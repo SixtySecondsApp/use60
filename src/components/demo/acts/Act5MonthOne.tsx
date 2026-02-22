@@ -17,7 +17,7 @@ import FinalLearningBeatScene from '../scenes/FinalLearningBeatScene';
 
 const SCENES = [
   { label: 'Before / After', icon: ArrowLeftRight, Component: BeforeAfterRevealScene },
-  { label: 'Knowledge Graph', icon: Network, Component: RelationshipGraphScene },
+  { label: 'Relationship Graph', icon: Network, Component: RelationshipGraphScene },
   { label: 'Agent Status', icon: Activity, Component: HeartbeatDashboardScene },
   { label: 'Coaching Digest', icon: GraduationCap, Component: CoachingDigestScene },
   { label: 'Conversational AI', icon: MessageCircle, Component: ConversationalSlackScene },

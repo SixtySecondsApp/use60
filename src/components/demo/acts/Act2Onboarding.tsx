@@ -135,13 +135,25 @@ const enrichmentStages = [
 
 function EnrichmentLoadingStep({ onComplete }: { onComplete: () => void }) {
   const [completedStages, setCompletedStages] = useState<number[]>([]);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
     enrichmentStages.forEach((_, i) => {
-      setTimeout(() => {
-        setCompletedStages((prev) => [...prev, i]);
-      }, STAGE_DELAY * (i + 1));
+      timers.push(
+        setTimeout(() => {
+          setCompletedStages((prev) => [...prev, i]);
+        }, STAGE_DELAY * (i + 1)),
+      );
     });
+    // Auto-advance after all stages complete + a brief pause
+    timers.push(
+      setTimeout(() => {
+        onCompleteRef.current();
+      }, STAGE_DELAY * (enrichmentStages.length + 1) + 600),
+    );
+    return () => timers.forEach(clearTimeout);
   }, []);
 
   const allDone = completedStages.length === enrichmentStages.length;

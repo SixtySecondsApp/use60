@@ -395,7 +395,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       
       {/* Quick Add FAB - Only shown for admins in internal view */}
-      {location.pathname !== '/workflows' && !isViewingAsExternal && !isOpsFullscreen && isUserAdmin(userData) && (
+      {location.pathname !== '/workflows' && location.pathname !== '/settings/demo' && !isViewingAsExternal && !isOpsFullscreen && isUserAdmin(userData) && (
         <motion.button
           type="button"
           whileHover={{ scale: 1.05 }}
