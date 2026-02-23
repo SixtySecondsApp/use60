@@ -437,7 +437,7 @@ const UnifiedMeetingsList: React.FC = () => {
   }
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 w-full max-w-full overflow-x-hidden">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-x-hidden">
       {/* Meeting Usage Bar */}
       <MeetingUsageBar />
 
@@ -543,17 +543,22 @@ const UnifiedMeetingsList: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full"
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 bg-emerald-600/10 dark:bg-emerald-500/20 backdrop-blur-sm rounded-xl border border-emerald-600/20 dark:border-emerald-500/20 flex-shrink-0">
-            <Video className="h-5 sm:h-6 w-5 sm:w-6 text-emerald-600 dark:text-emerald-400" />
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-600/10 dark:bg-emerald-500/20 border border-emerald-600/20 dark:border-emerald-500/30 flex items-center justify-center flex-shrink-0">
+            <Video className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 truncate">
-              Meetings
+            <h1 className="text-2xl sm:text-3xl font-bold">
+              <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-100 dark:to-white bg-clip-text text-transparent">
+                Meetings
+              </span>
             </h1>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1 truncate">
-              All your recorded conversations in one place
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                All your recorded conversations in one place
+              </p>
+            </div>
           </div>
         </div>
 

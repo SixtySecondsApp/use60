@@ -282,7 +282,17 @@ export function MeetingDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      navigate('/meetings', { replace: true });
+      return;
+    }
+
+    // Redirect immediately if the id doesn't look like a valid UUID
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(id)) {
+      navigate('/meetings', { replace: true });
+      return;
+    }
 
     const fetchMeetingDetails = async () => {
       try {
@@ -296,7 +306,14 @@ export function MeetingDetail() {
           .eq('id', id)
           .single();
 
-        if (meetingError) throw meetingError;
+        if (meetingError) {
+          // PGRST116 = row not found — redirect instead of showing error
+          if ((meetingError as any).code === 'PGRST116') {
+            navigate('/meetings', { replace: true });
+            return;
+          }
+          throw meetingError;
+        }
         setMeeting(meetingData);
 
         // Fetch company name if company_id exists

@@ -62,7 +62,7 @@ export default function MeetingAnalyticsPage() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="min-h-screen bg-gray-50 dark:bg-[#0a0f1e] text-gray-900 dark:text-gray-100 relative"
+      className="min-h-screen text-gray-900 dark:text-gray-100 relative"
     >
       {/* Background gradient orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -187,7 +187,7 @@ export default function MeetingAnalyticsPage() {
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:dark:bg-gray-800/80 data-[state=active]:shadow-sm transition-all"
+                    className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-800/80 data-[state=active]:shadow-sm transition-all"
                   >
                     <Icon className="w-4 h-4" />
                     <span className="hidden sm:inline">{tab.label}</span>

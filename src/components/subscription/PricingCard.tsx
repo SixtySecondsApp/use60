@@ -84,65 +84,76 @@ export function PricingCard({
   const PlanIcon = getPlanIcon(plan.slug, isFreeTier);
 
   return (
+    // Outer wrapper handles animation + hover. pt-5 gives vertical space for the
+    // badge that is now positioned inside the card at -top-4 (negative offset).
     <motion.div
       custom={index}
       initial="hidden"
       animate="visible"
       variants={cardVariants}
       whileHover={{ y: -8, transition: { duration: 0.2 } }}
-      className={`
-        relative flex flex-col rounded-2xl p-8
-        backdrop-blur-xl transition-all duration-300
-        ${isPopular
-          ? 'bg-gradient-to-b from-blue-600/10 to-gray-900/80 dark:from-blue-600/20 dark:to-gray-900/80'
-          : isFreeTier
-            ? 'bg-gradient-to-b from-emerald-600/5 to-gray-900/80 dark:from-emerald-600/10 dark:to-gray-900/80'
-            : 'bg-white/80 dark:bg-gray-900/80'
-        }
-        ${isPopular
-          ? 'border-2 border-blue-500/50 shadow-lg shadow-blue-500/20'
-          : isFreeTier
-            ? 'border-2 border-emerald-500/30 shadow-lg shadow-emerald-500/10'
-            : 'border border-gray-200 dark:border-gray-700/50'
-        }
-        ${isCurrentPlan ? 'ring-2 ring-emerald-500/50' : ''}
-        hover:border-blue-500/50 dark:hover:border-blue-500/50
-        hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/40
-      `}
+      className="relative pt-5"
     >
-      {/* Popular badge with gradient border */}
+      {/* Card element — badges are positioned inside with overflow-visible so they
+          escape the card boundary upward, unaffected by backdrop-blur stacking */}
+      <div
+        className={`
+          relative flex flex-col rounded-2xl p-8
+          overflow-visible
+          backdrop-blur-xl transition-all duration-300
+          ${isPopular
+            ? 'bg-gradient-to-b from-blue-600/10 to-gray-900/80 dark:from-blue-600/20 dark:to-gray-900/80'
+            : isFreeTier
+              ? 'bg-gradient-to-b from-emerald-600/5 to-gray-900/80 dark:from-emerald-600/10 dark:to-gray-900/80'
+              : 'bg-white/80 dark:bg-gray-900/80'
+          }
+          ${isPopular
+            ? 'border-2 border-blue-500/50 shadow-lg shadow-blue-500/20'
+            : isFreeTier
+              ? 'border-2 border-emerald-500/30 shadow-lg shadow-emerald-500/10'
+              : 'border border-gray-200 dark:border-gray-700/50'
+          }
+          ${isCurrentPlan ? 'ring-2 ring-emerald-500/50' : ''}
+          hover:border-blue-500/50 dark:hover:border-blue-500/50
+          hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/40
+        `}
+      >
+      {/* Popular badge — inside the card but positioned above its top edge via
+          -top-4. overflow-visible on the card lets it escape upward. The badge
+          is a child of the card so it shares the same stacking context and is
+          never clipped or buried by the card's border or backdrop-blur layer. */}
       {isPopular && (
         <motion.div
           variants={badgeVariants}
           initial="initial"
           animate="animate"
-          className="absolute -top-4 left-1/2 -translate-x-1/2 z-10"
+          className="absolute -top-4 left-1/2 -translate-x-1/2 z-50"
         >
-          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-xs font-bold uppercase tracking-wide shadow-lg shadow-blue-500/30">
+          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-xs font-bold uppercase tracking-wide shadow-lg shadow-blue-500/30 whitespace-nowrap">
             <Sparkles className="w-3.5 h-3.5" />
             {plan.badge_text || 'Most Popular'}
           </span>
         </motion.div>
       )}
 
-      {/* Free tier badge */}
+      {/* Free tier badge — same inside-card approach */}
       {isFreeTier && !isPopular && (
         <motion.div
           variants={badgeVariants}
           initial="initial"
           animate="animate"
-          className="absolute -top-4 left-1/2 -translate-x-1/2"
+          className="absolute -top-4 left-1/2 -translate-x-1/2 z-50"
         >
-          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold uppercase tracking-wide shadow-lg shadow-emerald-500/30">
+          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold uppercase tracking-wide shadow-lg shadow-emerald-500/30 whitespace-nowrap">
             <Gift className="w-3.5 h-3.5" />
             Free Forever
           </span>
         </motion.div>
       )}
 
-      {/* Current plan badge */}
+      {/* Current plan badge — small, top-right corner */}
       {isCurrentPlan && (
-        <div className="absolute -top-3 right-6">
+        <div className="absolute -top-3 right-6 z-50">
           <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold border border-emerald-500/30">
             Current Plan
           </span>
@@ -332,6 +343,7 @@ export function PricingCard({
           </p>
         </div>
       )}
+      </div>
     </motion.div>
   );
 }

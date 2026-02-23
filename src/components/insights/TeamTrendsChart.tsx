@@ -160,19 +160,10 @@ function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg
     return data.map((d) => ({
       ...d,
       dateFormatted: formatDateLabel(d.date, period),
-      sentiment: d.avg !== null ? d.avg * 10 : null,
+      // Null means no data for that day — treat as 0 so the chart anchors at baseline
+      sentiment: d.avg !== null ? d.avg * 10 : 0,
     }));
   }, [data, period]);
-
-  const hasData = chartData.some((d) => d.sentiment !== null);
-
-  if (!hasData) {
-    return (
-      <div className="h-72 flex items-center justify-center text-gray-500 dark:text-gray-400">
-        No sentiment data available
-      </div>
-    );
-  }
 
   return (
     <div className="h-72">
@@ -195,12 +186,7 @@ function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg
             height={period === 7 ? 30 : 50}
           />
           <YAxis
-            domain={([dataMin, dataMax]: [number, number]) => {
-              const padding = Math.max(1, (dataMax - dataMin) * 0.2);
-              const lo = Math.max(-10, Math.floor(dataMin - padding));
-              const hi = Math.min(10, Math.ceil(dataMax + padding));
-              return [lo, hi];
-            }}
+            domain={[-10, 10]}
             tick={{ fontSize: 12 }}
             className="text-gray-600 dark:text-gray-400"
             tickFormatter={(value) => value.toFixed(0)}
@@ -214,13 +200,10 @@ function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg
             stroke="#10b981"
             strokeWidth={2}
             fill="url(#sentimentGradient)"
-            defined={(d: any) => d.sentiment !== null && d.sentiment !== undefined}
-            dot={(props: any) => {
-              if (props.value === null || props.value === undefined) return <g key={props.key} />;
-              return <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill="#10b981" stroke="#10b981" strokeWidth={1} />;
-            }}
+            dot={(props: any) => (
+              <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill="#10b981" stroke="#10b981" strokeWidth={1} />
+            )}
             activeDot={{ r: 5, fill: '#10b981' }}
-            connectNulls={true}
             unit=" / 10"
           />
         </AreaChart>
@@ -235,17 +218,10 @@ function TalkTimeChart({ data, period }: { data: Array<{ date: string; avg: numb
     return data.map((d) => ({
       ...d,
       dateFormatted: formatDateLabel(d.date, period),
-      talkTime: d.avg,
+      // Null means no data for that day — treat as 0 so the chart anchors at baseline
+      talkTime: d.avg ?? 0,
     }));
   }, [data, period]);
-
-  if (chartData.every((d) => d.talkTime === null)) {
-    return (
-      <div className="h-72 flex items-center justify-center text-gray-500 dark:text-gray-400">
-        No talk time data available
-      </div>
-    );
-  }
 
   return (
     <div className="h-72">
@@ -287,13 +263,10 @@ function TalkTimeChart({ data, period }: { data: Array<{ date: string; avg: numb
             stroke="#8b5cf6"
             strokeWidth={2}
             fill="url(#talkTimeGradient)"
-            defined={(d: any) => d.talkTime !== null && d.talkTime !== undefined}
             unit="%"
-            connectNulls={true}
-            dot={(props: any) => {
-              if (props.value === null || props.value === undefined) return <g key={props.key} />;
-              return <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill="#8b5cf6" stroke="#8b5cf6" strokeWidth={1} />;
-            }}
+            dot={(props: any) => (
+              <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill="#8b5cf6" stroke="#8b5cf6" strokeWidth={1} />
+            )}
             activeDot={{ r: 5, fill: '#8b5cf6' }}
           />
         </AreaChart>

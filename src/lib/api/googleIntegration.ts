@@ -305,31 +305,55 @@ export class GoogleIntegrationAPI {
    * Returns detailed status for each service
    */
   static async testConnection(): Promise<GoogleTestConnectionResult> {
-    const { data, error } = await supabase.functions.invoke('google-test-connection', {
-      body: {}
-    });
+    try {
+      const { data, error } = await supabase.functions.invoke('google-test-connection', {
+        body: {}
+      });
 
-    // Log full response for debugging
-    console.log('[googleIntegration.testConnection] Response:', { data, error });
+      // Log full response for debugging
+      console.log('[googleIntegration.testConnection] Response:', { data, error });
 
-    // Handle invoke-level errors (network, etc.)
-    if (error) {
-      console.error('[googleIntegration.testConnection] Invoke error:', error);
-      throw new Error(error.message || 'Failed to test connection');
+      // Handle invoke-level errors (network, non-2xx that slipped through, etc.)
+      if (error) {
+        console.error('[googleIntegration.testConnection] Invoke error:', error);
+        return {
+          success: false,
+          connected: false,
+          error: error.message || 'Failed to test connection',
+          services: {
+            userinfo: { ok: false, message: 'Invoke error' },
+            gmail: { ok: false, message: 'Invoke error' },
+            calendar: { ok: false, message: 'Invoke error' },
+            tasks: { ok: false, message: 'Invoke error' },
+          },
+        };
+      }
+
+      // The function always returns 200 with data.
+      // If data.success is false, return the data as-is so the UI can show error details.
+      if (data && !data.success) {
+        console.error('[googleIntegration.testConnection] Function returned error:', data);
+        const debugInfo = data.debugInfo || '';
+        const currentStep = data.currentStep || '';
+        console.error(`[googleIntegration.testConnection] Debug: ${debugInfo}, Step: ${currentStep}`);
+        return data;
+      }
+
+      return data;
+    } catch (err) {
+      console.error('[googleIntegration.testConnection] Unexpected error:', err);
+      return {
+        success: false,
+        connected: false,
+        error: err instanceof Error ? err.message : 'Test connection failed',
+        services: {
+          userinfo: { ok: false, message: 'Unexpected error' },
+          gmail: { ok: false, message: 'Unexpected error' },
+          calendar: { ok: false, message: 'Unexpected error' },
+          tasks: { ok: false, message: 'Unexpected error' },
+        },
+      };
     }
-
-    // The function now always returns 200 with data
-    // Check data.success to determine if the operation succeeded
-    if (data && !data.success) {
-      console.error('[googleIntegration.testConnection] Function returned error:', data);
-      const errorInfo = data.error || data.message || 'Test connection failed';
-      const debugInfo = data.debugInfo || '';
-      const currentStep = data.currentStep || '';
-      console.error(`[googleIntegration.testConnection] Debug: ${debugInfo}, Step: ${currentStep}`);
-      // Still return the data so the UI can show the error details
-    }
-
-    return data;
   }
 }
 

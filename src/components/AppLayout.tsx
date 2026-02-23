@@ -853,7 +853,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           'overflow-x-hidden',
           isCollapsed ? 'overflow-y-hidden' : 'overflow-y-auto',
           isCollapsed ? 'w-[96px]' : 'w-[256px]',
-          'hidden lg:block z-[100]',
+          'hidden lg:block z-[40]',
           isImpersonating ? 'top-[44px] h-[calc(100vh-44px)]' : 'top-0 h-screen'
         )}
         style={{ overscrollBehavior: 'contain' }}
@@ -1140,8 +1140,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsCollapsed(!isCollapsed)}
         className={cn(
-          'fixed z-[55] hidden lg:flex',
-          'top-[48px]',
+          'fixed z-[45] hidden lg:flex',
+          isImpersonating ? 'top-[116px]' : 'top-[72px]',
           isCollapsed ? 'left-[84px]' : 'left-[244px]',
           'w-6 h-6 rounded-full',
           'bg-white dark:bg-gray-800',

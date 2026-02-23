@@ -8,1095 +8,133 @@
       "styling": "tailwind"
     }
   },
-  "features": [
-    {
-      "id": "meeting-analytics-redesign",
-      "name": "Combined Meeting + Team Analytics Redesign",
-      "status": "complete",
-      "consultReport": ".sixty/consult/meeting-analytics-redesign.md",
-      "createdAt": "2026-02-18T00:00:00Z"
-    },
-    {
-      "id": "settings-page-fixes",
-      "name": "Settings Page - TSK-0455 Go-Live Fixes",
-      "status": "complete",
-      "prd": null,
-      "taskRef": "TSK-0455",
-      "createdAt": "2026-02-18T14:00:00Z"
-    },
-    {
-      "id": "ops-table-webhooks",
-      "name": "Ops Table Webhook & API Ingestion",
-      "status": "pending",
-      "branch": "feature/ops-table-webhooks",
-      "planFile": ".sixty/plan-ops-table-webhooks.json",
-      "createdAt": "2026-02-19T00:00:00Z"
-    },
-    {
-      "id": "support-centre",
-      "name": "AI-Powered Support Centre (Help Desk)",
-      "status": "complete",
-      "completedAt": "2026-02-22T22:00:00Z",
-      "prd": null,
-      "devHubTicketId": "c5c4840b-851b-4839-94a2-334e01db4a7b",
-      "createdAt": "2026-02-19T00:00:00Z"
-    },
-    {
-      "id": "webhook-url-masking",
-      "name": "Mask Supabase Webhook URLs with Use60 Branded URLs",
-      "status": "pending",
-      "prd": null,
-      "devHubTicketId": "dd68e6c9-12d6-4e39-8ccf-087cc6eb6e0b",
-      "createdAt": "2026-02-19T00:00:00Z"
-    },
-    {
-      "id": "audit-quick-fixes",
-      "name": "Audit Quick Fixes — Critical Bugs & Broken Types",
-      "status": "complete",
-      "completedAt": "2026-02-22T23:00:00Z",
-      "prd": null,
-      "consultReport": "Command Centre audit (2026-02-19)",
-      "createdAt": "2026-02-19T12:00:00Z"
-    },
-    {
-      "id": "copilot-transition",
-      "name": "Complete Autonomous Copilot Transition",
-      "status": "complete",
-      "completedAt": "2026-02-22T23:00:00Z",
-      "prd": null,
-      "consultReport": "Command Centre audit (2026-02-19)",
-      "createdAt": "2026-02-19T12:00:00Z"
-    },
-    {
-      "id": "service-cleanup",
-      "name": "Service Layer Cleanup & Tech Debt",
-      "status": "complete",
-      "completedAt": "2026-02-22T22:00:00Z",
-      "prd": null,
-      "consultReport": "Command Centre audit (2026-02-19)",
-      "createdAt": "2026-02-19T12:00:00Z"
-    },
-    {
-      "id": "auto-crm-update",
-      "name": "PRD-03: Auto CRM Update Agent",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-03",
-      "planFile": ".sixty/plan-auto-crm-update.json",
-      "createdAt": "2026-02-21T23:30:00Z"
-    },
-    {
-      "id": "reengagement-trigger",
-      "name": "PRD-05: Re-engagement Trigger Agent",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-05",
-      "planFile": ".sixty/plan-reengagement-trigger.json",
-      "createdAt": "2026-02-21T00:00:00Z"
-    },
-    {
-      "id": "enhanced-morning-briefing",
-      "name": "PRD-06: Enhanced Morning Briefing",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-06",
-      "planFile": ".sixty/plan-enhanced-morning-briefing.json",
-      "createdAt": "2026-02-21T00:00:00Z"
-    },
-    {
-      "id": "eod-synthesis",
-      "name": "PRD-07: End-of-Day Synthesis",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-07",
-      "planFile": ".sixty/plan-eod-synthesis.json",
-      "createdAt": "2026-02-21T00:00:00Z"
-    },
-    {
-      "id": "internal-meeting-prep",
-      "name": "PRD-08: Internal Meeting Prep",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-08",
-      "planFile": ".sixty/plan-internal-meeting-prep.json",
-      "createdAt": "2026-02-21T00:00:00Z"
-    },
-    {
-      "id": "methodology-settings",
-      "name": "PRD-09: Sales Methodology & Process Settings",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-09",
-      "planFile": ".sixty/plan-methodology-settings.json",
-      "createdAt": "2026-02-22T00:00:00Z",
-      "completedAt": "2026-02-22T12:00:00Z"
-    },
-    {
-      "id": "autonomy-settings",
-      "name": "PRD-10: Autonomy & Approval Policy Settings",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-10",
-      "planFile": ".sixty/plan-autonomy-settings.json",
-      "createdAt": "2026-02-22T00:00:00Z",
-      "completedAt": "2026-02-22T00:00:00Z"
-    },
-    {
-      "id": "crm-field-mapping",
-      "name": "PRD-11: CRM Field Mapping & Write Policies",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-11",
-      "planFile": ".sixty/plan-crm-field-mapping.json",
-      "createdAt": "2026-02-22T00:00:00Z",
-      "completedAt": "2026-02-22T10:35:00Z"
-    },
-    {
-      "id": "custom-sop-builder",
-      "name": "PRD-12: Custom SOP Builder",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-12",
-      "planFile": ".sixty/plan-custom-sop-builder.json",
-      "createdAt": "2026-02-22T00:00:00Z",
-      "completedAt": "2026-02-22T02:30:00Z"
-    },
-    {
-      "id": "command-centre-enhancement",
-      "name": "Command Centre Enhancement — Shared Inbox (Phases 8-12)",
-      "status": "complete",
-      "prd": "Command Centre Enhancement Plan",
-      "planFile": ".sixty/plan-command-centre-enhancement.json",
-      "createdAt": "2026-02-21T00:00:00Z"
-    },
-    {
-      "id": "signal-intelligence",
-      "name": "Phase 4: Signal Intelligence (PRD-13, PRD-14, PRD-15)",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#Phase-4",
-      "planFile": ".sixty/plan-signal-intelligence.json",
-      "createdAt": "2026-02-22T15:00:00Z"
-    },
-    {
-      "id": "knowledge-memory",
-      "name": "Phase 5: Knowledge & Memory (PRD-16, PRD-17, PRD-18)",
-      "status": "complete",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#Phase-5",
-      "planFile": ".sixty/plan-knowledge-memory.json",
-      "createdAt": "2026-02-22T20:00:00Z"
-    },
-    {
-      "id": "coaching-team-intel",
-      "name": "Phase 6: Coaching & Team Intelligence (PRD-19, PRD-20, PRD-21)",
-      "status": "pending",
-      "prd": "docs/copilot/always_on_60/use60_master_plan.md#Phase-6",
-      "planFile": ".sixty/plan-coaching-team-intel.json",
-      "createdAt": "2026-02-22T23:00:00Z"
-    }
-  ],
+  "feature": "ui-polish",
+  "consultReport": ".sixty/consult/ui-polish.md",
+  "createdAt": "2026-02-23",
   "stories": [
     {
-      "id": "MAR-001",
-      "feature": "meeting-analytics-redesign",
-      "title": "Create SearchHero component with Intelligence page design",
+      "id": "UI-001",
+      "feature": "ui-polish",
+      "title": "Fix Sentiment and TalkTime charts plotting null values at top of chart",
       "type": "frontend",
-      "status": "complete",
-      "priority": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["MAR-003"],
-      "parallelWith": ["MAR-002"],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "SearchHero.tsx created in src/components/meeting-analytics/",
-        "Glassmorphism card with gradient accent bar (emerald/teal/cyan)",
-        "Large h-14 search input with icon badge, matching Intelligence page",
-        "Mode toggle: Semantic Search | Ask Anything (embeds AskAnythingPanel)",
-        "Filter bar below search: Team Member, Sentiment, Date, Action Items",
-        "Example queries shown when no active query",
-        "Search results display with source cards and similarity scores",
-        "Full light/dark mode support with no color clashes"
-      ],
-      "files": [
-        "src/components/meeting-analytics/SearchHero.tsx",
-        "src/components/meeting-analytics/AskAnythingPanel.tsx"
-      ]
-    },
-    {
-      "id": "MAR-002",
-      "feature": "meeting-analytics-redesign",
-      "title": "Create DashboardTab merging Overview and Team Analytics",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 2,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["MAR-003"],
-      "parallelWith": ["MAR-001"],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "DashboardTab.tsx created in src/components/meeting-analytics/",
-        "Period selector (7d/30d/90d) at top",
-        "Merged KPI cards from OverviewTab + TeamKPIGrid (6-8 best metrics, no duplicates)",
-        "Side-by-side layout: TeamTrendsChart | TeamComparisonMatrix",
-        "Pipeline Health cards row below",
-        "Active Alerts section (collapsible)",
-        "Imports existing team components (TeamKPIGrid, TeamTrendsChart, TeamComparisonMatrix, MetricDrillDownModal)",
-        "Full light/dark mode glassmorphism styling"
-      ],
-      "files": [
-        "src/components/meeting-analytics/DashboardTab.tsx",
-        "src/components/meeting-analytics/OverviewTab.tsx"
-      ]
-    },
-    {
-      "id": "MAR-003",
-      "feature": "meeting-analytics-redesign",
-      "title": "Restructure MeetingAnalyticsPage with SearchHero and 4 tabs",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 3,
-      "dependencies": { "stories": ["MAR-001", "MAR-002"], "files": [], "schema": [] },
-      "blocks": ["MAR-004", "MAR-005", "MAR-006", "MAR-007"],
-      "parallelWith": [],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "Page layout: Header -> SearchHero (always visible) -> Tabs",
-        "4 tabs: Dashboard, Transcripts, Insights, Reports",
-        "SearchHero rendered above tabs (not inside a tab)",
-        "Intelligence page header pattern (icon badge + title + status)",
-        "URL params updated for new tab structure",
-        "TranscriptDetailSheet still opens on transcript click",
-        "Framer Motion animations on page load"
-      ],
-      "files": [
-        "src/pages/MeetingAnalyticsPage.tsx"
-      ]
-    },
-    {
-      "id": "MAR-004",
-      "feature": "meeting-analytics-redesign",
-      "title": "Restyle InsightsTab with glassmorphism and dark mode audit",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 4,
-      "dependencies": { "stories": ["MAR-003"] },
-      "blocks": ["MAR-007"],
-      "parallelWith": ["MAR-005", "MAR-006"],
-      "estimatedMinutes": 20,
-      "acceptance": [
-        "All cards use glassmorphism pattern (bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl)",
-        "Chart colors consistent in both light and dark mode",
-        "Recharts wrapped in ResponsiveContainer with proper aspect ratios",
-        "Badge colors use standard palette (emerald, red, amber, blue with dark variants)",
-        "No hardcoded colors without dark: counterparts"
-      ],
-      "files": [
-        "src/components/meeting-analytics/InsightsTab.tsx"
-      ]
-    },
-    {
-      "id": "MAR-005",
-      "feature": "meeting-analytics-redesign",
-      "title": "Restyle TranscriptsTab, TranscriptDetailSheet, and ReportsTab",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 5,
-      "dependencies": { "stories": ["MAR-003"] },
-      "blocks": ["MAR-007"],
-      "parallelWith": ["MAR-004", "MAR-006"],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "TranscriptsTab uses glassmorphism cards, consistent table styling",
-        "TranscriptDetailSheet has !top-16 !h-[calc(100vh-4rem)] and matching design",
-        "ReportsTab report preview and history table match design system",
-        "NotificationSettingsDialog matches design system",
-        "All components have proper light/dark mode classes"
-      ],
-      "files": [
-        "src/components/meeting-analytics/TranscriptsTab.tsx",
-        "src/components/meeting-analytics/TranscriptDetailSheet.tsx",
-        "src/components/meeting-analytics/ReportsTab.tsx",
-        "src/components/meeting-analytics/NotificationSettingsDialog.tsx"
-      ]
-    },
-    {
-      "id": "MAR-006",
-      "feature": "meeting-analytics-redesign",
-      "title": "Remove standalone Team Analytics page and update routing",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 6,
-      "dependencies": { "stories": ["MAR-003"] },
-      "blocks": ["MAR-007"],
-      "parallelWith": ["MAR-004", "MAR-005"],
-      "estimatedMinutes": 15,
-      "acceptance": [
-        "src/pages/insights/TeamAnalytics.tsx removed or redirects to /meeting-analytics?tab=dashboard",
-        "Route in App.tsx updated (redirect /insights/team -> /meeting-analytics)",
-        "routeConfig.ts updated",
-        "userTypeUtils.ts references updated in both src/ and packages/landing/",
-        "lazyPages.tsx export removed or updated",
-        "No broken imports across codebase"
-      ],
-      "files": [
-        "src/pages/insights/TeamAnalytics.tsx",
-        "src/App.tsx",
-        "src/lib/routes/routeConfig.ts",
-        "src/routes/lazyPages.tsx",
-        "src/lib/utils/userTypeUtils.ts"
-      ]
-    },
-    {
-      "id": "MAR-007",
-      "feature": "meeting-analytics-redesign",
-      "title": "Chart responsiveness fix and full dark/light mode QA pass",
-      "type": "qa",
-      "status": "complete",
-      "priority": 7,
-      "dependencies": { "stories": ["MAR-004", "MAR-005", "MAR-006"] },
-      "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "All Recharts charts use ResponsiveContainer and render correctly at 320px, 768px, 1024px, 1440px",
-        "Chart grid lines, axes, and tooltips themed for both light and dark",
-        "Toggle between themes shows no clashing colors anywhere",
-        "No light text on light background or dark text on dark background",
-        "All badges use consistent color palette with dark: variants",
-        "Build passes with no TypeScript errors (npm run build)"
-      ],
-      "files": [
-        "src/components/meeting-analytics/DashboardTab.tsx",
-        "src/components/meeting-analytics/InsightsTab.tsx",
-        "src/components/meeting-analytics/SearchHero.tsx"
-      ]
-    },
-    {
-      "id": "SET-001",
-      "feature": "settings-page-fixes",
-      "title": "Unify Profile and Settings/Account pages",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["SET-002", "SET-003"],
-      "estimatedMinutes": 20,
-      "acceptance": [
-        "Settings > Account renders identical content to Profile page (both use Profile.tsx already via AccountSettings.tsx wrapper)",
-        "Profile page header says 'Account' not 'Profile Settings' to match Settings navigation",
-        "Settings > Account uses SettingsPageWrapper consistently (no duplicate headers)",
-        "Dropdown menu 'Profile' navigates to /settings/account instead of /profile (or /profile redirects to /settings/account)"
-      ],
-      "files": [
-        "src/pages/Profile.tsx",
-        "src/pages/settings/AccountSettings.tsx",
-        "src/components/layout/TopBar.tsx"
-      ]
-    },
-    {
-      "id": "SET-002",
-      "feature": "settings-page-fixes",
-      "title": "Make Appearance settings functional (notifications, language, timezone)",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 2,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["SET-001", "SET-003"],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "Notification preferences toggle on/off and persist to user_settings or profiles table",
-        "Language selector is present and saves preference (even if only English for now)",
-        "Timezone selector shows user's current timezone and saves changes",
-        "All preferences persist across page reload"
-      ],
-      "files": [
-        "src/pages/Preferences.tsx",
-        "src/pages/settings/AppearanceSettings.tsx"
-      ]
-    },
-    {
-      "id": "SET-003",
-      "feature": "settings-page-fixes",
-      "title": "Hide non-functional settings sections (Task Auto-Sync, Smart Listening, Proactive Agent, Call Type cog)",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 3,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["SET-001", "SET-002"],
-      "estimatedMinutes": 15,
-      "acceptance": [
-        "Task Auto-Sync entry removed from Settings.tsx allSettingsSections array",
-        "Smart Listening entry removed from Settings.tsx allSettingsSections array",
-        "Proactive Agent entry removed from Settings.tsx allSettingsSections array",
-        "Call Type Settings: cog icon (CallTypeWorkflowEditor trigger) hidden per call type row, edit pen icon remains",
-        "Routes for hidden pages still work if accessed directly (no crash) but Settings hub doesn't show them"
-      ],
-      "files": [
-        "src/pages/Settings.tsx",
-        "src/pages/settings/CallTypeSettings.tsx"
-      ]
-    },
-    {
-      "id": "SET-004",
-      "feature": "settings-page-fixes",
-      "title": "Fix AI Personalization - popup centering and writing style save",
-      "type": "bugfix",
-      "status": "complete",
-      "priority": 4,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["SET-005"],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "'Train from Sent Emails' popup is centered in viewport (Dialog positioning fix)",
-        "New Writing Style: creating and saving a style persists the description correctly (not empty '')",
-        "Writing style appears in the list with correct name and description after save",
-        "Other settings popups audited for centering issues and fixed"
-      ],
-      "files": [
-        "src/pages/settings/AIPersonalizationSettings.tsx"
-      ]
-    },
-    {
-      "id": "SET-005",
-      "feature": "settings-page-fixes",
-      "title": "Test and fix Follow Up Configuration templates",
-      "type": "bugfix",
-      "status": "complete",
-      "priority": 5,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["SET-004"],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "Full Proposal workflow tested - generates output correctly",
-        "Quick Followup Email workflow tested - generates output correctly",
-        "Client Summary workflow tested - generates output correctly",
-        "Any broken workflows have errors surfaced to user with toast feedback"
-      ],
-      "files": [
-        "src/pages/settings/FollowUpSettings.tsx"
-      ]
-    },
-    {
-      "id": "SET-006",
-      "feature": "settings-page-fixes",
-      "title": "Fix Google OAuth sign-in and Workspace toggle persistence",
-      "type": "bugfix",
-      "status": "complete",
-      "priority": 6,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["SET-007"],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "Google OAuth sign-in does not fail and log user out",
-        "Google Workspace: toggling OFF Gmail/Calendar/Drive and clicking Save persists the changes",
-        "Returning to the page shows toggles in their saved OFF state",
-        "Test Connection returns meaningful status (or error is handled gracefully with toast)",
-        "Service status messages ('Some services have issues') show accurate status"
-      ],
-      "files": [
-        "src/pages/settings/integrations/GoogleWorkspaceIntegrationPage.tsx",
-        "src/lib/stores/integrationStore.ts"
-      ]
-    },
-    {
-      "id": "SET-007",
-      "feature": "settings-page-fixes",
-      "title": "Fix Email Sync functionality",
-      "type": "bugfix",
-      "status": "complete",
-      "priority": 7,
-      "dependencies": { "stories": ["SET-006"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "Pressing 'Sync Emails' triggers actual email sync operation",
-        "Progress indicator shown during sync",
-        "Email count updates after sync completes",
-        "Error state shown with toast if sync fails"
-      ],
-      "files": [
-        "src/pages/settings/EmailSyncPage.tsx"
-      ]
-    },
-    {
-      "id": "SET-008",
-      "feature": "settings-page-fixes",
-      "title": "Fix Instantly.AI Dashlane autofill issue",
-      "type": "bugfix",
-      "status": "complete",
-      "priority": 8,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["SET-009"],
-      "estimatedMinutes": 15,
-      "acceptance": [
-        "API Key input field has autocomplete='off' and data-lpignore='true' and data-1p-ignore attributes",
-        "Connect button requires explicit user click (not auto-triggered by input change)",
-        "Dashlane/1Password autofill does not trigger automatic connection attempt"
-      ],
-      "files": [
-        "src/pages/settings/InstantlySettings.tsx"
-      ]
-    },
-    {
-      "id": "SET-009",
-      "feature": "settings-page-fixes",
-      "title": "Fix invitation system - role selection, email delivery, and error handling",
-      "type": "bugfix",
-      "status": "complete",
-      "priority": 9,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["SET-008"],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "Selecting 'Member' role in invite form sends invitation with role='member' (not admin)",
-        "Invitations list shows correct role that was selected",
-        "Admin invites work without 'email delivery failed' error (or error is actionable)",
-        "Member invites actually deliver email to destination mailbox",
-        "Resend functionality works for pending invitations"
-      ],
-      "files": [
-        "src/pages/settings/OrganizationManagementPage.tsx",
-        "src/lib/services/invitationService.ts"
-      ]
-    },
-    {
-      "id": "SET-010",
-      "feature": "settings-page-fixes",
-      "title": "Fix Org Settings - populate Company Website from signup, remove Company Domain",
-      "type": "bugfix",
-      "status": "complete",
-      "priority": 10,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 20,
-      "acceptance": [
-        "Company Domain field removed from Org Settings UI",
-        "Company Website field displays the value set during signup (from organizations.company_website)",
-        "Company Website is editable and saves correctly",
-        "If company_website is null, field shows empty with placeholder"
-      ],
-      "files": [
-        "src/pages/settings/OrganizationSettingsPage.tsx"
-      ]
-    },
-    {
-      "id": "SET-011",
-      "feature": "settings-page-fixes",
-      "title": "Create Billing & Subscription page with Stripe integration placeholder",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 11,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "New BillingSettingsPage.tsx created at src/pages/settings/",
-        "Route /settings/billing registered in App.tsx and routeConfig.ts",
-        "Shows current plan (default 29/month) with status indicator",
-        "Stripe Customer Portal link button (uses Stripe billing portal URL or edge function)",
-        "Credit pack top-up section links to existing CreditsSettingsPage or embeds CreditPurchaseModal",
-        "If Stripe not yet connected, shows 'Coming soon' or setup instructions"
-      ],
-      "files": [
-        "src/pages/settings/BillingSettingsPage.tsx",
-        "src/lib/routes/routeConfig.ts"
-      ]
-    },
-
-    {
-      "id": "SUP-001",
-      "feature": "support-centre",
-      "title": "Create support_tickets and support_messages schema with RLS",
-      "type": "schema",
-      "status": "complete",
-      "priority": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["SUP-002", "SUP-003", "SUP-004", "SUP-005"],
-      "parallelWith": [],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "support_tickets table: id, org_id, user_id, subject, description, category (enum: bug, feature_request, billing, how_to, other), priority (enum: low, medium, high, urgent), status (enum: open, in_progress, waiting_on_customer, resolved, closed), assigned_to, created_at, updated_at, resolved_at",
-        "support_messages table: id, ticket_id (FK), sender_id, sender_type (enum: user, agent, system), content, attachments (jsonb), created_at",
-        "RLS: users see own tickets, org admins see all org tickets",
-        "Indexes on org_id, user_id, status, created_at",
-        "Trigger for auto-updating updated_at on support_tickets"
-      ],
-      "files": [
-        "supabase/migrations/20260220000001_support_centre_schema.sql"
-      ]
-    },
-    {
-      "id": "SUP-002",
-      "feature": "support-centre",
-      "title": "Build Support Centre page shell with AI search landing",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 2,
-      "dependencies": { "stories": ["SUP-001"], "files": [], "schema": ["support_tickets"] },
-      "blocks": ["SUP-003", "SUP-004"],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "SupportCentrePage.tsx created at src/pages/",
-        "Route /support registered in routeConfig.ts (access: 'any', LifeBuoy icon, tools section)",
-        "Lazy import in lazyPages.tsx",
-        "Page layout: header (icon badge + 'Support Centre') -> search hero -> two tabs (Ask AI, My Tickets)",
-        "Search hero: large input with 'How can we help?' placeholder, suggested questions below"
-      ],
-      "files": [
-        "src/pages/SupportCentrePage.tsx",
-        "src/lib/routes/routeConfig.ts",
-        "src/routes/lazyPages.tsx",
-        "src/App.tsx"
-      ]
-    },
-    {
-      "id": "SUP-003",
-      "feature": "support-centre",
-      "title": "Build AI Documentation Assistant chat interface",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 3,
-      "dependencies": { "stories": ["SUP-002"], "files": [], "schema": [] },
-      "blocks": ["SUP-006"],
-      "parallelWith": ["SUP-004"],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "SupportAIChat.tsx component in src/components/support/",
-        "Chat-style UI: user asks question, AI responds with doc-sourced answer",
-        "Queries docs_articles table via full-text search or calls search-documentation pattern",
-        "Answers show source article links (clickable, open in DocsPage or new tab)",
-        "Suggested follow-up questions after each answer",
-        "'Was this helpful?' thumbs up/down feedback (writes to docs_feedback table)",
-        "'Talk to a human' button below each answer escalates to ticket creation"
-      ],
-      "files": [
-        "src/components/support/SupportAIChat.tsx",
-        "src/lib/hooks/useSupportChat.ts"
-      ]
-    },
-    {
-      "id": "SUP-004",
-      "feature": "support-centre",
-      "title": "Build ticket creation form and My Tickets list",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 4,
-      "dependencies": { "stories": ["SUP-002"], "files": [], "schema": ["support_tickets"] },
-      "blocks": ["SUP-005"],
-      "parallelWith": ["SUP-003"],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "CreateTicketForm.tsx in src/components/support/ — Dialog with subject, description (rich text), category dropdown, priority selector",
-        "Form submits to support_tickets table, shows toast with ticket ID",
-        "TicketList.tsx shows user's tickets with status badges, category, priority, created date",
-        "Filters: status (open/resolved/all), category",
-        "Empty state when no tickets"
-      ],
-      "files": [
-        "src/components/support/CreateTicketForm.tsx",
-        "src/components/support/TicketList.tsx",
-        "src/lib/hooks/useSupportTickets.ts"
-      ]
-    },
-    {
-      "id": "SUP-005",
-      "feature": "support-centre",
-      "title": "Build ticket detail view with conversation thread",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 5,
-      "dependencies": { "stories": ["SUP-004"], "files": [], "schema": ["support_tickets", "support_messages"] },
-      "blocks": ["SUP-006"],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "TicketDetail.tsx in src/components/support/ — Sheet panel with !top-16 !h-[calc(100vh-4rem)]",
-        "Shows ticket metadata: subject, status badge, category, priority, created/updated dates",
-        "Conversation thread: chronological messages with sender avatar, timestamp, content",
-        "Message input at bottom for user replies (inserts into support_messages)",
-        "Status timeline showing state transitions"
-      ],
-      "files": [
-        "src/components/support/TicketDetail.tsx",
-        "src/components/support/TicketConversation.tsx",
-        "src/lib/hooks/useSupportMessages.ts"
-      ]
-    },
-    {
-      "id": "SUP-006",
-      "feature": "support-centre",
-      "title": "Build internal support agent dashboard and email notifications",
-      "type": "fullstack",
-      "status": "complete",
-      "priority": 6,
-      "dependencies": { "stories": ["SUP-003", "SUP-005"], "files": [], "schema": ["support_tickets", "support_messages"] },
-      "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "SupportAgentDashboard.tsx — org admin view showing all org tickets with assignment, filters, bulk actions",
-        "Assign ticket to team member (updates assigned_to)",
-        "Agent can reply to tickets (sender_type: 'agent')",
-        "Edge function support-ticket-notification sends email on: ticket created, new reply, status changed",
-        "MJML template matching existing email patterns (uses getCorsHeaders)"
-      ],
-      "files": [
-        "src/components/support/SupportAgentDashboard.tsx",
-        "supabase/functions/support-ticket-notification/index.ts"
-      ]
-    },
-
-    {
-      "id": "WBM-001",
-      "feature": "webhook-url-masking",
-      "title": "Add webhook base URL config and Vercel rewrite rule",
-      "type": "infrastructure",
       "status": "pending",
       "priority": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["WBM-002"],
-      "parallelWith": [],
-      "estimatedMinutes": 20,
       "acceptance": [
-        "New VITE_WEBHOOK_BASE_URL env var added to .env.development, .env.staging, .env.production",
-        "Development: points to Supabase URL (backwards compatible)",
-        "Production: points to use60.com domain (e.g. https://app.use60.com/api/webhooks)",
-        "vercel.json rewrite rule: /api/webhooks/:path* -> ${SUPABASE_URL}/functions/v1/:path*",
-        "Utility function getWebhookBaseUrl() in src/lib/utils/ returns the branded URL"
+        "Sentiment chart does not render data points at the top of the chart",
+        "TalkTime chart does not render data points at the top of the chart",
+        "Both charts show gaps where data is null (no line drawn through null points at top)",
+        "Non-null data points still connect smoothly",
+        "Volume chart behaviour unchanged"
       ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
       "files": [
-        "vercel.json",
-        "src/lib/utils/webhookUrl.ts",
-        ".env.development",
-        ".env.staging",
-        ".env.production"
-      ]
+        "src/components/insights/TeamTrendsChart.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-002", "UI-003", "UI-004", "UI-005"],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "WBM-002",
-      "feature": "webhook-url-masking",
-      "title": "Update all webhook UI components to display branded URLs",
+      "id": "UI-002",
+      "feature": "ui-polish",
+      "title": "Fix transcript attendee sidebar speaker color mismatch",
       "type": "frontend",
       "status": "pending",
       "priority": 2,
-      "dependencies": { "stories": ["WBM-001"], "files": ["src/lib/utils/webhookUrl.ts"], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 25,
       "acceptance": [
-        "WebhookSettingsPanel.tsx: webhookUrl uses getWebhookBaseUrl() instead of VITE_SUPABASE_URL",
-        "WebhookSetupInstructions.tsx: all code examples (cURL, Python, Zapier, Make, n8n) show branded URL",
-        "WebhookTestConsole.tsx: test endpoint uses branded URL",
-        "No Supabase project ref or supabase.co domain visible to users anywhere in webhook UI",
-        "Existing webhooks using old Supabase URLs still work (Vercel rewrite handles both paths)"
+        "Speaker avatar color in attendees sidebar matches the same speaker's avatar color in the transcript",
+        "Speaker name text color matches avatar background color",
+        "Attendees sidebar uses speaker-name-based slot lookup (not array index)"
       ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
       "files": [
-        "src/components/ops/WebhookSettingsPanel.tsx",
-        "src/components/ops/WebhookSetupInstructions.tsx",
-        "src/components/ops/WebhookTestConsole.tsx"
-      ]
-    },
-    {
-      "id": "AQF-001",
-      "feature": "audit-quick-fixes",
-      "title": "Fix webhook action_type union and RuleList label",
-      "type": "bugfix",
-      "status": "complete",
-      "priority": 1,
+        "src/pages/MeetingDetail.tsx"
+      ],
       "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": ["AQF-002"],
-      "estimatedMinutes": 15,
-      "acceptance": [
-        "Add '| webhook' to action_type union in useOpsRules.ts line 15",
-        "Add 'webhook': 'Webhook' to actionLabels in RuleList.tsx",
-        "TypeScript build passes with no errors on webhook rule usage"
-      ],
-      "files": [
-        "src/lib/hooks/useOpsRules.ts",
-        "src/components/ops/RuleList.tsx"
-      ]
+      "parallelWith": ["UI-001", "UI-003", "UI-004", "UI-005"],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "AQF-002",
-      "feature": "audit-quick-fixes",
-      "title": "Create generate_webhook_api_key RPC in migration",
-      "type": "schema",
-      "status": "complete",
-      "priority": 2,
-      "dependencies": { "stories": [], "files": [], "schema": ["ops_table_webhooks"] },
-      "blocks": [],
-      "parallelWith": ["AQF-001"],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "SQL function generate_webhook_api_key(p_table_id UUID) created",
-        "Generates sk_ prefix + 64 hex chars using gen_random_bytes(32)",
-        "Rotates previous key with 24h grace period (previous_api_key_expires_at)",
-        "Returns the new full API key",
-        "RLS: only org members can call for their org's tables"
-      ],
-      "files": [
-        "supabase/migrations/20260219600002_webhook_api_key_rpc.sql"
-      ]
-    },
-    {
-      "id": "AQF-003",
-      "feature": "audit-quick-fixes",
-      "title": "Implement DB triggers to invoke evaluate-ops-rule on cell/row events",
-      "type": "schema",
-      "status": "complete",
+      "id": "UI-003",
+      "feature": "ui-polish",
+      "title": "Credits navbar: show 'N credits' label and add pulsating green dot",
+      "type": "frontend",
+      "status": "pending",
       "priority": 3,
+      "acceptance": [
+        "Credits button shows '342 credits' not '342 cr'",
+        "Green status dot next to credits pulsates (like notification dot) using animate-pulse in green",
+        "Pulse is subtle — not distracting"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/components/credits/CreditWidget.tsx"
+      ],
       "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "Trigger on dynamic_table_cells INSERT/UPDATE fires for cell_updated rules",
-        "Trigger on dynamic_table_rows INSERT fires for row_created rules",
-        "Trigger calls pg_net to invoke evaluate-ops-rule edge function async",
-        "Debounce: skips if same row triggered within 5 seconds (prevents cascading)",
-        "Only fires if table has enabled rules (check ops_automation_rules)"
-      ],
-      "files": [
-        "supabase/migrations/20260219600003_ops_rule_triggers.sql"
-      ]
+      "parallelWith": ["UI-001", "UI-002", "UI-004", "UI-005"],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "AQF-004",
-      "feature": "audit-quick-fixes",
-      "title": "Wire or remove dead ApplicationConfig.autonomous_copilot",
-      "type": "bugfix",
-      "status": "complete",
+      "id": "UI-004",
+      "feature": "ui-polish",
+      "title": "Dashboard Activity tab: add entry animation matching Team Performance",
+      "type": "frontend",
+      "status": "pending",
       "priority": 4,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["CPT-003"],
-      "parallelWith": ["AQF-005"],
-      "estimatedMinutes": 20,
       "acceptance": [
-        "ApplicationConfig.autonomous_copilot either removed or wired into CopilotContext",
-        "If wired: CopilotContext reads enabled flag and model from config instead of hardcoding",
-        "If removed: dead config block deleted, comment added explaining mode is hardcoded",
-        "No disconnected config values remain"
+        "Switching to Activity tab triggers fade-in + slide-up animation (opacity 0→1, y 20→0)",
+        "Animation matches the motion.div pattern used in TeamKPIGrid",
+        "Content width/scaling is consistent with Overview tab"
       ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
       "files": [
-        "src/lib/configuration/ApplicationConfig.ts",
-        "src/lib/contexts/CopilotContext.tsx"
-      ]
+        "src/pages/Dashboard.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-005"],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "AQF-005",
-      "feature": "audit-quick-fixes",
-      "title": "Fix useCompanies stat aggregation stubs returning zeros",
-      "type": "bugfix",
-      "status": "complete",
+      "id": "UI-005",
+      "feature": "ui-polish",
+      "title": "Meetings tab: add consistent spacing to match app standard padding",
+      "type": "frontend",
+      "status": "pending",
       "priority": 5,
+      "acceptance": [
+        "Meetings list content has px-4 sm:px-6 lg:px-8 horizontal padding",
+        "Vertical padding matches app standard (py-6 sm:py-8)",
+        "Content is no longer flush to screen edges",
+        "Pattern matches MeetingAnalyticsPage and Dashboard padding"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "src/components/meetings/UnifiedMeetingsList.tsx"
+      ],
       "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": ["AQF-004"],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "useCompanies contactCount returns actual count from contacts table",
-        "useCompanies dealsCount returns actual count from deals table",
-        "useCompanies dealsValue returns actual sum from deals table",
-        "Queries use proper RLS-scoped joins (org_id match)"
-      ],
-      "files": [
-        "src/lib/hooks/useCompanies.ts"
-      ]
-    },
-    {
-      "id": "AQF-006",
-      "feature": "audit-quick-fixes",
-      "title": "Replace predictive model null returns with heuristic defaults",
-      "type": "bugfix",
-      "status": "complete",
-      "priority": 6,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "days_until_predicted_ghost returns heuristic based on days since last activity",
-        "predicted_days_to_close returns heuristic based on average stage duration",
-        "No null values shown in deal health or relationship health UIs",
-        "Heuristic logic clearly commented as placeholder for future ML model"
-      ],
-      "files": [
-        "src/lib/services/relationshipHealthService.ts",
-        "src/lib/services/dealHealthService.ts"
-      ]
-    },
-
-    {
-      "id": "CPT-001",
-      "feature": "copilot-transition",
-      "title": "Port structured response router to autonomous mode",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 1,
-      "dependencies": { "stories": ["AQF-004"], "files": [], "schema": [] },
-      "blocks": ["CPT-002"],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "Autonomous mode renders structured response components when backend emits structured_response SSE",
-        "Reuse existing CopilotResponse.tsx component router (or simplified subset)",
-        "Pipeline views, deal health cards, follow-up packs render as rich UI not plain text",
-        "Fallback to plain text when no structured_response event received"
-      ],
-      "files": [
-        "src/lib/hooks/useCopilotChat.ts",
-        "src/components/copilot/CopilotResponse.tsx",
-        "src/lib/contexts/CopilotContext.tsx"
-      ]
-    },
-    {
-      "id": "CPT-002",
-      "feature": "copilot-transition",
-      "title": "Add HITL preview-confirm flow to autonomous mode",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 2,
-      "dependencies": { "stories": ["CPT-001"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["CPT-003"],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "Sequences with is_simulation=true show preview card with Confirm/Cancel buttons",
-        "User reply 'Confirm' re-executes with is_simulation=false",
-        "Cancel dismisses the pending action",
-        "ActionItemsStore tracks pending_action state correctly in autonomous mode"
-      ],
-      "files": [
-        "src/lib/contexts/CopilotContext.tsx",
-        "src/lib/stores/actionItemsStore.ts",
-        "src/components/copilot/CopilotConfirmation.tsx"
-      ]
-    },
-    {
-      "id": "CPT-003",
-      "feature": "copilot-transition",
-      "title": "Add copilot mode-switching toggle in settings",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 3,
-      "dependencies": { "stories": ["AQF-004"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["CPT-002"],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "AI settings page shows 'Copilot Engine' toggle: Autonomous (Claude) vs Classic (Gemini)",
-        "Selection persists to user_settings table",
-        "CopilotContext reads preference instead of hardcoded true",
-        "Warning shown if switching mid-conversation (clears current session)"
-      ],
-      "files": [
-        "src/pages/settings/AIPersonalizationSettings.tsx",
-        "src/lib/contexts/CopilotContext.tsx",
-        "src/lib/configuration/ApplicationConfig.ts"
-      ]
-    },
-    {
-      "id": "CPT-004",
-      "feature": "copilot-transition",
-      "title": "Wire multi-agent response rendering in copilot UI",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 4,
-      "dependencies": { "stories": ["CPT-001"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "agent_start SSE events show specialist agent card (name, domain, status spinner)",
-        "agent_done SSE events update card with result summary",
-        "synthesis event renders final orchestrated response",
-        "Multiple specialist results displayed as collapsible sections"
-      ],
-      "files": [
-        "src/lib/hooks/useCopilotChat.ts",
-        "src/components/copilot/AgentSpecialistCard.tsx",
-        "src/components/copilot/CopilotResponse.tsx"
-      ]
-    },
-
-    {
-      "id": "SVC-001",
-      "feature": "service-cleanup",
-      "title": "Remove or archive unused services",
-      "type": "refactor",
-      "status": "complete",
-      "priority": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["SVC-002"],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "Verify each service has zero imports: coachingService, ghostDetectionService, costAnalysisService, testCalendarFunction, testScenarioService, onboardingService, contentService.examples",
-        "Delete confirmed unused services (or move to src/lib/services/_archived/)",
-        "No broken imports after removal",
-        "Build passes cleanly"
-      ],
-      "files": [
-        "src/lib/services/coachingService.ts",
-        "src/lib/services/ghostDetectionService.ts",
-        "src/lib/services/costAnalysisService.ts",
-        "src/lib/services/testCalendarFunction.ts",
-        "src/lib/services/testScenarioService.ts",
-        "src/lib/services/onboardingService.ts"
-      ]
-    },
-    {
-      "id": "SVC-002",
-      "feature": "service-cleanup",
-      "title": "Consolidate actionItemStore and actionItemsStore",
-      "type": "refactor",
-      "status": "complete",
-      "priority": 2,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["SVC-001"],
-      "estimatedMinutes": 25,
-      "acceptance": [
-        "Determine which store is canonical (check import counts)",
-        "Migrate all imports to single store",
-        "Delete the deprecated store",
-        "No duplicate action item state management"
-      ],
-      "files": [
-        "src/lib/stores/actionItemStore.ts",
-        "src/lib/stores/actionItemsStore.ts"
-      ]
-    },
-    {
-      "id": "SVC-003",
-      "feature": "service-cleanup",
-      "title": "Build outbound webhook rule configuration UI",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 3,
-      "dependencies": { "stories": ["AQF-001"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "estimatedMinutes": 30,
-      "acceptance": [
-        "WebhookSettingsPanel outbound section shows existing webhook rules for this table",
-        "'Add Webhook Rule' button opens RuleBuilder pre-filled with webhook action type",
-        "Existing outbound rules listed with enable/disable toggle and delete",
-        "Remove 'Coming soon' disabled state"
-      ],
-      "files": [
-        "src/components/ops/WebhookSettingsPanel.tsx",
-        "src/components/ops/RuleBuilder.tsx"
-      ]
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004"],
+      "startedAt": null,
+      "completedAt": null
     }
   ],
   "execution": {
-    "totalStories": 82,
-    "completedStories": 82,
-    "currentFeature": null,
-    "lastUpdated": "2026-02-22T23:00:00Z"
+    "totalStories": 5,
+    "completedStories": 0,
+    "currentFeature": "ui-polish",
+    "lastUpdated": "2026-02-23"
   }
 }

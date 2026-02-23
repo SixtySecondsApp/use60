@@ -599,7 +599,7 @@ export const RecordingSettings: React.FC = () => {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => navigate('/meetings/recordings')}
+          onClick={() => navigate('/meetings')}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>

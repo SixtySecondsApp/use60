@@ -114,11 +114,19 @@ serve(async (req) => {
     if (req.method !== 'POST' && req.method !== 'OPTIONS') {
       console.log('[google-test-connection] Method not allowed:', req.method);
       return jsonResponse({
-        error: 'Method not allowed. Use POST.',
+        success: false,
+        error: 'Method not allowed',
         debugInfo: 'method-check',
         actualMethod: req.method,
         url: req.url,
-      }, req, 405);
+        connected: false,
+        services: {
+          userinfo: { ok: false, message: 'Method not allowed' },
+          gmail: { ok: false, message: 'Method not allowed' },
+          calendar: { ok: false, message: 'Method not allowed' },
+          tasks: { ok: false, message: 'Method not allowed' },
+        },
+      }, req, 200);
     }
 
     console.log('[google-test-connection] Method check passed, proceeding to auth');
@@ -139,7 +147,14 @@ serve(async (req) => {
         debugInfo: 'missing-env',
         hasUrl: !!supabaseUrl,
         hasKey: !!supabaseServiceKey,
-      }, req, 500);
+        connected: false,
+        services: {
+          userinfo: { ok: false, message: 'Server configuration error' },
+          gmail: { ok: false, message: 'Server configuration error' },
+          calendar: { ok: false, message: 'Server configuration error' },
+          tasks: { ok: false, message: 'Server configuration error' },
+        },
+      }, req, 200);
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
