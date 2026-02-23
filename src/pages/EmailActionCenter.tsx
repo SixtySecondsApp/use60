@@ -23,6 +23,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -482,8 +483,34 @@ export default function EmailActionCenter() {
 
           <TabsContent value="pending" className="mt-0">
             {isLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg border border-gray-200 dark:border-gray-800 p-4"
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* Company logo placeholder */}
+                      <Skeleton className="w-10 h-10 rounded-lg flex-shrink-0" />
+                      <div className="flex-1 min-w-0 space-y-2">
+                        {/* Recipient name + status */}
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-5 w-36" />
+                          <Skeleton className="h-5 w-16 rounded-full" />
+                        </div>
+                        {/* Subject line */}
+                        <Skeleton className="h-4 w-3/4" />
+                        {/* Domain + timestamp */}
+                        <div className="flex items-center gap-4">
+                          <Skeleton className="h-3 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                      {/* Arrow */}
+                      <Skeleton className="w-5 h-5 rounded flex-shrink-0" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : pendingActions.length === 0 ? (
               <Card className="border-dashed">

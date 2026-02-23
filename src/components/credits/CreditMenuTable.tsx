@@ -275,7 +275,7 @@ const PACK_ICONS: Record<string, React.ElementType> = {
 
 function PackComparisonCards() {
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
-  const { currencyCode } = useOrgMoney();
+  const { currencyCode, symbol: orgSymbol } = useOrgMoney();
 
   return (
     <>
@@ -292,12 +292,12 @@ function PackComparisonCards() {
             const PackIcon = PACK_ICONS[packType] ?? Zap;
 
             return (
-              <div key={packType} className={cn('relative', pack.popular && 'z-10')}>
+              <div key={packType} className={cn('relative', pack.popular && 'z-10 pt-3')}>
                 {pack.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap">
+                  <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap">
                     <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
                       <Star className="w-2.5 h-2.5" />
-                      Popular
+                      Most Popular
                     </span>
                   </div>
                 )}
@@ -305,7 +305,7 @@ function PackComparisonCards() {
                   className={cn(
                     'border rounded-xl p-4 flex flex-col gap-3 h-full',
                     pack.popular
-                      ? 'border-indigo-300 dark:border-indigo-700 bg-indigo-50/50 dark:bg-indigo-900/10'
+                      ? 'border-indigo-400 dark:border-indigo-600 ring-2 ring-indigo-400/30 dark:ring-indigo-500/20 bg-indigo-50/50 dark:bg-indigo-900/10'
                       : 'border-gray-200 dark:border-gray-800'
                   )}
                 >
@@ -324,7 +324,7 @@ function PackComparisonCards() {
                       {isApproximate && <span className="text-gray-400">~</span>}{symbol}{price}
                     </p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                      £{costPerCredit.toFixed(2)}/credit
+                      {symbol}{costPerCredit.toFixed(2)}/credit
                     </p>
                   </div>
 
@@ -363,6 +363,7 @@ function PackComparisonCards() {
 // ============================================================================
 
 export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
+  const { symbol } = useOrgMoney();
   const { data: menu, isLoading, isError, refetch } = useQuery({
     queryKey: ['credit-menu'],
     queryFn: () => getCreditMenu(),
@@ -557,7 +558,7 @@ export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
 
         {!isLoading && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-            Costs shown in credit units. 1 credit ≈ £0.49 at Signal tier.
+            Costs shown in credit units. 1 credit ≈ {symbol}0.49 at Signal tier.
           </p>
         )}
       </div>

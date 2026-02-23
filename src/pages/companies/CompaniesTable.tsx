@@ -44,6 +44,7 @@ import { useUser } from '@/lib/hooks/useUser';
 import { useCompanies } from '@/lib/hooks/useCompanies';
 import logger from '@/lib/utils/logger';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface Company {
   id: string;
@@ -477,15 +478,120 @@ export default function CompaniesTable() {
 
   if (isLoading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white dark:bg-gray-900/50 rounded-xl p-8 border border-[#E2E8F0] dark:border-gray-800 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-slate-200 dark:bg-gray-800 rounded w-1/4"></div>
-            <div className="h-4 bg-slate-200 dark:bg-gray-800 rounded w-1/2"></div>
-            <div className="space-y-3 mt-6">
-              {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="h-16 bg-slate-100 dark:bg-gray-800/50 rounded-lg"></div>
-              ))}
+      <div className="overflow-x-hidden">
+        <CRMNavigation />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+          {/* Header skeleton */}
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-2">
+              <Skeleton className="w-8 h-8 rounded-md" />
+              <Skeleton className="h-9 w-40" />
+            </div>
+            <Skeleton className="h-4 w-48 mt-1" />
+          </div>
+
+          {/* Search bar skeleton */}
+          <div className="bg-white dark:bg-gray-900/50 rounded-xl p-6 mb-6 border border-[#E2E8F0] dark:border-gray-800 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col lg:flex-row gap-4">
+                <Skeleton className="h-10 flex-1" />
+                <Skeleton className="h-10 w-44" />
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex gap-4 flex-1">
+                  <Skeleton className="h-10 w-44" />
+                  <Skeleton className="h-10 w-44" />
+                  <Skeleton className="h-10 w-44" />
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-10 w-24" />
+                  <Skeleton className="h-10 w-32" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Table skeleton — real headers + 6 row placeholders */}
+          <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-[#E2E8F0] dark:border-gray-800 overflow-x-auto shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
+            <div className="min-w-[900px]">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[#E2E8F0] dark:border-gray-800 hover:bg-transparent">
+                    <TableHead className="text-[#64748B] dark:text-gray-300">
+                      <div className="flex items-center gap-2">Company <ArrowUpDown className="w-4 h-4 text-gray-400" /></div>
+                    </TableHead>
+                    <TableHead className="text-[#64748B] dark:text-gray-300">
+                      <div className="flex items-center gap-2">Domain <ArrowUpDown className="w-4 h-4 text-gray-400" /></div>
+                    </TableHead>
+                    <TableHead className="text-[#64748B] dark:text-gray-300">
+                      <div className="flex items-center gap-2">Size <ArrowUpDown className="w-4 h-4 text-gray-400" /></div>
+                    </TableHead>
+                    <TableHead className="text-[#64748B] dark:text-gray-300">
+                      <div className="flex items-center gap-2">Industry <ArrowUpDown className="w-4 h-4 text-gray-400" /></div>
+                    </TableHead>
+                    <TableHead className="text-[#64748B] dark:text-gray-300 text-center">
+                      <div className="flex items-center justify-center gap-2">Contacts <ArrowUpDown className="w-4 h-4 text-gray-400" /></div>
+                    </TableHead>
+                    <TableHead className="text-[#64748B] dark:text-gray-300 text-center">
+                      <div className="flex items-center justify-center gap-2">Deals <ArrowUpDown className="w-4 h-4 text-gray-400" /></div>
+                    </TableHead>
+                    <TableHead className="text-[#64748B] dark:text-gray-300 text-right">
+                      <div className="flex items-center justify-end gap-2">Value <ArrowUpDown className="w-4 h-4 text-gray-400" /></div>
+                    </TableHead>
+                    <TableHead className="text-[#64748B] dark:text-gray-300 text-center">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[1, 2, 3, 4, 5, 6].map(i => (
+                    <TableRow key={i} className="border-[#E2E8F0] dark:border-gray-800 hover:bg-transparent">
+                      {/* Company name + optional description */}
+                      <TableCell>
+                        <div className="flex flex-col gap-1.5">
+                          <Skeleton className="h-4 w-36" />
+                          <Skeleton className="h-3 w-52 opacity-60" />
+                        </div>
+                      </TableCell>
+                      {/* Domain */}
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-4 w-4 rounded-sm" />
+                          <Skeleton className="h-4 w-28" />
+                        </div>
+                      </TableCell>
+                      {/* Size badge */}
+                      <TableCell>
+                        <Skeleton className="h-5 w-16 rounded-full" />
+                      </TableCell>
+                      {/* Industry badge */}
+                      <TableCell>
+                        <Skeleton className="h-5 w-24 rounded-full" />
+                      </TableCell>
+                      {/* Contacts count */}
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Skeleton className="h-4 w-4 rounded-sm" />
+                          <Skeleton className="h-4 w-6" />
+                        </div>
+                      </TableCell>
+                      {/* Deals count */}
+                      <TableCell className="text-center">
+                        <Skeleton className="h-4 w-6 mx-auto" />
+                      </TableCell>
+                      {/* Value */}
+                      <TableCell className="text-right">
+                        <Skeleton className="h-4 w-16 ml-auto" />
+                      </TableCell>
+                      {/* Actions */}
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1">
+                          <Skeleton className="h-8 w-8 rounded-md" />
+                          <Skeleton className="h-8 w-8 rounded-md" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </div>
         </div>

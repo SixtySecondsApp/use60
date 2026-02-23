@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useUpdateSubscription } from '@/lib/hooks/useSubscription';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import {
   ArrowRight,
   ArrowDown,
@@ -64,11 +65,12 @@ const PLAN_PRICES: Record<PlanSlug, { monthly: number; annual: number; name: str
 
 const TIER_ORDER: Record<PlanSlug, number> = { basic: 0, pro: 1 };
 
-function formatPrice(slug: PlanSlug, cycle: BillingCycle): string {
+function formatPrice(slug: PlanSlug, cycle: BillingCycle, currencySymbol?: string): string {
   const p = PLAN_PRICES[slug];
+  const sym = currencySymbol ?? p.currency;
   return cycle === 'annual'
-    ? `${p.currency}${p.annual}/yr`
-    : `${p.currency}${p.monthly}/mo`;
+    ? `${sym}${p.annual}/yr`
+    : `${sym}${p.monthly}/mo`;
 }
 
 function formatDate(iso: string | null): string {
@@ -78,9 +80,8 @@ function formatDate(iso: string | null): string {
   });
 }
 
-function formatProration(amountPence: number, currency: string): string {
-  const symbol = currency.toUpperCase() === 'GBP' ? '£' : currency;
-  return `${symbol}${(amountPence / 100).toFixed(2)}`;
+function formatProration(amountPence: number, currencySymbol: string): string {
+  return `${currencySymbol}${(amountPence / 100).toFixed(2)}`;
 }
 
 // ============================================================================
@@ -99,6 +100,7 @@ export function PlanChangeModal({
   onSuccess,
 }: PlanChangeModalProps) {
   const updateSubscription = useUpdateSubscription();
+  const { symbol } = useOrgMoney();
   const [prorationPreview, setProrationPreview] = useState<number | null>(null);
   const [prorationCurrency, setProrationCurrency] = useState<string>('GBP');
 
@@ -106,8 +108,8 @@ export function PlanChangeModal({
   const isDowngrade = TIER_ORDER[targetPlanSlug] < TIER_ORDER[currentPlanSlug];
   const isCycleChange = !isUpgrade && !isDowngrade;
 
-  const currentPrice = formatPrice(currentPlanSlug, currentBillingCycle);
-  const targetPrice = formatPrice(targetPlanSlug, targetBillingCycle);
+  const currentPrice = formatPrice(currentPlanSlug, currentBillingCycle, symbol);
+  const targetPrice = formatPrice(targetPlanSlug, targetBillingCycle, symbol);
 
   const currentPlanInfo = PLAN_PRICES[currentPlanSlug];
   const targetPlanInfo = PLAN_PRICES[targetPlanSlug];
@@ -140,7 +142,7 @@ export function PlanChangeModal({
 
       if (result.effective === 'immediate') {
         if (result.proration_amount != null && result.proration_amount > 0) {
-          const prorationStr = formatProration(result.proration_amount, result.currency ?? 'GBP');
+          const prorationStr = formatProration(result.proration_amount, symbol);
           toast.success(
             `Upgraded to ${targetPlanInfo.name}! ${prorationStr} charged now for the remainder of this billing period.`
           );
@@ -230,7 +232,7 @@ export function PlanChangeModal({
                   <span className="font-semibold">{formatDate(currentPeriodEnd)}</span>
                 </p>
                 <p className="text-sm text-amber-700 dark:text-amber-300">
-                  After that, you'll be on {targetPlanInfo.name} at {formatPrice(targetPlanSlug, targetBillingCycle)}.
+                  After that, you'll be on {targetPlanInfo.name} at {formatPrice(targetPlanSlug, targetBillingCycle, symbol)}.
                   No charge or refund will be applied for the current period.
                 </p>
               </div>
@@ -242,7 +244,7 @@ export function PlanChangeModal({
               <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                  Switch to annual billing and save £{annualSavings}/year
+                  Switch to annual billing and save {symbol}{annualSavings}/year
                 </p>
                 <p className="text-sm text-blue-700 dark:text-blue-300">
                   Change takes effect at your next billing date:{' '}

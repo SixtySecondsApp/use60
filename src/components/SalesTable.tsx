@@ -49,7 +49,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { IdentifierType } from '../components/IdentifierField';
 import { EditActivityForm } from './EditActivityForm';
 import { useActivityFilters } from '@/lib/hooks/useActivityFilters';
@@ -57,7 +57,7 @@ import { ActivityUploadModal } from './admin/ActivityUploadModal'; // Import the
 import { VisuallyHidden } from '@/components/calendar/ScreenReaderAnnouncements';
 import { exportActivitiesToCSV, getExportSummary } from '@/lib/utils/csvExport';
 import { calculateLTVValue, formatActivityAmount } from '@/lib/utils/calculations';
-import { DateFilter, DateRangePreset, DateRange } from '@/components/ui/date-filter';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { Badge } from './Pipeline/Badge';
 import logger from '@/lib/utils/logger';
 import { useDeals } from '@/lib/hooks/useDeals';
@@ -99,16 +99,12 @@ export function SalesTable() {
   const [bulkEditData, setBulkEditData] = useState<Partial<Activity>>({});
   const [isSelectModeActive, setIsSelectModeActive] = useState(false);
   
-  // State for date filtering
-  const [selectedRangeType, setSelectedRangeType] = useState<DateRangePreset>('thisMonth');
-  const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null);
+  // Date filter hook — replaces selectedRangeType + customDateRange + selectedMonth
+  const dateFilter = useDateRangeFilter('month');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false); // State for upload modal
   const [showFilters, setShowFilters] = useState(false); // State for filters panel
   const hasLoggedInitialSync = useRef(false);
   const hasSyncedFromFilters = useRef(false);
-
-  // Month-by-month toggle state (mirrors dashboard behavior)
-  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
 
   // Add Deal modal state
   const [addDealForActivity, setAddDealForActivity] = useState<Activity | null>(null);
@@ -165,137 +161,33 @@ export function SalesTable() {
     const fr = filters.dateRange;
     if (!fr) return;
 
-    const now = new Date();
-    const filterStart = new Date(fr.start);
-    const filterEnd = new Date(fr.end);
-
     if (!hasLoggedInitialSync.current) {
       hasLoggedInitialSync.current = true;
       logger.log('[SalesTable] Initial sync with filter date range:', {
-        start: format(filterStart, 'yyyy-MM-dd'),
-        end: format(filterEnd, 'yyyy-MM-dd')
+        start: format(new Date(fr.start), 'yyyy-MM-dd'),
+        end: format(new Date(fr.end), 'yyyy-MM-dd')
       });
     }
 
-    if (
-      startOfDay(filterStart).getTime() === startOfDay(now).getTime() &&
-      endOfDay(filterEnd).getTime() === endOfDay(now).getTime()
-    ) {
-      setSelectedRangeType('today');
-      setCustomDateRange(null);
-      setSelectedMonth(new Date());
-    } else if (
-      startOfWeek(filterStart).getTime() === startOfWeek(now).getTime() &&
-      endOfWeek(filterEnd).getTime() === endOfWeek(now).getTime()
-    ) {
-      setSelectedRangeType('thisWeek');
-      setCustomDateRange(null);
-      setSelectedMonth(new Date());
-    } else if (
-      startOfMonth(filterStart).getTime() === startOfMonth(now).getTime() &&
-      endOfMonth(filterEnd).getTime() === endOfMonth(now).getTime()
-    ) {
-      setSelectedRangeType('thisMonth');
-      setCustomDateRange(null);
-      setSelectedMonth(new Date());
-    } else {
-      setSelectedRangeType('custom');
-      setCustomDateRange({ start: filterStart, end: filterEnd });
-
-      const monthStart = startOfMonth(filterStart);
-      const monthEnd = endOfMonth(filterStart);
-      if (
-        monthStart.getTime() === startOfDay(filterStart).getTime() &&
-        monthEnd.getTime() === endOfDay(filterEnd).getTime()
-      ) {
-        setSelectedMonth(new Date(filterStart));
-      }
-    }
-
+    // Set custom range from global filter
+    dateFilter.handleCalendarSelect(new Date(fr.start));
+    dateFilter.handleCalendarSelect(new Date(fr.end));
     hasSyncedFromFilters.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.dateRange]);
 
-  // Handlers for month navigation
-  const handlePreviousMonth = () => {
-    setSelectedMonth(prev => {
-      const newMonth = subMonths(prev, 1);
-      // Apply as a custom range covering that calendar month
-      const start = startOfMonth(newMonth);
-      const end = endOfMonth(newMonth);
-      setSelectedRangeType('custom');
-      setCustomDateRange({ start, end });
-      return newMonth;
-    });
-  };
-
-  const handleNextMonth = () => {
-    setSelectedMonth(prev => {
-      const candidate = new Date(prev);
-      const next = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 1);
-      const now = new Date();
-      const maxMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      if (next > maxMonth) {
-        return prev; // Do not go beyond current month
-      }
-      const start = startOfMonth(next);
-      const end = endOfMonth(next);
-      setSelectedRangeType('custom');
-      setCustomDateRange({ start, end });
-      return next;
-    });
-  };
-
-  // Calculate the current and previous date ranges based on the selected type
+  // Calculate the current and previous date ranges based on the date filter
   const { currentDateRange, previousDateRange } = useMemo(() => {
-    // Use custom range if available and preset is 'custom'
-    if (selectedRangeType === 'custom' && customDateRange) {
-      return {
-        currentDateRange: customDateRange,
-        previousDateRange: {
-          start: new Date(customDateRange.start.getTime() - (customDateRange.end.getTime() - customDateRange.start.getTime())),
-          end: new Date(customDateRange.start.getTime() - 1)
-        }
-      };
-    }
-
-    const now = new Date();
-    let currentStart, currentEnd, previousStart, previousEnd;
-
-    switch (selectedRangeType) {
-      case 'today':
-        currentStart = startOfDay(now);
-        currentEnd = endOfDay(now);
-        const yesterday = subDays(now, 1);
-        previousStart = startOfDay(yesterday);
-        previousEnd = endOfDay(yesterday);
-        break;
-      case 'thisWeek':
-        currentStart = startOfWeek(now, { weekStartsOn: 0 });
-        currentEnd = endOfWeek(now, { weekStartsOn: 0 });
-        const lastWeek = subWeeks(now, 1);
-        previousStart = startOfWeek(lastWeek, { weekStartsOn: 0 });
-        previousEnd = endOfWeek(lastWeek, { weekStartsOn: 0 });
-        break;
-      case 'last30Days':
-        currentStart = startOfDay(subDays(now, 29));
-        currentEnd = endOfDay(now);
-        previousStart = startOfDay(subDays(now, 59)); // 30 days before the current start
-        previousEnd = endOfDay(subDays(now, 30)); // Day before the current start
-        break;
-      case 'thisMonth': // Default case
-      default:
-        currentStart = startOfMonth(now);
-        currentEnd = endOfMonth(now);
-        const lastMonth = subMonths(now, 1);
-        previousStart = startOfMonth(lastMonth);
-        previousEnd = endOfMonth(lastMonth);
-        break;
-    }
+    const current = dateFilter.dateRange ?? { start: startOfMonth(new Date()), end: endOfMonth(new Date()) };
+    const duration = current.end.getTime() - current.start.getTime();
     return {
-      currentDateRange: { start: currentStart, end: currentEnd },
-      previousDateRange: { start: previousStart, end: previousEnd }
+      currentDateRange: current,
+      previousDateRange: {
+        start: new Date(current.start.getTime() - duration - 1),
+        end: new Date(current.start.getTime() - 1),
+      },
     };
-  }, [selectedRangeType, customDateRange]);
+  }, [dateFilter.dateRange]);
 
   // Now that currentDateRange is available, fetch activities server-side for that range
   const { activities, removeActivity, updateActivity } = useActivities(currentDateRange);
@@ -1383,30 +1275,6 @@ export function SalesTable() {
                 Export CSV ({filteredActivities.length})
               </Button>
 
-              {/* Month-by-month toggle */}
-              <div className="flex items-center gap-2 bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800/50 rounded-md px-2 py-1.5">
-                <button
-                  type="button"
-                  onClick={handlePreviousMonth}
-                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  aria-label="Previous month"
-                >
-                  <ChevronLeft className="w-4 h-4 text-gray-500" />
-                </button>
-                <div className="text-xs font-medium text-gray-700 dark:text-gray-300 min-w-[90px] text-center">
-                  {format(selectedMonth, 'MMM yyyy')}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleNextMonth}
-                  disabled={new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1) > new Date(new Date().getFullYear(), new Date().getMonth(), 1)}
-                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Next month"
-                >
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-
               {/* Bulk Actions - Only show when select mode is active and activities are selected */}
               <AnimatePresence>
                 {isSelectModeActive && selectedActivities.size > 0 && (
@@ -1466,15 +1334,7 @@ export function SalesTable() {
               </AnimatePresence>
               
               {/* Main Date Filter */}
-              <DateFilter
-                value={selectedRangeType}
-                customRange={customDateRange}
-                onPresetChange={setSelectedRangeType}
-                onCustomRangeChange={setCustomDateRange}
-                label="Activity Date"
-                compact={true}
-                className="min-w-[160px]"
-              />
+              <DateRangeFilter {...dateFilter} />
             </div>
           </div>
 
@@ -1707,7 +1567,7 @@ export function SalesTable() {
               icon={PoundSterling}
               color="emerald"
               contextInfo={`From ${metricsFilteredActivities.filter(a => a.type === 'sale').length} completed sales`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
             <StatCard
               key="meetingConversion"
@@ -1718,7 +1578,7 @@ export function SalesTable() {
               icon={Users}
               color="cyan"
               contextInfo={`${metricsFilteredActivities.filter(a => a.type === 'proposal').length} proposals from ${metricsFilteredActivities.filter(a => a.type === 'meeting').length} meetings`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
             <StatCard
               key="proposalWinRate"
@@ -1729,7 +1589,7 @@ export function SalesTable() {
               icon={FileText}
               color="blue"
               contextInfo={`${metricsFilteredActivities.filter(a => a.type === 'sale').length} wins from ${metricsFilteredActivities.filter(a => a.type === 'proposal').length} proposals`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
             <StatCard
               key="noShowRate"
@@ -1740,7 +1600,7 @@ export function SalesTable() {
               icon={XCircle}
               color="red"
               contextInfo={`${currentStats.noShowCount} no-shows from ${currentStats.totalScheduledCount} scheduled`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
             <StatCard
               key="avgdeal"
@@ -1751,7 +1611,7 @@ export function SalesTable() {
               icon={TrendingUp}
               color="amber"
               contextInfo={`Average from ${currentStats.activeDeals} won deals`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
           </div>
 

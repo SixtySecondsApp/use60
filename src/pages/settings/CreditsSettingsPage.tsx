@@ -54,6 +54,7 @@ import {
   Receipt,
   ChevronDown,
   Tag,
+  Star,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -340,8 +341,9 @@ export default function CreditsSettingsPage() {
                         <CreditCard className="w-4 h-4" />
                         {pack.label} — {pack.credits} credits / {(() => { const { symbol, price, isApproximate } = getPackPrice(packType, currencyCode); return `${isApproximate ? '~' : ''}${symbol}${price}`; })()}
                         {pack.popular && (
-                          <span className="ml-1 text-[10px] bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 px-1.5 py-0.5 rounded-full font-medium">
-                            Popular
+                          <span className="ml-1 inline-flex items-center gap-1 bg-blue-500/90 dark:bg-blue-600/90 text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
+                            <Star className="h-2.5 w-2.5 fill-white" />
+                            Most Popular
                           </span>
                         )}
                       </Button>

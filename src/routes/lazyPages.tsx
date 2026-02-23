@@ -210,6 +210,7 @@ export const SalesGoalsPage = lazyWithRetry(() => import('@/pages/settings/Sales
 export const GoogleWorkspaceIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/GoogleWorkspaceIntegrationPage'));
 export const FathomIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/FathomIntegrationPage'));
 export const FirefliesIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/FirefliesIntegrationPage'));
+export const MeetingSettingsPage = lazyWithRetry(() => import('@/pages/settings/MeetingSettingsPage'));
 
 // Org Settings (moved from /org routes)
 export const OrgBranding = lazyWithRetry(() => import('@/pages/org/OrgBranding'));

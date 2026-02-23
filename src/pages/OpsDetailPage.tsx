@@ -97,6 +97,7 @@ import { isCampaignPrompt, detectTableCampaignMissingInfo, generateCampaignName 
 import { CampaignWorkflowResponse, type CampaignWorkflowData } from '@/components/copilot/responses/CampaignWorkflowResponse';
 // Instantly top-bar UI removed — integration moved to column system
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFactProfiles } from '@/lib/hooks/useFactProfiles';
@@ -2275,10 +2276,46 @@ function OpsDetailPage() {
 
   if (isTableLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
-          <span className="text-sm text-gray-400">Loading table...</span>
+      <div className="flex min-h-screen flex-col">
+        {/* Top bar skeleton */}
+        <div className="flex items-center gap-3 border-b border-zinc-800/60 px-4 py-3">
+          <Skeleton className="h-8 w-8 rounded-lg" />
+          <Skeleton className="h-5 w-48" />
+          <div className="ml-auto flex items-center gap-2">
+            <Skeleton className="h-8 w-24 rounded-lg" />
+            <Skeleton className="h-8 w-24 rounded-lg" />
+            <Skeleton className="h-8 w-20 rounded-lg" />
+          </div>
+        </div>
+
+        {/* Column header row skeleton */}
+        <div className="flex items-center gap-0 border-b border-zinc-800/60 bg-zinc-900/60 px-4 py-2">
+          <Skeleton className="mr-2 h-4 w-4 rounded" />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex-1 px-3">
+              <Skeleton className="h-4 w-20" />
+            </div>
+          ))}
+        </div>
+
+        {/* Table row skeletons */}
+        <div className="flex-1">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-0 border-b border-zinc-800/40 px-4 py-3"
+            >
+              <Skeleton className="mr-2 h-4 w-4 rounded" />
+              {Array.from({ length: 5 }).map((_, j) => (
+                <div key={j} className="flex-1 px-3">
+                  <Skeleton
+                    className="h-4"
+                    style={{ width: `${[70, 45, 60, 80, 50][j % 5]}%` }}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     );

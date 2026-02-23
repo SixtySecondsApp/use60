@@ -1,0 +1,137 @@
+{
+  "feature": "date-navigator",
+  "name": "Month Navigator Date Picker",
+  "description": "Replace all date dropdowns with a month-first navigator: left/right arrows to browse full calendar months, calendar icon to open precise date picker. Applies globally to all pages.",
+  "createdAt": "2026-02-23T00:00:00Z",
+  "consultReport": ".sixty/consult/date-navigator.md",
+
+  "stories": [
+    {
+      "id": "DATE-001",
+      "title": "Redesign useDateRangeFilter hook with month navigation mode",
+      "type": "frontend-hook",
+      "status": "complete",
+      "priority": 1,
+      "description": "Refactor the useDateRangeFilter hook to default to month navigation mode. Add currentMonth state, navigateMonth(direction) function, and derive dateRange from full calendar month boundaries (startOfMonth/endOfMonth). Presets (7d/30d/90d) become secondary options inside the calendar popover. The hook output contract (period, dateRange, dateDisplayText) stays backward-compatible so all consumers work without changes.",
+      "acceptance": [
+        "Default mode is 'month' showing current month (e.g. February 2026)",
+        "navigateMonth(-1) sets dateRange to previous full calendar month",
+        "navigateMonth(+1) sets dateRange to next month (disabled if future)",
+        "dateRange output returns { start: startOfMonth, end: endOfMonth } in month mode",
+        "Switching to custom range via calendar still works as before"
+      ],
+      "files": [
+        "src/components/ui/DateRangeFilter.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["DATE-002"],
+      "parallelWith": [],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "DATE-002",
+      "title": "Redesign DateRangeFilter UI with month navigator + calendar popover",
+      "type": "frontend-component",
+      "status": "complete",
+      "priority": 2,
+      "description": "Replace the trigger button with: [ChevronLeft] 'February 2026' [ChevronRight] [Calendar icon]. Left/right arrows call navigateMonth. Clicking the calendar icon (or the month label) opens the existing popover with the full calendar grid + preset buttons. When in custom date mode, show the selected range with an X to clear back to month mode. Support both light and dark variants.",
+      "acceptance": [
+        "Trigger shows: < February 2026 > [calendar icon] layout",
+        "Left/right arrows navigate months without opening popover",
+        "Calendar icon opens popover with calendar grid + presets",
+        "Custom range displays as 'Jan 15 - Feb 3' with X to clear",
+        "Both light and dark variants render correctly"
+      ],
+      "files": [
+        "src/components/ui/DateRangeFilter.tsx"
+      ],
+      "dependencies": { "stories": ["DATE-001"], "files": [], "schema": [] },
+      "blocks": ["DATE-004", "DATE-005"],
+      "parallelWith": [],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "DATE-003",
+      "title": "Migrate DateFilter (date-filter.tsx) consumers to DateRangeFilter",
+      "type": "frontend-migration",
+      "status": "complete",
+      "priority": 2,
+      "description": "The old DateFilter component (date-filter.tsx) is used by MeetingsFilterBar, SalesTable, and PipelineContext. Migrate these 3 consumers to use the new DateRangeFilter with month navigation. Update imports, replace state management, ensure filtering logic works with the new dateRange output. Deprecate/remove the old date-filter.tsx component.",
+      "acceptance": [
+        "MeetingsFilterBar uses new DateRangeFilter with month navigation",
+        "SalesTable uses new DateRangeFilter with month navigation",
+        "PipelineContext updated to use new DateRange type and hook",
+        "Old date-filter.tsx removed or marked deprecated",
+        "All existing filter combinations still work (rep, duration, sentiment)"
+      ],
+      "files": [
+        "src/components/ui/date-filter.tsx",
+        "src/components/meetings/MeetingsFilterBar.tsx",
+        "src/components/SalesTable.tsx",
+        "src/lib/contexts/PipelineContext.tsx",
+        "src/components/meetings/MeetingsList.tsx",
+        "src/components/meetings/UnifiedMeetingsList.tsx"
+      ],
+      "dependencies": { "stories": ["DATE-002"], "files": [], "schema": [] },
+      "blocks": ["DATE-005"],
+      "parallelWith": [],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "DATE-004",
+      "title": "Update Dashboard and MeetingAnalytics pages",
+      "type": "frontend-integration",
+      "status": "complete",
+      "priority": 3,
+      "description": "Verify and update Dashboard.tsx and MeetingAnalyticsPage.tsx to work with the new month-default DateRangeFilter. These already use useDateRangeFilter so changes should be minimal — mainly ensuring the default preset changes from '30d' to month mode and the new trigger UI renders correctly in their header bars.",
+      "acceptance": [
+        "Dashboard page shows month navigator by default",
+        "MeetingAnalytics page shows month navigator by default",
+        "Data refreshes correctly when navigating months",
+        "Team analytics hooks receive correct startOfMonth/endOfMonth dateRange"
+      ],
+      "files": [
+        "src/pages/Dashboard.tsx",
+        "src/pages/MeetingAnalyticsPage.tsx"
+      ],
+      "dependencies": { "stories": ["DATE-002"], "files": [], "schema": [] },
+      "blocks": ["DATE-005"],
+      "parallelWith": ["DATE-003"],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "DATE-005",
+      "title": "Update remaining pages and verify all integrations",
+      "type": "frontend-integration",
+      "status": "complete",
+      "priority": 4,
+      "description": "Update VSLAnalytics, MetaAdsAnalytics, BillingAnalytics, and ActionCentre to use the new month navigator. VSLAnalytics has extra presets (thisMonth, lastMonth) which are now redundant with month navigation — remove them. MetaAdsAnalytics uses dark variant. BillingAnalytics defaults to 90d — verify month mode is appropriate or keep as override. Smoke test all 8+ pages.",
+      "acceptance": [
+        "VSLAnalytics shows month navigator (extra presets removed)",
+        "MetaAdsAnalytics dark variant works with month navigator",
+        "BillingAnalytics works with month navigator",
+        "ActionCentre date filter updated if applicable",
+        "No TypeScript errors across the build"
+      ],
+      "files": [
+        "src/pages/platform/VSLAnalytics.tsx",
+        "src/pages/platform/MetaAdsAnalytics.tsx",
+        "src/pages/admin/BillingAnalytics.tsx",
+        "src/pages/platform/ActionCentre.tsx"
+      ],
+      "dependencies": { "stories": ["DATE-003", "DATE-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 20
+    }
+  ],
+
+  "execution": {
+    "totalStories": 5,
+    "completedStories": 5,
+    "estimatedMinutes": 105,
+    "parallelGroups": [
+      { "stories": ["DATE-003", "DATE-004"], "reason": "No file overlap, both depend on DATE-002" }
+    ]
+  }
+}

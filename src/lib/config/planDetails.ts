@@ -68,9 +68,9 @@ export const PLAN_DETAILS: Record<'basic' | 'pro', PlanDetail> = {
 
 // Credit pack display data for billing page quick top-up
 export const CREDIT_PACK_DISPLAY = [
-  { packType: 'starter' as const, name: 'Signal', credits: 100, price: 49, perCredit: '£0.49', tagline: 'Detect what matters' },
-  { packType: 'growth' as const, name: 'Insight', credits: 250, price: 99, perCredit: '£0.40', tagline: 'Connect the dots' },
-  { packType: 'scale' as const, name: 'Intelligence', credits: 500, price: 149, perCredit: '£0.30', tagline: 'Full AI autonomy' },
+  { packType: 'starter' as const, name: 'Signal', credits: 100, price: 49, perCredit: 0.49, tagline: 'Detect what matters' },
+  { packType: 'growth' as const, name: 'Insight', credits: 250, price: 99, perCredit: 0.40, tagline: 'Connect the dots' },
+  { packType: 'scale' as const, name: 'Intelligence', credits: 500, price: 149, perCredit: 0.30, tagline: 'Full AI autonomy' },
 ] as const;
 
 // Annual savings calculation

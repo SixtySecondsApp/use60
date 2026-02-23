@@ -16,6 +16,7 @@ import {
 import { Link } from 'react-router-dom';
 import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { VSLComparisonCards, VSLTrendChart, VSLRetentionGraph } from '@/components/vsl-analytics';
 import {
@@ -29,7 +30,7 @@ import {
 } from '@/lib/hooks/useLandingPageAnalytics';
 
 export function VSLAnalytics() {
-  const dateFilter = useDateRangeFilter('30d');
+  const dateFilter = useDateRangeFilter();
 
   const {
     loading,
@@ -42,11 +43,6 @@ export function VSLAnalytics() {
     hasData,
     refresh,
     updateDateRange,
-    setLast7Days,
-    setLast30Days,
-    setLast90Days,
-    setThisMonth,
-    setLastMonth,
   } = useVSLAnalytics();
 
   // Landing page analytics for video vs non-video comparison
@@ -58,29 +54,77 @@ export function VSLAnalytics() {
 
   // Sync date filter state with the VSL analytics hook
   useEffect(() => {
-    if (dateFilter.datePreset === 'custom') {
-      if (dateFilter.dateRange?.start && dateFilter.dateRange?.end) {
-        updateDateRange({
-          startDate: dateFilter.dateRange.start,
-          endDate: dateFilter.dateRange.end,
-        });
-      }
-      return;
+    if (dateFilter.dateRange?.start && dateFilter.dateRange?.end) {
+      updateDateRange({
+        startDate: dateFilter.dateRange.start,
+        endDate: dateFilter.dateRange.end,
+      });
     }
-    switch (dateFilter.period) {
-      case 7: setLast7Days(); break;
-      case 30: setLast30Days(); break;
-      case 90: setLast90Days(); break;
-    }
-  }, [dateFilter.period, dateFilter.datePreset, dateFilter.dateRange]);
+  }, [dateFilter.dateRange]);
 
   // Show loading state while checking user permissions
   if (userLoading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="w-8 h-8 text-brand-violet animate-spin" />
-          <p className="text-gray-400">Loading...</p>
+      <div className="min-h-screen bg-gray-950 text-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Header skeleton */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Skeleton className="h-5 w-5 rounded" />
+                <Skeleton className="h-8 w-64 rounded" />
+              </div>
+              <Skeleton className="h-4 w-80 rounded mt-1" />
+            </div>
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-9 w-36 rounded" />
+              <Skeleton className="h-9 w-9 rounded" />
+            </div>
+          </div>
+          {/* Summary stats skeleton — 4 columns */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-gray-800/30 rounded-lg p-4 flex items-center gap-4">
+                <Skeleton className="h-11 w-11 rounded-lg flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3.5 w-24 rounded" />
+                  <Skeleton className="h-7 w-20 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* VSLComparisonCards skeleton */}
+          <div className="mb-8">
+            <Skeleton className="h-6 w-44 rounded mb-4" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-gray-800/30 border border-gray-700/50 rounded-lg p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-5 w-28 rounded" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <div className="space-y-2">
+                    {[1, 2, 3, 4].map((j) => (
+                      <div key={j} className="flex justify-between">
+                        <Skeleton className="h-4 w-28 rounded" />
+                        <Skeleton className="h-4 w-16 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* VSLTrendChart skeleton */}
+          <div className="mb-8">
+            <Skeleton className="h-6 w-36 rounded mb-4" />
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
+          {/* VSLRetentionGraph skeleton */}
+          <div className="mb-8">
+            <Skeleton className="h-6 w-40 rounded mb-4" />
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
         </div>
       </div>
     );
@@ -135,10 +179,6 @@ export function VSLAnalytics() {
             <DateRangeFilter
               {...dateFilter}
               variant="dark"
-              extraPresets={[
-                { key: 'thisMonth', label: 'This Month', onClick: () => { setThisMonth(); dateFilter.setIsDatePickerOpen(false); } },
-                { key: 'lastMonth', label: 'Last Month', onClick: () => { setLastMonth(); dateFilter.setIsDatePickerOpen(false); } },
-              ]}
             />
 
             {/* Refresh Button */}
@@ -256,8 +296,25 @@ export function VSLAnalytics() {
           </h2>
 
           {landingLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="w-6 h-6 text-brand-violet animate-spin" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {[1, 2].map((i) => (
+                <div key={i} className="bg-gray-800/30 rounded-lg p-5 border border-gray-700/50 space-y-3">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Skeleton className="h-9 w-9 rounded-lg" />
+                    <Skeleton className="h-5 w-36 rounded" />
+                  </div>
+                  {[1, 2, 3].map((j) => (
+                    <div key={j} className="bg-gray-900/50 rounded-lg p-3 space-y-2">
+                      <Skeleton className="h-4 w-full rounded" />
+                      <div className="grid grid-cols-3 gap-2">
+                        <Skeleton className="h-8 rounded" />
+                        <Skeleton className="h-8 rounded" />
+                        <Skeleton className="h-8 rounded" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           ) : Object.keys(landingStats.byLandingPage).length === 0 ? (
             <div className="bg-gray-800/30 rounded-lg p-6 text-center">

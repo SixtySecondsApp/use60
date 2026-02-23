@@ -133,25 +133,11 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
-      id: 'fathom',
-      label: 'Fathom',
+      id: 'meeting-settings',
+      label: 'Meeting Settings',
       icon: Video,
-      description: 'AI meeting notes and user mapping settings',
-      path: '/settings/integrations/fathom',
-    },
-    {
-      id: 'fireflies',
-      label: 'Fireflies',
-      icon: Video,
-      description: 'AI meeting notes and transcription settings',
-      path: '/settings/integrations/fireflies',
-    },
-    {
-      id: '60-notetaker',
-      label: '60 Notetaker',
-      icon: Video,
-      description: 'Configure automated meeting recording preferences',
-      path: '/meetings/recordings/settings',
+      description: 'Configure meeting recording and transcription tools',
+      path: '/settings/meeting-settings',
     },
     {
       id: 'call-types',
@@ -300,7 +286,7 @@ export default function Settings() {
       ['ai-intelligence', 'autonomy', 'methodology', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'call-types', 'custom-sops'].includes(s.id)
     );
     const integrationSections = settingsSections.filter(s =>
-      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'crm-field-mapping', 'attio', 'bullhorn', 'instantly', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
+      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'crm-field-mapping', 'attio', 'bullhorn', 'instantly', 'meeting-settings'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
       ['organization-management', 'credits', 'billing', 'goals'].includes(s.id)

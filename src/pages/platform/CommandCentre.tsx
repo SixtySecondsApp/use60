@@ -844,7 +844,7 @@ export default function CommandCentre() {
         </div>
 
         {/* Filter bar */}
-        <div className="mt-3">
+        <div className="mt-3 mb-4">
           <FilterBar
             urgencyFilter={urgencyFilter}
             agentFilter={agentFilter}

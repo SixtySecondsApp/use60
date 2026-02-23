@@ -6,6 +6,7 @@ import { LayoutDashboard, FileText, Wand2, ClipboardList, Search, Database, Refr
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useMeetingIntelligence } from '@/lib/hooks/useMeetingIntelligence';
 import { format } from 'date-fns';
 import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
@@ -25,6 +26,65 @@ const tabs = [
   { value: 'reports', label: 'Reports', icon: ClipboardList },
 ] as const;
 
+function MeetingAnalyticsSkeleton() {
+  return (
+    <div className="min-h-screen">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Header — icon + animated gradient title + index status widget */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+          <div className="flex items-center gap-4">
+            <Skeleton className="w-14 h-14 rounded-2xl" />
+            <div>
+              <Skeleton className="h-9 w-52 mb-2" />
+              <div className="flex items-center gap-2">
+                <Skeleton className="w-1.5 h-1.5 rounded-full" />
+                <Skeleton className="h-4 w-64" />
+              </div>
+            </div>
+          </div>
+          {/* Index status widget placeholder */}
+          <div className="flex items-center gap-3 bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl px-4 py-2.5 border border-gray-200/50 dark:border-gray-700/30 shadow-sm self-start sm:self-auto">
+            <Skeleton className="w-10 h-10 rounded-full" />
+            <div>
+              <Skeleton className="h-4 w-12 mb-1" />
+              <Skeleton className="h-3 w-14" />
+            </div>
+            <Skeleton className="h-6 w-16 rounded-full" />
+            <Skeleton className="h-9 w-16 rounded-lg" />
+          </div>
+        </div>
+
+        {/* Tab bar — 4 tabs + date range picker */}
+        <div className="mb-4 sm:mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex gap-1 bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl p-1 shadow-sm w-fit">
+            {[80, 96, 76, 76].map((w, i) => (
+              <Skeleton key={i} className="h-8 rounded-lg" style={{ width: w }} />
+            ))}
+          </div>
+          <Skeleton className="h-9 w-44 rounded-xl" />
+        </div>
+
+        {/* Search hero placeholder (shown on Dashboard tab) */}
+        <Skeleton className="h-16 w-full rounded-2xl mb-6 sm:mb-8" />
+
+        {/* Main content area — 4 metric cards + chart */}
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="rounded-xl p-4 sm:p-6 bg-white dark:bg-gray-900/50 border border-gray-200/50 dark:border-gray-700/30 shadow-sm">
+                <Skeleton className="h-4 w-24 mb-2" />
+                <Skeleton className="h-8 w-20 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            ))}
+          </div>
+          <Skeleton className="h-64 w-full rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MeetingAnalyticsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { transcriptId } = useParams<{ transcriptId?: string }>();
@@ -35,10 +95,15 @@ export default function MeetingAnalyticsPage() {
 
   const activeTab = searchParams.get('tab') || 'dashboard';
 
-  // Date range state (shared across tabs)
-  const dateFilter = useDateRangeFilter('30d');
+  // Date range state (shared across tabs) — must be above early return to respect Rules of Hooks
+  const dateFilter = useDateRangeFilter();
   const period = dateFilter.period as TimePeriod;
   const { dateRange } = dateFilter;
+
+  // Show skeleton while the index status (initial page data) is loading
+  if (isLoadingStatus) {
+    return <MeetingAnalyticsSkeleton />;
+  }
 
   const handleSync = async () => {
     setIsIndexing(true);
@@ -62,15 +127,9 @@ export default function MeetingAnalyticsPage() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="min-h-screen text-gray-900 dark:text-gray-100 relative"
+      className="min-h-screen text-gray-900 dark:text-gray-100"
     >
-      {/* Background gradient orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[200px] -left-[100px] w-[600px] h-[600px] rounded-full bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] blur-[120px]" />
-        <div className="absolute -bottom-[200px] -right-[100px] w-[500px] h-[500px] rounded-full bg-teal-500/[0.04] dark:bg-teal-500/[0.06] blur-[120px]" />
-      </div>
-
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Header - Intelligence page pattern */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}

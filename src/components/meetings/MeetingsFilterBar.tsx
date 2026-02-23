@@ -22,7 +22,7 @@ import { SortControl } from './SortControl'
 import { DurationFilter } from './filters/DurationFilter'
 import { SentimentFilter } from './filters/SentimentFilter'
 import { CoachingScoreFilter } from './filters/CoachingScoreFilter'
-import { DateFilter, DateRangePreset, DateRange } from '@/components/ui/date-filter'
+import { DateRangeFilter, UseDateRangeFilterReturn } from '@/components/ui/DateRangeFilter'
 import { OwnerFilterV3 } from '@/components/OwnerFilterV3'
 import { cn } from '@/lib/utils'
 import type { UnifiedSource } from '@/lib/types/unifiedMeeting'
@@ -41,9 +41,7 @@ interface MeetingsFilterBarProps {
   onSortDirectionToggle: () => void
 
   // Filters
-  datePreset: DateRangePreset
-  customDateRange: DateRange | null
-  onDateChange: (preset: DateRangePreset, range: DateRange | null) => void
+  dateFilter: UseDateRangeFilterReturn
 
   selectedRepId: string | null | undefined
   onRepChange: (repId: string | null | undefined) => void
@@ -79,9 +77,7 @@ export const MeetingsFilterBar: React.FC<MeetingsFilterBarProps> = ({
   sortDirection,
   onSortFieldChange,
   onSortDirectionToggle,
-  datePreset,
-  customDateRange,
-  onDateChange,
+  dateFilter,
   selectedRepId,
   onRepChange,
   scope,
@@ -191,13 +187,7 @@ export const MeetingsFilterBar: React.FC<MeetingsFilterBarProps> = ({
               </Select>
             )}
 
-            <DateFilter
-              value={datePreset}
-              customRange={customDateRange}
-              onPresetChange={(preset) => onDateChange(preset, customDateRange)}
-              onCustomRangeChange={(range) => onDateChange(datePreset, range)}
-              compact
-            />
+            <DateRangeFilter {...dateFilter} />
 
             {scope === 'team' && (
               <OwnerFilterV3
@@ -380,12 +370,7 @@ export const MeetingsFilterBar: React.FC<MeetingsFilterBarProps> = ({
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">
                     Date Range
                   </label>
-                  <DateFilter
-                    value={datePreset}
-                    customRange={customDateRange}
-                    onPresetChange={(preset) => onDateChange(preset, customDateRange)}
-                    onCustomRangeChange={(range) => onDateChange(datePreset, range)}
-                  />
+                  <DateRangeFilter {...dateFilter} />
                 </div>
 
                 {/* Rep Filter - Only show in team scope */}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
 import { useUser } from '@/lib/hooks/useUser';
 import { useTargets } from '@/lib/hooks/useTargets';
@@ -20,6 +21,7 @@ import {
   Activity as ActivityIcon,
   LineChart,
   Grid3X3,
+  Sparkles,
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 import { PendingJoinRequestBanner } from '@/components/PendingJoinRequestBanner';
@@ -32,10 +34,12 @@ import { TeamKPIGrid } from '@/components/insights/TeamKPIGrid';
 import { TeamComparisonMatrix } from '@/components/insights/TeamComparisonMatrix';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ActivationChecklist } from '@/components/dashboard/ActivationChecklist';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 const LazyActivityLog = lazy(() => import('@/pages/ActivityLog'));
 const LazySalesFunnel = lazy(() => import('@/pages/SalesFunnel'));
 const LazyHeatmap = lazy(() => import('@/pages/Heatmap'));
+const LazyLeadAnalytics = lazy(() => import('@/components/leads/LeadAnalyticsCard').then(m => ({ default: m.LeadAnalyticsCard })));
 
 interface MetricCardProps {
   title: string;
@@ -108,6 +112,7 @@ const Tooltip = ({ show, content, position }: TooltipProps) => {
 const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, metricKey, dateRange, previousMonthTotal, totalTrend: totalTrendProp, isLoadingComparisons, hasComparisons, isInitialLoad = false, onNavigateToActivity }: MetricCardProps) => {
   const { setFilters } = useActivityFilters();
   const navigate = useNavigate();
+  const { symbol } = useOrgMoney();
   const [showTrendTooltip, setShowTrendTooltip] = useState(false);
   const [showTotalTooltip, setShowTotalTooltip] = useState(false);
   const [trendPosition, setTrendPosition] = useState({ x: 0, y: 0 });
@@ -340,16 +345,16 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
             <div className="flex items-baseline gap-2">
               <div className="w-24 h-9 bg-slate-200 dark:bg-gray-800/50 rounded animate-pulse" />
               <span className="text-xs sm:text-sm text-[#64748B] dark:text-gray-500 font-medium">
-                / {title === 'New Business' ? `£${target.toLocaleString()}` : target}
+                / {title === 'New Business' ? `${symbol}${target.toLocaleString()}` : target}
               </span>
             </div>
           ) : (
             <>
               <span className="text-2xl sm:text-3xl font-bold text-[#1E293B] dark:text-white transition-none" suppressHydrationWarning>
-                {title === 'New Business' ? `£${value.toLocaleString()}` : value}
+                {title === 'New Business' ? `${symbol}${value.toLocaleString()}` : value}
               </span>
               <span className="text-xs sm:text-sm text-[#64748B] dark:text-gray-500 font-medium">
-                / {title === 'New Business' ? `£${target.toLocaleString()}` : target}
+                / {title === 'New Business' ? `${symbol}${target.toLocaleString()}` : target}
               </span>
             </>
           )}
@@ -402,67 +407,79 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
 // Skeleton loader component for the dashboard
 function DashboardSkeleton() {
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 mt-12 lg:mt-0 animate-pulse">
-      {/* Header skeleton */}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 mt-12 lg:mt-0">
+      {/* Header skeleton — matches "Welcome back, [name]" + subtitle + date picker row */}
       <div className="space-y-1 mb-6 sm:mb-8">
-        <div className="h-8 w-48 bg-slate-200 dark:bg-gray-800 rounded-lg mb-2" />
-        <div className="h-4 w-64 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+        <Skeleton className="h-9 w-56" />
+        <div className="flex items-center justify-between mt-2">
+          <Skeleton className="h-4 w-72" />
+          <Skeleton className="h-9 w-44 rounded-xl" />
+        </div>
       </div>
 
-      {/* Metrics grid skeleton */}
+      {/* Tab bar skeleton — 5 tabs: Overview / Activity / Funnel / Heatmap / Lead Analytics */}
+      <div className="mb-6 flex gap-1 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 rounded-lg p-1 w-fit shadow-sm">
+        {[96, 80, 72, 84, 112].map((w, i) => (
+          <Skeleton key={i} className="h-8 rounded-md" style={{ width: w }} />
+        ))}
+      </div>
+
+      {/* KPI metric cards grid — 2-col matching real grid-cols-1 sm:grid-cols-2 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-8">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-[#E2E8F0] dark:border-gray-800/50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="rounded-3xl p-6 sm:p-7 border border-transparent dark:border-gray-800/50 bg-white dark:bg-gray-900/50 shadow-sm dark:shadow-none flex flex-col"
+          >
+            {/* Card header: icon + title/subtitle + two trend badges */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+                <Skeleton className="w-10 h-10 rounded-xl" />
                 <div>
-                  <div className="h-4 w-24 bg-slate-200 dark:bg-gray-800 rounded-lg mb-1" />
-                  <div className="h-3 w-16 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+                  <Skeleton className="h-4 w-24 mb-1" />
+                  <Skeleton className="h-3 w-20" />
                 </div>
               </div>
               <div className="flex gap-2">
-                <div className="w-16 h-8 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+                <Skeleton className="h-8 w-14 rounded-lg" />
+                <Skeleton className="h-8 w-14 rounded-lg" />
               </div>
             </div>
-            <div className="space-y-2">
-              <div className="h-8 w-32 bg-slate-200 dark:bg-gray-800 rounded-lg mb-2" />
-              <div className="space-y-1">
-                <div className="h-2 bg-slate-200 dark:bg-gray-800 rounded-full" />
-                <div className="flex justify-between">
-                  <div className="h-3 w-16 bg-slate-200 dark:bg-gray-800 rounded-lg" />
-                  <div className="h-3 w-8 bg-slate-200 dark:bg-gray-800 rounded-lg" />
-                </div>
-              </div>
+            {/* Value + target */}
+            <div className="flex items-baseline gap-2 mb-3">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            {/* Progress bar + label row */}
+            <Skeleton className="h-2.5 w-full rounded-full mb-2" />
+            <div className="flex justify-between">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-8" />
             </div>
           </div>
         ))}
       </div>
 
-      {/* Recent deals skeleton */}
-      <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-[#E2E8F0] dark:border-gray-800/50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
-        <div className="flex justify-between items-center mb-6">
-          <div className="h-6 w-36 bg-slate-200 dark:bg-gray-800 rounded-lg" />
-          <div className="h-9 w-48 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+      {/* Team Performance section placeholder */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="w-5 h-5 rounded" />
+          <Skeleton className="h-6 w-44" />
         </div>
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-slate-100 dark:bg-gray-800/50 rounded-xl p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-slate-200 dark:bg-gray-700 rounded-lg" />
-                  <div>
-                    <div className="h-5 w-32 bg-slate-200 dark:bg-gray-700 rounded-lg mb-1" />
-                    <div className="h-4 w-48 bg-slate-200 dark:bg-gray-700 rounded-lg" />
-                  </div>
-                </div>
-                <div>
-                  <div className="h-6 w-24 bg-slate-200 dark:bg-gray-700 rounded-lg mb-1" />
-                  <div className="h-4 w-16 bg-slate-200 dark:bg-gray-700 rounded-lg" />
-                </div>
-              </div>
+        {/* KPI grid row placeholder */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl p-4 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 shadow-sm">
+              <Skeleton className="h-4 w-20 mb-2" />
+              <Skeleton className="h-7 w-16 mb-1" />
+              <Skeleton className="h-3 w-24" />
             </div>
           ))}
+        </div>
+        {/* Comparison matrix placeholder */}
+        <div className="rounded-3xl border border-transparent dark:border-gray-800/50 bg-white dark:bg-gray-900/50 shadow-sm p-6">
+          <Skeleton className="h-5 w-40 mb-4" />
+          <Skeleton className="h-48 w-full rounded-xl" />
         </div>
       </div>
     </div>
@@ -502,7 +519,7 @@ function TeamPerformanceSection({ dateRange, period }: { dateRange: { start: Dat
 export default function Dashboard() {
   // Move all hooks to the top
   const [showContent, setShowContent] = useState(false);
-  const dateFilter = useDateRangeFilter('30d');
+  const dateFilter = useDateRangeFilter();
 
   // Derive the active dateRange from the filter (always defined for presets)
   const activeDateRange = useMemo(() => {
@@ -696,9 +713,9 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center justify-between mt-2">
           <p className="text-[#64748B] dark:text-gray-400">Here's how your sales performance is tracking</p>
-          {activeTab === 'overview' && (
+          <div className={activeTab !== 'overview' ? 'invisible' : ''}>
             <DateRangeFilter {...dateFilter} />
-          )}
+          </div>
         </div>
       </div>
 
@@ -732,6 +749,13 @@ export default function Dashboard() {
           >
             <Grid3X3 className="w-4 h-4" />
             Heatmap
+          </TabsTrigger>
+          <TabsTrigger
+            value="leads"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <Sparkles className="w-4 h-4" />
+            Lead Analytics
           </TabsTrigger>
         </TabsList>
 
@@ -827,21 +851,78 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <Suspense fallback={<div className="flex items-center justify-center py-12 text-gray-500">Loading activity...</div>}>
+            <Suspense fallback={
+              <div className="space-y-3 pt-4">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center gap-4 rounded-xl p-4 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50">
+                    <Skeleton className="w-10 h-10 rounded-lg shrink-0" />
+                    <div className="flex-1">
+                      <Skeleton className="h-4 w-40 mb-1.5" />
+                      <Skeleton className="h-3 w-56" />
+                    </div>
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                  </div>
+                ))}
+              </div>
+            }>
               <LazyActivityLog />
             </Suspense>
           </motion.div>
         </TabsContent>
 
         <TabsContent value="funnel">
-          <Suspense fallback={<div className="flex items-center justify-center py-12 text-gray-500">Loading funnel...</div>}>
+          <Suspense fallback={
+            <div className="pt-4 space-y-4 max-w-2xl mx-auto">
+              {[100, 78, 56, 36].map((w, i) => (
+                <Skeleton key={i} className="h-16 rounded-xl" style={{ width: `${w}%` }} />
+              ))}
+            </div>
+          }>
             <LazySalesFunnel />
           </Suspense>
         </TabsContent>
 
         <TabsContent value="heatmap">
-          <Suspense fallback={<div className="flex items-center justify-center py-12 text-gray-500">Loading heatmap...</div>}>
+          <Suspense fallback={
+            <div className="pt-4 rounded-xl bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 p-4">
+              <div className="grid grid-cols-[30px_repeat(7,1fr)] gap-1">
+                {/* day labels */}
+                <div />
+                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (
+                  <Skeleton key={d} className="h-5 w-full rounded" />
+                ))}
+                {/* 5 weeks of cells */}
+                {Array.from({ length: 5 }).map((_, w) => (
+                  <React.Fragment key={w}>
+                    <Skeleton className="h-8 w-full rounded" />
+                    {Array.from({ length: 7 }).map((_, d) => (
+                      <Skeleton key={d} className="aspect-square w-full rounded" />
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          }>
             <LazyHeatmap />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="leads">
+          <Suspense fallback={
+            <div className="pt-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="rounded-xl p-5 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50">
+                    <Skeleton className="h-4 w-24 mb-2" />
+                    <Skeleton className="h-8 w-16 mb-1" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                ))}
+              </div>
+              <Skeleton className="h-64 w-full rounded-xl" />
+            </div>
+          }>
+            <LazyLeadAnalytics />
           </Suspense>
         </TabsContent>
       </Tabs>
