@@ -40,6 +40,7 @@ import {
   BookOpen,
   ShieldCheck,
   ArrowRightLeft,
+  Target,
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -246,6 +247,14 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
+      id: 'goals',
+      label: 'Sales Goals',
+      icon: Target,
+      description: 'Set monthly targets for New Business, Outbound, Meetings, and Proposals',
+      path: '/settings/goals',
+      requiresOrgAdmin: false,
+    },
+    {
       id: 'billing',
       label: 'Billing',
       icon: CreditCard,
@@ -294,7 +303,7 @@ export default function Settings() {
       ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'crm-field-mapping', 'attio', 'bullhorn', 'instantly', 'fathom', 'fireflies', '60-notetaker'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
-      ['organization-management', 'credits', 'billing'].includes(s.id)
+      ['organization-management', 'credits', 'billing', 'goals'].includes(s.id)
     );
 
     const cats = [

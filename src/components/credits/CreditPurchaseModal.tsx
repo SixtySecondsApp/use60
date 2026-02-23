@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { purchasePack } from '@/lib/services/creditService';
-import { CREDIT_PACKS, STANDARD_PACKS, getCostPerCredit } from '@/lib/config/creditPacks';
+import { CREDIT_PACKS, STANDARD_PACKS, getCostPerCredit, getPackPrice } from '@/lib/config/creditPacks';
 import type { PackType } from '@/lib/config/creditPacks';
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import { useUser } from '@/lib/hooks/useUser';
@@ -78,63 +78,64 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-6">
+        <div className="space-y-3 pt-7">
           {/* Pack cards */}
           {STANDARD_PACKS.map((packType) => {
             const pack = CREDIT_PACKS[packType];
             const costPerCredit = getCostPerCredit(packType);
+            const { symbol, price } = getPackPrice(packType, currencyCode);
             const isSelected = selectedPack === packType;
             const isPopular = pack.popular;
 
             return (
-              <button
-                key={packType}
-                type="button"
-                onClick={() => setSelectedPack(packType)}
-                className={cn(
-                  'relative w-full rounded-lg border-2 p-4 text-left transition-all overflow-visible',
-                  'hover:border-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-950/20',
-                  isSelected
-                    ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 ring-2 ring-blue-500/20'
-                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'
-                )}
-              >
+              <div key={packType} className={cn('relative', isPopular && 'z-10')}>
                 {isPopular && (
-                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-50 whitespace-nowrap">
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap">
                     <Badge className="gap-1 bg-blue-600 text-white hover:bg-blue-600 text-xs px-2 py-0.5">
                       <Star className="h-3 w-3 fill-white" />
                       Most Popular
                     </Badge>
                   </div>
                 )}
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      'flex h-9 w-9 items-center justify-center rounded-lg',
-                      isSelected ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                    )}>
-                      {PACK_ICONS[packType]}
+                <button
+                  type="button"
+                  onClick={() => setSelectedPack(packType)}
+                  className={cn(
+                    'relative w-full rounded-lg border-2 p-4 text-left transition-all',
+                    'hover:border-blue-400 hover:bg-blue-50/30 dark:hover:bg-blue-950/20',
+                    isSelected
+                      ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 ring-2 ring-blue-500/20'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        'flex h-9 w-9 items-center justify-center rounded-lg',
+                        isSelected ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                      )}>
+                        {PACK_ICONS[packType]}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[#1E293B] dark:text-white">{pack.label}</p>
+                        <p className="text-xs text-[#64748B] dark:text-gray-400">{pack.description}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-[#1E293B] dark:text-white">{pack.label}</p>
-                      <p className="text-xs text-[#64748B] dark:text-gray-400">{pack.description}</p>
+
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-[#1E293B] dark:text-white">
+                        {symbol}{price}
+                      </p>
+                      <p className="text-xs text-[#64748B] dark:text-gray-400">
+                        {pack.credits} credits
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                        £{costPerCredit.toFixed(3)}/credit
+                      </p>
                     </div>
                   </div>
-
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-[#1E293B] dark:text-white">
-                      £{pack.priceGBP}
-                    </p>
-                    <p className="text-xs text-[#64748B] dark:text-gray-400">
-                      {pack.credits} credits
-                    </p>
-                    <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                      £{costPerCredit.toFixed(3)}/credit
-                    </p>
-                  </div>
-                </div>
-              </button>
+                </button>
+              </div>
             );
           })}
 
@@ -238,7 +239,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
               ) : (
                 <>
                   <CreditCard className="mr-2 h-4 w-4" />
-                  Buy for £{selectedPackData.priceGBP}
+                  Buy for {getPackPrice(selectedPack, currencyCode).symbol}{getPackPrice(selectedPack, currencyCode).price}
                 </>
               )}
             </Button>

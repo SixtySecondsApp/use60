@@ -60,7 +60,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
 import { useUser } from '@/lib/hooks/useUser';
-import { CREDIT_PACKS, STANDARD_PACKS } from '@/lib/config/creditPacks';
+import { CREDIT_PACKS, STANDARD_PACKS, getPackPrice } from '@/lib/config/creditPacks';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 // ============================================================================
 // Balance color helpers
@@ -100,6 +101,7 @@ function isValidTab(value: string | null): value is TabValue {
 export default function CreditsSettingsPage() {
   const orgId = useOrgId();
   const { data: balance, isLoading: balanceLoading } = useCreditBalance();
+  const { currencyCode } = useOrgMoney();
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const { userData } = useUser();
   const isAdmin = userData ? isUserAdmin(userData) : false;
@@ -336,7 +338,7 @@ export default function CreditsSettingsPage() {
                         className="hover:border-[#37bd7e] hover:text-[#37bd7e] flex items-center gap-2"
                       >
                         <CreditCard className="w-4 h-4" />
-                        {pack.label} — {pack.credits} cr / £{pack.priceGBP}
+                        {pack.label} — {pack.credits} cr / {(() => { const { symbol, price, isApproximate } = getPackPrice(packType, currencyCode); return `${isApproximate ? '~' : ''}${symbol}${price}`; })()}
                         {pack.popular && (
                           <span className="ml-1 text-[10px] bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 px-1.5 py-0.5 rounded-full font-medium">
                             Popular

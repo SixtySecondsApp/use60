@@ -44,6 +44,7 @@ interface MetricCardProps {
   trend: number | null;
   icon: React.ElementType;
   type?: string;
+  metricKey?: string;
   dateRange: {
     start: Date;
     end: Date;
@@ -104,8 +105,9 @@ const Tooltip = ({ show, content, position }: TooltipProps) => {
   );
 };
 
-const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, dateRange, previousMonthTotal, totalTrend: totalTrendProp, isLoadingComparisons, hasComparisons, isInitialLoad = false, onNavigateToActivity }: MetricCardProps) => {
+const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, metricKey, dateRange, previousMonthTotal, totalTrend: totalTrendProp, isLoadingComparisons, hasComparisons, isInitialLoad = false, onNavigateToActivity }: MetricCardProps) => {
   const { setFilters } = useActivityFilters();
+  const navigate = useNavigate();
   const [showTrendTooltip, setShowTrendTooltip] = useState(false);
   const [showTotalTooltip, setShowTotalTooltip] = useState(false);
   const [trendPosition, setTrendPosition] = useState({ x: 0, y: 0 });
@@ -115,7 +117,9 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
 
   const handleClick = () => {
     try {
-      if (type) {
+      if (metricKey) {
+        navigate(`/settings/goals?metric=${metricKey}`);
+      } else if (type) {
         setFilters({ type, dateRange });
         if (onNavigateToActivity) {
           onNavigateToActivity();
@@ -368,7 +372,10 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
           </div>
           <div className="text-xs text-[#64748B] dark:text-gray-400 flex justify-between items-center gap-2">
             <span>Progress</span>
-            <span className="font-medium">{target > 0 ? `${Math.round((value / target) * 100)}%` : '\u2014'}</span>
+            {target > 0
+              ? <span className="font-medium">{Math.round((value / target) * 100)}%</span>
+              : <span className="font-medium text-[#64748B]/60 dark:text-gray-500">Set goal →</span>
+            }
           </div>
         </div>
       </div>
@@ -749,6 +756,7 @@ export default function Dashboard() {
           totalTrend={totalTrends.revenue}
           icon={PoundSterling}
           type="sale"
+          metricKey="new-business"
           dateRange={selectedMonthRange}
           previousMonthTotal={previousMonthTotals.revenue}
           isLoadingComparisons={isLoadingComparisons}
@@ -765,6 +773,7 @@ export default function Dashboard() {
           totalTrend={totalTrends.outbound}
           icon={Phone}
           type="outbound"
+          metricKey="outbound"
           dateRange={selectedMonthRange}
           previousMonthTotal={previousMonthTotals.outbound}
           isLoadingComparisons={isLoadingComparisons}
@@ -781,6 +790,7 @@ export default function Dashboard() {
           totalTrend={totalTrends.meetings}
           icon={Users}
           type="meeting"
+          metricKey="meetings"
           dateRange={selectedMonthRange}
           previousMonthTotal={previousMonthTotals.meetings}
           isLoadingComparisons={isLoadingComparisons}
@@ -797,6 +807,7 @@ export default function Dashboard() {
           totalTrend={totalTrends.proposals}
           icon={FileText}
           type="proposal"
+          metricKey="proposals"
           dateRange={selectedMonthRange}
           previousMonthTotal={previousMonthTotals.proposals}
           isLoadingComparisons={isLoadingComparisons}

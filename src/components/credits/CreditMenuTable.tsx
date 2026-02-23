@@ -5,16 +5,18 @@
  * current tier highlighted.  Includes FREE badges, flat-rate chips, and a
  * skeleton loading state.
  *
- * Below the table renders:
- *   - Credit pack comparison cards (Signal / Insight / Intelligence)
- *   - Budget cap quick-set (Unlimited / Daily / Weekly)
+ * Layout order:
+ *   1. Credit pack comparison cards (Signal / Insight / Intelligence) — ABOVE pricing table
+ *   2. Cost by action pricing table
+ *   3. Budget cap quick-set (Unlimited / Daily / Weekly)
  */
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getCreditMenu, getBudgetCap, setBudgetCap } from '@/lib/services/creditService';
 import type { IntelligenceTier } from '@/lib/config/creditPacks';
-import { CREDIT_PACKS, STANDARD_PACKS, getCostPerCredit } from '@/lib/config/creditPacks';
+import { CREDIT_PACKS, STANDARD_PACKS, getCostPerCredit, getPackPrice } from '@/lib/config/creditPacks';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -273,69 +275,75 @@ const PACK_ICONS: Record<string, React.ElementType> = {
 
 function PackComparisonCards() {
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
+  const { currencyCode } = useOrgMoney();
 
   return (
     <>
       <div>
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#37bd7e]" />
           Credit Packs
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
           {STANDARD_PACKS.map((packType) => {
             const pack = CREDIT_PACKS[packType];
             const costPerCredit = getCostPerCredit(packType);
+            const { symbol, price, isApproximate } = getPackPrice(packType, currencyCode);
             const PackIcon = PACK_ICONS[packType] ?? Zap;
 
             return (
-              <div
-                key={packType}
-                className={cn(
-                  'border rounded-xl p-4 flex flex-col gap-3 relative',
-                  pack.popular
-                    ? 'border-indigo-300 dark:border-indigo-700 bg-indigo-50/50 dark:bg-indigo-900/10'
-                    : 'border-gray-200 dark:border-gray-800'
-                )}
-              >
+              <div key={packType} className={cn('relative', pack.popular && 'z-10')}>
                 {pack.popular && (
-                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-medium flex items-center gap-1 whitespace-nowrap">
-                    <Star className="w-2.5 h-2.5" />
-                    Popular
-                  </span>
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap">
+                    <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                      <Star className="w-2.5 h-2.5" />
+                      Popular
+                    </span>
+                  </div>
                 )}
-
-                <div className="flex items-center gap-2">
-                  <PackIcon className="w-4 h-4 text-[#37bd7e]" />
-                  <span className="font-semibold text-gray-900 dark:text-white text-sm">
-                    {pack.label}
-                  </span>
-                </div>
-
-                <div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
-                    {pack.credits} <span className="text-sm font-normal text-gray-500">cr</span>
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">£{pack.priceGBP}</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                    £{costPerCredit.toFixed(2)}/cr
-                  </p>
-                </div>
-
-                <p className="text-xs text-gray-500 dark:text-gray-400 flex-1">
-                  {pack.description}
-                </p>
-
-                <Button
-                  size="sm"
-                  variant={pack.popular ? 'default' : 'outline'}
-                  onClick={() => setPurchaseModalOpen(true)}
+                <div
                   className={cn(
-                    'w-full',
-                    pack.popular && 'bg-indigo-600 hover:bg-indigo-700 text-white border-0'
+                    'border rounded-xl p-4 flex flex-col gap-3 h-full',
+                    pack.popular
+                      ? 'border-indigo-300 dark:border-indigo-700 bg-indigo-50/50 dark:bg-indigo-900/10'
+                      : 'border-gray-200 dark:border-gray-800'
                   )}
                 >
-                  Buy
-                </Button>
+                  <div className="flex items-center gap-2">
+                    <PackIcon className="w-4 h-4 text-[#37bd7e]" />
+                    <span className="font-semibold text-gray-900 dark:text-white text-sm">
+                      {pack.label}
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
+                      {pack.credits} <span className="text-sm font-normal text-gray-500">cr</span>
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {isApproximate && <span className="text-gray-400">~</span>}{symbol}{price}
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                      £{costPerCredit.toFixed(2)}/cr
+                    </p>
+                  </div>
+
+                  <p className="text-xs text-gray-500 dark:text-gray-400 flex-1">
+                    {pack.description}
+                  </p>
+
+                  <Button
+                    size="sm"
+                    variant={pack.popular ? 'default' : 'outline'}
+                    onClick={() => setPurchaseModalOpen(true)}
+                    className={cn(
+                      'w-full',
+                      pack.popular && 'bg-indigo-600 hover:bg-indigo-700 text-white border-0'
+                    )}
+                  >
+                    Buy
+                  </Button>
+                </div>
               </div>
             );
           })}
@@ -369,6 +377,9 @@ export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
 
   return (
     <div className="space-y-6">
+      {/* ── Credit Pack Comparison ──────────────────────────────────── */}
+      <PackComparisonCards />
+
       {/* ── Pricing Table ──────────────────────────────────────────── */}
       <div>
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
@@ -550,9 +561,6 @@ export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
           </p>
         )}
       </div>
-
-      {/* ── Credit Pack Comparison ──────────────────────────────────── */}
-      <PackComparisonCards />
 
       {/* ── Budget Cap ──────────────────────────────────────────────── */}
       <BudgetCapSection />

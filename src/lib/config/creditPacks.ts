@@ -24,6 +24,8 @@ export interface CreditPack {
   packType: PackType;
   credits: number;
   priceGBP: number;
+  priceUSD: number;
+  priceEUR: number;
   label: string;
   description: string;
   isAgency?: boolean;
@@ -69,6 +71,8 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
     packType: 'starter',
     credits: 100,
     priceGBP: 49,
+    priceUSD: 62,
+    priceEUR: 57,
     label: 'Signal',
     description: 'Perfect for small teams getting started',
   },
@@ -76,6 +80,8 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
     packType: 'growth',
     credits: 250,
     priceGBP: 99,
+    priceUSD: 125,
+    priceEUR: 115,
     label: 'Insight',
     description: 'Best value for growing sales teams',
     popular: true,
@@ -84,6 +90,8 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
     packType: 'scale',
     credits: 500,
     priceGBP: 149,
+    priceUSD: 188,
+    priceEUR: 173,
     label: 'Intelligence',
     description: 'Best value for high-volume AI usage',
   },
@@ -91,6 +99,8 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
     packType: 'agency_starter',
     credits: 500,
     priceGBP: 149,
+    priceUSD: 188,
+    priceEUR: 173,
     label: 'Agency Starter',
     description: 'Entry-level pack for agencies managing multiple clients',
     isAgency: true,
@@ -99,6 +109,8 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
     packType: 'agency_growth',
     credits: 1250,
     priceGBP: 349,
+    priceUSD: 442,
+    priceEUR: 406,
     label: 'Agency Growth',
     description: 'Recommended for agencies with active client portfolios',
     isAgency: true,
@@ -108,6 +120,8 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
     packType: 'agency_scale',
     credits: 2500,
     priceGBP: 599,
+    priceUSD: 758,
+    priceEUR: 696,
     label: 'Agency Scale',
     description: 'High-volume pack for large agency operations',
     isAgency: true,
@@ -116,6 +130,8 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
     packType: 'agency_enterprise',
     credits: 5000,
     priceGBP: 999,
+    priceUSD: 1265,
+    priceEUR: 1161,
     label: 'Agency Enterprise',
     description: 'Maximum capacity for enterprise-scale agencies',
     isAgency: true,
@@ -124,6 +140,8 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
     packType: 'custom',
     credits: 0,
     priceGBP: 0,
+    priceUSD: 0,
+    priceEUR: 0,
     label: 'Custom Pack',
     description: 'Custom credit allocation (admin/migration use)',
   },
@@ -210,4 +228,25 @@ export function getCostPerCredit(packType: PackType): number {
   const pack = CREDIT_PACKS[packType];
   if (!pack || pack.credits === 0) return 0;
   return pack.priceGBP / pack.credits;
+}
+
+/**
+ * Get the display price and symbol for a pack based on org currency.
+ * Non-GBP prices are approximate conversions (payments are always charged in GBP).
+ */
+export function getPackPrice(
+  packType: PackType,
+  currencyCode?: string
+): { symbol: string; price: number; isApproximate: boolean } {
+  const pack = CREDIT_PACKS[packType];
+  if (!pack) return { symbol: '£', price: 0, isApproximate: false };
+
+  switch (currencyCode?.toUpperCase()) {
+    case 'USD':
+      return { symbol: '$', price: pack.priceUSD, isApproximate: true };
+    case 'EUR':
+      return { symbol: '€', price: pack.priceEUR, isApproximate: true };
+    default:
+      return { symbol: '£', price: pack.priceGBP, isApproximate: false };
+  }
 }

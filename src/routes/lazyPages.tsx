@@ -205,6 +205,7 @@ export const SmartListeningSettings = lazyWithRetry(() => import('@/pages/settin
 export const CreditPurchaseSuccess = lazyWithRetry(() => import('@/pages/settings/CreditPurchaseSuccess'));
 export const CreditsSettingsPage = lazyWithRetry(() => import('@/pages/settings/CreditsSettingsPage'));
 export const BillingSettingsPage = lazyWithRetry(() => import('@/pages/settings/BillingSettingsPage'));
+export const SalesGoalsPage = lazyWithRetry(() => import('@/pages/settings/SalesGoalsPage'));
 // Integration settings pages (dedicated settings for each integration)
 export const GoogleWorkspaceIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/GoogleWorkspaceIntegrationPage'));
 export const FathomIntegrationPage = lazyWithRetry(() => import('@/pages/settings/integrations/FathomIntegrationPage'));
