@@ -1182,12 +1182,24 @@ export function MeetingDetail() {
             <div className="font-semibold mb-3">Attendees ({attendees.length})</div>
             <div className="space-y-1">
               {attendees.length > 0 ? (
-                attendees.map((attendee, idx) => {
+                (() => {
+                  // Build speaker→slot map matching transcript color assignment
+                  const attendeeSlotMap = new Map<string, number>();
+                  let slotCounter = 0;
+                  for (const a of attendees) {
+                    const name = a.name?.trim();
+                    if (name && !attendeeSlotMap.has(name)) {
+                      attendeeSlotMap.set(name, slotCounter++ % SPEAKER_CONFIGS.length);
+                    }
+                  }
+                  return attendees.map((attendee, idx) => {
                   const isExternal = attendee.is_external;
                   const contactId = isExternal ? attendee.id : null;
                   const firstName = attendee.name?.trim().split(/\s+/)[0] ?? '';
                   const initial = firstName[0]?.toUpperCase() ?? '?';
                   const avatarUrl = speakerAvatarMap.get(attendee.name ?? '') || speakerAvatarMap.get(firstName);
+                  const speakerName = attendee.name?.trim() ?? '';
+                  const colorSlot = attendeeSlotMap.get(speakerName) ?? (idx % SPEAKER_CONFIGS.length);
 
                   const content = (
                     <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-2 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-900/40 transition-colors">
@@ -1201,7 +1213,7 @@ export function MeetingDetail() {
                       ) : (
                         <div
                           className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0"
-                          style={{ background: SPEAKER_CONFIGS[idx % SPEAKER_CONFIGS.length].gradient }}
+                          style={{ background: SPEAKER_CONFIGS[colorSlot].gradient }}
                         >
                           {initial}
                         </div>
@@ -1235,7 +1247,8 @@ export function MeetingDetail() {
                       {content}
                     </div>
                   );
-                })
+                });
+                })()
               ) : (
                 <p className="text-sm text-muted-foreground">No attendees recorded</p>
               )}

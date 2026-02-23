@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { motion } from 'framer-motion';
 import { useUser } from '@/lib/hooks/useUser';
 import { useTargets } from '@/lib/hooks/useTargets';
 import { useActivityFilters } from '@/lib/hooks/useActivityFilters';
@@ -810,9 +811,15 @@ export default function Dashboard() {
         </TabsContent>
 
         <TabsContent value="activity">
-          <Suspense fallback={<div className="flex items-center justify-center py-12 text-gray-500">Loading activity...</div>}>
-            <LazyActivityLog />
-          </Suspense>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Suspense fallback={<div className="flex items-center justify-center py-12 text-gray-500">Loading activity...</div>}>
+              <LazyActivityLog />
+            </Suspense>
+          </motion.div>
         </TabsContent>
 
         <TabsContent value="funnel">

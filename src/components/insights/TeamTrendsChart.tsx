@@ -214,6 +214,7 @@ function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg
             stroke="#10b981"
             strokeWidth={2}
             fill="url(#sentimentGradient)"
+            defined={(d: any) => d.sentiment !== null && d.sentiment !== undefined}
             dot={(props: any) => {
               if (props.value === null || props.value === undefined) return <g key={props.key} />;
               return <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill="#10b981" stroke="#10b981" strokeWidth={1} />;
@@ -286,6 +287,7 @@ function TalkTimeChart({ data, period }: { data: Array<{ date: string; avg: numb
             stroke="#8b5cf6"
             strokeWidth={2}
             fill="url(#talkTimeGradient)"
+            defined={(d: any) => d.talkTime !== null && d.talkTime !== undefined}
             unit="%"
             connectNulls={true}
             dot={(props: any) => {

@@ -29,10 +29,10 @@ function getBalanceColor(balance: number, projectedDays: number) {
 
 function getDotColor(balance: number, projectedDays: number) {
   if (balance <= 0) return 'bg-red-500 animate-pulse';
-  if (projectedDays < 0) return 'bg-emerald-500'; // no usage data yet
+  if (projectedDays < 0) return 'bg-emerald-500 animate-pulse'; // no usage data yet
   if (projectedDays < 7) return 'bg-red-500';
   if (projectedDays <= 14) return 'bg-amber-500';
-  return 'bg-emerald-500';
+  return 'bg-emerald-500 animate-pulse';
 }
 
 export function CreditWidget() {
@@ -57,7 +57,7 @@ export function CreditWidget() {
   const dotClass = getDotColor(balance, projectedDaysRemaining);
 
   // Format: integer if whole, one decimal otherwise, e.g. "342 cr" or "342.5 cr"
-  const formattedBalance = balance % 1 === 0 ? `${Math.round(balance)} cr` : `${balance.toFixed(1)} cr`;
+  const formattedBalance = balance % 1 === 0 ? `${Math.round(balance)} credits` : `${balance.toFixed(1)} credits`;
 
   return (
     <DropdownMenu>

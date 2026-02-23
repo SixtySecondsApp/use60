@@ -437,7 +437,7 @@ const UnifiedMeetingsList: React.FC = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 w-full max-w-full overflow-x-hidden">
+    <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 w-full max-w-full overflow-x-hidden">
       {/* Meeting Usage Bar */}
       <MeetingUsageBar />
 
