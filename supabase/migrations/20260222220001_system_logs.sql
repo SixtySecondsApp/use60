@@ -89,7 +89,7 @@ CREATE POLICY "org_members_select_system_logs"
     AND EXISTS (
       SELECT 1
       FROM organization_memberships
-      WHERE organization_id = system_logs.org_id
+      WHERE org_id = system_logs.org_id
         AND user_id = auth.uid()
     )
   );

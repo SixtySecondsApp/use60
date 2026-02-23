@@ -115,7 +115,7 @@ CREATE POLICY "org_members_select_agent_executions"
     AND EXISTS (
       SELECT 1
       FROM organization_memberships
-      WHERE organization_id = agent_executions.org_id
+      WHERE org_id = agent_executions.org_id
         AND user_id = auth.uid()
     )
   );
