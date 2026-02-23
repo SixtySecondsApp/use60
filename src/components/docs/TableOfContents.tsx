@@ -63,7 +63,7 @@ export function TableOfContents({ content }: TableOfContentsProps) {
   if (headings.length < 3) return null;
 
   return (
-    <nav className="hidden xl:block sticky top-24 w-56 shrink-0 max-h-[calc(100vh-8rem)] overflow-y-auto">
+    <nav className="hidden xl:block sticky top-24 w-56 shrink-0 max-h-[calc(100vh-8rem)] overflow-y-auto scrollbar-custom">
       <div className="flex items-center gap-2 mb-3 px-2">
         <List className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
