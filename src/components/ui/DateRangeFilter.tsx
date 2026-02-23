@@ -61,8 +61,16 @@ export function useDateRangeFilter(defaultPreset: DatePreset = '30d'): UseDateRa
   const period = useMemo(() => {
     if (datePreset === '7d') return 7;
     if (datePreset === '90d') return 90;
+    if (datePreset === 'custom' && calendarStart && calendarEnd) {
+      const s = isBefore(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
+      const e = isAfter(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
+      const days = Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000));
+      if (days <= 7) return 7;
+      if (days <= 30) return 30;
+      return 90;
+    }
     return 30;
-  }, [datePreset]);
+  }, [datePreset, calendarStart, calendarEnd]);
 
   const dateRange = useMemo<DateRange | undefined>(() => {
     if (datePreset === 'custom' && calendarStart && calendarEnd) {

@@ -34,17 +34,17 @@ export function SentimentTrend() {
 
       const { data, error } = await supabase
         .from('meetings')
-        .select('sentiment_score, meeting_date')
-        .eq('user_id', user.id)
+        .select('sentiment_score, meeting_start')
+        .eq('owner_user_id', user.id)
         .not('sentiment_score', 'is', null)
-        .gte('meeting_date', startDate.toISOString())
-        .order('meeting_date', { ascending: true });
+        .gte('meeting_start', startDate.toISOString())
+        .order('meeting_start', { ascending: true });
 
       if (error) throw error;
 
       // Group by date
       const grouped = (data || []).reduce((acc: any, meeting: any) => {
-        const date = format(new Date(meeting.meeting_date), 'yyyy-MM-dd');
+        const date = format(new Date(meeting.meeting_start), 'yyyy-MM-dd');
         if (!acc[date]) {
           acc[date] = {
             date,

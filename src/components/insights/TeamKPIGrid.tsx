@@ -266,8 +266,8 @@ export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamK
     },
     {
       title: 'Avg Sentiment',
-      value: current.avgSentiment !== null ? (current.avgSentiment > 0 ? '+' : '') + current.avgSentiment.toFixed(2) : 'N/A',
-      subtitle: `${current.positiveCount} positive calls`,
+      value: current.avgSentiment !== null ? (current.avgSentiment * 10 > 0 ? '+' : '') + (current.avgSentiment * 10).toFixed(1) : 'N/A',
+      subtitle: current.avgSentiment !== null ? `${current.positiveCount} positive calls (scale: -10 to +10)` : `${current.positiveCount} positive calls`,
       trendPct: changes.sentimentChangePct,
       icon: Smile,
       color: 'emerald',

@@ -210,6 +210,7 @@ function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg
             dot={false}
             activeDot={{ r: 4, fill: '#10b981' }}
             connectNulls={false}
+            unit=" / 10"
           />
         </LineChart>
       </ResponsiveContainer>

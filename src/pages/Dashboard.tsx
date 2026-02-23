@@ -4,7 +4,6 @@ import { useTargets } from '@/lib/hooks/useTargets';
 import { useActivityFilters } from '@/lib/hooks/useActivityFilters';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDashboardMetrics } from '@/lib/hooks/useDashboardMetrics';
-import { startOfMonth, endOfMonth } from 'date-fns';
 import {
   PoundSterling,
   Phone,
@@ -41,7 +40,7 @@ interface MetricCardProps {
   title: string;
   value: number;
   target: number;
-  trend: number;
+  trend: number | null;
   icon: React.ElementType;
   type?: string;
   dateRange: {
@@ -49,7 +48,7 @@ interface MetricCardProps {
     end: Date;
   };
   previousMonthTotal?: number;
-  totalTrend?: number;
+  totalTrend?: number | null;
   isLoadingComparisons?: boolean;
   hasComparisons?: boolean;
   isInitialLoad?: boolean;
@@ -142,17 +141,17 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
   };
 
   // Use totalTrend from props (computed by useDashboardMetrics hook) for consistency
-  const totalTrend = totalTrendProp ?? 0;
+  const totalTrend = totalTrendProp === undefined ? 0 : totalTrendProp;
 
   // Helper function for arrow styling
-  const getArrowClass = (trendValue: number) => {
-    if (trendValue === 0) return 'text-gray-500';
+  const getArrowClass = (trendValue: number | null) => {
+    if (trendValue === null || trendValue === 0) return 'text-gray-500';
     return trendValue > 0 ? 'text-emerald-500' : 'text-red-500';
   };
 
   // Get background colors based on trend values
-  const getTrendBg = (trendValue: number) => {
-    if (trendValue === 0) return 'bg-gray-500/10 border-gray-500/30';
+  const getTrendBg = (trendValue: number | null) => {
+    if (trendValue === null || trendValue === 0) return 'bg-gray-500/10 border-gray-500/30';
     return trendValue > 0
       ? 'bg-emerald-500/10 border-emerald-500/30'
       : 'bg-red-500/10 border-red-500/30';
@@ -210,7 +209,7 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-medium text-[#1E293B] dark:text-white">{title}</span>
-            <span className="text-xs text-[#64748B] dark:text-gray-500">This month</span>
+            <span className="text-xs text-[#64748B] dark:text-gray-500">Current period</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -234,7 +233,12 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
                 </>
               ) : (
                 <>
-                  {trend === 0 ? (
+                  {trend === null ? (
+                    <>
+                      <Minus className="w-4 h-4 text-gray-500" />
+                      <span className="text-xs font-semibold text-gray-500">New</span>
+                    </>
+                  ) : trend === 0 ? (
                     <>
                       <Minus className="w-4 h-4 text-gray-500" />
                       <span className="text-xs font-semibold text-gray-500">0%</span>
@@ -275,7 +279,12 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
                 </>
               ) : (
                 <>
-                  {totalTrend === 0 ? (
+                  {totalTrend === null ? (
+                    <>
+                      <Minus className="w-4 h-4 text-gray-500" />
+                      <span className="text-xs font-semibold text-gray-500">New</span>
+                    </>
+                  ) : totalTrend === 0 ? (
                     <>
                       <Minus className="w-4 h-4 text-gray-500" />
                       <span className="text-xs font-semibold text-gray-500">0%</span>
@@ -297,23 +306,23 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
           </div>
 
           {/* Tooltips using Portal */}
-          <Tooltip 
+          <Tooltip
             show={showTrendTooltip}
             position={trendPosition}
             content={{
-              title: "Vs. same point last month",
-              message: trend > 0 ? "Ahead of last month's pace" : trend < 0 ? "Behind last month's pace" : "Same as last month's pace",
-              positive: trend > 0
+              title: "Vs. same point last period",
+              message: trend === null ? "No prior data to compare" : trend > 0 ? "Ahead of last period's pace" : trend < 0 ? "Behind last period's pace" : "Same as last period's pace",
+              positive: trend !== null && trend > 0
             }}
           />
-          
-          <Tooltip 
+
+          <Tooltip
             show={showTotalTooltip}
             position={totalPosition}
             content={{
-              title: "Vs. previous month's total",
-              message: totalTrend > 0 ? "Already ahead of last month" : totalTrend < 0 ? "Behind last month's total" : "Matching last month's total",
-              positive: totalTrend > 0
+              title: "Vs. previous period's total",
+              message: totalTrend === null ? "No prior data to compare" : totalTrend > 0 ? "Already ahead of last period" : totalTrend < 0 ? "Behind last period's total" : "Matching last period's total",
+              positive: totalTrend !== null && totalTrend > 0
             }}
           />
         </div>
@@ -376,7 +385,9 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
     prevProps.isLoadingComparisons === nextProps.isLoadingComparisons &&
     prevProps.hasComparisons === nextProps.hasComparisons &&
     prevProps.isInitialLoad === nextProps.isInitialLoad &&
-    prevProps.onNavigateToActivity === nextProps.onNavigateToActivity
+    prevProps.onNavigateToActivity === nextProps.onNavigateToActivity &&
+    prevProps.dateRange?.start?.getTime() === nextProps.dateRange?.start?.getTime() &&
+    prevProps.dateRange?.end?.getTime() === nextProps.dateRange?.end?.getTime()
   );
 });
 
@@ -450,7 +461,7 @@ function DashboardSkeleton() {
   );
 }
 
-function TeamPerformanceSection({ dateRange }: { dateRange: { start: Date; end: Date } }) {
+function TeamPerformanceSection({ dateRange, period }: { dateRange: { start: Date; end: Date }; period: number }) {
 
   return (
     <div className="mb-8">
@@ -469,12 +480,12 @@ function TeamPerformanceSection({ dateRange }: { dateRange: { start: Date; end: 
 
       {/* KPI Grid */}
       <div className="mb-4">
-        <TeamKPIGrid period={30} dateRange={dateRange} onCardClick={() => {}} />
+        <TeamKPIGrid period={period} dateRange={dateRange} onCardClick={() => {}} />
       </div>
 
       {/* Trends Chart */}
       <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-3xl border border-transparent dark:border-gray-800/50 shadow-sm dark:shadow-none p-6">
-        <TeamComparisonMatrix period={30} dateRange={dateRange} onRepClick={() => {}} />
+        <TeamComparisonMatrix period={period} dateRange={dateRange} onRepClick={() => {}} />
       </div>
     </div>
   );
@@ -485,12 +496,16 @@ export default function Dashboard() {
   const [showContent, setShowContent] = useState(false);
   const dateFilter = useDateRangeFilter('30d');
 
-  // Derive selectedMonth from date filter for useDashboardMetrics compatibility
-  const selectedMonth = useMemo(() => {
+  // Derive the active dateRange from the filter (always defined for presets)
+  const activeDateRange = useMemo(() => {
     if (dateFilter.dateRange) {
-      return dateFilter.dateRange.start;
+      return dateFilter.dateRange;
     }
-    return new Date();
+    // Fallback: last 30 days
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    return { start, end };
   }, [dateFilter.dateRange]);
 
   const { userData, isLoading: isLoadingUser, session } = useUser();
@@ -639,16 +654,9 @@ export default function Dashboard() {
     hasComparisons,
     currentMonthActivities,
     refreshDashboard
-  } = useDashboardMetrics(selectedMonth, showContent && !!userId && !isLoadingSales);
+  } = useDashboardMetrics(activeDateRange, showContent && !!userId && !isLoadingSales);
   
-  const selectedMonthRange = useMemo(() => {
-    if (dateFilter.dateRange) {
-      return { start: dateFilter.dateRange.start, end: dateFilter.dateRange.end };
-    }
-    const start = startOfMonth(selectedMonth);
-    const end = endOfMonth(selectedMonth);
-    return { start, end };
-  }, [dateFilter.dateRange, selectedMonth]);
+  const selectedMonthRange = activeDateRange;
 
   // Check if any data is loading - include metrics check
   // Note: targets can be null (user has no targets set) — that's not a loading state
@@ -798,7 +806,7 @@ export default function Dashboard() {
       </div>
 
       {/* Team Performance Section */}
-      <TeamPerformanceSection dateRange={selectedMonthRange} />
+      <TeamPerformanceSection dateRange={selectedMonthRange} period={dateFilter.period} />
         </TabsContent>
 
         <TabsContent value="activity">

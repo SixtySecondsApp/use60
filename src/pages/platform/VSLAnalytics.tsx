@@ -41,6 +41,7 @@ export function VSLAnalytics() {
     comparison,
     hasData,
     refresh,
+    updateDateRange,
     setLast7Days,
     setLast30Days,
     setLast90Days,
@@ -57,7 +58,13 @@ export function VSLAnalytics() {
 
   // Sync date filter state with the VSL analytics hook
   useEffect(() => {
-    if (dateFilter.datePreset === 'custom' && dateFilter.dateRange) {
+    if (dateFilter.datePreset === 'custom') {
+      if (dateFilter.dateRange?.start && dateFilter.dateRange?.end) {
+        updateDateRange({
+          startDate: dateFilter.dateRange.start,
+          endDate: dateFilter.dateRange.end,
+        });
+      }
       return;
     }
     switch (dateFilter.period) {
@@ -65,7 +72,7 @@ export function VSLAnalytics() {
       case 30: setLast30Days(); break;
       case 90: setLast90Days(); break;
     }
-  }, [dateFilter.period, dateFilter.datePreset]);
+  }, [dateFilter.period, dateFilter.datePreset, dateFilter.dateRange]);
 
   // Show loading state while checking user permissions
   if (userLoading) {

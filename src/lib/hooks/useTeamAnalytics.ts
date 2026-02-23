@@ -35,22 +35,22 @@ const teamAnalyticsKeys = {
   all: ['team-analytics'] as const,
   aggregates: (orgId: string, period: TimePeriod, dateRange?: DateRange) =>
     [...teamAnalyticsKeys.all, 'aggregates', orgId, period, dateRangeKey(dateRange)] as const,
-  timeSeries: (orgId: string, period: TimePeriod, granularity: Granularity, userId?: string) =>
-    [...teamAnalyticsKeys.all, 'time-series', orgId, period, granularity, userId || 'all'] as const,
-  qualitySignals: (orgId: string, period: TimePeriod, userId?: string) =>
-    [...teamAnalyticsKeys.all, 'quality-signals', orgId, period, userId || 'all'] as const,
+  timeSeries: (orgId: string, period: TimePeriod, granularity: Granularity, userId?: string, dateRange?: DateRange) =>
+    [...teamAnalyticsKeys.all, 'time-series', orgId, period, granularity, userId || 'all', dateRangeKey(dateRange)] as const,
+  qualitySignals: (orgId: string, period: TimePeriod, userId?: string, dateRange?: DateRange) =>
+    [...teamAnalyticsKeys.all, 'quality-signals', orgId, period, userId || 'all', dateRangeKey(dateRange)] as const,
   comparison: (orgId: string, period: TimePeriod, dateRange?: DateRange) =>
     [...teamAnalyticsKeys.all, 'comparison', orgId, period, dateRangeKey(dateRange)] as const,
-  drillDown: (orgId: string, metricType: DrillDownMetricType, period: TimePeriod, userId?: string) =>
-    [...teamAnalyticsKeys.all, 'drill-down', orgId, metricType, period, userId || 'all'] as const,
+  drillDown: (orgId: string, metricType: DrillDownMetricType, period: TimePeriod, userId?: string, dateRange?: DateRange) =>
+    [...teamAnalyticsKeys.all, 'drill-down', orgId, metricType, period, userId || 'all', dateRangeKey(dateRange)] as const,
   trends: (orgId: string, period: TimePeriod, dateRange?: DateRange) =>
     [...teamAnalyticsKeys.all, 'trends', orgId, period, dateRangeKey(dateRange)] as const,
-  sentimentExtremes: (orgId: string, period: TimePeriod, userId?: string) =>
-    [...teamAnalyticsKeys.all, 'sentiment-extremes', orgId, period, userId || 'all'] as const,
-  talkTimeExtremes: (orgId: string, period: TimePeriod, userId?: string) =>
-    [...teamAnalyticsKeys.all, 'talk-time-extremes', orgId, period, userId || 'all'] as const,
-  objectionDetails: (orgId: string, period: TimePeriod, userId?: string) =>
-    [...teamAnalyticsKeys.all, 'objection-details', orgId, period, userId || 'all'] as const,
+  sentimentExtremes: (orgId: string, period: TimePeriod, userId?: string, dateRange?: DateRange) =>
+    [...teamAnalyticsKeys.all, 'sentiment-extremes', orgId, period, userId || 'all', dateRangeKey(dateRange)] as const,
+  talkTimeExtremes: (orgId: string, period: TimePeriod, userId?: string, dateRange?: DateRange) =>
+    [...teamAnalyticsKeys.all, 'talk-time-extremes', orgId, period, userId || 'all', dateRangeKey(dateRange)] as const,
+  objectionDetails: (orgId: string, period: TimePeriod, userId?: string, dateRange?: DateRange) =>
+    [...teamAnalyticsKeys.all, 'objection-details', orgId, period, userId || 'all', dateRangeKey(dateRange)] as const,
 };
 
 /**
@@ -82,14 +82,15 @@ export function useTeamAggregates(period: TimePeriod = 30, dateRange?: DateRange
 export function useTeamTimeSeries(
   period: TimePeriod = 30,
   granularity: Granularity = 'day',
-  userId?: string
+  userId?: string,
+  dateRange?: DateRange
 ) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
   const orgId = activeOrg?.id;
 
   return useQuery<TimeSeriesDataPoint[]>({
-    queryKey: teamAnalyticsKeys.timeSeries(orgId || '', period, granularity, userId),
+    queryKey: teamAnalyticsKeys.timeSeries(orgId || '', period, granularity, userId, dateRange),
     queryFn: async () => {
       if (!orgId) throw new Error('No organization selected');
       return TeamAnalyticsService.getTimeSeriesMetrics({
@@ -110,16 +111,16 @@ export function useTeamTimeSeries(
  * Hook for team quality signals per rep
  * Forward movement rate, objection rate, outcome distribution, etc.
  */
-export function useTeamQualitySignals(period: TimePeriod = 30, userId?: string) {
+export function useTeamQualitySignals(period: TimePeriod = 30, userId?: string, dateRange?: DateRange) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
   const orgId = activeOrg?.id;
 
   return useQuery<RepQualitySignals[]>({
-    queryKey: teamAnalyticsKeys.qualitySignals(orgId || '', period, userId),
+    queryKey: teamAnalyticsKeys.qualitySignals(orgId || '', period, userId, dateRange),
     queryFn: async () => {
       if (!orgId) throw new Error('No organization selected');
-      return TeamAnalyticsService.getTeamQualitySignals(orgId, period, userId);
+      return TeamAnalyticsService.getTeamQualitySignals(orgId, period, userId, dateRange);
     },
     enabled: Boolean(user && orgId),
     staleTime: 5 * 60 * 1000,
@@ -158,17 +159,18 @@ export function useMeetingsForDrillDown(
   metricType: DrillDownMetricType,
   period: TimePeriod = 30,
   userId?: string,
-  enabled: boolean = true
+  enabled: boolean = true,
+  dateRange?: DateRange
 ) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
   const orgId = activeOrg?.id;
 
   return useQuery<MeetingSummary[]>({
-    queryKey: teamAnalyticsKeys.drillDown(orgId || '', metricType, period, userId),
+    queryKey: teamAnalyticsKeys.drillDown(orgId || '', metricType, period, userId, dateRange),
     queryFn: async () => {
       if (!orgId) throw new Error('No organization selected');
-      return TeamAnalyticsService.getMeetingsForDrillDown(orgId, metricType, period, userId, 50);
+      return TeamAnalyticsService.getMeetingsForDrillDown(orgId, metricType, period, userId, 50, dateRange);
     },
     enabled: Boolean(user && orgId && enabled),
     staleTime: 5 * 60 * 1000,
@@ -209,17 +211,18 @@ export function useTeamTrends(period: TimePeriod = 30, dateRange?: DateRange) {
 export function useSentimentExtremes(
   period: TimePeriod = 30,
   userId?: string,
-  enabled: boolean = true
+  enabled: boolean = true,
+  dateRange?: DateRange
 ) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
   const orgId = activeOrg?.id;
 
   return useQuery<SentimentExtremesResult>({
-    queryKey: teamAnalyticsKeys.sentimentExtremes(orgId || '', period, userId),
+    queryKey: teamAnalyticsKeys.sentimentExtremes(orgId || '', period, userId, dateRange),
     queryFn: async () => {
       if (!orgId) throw new Error('No organization selected');
-      return TeamAnalyticsService.getSentimentExtremes(orgId, period, userId);
+      return TeamAnalyticsService.getSentimentExtremes(orgId, period, userId, dateRange);
     },
     enabled: Boolean(user && orgId && enabled),
     staleTime: 5 * 60 * 1000,
@@ -234,17 +237,18 @@ export function useSentimentExtremes(
 export function useTalkTimeExtremes(
   period: TimePeriod = 30,
   userId?: string,
-  enabled: boolean = true
+  enabled: boolean = true,
+  dateRange?: DateRange
 ) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
   const orgId = activeOrg?.id;
 
   return useQuery<TalkTimeExtremesResult>({
-    queryKey: teamAnalyticsKeys.talkTimeExtremes(orgId || '', period, userId),
+    queryKey: teamAnalyticsKeys.talkTimeExtremes(orgId || '', period, userId, dateRange),
     queryFn: async () => {
       if (!orgId) throw new Error('No organization selected');
-      return TeamAnalyticsService.getTalkTimeExtremes(orgId, period, userId);
+      return TeamAnalyticsService.getTalkTimeExtremes(orgId, period, userId, dateRange);
     },
     enabled: Boolean(user && orgId && enabled),
     staleTime: 5 * 60 * 1000,
@@ -259,17 +263,18 @@ export function useTalkTimeExtremes(
 export function useObjectionDetails(
   period: TimePeriod = 30,
   userId?: string,
-  enabled: boolean = true
+  enabled: boolean = true,
+  dateRange?: DateRange
 ) {
   const { user } = useAuth();
   const activeOrg = useActiveOrg();
   const orgId = activeOrg?.id;
 
   return useQuery<ObjectionDetailsResult>({
-    queryKey: teamAnalyticsKeys.objectionDetails(orgId || '', period, userId),
+    queryKey: teamAnalyticsKeys.objectionDetails(orgId || '', period, userId, dateRange),
     queryFn: async () => {
       if (!orgId) throw new Error('No organization selected');
-      return TeamAnalyticsService.getObjectionDetails(orgId, period, userId);
+      return TeamAnalyticsService.getObjectionDetails(orgId, period, userId, dateRange);
     },
     enabled: Boolean(user && orgId && enabled),
     staleTime: 5 * 60 * 1000,

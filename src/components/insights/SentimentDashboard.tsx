@@ -44,11 +44,11 @@ export function SentimentDashboard() {
             contact_id,
             contacts!inner(name),
             sentiment_score,
-            meeting_date
+            meeting_start
           `)
-          .eq('user_id', user.id)
+          .eq('owner_user_id', user.id)
           .not('sentiment_score', 'is', null)
-          .order('meeting_date', { ascending: false });
+          .order('meeting_start', { ascending: false });
 
         if (error) throw error;
 
@@ -67,7 +67,7 @@ export function SentimentDashboard() {
           }
 
           acc[contactId].sentiments.push(meeting.sentiment_score);
-          acc[contactId].dates.push(meeting.meeting_date);
+          acc[contactId].dates.push(meeting.meeting_start);
 
           return acc;
         }, {});
