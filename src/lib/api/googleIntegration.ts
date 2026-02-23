@@ -140,7 +140,7 @@ export class GoogleIntegrationAPI {
       .from('google_integrations')
       .select('id')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (!integration) return;
 
@@ -175,7 +175,7 @@ export class GoogleIntegrationAPI {
 
     const { data, error } = await supabase
       .from('google_integrations')
-      .select('is_active, service_preferences')
+      .select('*')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .maybeSingle();
@@ -209,7 +209,7 @@ export class GoogleIntegrationAPI {
     // Read current preferences first
     const { data: current, error: readError } = await supabase
       .from('google_integrations')
-      .select('service_preferences')
+      .select('*')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .maybeSingle();

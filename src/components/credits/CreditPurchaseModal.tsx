@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CreditCard, Loader2, Star, ChevronDown, ChevronUp, Zap, TrendingUp, Layers } from 'lucide-react';
+import { CreditCard, Loader2, Star, ChevronDown, ChevronUp, Zap, TrendingUp, Layers, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -15,6 +15,7 @@ import { CREDIT_PACKS, STANDARD_PACKS, getCostPerCredit } from '@/lib/config/cre
 import type { PackType } from '@/lib/config/creditPacks';
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import { useUser } from '@/lib/hooks/useUser';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +40,7 @@ const COMPARE_ROWS = [
 export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurchaseModalProps) {
   const orgId = useOrgId();
   const { userData } = useUser();
+  const { currencyCode } = useOrgMoney();
   const [selectedPack, setSelectedPack] = useState<PackType>('growth');
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
@@ -209,6 +211,13 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
             </div>
           )}
         </div>
+
+        {currencyCode !== 'GBP' && (
+          <div className="flex items-center gap-1.5 text-xs text-[#64748B] dark:text-gray-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
+            <Info className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+            <span>Payments are processed in GBP. Your card will be charged at your bank's exchange rate.</span>
+          </div>
+        )}
 
         <div className="flex items-center justify-between pt-2">
           <div className="text-sm text-[#64748B] dark:text-gray-400">

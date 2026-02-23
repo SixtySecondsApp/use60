@@ -200,10 +200,8 @@ function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg
             stroke="#10b981"
             strokeWidth={2}
             fill="url(#sentimentGradient)"
-            dot={(props: any) => (
-              <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill="#10b981" stroke="#10b981" strokeWidth={1} />
-            )}
-            activeDot={{ r: 5, fill: '#10b981' }}
+            dot={false}
+            activeDot={false}
             unit=" / 10"
           />
         </AreaChart>
@@ -264,10 +262,8 @@ function TalkTimeChart({ data, period }: { data: Array<{ date: string; avg: numb
             strokeWidth={2}
             fill="url(#talkTimeGradient)"
             unit="%"
-            dot={(props: any) => (
-              <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill="#8b5cf6" stroke="#8b5cf6" strokeWidth={1} />
-            )}
-            activeDot={{ r: 5, fill: '#8b5cf6' }}
+            dot={false}
+            activeDot={false}
           />
         </AreaChart>
       </ResponsiveContainer>
