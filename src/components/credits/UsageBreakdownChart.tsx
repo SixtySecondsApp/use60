@@ -148,7 +148,7 @@ export function UsageBreakdownChart({ usageByFeature, storageCostCredits }: Usag
               />
             </div>
             <span className="text-xs font-medium text-gray-700 dark:text-gray-300 tabular-nums w-16 text-right flex-shrink-0">
-              {formattedCost} cr
+              {formattedCost} credits
             </span>
             {cat.callCount > 0 && (
               <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums w-14 text-right flex-shrink-0">

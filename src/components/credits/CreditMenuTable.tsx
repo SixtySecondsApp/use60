@@ -318,13 +318,13 @@ function PackComparisonCards() {
 
                   <div>
                     <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
-                      {pack.credits} <span className="text-sm font-normal text-gray-500">cr</span>
+                      {pack.credits} <span className="text-sm font-normal text-gray-500">credits</span>
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {isApproximate && <span className="text-gray-400">~</span>}{symbol}{price}
                     </p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                      £{costPerCredit.toFixed(2)}/cr
+                      £{costPerCredit.toFixed(2)}/credit
                     </p>
                   </div>
 

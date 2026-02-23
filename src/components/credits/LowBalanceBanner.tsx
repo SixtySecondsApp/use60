@@ -65,8 +65,8 @@ export function LowBalanceBanner() {
   const autoTopUpPackCredits = autoTopUp?.packType ? `${autoTopUp.packType}` : 'credits';
 
   const formattedBalance = balance % 1 === 0
-    ? `${Math.round(balance)} cr`
-    : `${balance.toFixed(1)} cr`;
+    ? `${Math.round(balance)} credits`
+    : `${balance.toFixed(1)} credits`;
 
   return (
     <div

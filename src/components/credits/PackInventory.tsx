@@ -104,7 +104,7 @@ export function PackInventory() {
                 <span className="text-xs tabular-nums text-gray-700 dark:text-gray-300 font-medium flex-shrink-0">
                   {pack.creditsRemaining % 1 === 0 ? Math.round(pack.creditsRemaining) : pack.creditsRemaining.toFixed(1)}
                   {' / '}
-                  {pack.creditsPurchased % 1 === 0 ? Math.round(pack.creditsPurchased) : pack.creditsPurchased.toFixed(1)} cr
+                  {pack.creditsPurchased % 1 === 0 ? Math.round(pack.creditsPurchased) : pack.creditsPurchased.toFixed(1)} credits
                 </span>
               </div>
 

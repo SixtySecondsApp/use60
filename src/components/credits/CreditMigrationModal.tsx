@@ -103,7 +103,7 @@ export function CreditMigrationModal({ forceShow }: CreditMigrationModalProps) {
               <div>
                 <p className="text-sm font-medium text-gray-900 dark:text-white">Credit packs</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Buy Starter (100 cr), Growth (250 cr), or Scale (500 cr) packs. Better value at higher tiers.
+                  Buy Starter (100 credits), Growth (250 credits), or Scale (500 credits) packs. Better value at higher tiers.
                 </p>
               </div>
             </div>
@@ -115,7 +115,7 @@ export function CreditMigrationModal({ forceShow }: CreditMigrationModalProps) {
               <div>
                 <p className="text-sm font-medium text-gray-900 dark:text-white">Credit units</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  All AI actions now cost credits (e.g. 0.3 cr/chat, 1.8 cr/meeting summary). See costs in model settings.
+                  All AI actions now cost credits (e.g. 0.3 credits/chat, 1.8 credits/meeting summary). See costs in model settings.
                 </p>
               </div>
             </div>

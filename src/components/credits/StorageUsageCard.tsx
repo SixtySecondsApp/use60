@@ -33,7 +33,7 @@ function StorageRow({
           {value.toLocaleString()} {unit}
         </span>
         <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums w-20 text-right">
-          ~{cost % 1 === 0 ? cost.toFixed(0) : cost.toFixed(2)} cr/mo
+          ~{cost % 1 === 0 ? cost.toFixed(0) : cost.toFixed(2)} credits/mo
         </span>
       </div>
     </div>
@@ -98,7 +98,7 @@ export function StorageUsageCard({ storage }: StorageUsageCardProps) {
         <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
           ~{projectedMonthlyCostCredits % 1 === 0
             ? projectedMonthlyCostCredits.toFixed(0)
-            : projectedMonthlyCostCredits.toFixed(2)} cr/mo
+            : projectedMonthlyCostCredits.toFixed(2)} credits/mo
         </span>
       </div>
 

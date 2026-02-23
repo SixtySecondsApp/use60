@@ -131,8 +131,66 @@
       "completedAt": null
     }
   ],
+    {
+      "id": "UI-006",
+      "feature": "ui-polish",
+      "title": "Fix Most Popular badge clipped by CreditPurchaseModal card border",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "Most Popular badge renders fully above the card's border (not overlapping/clipped by it)",
+        "Badge is visually floating above the top edge of the popular card",
+        "Other pack cards are unaffected"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "src/components/credits/CreditPurchaseModal.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004", "UI-005", "UI-007"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "UI-007",
+      "feature": "ui-polish",
+      "title": "Replace 'cr' abbreviation with 'credits' throughout credit UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "All visible 'cr' abbreviations replaced with 'credits' (e.g. '342 cr' → '342 credits')",
+        "Per-unit rates updated (e.g. 'cr/mo' → 'credits/mo', 'cr/day' → 'credits/day')",
+        "No regressions in credit display logic"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/credits/UsageBreakdownChart.tsx",
+        "src/components/credits/TransactionLog.tsx",
+        "src/components/credits/StorageUsageCard.tsx",
+        "src/components/credits/LowBalanceBanner.tsx",
+        "src/components/credits/CreditEstimator.tsx",
+        "src/components/credits/CreditMigrationModal.tsx",
+        "src/components/credits/PackInventory.tsx",
+        "src/components/credits/ARBudgetSettings.tsx",
+        "src/components/credits/CreditMenuTable.tsx",
+        "src/components/credits/CreditWidgetDropdown.tsx",
+        "src/components/credits/SimpleModelTierSelector.tsx",
+        "src/pages/settings/CreditsSettingsPage.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004", "UI-005", "UI-006"],
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
   "execution": {
-    "totalStories": 5,
+    "totalStories": 7,
     "completedStories": 0,
     "currentFeature": "ui-polish",
     "lastUpdated": "2026-02-23"

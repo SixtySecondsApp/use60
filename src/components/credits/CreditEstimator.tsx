@@ -3,7 +3,7 @@
  *
  * Shows users what they can do with X credits.
  * Uses pack-based credit costs from creditPacks config.
- * Quick-pick: Starter (100 cr), Growth (250 cr), Scale (500 cr), My Balance.
+ * Quick-pick: Starter (100 credits), Growth (250 credits), Scale (500 credits), My Balance.
  */
 
 import { useState, useMemo } from 'react';
@@ -144,7 +144,7 @@ export function CreditEstimator() {
                 : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
             )}
           >
-            {label} ({credits} cr)
+            {label} ({credits} credits)
           </button>
         ))}
         {currentBalance > 0 && !PACK_QUICK_PICKS.some((p) => p.credits === currentBalance) && (
@@ -157,7 +157,7 @@ export function CreditEstimator() {
                 : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
             )}
           >
-            My balance ({currentBalance} cr)
+            My balance ({currentBalance} credits)
           </button>
         )}
       </div>
@@ -199,7 +199,7 @@ export function CreditEstimator() {
                   {TIER_LABELS[tier]}
                 </span>
                 <span className="text-[10px] text-gray-400 tabular-nums">
-                  {costPerAction} cr/ea
+                  {costPerAction} credits/ea
                 </span>
               </div>
             </div>

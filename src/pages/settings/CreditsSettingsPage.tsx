@@ -152,7 +152,7 @@ export default function CreditsSettingsPage() {
     try {
       const newBalance = await grantCredits(orgId, amount, grantReason);
       const formatted = newBalance % 1 === 0 ? `${Math.round(newBalance)}` : newBalance.toFixed(1);
-      toast.success(`Granted ${amount} credits. New balance: ${formatted} cr`);
+      toast.success(`Granted ${amount} credits. New balance: ${formatted} credits`);
       setGrantAmount('');
       setGrantReason('');
       queryClient.setQueryData(creditKeys.balance(orgId), (old: any) => ({
@@ -185,7 +185,7 @@ export default function CreditsSettingsPage() {
     : '-- credits';
 
   const formattedBurnRate = balance
-    ? (balance.dailyBurnRate % 1 === 0 ? `${Math.round(balance.dailyBurnRate)} cr/day` : `${balance.dailyBurnRate.toFixed(1)} cr/day`)
+    ? (balance.dailyBurnRate % 1 === 0 ? `${Math.round(balance.dailyBurnRate)} credits/day` : `${balance.dailyBurnRate.toFixed(1)} credits/day`)
     : '--';
 
   return (
@@ -239,7 +239,7 @@ export default function CreditsSettingsPage() {
               </div>
               {balance.autoTopUp?.enabled && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Triggers below {balance.autoTopUp.threshold} cr
+                  Triggers below {balance.autoTopUp.threshold} credits
                 </p>
               )}
               {!balance.autoTopUp?.enabled && isAdmin && (
@@ -338,7 +338,7 @@ export default function CreditsSettingsPage() {
                         className="hover:border-[#37bd7e] hover:text-[#37bd7e] flex items-center gap-2"
                       >
                         <CreditCard className="w-4 h-4" />
-                        {pack.label} — {pack.credits} cr / {(() => { const { symbol, price, isApproximate } = getPackPrice(packType, currencyCode); return `${isApproximate ? '~' : ''}${symbol}${price}`; })()}
+                        {pack.label} — {pack.credits} credits / {(() => { const { symbol, price, isApproximate } = getPackPrice(packType, currencyCode); return `${isApproximate ? '~' : ''}${symbol}${price}`; })()}
                         {pack.popular && (
                           <span className="ml-1 text-[10px] bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 px-1.5 py-0.5 rounded-full font-medium">
                             Popular

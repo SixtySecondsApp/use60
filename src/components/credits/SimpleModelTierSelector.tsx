@@ -212,7 +212,7 @@ function formatCreditCost(catKey: string, tier: Tier, actionLabel: string): stri
   if (!creditKey) return '--';
   const costs = ACTION_CREDIT_COSTS[creditKey];
   const cost = costs[TIER_TO_CREDIT_TIER[tier]];
-  return `~${cost} cr/${actionLabel}`;
+  return `~${cost} credits/${actionLabel}`;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────

@@ -68,11 +68,11 @@ function formatCreditAmount(amount: number): string {
   const abs = Math.abs(amount);
   const formatted = abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1);
   const prefix = amount >= 0 ? '+' : '-';
-  return `${prefix}${formatted} cr`;
+  return `${prefix}${formatted} credits`;
 }
 
 function formatBalance(balance: number): string {
-  return balance % 1 === 0 ? `${Math.round(balance)} cr` : `${balance.toFixed(1)} cr`;
+  return balance % 1 === 0 ? `${Math.round(balance)} credits` : `${balance.toFixed(1)} credits`;
 }
 
 function formatDate(iso: string) {

@@ -88,7 +88,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
             const isPopular = pack.popular;
 
             return (
-              <div key={packType} className={cn('relative', isPopular && 'z-10')}>
+              <div key={packType} className={cn('relative', isPopular && 'pt-5 z-10')}>
                 {isPopular && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap">
                     <Badge className="gap-1 bg-blue-600 text-white hover:bg-blue-600 text-xs px-2 py-0.5">

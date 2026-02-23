@@ -1,7 +1,7 @@
 /**
  * ARBudgetSettings
  *
- * Controls the monthly credit cap and pause/resume toggle for autonomous research
+ * Controls the monthly creditsedit cap and pause/resume toggle for autonomous research
  * (AR) / proactive agent runs. Admin-only.
  *
  * Data source: org_credit_balance.ar_monthly_cap, ar_paused
@@ -233,7 +233,7 @@ export function ARBudgetSettings() {
         <div>
           <p className="text-sm font-medium text-[#1E293B] dark:text-white">Monthly AR Credit Cap</p>
           <p className="text-xs text-[#64748B] dark:text-gray-400 mt-0.5">
-            Limit how many credits proactive agents can consume per month. Set to unlimited for no restriction.
+            Limit how many creditsedits proactive agents can consume per month. Set to unlimited for no restriction.
           </p>
         </div>
 
@@ -299,7 +299,7 @@ export function ARBudgetSettings() {
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-[#1E293B] dark:text-white">AR Usage This Month</p>
             <span className={cn('text-sm font-medium tabular-nums', getProgressTextColor(pct))}>
-              {usedThisMonth.toFixed(1)} / {arMonthlyCap} cr ({Math.round(pct)}%)
+              {usedThisMonth.toFixed(1)} / {arMonthlyCap} credits ({Math.round(pct)}%)
             </span>
           </div>
 
@@ -313,7 +313,7 @@ export function ARBudgetSettings() {
           {atCap && (
             <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
               <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-              Monthly AR credit cap reached. Proactive agents are blocked until next month or cap is raised.
+              Monthly AR creditsedit cap reached. Proactive agents are blocked until next month or cap is raised.
             </div>
           )}
           {!atCap && approachingCap && (
@@ -334,7 +334,7 @@ export function ARBudgetSettings() {
               <div key={featureKey} className="flex items-center justify-between text-sm">
                 <span className="text-[#64748B] dark:text-gray-400">{label}</span>
                 <span className="font-medium tabular-nums text-[#1E293B] dark:text-gray-200">
-                  {used.toFixed(1)} cr
+                  {used.toFixed(1)} credits
                 </span>
               </div>
             ))}
