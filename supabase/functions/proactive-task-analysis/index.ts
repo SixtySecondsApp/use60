@@ -345,14 +345,32 @@ async function sendTaskNotification(
   result: TaskAnalysisResult
 ): Promise<boolean> {
   try {
-    // Check if user has Slack connected
-    const { data: slackAuth } = await supabase
-      .from('slack_auth')
-      .select('access_token, channel_id')
-      .eq('user_id', result.userId)
+    if (!result.organizationId) {
+      console.log(`[TaskAnalysis] No org_id for user ${result.userId}, cannot send Slack notification`);
+      return false;
+    }
+
+    // Get org-level Slack bot token
+    const { data: slackOrg } = await supabase
+      .from('slack_org_settings')
+      .select('bot_access_token')
+      .eq('org_id', result.organizationId)
+      .eq('is_connected', true)
       .maybeSingle();
 
-    if (!slackAuth?.access_token) {
+    if (!slackOrg?.bot_access_token) {
+      return false;
+    }
+
+    // Get user's Slack user ID for DM
+    const { data: slackMapping } = await supabase
+      .from('slack_user_mappings')
+      .select('slack_user_id')
+      .eq('sixty_user_id', result.userId)
+      .eq('org_id', result.organizationId)
+      .maybeSingle();
+
+    if (!slackMapping?.slack_user_id) {
       return false;
     }
 
@@ -444,15 +462,15 @@ async function sendTaskNotification(
       }],
     });
 
-    // Send to Slack
+    // Send DM to user's Slack user ID
     const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${slackAuth.access_token}`,
+        'Authorization': `Bearer ${slackOrg.bot_access_token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        channel: slackAuth.channel_id || result.userId,
+        channel: slackMapping.slack_user_id,
         blocks,
         text: `Task reminder: ${result.overdueTasks.length} overdue, ${result.dueTodayTasks.length} due today`,
       }),

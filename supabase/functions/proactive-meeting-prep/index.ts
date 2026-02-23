@@ -177,20 +177,36 @@ async function checkAndPrepAllUsers(supabase: any): Promise<{
     )
     .gte('start_time', windowStart.toISOString())
     .lte('start_time', windowEnd.toISOString())
-    .gt('attendees_count', 1) // Real meetings only
+    .gt('attendees_count', 0) // Any meeting with attendees (relaxed from > 1 — Google Cal sync may not populate count)
     .order('start_time');
 
   if (meetingsError) {
     throw new Error(`Failed to fetch meetings: ${meetingsError.message}`);
   }
 
-  console.log(`[MeetingPrep] Found ${meetings?.length || 0} meetings in prep window`);
+  // If no meetings found with attendees_count filter, try without it (staging workaround)
+  let effectiveMeetings = meetings || [];
+  if (effectiveMeetings.length === 0) {
+    console.log('[MeetingPrep] No meetings with attendees_count > 0, retrying without filter...');
+    const { data: fallbackMeetings } = await supabase
+      .from('calendar_events')
+      .select(
+        'id, title, start_time, end_time, attendees, attendees_count, ' +
+        'meeting_url, user_id, external_id, is_internal, meeting_type'
+      )
+      .gte('start_time', windowStart.toISOString())
+      .lte('start_time', windowEnd.toISOString())
+      .order('start_time');
+    effectiveMeetings = fallbackMeetings || [];
+  }
+
+  console.log(`[MeetingPrep] Found ${effectiveMeetings.length} meetings in prep window`);
 
   const results: MeetingPrepResult[] = [];
   const userMeetings = new Map<string, UpcomingMeeting[]>();
 
   // Group meetings by user
-  for (const meeting of meetings || []) {
+  for (const meeting of effectiveMeetings) {
     const userId = meeting.user_id;
     if (!userMeetings.has(userId)) {
       userMeetings.set(userId, []);
@@ -243,14 +259,18 @@ async function prepMeetingsForUser(
     .eq('user_id', userId)
     .gte('start_time', windowStart.toISOString())
     .lte('start_time', windowEnd.toISOString())
-    .gt('attendees_count', 1)
     .order('start_time');
 
   if (error) {
     throw new Error(`Failed to fetch meetings: ${error.message}`);
   }
 
-  const results = await prepMeetingsForUserInternal(supabase, userId, meetings || []);
+  // Filter to real meetings — use attendees_count if populated, otherwise include all
+  const effectiveMeetings = (meetings || []).filter(m =>
+    !m.attendees_count || m.attendees_count > 0
+  );
+
+  const results = await prepMeetingsForUserInternal(supabase, userId, effectiveMeetings);
 
   return { success: true, results };
 }
@@ -398,7 +418,7 @@ async function prepMeetingsForUserInternal(
 
       if (relevance === 'unknown') {
         console.log(`[MeetingPrep] Unknown relevance, asking user: ${meeting.title}`);
-        const asked = await sendRelevanceQuestion(supabase, userId, meeting);
+        const asked = await sendRelevanceQuestion(supabase, userId, meeting, orgId);
         results.push({
           meetingId: meeting.id,
           title: meeting.title,
@@ -464,7 +484,7 @@ async function prepMeetingsForUserInternal(
       // Send Slack notification
       let slackNotified = false;
       if (prepResult.success) {
-        slackNotified = await sendPrepNotification(supabase, userId, meeting, prepResult.brief);
+        slackNotified = await sendPrepNotification(supabase, userId, meeting, prepResult.brief, orgId || prepResult.organizationId);
       }
 
       // Log engagement event
@@ -566,16 +586,34 @@ async function quickRelevanceCheck(
 async function sendRelevanceQuestion(
   supabase: any,
   userId: string,
-  meeting: UpcomingMeeting
+  meeting: UpcomingMeeting,
+  orgId?: string
 ): Promise<boolean> {
   try {
-    const { data: slackAuth } = await supabase
-      .from('slack_auth')
-      .select('access_token, channel_id')
-      .eq('user_id', userId)
+    if (!orgId) {
+      console.log(`[MeetingPrep] No org_id for user ${userId}, cannot send relevance question`);
+      return false;
+    }
+
+    // Get org-level Slack bot token
+    const { data: slackOrg } = await supabase
+      .from('slack_org_settings')
+      .select('bot_access_token')
+      .eq('org_id', orgId)
+      .eq('is_connected', true)
       .maybeSingle();
 
-    if (!slackAuth?.access_token) return false;
+    if (!slackOrg?.bot_access_token) return false;
+
+    // Get user's Slack user ID for DM
+    const { data: slackMapping } = await supabase
+      .from('slack_user_mappings')
+      .select('slack_user_id')
+      .eq('sixty_user_id', userId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (!slackMapping?.slack_user_id) return false;
 
     const startTime = new Date(meeting.start_time);
     const timeStr = startTime.toLocaleTimeString('en-US', {
@@ -622,11 +660,11 @@ async function sendRelevanceQuestion(
     const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${slackAuth.access_token}`,
+        'Authorization': `Bearer ${slackOrg.bot_access_token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        channel: slackAuth.channel_id || userId,
+        channel: slackMapping.slack_user_id,
         blocks,
         text: `Should I prep for "${meeting.title}"?`,
       }),
@@ -737,17 +775,36 @@ async function sendPrepNotification(
   supabase: any,
   userId: string,
   meeting: UpcomingMeeting,
-  brief?: string
+  brief?: string,
+  orgId?: string
 ): Promise<boolean> {
   try {
-    // Check if user has Slack connected
-    const { data: slackAuth } = await supabase
-      .from('slack_auth')
-      .select('access_token, channel_id')
-      .eq('user_id', userId)
+    if (!orgId) {
+      console.log(`[MeetingPrep] No org_id for user ${userId}, cannot send prep notification`);
+      return false;
+    }
+
+    // Get org-level Slack bot token
+    const { data: slackOrg } = await supabase
+      .from('slack_org_settings')
+      .select('bot_access_token')
+      .eq('org_id', orgId)
+      .eq('is_connected', true)
       .maybeSingle();
 
-    if (!slackAuth?.access_token) {
+    if (!slackOrg?.bot_access_token) {
+      return false;
+    }
+
+    // Get user's Slack user ID for DM
+    const { data: slackMapping } = await supabase
+      .from('slack_user_mappings')
+      .select('slack_user_id')
+      .eq('sixty_user_id', userId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (!slackMapping?.slack_user_id) {
       return false;
     }
 
@@ -829,15 +886,15 @@ async function sendPrepNotification(
       }],
     });
 
-    // Send to Slack
+    // Send DM to user's Slack user ID
     const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${slackAuth.access_token}`,
+        'Authorization': `Bearer ${slackOrg.bot_access_token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        channel: slackAuth.channel_id || userId,
+        channel: slackMapping.slack_user_id,
         blocks,
         text: `Meeting prep ready: ${meeting.title}`,
       }),
