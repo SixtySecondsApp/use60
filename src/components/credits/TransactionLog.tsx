@@ -189,7 +189,7 @@ export function TransactionLog() {
                         <TypeIcon className={`w-3.5 h-3.5 flex-shrink-0 ${iconClass}`} />
                         <Badge
                           variant={autoTopUp ? 'outline' : config.variant}
-                          className={`text-[10px] px-1.5 py-0 ${autoTopUp ? 'border-indigo-300 text-indigo-600 dark:text-indigo-400' : ''}`}
+                          className={`text-[10px] px-1.5 py-0 whitespace-nowrap ${autoTopUp ? 'border-indigo-300 text-indigo-600 dark:text-indigo-400' : ''}`}
                         >
                           {autoTopUp ? 'Auto Top-Up' : config.label}
                         </Badge>

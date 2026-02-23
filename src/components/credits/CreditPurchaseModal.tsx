@@ -76,7 +76,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-3">
+        <div className="space-y-4 pt-6">
           {/* Pack cards */}
           {STANDARD_PACKS.map((packType) => {
             const pack = CREDIT_PACKS[packType];
@@ -98,7 +98,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
                 )}
               >
                 {isPopular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-50 whitespace-nowrap">
+                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-50 whitespace-nowrap">
                     <Badge className="gap-1 bg-blue-600 text-white hover:bg-blue-600 text-xs px-2 py-0.5">
                       <Star className="h-3 w-3 fill-white" />
                       Most Popular

@@ -90,7 +90,7 @@ export function CreditEstimator() {
   }, [creditAmount, tier]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 px-1 py-2">
       {/* Tier selector */}
       <div className="flex items-center gap-2">
         <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
