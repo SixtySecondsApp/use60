@@ -1140,7 +1140,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsCollapsed(!isCollapsed)}
         className={cn(
-          'fixed z-[200] hidden lg:flex',
+          'fixed z-[45] hidden lg:flex',
           'top-[48px]',
           isCollapsed ? 'left-[84px]' : 'left-[244px]',
           'w-6 h-6 rounded-full',

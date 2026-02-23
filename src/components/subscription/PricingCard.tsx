@@ -116,7 +116,7 @@ export function PricingCard({
           variants={badgeVariants}
           initial="initial"
           animate="animate"
-          className="absolute -top-4 left-1/2 -translate-x-1/2"
+          className="absolute -top-4 left-1/2 -translate-x-1/2 z-10"
         >
           <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-xs font-bold uppercase tracking-wide shadow-lg shadow-blue-500/30">
             <Sparkles className="w-3.5 h-3.5" />

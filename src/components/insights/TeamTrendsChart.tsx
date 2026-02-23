@@ -154,7 +154,7 @@ function MeetingVolumeChart({ data, period }: { data: Array<{ date: string; coun
   );
 }
 
-// Sentiment Trend Chart — Y axis scaled to -10..+10
+// Sentiment Trend Chart — area chart matching Volume style
 function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg: number | null }>; period: TimePeriod }) {
   const chartData = useMemo(() => {
     return data.map((d) => ({
@@ -164,7 +164,9 @@ function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg
     }));
   }, [data, period]);
 
-  if (chartData.every((d) => d.sentiment === null)) {
+  const hasData = chartData.some((d) => d.sentiment !== null);
+
+  if (!hasData) {
     return (
       <div className="h-72 flex items-center justify-center text-gray-500 dark:text-gray-400">
         No sentiment data available
@@ -175,7 +177,7 @@ function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg
   return (
     <div className="h-72">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={chartData}>
+        <AreaChart data={chartData}>
           <defs>
             <linearGradient id="sentimentGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -193,26 +195,34 @@ function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg
             height={period === 7 ? 30 : 50}
           />
           <YAxis
-            domain={[-10, 10]}
-            ticks={[-10, -5, 0, 5, 10]}
+            domain={([dataMin, dataMax]: [number, number]) => {
+              const padding = Math.max(1, (dataMax - dataMin) * 0.2);
+              const lo = Math.max(-10, Math.floor(dataMin - padding));
+              const hi = Math.min(10, Math.ceil(dataMax + padding));
+              return [lo, hi];
+            }}
             tick={{ fontSize: 12 }}
             className="text-gray-600 dark:text-gray-400"
             tickFormatter={(value) => value.toFixed(0)}
           />
           <Tooltip content={<CustomTooltip />} />
-          <ReferenceLine y={0} stroke="#6b7280" strokeDasharray="3 3" />
-          <Line
+          <ReferenceLine y={0} stroke="#6b7280" strokeDasharray="3 3" strokeOpacity={0.5} />
+          <Area
             type="monotone"
             dataKey="sentiment"
             name="Sentiment"
             stroke="#10b981"
             strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: '#10b981' }}
-            connectNulls={false}
+            fill="url(#sentimentGradient)"
+            dot={(props: any) => {
+              if (props.value === null || props.value === undefined) return <g key={props.key} />;
+              return <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill="#10b981" stroke="#10b981" strokeWidth={1} />;
+            }}
+            activeDot={{ r: 5, fill: '#10b981' }}
+            connectNulls={true}
             unit=" / 10"
           />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
@@ -277,7 +287,12 @@ function TalkTimeChart({ data, period }: { data: Array<{ date: string; avg: numb
             strokeWidth={2}
             fill="url(#talkTimeGradient)"
             unit="%"
-            connectNulls={false}
+            connectNulls={true}
+            dot={(props: any) => {
+              if (props.value === null || props.value === undefined) return <g key={props.key} />;
+              return <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill="#8b5cf6" stroke="#8b5cf6" strokeWidth={1} />;
+            }}
+            activeDot={{ r: 5, fill: '#8b5cf6' }}
           />
         </AreaChart>
       </ResponsiveContainer>
