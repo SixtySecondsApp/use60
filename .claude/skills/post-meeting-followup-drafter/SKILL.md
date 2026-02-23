@@ -11,6 +11,11 @@ metadata:
   category: writing
   skill_type: atomic
   is_active: true
+  command_centre:
+    enabled: true
+    label: "/follow-up"
+    description: "Draft a follow-up based on history"
+    icon: "refresh-cw"
   context_profile: full
   agent_affinity:
     - outreach

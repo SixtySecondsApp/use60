@@ -16,6 +16,11 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  command_centre:
+    enabled: true
+    label: "/email"
+    description: "Draft an email from task context"
+    icon: "mail"
   agent_affinity:
     - outreach
     - pipeline

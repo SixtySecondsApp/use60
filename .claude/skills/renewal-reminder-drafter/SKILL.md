@@ -8,13 +8,13 @@ description: |
 metadata:
   author: sixty-ai
   version: "2"
-  category: relationship-ai
+  category: sales-ai
   skill_type: atomic
   is_active: true
   context_profile: account
   agent_affinity:
-    - retention
-    - customer-success
+    - pipeline
+    - outreach
   triggers:
     - pattern: "draft renewal reminder"
       intent: "renewal_reminder_email"

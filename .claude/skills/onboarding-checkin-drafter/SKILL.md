@@ -8,13 +8,13 @@ description: |
 metadata:
   author: sixty-ai
   version: "2"
-  category: relationship-ai
+  category: sales-ai
   skill_type: atomic
   is_active: true
   context_profile: account
   agent_affinity:
-    - customer-success
-    - onboarding
+    - pipeline
+    - meetings
   triggers:
     - pattern: "draft onboarding check-in"
       intent: "onboarding_checkin_email"

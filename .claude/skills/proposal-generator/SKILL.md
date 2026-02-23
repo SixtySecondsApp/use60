@@ -14,6 +14,11 @@ metadata:
   category: sales-ai
   skill_type: atomic
   is_active: true
+  command_centre:
+    enabled: true
+    label: "/proposal"
+    description: "Generate a proposal or SOW"
+    icon: "file-text"
   context_profile: sales
   agent_affinity:
     - pipeline
