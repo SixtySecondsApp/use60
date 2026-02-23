@@ -237,11 +237,6 @@ export const LazyAuditLogViewer = createLazyComponent(
   { loader: () => <TableLoader rows={10} />, preloadDelay: 3000 }
 );
 
-export const LazyBulkActivityImport = createLazyComponent(
-  () => import('@/components/admin/BulkActivityImport'),
-  { loader: () => <FormLoader />, preloadDelay: 3000 }
-);
-
 // Route-specific preloading based on navigation patterns
 export const useRoutePreloading = () => {
   React.useEffect(() => {
@@ -259,7 +254,6 @@ export const useRoutePreloading = () => {
       } else if (currentPath.includes('/platform')) {
         // Preload platform admin components
         LazyAuditLogViewer.preload?.();
-        LazyBulkActivityImport.preload?.();
       }
     }, 2000);
 
