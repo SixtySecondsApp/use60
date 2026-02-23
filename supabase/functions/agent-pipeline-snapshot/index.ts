@@ -25,6 +25,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { runAgent } from '../_shared/agentRunner.ts';
 
 // ============================================================================
 // Types
@@ -89,15 +90,26 @@ serve(async (req) => {
       );
     }
 
-    let result;
-    if (userId && orgId) {
-      // On-demand: single user
-      const snapshot = await captureUserSnapshot(supabase, userId, orgId);
-      result = { success: true, snapshots: snapshot ? [snapshot] : [] };
-    } else {
-      // Cron mode: all org members
-      result = await captureAllSnapshots(supabase);
-    }
+    const agentResult = await runAgent(
+      {
+        agentName: 'pipeline-snapshot',
+        userId: userId ?? 'system',
+        orgId: orgId ?? 'system',
+      },
+      async () => {
+        if (userId && orgId) {
+          // On-demand: single user
+          const snapshot = await captureUserSnapshot(supabase, userId, orgId);
+          return { success: true, snapshots: snapshot ? [snapshot] : [] };
+        }
+        // Cron mode: all org members
+        return captureAllSnapshots(supabase);
+      },
+    );
+
+    const result = agentResult.success
+      ? agentResult.data
+      : { success: false, error: agentResult.error };
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

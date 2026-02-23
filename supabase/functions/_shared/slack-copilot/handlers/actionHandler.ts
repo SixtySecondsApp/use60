@@ -7,11 +7,12 @@ import { section, actions, divider, context } from '../responseFormatter.ts';
 export async function handleActionRequest(
   intent: ClassifiedIntent,
   queryContext: QueryContext,
-  anthropicApiKey: string | null
+  anthropicApiKey: string | null,
+  modelId?: string
 ): Promise<HandlerResult> {
   switch (intent.entities.actionType) {
     case 'draft_email':
-      return handleDraftEmail(intent, queryContext, anthropicApiKey);
+      return handleDraftEmail(intent, queryContext, anthropicApiKey, modelId);
     case 'create_task':
       return handleCreateTask(intent, queryContext);
     case 'schedule_meeting':
@@ -26,9 +27,11 @@ export async function handleActionRequest(
 async function handleDraftEmail(
   intent: ClassifiedIntent,
   queryContext: QueryContext,
-  anthropicApiKey: string | null
+  anthropicApiKey: string | null,
+  modelId?: string
 ): Promise<HandlerResult> {
   const { deals, contacts, meetings } = queryContext;
+  const resolvedModelId = modelId ?? 'claude-haiku-4-5-20251001';
 
   // Find the most relevant deal or contact
   const deal = deals?.[0];
@@ -46,7 +49,7 @@ async function handleDraftEmail(
   // Generate draft with AI if available
   if (anthropicApiKey) {
     try {
-      const draft = await generateEmailDraft(intent, queryContext, anthropicApiKey);
+      const draft = await generateEmailDraft(intent, queryContext, anthropicApiKey, resolvedModelId);
       return {
         blocks: [
           section(`*Draft Follow-up for ${recipientName}:*`),
@@ -83,7 +86,8 @@ async function handleDraftEmail(
 async function generateEmailDraft(
   intent: ClassifiedIntent,
   queryContext: QueryContext,
-  apiKey: string
+  apiKey: string,
+  modelId: string
 ): Promise<string> {
   const deal = queryContext.deals?.[0];
   const contact = queryContext.contacts?.[0];
@@ -104,7 +108,7 @@ async function generateEmailDraft(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: modelId,
       max_tokens: 500,
       system: `You are a sales email assistant. Write concise, professional follow-up emails. Today's date: ${today}. Keep emails under 150 words. Be warm but direct. Include a clear next step or CTA.`,
       messages: [{

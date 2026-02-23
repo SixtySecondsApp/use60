@@ -12,6 +12,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { resolveModel, recordSuccess, recordFailure } from '../_shared/modelRouter.ts';
 import { 
   createSuccessResponse,
   createErrorResponse,
@@ -3786,6 +3787,19 @@ async function callGeminiAPI(
     throw new Error('GEMINI_API_KEY not configured')
   }
 
+  // Resolve model via modelRouter (circuit breaker + fallback)
+  const modelResolution = await resolveModel(client, {
+    feature: 'copilot',
+    intelligenceTier: 'medium',
+    userId,
+    orgId: orgId ?? '',
+  }).catch((err) => {
+    console.warn('[api-copilot] resolveModel failed, using hardcoded fallback:', err);
+    return { modelId: GEMINI_MODEL, provider: 'gemini', creditCost: 0, maxTokens: 4096, wasFallback: false, traceId: '' };
+  });
+
+  console.log(`[api-copilot] Model resolved: ${modelResolution.modelId} (wasFallback=${modelResolution.wasFallback})`);
+
   // Build system instruction and messages for Gemini
   let companyName = 'your company'
   let availableSkills: { skill_key: string; name: string; category: string }[] = []
@@ -3989,7 +4003,7 @@ ${skillsListText || '  No skills configured yet'}
         }
       }
 
-  const endpoint = `${GEMINI_API_BASE}/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${GEMINI_API_KEY}`
+  const endpoint = `${GEMINI_API_BASE}/models/${encodeURIComponent(modelResolution.modelId)}:generateContent?key=${GEMINI_API_KEY}`
 
   const requestBody = {
     contents,
@@ -4003,7 +4017,7 @@ ${skillsListText || '  No skills configured yet'}
     }
   }
 
-  console.log(`[GEMINI_REQUEST] Model: ${GEMINI_MODEL}, toolConfig: ${JSON.stringify(toolConfig)}`)
+  console.log(`[GEMINI_REQUEST] Model: ${modelResolution.modelId}, toolConfig: ${JSON.stringify(toolConfig)}`)
 
   let response = await fetch(endpoint, {
     method: 'POST',
@@ -4014,6 +4028,7 @@ ${skillsListText || '  No skills configured yet'}
   if (!response.ok) {
     const errorText = await response.text()
     console.error(`[GEMINI_ERROR] ${response.status}: ${errorText}`)
+    await recordFailure(client, modelResolution.modelId)
     throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
   }
 
@@ -4195,6 +4210,9 @@ ${skillsListText || '  No skills configured yet'}
   }
 
   console.log(`[GEMINI_COMPLETE] tokens: ${usage.input_tokens}/${usage.output_tokens}, tools: ${toolsUsed.join(',')}, toolExecutions: ${toolExecutions.length}`)
+
+  // Record model success (resets circuit breaker)
+  await recordSuccess(client, modelResolution.modelId)
 
   return {
     content: finalContent.trim() || 'I processed your request but have no additional response.',

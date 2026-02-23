@@ -18,6 +18,12 @@ import matter from 'gray-matter';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+export const VALID_NAMESPACES = ['copilot', 'fleet', 'slack', 'shared'] as const;
+export const VALID_SOURCES = ['platform', 'org', 'user'] as const;
+
+export type SkillNamespace = typeof VALID_NAMESPACES[number];
+export type SkillSource = typeof VALID_SOURCES[number];
+
 /** DB-ready record produced by the parser */
 export interface ParsedSkillRecord {
   skill_key: string;
@@ -28,6 +34,8 @@ export interface ParsedSkillRecord {
   source_format: 'skill_md';
   source_path: string;
   source_hash: string;
+  namespace: SkillNamespace;
+  source: SkillSource;
 }
 
 /**
@@ -65,6 +73,24 @@ export function parseSkillContent(content: string, sourcePath: string): ParsedSk
   const category = (metadata.category as string) ?? 'sales-ai';
   const skillType = (metadata.skill_type as string) ?? 'atomic';
   const isActive = metadata.is_active !== false; // default true
+
+  // ── Namespace and source ───────────────────────────────────────
+  const rawNamespace = (frontmatter.namespace as string) ?? 'shared';
+  const rawSource = (frontmatter.source as string) ?? 'platform';
+
+  if (!(VALID_NAMESPACES as readonly string[]).includes(rawNamespace)) {
+    throw new Error(
+      `[${sourcePath}] Invalid namespace: "${rawNamespace}". Must be one of: ${VALID_NAMESPACES.join(', ')}`
+    );
+  }
+  if (!(VALID_SOURCES as readonly string[]).includes(rawSource)) {
+    throw new Error(
+      `[${sourcePath}] Invalid source: "${rawSource}". Must be one of: ${VALID_SOURCES.join(', ')}`
+    );
+  }
+
+  const namespace = rawNamespace as SkillNamespace;
+  const source = rawSource as SkillSource;
 
   // ── Build the DB frontmatter blob ─────────────────────────────
   // Flatten V3 into the shape the runtime already consumes:
@@ -118,6 +144,8 @@ export function parseSkillContent(content: string, sourcePath: string): ParsedSk
     source_format: 'skill_md',
     source_path: sourcePath,
     source_hash: sourceHash,
+    namespace,
+    source,
   };
 }
 
