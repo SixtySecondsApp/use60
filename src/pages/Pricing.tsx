@@ -384,7 +384,7 @@ export function PricingPage() {
               ))}
             </div>
           ) : (
-            <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${displayPlans.length <= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-5'}`}>
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 ${displayPlans.length <= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-5'}`}>
               {displayPlans.map((plan, index) => {
                 const prices = getFormattedPrices(plan);
                 const isEnterprise = plan.slug === 'enterprise';
