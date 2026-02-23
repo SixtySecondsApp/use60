@@ -1,5 +1,5 @@
 // src/pages/settings/DemoExperiencePage.tsx
-// Main demo experience page at /settings/demo.
+// Main demo experience page at /platform/demo.
 // Wires all 5 acts into DemoShell with scene-level routing.
 
 import React, { useState, useCallback } from 'react';

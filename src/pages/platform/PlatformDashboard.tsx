@@ -404,6 +404,15 @@ const platformSections: Record<string, PlatformSection[]> = {
   ],
   'Development Tools': [
     {
+      id: 'demo-experience',
+      title: 'Always-On Demo',
+      description: '5-act narrative demo experience — before 60, onboarding, Day 1, Week 2, Month 1',
+      icon: Play,
+      href: '/platform/demo',
+      color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
+      badge: 'New',
+    },
+    {
       id: 'deal-truth-simulator',
       title: 'Deal Truth Simulator',
       description: 'Visualize Deal Truth fields, clarity scoring, and close plan execution',
