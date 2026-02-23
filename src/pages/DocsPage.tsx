@@ -373,7 +373,7 @@ export default function DocsPage() {
                 ${mobileMenuOpen ? 'fixed right-0 top-0 h-full w-80 z-50' : 'sticky top-24'}
                 bg-white dark:bg-gray-900/80 dark:backdrop-blur-sm
                 border border-gray-200 dark:border-gray-700/50
-                rounded-xl overflow-hidden max-h-[calc(100vh-6rem)] overflow-y-auto
+                rounded-xl overflow-hidden max-h-[calc(100vh-6rem)] overflow-y-auto overscroll-contain scrollbar-custom
               `}
             >
               <div className="p-5">

@@ -96,7 +96,7 @@ import {
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
   LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
   CreditPurchaseSuccess, CreditsSettingsPage, BillingSettingsPage, SalesGoalsPage,
-  GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage,
+  GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage, MeetingSettingsPage,
   OrgBilling,
   // Insights
   Insights, Heatmap, SalesFunnel, TeamAnalytics, ContentTopics, MeetingAnalyticsPage,
@@ -644,12 +644,13 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/bullhorn" element={<Navigate to="/settings/integrations/bullhorn" replace />} />
                 {/* Google Workspace Settings - visible only when Google is connected (enforced inside page) */}
                 <Route path="/settings/integrations/google-workspace" element={<AppLayout><GoogleWorkspaceIntegrationPage /></AppLayout>} />
-                {/* Fathom Settings - visible only when Fathom is connected (enforced inside page) */}
-                <Route path="/settings/integrations/fathom" element={<AppLayout><FathomIntegrationPage /></AppLayout>} />
-                {/* Fireflies Settings - visible only when Fireflies is connected (enforced inside page) */}
-                <Route path="/settings/integrations/fireflies" element={<AppLayout><FirefliesIntegrationPage /></AppLayout>} />
-                {/* 60 Notetaker Settings - redirect to existing recordings settings page */}
-                <Route path="/settings/integrations/60-notetaker" element={<Navigate to="/meetings/recordings/settings" replace />} />
+                {/* Meeting Settings - unified tab page for Fathom, Fireflies, and 60 Notetaker */}
+                <Route path="/settings/meeting-settings" element={<AppLayout><MeetingSettingsPage /></AppLayout>} />
+                {/* Legacy redirects to unified Meeting Settings page */}
+                <Route path="/settings/integrations/fathom" element={<Navigate to="/settings/meeting-settings?tab=fathom" replace />} />
+                <Route path="/settings/integrations/fireflies" element={<Navigate to="/settings/meeting-settings?tab=fireflies" replace />} />
+                <Route path="/settings/integrations/60-notetaker" element={<Navigate to="/settings/meeting-settings" replace />} />
+                <Route path="/meetings/recordings/settings" element={<Navigate to="/settings/meeting-settings" replace />} />
                 <Route path="/settings/ai" element={<AppLayout><AISettings /></AppLayout>} />
                 <Route path="/settings/extraction-rules" element={<Navigate to="/settings/task-sync" replace />} />
                 <Route path="/settings/task-sync" element={<AppLayout><TaskSyncSettings /></AppLayout>} />

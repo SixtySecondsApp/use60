@@ -17,6 +17,7 @@ import {
   Send,
   X,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useUser } from '@/lib/hooks/useUser';
 import { useOrg } from '@/lib/contexts/OrgContext';
@@ -320,8 +321,78 @@ function OpsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* Header skeleton */}
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-10 w-10 rounded-xl" />
+            <Skeleton className="h-7 w-20" />
+          </div>
+          <Skeleton className="h-10 w-28 rounded-lg" />
+        </div>
+        <Skeleton className="mb-6 h-4 w-64" />
+
+        {/* Stats row skeleton */}
+        <div className="mb-6 flex items-center gap-6 border-b border-zinc-800/60 pb-6">
+          <Skeleton className="h-7 w-16" />
+          <div className="h-6 w-px bg-zinc-800" />
+          <Skeleton className="h-7 w-24" />
+          <div className="h-6 w-px bg-zinc-800" />
+          <Skeleton className="h-7 w-20" />
+        </div>
+
+        {/* Filters skeleton */}
+        <div className="mb-6 flex items-center gap-3">
+          <Skeleton className="h-10 w-64 rounded-lg" />
+          <Skeleton className="h-10 w-36 rounded-lg" />
+          <Skeleton className="h-10 w-32 rounded-lg" />
+        </div>
+
+        {/* Standard Tables section skeleton */}
+        <div className="mb-8">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <Skeleton className="h-6 w-40 mb-1" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+            <Skeleton className="h-8 w-36 rounded-lg" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-lg" />
+            ))}
+          </div>
+        </div>
+
+        {/* Custom Tables header skeleton */}
+        <div className="mb-4 mt-8">
+          <Skeleton className="h-6 w-36 mb-1" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+
+        {/* Card grid skeleton */}
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="rounded-lg border border-gray-800/50 bg-gradient-to-br from-gray-900/80 to-gray-900/40 p-6"
+            >
+              <div className="mb-5 flex items-start justify-between">
+                <div className="flex flex-1 items-center gap-3">
+                  <Skeleton className="h-4 w-4 rounded-full" />
+                  <Skeleton className="h-5 w-36" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+              <div className="mb-5 flex items-center gap-5">
+                <Skeleton className="h-4 w-20" />
+              </div>
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-4 w-28" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

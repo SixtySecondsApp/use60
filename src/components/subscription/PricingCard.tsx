@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Check, Sparkles, Zap, Users, Building2, Clock, Gift } from 'lucide-react';
+import { Check, Sparkles, Star, Zap, Users, Building2, Clock, Gift } from 'lucide-react';
 import type { SubscriptionPlan, BillingCycle } from '../../lib/types/subscription';
 import { formatCurrency } from '../../lib/types/subscription';
 
@@ -129,8 +129,8 @@ export function PricingCard({
           animate="animate"
           className="absolute -top-4 left-1/2 -translate-x-1/2 z-50"
         >
-          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-xs font-bold uppercase tracking-wide shadow-lg shadow-blue-500/30 whitespace-nowrap">
-            <Sparkles className="w-3.5 h-3.5" />
+          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-blue-500/90 dark:bg-blue-600/90 backdrop-blur-sm text-white text-xs font-bold uppercase tracking-wide shadow-lg shadow-blue-500/30 whitespace-nowrap">
+            <Star className="w-3.5 h-3.5 fill-white" />
             {plan.badge_text || 'Most Popular'}
           </span>
         </motion.div>

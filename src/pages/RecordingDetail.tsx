@@ -150,17 +150,52 @@ function parseTimestampToSeconds(ts: string): number | null {
 // Skeleton for loading state
 const RecordingDetailSkeleton: React.FC = () => (
   <div className="p-6 space-y-6">
+    {/* Back button + title */}
     <div className="flex items-center gap-4">
       <Skeleton className="h-10 w-10 rounded-lg" />
-      <div>
-        <Skeleton className="h-8 w-64 mb-2" />
-        <Skeleton className="h-4 w-40" />
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-64" />
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-24" />
+        </div>
       </div>
     </div>
+
+    {/* Tab bar */}
+    <div className="flex items-center gap-1 border-b border-zinc-800/60 pb-0">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} className="h-9 w-24 rounded-t-md" />
+      ))}
+    </div>
+
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <div className="lg:col-span-8">
-        <Skeleton className="h-96 rounded-xl" />
+      {/* Left: video player + transcript */}
+      <div className="lg:col-span-8 space-y-4">
+        {/* Video player area */}
+        <Skeleton className="h-14 w-full rounded-xl" />
+        {/* Transcript header */}
+        <Skeleton className="h-5 w-32" />
+        {/* Transcript lines */}
+        <div className="space-y-4">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="flex items-start gap-3">
+              <Skeleton className="h-7 w-7 rounded-full flex-shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-3 w-10" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className={`h-4 ${['w-5/6', 'w-full', 'w-3/4', 'w-4/5', 'w-full', 'w-2/3', 'w-5/6'][i % 7]}`} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
+
+      {/* Right: metadata + insights */}
       <div className="lg:col-span-4 space-y-4">
         <Skeleton className="h-48 rounded-xl" />
         <Skeleton className="h-64 rounded-xl" />

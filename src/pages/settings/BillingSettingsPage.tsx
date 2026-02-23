@@ -24,6 +24,8 @@ import { TransactionHistorySection } from '@/components/billing/TransactionHisto
 import { PlanChangeModal } from '@/components/billing/PlanChangeModal';
 import type { PlanSlug, BillingCycle as ModalBillingCycle } from '@/components/billing/PlanChangeModal';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -88,6 +90,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function BillingSettingsPage() {
   const { activeOrgId: organizationId } = useOrg();
+  const { symbol } = useOrgMoney();
   const { subscription, trial, isLoading, error } = useCurrentSubscription();
   const createCheckoutSession = useCreateCheckoutSession();
 
@@ -121,8 +124,8 @@ export default function BillingSettingsPage() {
 
   // Monthly cost display
   const monthlyCostDisplay = currentPlan?.price_monthly != null
-    ? `£${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
-    : '£29/mo';
+    ? `${symbol}${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
+    : `${symbol}29/mo`;
 
   // Trial progress
   const daysRemaining = trial?.daysRemaining ?? 0;
@@ -190,8 +193,24 @@ export default function BillingSettingsPage() {
 
           <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-900">
             {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+              <div className="space-y-4">
+                {/* Plan name + status row */}
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-7 w-32" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <Skeleton className="h-8 w-32 rounded-md" />
+                </div>
+                {/* Stats grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="space-y-1.5">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-6 w-16" />
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : error ? (
               <div className="flex items-center gap-3 py-6">
@@ -350,6 +369,41 @@ export default function BillingSettingsPage() {
             </div>
           </div>
 
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[...Array(2)].map((_, i) => (
+                <div
+                  key={i}
+                  className="relative rounded-xl border border-gray-200 dark:border-gray-800 p-5 flex flex-col bg-white dark:bg-gray-900 space-y-4"
+                >
+                  {/* Badge area */}
+                  <div className="absolute top-3 right-3">
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                  </div>
+                  {/* Plan header */}
+                  <div className="pr-16 space-y-1.5">
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-3 w-40" />
+                  </div>
+                  {/* Price */}
+                  <div className="space-y-1">
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                  {/* Feature list */}
+                  <div className="space-y-2 flex-1">
+                    {[...Array(5)].map((_, j) => (
+                      <Skeleton key={j} className="h-5 w-full rounded-md" />
+                    ))}
+                  </div>
+                  {/* CTA */}
+                  <Skeleton className="h-9 w-full rounded-md" />
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {!isLoading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {(['basic', 'pro'] as const).map((slug) => {
               const plan = PLAN_DETAILS[slug];
@@ -372,13 +426,15 @@ export default function BillingSettingsPage() {
                     'relative rounded-xl border p-5 flex flex-col bg-white dark:bg-gray-900 transition-all',
                     isCurrentPlan
                       ? 'border-[#37bd7e] ring-1 ring-[#37bd7e]/30'
-                      : 'border-gray-200 dark:border-gray-800'
+                      : plan.badge
+                        ? 'border-blue-400 dark:border-blue-600 ring-2 ring-blue-400/30 dark:ring-blue-500/20'
+                        : 'border-gray-200 dark:border-gray-800'
                   )}
                 >
                   {/* Badges */}
                   <div className="absolute top-3 right-3 flex items-center gap-1.5">
                     {plan.badge && (
-                      <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400 rounded-full flex items-center gap-1">
+                      <span className="px-2 py-0.5 text-xs font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 rounded-full flex items-center gap-1">
                         <Crown className="w-3 h-3" />
                         {plan.badge}
                       </span>
@@ -404,7 +460,7 @@ export default function BillingSettingsPage() {
                   <div className="mb-4">
                     <div className="flex items-baseline gap-1">
                       <span className="text-3xl font-bold text-gray-900 dark:text-white">
-                        {plan.currency}{displayPrice}
+                        {symbol}{displayPrice}
                       </span>
                       <span className="text-sm text-gray-500 dark:text-gray-400">
                         {priceSuffix}
@@ -412,7 +468,7 @@ export default function BillingSettingsPage() {
                     </div>
                     {billingCycle === 'annual' && (
                       <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
-                        Save {plan.currency}{savings.saved}/yr vs monthly
+                        Save {symbol}{savings.saved}/yr vs monthly
                       </p>
                     )}
                   </div>
@@ -509,6 +565,7 @@ export default function BillingSettingsPage() {
               );
             })}
           </div>
+          )}
         </section>
 
         {/* Credit Balance Section */}

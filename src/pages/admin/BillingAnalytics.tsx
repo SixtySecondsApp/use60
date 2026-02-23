@@ -15,6 +15,7 @@ import {
   PieChart,
   LineChart,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -64,7 +65,7 @@ export default function BillingAnalytics() {
   });
   const [selectedCurrency, setSelectedCurrency] = useState<string | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
-  const dateFilter = useDateRangeFilter('90d');
+  const dateFilter = useDateRangeFilter();
 
   useEffect(() => {
     if (dateFilter.dateRange) {
@@ -155,6 +156,54 @@ export default function BillingAnalytics() {
       }))
       .slice(0, 20); // Limit to last 20 cohorts
   }, [realizedLTV]);
+
+  if (isLoading) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-white dark:bg-gray-950">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Header skeleton */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48 rounded" />
+              <Skeleton className="h-4 w-80 rounded" />
+            </div>
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-9 w-32 rounded" />
+              <Skeleton className="h-9 w-36 rounded" />
+              <Skeleton className="h-9 w-24 rounded" />
+            </div>
+          </div>
+          {/* Metric cards skeleton — 4 columns */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-24 rounded" />
+                  <Skeleton className="h-4 w-4 rounded" />
+                </div>
+                <Skeleton className="h-8 w-28 rounded" />
+                <Skeleton className="h-3.5 w-36 rounded" />
+              </div>
+            ))}
+          </div>
+          {/* Tab bar skeleton */}
+          <div className="flex gap-2">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-9 w-28 rounded" />
+            ))}
+          </div>
+          {/* Chart area skeleton */}
+          <div className="border rounded-lg p-6 space-y-4">
+            <div className="space-y-1">
+              <Skeleton className="h-6 w-56 rounded" />
+              <Skeleton className="h-4 w-72 rounded" />
+            </div>
+            <Skeleton className="h-[400px] w-full rounded-xl" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-white dark:bg-gray-950">
@@ -292,9 +341,7 @@ export default function BillingAnalytics() {
               </CardHeader>
               <CardContent>
                 {mrrByDateLoading ? (
-                  <div className="flex items-center justify-center h-[400px]">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  </div>
+                  <Skeleton className="h-[400px] w-full rounded-xl" />
                 ) : mrrChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={400}>
                     <AreaChart data={mrrChartData}>
@@ -334,9 +381,7 @@ export default function BillingAnalytics() {
               </CardHeader>
               <CardContent>
                 {retentionLoading ? (
-                  <div className="flex items-center justify-center h-[400px]">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  </div>
+                  <Skeleton className="h-[400px] w-full rounded-xl" />
                 ) : retentionChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={400}>
                     <BarChart data={retentionChartData}>
@@ -370,9 +415,7 @@ export default function BillingAnalytics() {
               </CardHeader>
               <CardContent>
                 {ltvLoading ? (
-                  <div className="flex items-center justify-center h-[400px]">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  </div>
+                  <Skeleton className="h-[400px] w-full rounded-xl" />
                 ) : ltvChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={400}>
                     <BarChart data={ltvChartData}>
@@ -406,9 +449,7 @@ export default function BillingAnalytics() {
               </CardHeader>
               <CardContent>
                 {churnLoading ? (
-                  <div className="flex items-center justify-center h-[400px]">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  </div>
+                  <Skeleton className="h-[400px] w-full rounded-xl" />
                 ) : churnRate && churnRate.length > 0 ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">

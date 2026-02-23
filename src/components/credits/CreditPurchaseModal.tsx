@@ -40,7 +40,7 @@ const COMPARE_ROWS = [
 export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurchaseModalProps) {
   const orgId = useOrgId();
   const { userData } = useUser();
-  const { currencyCode } = useOrgMoney();
+  const { currencyCode, symbol } = useOrgMoney();
   const [selectedPack, setSelectedPack] = useState<PackType>('growth');
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
@@ -74,7 +74,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
             Purchase Credit Pack
           </DialogTitle>
           <DialogDescription>
-            Credits power all AI features. 1 credit ≈ £0.10 — choose the pack that fits your team.
+            Credits power all AI features. 1 credit ≈ {symbol}0.10 — choose the pack that fits your team.
           </DialogDescription>
         </DialogHeader>
 
@@ -88,13 +88,13 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
             const isPopular = pack.popular;
 
             return (
-              <div key={packType} className={cn('relative', isPopular && 'pt-5 z-10')}>
+              <div key={packType} className="relative">
                 {isPopular && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap">
-                    <Badge className="gap-1 bg-blue-600 text-white hover:bg-blue-600 text-xs px-2 py-0.5">
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+                    <span className="inline-flex items-center gap-1 bg-blue-500/90 dark:bg-blue-600/90 backdrop-blur-sm text-white text-xs font-medium px-3 py-1 rounded-full shadow-sm">
                       <Star className="h-3 w-3 fill-white" />
                       Most Popular
-                    </Badge>
+                    </span>
                   </div>
                 )}
                 <button
@@ -130,7 +130,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
                         {pack.credits} credits
                       </p>
                       <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                        £{costPerCredit.toFixed(3)}/credit
+                        {symbol}{costPerCredit.toFixed(3)}/credit
                       </p>
                     </div>
                   </div>
@@ -202,7 +202,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
                         'text-center px-2 py-2 font-medium',
                         pt === 'scale' ? 'text-green-600 dark:text-green-400' : 'text-[#64748B] dark:text-gray-300'
                       )}>
-                        £{getCostPerCredit(pt).toFixed(3)}
+                        {symbol}{getCostPerCredit(pt).toFixed(3)}
                         {pt === 'scale' && <span className="ml-1 text-xs">(best)</span>}
                       </td>
                     ))}
@@ -224,7 +224,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
           <div className="text-sm text-[#64748B] dark:text-gray-400">
             <span className="font-medium text-[#1E293B] dark:text-white">{selectedPackData.credits} credits</span>
             {' · '}
-            <span>£{selectedPackData.priceGBP} one-time</span>
+            <span>{getPackPrice(selectedPack, currencyCode).symbol}{getPackPrice(selectedPack, currencyCode).price} one-time</span>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isRedirecting}>

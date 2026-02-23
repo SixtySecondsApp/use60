@@ -17,7 +17,9 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import {
   PoundSterling,
   Phone,
@@ -55,7 +57,6 @@ const METRICS: MetricDefinition[] = [
     what: 'Tracks the total value of deals marked as "Won" during the selected date range.',
     howTracked: 'Pulls from your pipeline — every deal moved to Won stage within the period contributes to this number.',
     unit: 'amount',
-    prefix: '£',
     icon: PoundSterling,
     color: 'text-emerald-600 dark:text-emerald-400',
     bg: 'bg-emerald-500/10 border-emerald-500/20',
@@ -235,8 +236,9 @@ function GoalCard({ metric, currentValue, isHighlighted, cardRef, onSave }: Goal
 
 export default function SalesGoalsPage() {
   const { userData } = useUser();
+  const { symbol } = useOrgMoney();
   const userId = userData?.id;
-  const { data: targets, refetch } = useTargets(userId);
+  const { data: targets, isLoading: targetsLoading, refetch } = useTargets(userId);
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const highlightedMetric = searchParams.get('metric');
@@ -292,7 +294,12 @@ export default function SalesGoalsPage() {
   return (
     <SettingsPageWrapper
       title="Sales Goals"
-      description="Set monthly targets for your key performance metrics. These goals appear on your dashboard and track your progress."
+      description="Set monthly targets for your KPIs — tracked live on your dashboard."
+      icon={Target}
+      iconClassName="h-7 w-7 text-emerald-500 dark:text-emerald-400"
+      iconContainerClassName="bg-emerald-500/10 dark:bg-emerald-500/20 border-emerald-500/20 dark:border-emerald-500/30"
+      dotClassName="bg-emerald-500"
+      accentGradient="from-emerald-500 via-teal-500 to-cyan-500"
     >
       <div className="space-y-4 max-w-2xl mx-auto">
         {/* Tip banner */}
@@ -304,16 +311,44 @@ export default function SalesGoalsPage() {
         </div>
 
         {/* Goal cards */}
-        {METRICS.map((metric) => (
-          <GoalCard
-            key={metric.key}
-            metric={metric}
-            currentValue={targets?.[metric.dbField] ?? 0}
-            isHighlighted={highlightedMetric === metric.key}
-            cardRef={(el: HTMLDivElement | null) => { cardRefs.current[metric.key] = el; }}
-            onSave={handleSave}
-          />
-        ))}
+        {targetsLoading
+          ? METRICS.map((metric) => (
+              <div
+                key={metric.key}
+                className="border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-4"
+              >
+                {/* Header: icon + label */}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-10 w-10 rounded-xl" />
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-3 w-48" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-5 w-5 rounded" />
+                </div>
+                {/* Input row */}
+                <div className="flex items-end gap-3">
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-9 w-full rounded-lg" />
+                  </div>
+                  <Skeleton className="h-9 w-20 rounded-md shrink-0" />
+                </div>
+              </div>
+            ))
+          : METRICS.map((metric) => (
+              <GoalCard
+                key={metric.key}
+                metric={metric.unit === 'amount' ? { ...metric, prefix: symbol } : metric}
+                currentValue={targets?.[metric.dbField] ?? 0}
+                isHighlighted={highlightedMetric === metric.key}
+                cardRef={(el: HTMLDivElement | null) => { cardRefs.current[metric.key] = el; }}
+                onSave={handleSave}
+              />
+            ))
+        }
       </div>
     </SettingsPageWrapper>
   );

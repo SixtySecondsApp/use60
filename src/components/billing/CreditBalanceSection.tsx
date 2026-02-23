@@ -11,6 +11,7 @@ import { useCurrentSubscription } from '@/lib/hooks/useSubscription';
 import { Sparkles, Gift, Package, TrendingDown, Timer, ArrowRight, Loader2, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import { CREDIT_PACK_DISPLAY } from '@/lib/config/planDetails';
 import CreditPurchaseModal from '@/components/credits/CreditPurchaseModal';
 import type { PackType } from '@/lib/config/creditPacks';
@@ -74,6 +75,7 @@ function BreakdownCard({ icon, label, value, sub, progress }: BreakdownCardProps
 export function CreditBalanceSection() {
   const { data: balance, isLoading } = useCreditBalance();
   const { subscription: subState } = useCurrentSubscription();
+  const { symbol } = useOrgMoney();
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [selectedPackType, setSelectedPackType] = useState<PackType>('growth');
 
@@ -181,7 +183,7 @@ export function CreditBalanceSection() {
                 onClick={() => handleTopUp(pack.packType)}
                 className="text-xs h-8 hover:border-[#37bd7e] hover:text-[#37bd7e]"
               >
-                {pack.name} · £{pack.price}/{pack.credits}cr
+                {pack.name} · {symbol}{pack.price}/{pack.credits}cr
               </Button>
             ))}
           </div>

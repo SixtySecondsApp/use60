@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { MeetingsEmptyState } from './MeetingsEmptyState'
 import { MeetingsFilterBar } from './MeetingsFilterBar'
-import { DateRangePreset, DateRange } from '@/components/ui/date-filter'
+import { useDateRangeFilter } from '@/components/ui/DateRangeFilter'
 import { toast } from 'sonner'
 import { recordingService } from '@/lib/services/recordingService'
 import { useRecordingUsage } from '@/lib/hooks/useRecordings'
@@ -138,10 +138,15 @@ const StatCard: React.FC<{
 // ============================================================================
 
 const StatCardSkeleton: React.FC = () => (
-  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-3 sm:p-5 border border-gray-200/50 dark:border-gray-700/30">
-    <div className="flex flex-col gap-2">
-      <Skeleton className="h-2 w-20 bg-gray-200/60 dark:bg-gray-700/40" />
-      <Skeleton className="h-8 w-16 bg-gray-200/60 dark:bg-gray-700/40" />
+  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-4 sm:p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10 flex flex-col">
+    {/* Icon row — matches real StatCard's icon container */}
+    <div className="flex items-start justify-between gap-3 mb-3">
+      <Skeleton className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+    </div>
+    {/* Title + value */}
+    <div className="flex flex-col gap-2 flex-1">
+      <Skeleton className="h-3 w-20 bg-gray-200/60 dark:bg-gray-700/40" />
+      <Skeleton className="h-8 sm:h-9 w-16 bg-gray-200/60 dark:bg-gray-700/40" />
     </div>
   </div>
 )
@@ -162,36 +167,83 @@ const MeetingCardSkeleton: React.FC = () => (
 
 const MeetingRowSkeleton: React.FC = () => (
   <TableRow className="border-gray-200/50 dark:border-gray-700/30">
-    <TableCell><Skeleton className="h-4 w-32 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-4 w-16 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-4 w-24 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-4 w-16 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-4 w-12 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-5 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-5 w-14 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell>
+      <div className="flex items-center gap-2">
+        <Skeleton className="w-12 h-8 rounded bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+        <Skeleton className="h-4 w-32 bg-gray-200/60 dark:bg-gray-700/40" />
+      </div>
+    </TableCell>
+    <TableCell className="hidden sm:table-cell"><Skeleton className="h-5 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-20 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell><Skeleton className="h-4 w-14 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-12 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden lg:table-cell"><Skeleton className="h-5 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden lg:table-cell"><Skeleton className="h-5 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden xl:table-cell"><Skeleton className="h-5 w-12 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
     <TableCell><Skeleton className="h-8 w-8 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
   </TableRow>
 )
 
 const ListSkeleton: React.FC<{ view: 'list' | 'grid' }> = ({ view }) => (
-  <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-    <div className="flex items-center gap-3">
-      <Skeleton className="h-12 w-12 rounded-xl bg-gray-200/60 dark:bg-gray-700/40" />
-      <div>
-        <Skeleton className="h-8 w-32 mb-2 bg-gray-200/60 dark:bg-gray-700/40" />
-        <Skeleton className="h-4 w-56 bg-gray-200/60 dark:bg-gray-700/40" />
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-x-hidden">
+    {/* MeetingUsageBar placeholder */}
+    <Skeleton className="h-2 w-full rounded-full bg-gray-200/60 dark:bg-gray-700/40" />
+
+    {/* Header — matches real: w-14 h-14 icon + title + subtitle */}
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
+      <div className="flex items-center gap-4 min-w-0">
+        <Skeleton className="w-14 h-14 rounded-2xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+        <div className="min-w-0 flex-1">
+          <Skeleton className="h-8 sm:h-9 w-32 mb-2 bg-gray-200/60 dark:bg-gray-700/40" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="w-1.5 h-1.5 rounded-full bg-gray-200/60 dark:bg-gray-700/40" />
+            <Skeleton className="h-4 w-56 bg-gray-200/60 dark:bg-gray-700/40" />
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <Skeleton className="h-8 w-28 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" />
+        <Skeleton className="h-8 w-20 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" />
+        <Skeleton className="h-8 w-20 rounded-xl bg-gray-200/60 dark:bg-gray-700/40" />
+        <Skeleton className="h-8 w-16 rounded-xl bg-gray-200/60 dark:bg-gray-700/40" />
+        <Skeleton className="h-8 w-16 rounded-xl bg-gray-200/60 dark:bg-gray-700/40" />
       </div>
     </div>
-    <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-5 gap-3">
+
+    {/* Stats grid */}
+    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 w-full overflow-hidden">
       {[...Array(5)].map((_, i) => <StatCardSkeleton key={i} />)}
     </div>
+
+    {/* Filter bar placeholder */}
+    <div className="flex items-center gap-2 flex-wrap">
+      <Skeleton className="h-9 w-48 rounded-xl bg-gray-200/60 dark:bg-gray-700/40" />
+      <Skeleton className="h-8 w-20 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" />
+      <Skeleton className="h-8 w-24 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" />
+      <Skeleton className="h-8 w-20 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" />
+    </div>
+
+    {/* Content */}
     {view === 'grid' ? (
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 w-full">
         {[...Array(6)].map((_, i) => <MeetingCardSkeleton key={i} />)}
       </div>
     ) : (
-      <div className="bg-white/80 dark:bg-gray-900/40 rounded-2xl border border-gray-200/50 dark:border-gray-700/30 overflow-hidden">
+      <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-gray-700/30 overflow-hidden shadow-sm w-full">
         <Table>
+          <TableHeader>
+            <TableRow className="border-gray-200/50 dark:border-gray-700/30">
+              <TableHead className="text-gray-500 dark:text-gray-400">Title</TableHead>
+              <TableHead className="text-gray-500 dark:text-gray-400 hidden sm:table-cell">Source</TableHead>
+              <TableHead className="text-gray-500 dark:text-gray-400 hidden sm:table-cell">Company</TableHead>
+              <TableHead className="text-gray-500 dark:text-gray-400">Date</TableHead>
+              <TableHead className="text-gray-500 dark:text-gray-400 hidden sm:table-cell">Duration</TableHead>
+              <TableHead className="text-gray-500 dark:text-gray-400 hidden lg:table-cell">Type/Status</TableHead>
+              <TableHead className="text-gray-500 dark:text-gray-400 hidden lg:table-cell">Sentiment</TableHead>
+              <TableHead className="text-gray-500 dark:text-gray-400 hidden xl:table-cell">Coach</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
             {[...Array(6)].map((_, i) => <MeetingRowSkeleton key={i} />)}
           </TableBody>
@@ -220,8 +272,7 @@ const UnifiedMeetingsList: React.FC = () => {
   // Filter state
   const [sortField, setSortField] = useState<'title' | 'meeting_start' | 'duration_minutes' | 'sentiment_score' | 'coach_rating'>('meeting_start')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('all')
-  const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null)
+  const dateFilter = useDateRangeFilter('month')
   const [selectedRepId, setSelectedRepId] = useState<string | null | undefined>(undefined)
   const [durationBucket, setDurationBucket] = useState<'all' | 'short' | 'medium' | 'long'>('all')
   const [sentimentCategory, setSentimentCategory] = useState<'all' | 'positive' | 'neutral' | 'challenging'>('all')
@@ -266,8 +317,7 @@ const UnifiedMeetingsList: React.FC = () => {
       platformFilter,
       sortField,
       sortDirection,
-      datePreset,
-      customDateRange,
+      dateRange: dateFilter.dateRange,
       selectedRepId,
       durationBucket,
       sentimentCategory,
@@ -279,7 +329,7 @@ const UnifiedMeetingsList: React.FC = () => {
   // Active filter count
   const activeFilterCount = useMemo(() => {
     let count = 0
-    if (datePreset !== 'all') count++
+    if (dateFilter.datePreset !== 'month') count++
     if (selectedRepId) count++
     if (durationBucket !== 'all') count++
     if (sentimentCategory !== 'all') count++
@@ -289,12 +339,12 @@ const UnifiedMeetingsList: React.FC = () => {
     if (statusFilter !== 'all') count++
     if (platformFilter !== 'all') count++
     return count
-  }, [datePreset, selectedRepId, durationBucket, sentimentCategory, coachingCategory, searchQuery, sourceFilter, statusFilter, platformFilter])
+  }, [dateFilter.datePreset, selectedRepId, durationBucket, sentimentCategory, coachingCategory, searchQuery, sourceFilter, statusFilter, platformFilter])
 
   // Reset to page 1 on filter/scope changes
   useEffect(() => {
     setCurrentPage(1)
-  }, [scope, activeOrgId, sortField, sortDirection, datePreset, customDateRange, selectedRepId, durationBucket, sentimentCategory, coachingCategory, sourceFilter, statusFilter, platformFilter])
+  }, [scope, activeOrgId, sortField, sortDirection, dateFilter.dateRange, selectedRepId, durationBucket, sentimentCategory, coachingCategory, sourceFilter, statusFilter, platformFilter])
 
   // Join meeting handler
   const handleJoinMeeting = async (meetingUrl: string, meetingTitle?: string) => {
@@ -351,8 +401,7 @@ const UnifiedMeetingsList: React.FC = () => {
     setSearchQuery('')
     setSortField('meeting_start')
     setSortDirection('desc')
-    setDatePreset('all')
-    setCustomDateRange(null)
+    dateFilter.handleClear()
     setSelectedRepId(undefined)
     setDurationBucket('all')
     setSentimentCategory('all')
@@ -384,7 +433,7 @@ const UnifiedMeetingsList: React.FC = () => {
                 key={i}
                 className="w-1 bg-emerald-500/60 dark:bg-emerald-400/60 rounded-full"
                 style={{
-                  height: `${12 + Math.sin(i * 0.8) * 8 + Math.random() * 6}px`,
+                  height: `${12 + Math.sin(i * 0.8) * 8 + (i % 3) * 3}px`,
                   animation: `waveform ${0.5 + i * 0.1}s ease-in-out infinite alternate`,
                   animationDelay: `${i * 50}ms`,
                 }}
@@ -591,7 +640,7 @@ const UnifiedMeetingsList: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate('/meetings/recordings/settings')}
+            onClick={() => navigate('/settings/meeting-settings')}
             className="gap-2"
           >
             <Settings className="h-4 w-4" />
@@ -691,9 +740,7 @@ const UnifiedMeetingsList: React.FC = () => {
         sortDirection={sortDirection}
         onSortFieldChange={setSortField}
         onSortDirectionToggle={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-        datePreset={datePreset}
-        customDateRange={customDateRange}
-        onDateChange={(preset, range) => { setDatePreset(preset); setCustomDateRange(range) }}
+        dateFilter={dateFilter}
         selectedRepId={selectedRepId}
         onRepChange={setSelectedRepId}
         scope={scope}

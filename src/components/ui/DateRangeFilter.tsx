@@ -2,9 +2,13 @@
  * DateRangeFilter — Reusable date range picker with preset buttons and heatmap-styled calendar.
  *
  * Usage:
- *   const dateFilter = useDateRangeFilter('30d');
+ *   const dateFilter = useDateRangeFilter(); // defaults to 'month' mode (current calendar month)
  *   <DateRangeFilter {...dateFilter} />
  *   // Use dateFilter.period and dateFilter.dateRange for data fetching
+ *
+ *   Month navigation:
+ *   dateFilter.navigateMonth(-1) // go to previous month
+ *   dateFilter.navigateMonth(1)  // go to next month (disabled if would be future)
  */
 
 import { useState, useCallback, useMemo, useRef } from 'react';
@@ -13,7 +17,7 @@ import {
   eachDayOfInterval, getDay, addMonths, subMonths, isSameDay,
   isAfter, isBefore, isWithinInterval, isToday, subDays,
 } from 'date-fns';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -22,7 +26,7 @@ import { cn } from '@/lib/utils';
 // Types
 // ============================================================================
 
-export type DatePreset = '7d' | '30d' | '90d' | 'custom';
+export type DatePreset = '7d' | '30d' | '90d' | 'month' | 'custom';
 
 export interface DateRange {
   start: Date;
@@ -33,6 +37,12 @@ export interface UseDateRangeFilterReturn {
   datePreset: DatePreset;
   calendarStart: Date | null;
   calendarEnd: Date | null;
+  /** Current month being displayed in month navigation mode */
+  currentMonth: Date;
+  /** Navigate months: -1 for previous, +1 for next. Disabled if would exceed current month. */
+  navigateMonth: (direction: -1 | 1) => void;
+  /** True when next month navigation would exceed today's month */
+  isCurrentMonth: boolean;
   period: number;
   dateRange: DateRange | undefined;
   dateDisplayText: string;
@@ -47,20 +57,47 @@ export interface UseDateRangeFilterReturn {
 // Hook — manages all date range filter state
 // ============================================================================
 
-export function useDateRangeFilter(defaultPreset: DatePreset = '30d'): UseDateRangeFilterReturn {
+export function useDateRangeFilter(defaultPreset: DatePreset = 'month'): UseDateRangeFilterReturn {
   const [datePreset, setDatePreset] = useState<DatePreset>(defaultPreset);
   const [calendarStart, setCalendarStart] = useState<Date | null>(null);
   const [calendarEnd, setCalendarEnd] = useState<Date | null>(null);
   const [isDatePickerOpen, setIsDatePickerOpenRaw] = useState(false);
+  // Month navigation: start at current month (beginning of today's month)
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => startOfMonth(new Date()));
 
   // Snapshot of the last valid state before opening, so we can restore on incomplete close
-  const lastValidState = useRef<{ preset: DatePreset; start: Date | null; end: Date | null }>({
-    preset: defaultPreset, start: null, end: null,
+  const lastValidState = useRef<{ preset: DatePreset; start: Date | null; end: Date | null; month: Date }>({
+    preset: defaultPreset, start: null, end: null, month: startOfMonth(new Date()),
   });
+
+  // True when the current navigated month is the same as today's month (can't go forward)
+  const isCurrentMonth = useMemo(() => {
+    const todayMonthStart = startOfMonth(new Date());
+    return !isBefore(currentMonth, todayMonthStart);
+  }, [currentMonth]);
+
+  const navigateMonth = useCallback((direction: -1 | 1) => {
+    setCurrentMonth(prev => {
+      const next = direction === 1 ? addMonths(prev, 1) : subMonths(prev, 1);
+      // Clamp: never allow navigating past the current calendar month
+      const todayMonthStart = startOfMonth(new Date());
+      if (isAfter(next, todayMonthStart)) return prev;
+      return next;
+    });
+    // Ensure we switch to month mode when using navigation
+    setDatePreset('month');
+    setCalendarStart(null);
+    setCalendarEnd(null);
+  }, []);
 
   const period = useMemo(() => {
     if (datePreset === '7d') return 7;
     if (datePreset === '90d') return 90;
+    if (datePreset === 'month') {
+      // Return actual days in the current navigated month
+      const days = eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) }).length;
+      return days;
+    }
     if (datePreset === 'custom' && calendarStart && calendarEnd) {
       const s = isBefore(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
       const e = isAfter(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
@@ -70,28 +107,31 @@ export function useDateRangeFilter(defaultPreset: DatePreset = '30d'): UseDateRa
       return 90;
     }
     return 30;
-  }, [datePreset, calendarStart, calendarEnd]);
+  }, [datePreset, calendarStart, calendarEnd, currentMonth]);
 
   const dateRange = useMemo<DateRange | undefined>(() => {
+    if (datePreset === 'month') {
+      return { start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) };
+    }
     if (datePreset === 'custom' && calendarStart && calendarEnd) {
       const s = isBefore(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
       const e = isAfter(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
       return { start: startOfDay(s), end: endOfDay(e) };
     }
-    // For preset periods, compute the range
+    // For rolling preset periods, compute the range
     if (datePreset !== 'custom') {
       const end = new Date();
       const start = subDays(end, period);
       return { start: startOfDay(start), end: endOfDay(end) };
     }
     return undefined;
-  }, [datePreset, calendarStart, calendarEnd, period]);
+  }, [datePreset, calendarStart, calendarEnd, period, currentMonth]);
 
   // Wrap setIsDatePickerOpen to handle cleanup on close
   const setIsDatePickerOpen = useCallback((open: boolean) => {
     if (open) {
       // Snapshot current valid state before user starts interacting
-      lastValidState.current = { preset: datePreset, start: calendarStart, end: calendarEnd };
+      lastValidState.current = { preset: datePreset, start: calendarStart, end: calendarEnd, month: currentMonth };
     } else {
       // Closing: if selection is incomplete (custom with no end date), restore previous state
       // This prevents the filter from getting "stuck" when user browses months without completing a selection
@@ -99,14 +139,21 @@ export function useDateRangeFilter(defaultPreset: DatePreset = '30d'): UseDateRa
         setDatePreset(lastValidState.current.preset);
         setCalendarStart(lastValidState.current.start);
         setCalendarEnd(lastValidState.current.end);
+        setCurrentMonth(lastValidState.current.month);
       }
     }
     setIsDatePickerOpenRaw(open);
-  }, [datePreset, calendarStart, calendarEnd]);
+  }, [datePreset, calendarStart, calendarEnd, currentMonth]);
 
   const handlePresetClick = useCallback((preset: DatePreset) => {
     setDatePreset(preset);
-    if (preset !== 'custom') {
+    if (preset === 'month') {
+      // Reset to current calendar month when switching to month mode
+      setCurrentMonth(startOfMonth(new Date()));
+      setCalendarStart(null);
+      setCalendarEnd(null);
+      setIsDatePickerOpenRaw(false);
+    } else if (preset !== 'custom') {
       setCalendarStart(null);
       setCalendarEnd(null);
       setIsDatePickerOpenRaw(false);
@@ -128,10 +175,14 @@ export function useDateRangeFilter(defaultPreset: DatePreset = '30d'): UseDateRa
     setDatePreset(defaultPreset);
     setCalendarStart(null);
     setCalendarEnd(null);
+    setCurrentMonth(startOfMonth(new Date()));
     setIsDatePickerOpenRaw(false);
   }, [defaultPreset]);
 
   const dateDisplayText = useMemo(() => {
+    if (datePreset === 'month') {
+      return format(currentMonth, 'MMMM yyyy');
+    }
     if (datePreset === 'custom' && calendarStart && calendarEnd) {
       const s = isBefore(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
       const e = isAfter(calendarStart, calendarEnd) ? calendarStart : calendarEnd;
@@ -143,10 +194,11 @@ export function useDateRangeFilter(defaultPreset: DatePreset = '30d'): UseDateRa
     if (datePreset === '7d') return 'Last 7 days';
     if (datePreset === '90d') return 'Last 90 days';
     return 'Last 30 days';
-  }, [datePreset, calendarStart, calendarEnd]);
+  }, [datePreset, calendarStart, calendarEnd, currentMonth]);
 
   return {
     datePreset, calendarStart, calendarEnd,
+    currentMonth, navigateMonth, isCurrentMonth,
     period, dateRange, dateDisplayText,
     isDatePickerOpen, setIsDatePickerOpen,
     handlePresetClick, handleCalendarSelect, handleClear,
@@ -261,14 +313,15 @@ interface DateRangeFilterProps extends UseDateRangeFilterReturn {
   className?: string;
   /** 'dark' variant for platform pages with dark backgrounds */
   variant?: 'light' | 'dark';
-  /** Extra preset options beyond the default 7d/30d/90d */
-  extraPresets?: Array<{ key: string; label: string; onClick: () => void }>;
 }
 
 export function DateRangeFilter({
   datePreset,
   calendarStart,
   calendarEnd,
+  currentMonth,
+  navigateMonth,
+  isCurrentMonth,
   dateDisplayText,
   isDatePickerOpen,
   setIsDatePickerOpen,
@@ -277,45 +330,134 @@ export function DateRangeFilter({
   handleClear,
   className,
   variant = 'light',
-  extraPresets,
 }: DateRangeFilterProps) {
   const isDark = variant === 'dark';
+  const isCustom = datePreset === 'custom';
+  const isMonthMode = datePreset === 'month';
+
+  // Shared classes for the outer wrapper and chevron buttons
+  const wrapperBase = cn(
+    'flex items-center rounded-xl border backdrop-blur-xl shadow-sm transition-all',
+    isDark
+      ? cn(
+          'bg-gray-800/50',
+          isCustom ? 'border-emerald-500/50' : 'border-gray-700/50',
+        )
+      : cn(
+          'bg-white/60 dark:bg-gray-900/40',
+          isCustom
+            ? 'border-emerald-500/50'
+            : 'border-gray-200/50 dark:border-gray-700/30',
+        ),
+    className,
+  );
+
+  const chevronBtn = cn(
+    'flex items-center justify-center w-7 h-8 rounded-lg transition-colors',
+    isDark
+      ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/60 disabled:opacity-30 disabled:cursor-not-allowed'
+      : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100/80 dark:hover:bg-gray-700/50 disabled:opacity-30 disabled:cursor-not-allowed',
+  );
 
   return (
     <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-      <PopoverTrigger asChild>
-        <button
-          className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all',
-            isDark
-              ? cn(
-                  'bg-gray-800/50 backdrop-blur-xl border shadow-sm',
-                  datePreset === 'custom'
-                    ? 'border-emerald-500/50 text-emerald-400'
-                    : 'border-gray-700/50 text-gray-300',
-                  'hover:border-emerald-500/30'
-                )
-              : cn(
-                  'bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border shadow-sm',
-                  datePreset === 'custom'
-                    ? 'border-emerald-500/50 text-emerald-700 dark:text-emerald-400'
-                    : 'border-gray-200/50 dark:border-gray-700/30 text-gray-700 dark:text-gray-300',
-                  'hover:border-emerald-300/50 dark:hover:border-emerald-500/30'
-                ),
-            className
-          )}
-        >
-          <Calendar className="w-4 h-4 dark:text-white" />
-          <span>{dateDisplayText}</span>
-          {datePreset === 'custom' && (
-            <X
-              className="w-3.5 h-3.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-              onClick={(e) => { e.stopPropagation(); handleClear(); }}
-            />
-          )}
-          <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-        </button>
-      </PopoverTrigger>
+      <div className={wrapperBase}>
+        {/* ── Month navigation arrows (month mode only) ── */}
+        {isMonthMode && (
+          <>
+            <button
+              type="button"
+              onClick={() => navigateMonth(-1)}
+              className={cn(chevronBtn, 'ml-1')}
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Month label — clicking opens the popover */}
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  'px-2 py-1.5 text-sm font-medium transition-colors',
+                  isDark
+                    ? 'text-gray-200 hover:text-emerald-400'
+                    : 'text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400',
+                )}
+                aria-label="Open date picker"
+              >
+                {dateDisplayText}
+              </button>
+            </PopoverTrigger>
+
+            <button
+              type="button"
+              onClick={() => navigateMonth(1)}
+              disabled={isCurrentMonth}
+              className={cn(chevronBtn, 'mr-1')}
+              aria-label="Next month"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </>
+        )}
+
+        {/* ── Custom / rolling preset label ── */}
+        {!isMonthMode && (
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-sm font-medium transition-colors',
+                isCustom
+                  ? isDark
+                    ? 'text-emerald-400'
+                    : 'text-emerald-700 dark:text-emerald-400'
+                  : isDark
+                    ? 'text-gray-300'
+                    : 'text-gray-700 dark:text-gray-300',
+              )}
+            >
+              <span>{dateDisplayText}</span>
+            </button>
+          </PopoverTrigger>
+        )}
+
+        {/* ── X to clear custom range ── */}
+        {isCustom && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleClear(); }}
+            className={cn(
+              'flex items-center justify-center w-5 h-5 mr-1 rounded transition-colors',
+              isDark
+                ? 'text-gray-500 hover:text-gray-200 hover:bg-gray-700/60'
+                : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100/80 dark:hover:bg-gray-700/50',
+            )}
+            aria-label="Clear date range"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
+
+        {/* ── Calendar icon — always opens popover ── */}
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'flex items-center justify-center w-8 h-8 rounded-lg transition-colors',
+              isDark
+                ? 'text-gray-400 hover:text-emerald-400 hover:bg-gray-700/60'
+                : 'text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-gray-100/80 dark:hover:bg-gray-700/50',
+              isMonthMode ? 'border-l border-gray-200/50 dark:border-gray-700/30 rounded-l-none ml-0' : 'ml-0',
+            )}
+            aria-label="Open date picker"
+          >
+            <Calendar className="w-4 h-4" />
+          </button>
+        </PopoverTrigger>
+      </div>
+
       <PopoverContent
         className={cn(
           'w-80 p-0 backdrop-blur-xl shadow-xl rounded-xl',
@@ -326,53 +468,8 @@ export function DateRangeFilter({
         align="end"
       >
         <div className="p-4 space-y-3">
-          <div className="flex items-center gap-2 pb-2 border-b border-gray-200/50 dark:border-gray-700/30">
-            <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span className="text-sm font-medium text-gray-900 dark:text-gray-200">Date Range</span>
-          </div>
-
-          {/* Quick presets */}
-          <div className="flex gap-2">
-            {([['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days']] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => handlePresetClick(key)}
-                className={cn(
-                  'flex-1 px-3 py-1.5 text-sm rounded-lg font-medium transition-all',
-                  datePreset === key
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : isDark
-                      ? 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50'
-                      : 'bg-gray-100/80 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-gray-200/80 dark:hover:bg-gray-700/50'
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Extra presets (e.g. thisMonth, lastMonth for VSL) */}
-          {extraPresets && extraPresets.length > 0 && (
-            <div className="flex gap-2">
-              {extraPresets.map(({ key, label, onClick }) => (
-                <button
-                  key={key}
-                  onClick={onClick}
-                  className={cn(
-                    'flex-1 px-3 py-1.5 text-sm rounded-lg font-medium transition-all',
-                    isDark
-                      ? 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50'
-                      : 'bg-gray-100/80 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-gray-200/80 dark:hover:bg-gray-700/50'
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Calendar range picker — key forces remount on reopen so viewMonth resets */}
-          <div className="pt-2 border-t border-gray-200/50 dark:border-gray-700/30">
+          <div>
             <CalendarRangePicker
               key={isDatePickerOpen ? 'open' : 'closed'}
               rangeStart={calendarStart}

@@ -4,7 +4,7 @@ import { useDealStages } from '@/lib/hooks/useDealStages';
 import { useUser } from '@/lib/hooks/useUser';
 import { exportPipelineToCSV, getPipelineExportSummary, CSVExportOptions } from '@/lib/utils/csvExport';
 import { format } from 'date-fns';
-import { DateRangePreset, DateRange, getDateRangeFromPreset } from '@/components/ui/date-filter';
+import { DatePreset, DateRange } from '@/components/ui/DateRangeFilter';
 import logger from '@/lib/utils/logger';
 
 interface FilterOptions {
@@ -63,8 +63,8 @@ interface PipelineContextType {
   selectedOwnerId: string | undefined;
   setSelectedOwnerId: (ownerId: string | undefined) => void;
   // Add date filter state
-  dateFilterPreset: DateRangePreset;
-  setDateFilterPreset: (preset: DateRangePreset) => void;
+  dateFilterPreset: DatePreset;
+  setDateFilterPreset: (preset: DatePreset) => void;
   customDateRange: DateRange | null;
   setCustomDateRange: (range: DateRange | null) => void;
   exportPipeline: (options?: CSVExportOptions) => Promise<void>;
@@ -158,7 +158,7 @@ export function PipelineProvider({ children }: PipelineProviderProps) {
   });
 
   // Add date filter state
-  const [dateFilterPreset, setDateFilterPreset] = useState<DateRangePreset>('all');
+  const [dateFilterPreset, setDateFilterPreset] = useState<DatePreset>('month');
   const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null);
 
   // Helper functions using useCallback to stabilize references
@@ -248,9 +248,7 @@ export function PipelineProvider({ children }: PipelineProviderProps) {
     if (!stages) return {};
 
     // Get the effective date range for filtering
-    const effectiveDateRange = dateFilterPreset === 'custom' && customDateRange 
-      ? customDateRange 
-      : getDateRangeFromPreset(dateFilterPreset);
+    const effectiveDateRange = customDateRange;
 
     // Apply all filters to the deals
     let filteredDeals = deals.filter(deal => {

@@ -13,7 +13,7 @@ import { useOrg } from '@/lib/contexts/OrgContext'
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration'
 import { useRecordings, useBatchVideoUrls, useActiveRecordings, useRecordingsRequiringAttention } from '@/lib/hooks/useRecordings'
 import { useDebouncedSearch, filterItems } from '@/lib/hooks/useDebounce'
-import { DateRangePreset, DateRange, getDateRangeFromPreset } from '@/components/ui/date-filter'
+import { DateRange } from '@/components/ui/DateRangeFilter'
 import {
   type UnifiedMeeting,
   type UnifiedSource,
@@ -34,8 +34,7 @@ export interface UnifiedMeetingsFilters {
   platformFilter: MeetingPlatform | 'all'
   sortField: 'title' | 'meeting_start' | 'duration_minutes' | 'sentiment_score' | 'coach_rating'
   sortDirection: 'asc' | 'desc'
-  datePreset: DateRangePreset
-  customDateRange: DateRange | null
+  dateRange: DateRange | undefined
   selectedRepId: string | null | undefined
   durationBucket: 'all' | 'short' | 'medium' | 'long'
   sentimentCategory: 'all' | 'positive' | 'neutral' | 'challenging'
@@ -163,8 +162,8 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
       }
 
       // Date filter
-      const dateRange = filters.customDateRange || getDateRangeFromPreset(filters.datePreset)
-      if (dateRange) {
+      if (filters.dateRange) {
+        const dateRange = filters.dateRange;
         query = query
           .gte('meeting_start', dateRange.start.toISOString())
           .lte('meeting_start', dateRange.end.toISOString())
@@ -192,7 +191,7 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
     } finally {
       setMeetingsLoading(false)
     }
-  }, [user, activeOrgId, currentPage, filters.scope, filters.sortField, filters.sortDirection, filters.datePreset, filters.customDateRange, filters.selectedRepId, filters.sourceFilter, shouldFetchMeetings])
+  }, [user, activeOrgId, currentPage, filters.scope, filters.sortField, filters.sortDirection, filters.dateRange, filters.selectedRepId, filters.sourceFilter, shouldFetchMeetings])
 
   // Trigger fetch when deps change
   useEffect(() => {

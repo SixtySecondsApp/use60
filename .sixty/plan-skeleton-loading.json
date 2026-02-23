@@ -1,0 +1,438 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "feature": "skeleton-loading",
+    "createdAt": "2026-02-23T00:00:00Z"
+  },
+  "feature": {
+    "id": "skeleton-loading",
+    "name": "Skeleton Loading Refresh",
+    "description": "Audit and update all skeleton loading states across every major page to match the newer redesigned layouts. Goal: zero layout shift (CLS), seamless perceived loading — content should never jump around before or after data loads. Cover all recently-modified pages first, then fill gaps on pages with no skeletons.",
+    "status": "in_progress"
+  },
+  "stories": [
+    {
+      "id": "SKEL-001",
+      "title": "Dashboard — audit & fix metric card skeleton to match new KPI layout",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "parallelGroup": "A",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-002", "SKEL-003", "SKEL-004", "SKEL-005", "SKEL-006", "SKEL-008", "SKEL-010"],
+      "acceptance": [
+        "Dashboard skeleton matches exact grid layout of 4 KPI metric cards + secondary stats section",
+        "Skeleton uses same card dimensions/spacing as the real loaded cards (no shift on load)",
+        "Tab bar (Activity / Funnel / Heatmap / Leads) shows skeleton placeholder while lazy children load",
+        "Skeleton renders within Dashboard.tsx — no separate loading spinner"
+      ],
+      "files": ["src/pages/Dashboard.tsx"],
+      "estimatedMinutes": 20,
+      "notes": "Dashboard.tsx modified in current branch. Uses motion animations currently — ensure skeleton covers metric grid before data loads in."
+    },
+    {
+      "id": "SKEL-002",
+      "title": "SalesFunnel — verify existing FunnelSkeleton still matches updated layout",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "parallelGroup": "A",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-001", "SKEL-003", "SKEL-004", "SKEL-005", "SKEL-006"],
+      "acceptance": [
+        "FunnelSkeleton bar widths and count match the real funnel stage count",
+        "3-stat-card grid in skeleton matches the 3 cards below the funnel",
+        "Header skeleton (title + description) matches real header dimensions",
+        "No layout shift when skeleton transitions to real content"
+      ],
+      "files": ["src/pages/SalesFunnel.tsx"],
+      "estimatedMinutes": 15,
+      "notes": "SalesFunnel.tsx was modified in current branch. Existing FunnelSkeleton may be stale."
+    },
+    {
+      "id": "SKEL-003",
+      "title": "Heatmap — create missing calendar-grid skeleton (currently no skeleton at all)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "parallelGroup": "A",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-001", "SKEL-002", "SKEL-004", "SKEL-005"],
+      "acceptance": [
+        "Heatmap shows a skeleton while activity data is loading",
+        "Skeleton renders a grid matching the real heatmap calendar grid (header row + day cells)",
+        "Cell dimensions in skeleton match real cell dimensions — zero shift on load",
+        "Skeleton shows week-label column + 7-day columns matching actual layout",
+        "No jump when skeleton swaps to real heatmap content"
+      ],
+      "files": ["src/pages/Heatmap.tsx"],
+      "estimatedMinutes": 20,
+      "notes": "Heatmap.tsx modified in current branch. ZERO skeleton currently — high CLS risk. Calendar grid structure: 8 columns (week numbers + 7 days), multiple rows of cells."
+    },
+    {
+      "id": "SKEL-004",
+      "title": "MeetingAnalyticsPage — verify skeleton matches updated tabbed analytics layout",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "A",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-001", "SKEL-002", "SKEL-003"],
+      "acceptance": [
+        "Page header skeleton matches the new animated gradient header layout",
+        "Tab bar (Dashboard / Transcripts / Insights / Reports) shows as skeleton while loading",
+        "Stats/metric cards skeleton within each tab matches actual card grid",
+        "Index status progress indicator is properly positioned — no layout shift around it"
+      ],
+      "files": ["src/pages/MeetingAnalyticsPage.tsx"],
+      "estimatedMinutes": 20,
+      "notes": "MeetingAnalyticsPage.tsx modified in current branch."
+    },
+    {
+      "id": "SKEL-005",
+      "title": "CompaniesTable — create missing table skeleton (loading flag exists but no skeleton UI)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "parallelGroup": "B",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-001", "SKEL-002", "SKEL-003", "SKEL-006", "SKEL-007"],
+      "acceptance": [
+        "CompaniesTable shows a table row skeleton while isLoading is true",
+        "Skeleton renders 5-8 row placeholders matching the real table column structure (name, domain, size, industry, contacts, deals)",
+        "Header row (column labels) visible during skeleton state so layout doesn't shift",
+        "No jump when real table rows replace skeletons"
+      ],
+      "files": ["src/pages/companies/CompaniesTable.tsx"],
+      "estimatedMinutes": 20,
+      "notes": "Has isLoading flag from useCompanies() but renders nothing while loading. Critical CLS issue."
+    },
+    {
+      "id": "SKEL-006",
+      "title": "DealRecord — create missing deal detail skeleton (loading flag exists but no skeleton UI)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "parallelGroup": "B",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-001", "SKEL-002", "SKEL-005", "SKEL-007"],
+      "acceptance": [
+        "DealRecord shows a skeleton while loading flag is true",
+        "Skeleton mirrors deal header layout (logo placeholder, deal name, value badge, stage pill, health score gauge)",
+        "Tab bar (Overview / Timeline / Contacts / Activities) shows as skeleton placeholder",
+        "Main content area has skeleton matching the overview panel layout",
+        "Zero shift when skeleton transitions to real deal data"
+      ],
+      "files": ["src/pages/deals/DealRecord.tsx"],
+      "estimatedMinutes": 25,
+      "notes": "Has loading flag but no visual skeleton — user sees blank then full content appearing. Complex layout with tabs."
+    },
+    {
+      "id": "SKEL-007",
+      "title": "ContactRecord — verify existing ContactProfileSkeleton matches any layout updates",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "B",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-005", "SKEL-006"],
+      "acceptance": [
+        "ContactProfileSkeleton 3-column grid matches current ContactRecord layout (3/6/3 cols)",
+        "Header skeleton dimensions match actual ContactHeader",
+        "Sidebar, main content, and right panel skeleton sections align with real component sizes",
+        "No layout shift between skeleton and loaded state"
+      ],
+      "files": [
+        "src/pages/contacts/ContactRecord.tsx",
+        "src/components/ui/contact-skeleton.tsx"
+      ],
+      "estimatedMinutes": 15,
+      "notes": "Has dedicated skeleton — just needs verification against current layout."
+    },
+    {
+      "id": "SKEL-008",
+      "title": "Meetings — verify UnifiedMeetingsList & MeetingsList skeletons match updated layouts",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "parallelGroup": "C",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-001", "SKEL-005", "SKEL-006", "SKEL-009"],
+      "acceptance": [
+        "UnifiedMeetingsList stat card skeletons match real StatCard dimensions (label height, value height, icon)",
+        "Meeting card skeletons match the real meeting card layout (title, date, attendees, duration)",
+        "MeetingsFilterBar shows a skeleton/disabled state while data loads (no empty filter bar jump)",
+        "MeetingsList stat skeletons updated if layout changed in current branch",
+        "No layout shift on any state transition"
+      ],
+      "files": [
+        "src/components/meetings/UnifiedMeetingsList.tsx",
+        "src/components/meetings/MeetingsList.tsx",
+        "src/components/meetings/MeetingsFilterBar.tsx"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "All 3 files modified in current branch. Skeletons exist but may be stale vs new layout."
+    },
+    {
+      "id": "SKEL-009",
+      "title": "MeetingDetail — audit and add/fix skeleton for meeting detail page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "C",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-008"],
+      "acceptance": [
+        "MeetingDetail shows a skeleton while meeting data loads",
+        "Skeleton covers: back button, meeting title, participants, transcript area",
+        "AI insights section shows skeleton while generating",
+        "No content jump between loading and loaded states"
+      ],
+      "files": ["src/pages/MeetingDetail.tsx"],
+      "estimatedMinutes": 20,
+      "notes": "Meeting detail shows recording + transcript — complex layout needing proper skeleton."
+    },
+    {
+      "id": "SKEL-010",
+      "title": "CommandCentre — verify skeleton components match updated card layout",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "D",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-001", "SKEL-011", "SKEL-012", "SKEL-013"],
+      "acceptance": [
+        "CC item card skeletons match actual card layout (urgency badge, title, agent tag, confidence pill, action buttons)",
+        "Tab bar skeleton covers all 4 tabs (Active / Auto-completed / Resolved / Pipeline)",
+        "Card list skeleton shows correct number of placeholder rows",
+        "No layout shift when real cards load in"
+      ],
+      "files": ["src/pages/platform/CommandCentre.tsx"],
+      "estimatedMinutes": 20,
+      "notes": "CommandCentre.tsx modified in current branch. Uses Skeleton component but needs verification."
+    },
+    {
+      "id": "SKEL-011",
+      "title": "MetaAdsAnalytics — replace loading spinner with structural skeleton",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "D",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-010", "SKEL-012", "SKEL-013"],
+      "acceptance": [
+        "MetaAdsAnalytics replaces RefreshCw spinner with a proper structural skeleton",
+        "Skeleton mirrors the real layout: header, performance cards grid, chart areas",
+        "Header (title, icon, date range filter) visible as skeleton so page height is stable",
+        "Metric card skeletons use same grid columns as real cards",
+        "Zero layout shift on data load"
+      ],
+      "files": ["src/pages/platform/MetaAdsAnalytics.tsx"],
+      "estimatedMinutes": 20,
+      "notes": "Modified in current branch. Currently just shows a RefreshCw spinner — poor UX, causes major layout shift."
+    },
+    {
+      "id": "SKEL-012",
+      "title": "VSLAnalytics — replace loading spinner with structural skeleton matching real layout",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "D",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-010", "SKEL-011", "SKEL-013"],
+      "acceptance": [
+        "VSLAnalytics replaces spinner with structural skeleton matching real content layout",
+        "Skeleton covers: header, VSLComparisonCards grid, VSLTrendChart placeholder, VSLRetentionGraph placeholder",
+        "Chart area skeletons have correct approximate heights so content doesn't shift vertically",
+        "Zero layout shift on data load"
+      ],
+      "files": ["src/pages/platform/VSLAnalytics.tsx"],
+      "estimatedMinutes": 20,
+      "notes": "Modified in current branch. Same spinner-only anti-pattern as MetaAdsAnalytics."
+    },
+    {
+      "id": "SKEL-013",
+      "title": "BillingAnalytics — audit and add skeleton for admin billing analytics page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "parallelGroup": "D",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-010", "SKEL-011", "SKEL-012"],
+      "acceptance": [
+        "BillingAnalytics shows structural skeleton while billing data loads",
+        "Skeleton covers the main revenue metrics cards grid",
+        "Chart placeholders hold correct height so page doesn't reflow when charts mount",
+        "No layout shift between loading and loaded states"
+      ],
+      "files": ["src/pages/admin/BillingAnalytics.tsx"],
+      "estimatedMinutes": 20,
+      "notes": "BillingAnalytics.tsx modified in current branch."
+    },
+    {
+      "id": "SKEL-014",
+      "title": "Settings — add loading states to BillingSettingsPage and SalesGoalsPage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "E",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-015"],
+      "acceptance": [
+        "BillingSettingsPage shows skeleton for plan cards and credit balance while billing data loads",
+        "SalesGoalsPage shows skeleton for goal metric inputs while user goals load",
+        "No CLS on either page — skeleton dimensions match real content",
+        "Settings hub page itself needs no skeleton (sections are static)"
+      ],
+      "files": [
+        "src/pages/settings/BillingSettingsPage.tsx",
+        "src/pages/settings/SalesGoalsPage.tsx"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "Both modified in current branch. BillingSettingsPage loads plan/credit data async. SalesGoalsPage loads goal data."
+    },
+    {
+      "id": "SKEL-015",
+      "title": "MeetingSettingsPage — add skeleton loading for new meeting settings page (new file)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "E",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-014"],
+      "acceptance": [
+        "MeetingSettingsPage shows skeleton while meeting preferences/integration data loads",
+        "Notetaker, Fathom, and Fireflies tab panels show skeletons that match their real content structure",
+        "Settings form skeletons (toggle rows, input fields) match actual form dimensions",
+        "Zero layout shift on settings page load"
+      ],
+      "files": [
+        "src/pages/settings/MeetingSettingsPage.tsx",
+        "src/components/settings/FathomSettingsTab.tsx",
+        "src/components/settings/FirefliesSettingsTab.tsx",
+        "src/components/settings/NotetakerSettingsTab.tsx"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "All 4 files are new (untracked). Fresh implementations — ensure they ship with skeletons from the start."
+    },
+    {
+      "id": "SKEL-016",
+      "title": "OpsPage & OpsDetailPage — add table/record skeleton loading states",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "parallelGroup": "F",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-017", "SKEL-018"],
+      "acceptance": [
+        "OpsPage table shows row skeletons matching column structure while data loads",
+        "OpsDetailPage record view shows field skeletons matching data layout",
+        "No content jump in either page on data load"
+      ],
+      "files": [
+        "src/pages/OpsPage.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "Ops tables are dynamic (user-defined columns) — skeleton should show generic N-column placeholder rows."
+    },
+    {
+      "id": "SKEL-017",
+      "title": "Email pages — verify or add skeleton for Email & EmailActionCenter",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "parallelGroup": "F",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-016", "SKEL-018"],
+      "acceptance": [
+        "Email page uses EmailListItemSkeleton (already exists) correctly while threads load",
+        "EmailActionCenter shows skeleton for action items while they load",
+        "No layout shift on email list load — skeleton list height matches real list",
+        "EmailThreadMessageSkeleton used correctly in thread view"
+      ],
+      "files": [
+        "src/pages/Email.tsx",
+        "src/pages/EmailActionCenter.tsx",
+        "src/components/email/EmailSkeleton.tsx"
+      ],
+      "estimatedMinutes": 20,
+      "notes": "Email skeleton components exist — just need to be wired up correctly and verified against current layouts."
+    },
+    {
+      "id": "SKEL-018",
+      "title": "RecordingsPage & ProspectingPage — add missing skeleton loading states",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "parallelGroup": "F",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SKEL-016", "SKEL-017"],
+      "acceptance": [
+        "RecordingsPage shows card/grid skeleton while recordings load",
+        "RecordingDetail shows skeleton for recording player + transcript while loading",
+        "ProspectingPage shows table/card skeleton while lead data loads",
+        "No layout shift on any of these pages"
+      ],
+      "files": [
+        "src/pages/RecordingsPage.tsx",
+        "src/pages/RecordingDetail.tsx",
+        "src/pages/ProspectingPage.tsx"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "Lower priority pages but should be covered for completeness."
+    }
+  ],
+  "execution": {
+    "totalStories": 18,
+    "completedStories": 0,
+    "parallelGroups": {
+      "A": ["SKEL-001", "SKEL-002", "SKEL-003", "SKEL-004"],
+      "B": ["SKEL-005", "SKEL-006", "SKEL-007"],
+      "C": ["SKEL-008", "SKEL-009"],
+      "D": ["SKEL-010", "SKEL-011", "SKEL-012", "SKEL-013"],
+      "E": ["SKEL-014", "SKEL-015"],
+      "F": ["SKEL-016", "SKEL-017", "SKEL-018"]
+    },
+    "groupsCanRunInParallel": ["A", "B", "C", "D", "E"],
+    "lastUpdated": "2026-02-23T00:00:00Z"
+  },
+  "guidelines": {
+    "skeletonPrinciples": [
+      "Skeleton dimensions must match the real content exactly — same heights, same column counts, same padding",
+      "Use animate-pulse with bg-gray-200 dark:bg-white/[0.06] (not bg-gray-800 which is too dark)",
+      "Wrap skeletons in the same container structure as real content (same grid/flex, same gap/spacing)",
+      "For charts/graphs: use a fixed-height skeleton div matching the real chart's min-height",
+      "For tabs: always show the tab bar as skeleton (same number of tabs) so header height is stable",
+      "For tables: show the actual column headers + N row skeletons — never hide the header during loading",
+      "Use Framer Motion animate={{ opacity: [0.5, 1, 0.5] }} for a breathing effect if desired",
+      "Import Skeleton from @/components/ui/skeleton (the base component) — don't create new animation variants",
+      "Check dark mode — skeleton must be visible in both light and dark themes"
+    ],
+    "antiPatterns": [
+      "Never show a spinner where a structural skeleton could go",
+      "Never hide the page header/navigation during loading — only hide data sections",
+      "Never use random widths in skeleton (Math.random()) — use consistent representative widths",
+      "Never make skeleton taller than real content (causes downward shift on load)",
+      "Never make skeleton shorter than real content (causes upward shift/jump on load)"
+    ]
+  }
+}

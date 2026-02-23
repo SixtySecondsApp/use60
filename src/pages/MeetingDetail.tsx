@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase/clientV2';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic } from 'lucide-react';
@@ -683,8 +684,89 @@ export function MeetingDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl min-w-0">
+        {/* Header skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 min-w-0">
+          <div className="space-y-2 min-w-0 flex-1">
+            {/* Back button */}
+            <Skeleton className="h-9 w-20 rounded-md bg-gray-200/60 dark:bg-gray-700/40" />
+            {/* Title */}
+            <Skeleton className="h-8 sm:h-9 w-3/4 bg-gray-200/60 dark:bg-gray-700/40" />
+            {/* Date + duration */}
+            <Skeleton className="h-4 w-56 bg-gray-200/60 dark:bg-gray-700/40" />
+          </div>
+          {/* Badges */}
+          <div className="flex gap-2 flex-shrink-0">
+            <Skeleton className="h-6 w-20 rounded-full bg-gray-200/60 dark:bg-gray-700/40" />
+            <Skeleton className="h-6 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40" />
+          </div>
+        </div>
+
+        {/* Main grid skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-w-0">
+          {/* Left column: video + tabs */}
+          <div className="lg:col-span-8 space-y-3 sm:space-y-4 min-w-0">
+            {/* Video player area — h-[320px] matches actual player */}
+            <Skeleton className="w-full h-[320px] rounded-2xl bg-gray-200/60 dark:bg-gray-700/40" />
+
+            {/* Tab bar */}
+            <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 sm:p-6 space-y-4">
+              {/* Tab triggers */}
+              <div className="grid grid-cols-4 gap-1 bg-gray-100/80 dark:bg-gray-800/50 rounded-lg p-1">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-8 rounded-md bg-gray-200/60 dark:bg-gray-700/40" />
+                ))}
+              </div>
+              {/* Tab content placeholder — summary area */}
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full bg-gray-200/60 dark:bg-gray-700/40" />
+                <Skeleton className="h-4 w-5/6 bg-gray-200/60 dark:bg-gray-700/40" />
+                <Skeleton className="h-4 w-4/6 bg-gray-200/60 dark:bg-gray-700/40" />
+                <Skeleton className="h-4 w-full bg-gray-200/60 dark:bg-gray-700/40" />
+                <Skeleton className="h-4 w-3/4 bg-gray-200/60 dark:bg-gray-700/40" />
+              </div>
+            </div>
+          </div>
+
+          {/* Right column: sidebar cards */}
+          <div className="lg:col-span-4 space-y-3 sm:space-y-4 min-w-0">
+            {/* Quick actions card */}
+            <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 space-y-3">
+              <Skeleton className="h-5 w-28 bg-gray-200/60 dark:bg-gray-700/40" />
+              <div className="grid grid-cols-2 gap-2">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-9 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" />
+                ))}
+              </div>
+            </div>
+
+            {/* Attendees card */}
+            <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 space-y-3">
+              <Skeleton className="h-5 w-24 bg-gray-200/60 dark:bg-gray-700/40" />
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <Skeleton className="h-8 w-8 rounded-full bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 w-28 bg-gray-200/60 dark:bg-gray-700/40" />
+                    <Skeleton className="h-3 w-36 bg-gray-200/60 dark:bg-gray-700/40" />
+                  </div>
+                  <Skeleton className="h-5 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+
+            {/* Meeting info card */}
+            <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 space-y-2">
+              <Skeleton className="h-5 w-24 bg-gray-200/60 dark:bg-gray-700/40" />
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex justify-between">
+                  <Skeleton className="h-3.5 w-16 bg-gray-200/60 dark:bg-gray-700/40" />
+                  <Skeleton className="h-3.5 w-24 bg-gray-200/60 dark:bg-gray-700/40" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
