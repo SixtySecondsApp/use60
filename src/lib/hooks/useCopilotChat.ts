@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 import { CopilotSessionService } from '@/lib/services/copilotSessionService';
 import type { CopilotMessage as PersistedMessage, CopilotMessageMetadata } from '@/lib/types/copilot';
@@ -112,6 +113,7 @@ export interface UseCopilotChatReturn {
 // =============================================================================
 
 export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatReturn {
+  const queryClient = useQueryClient();
   const {
     persistSession = true,
     historyLimit = 50,
@@ -130,6 +132,13 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
   const sessionServiceRef = useRef<CopilotSessionService | null>(null);
+  // Ref mirror of conversationId — always up-to-date regardless of closure capture timing
+  const conversationIdRef = useRef<string | null>(null);
+
+  // Keep ref in sync with state so SSE handlers never use a stale conversationId
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   // Initialize session service
   if (!sessionServiceRef.current) {
@@ -166,9 +175,11 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
       setActiveAgents([]);
 
       // Persist user message to database (non-blocking)
-      if (persistSession && conversationId && sessionServiceRef.current) {
+      // Use ref to avoid stale closure — conversationId state may lag behind actual session load
+      const currentConvId = conversationIdRef.current;
+      if (persistSession && currentConvId && sessionServiceRef.current) {
         sessionServiceRef.current.addMessage({
-          conversation_id: conversationId,
+          conversation_id: currentConvId,
           role: 'user',
           content: message,
         }).catch((err) => console.warn('[useCopilotChat] Error persisting user message:', err));
@@ -340,6 +351,11 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                       setCurrentTool(null);
                       options.onToolComplete?.(currentToolCalls[toolIndex]);
 
+                      // Invalidate targets query when copilot updates a sales goal
+                      if (data.success && data.result?.source === 'upsert_target') {
+                        queryClient.invalidateQueries({ queryKey: ['targets', options.userId] });
+                      }
+
                       // Track tools used
                       setToolsUsed((prev) => {
                         if (!prev.includes(data.name)) {
@@ -420,8 +436,22 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                     }
                     options.onComplete?.(accumulatedContent, data.toolsUsed || []);
 
+                    // Belt-and-suspenders: if any tool call in this turn was upsert_target,
+                    // invalidate targets even if the tool_result event was missed/ambiguous
+                    const hadTargetUpdate = currentToolCalls.some(
+                      (tc) =>
+                        tc.status === 'completed' &&
+                        (tc.result?.source === 'upsert_target' ||
+                          (tc.result?.data?.field && String(tc.result.data.field).endsWith('_target')))
+                    );
+                    if (hadTargetUpdate) {
+                      queryClient.invalidateQueries({ queryKey: ['targets', options.userId] });
+                    }
+
                     // Persist assistant message after streaming completes
-                    if (persistSession && conversationId && sessionServiceRef.current && accumulatedContent) {
+                    // Use ref to get latest conversationId — the closure may have captured a stale value
+                    const persistConvId = conversationIdRef.current;
+                    if (persistSession && persistConvId && sessionServiceRef.current && accumulatedContent) {
                       const toolCallsMeta = currentToolCalls.length > 0
                         ? currentToolCalls.map((tc) => ({
                             id: tc.id,
@@ -447,11 +477,13 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                       }
 
                       sessionServiceRef.current.addMessage({
-                        conversation_id: conversationId,
+                        conversation_id: persistConvId,
                         role: 'assistant',
                         content: accumulatedContent,
                         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-                      }).catch((err) => console.warn('[useCopilotChat] Error persisting assistant message:', err));
+                      }).catch((err) => console.error('[useCopilotChat] Error persisting assistant message:', err));
+                    } else if (persistSession && !accumulatedContent) {
+                      console.warn('[useCopilotChat] Assistant message not persisted — accumulatedContent empty at done event');
                     }
                     break;
 

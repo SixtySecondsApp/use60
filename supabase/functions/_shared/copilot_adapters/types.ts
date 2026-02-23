@@ -80,7 +80,10 @@ export type ExecuteActionName =
   | 'meeting_analytics_dashboard'
   | 'meeting_analytics_talk_time'
   | 'meeting_analytics_sentiment_trends'
-  | 'meeting_analytics_insights';
+  | 'meeting_analytics_insights'
+  // Sales targets / goals
+  | 'get_targets'
+  | 'upsert_target';
 
 /**
  * Parameters for run_sequence action - executes a multi-step agent sequence
@@ -304,6 +307,16 @@ export interface PushOpsToInstantlyParams {
 export interface GetOpsInsightsParams {
   table_id: string;
   insight_type?: string;
+}
+
+/**
+ * Parameters for upsert_target action
+ */
+export interface UpsertTargetParams {
+  /** Which KPI to update */
+  field: 'revenue_target' | 'outbound_target' | 'meetings_target' | 'proposal_target';
+  /** New goal value (must be >= 0) */
+  value: number;
 }
 
 export interface ExecuteActionRequest {

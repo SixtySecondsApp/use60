@@ -2343,6 +2343,151 @@ export async function executeAction(
       }
     }
 
+    // ── Sales targets / goals ─────────────────────────────────────────────────
+
+    case 'get_targets': {
+      // Return current month's targets for the user
+      const today = new Date();
+      const startOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+
+      const { data: targetRow, error: targetErr } = await client
+        .from('targets')
+        .select('id, revenue_target, outbound_target, meetings_target, proposal_target, start_date, end_date')
+        .eq('user_id', userId)
+        .gte('start_date', startOfMonth)
+        .order('start_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (targetErr) {
+        return { success: false, data: null, error: `Failed to fetch targets: ${targetErr.message}` };
+      }
+
+      if (!targetRow) {
+        return {
+          success: true,
+          data: {
+            targets_set: false,
+            message: 'No targets have been set for this month yet.',
+            revenue_target: 0,
+            outbound_target: 0,
+            meetings_target: 0,
+            proposal_target: 0,
+          },
+          source: 'get_targets',
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          targets_set: true,
+          id: targetRow.id,
+          revenue_target: targetRow.revenue_target,
+          outbound_target: targetRow.outbound_target,
+          meetings_target: targetRow.meetings_target,
+          proposal_target: targetRow.proposal_target,
+          start_date: targetRow.start_date,
+          end_date: targetRow.end_date,
+        },
+        source: 'get_targets',
+      };
+    }
+
+    case 'upsert_target': {
+      const field = params.field ? String(params.field) : '';
+      const validFields = ['revenue_target', 'outbound_target', 'meetings_target', 'proposal_target'];
+      if (!validFields.includes(field)) {
+        return {
+          success: false,
+          data: null,
+          error: `field must be one of: ${validFields.join(', ')}`,
+        };
+      }
+
+      const rawValue = params.value;
+      const value = typeof rawValue === 'number' ? rawValue : parseFloat(String(rawValue ?? ''));
+      if (isNaN(value) || value < 0) {
+        return { success: false, data: null, error: 'value must be a non-negative number' };
+      }
+
+      const fieldLabels: Record<string, string> = {
+        revenue_target: 'New Business revenue goal',
+        outbound_target: 'Outbound activities goal',
+        meetings_target: 'Meetings goal',
+        proposal_target: 'Proposals goal',
+      };
+
+      const preview = { field, value, label: fieldLabels[field] };
+
+      if (!ctx.confirm) {
+        return {
+          success: false,
+          data: null,
+          error: 'Confirmation required to update sales target',
+          needs_confirmation: true,
+          preview,
+          source: 'upsert_target',
+        };
+      }
+
+      // Find or create the current month's target row
+      const today = new Date();
+      const startOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const endOfMonth = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+
+      const { data: existing, error: fetchErr } = await client
+        .from('targets')
+        .select('id')
+        .eq('user_id', userId)
+        .gte('start_date', startOfMonth)
+        .order('start_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchErr) {
+        return { success: false, data: null, error: `Failed to look up targets: ${fetchErr.message}` };
+      }
+
+      if (existing?.id) {
+        const { error: updateErr } = await client
+          .from('targets')
+          .update({ [field]: value })
+          .eq('id', existing.id);
+        if (updateErr) {
+          return { success: false, data: null, error: `Failed to update target: ${updateErr.message}` };
+        }
+      } else {
+        const { error: insertErr } = await client
+          .from('targets')
+          .insert({
+            user_id: userId,
+            revenue_target: 0,
+            outbound_target: 0,
+            meetings_target: 0,
+            proposal_target: 0,
+            start_date: startOfMonth,
+            end_date: endOfMonth,
+            [field]: value,
+          });
+        if (insertErr) {
+          return { success: false, data: null, error: `Failed to create target: ${insertErr.message}` };
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          field,
+          value,
+          label: fieldLabels[field],
+          message: `${fieldLabels[field]} updated to ${value}.`,
+        },
+        source: 'upsert_target',
+      };
+    }
+
     default:
       return { success: false, data: null, error: `Unknown action: ${String(action)}` };
   }

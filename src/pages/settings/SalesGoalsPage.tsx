@@ -294,7 +294,7 @@ export default function SalesGoalsPage() {
       title="Sales Goals"
       description="Set monthly targets for your key performance metrics. These goals appear on your dashboard and track your progress."
     >
-      <div className="space-y-4 max-w-2xl">
+      <div className="space-y-4 max-w-2xl mx-auto">
         {/* Tip banner */}
         <div className="flex items-start gap-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-4 py-3">
           <TrendingUp className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />

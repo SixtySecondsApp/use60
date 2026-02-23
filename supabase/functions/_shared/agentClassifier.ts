@@ -46,6 +46,13 @@ export const AGENT_DOMAINS: AgentDomain[] = [
       'win', 'loss', 'stale', 'at risk', 'risk', 'health',
       'pipeline review', 'deal review', 'needs attention',
       'deal health', 'weighted pipeline', 'win rate',
+      // Sales targets / goals (dashboard KPIs)
+      'monthly goal', 'sales goal', 'revenue goal', 'meetings goal',
+      'outbound goal', 'proposal goal', 'dashboard goal', 'dashboard target',
+      'sales target', 'revenue target', 'meetings target', 'outbound target',
+      'proposal target', 'my goal', 'my target', 'update my goal',
+      'set my goal', 'update target', 'set target', 'kpi', 'kpis',
+      'goal', 'goals',
     ],
   },
   {
@@ -261,21 +268,26 @@ Rules:
   * "research this company and list my pending tasks" → ["research", "crm_ops"], parallel
 - Only include agents that are truly needed
 - High confidence (0.8+) for clear intent, lower for ambiguous
-- **pipeline** = analysis/insights about deals; **crm_ops** = writing/updating CRM data
+- **pipeline** = analysis/insights about deals AND setting/viewing personal sales targets/goals/KPIs; **crm_ops** = writing/updating CRM contact and deal records
 - **research** = enriching known contacts; **prospecting** = finding new leads
-- **outreach** = drafting emails; **meetings** = calendar and meeting prep`;
+- **outreach** = drafting emails; **meetings** = calendar and meeting prep
+- IMPORTANT: "update my goal", "set my meetings target", "change my revenue target", "what are my monthly goals", "update dashboard goals" → ALWAYS route to **pipeline** (not crm_ops). These update personal KPI targets, NOT CRM records.`;
 
 async function classifyWithClaude(
   message: string,
   anthropic: Anthropic,
   model: string,
-  enabledAgents: AgentName[]
+  enabledAgents: AgentName[],
+  recentContext?: string
 ): Promise<IntentClassification | null> {
   try {
+    const contextSection = recentContext
+      ? `\n\nRecent conversation context (use this to understand follow-up messages — the user may be continuing a prior topic):\n${recentContext}`
+      : '';
     const response = await anthropic.messages.create({
       model,
       max_tokens: 200,
-      system: CLASSIFICATION_PROMPT + `\n\nEnabled agents: ${enabledAgents.join(', ')}`,
+      system: CLASSIFICATION_PROMPT + contextSection + `\n\nEnabled agents: ${enabledAgents.join(', ')}`,
       messages: [{ role: 'user', content: message }],
     });
 
@@ -326,7 +338,8 @@ async function classifyWithClaude(
 export async function classifyIntent(
   message: string,
   config: AgentTeamConfig,
-  anthropic: Anthropic
+  anthropic: Anthropic,
+  recentContext?: string
 ): Promise<IntentClassification | null> {
   // Get enabled agents
   const enabledAgents = config.enabled_agents.filter(
@@ -346,10 +359,10 @@ export async function classifyIntent(
   // Step 1: Keyword pre-filter
   const keywordMatches = keywordPreFilter(message);
 
-  // No keywords matched — use Claude for classification
+  // No keywords matched — use Claude for classification (pass recentContext so follow-ups are understood)
   if (keywordMatches.length === 0) {
     return await classifyWithClaude(
-      message, anthropic, config.orchestrator_model, enabledAgents
+      message, anthropic, config.orchestrator_model, enabledAgents, recentContext
     );
   }
 
@@ -370,7 +383,7 @@ export async function classifyIntent(
   // Multiple agents matched or low confidence — use Claude for disambiguation
   if (keywordMatches.length > 1 || keywordMatches[0].score < 3) {
     return await classifyWithClaude(
-      message, anthropic, config.orchestrator_model, enabledAgents
+      message, anthropic, config.orchestrator_model, enabledAgents, recentContext
     );
   }
 

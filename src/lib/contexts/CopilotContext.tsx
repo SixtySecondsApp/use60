@@ -1307,7 +1307,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
             const userMsg: AutonomousChatMessage = {
               id: `msg-${Date.now()}-user`,
               role: 'user',
-              content: message,
+              content: enrichedMessage, // use enrichedMessage to preserve @mention entity context
               timestamp: new Date(),
             };
             const assistantMsg: AutonomousChatMessage = {
@@ -1335,7 +1335,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
             const userMsg: AutonomousChatMessage = {
               id: `msg-${Date.now()}-user`,
               role: 'user',
-              content: message,
+              content: enrichedMessage, // use enrichedMessage to preserve @mention entity context
               timestamp: new Date(),
             };
             const assistantMsg: AutonomousChatMessage = {

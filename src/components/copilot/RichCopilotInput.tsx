@@ -430,7 +430,7 @@ export const RichCopilotInput = forwardRef<RichCopilotInputHandle, RichCopilotIn
     // ---------------------------------------------------------------------------
 
     return (
-      <div className="relative">
+      <div className="relative flex-1 min-w-0">
         <div
           ref={editorRef}
           contentEditable={!disabled}
@@ -443,7 +443,7 @@ export const RichCopilotInput = forwardRef<RichCopilotInputHandle, RichCopilotIn
           onKeyDown={handleKeyDownInternal}
           onPaste={handlePaste}
           className={cn(
-            'flex-1 bg-transparent resize-none text-sm text-gray-100 placeholder-gray-500 focus:outline-none max-h-32 overflow-y-auto whitespace-pre-wrap break-words',
+            'w-full bg-transparent resize-none text-sm text-gray-100 placeholder-gray-500 focus:outline-none max-h-32 overflow-y-auto whitespace-pre-wrap break-words',
             'min-h-[24px]',
             !hasContent && 'empty:before:content-[attr(aria-placeholder)] empty:before:text-gray-500',
             disabled && 'opacity-60 cursor-not-allowed',

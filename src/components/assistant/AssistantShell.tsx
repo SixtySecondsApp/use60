@@ -350,9 +350,7 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
     }
   };
 
-  const shellClass = useMemo(() => {
-    return mode === 'overlay' ? 'h-full' : 'h-full';
-  }, [mode]);
+  const shellClass = 'h-full';
 
   const quickActions = useMemo(() => {
     return [
@@ -448,7 +446,6 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
 
       {isLoading && (
         <div className="mt-2 text-xs text-gray-500 flex items-center gap-2">
-          Working...{' '}
           <button className="underline hover:text-gray-300 transition-colors" onClick={cancelRequest}>
             Cancel
           </button>
@@ -504,12 +501,45 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       {/* Messages area (has messages) */}
       {!isEmpty && (
         <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 relative">
-          {messages.map((m) => (
-            <ChatMessage key={m.id} message={m} onActionClick={handleActionClick} />
-          ))}
+          {messages
+            // Hide empty assistant placeholder while the typing indicator is showing
+            .filter((m) => !(isLoading && m.role === 'assistant' && !m.content))
+            .map((m) => (
+              <ChatMessage key={m.id} message={m} onActionClick={handleActionClick} />
+            ))}
           {autonomousMode.activeAgents.length > 0 && (
             <AgentWorkingIndicator agents={autonomousMode.activeAgents} />
           )}
+
+          {/* Typing indicator — only shown before the assistant message has any content */}
+          <AnimatePresence>
+            {isLoading && (() => {
+              const lastMsg = messages[messages.length - 1];
+              return lastMsg.role === 'user' || !lastMsg.content;
+            })() && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.2 }}
+                className="flex gap-3 justify-start"
+              >
+                {/* Bot avatar — identical to ChatMessage */}
+                <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-gray-800 border border-gray-700 flex items-center justify-center">
+                  <img src="/favicon_0_64x64.png" alt="60" className="w-full h-full object-cover" />
+                </div>
+                {/* Typing bubble */}
+                <div className="bg-white dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200 dark:border-gray-700/60 rounded-xl px-5 py-4 shadow-lg dark:shadow-none">
+                  <div className="flex items-center gap-1.5 py-0.5">
+                    <span className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-400 animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-400 animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-400 animate-bounce" />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div ref={endRef} />
 
           {/* UX-003: Scroll-to-bottom floating button */}

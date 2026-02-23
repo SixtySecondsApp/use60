@@ -62,7 +62,7 @@ const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const MODEL = 'claude-sonnet-4-6-20250929';
+const MODEL = 'claude-sonnet-4-6';
 const MAX_ITERATIONS = 15;
 const MAX_TOKENS = 4096;
 
@@ -238,7 +238,12 @@ ACTION PARAMETERS:
 - meeting_analytics_sentiment_trends: { days? } - Get sentiment trend data over time
 - meeting_analytics_insights: { transcriptId } - Get detailed insights for a specific transcript (topics, sentiment, action items, key moments)
 
-Write actions (create_task, create_ops_table, update_crm, etc.) require params.confirm=true. search_leads_create_table and enrich_table_column do NOT require confirmation.`,
+## Sales Targets / Goals (Dashboard KPIs)
+Use these when the user mentions goals, targets, KPIs, monthly goals, or asks to set/update/view their sales targets. These update the Dashboard progress bars.
+- get_targets: {} - Get the user's current monthly goals (revenue, outbound activities, meetings, proposals)
+- upsert_target: { field: "revenue_target"|"outbound_target"|"meetings_target"|"proposal_target", value: <number>, confirm: true } - Set or update a monthly sales goal. FIELD MAPPING: "new business"/"revenue"/"won deals" → revenue_target | "outbound"/"calls"/"activities" → outbound_target | "meetings"/"demos"/"booked" → meetings_target | "proposals"/"quotes" → proposal_target. Does NOT require any contact lookup — operates directly on the user's personal targets. Requires confirm=true.
+
+Write actions (create_task, create_ops_table, update_crm, upsert_target, etc.) require params.confirm=true. search_leads_create_table and enrich_table_column do NOT require confirmation.`,
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -301,6 +306,9 @@ Write actions (create_task, create_ops_table, update_crm, etc.) require params.c
             'meeting_analytics_talk_time',
             'meeting_analytics_sentiment_trends',
             'meeting_analytics_insights',
+            // Sales Targets / Goals
+            'get_targets',
+            'upsert_target',
           ],
           description: 'The action to execute',
         },
@@ -457,23 +465,28 @@ The tool returns lightweight index records with basic fields and materialization
   // 8. materialize_contact - Pull full CRM record into local contacts table
   {
     name: 'materialize_contact',
-    description: `Materialize a CRM contact from the index into the full contacts table. This pulls the complete record from HubSpot/Attio and creates a local contact record.
+    description: `Materialize a CRM contact from the index into the full contacts table. Pulls the complete record from HubSpot/Attio and creates a local contact record.
 
 USE THIS TOOL when:
-- User wants to work with a specific contact found in search results
+- User wants to work with a specific contact found in search_crm_contacts results
 - User needs full contact details beyond the index fields
 - User wants to associate the contact with local deals/tasks/meetings
 
-For now, this is a placeholder - materialization will be implemented in Phase 3.`,
+Requires crm_source and crm_record_id from search_crm_contacts results.`,
     input_schema: {
       type: 'object' as const,
       properties: {
-        index_record_id: {
+        crm_source: {
           type: 'string',
-          description: 'The UUID from crm_contact_index to materialize',
+          enum: ['hubspot', 'attio'],
+          description: 'The CRM source — "hubspot" or "attio"',
+        },
+        crm_record_id: {
+          type: 'string',
+          description: 'The CRM record ID from search_crm_contacts results',
         },
       },
-      required: ['index_record_id'],
+      required: ['crm_source', 'crm_record_id'],
     },
   },
   // 9. search_documentation - Search platform documentation
@@ -965,6 +978,41 @@ const MIN_RECENT_MESSAGES = 10;
 function estimateTokens(text: string): number {
   if (!text) return 0;
   return Math.ceil(text.length / 4);
+}
+
+/**
+ * Load the last 2 conversation turns (up to 4 messages) for context injection.
+ * Used to help the classifier understand follow-up messages with no obvious keywords.
+ */
+async function loadRecentConversationContext(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<string> {
+  try {
+    const { data: conversation } = await supabase
+      .from('copilot_conversations')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('is_main', true)
+      .maybeSingle();
+
+    if (!conversation?.id) return '';
+
+    const { data: messages } = await supabase
+      .from('copilot_messages')
+      .select('role, content, created_at')
+      .eq('conversation_id', conversation.id)
+      .order('created_at', { ascending: false })
+      .limit(4);
+
+    if (!messages || messages.length === 0) return '';
+
+    return messages.reverse().map((m: { role: string; content: string }) =>
+      `${m.role}: ${String(m.content).slice(0, 400)}`
+    ).join('\n');
+  } catch {
+    return '';
+  }
 }
 
 async function handleCompactionIfNeeded(
@@ -1682,7 +1730,8 @@ async function handleMultiAgentRequest(
   orgId: string,
   writer: WritableStreamDefaultWriter,
   encoder: TextEncoder,
-  executionId: string | null
+  executionId: string | null,
+  recentContext?: string
 ): Promise<void> {
   const streamWriter: StreamWriter = {
     sendSSE: (event, data) => sendSSE(writer, encoder, event, data),
@@ -1708,7 +1757,7 @@ async function handleMultiAgentRequest(
     const result = await runSpecialist(
       agentConfig,
       message,
-      '', // No prior context for single agent
+      recentContext || '', // Pass conversation history so specialist understands follow-ups
       { anthropic, supabase, userId, orgId },
       streamWriter,
       executionId || undefined
@@ -1990,6 +2039,9 @@ serve(async (req: Request) => {
     let memoryContext = '';
     memoryContext = await buildContextWithMemories(supabase, userId, message);
 
+    // Load recent conversation turns so the classifier understands follow-up messages
+    const recentConversationContext = await loadRecentConversationContext(supabase, userId);
+
     // Trigger compaction check in background (non-blocking)
     handleCompactionIfNeeded(supabase, anthropic, userId, MODEL).catch((err) =>
       console.error('[copilot-autonomous] Background compaction error:', err)
@@ -2153,8 +2205,8 @@ serve(async (req: Request) => {
         console.log(`[copilot-autonomous] Budget exceeded: $${budgetCheck.todaySpend.toFixed(2)}/$${budgetCheck.budgetLimit.toFixed(2)}, falling back to single-agent`);
         // Fall through to single-agent path below
       } else {
-        // Attempt multi-agent classification
-        const classification = await classifyIntent(message, agentTeamConfig, anthropic);
+        // Attempt multi-agent classification (pass recent context so follow-ups are routed correctly)
+        const classification = await classifyIntent(message, agentTeamConfig, anthropic, recentConversationContext || undefined);
 
         if (classification && classification.agents.length > 0) {
           console.log(`[copilot-autonomous] Multi-agent: ${classification.agents.join(',')} via ${classification.strategy}`);
@@ -2181,7 +2233,8 @@ serve(async (req: Request) => {
                 resolvedOrgForConfig,
                 writer,
                 encoder,
-                executionId
+                executionId,
+                recentConversationContext || undefined
               );
             } catch (err) {
               const errorMsg = err instanceof Error ? err.message : String(err);
@@ -2247,7 +2300,9 @@ serve(async (req: Request) => {
 
             // Use streaming API for real-time token delivery
             // Force search_leads tool on first iteration for lead search queries
-            const forceToolChoice = (isLeadSearchQuery && iterations === 1)
+            // Guard: only force if the tool is actually in claudeTools (avoids Anthropic 400 errors)
+            const hasSearchLeads = claudeTools.some((t) => t.name === 'search_leads');
+            const forceToolChoice = (isLeadSearchQuery && iterations === 1 && hasSearchLeads)
               ? { type: 'tool' as const, name: 'search_leads' }
               : undefined;
             const stream = anthropic.messages.stream({

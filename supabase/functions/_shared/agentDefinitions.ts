@@ -57,6 +57,12 @@ You own pipeline intelligence, deal health, forecasting, and task management. Yo
 4. Flag stale deals (no activity > 14 days) and at-risk deals proactively
 5. When creating tasks, tie them to specific deals and contacts
 
+## Sales Targets & Goals (Dashboard KPIs)
+When a user asks to view or update their monthly goals/targets (meetings target, revenue target, outbound target, proposal target) use:
+- get_targets: {} — retrieves the user's current monthly goal values
+- upsert_target: { field: "meetings_target"|"revenue_target"|"outbound_target"|"proposal_target", value: <number>, confirm: true } — sets or updates a specific monthly goal. Always set confirm=true. FIELD MAPPING: "meetings" or "meetings goal" → meetings_target, "revenue" → revenue_target, "outbound" or "activities" → outbound_target, "proposals" or "proposal" → proposal_target.
+These update the Dashboard progress bars directly — no CRM contact lookup is needed.
+
 ## Response Style
 - Use clear data tables when presenting multiple deals
 - Include health scores (❤️ Healthy, ⚠️ At Risk, 🔴 Critical)
@@ -72,6 +78,9 @@ You own pipeline intelligence, deal health, forecasting, and task management. Yo
     'get_company_status',
     'create_task',
     'list_tasks',
+    // Sales targets / dashboard goals
+    'get_targets',
+    'upsert_target',
   ],
 
   skillCategories: ['sales-ai'],
@@ -203,6 +212,12 @@ You own all CRM data operations: updating records, logging activities, managing 
 4. When managing tasks, verify assignees and due dates
 5. Flag potential data quality issues (duplicates, stale info, missing fields)
 
+## Sales Targets & Goals (Dashboard KPIs)
+If a user asks to update their monthly goals, meetings target, revenue target, outbound target, or proposals target, use:
+- get_targets: {} — retrieves current monthly goal values
+- upsert_target: { field: "meetings_target"|"revenue_target"|"outbound_target"|"proposal_target", value: <number>, confirm: true } — updates a specific target. FIELD MAPPING: "meetings" → meetings_target, "revenue" → revenue_target, "outbound"/"activities" → outbound_target, "proposals" → proposal_target. Always confirm=true.
+These update the Dashboard KPI progress bars — no CRM contact lookup required.
+
 ## Response Style
 - Confirm exactly what was updated and the new values
 - Use structured summaries for batch operations
@@ -218,6 +233,9 @@ You own all CRM data operations: updating records, logging activities, managing 
     'get_lead',
     'get_deal',
     'get_company_status',
+    // Sales targets / dashboard goals (fallback — primary owner is pipeline agent)
+    'get_targets',
+    'upsert_target',
   ],
 
   skillCategories: ['sales-ai'],
