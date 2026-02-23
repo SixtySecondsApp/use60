@@ -5,7 +5,7 @@
 import { getRailwayDb } from '../db.ts';
 import { jsonResponse, successResponse, errorResponse } from '../helpers.ts';
 
-export async function handleGetTranscripts(req: Request): Promise<Response> {
+export async function handleGetTranscripts(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
   const offset = parseInt(url.searchParams.get('offset') || '0');
@@ -19,11 +19,12 @@ export async function handleGetTranscripts(req: Request): Promise<Response> {
   const safeOrderBy = validCols.includes(orderBy) ? orderBy : 'created_at';
   const safeOrder = order === 'ASC' ? 'ASC' : 'DESC';
 
-  let whereClause = '';
+  let whereClause = 'WHERE t.org_id = $1';
+  const params: unknown[] = [orgId];
   if (demoOnly) {
-    whereClause = 'WHERE t.is_demo = TRUE';
+    whereClause += ' AND t.is_demo = TRUE';
   } else if (!includeDemo) {
-    whereClause = 'WHERE (t.is_demo = FALSE OR t.is_demo IS NULL)';
+    whereClause += ' AND (t.is_demo = FALSE OR t.is_demo IS NULL)';
   }
 
   const transcripts = await db.unsafe(
@@ -35,13 +36,13 @@ export async function handleGetTranscripts(req: Request): Promise<Response> {
             t.demo_session_id as "demoSessionId"
      FROM transcripts t ${whereClause}
      ORDER BY t.${safeOrderBy} ${safeOrder}
-     LIMIT $1 OFFSET $2`,
-    [limit, offset]
+     LIMIT $2 OFFSET $3`,
+    [...params, limit, offset]
   );
 
   const countResult = await db.unsafe(
     `SELECT COUNT(*)::text as count FROM transcripts t ${whereClause}`,
-    []
+    params
   );
   const total = parseInt((countResult[0] as Record<string, unknown>)?.count as string || '0', 10);
 
@@ -60,7 +61,7 @@ export async function handleGetTranscripts(req: Request): Promise<Response> {
   );
 }
 
-export async function handleGetTranscript(id: string, req: Request): Promise<Response> {
+export async function handleGetTranscript(id: string, req: Request, orgId: string): Promise<Response> {
   const db = getRailwayDb();
   const rows = await db.unsafe(
     `SELECT t.*,
@@ -71,8 +72,8 @@ export async function handleGetTranscript(id: string, req: Request): Promise<Res
       (SELECT COUNT(*) FROM qa_pairs WHERE transcript_id = t.id)::int as qa_pair_count,
       EXISTS(SELECT 1 FROM summaries WHERE transcript_id = t.id) as has_summary,
       EXISTS(SELECT 1 FROM sentiment_analysis WHERE transcript_id = t.id) as has_sentiment
-     FROM transcripts t WHERE t.id = $1`,
-    [id]
+     FROM transcripts t WHERE t.id = $1 AND t.org_id = $2`,
+    [id, orgId]
   );
 
   const row = Array.isArray(rows) ? rows[0] as Record<string, unknown> : null;

@@ -93,7 +93,7 @@ interface SearchResult {
 // Main handler
 // ---------------------------------------------------------------------------
 
-export async function handleAsk(req: Request): Promise<Response> {
+export async function handleAsk(req: Request, orgId: string): Promise<Response> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -125,14 +125,14 @@ export async function handleAsk(req: Request): Promise<Response> {
     const isAggregateQuestion = aggregateKeywords.some(kw => questionLower.includes(kw));
 
     // ============================================
-    // STEP 1: Get allowed transcripts from DB
+    // STEP 1: Get allowed transcripts from DB (org-scoped)
     // ============================================
     let transcriptSql = `
       SELECT id, title, full_text, created_at, is_demo
       FROM transcripts
-      WHERE 1=1
+      WHERE org_id = $1
     `;
-    const transcriptParams: unknown[] = [];
+    const transcriptParams: unknown[] = [orgId];
 
     if (demoOnly) {
       transcriptSql += ' AND is_demo = true';

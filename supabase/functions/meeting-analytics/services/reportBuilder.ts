@@ -114,9 +114,10 @@ function generateHighlights(
 
 export async function buildDailyReport(
   req: Request,
+  orgId: string,
   _options: { includeDemo?: boolean; demoOnly?: boolean } = {}
 ): Promise<Report> {
-  const metrics = await getDashboardMetricsData(req);
+  const metrics = await getDashboardMetricsData(req, orgId);
   const highlights = generateHighlights(metrics, 'daily');
 
   const now = new Date();
@@ -137,9 +138,10 @@ export async function buildDailyReport(
 
 export async function buildWeeklyReport(
   req: Request,
+  orgId: string,
   _options: { includeDemo?: boolean; demoOnly?: boolean } = {}
 ): Promise<Report> {
-  const metrics = await getDashboardMetricsData(req);
+  const metrics = await getDashboardMetricsData(req, orgId);
   const highlights = generateHighlights(metrics, 'weekly');
 
   const startDate = getLastWeekStart();

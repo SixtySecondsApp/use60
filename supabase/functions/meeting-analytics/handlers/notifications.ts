@@ -8,15 +8,15 @@ import { successResponse, errorResponse } from '../helpers.ts';
 
 // ---------- Settings CRUD ----------
 
-export async function handleGetNotificationSettings(req: Request): Promise<Response> {
+export async function handleGetNotificationSettings(req: Request, orgId: string): Promise<Response> {
   const db = getRailwayDb();
   const rows = await db.unsafe(
     `SELECT id, setting_type as "settingType", channel, config,
             schedule_type as "scheduleType", schedule_time as "scheduleTime",
             schedule_day as "scheduleDay", enabled,
             created_at as "createdAt", updated_at as "updatedAt"
-     FROM notification_settings ORDER BY created_at DESC`,
-    []
+     FROM notification_settings WHERE org_id IS NULL OR org_id = $1 ORDER BY created_at DESC`,
+    [orgId]
   );
 
   const data = rows.map((r: Record<string, unknown>) => ({
@@ -29,7 +29,7 @@ export async function handleGetNotificationSettings(req: Request): Promise<Respo
   return successResponse(data, req);
 }
 
-export async function handleCreateNotificationSetting(req: Request): Promise<Response> {
+export async function handleCreateNotificationSetting(req: Request, orgId: string): Promise<Response> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -65,13 +65,14 @@ export async function handleCreateNotificationSetting(req: Request): Promise<Res
 
   const db = getRailwayDb();
   const rows = await db.unsafe(
-    `INSERT INTO notification_settings (setting_type, channel, config, schedule_type, schedule_time, schedule_day, enabled)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO notification_settings (org_id, setting_type, channel, config, schedule_type, schedule_time, schedule_day, enabled)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id, setting_type as "settingType", channel, config,
                schedule_type as "scheduleType", schedule_time as "scheduleTime",
                schedule_day as "scheduleDay", enabled,
                created_at as "createdAt", updated_at as "updatedAt"`,
     [
+      orgId,
       settingType,
       channel,
       JSON.stringify(body.config || {}),
@@ -91,7 +92,7 @@ export async function handleCreateNotificationSetting(req: Request): Promise<Res
   }, req);
 }
 
-export async function handleUpdateNotificationSetting(id: string, req: Request): Promise<Response> {
+export async function handleUpdateNotificationSetting(id: string, req: Request, orgId: string): Promise<Response> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -137,12 +138,12 @@ export async function handleUpdateNotificationSetting(id: string, req: Request):
   }
 
   updates.push(`updated_at = NOW()`);
-  values.push(id);
+  values.push(id, orgId);
 
   const db = getRailwayDb();
   const rows = await db.unsafe(
     `UPDATE notification_settings SET ${updates.join(', ')}
-     WHERE id = $${paramIndex}
+     WHERE id = $${paramIndex} AND (org_id IS NULL OR org_id = $${paramIndex + 1})
      RETURNING id, setting_type as "settingType", channel, config,
                schedule_type as "scheduleType", schedule_time as "scheduleTime",
                schedule_day as "scheduleDay", enabled,
@@ -163,11 +164,11 @@ export async function handleUpdateNotificationSetting(id: string, req: Request):
   }, req);
 }
 
-export async function handleDeleteNotificationSetting(id: string, req: Request): Promise<Response> {
+export async function handleDeleteNotificationSetting(id: string, req: Request, orgId: string): Promise<Response> {
   const db = getRailwayDb();
   const rows = await db.unsafe(
-    `DELETE FROM notification_settings WHERE id = $1 RETURNING id`,
-    [id]
+    `DELETE FROM notification_settings WHERE id = $1 AND (org_id IS NULL OR org_id = $2) RETURNING id`,
+    [id, orgId]
   );
 
   if (rows.length === 0) {

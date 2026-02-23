@@ -15,7 +15,7 @@ import {
 
 // ---------- Report generation ----------
 
-export async function handleGenerateReport(req: Request): Promise<Response> {
+export async function handleGenerateReport(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
   const type = url.searchParams.get('type') || 'daily';
   const includeDemo = url.searchParams.get('includeDemo') !== 'false';
@@ -26,13 +26,13 @@ export async function handleGenerateReport(req: Request): Promise<Response> {
   }
 
   const report = type === 'daily'
-    ? await buildDailyReport(req, { includeDemo, demoOnly })
-    : await buildWeeklyReport(req, { includeDemo, demoOnly });
+    ? await buildDailyReport(req, orgId, { includeDemo, demoOnly })
+    : await buildWeeklyReport(req, orgId, { includeDemo, demoOnly });
 
   return successResponse(report, req);
 }
 
-export async function handlePreviewReport(req: Request): Promise<Response> {
+export async function handlePreviewReport(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
   const type = url.searchParams.get('type') || 'daily';
   const format = url.searchParams.get('format') || 'json';
@@ -44,8 +44,8 @@ export async function handlePreviewReport(req: Request): Promise<Response> {
   }
 
   const report = type === 'daily'
-    ? await buildDailyReport(req, { includeDemo, demoOnly })
-    : await buildWeeklyReport(req, { includeDemo, demoOnly });
+    ? await buildDailyReport(req, orgId, { includeDemo, demoOnly })
+    : await buildWeeklyReport(req, orgId, { includeDemo, demoOnly });
 
   if (format === 'slack') {
     return successResponse(formatForSlack(report), req);
@@ -67,7 +67,7 @@ export async function handlePreviewReport(req: Request): Promise<Response> {
 
 // ---------- Send report ----------
 
-export async function handleSendReport(req: Request): Promise<Response> {
+export async function handleSendReport(req: Request, orgId: string): Promise<Response> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -83,16 +83,16 @@ export async function handleSendReport(req: Request): Promise<Response> {
   }
 
   const report = type === 'daily'
-    ? await buildDailyReport(req)
-    : await buildWeeklyReport(req);
+    ? await buildDailyReport(req, orgId)
+    : await buildWeeklyReport(req, orgId);
 
   const db = getRailwayDb();
   const results: Array<{ channel: string; success: boolean; error?: string }> = [];
 
   if (settingId) {
     const settingRows = await db.unsafe(
-      `SELECT id, setting_type, channel, config FROM notification_settings WHERE id = $1`,
-      [settingId]
+      `SELECT id, setting_type, channel, config FROM notification_settings WHERE id = $1 AND (org_id IS NULL OR org_id = $2)`,
+      [settingId, orgId]
     );
     if (settingRows.length === 0) {
       return errorResponse('Notification setting not found', 404, req);
@@ -101,17 +101,17 @@ export async function handleSendReport(req: Request): Promise<Response> {
     const result = await sendToChannel(report, setting);
     results.push(result);
 
-    await recordHistory(db, report.type, setting.setting_type as string, setting.channel as string, result);
+    await recordHistory(db, orgId, report.type, setting.setting_type as string, setting.channel as string, result);
   } else {
     const settings = await db.unsafe(
-      `SELECT id, setting_type, channel, config FROM notification_settings WHERE enabled = true`,
-      []
+      `SELECT id, setting_type, channel, config FROM notification_settings WHERE enabled = true AND (org_id IS NULL OR org_id = $1)`,
+      [orgId]
     );
     for (const setting of settings) {
       const s = setting as Record<string, unknown>;
       const result = await sendToChannel(report, s);
       results.push(result);
-      await recordHistory(db, report.type, s.setting_type as string, s.channel as string, result);
+      await recordHistory(db, orgId, report.type, s.setting_type as string, s.channel as string, result);
     }
   }
 
@@ -153,6 +153,7 @@ async function sendToChannel(
 
 async function recordHistory(
   db: ReturnType<typeof getRailwayDb>,
+  orgId: string,
   reportType: string,
   channelType: string,
   channelTarget: string,
@@ -160,9 +161,9 @@ async function recordHistory(
 ) {
   try {
     await db.unsafe(
-      `INSERT INTO report_history (report_type, channel_type, channel_target, status, error_message)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [reportType, channelType, channelTarget, result.success ? 'sent' : 'failed', result.error || null]
+      `INSERT INTO report_history (org_id, report_type, channel_type, channel_target, status, error_message)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [orgId, reportType, channelType, channelTarget, result.success ? 'sent' : 'failed', result.error || null]
     );
   } catch (err) {
     console.error('[reports] Failed to record history:', err);
@@ -171,7 +172,7 @@ async function recordHistory(
 
 // ---------- Report history ----------
 
-export async function handleGetReportHistory(req: Request): Promise<Response> {
+export async function handleGetReportHistory(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
 
@@ -180,8 +181,8 @@ export async function handleGetReportHistory(req: Request): Promise<Response> {
     `SELECT id, report_type as "reportType", channel_type as "channelType",
             channel_target as "channelTarget", status, error_message as "errorMessage",
             report_data as "reportData", sent_at as "sentAt"
-     FROM report_history ORDER BY sent_at DESC LIMIT $1`,
-    [limit]
+     FROM report_history WHERE org_id IS NULL OR org_id = $1 ORDER BY sent_at DESC LIMIT $2`,
+    [orgId, limit]
   );
 
   const data = rows.map((r: Record<string, unknown>) => ({
@@ -192,14 +193,14 @@ export async function handleGetReportHistory(req: Request): Promise<Response> {
   return successResponse(data, req);
 }
 
-export async function handleGetReport(id: string, req: Request): Promise<Response> {
+export async function handleGetReport(id: string, req: Request, orgId: string): Promise<Response> {
   const db = getRailwayDb();
   const rows = await db.unsafe(
     `SELECT id, report_type as "reportType", channel_type as "channelType",
             channel_target as "channelTarget", status, error_message as "errorMessage",
             report_data as "reportData", sent_at as "sentAt"
-     FROM report_history WHERE id = $1`,
-    [id]
+     FROM report_history WHERE id = $1 AND (org_id IS NULL OR org_id = $2)`,
+    [id, orgId]
   );
 
   if (rows.length === 0) {

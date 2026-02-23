@@ -3,8 +3,11 @@
  *
  * Thin HTTP client wrapping the meeting-translation REST API on Railway.
  * All data stays on the Railway PostgreSQL database — no Supabase migration needed.
+ * Sends user JWT + X-Org-Id for org-scoped multi-tenant access.
  */
 
+import { getSupabaseAuthToken } from '@/lib/supabase/clientV2';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import type {
   MaTranscript,
   MaTranscriptWithStats,
@@ -41,21 +44,31 @@ const EDGE_FUNCTION_URL = SUPABASE_URL ? `${SUPABASE_URL.replace(/\/$/, '')}/fun
 const BASE_URL =
   import.meta.env.VITE_MEETING_ANALYTICS_API_URL || EDGE_FUNCTION_URL || 'http://localhost:3000';
 
-function getHeaders(): Record<string, string> {
+async function getHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (BASE_URL.includes('/functions/v1/') && import.meta.env.VITE_SUPABASE_ANON_KEY) {
-    headers['Authorization'] = `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`;
-    headers['apikey'] = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (BASE_URL.includes('/functions/v1/')) {
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (anonKey) headers['apikey'] = anonKey;
+
+    const token = await getSupabaseAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const activeOrgId = useOrgStore.getState().activeOrgId;
+    if (activeOrgId) {
+      headers['X-Org-Id'] = activeOrgId;
+    }
   }
   return headers;
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${path}`;
+  const baseHeaders = await getHeaders();
   let res: Response;
   try {
     res = await fetch(url, {
-      headers: { ...getHeaders(), ...(options?.headers as Record<string, string>) },
+      headers: { ...baseHeaders, ...(options?.headers as Record<string, string>) },
       ...options,
     });
   } catch (err) {

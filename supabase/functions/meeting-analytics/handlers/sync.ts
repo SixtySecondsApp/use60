@@ -1,8 +1,10 @@
 /**
  * Sync handler: receives Supabase meeting data via pg_net trigger,
  * parses transcript, and upserts to Railway PostgreSQL with embeddings.
+ * Resolves org_id from owner_user_id via organization_memberships.
  */
 
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
 import { getRailwayDb } from '../db.ts';
 import { successResponse, errorResponse } from '../helpers.ts';
 
@@ -139,6 +141,7 @@ interface MeetingRecord {
   transcript_text?: string;
   meeting_start?: string;
   duration_minutes?: number;
+  owner_user_id?: string;
 }
 
 interface SyncPayload {
@@ -168,6 +171,23 @@ export async function handleSyncMeeting(req: Request): Promise<Response> {
 
   if (!transcriptText) {
     return successResponse({ message: 'No transcript_text, skipping', meetingId }, req);
+  }
+
+  // Resolve org_id from owner_user_id
+  let orgId: string | null = null;
+  if (record.owner_user_id) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    if (supabaseUrl && serviceRoleKey) {
+      const supabase = createClient(supabaseUrl, serviceRoleKey);
+      const { data: membership } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', record.owner_user_id)
+        .limit(1)
+        .maybeSingle();
+      orgId = membership?.org_id ?? null;
+    }
   }
 
   const db = getRailwayDb();
@@ -201,10 +221,11 @@ export async function handleSyncMeeting(req: Request): Promise<Response> {
       : null;
 
     const insertResult = await db.unsafe<{ id: string }>(
-      `INSERT INTO transcripts (external_id, source_url, title, full_text, word_count, audio_duration, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::timestamptz, NOW()))
+      `INSERT INTO transcripts (org_id, external_id, source_url, title, full_text, word_count, audio_duration, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()))
        RETURNING id`,
       [
+        orgId,
         meetingId,
         `supabase://meetings/${meetingId}`,
         title,

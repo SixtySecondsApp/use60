@@ -24,7 +24,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
   return json.data?.[0]?.embedding ?? [];
 }
 
-export async function handleSearch(req: Request): Promise<Response> {
+export async function handleSearch(req: Request, orgId: string): Promise<Response> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -51,12 +51,12 @@ export async function handleSearch(req: Request): Promise<Response> {
            t.title as "transcriptTitle",
            1 - (ts.embedding <=> $1::vector) AS similarity
     FROM transcript_segments ts
-    JOIN transcripts t ON t.id = ts.transcript_id
-    WHERE ts.embedding IS NOT NULL AND 1 - (ts.embedding <=> $1::vector) >= $2
+    JOIN transcripts t ON t.id = ts.transcript_id AND t.org_id = $2
+    WHERE ts.embedding IS NOT NULL AND 1 - (ts.embedding <=> $1::vector) >= $3
   `;
-  const params: unknown[] = [embeddingStr, threshold];
+  const params: unknown[] = [embeddingStr, orgId, threshold];
   if (transcriptId) {
-    searchSql += ' AND ts.transcript_id = $3';
+    searchSql += ' AND ts.transcript_id = $4';
     params.push(transcriptId);
   }
   searchSql += ` ORDER BY ts.embedding <=> $1::vector LIMIT $${params.length + 1}`;
@@ -117,7 +117,7 @@ export async function handleSearch(req: Request): Promise<Response> {
   );
 }
 
-export async function handleSearchSimilar(req: Request): Promise<Response> {
+export async function handleSearchSimilar(req: Request, orgId: string): Promise<Response> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -133,9 +133,11 @@ export async function handleSearchSimilar(req: Request): Promise<Response> {
 
   const db = getRailwayDb();
   const segRows = await db.unsafe(
-    `SELECT id, transcript_id, segment_index, text, start_time, end_time, word_count, avg_confidence
-     FROM transcript_segments WHERE id = $1`,
-    [segmentId]
+    `SELECT ts.id, ts.transcript_id, ts.segment_index, ts.text, ts.start_time, ts.end_time, ts.word_count, ts.avg_confidence
+     FROM transcript_segments ts
+     JOIN transcripts t ON t.id = ts.transcript_id AND t.org_id = $2
+     WHERE ts.id = $1`,
+    [segmentId, orgId]
   );
   const seg = segRows[0] as Record<string, unknown> | undefined;
   if (!seg) return errorResponse(`Segment not found: ${segmentId}`, 404, req);
@@ -152,12 +154,12 @@ export async function handleSearchSimilar(req: Request): Promise<Response> {
            t.title as "transcriptTitle",
            1 - (ts.embedding <=> $1::vector) AS similarity
     FROM transcript_segments ts
-    JOIN transcripts t ON t.id = ts.transcript_id
+    JOIN transcripts t ON t.id = ts.transcript_id AND t.org_id = $4
     WHERE ts.embedding IS NOT NULL AND ts.id != $2 AND 1 - (ts.embedding <=> $1::vector) >= $3
   `;
-  const params: unknown[] = [embeddingStr, segmentId, threshold];
+  const params: unknown[] = [embeddingStr, segmentId, threshold, orgId];
   if (excludeSameTranscript) {
-    searchSql += ' AND ts.transcript_id != $4';
+    searchSql += ' AND ts.transcript_id != $5';
     params.push(tid);
   }
   searchSql += ` ORDER BY ts.embedding <=> $1::vector LIMIT $${params.length + 1}`;
@@ -185,7 +187,7 @@ export async function handleSearchSimilar(req: Request): Promise<Response> {
   return successResponse({ segmentId, similarSegments: results, count: results.length }, req);
 }
 
-export async function handleSearchMulti(req: Request): Promise<Response> {
+export async function handleSearchMulti(req: Request, orgId: string): Promise<Response> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -219,13 +221,13 @@ export async function handleSearchMulti(req: Request): Promise<Response> {
                 t.title as "transcriptTitle",
                 1 - (ts.embedding <=> $1::vector) AS similarity
          FROM transcript_segments ts
-         JOIN transcripts t ON t.id = ts.transcript_id
+         JOIN transcripts t ON t.id = ts.transcript_id AND t.org_id = $3
          WHERE ts.embedding IS NOT NULL
            AND ts.transcript_id = $2
-           AND 1 - (ts.embedding <=> $1::vector) >= $3
+           AND 1 - (ts.embedding <=> $1::vector) >= $4
          ORDER BY ts.embedding <=> $1::vector
-         LIMIT $4`,
-        [embeddingStr, tid, threshold, limitPerTranscript]
+         LIMIT $5`,
+        [embeddingStr, tid, orgId, threshold, limitPerTranscript]
       );
       resultsByTranscript[tid] = rows.map((r: Record<string, unknown>) => ({
         segment: {

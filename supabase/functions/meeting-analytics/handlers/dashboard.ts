@@ -5,7 +5,7 @@
 import { getRailwayDb } from '../db.ts';
 import { jsonResponse, successResponse, errorResponse } from '../helpers.ts';
 
-export async function handleGetDashboardMetrics(req: Request): Promise<Response> {
+export async function handleGetDashboardMetrics(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
   const includeDemo = url.searchParams.get('includeDemo') !== 'false';
   const demoOnly = url.searchParams.get('demoOnly') === 'true';
@@ -15,6 +15,8 @@ export async function handleGetDashboardMetrics(req: Request): Promise<Response>
     : includeDemo
       ? ''
       : 'AND (t.is_demo = false OR t.is_demo IS NULL)';
+  const orgCondition = 'AND t.org_id = $1';
+  const countOrgCond = 'AND org_id = $1';
 
   const db = getRailwayDb();
 
@@ -25,30 +27,30 @@ export async function handleGetDashboardMetrics(req: Request): Promise<Response>
 
   const [transcripts, actionResult, weeklyResult, weeklyTranscripts] = await Promise.all([
     db.unsafe(
-      `SELECT t.id, t.title, t.full_text, t.created_at FROM transcripts t WHERE 1=1 ${transcriptDemoCond} ORDER BY t.created_at DESC LIMIT 100`,
-      []
+      `SELECT t.id, t.title, t.full_text, t.created_at FROM transcripts t WHERE 1=1 ${orgCondition} ${transcriptDemoCond} ORDER BY t.created_at DESC LIMIT 100`,
+      [orgId]
     ),
     db.unsafe(
       `SELECT
         COUNT(*)::text as total,
         COUNT(*) FILTER (WHERE ai.status = 'completed')::text as completed,
         COUNT(*) FILTER (WHERE ai.status = 'pending')::text as pending
-       FROM action_items ai JOIN transcripts t ON ai.transcript_id = t.id WHERE 1=1 ${transcriptDemoCond}`,
-      []
+       FROM action_items ai JOIN transcripts t ON ai.transcript_id = t.id WHERE 1=1 ${orgCondition} ${transcriptDemoCond}`,
+      [orgId]
     ),
     db.unsafe(
       `SELECT
-        COUNT(*) FILTER (WHERE ai.status = 'completed' AND ai.created_at >= $1)::text as completed_this_week,
-        COUNT(*) FILTER (WHERE ai.created_at >= $1)::text as created_this_week
-       FROM action_items ai JOIN transcripts t ON ai.transcript_id = t.id WHERE 1=1 ${transcriptDemoCond}`,
-      [oneWeekAgo]
+        COUNT(*) FILTER (WHERE ai.status = 'completed' AND ai.created_at >= $2)::text as completed_this_week,
+        COUNT(*) FILTER (WHERE ai.created_at >= $2)::text as created_this_week
+       FROM action_items ai JOIN transcripts t ON ai.transcript_id = t.id WHERE 1=1 ${orgCondition} ${transcriptDemoCond}`,
+      [orgId, oneWeekAgo]
     ),
     db.unsafe(
       `SELECT
-        COUNT(*) FILTER (WHERE created_at >= $1)::text as this_week,
-        COUNT(*) FILTER (WHERE created_at >= $2 AND created_at < $1)::text as last_week
-       FROM transcripts WHERE 1=1 ${countDemoCond}`,
-      [oneWeekAgo, twoWeeksAgo]
+        COUNT(*) FILTER (WHERE created_at >= $2)::text as this_week,
+        COUNT(*) FILTER (WHERE created_at >= $3 AND created_at < $2)::text as last_week
+       FROM transcripts WHERE 1=1 ${countOrgCond} ${countDemoCond}`,
+      [orgId, oneWeekAgo, twoWeeksAgo]
     ),
   ]);
 
@@ -283,22 +285,22 @@ export async function handleGetDashboardMetrics(req: Request): Promise<Response>
  * Returns just the metrics object (used internally by reports handler).
  * Avoids re-parsing the JSON response.
  */
-export async function getDashboardMetricsData(req: Request): Promise<Record<string, unknown>> {
-  const res = await handleGetDashboardMetrics(req);
+export async function getDashboardMetricsData(req: Request, orgId: string): Promise<Record<string, unknown>> {
+  const res = await handleGetDashboardMetrics(req, orgId);
   const json = await res.json();
   return json?.data ?? {};
 }
 
-export async function handleGetSalesPerformance(req: Request): Promise<Response> {
+export async function handleGetSalesPerformance(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
   const includeDemo = url.searchParams.get('includeDemo') !== 'false';
   const demoOnly = url.searchParams.get('demoOnly') === 'true';
 
-  const demoCondition = demoOnly ? 'WHERE t.is_demo = TRUE' : includeDemo ? '' : 'WHERE (t.is_demo = FALSE OR t.is_demo IS NULL)';
+  const demoCondition = demoOnly ? 'AND t.is_demo = TRUE' : includeDemo ? '' : 'AND (t.is_demo = FALSE OR t.is_demo IS NULL)';
   const db = getRailwayDb();
   const transcripts = await db.unsafe(
-    `SELECT t.id, t.title, t.created_at FROM transcripts t ${demoCondition} ORDER BY t.created_at DESC LIMIT 100`,
-    []
+    `SELECT t.id, t.title, t.created_at FROM transcripts t WHERE t.org_id = $1 ${demoCondition} ORDER BY t.created_at DESC LIMIT 100`,
+    [orgId]
   );
 
   const list = transcripts;
