@@ -206,6 +206,15 @@ export async function createInvitation({
 
         return { data: invitationData, error: null };
       }
+
+      // If expired, clean up the old record before creating a new one
+      if (existingInvite && existingExpiry <= now) {
+        console.log('[InvitationService] Cleaning up expired invitation:', existingInvite.id);
+        await supabase
+          .from('organization_invitations' as any)
+          .delete()
+          .eq('id', existingInvite.id);
+      }
       // If expired, fall through to create new one
     }
 

@@ -219,41 +219,46 @@ async function handleEvent(
 
         if (orgSettings && orgSettings.length > 0) {
           for (const org of orgSettings) {
-            // Try to auto-match by email
+            // Try to auto-match by email if present; always create the mapping record.
+            let sixtyUserId: string | null = null;
+            let isAutoMatched = false;
+
             if (user.profile?.email) {
               const { data: sixtyUser } = await supabase
                 .from('profiles')
                 .select('id, email')
                 .eq('email', user.profile.email)
                 .single();
+              sixtyUserId = sixtyUser?.id || null;
+              isAutoMatched = !!sixtyUser;
+            }
 
-              const { error: upsertError } = await supabase.from('slack_user_mappings').upsert({
-                org_id: org.org_id,
-                slack_user_id: user.id,
-                slack_username: user.name,
-                slack_display_name: user.profile?.display_name || user.real_name,
-                slack_email: user.profile?.email,
-                slack_avatar_url: user.profile?.image_72,
-                sixty_user_id: sixtyUser?.id || null,
-                is_auto_matched: !!sixtyUser,
-              }, {
-                onConflict: 'org_id,slack_user_id',
+            const { error: upsertError } = await supabase.from('slack_user_mappings').upsert({
+              org_id: org.org_id,
+              slack_user_id: user.id,
+              slack_username: user.name,
+              slack_display_name: user.profile?.display_name || user.real_name,
+              slack_email: user.profile?.email || null,
+              slack_avatar_url: user.profile?.image_72,
+              sixty_user_id: sixtyUserId,
+              is_auto_matched: isAutoMatched,
+            }, {
+              onConflict: 'org_id,slack_user_id',
+            });
+
+            if (!upsertError) {
+              await logSyncOperation(supabase, {
+                orgId: org.org_id,
+                operation: 'webhook',
+                direction: 'inbound',
+                entityType: 'user',
+                entityId: user.id,
+                entityName: `${user.profile?.display_name || user.real_name || user.name} (${user.profile?.email || 'no email'})`,
+                metadata: {
+                  team_id: teamId,
+                  is_auto_matched: isAutoMatched,
+                },
               });
-
-              if (!upsertError) {
-                await logSyncOperation(supabase, {
-                  orgId: org.org_id,
-                  operation: 'webhook',
-                  direction: 'inbound',
-                  entityType: 'user',
-                  entityId: user.id,
-                  entityName: `${user.profile?.display_name || user.real_name || user.name} (${user.profile?.email || 'no email'})`,
-                  metadata: {
-                    team_id: teamId,
-                    is_auto_matched: !!sixtyUser,
-                  },
-                });
-              }
             }
           }
         }

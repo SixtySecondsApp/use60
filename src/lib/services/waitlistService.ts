@@ -228,7 +228,7 @@ export async function validateReferralCode(code: string): Promise<boolean> {
     .from('meetings_waitlist')
     .select('id')
     .eq('referral_code', code)
-    .single();
+    .maybeSingle();
 
   if (error) {
     return false;

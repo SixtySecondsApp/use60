@@ -50,6 +50,8 @@ export interface UseDateRangeFilterReturn {
   setIsDatePickerOpen: (open: boolean) => void;
   handlePresetClick: (preset: DatePreset) => void;
   handleCalendarSelect: (date: Date) => void;
+  /** Atomically set both start and end of a custom range (avoids intermediate "select end" state) */
+  setCustomRange: (start: Date, end: Date) => void;
   handleClear: () => void;
 }
 
@@ -166,10 +168,17 @@ export function useDateRangeFilter(defaultPreset: DatePreset = 'month'): UseDate
       setCalendarEnd(null);
       setDatePreset('custom');
     } else {
+      // Allow start === end (single-day selection is valid)
       setCalendarEnd(date);
       setDatePreset('custom');
     }
   }, [calendarStart, calendarEnd]);
+
+  const setCustomRange = useCallback((start: Date, end: Date) => {
+    setCalendarStart(start);
+    setCalendarEnd(end);
+    setDatePreset('custom');
+  }, []);
 
   const handleClear = useCallback(() => {
     setDatePreset(defaultPreset);
@@ -201,7 +210,7 @@ export function useDateRangeFilter(defaultPreset: DatePreset = 'month'): UseDate
     currentMonth, navigateMonth, isCurrentMonth,
     period, dateRange, dateDisplayText,
     isDatePickerOpen, setIsDatePickerOpen,
-    handlePresetClick, handleCalendarSelect, handleClear,
+    handlePresetClick, handleCalendarSelect, setCustomRange, handleClear,
   };
 }
 

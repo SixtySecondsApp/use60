@@ -215,7 +215,7 @@ export default function SalesFunnel() {
   const [showContent, setShowContent] = useState(false);
 
   // Check if any data is loading
-  const isAnyLoading = isLoadingActivities || isLoadingSales || isLoadingTargets || !userData;
+  const isAnyLoading = isLoadingActivities || isLoadingSales || !userData;
 
   // Use effect to handle stable loading state
   useEffect(() => {
@@ -276,21 +276,6 @@ export default function SalesFunnel() {
   // Show loading skeleton until content is ready
   if (!showContent) {
     return <FunnelSkeleton />;
-  }
-
-  // Show error state if any required data is missing
-  if (!targets) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] gap-4">
-        <p className="text-lg text-gray-600 dark:text-gray-400">Unable to load sales funnel data</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 text-sm font-medium text-white bg-[#37bd7e] rounded-lg hover:bg-[#2da76c] transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
   }
 
   return (

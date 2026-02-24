@@ -223,7 +223,7 @@ Return coaching analysis JSON:
 - **Engagement Level:** {{metrics.engagement.enthusiasm_level}}
 
 ## AI Sales Coaching Analysis
-- **Coaching Score:** {{coaching.coaching_score}}/100
+- **Coaching Score:** {{coaching.coaching_score}}/10
 - **Deal Probability:** {{coaching.deal_probability}}%
 - **Discovery Quality:** {{coaching.discovery_quality}}
 

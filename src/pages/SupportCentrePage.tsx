@@ -81,42 +81,42 @@ export default function SupportCentrePage() {
       </div>
 
       {/* Quick Links */}
-      <div className="max-w-4xl mx-auto px-6 -mt-6 mb-6 relative z-10">
+      <div className="max-w-4xl mx-auto px-6 mt-6 mb-6">
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:shadow-lg hover:border-emerald-300 dark:hover:border-emerald-600/40 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
             onClick={() => handleSuggestedQuestion('How do I get started with 60?')}>
-            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
+            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-500/20 transition-colors">
               <Zap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Getting Started</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">Getting Started</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Onboarding guides</p>
             </div>
-            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 mt-0.5 shrink-0" />
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 mt-0.5 shrink-0 transition-colors" />
           </div>
 
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:shadow-lg hover:border-purple-300 dark:hover:border-purple-600/40 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
             onClick={() => navigate('/docs')}>
-            <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-500/10">
+            <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-500/10 group-hover:bg-purple-100 dark:group-hover:bg-purple-500/20 transition-colors">
               <BookOpen className="w-4 h-4 text-purple-600 dark:text-purple-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Documentation</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">Documentation</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Full feature docs</p>
             </div>
-            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 mt-0.5 shrink-0" />
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-purple-500 dark:group-hover:text-purple-400 mt-0.5 shrink-0 transition-colors" />
           </div>
 
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:shadow-lg hover:border-orange-300 dark:hover:border-orange-600/40 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
             onClick={() => setShowCreateTicket(true)}>
-            <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-500/10">
+            <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-500/10 group-hover:bg-orange-100 dark:group-hover:bg-orange-500/20 transition-colors">
               <HelpCircle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Contact Support</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-orange-700 dark:group-hover:text-orange-300 transition-colors">Contact Support</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Open a ticket</p>
             </div>
-            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 mt-0.5 shrink-0" />
+            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-orange-500 dark:group-hover:text-orange-400 mt-0.5 shrink-0 transition-colors" />
           </div>
         </div>
       </div>

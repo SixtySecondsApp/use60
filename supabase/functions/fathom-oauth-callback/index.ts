@@ -2,6 +2,10 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { captureException } from "../_shared/sentryEdge.ts"
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -58,8 +62,8 @@ serve(async (req) => {
           <head><title>Fathom Connection Failed</title></head>
           <body>
             <h1>Connection Failed</h1>
-            <p>Error: ${error}</p>
-            <p>${errorDescription || ''}</p>
+            <p>Error: ${escapeHtml(error || '')}</p>
+            <p>${escapeHtml(errorDescription || '')}</p>
             <a href="/">Return to App</a>
             <script>
               // Auto-close window after 5 seconds if opened in popup
@@ -393,12 +397,8 @@ serve(async (req) => {
           error: errorMessage,
           debugStep,
           debug: {
-            hasSupabaseUrl: !!Deno.env.get('SUPABASE_URL'),
-            hasServiceKey: !!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
-            hasFathomClientId: !!Deno.env.get('FATHOM_CLIENT_ID'),
-            hasFathomSecret: !!Deno.env.get('FATHOM_CLIENT_SECRET'),
-            hasFathomRedirect: !!Deno.env.get('FATHOM_REDIRECT_URI'),
-            fathomRedirectUri: Deno.env.get('FATHOM_REDIRECT_URI') || 'NOT SET',
+            step: debugStep,
+            timestamp: new Date().toISOString(),
           }
         }),
         {
@@ -415,7 +415,7 @@ serve(async (req) => {
         <head><title>Connection Failed</title></head>
         <body>
           <h1>Fathom Connection Failed</h1>
-          <p>Error: ${errorMessage}</p>
+          <p>Error: ${escapeHtml(errorMessage || '')}</p>
           <a href="${publicUrl}/integrations">Return to Integrations</a>
           <script>
             setTimeout(() => {

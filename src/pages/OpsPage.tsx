@@ -8,6 +8,7 @@ import {
   Database,
   ChevronDown,
   ArrowUpRight,
+  Table2,
   Zap,
   CheckCircle2,
   AlertCircle,
@@ -325,7 +326,7 @@ function OpsPage() {
         {/* Header skeleton */}
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Skeleton className="h-10 w-10 rounded-xl" />
+            <Skeleton className="h-12 w-12 rounded-xl" />
             <Skeleton className="h-7 w-20" />
           </div>
           <Skeleton className="h-10 w-28 rounded-lg" />
@@ -402,8 +403,8 @@ function OpsPage() {
       {/* Header */}
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20">
-            <Zap className="h-5 w-5 text-emerald-400" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20">
+            <Table2 className="h-6 w-6 text-emerald-400" />
           </div>
           <h1 className="text-2xl font-semibold text-zinc-100">Ops</h1>
         </div>

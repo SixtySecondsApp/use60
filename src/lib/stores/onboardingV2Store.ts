@@ -1514,6 +1514,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           userMessage = 'Your session has expired. Please refresh the page and try again.';
         } else if (message.includes('network') || message.includes('fetch')) {
           userMessage = 'Network error. Please check your connection and try again.';
+        } else if (message.includes('credit') || message.includes('balance') || message.includes('quota')) {
+          userMessage = 'Enrichment credits exhausted. Please check your billing settings.';
+        } else if (message.includes('rate limit') || message.includes('429') || message.includes('too many')) {
+          userMessage = 'Too many requests. Please wait a moment and try again.';
+        } else if (message.includes('invalid') && message.includes('domain')) {
+          userMessage = 'The company domain appears to be invalid. Please check and try again.';
         }
 
         set({

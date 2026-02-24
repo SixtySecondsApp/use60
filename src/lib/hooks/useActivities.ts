@@ -551,18 +551,39 @@ export function useActivities(dateRange?: { start: Date; end: Date }) {
     },
   });
 
-  // Remove activity mutation with error handling
+  // Remove activity mutation with optimistic update for instant UI feedback
   const removeActivityMutation = useMutation({
     mutationFn: deleteActivity,
+    onMutate: async (deletedId: string) => {
+      // Cancel any outgoing refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ['activities'] });
+
+      // Snapshot all activity queries for rollback
+      const previousQueries = queryClient.getQueriesData<Activity[]>({ queryKey: ['activities'] });
+
+      // Optimistically remove from all activity query caches
+      queryClient.setQueriesData<Activity[]>(
+        { queryKey: ['activities'] },
+        (old) => old ? old.filter((a) => a.id !== deletedId) : []
+      );
+
+      return { previousQueries };
+    },
     onSuccess: () => {
-      // Invalidate with exact: true to prevent cascade
-      queryClient.invalidateQueries({ queryKey: ['activities'], exact: true });
-      queryClient.invalidateQueries({ queryKey: ['salesData'], exact: true });
-      queryClient.invalidateQueries({ queryKey: ['targets'], exact: true });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'], exact: true });
+      // Invalidate to ensure server state is synced
+      queryClient.invalidateQueries({ queryKey: ['activities'] });
+      queryClient.invalidateQueries({ queryKey: ['salesData'] });
+      queryClient.invalidateQueries({ queryKey: ['targets'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
       toast.success('Activity deleted successfully');
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _deletedId, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        for (const [key, data] of context.previousQueries) {
+          queryClient.setQueryData(key, data);
+        }
+      }
       toast.error('Failed to delete activity');
     },
   });

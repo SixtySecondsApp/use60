@@ -153,7 +153,7 @@ export function TicketDetail({ ticket, open, onClose }: TicketDetailProps) {
         </SheetHeader>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto scrollbar-custom">
           {/* Description */}
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Description</p>

@@ -39,6 +39,24 @@ export interface FirefliesSyncState {
   total_meetings_found: number;
 }
 
+
+/**
+ * Returns true when a Supabase/PostgREST error indicates the table does not
+ * exist yet (Postgres code 42P01 or HTTP 404).  Used to gracefully handle
+ * tables whose migration has been written but not yet deployed to this env.
+ */
+function isTableNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as Record<string, unknown>;
+  // PostgREST wraps Postgres errors with a "code" field
+  if (e['code'] === '42P01') return true;
+  // HTTP-level 404 surfaces as a numeric status or string message
+  if (e['status'] === 404 || e['message'] === '404') return true;
+  // PostgREST also returns PGRST116 for "relation does not exist" in some versions
+  if (typeof e['message'] === 'string' && (e['message'] as string).includes('does not exist')) return true;
+  return false;
+}
+
 export function useFirefliesIntegration() {
   const { user } = useAuth();
   const activeOrgId = useOrgStore((s) => s.activeOrgId);
@@ -80,6 +98,13 @@ export function useFirefliesIntegration() {
           .maybeSingle();
 
         if (integrationError) {
+          // If the table hasn't been deployed yet, treat as "not connected" rather than crashing.
+          if (isTableNotFoundError(integrationError)) {
+            setIntegration(null);
+            setSyncState(null);
+            setLifetimeMeetingsCount(0);
+            return;
+          }
           throw integrationError;
         }
 
@@ -94,7 +119,12 @@ export function useFirefliesIntegration() {
             .maybeSingle();
 
           if (syncError) {
-            throw syncError;
+            // Gracefully ignore missing table – sync state simply stays null.
+            if (isTableNotFoundError(syncError)) {
+              setSyncState(null);
+            } else {
+              throw syncError;
+            }
           }
 
           setSyncState(syncData);
@@ -183,12 +213,14 @@ export function useFirefliesIntegration() {
       }
 
       // Only update count if Fireflies is connected
-      const { data: currentIntegration } = await supabaseAny
+      const { data: currentIntegration, error: ciError } = await supabaseAny
         .from('fireflies_integrations')
         .select('id')
         .eq('user_id', user?.id!)
         .eq('is_active', true)
         .maybeSingle();
+      // If the table doesn't exist yet, skip the count refresh silently.
+      if (isTableNotFoundError(ciError)) return;
 
       if (currentIntegration) {
         const { count } = await supabaseAny

@@ -108,26 +108,17 @@ export async function getOnboardingProgress(
   userId: string
 ): Promise<ServiceResult<OnboardingProgress>> {
   try {
-    const { data, error} = await supabase
+    const { data, error } = await supabase
       .from('waitlist_onboarding_progress')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      // If not found, return null data (user hasn't started onboarding yet)
-      if (error.code === 'PGRST116') {
-        return {
-          success: true,
-          data: undefined,
-        };
-      }
-      throw error;
-    }
+    if (error) throw error;
 
     return {
       success: true,
-      data,
+      data: data || undefined,
     };
   } catch (error: any) {
     console.error('Error fetching onboarding progress:', error);

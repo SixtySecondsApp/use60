@@ -568,14 +568,14 @@ export const NotetakerSettingsTab: React.FC = () => {
   if (!googleConnected && !googleLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
-          <Calendar className="h-8 w-8 text-emerald-500" />
+        <div className="w-16 h-16 rounded-2xl mb-4 overflow-hidden">
+          <img src={DEFAULT_SIXTY_ICON_URL} alt="60 Notetaker" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
         </div>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Google Calendar Required</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mb-6">
           Connect Google Calendar to enable the 60 Notetaker for automated meeting recording.
         </p>
-        <Button onClick={() => navigate('/settings/integrations/google-workspace')} className="gap-2">
+        <Button onClick={() => navigate('/integrations')} className="gap-2">
           <ExternalLink className="h-4 w-4" />
           Connect Google Calendar
         </Button>

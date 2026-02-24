@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, ThumbsUp, ThumbsDown, ExternalLink, Loader2, Bot, User, Ticket, Search } from 'lucide-react';
+import { Send, ThumbsUp, ThumbsDown, ExternalLink, Loader2, Bot, Ticket, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useSupportChat } from '@/lib/hooks/useSupportChat';
+import { useUser } from '@/lib/hooks/useUser';
 import { cn } from '@/lib/utils';
+
+const botIconUrl = (import.meta.env.VITE_COPILOT_BOT_ICON_URL as string | undefined) || '/favicon_0_64x64.png';
 
 interface SupportAIChatProps {
   initialQuery?: string;
@@ -18,6 +21,10 @@ export function SupportAIChat({ initialQuery, onEscalate }: SupportAIChatProps) 
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { messages, isLoading, isSearching, feedbackGiven, sendMessage, giveFeedback } = useSupportChat();
+  const { userData } = useUser();
+  const avatarUrl = userData?.avatar_url;
+  const userInitial = userData?.first_name?.[0]?.toUpperCase() || 'U';
+  const [botIconError, setBotIconError] = useState(false);
 
   // Send initial query from search hero
   useEffect(() => {
@@ -27,10 +34,14 @@ export function SupportAIChat({ initialQuery, onEscalate }: SupportAIChatProps) 
     }
   }, [initialQuery, initialQuerySent, sendMessage]);
 
-  // Scroll to bottom on new messages or searching
+  // Scroll to bottom only when a new message is added (not on tab switch or re-render)
+  const prevMessageCount = useRef(messages.length);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading, isSearching]);
+    if (messages.length > prevMessageCount.current || isSearching) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    prevMessageCount.current = messages.length;
+  }, [messages.length, isSearching]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,17 +51,29 @@ export function SupportAIChat({ initialQuery, onEscalate }: SupportAIChatProps) 
   };
 
   const handleSuggestedFollowUp = (question: string) => {
+    if (question === 'Try asking again') {
+      // Find the last user message and retry it
+      const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+      if (lastUserMsg) {
+        sendMessage(lastUserMsg.content);
+        return;
+      }
+    }
     sendMessage(question);
   };
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
       {/* Chat messages area */}
-      <div className="h-[480px] overflow-y-auto p-4 space-y-4">
+      <div className="h-[480px] overflow-y-auto scrollbar-custom p-4 space-y-4">
         {messages.length === 0 && !isLoading && (
           <div className="flex flex-col items-center justify-center h-full text-center gap-3">
-            <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20">
-              <Bot className="w-8 h-8 text-blue-500 dark:text-blue-400" />
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 overflow-hidden flex items-center justify-center">
+              {!botIconError && botIconUrl ? (
+                <img src={botIconUrl} alt="60" className="w-full h-full object-cover" onError={() => setBotIconError(true)} />
+              ) : (
+                <Bot className="w-8 h-8 text-blue-500 dark:text-blue-400" />
+              )}
             </div>
             <div>
               <p className="text-sm font-medium text-gray-900 dark:text-white">AI Documentation Assistant</p>
@@ -67,8 +90,12 @@ export function SupportAIChat({ initialQuery, onEscalate }: SupportAIChatProps) 
             className={cn('flex gap-3', message.role === 'user' ? 'justify-end' : 'justify-start')}
           >
             {message.role === 'assistant' && (
-              <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 h-fit mt-0.5 shrink-0">
-                <Bot className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+              <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 mt-0.5 shrink-0 overflow-hidden flex items-center justify-center">
+                {!botIconError && botIconUrl ? (
+                  <img src={botIconUrl} alt="60" className="w-full h-full object-cover" onError={() => setBotIconError(true)} />
+                ) : (
+                  <Bot className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                )}
               </div>
             )}
 
@@ -123,7 +150,7 @@ export function SupportAIChat({ initialQuery, onEscalate }: SupportAIChatProps) 
               )}
 
               {/* Feedback */}
-              {message.role === 'assistant' && !feedbackGiven[message.id] && (
+              {message.role === 'assistant' && feedbackGiven[message.id] === undefined && (
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-xs text-gray-400">Was this helpful?</span>
                   <button
@@ -149,9 +176,13 @@ export function SupportAIChat({ initialQuery, onEscalate }: SupportAIChatProps) 
             </div>
 
             {message.role === 'user' && (
-              <div className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 h-fit mt-0.5 shrink-0">
-                <User className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              </div>
+              avatarUrl ? (
+                <img src={avatarUrl} alt="" className="w-7 h-7 rounded-lg object-cover mt-0.5 shrink-0" />
+              ) : (
+                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white text-xs font-medium flex items-center justify-center mt-0.5 shrink-0">
+                  {userInitial}
+                </div>
+              )
             )}
           </div>
         ))}

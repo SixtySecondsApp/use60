@@ -21,12 +21,25 @@ import {
 import type { MaReportHistoryEntry, MaReport } from '@/lib/types/meetingAnalytics';
 import { NotificationSettingsDialog } from './NotificationSettingsDialog';
 
-export function ReportsTab() {
+interface DateRange {
+  start: Date;
+  end: Date;
+}
+
+interface ReportsTabProps {
+  period?: string;
+  dateRange?: DateRange;
+}
+
+export function ReportsTab({ period, dateRange }: ReportsTabProps) {
   const [reportType, setReportType] = useState<'daily' | 'weekly'>('daily');
   const [previewData, setPreviewData] = useState<MaReport | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const { data: history, isLoading: historyLoading } = useMaReportHistory(20);
+  const startDate = dateRange?.start ? dateRange.start.toISOString() : undefined;
+  const endDate = dateRange?.end ? dateRange.end.toISOString() : undefined;
+
+  const { data: history, isLoading: historyLoading } = useMaReportHistory({ limit: 20, startDate, endDate });
   const generateMutation = useMaGenerateReport();
   const sendMutation = useMaSendReport();
 

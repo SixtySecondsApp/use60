@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { LayoutDashboard, FileText, Wand2, ClipboardList, Search, Database, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, FileText, Wand2, ClipboardList, Search, Database, RefreshCw, Loader2, AlertCircle, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -33,7 +33,7 @@ function MeetingAnalyticsSkeleton() {
         {/* Header — icon + animated gradient title + index status widget */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
           <div className="flex items-center gap-4">
-            <Skeleton className="w-14 h-14 rounded-2xl" />
+            <Skeleton className="w-12 h-12 rounded-xl" />
             <div>
               <Skeleton className="h-9 w-52 mb-2" />
               <div className="flex items-center gap-2">
@@ -137,8 +137,8 @@ export default function MeetingAnalyticsPage() {
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8"
         >
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-600/10 dark:bg-emerald-500/20 border border-emerald-600/20 dark:border-emerald-500/30 flex items-center justify-center">
-              <Search className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20">
+              <Sparkles className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold">
@@ -288,15 +288,15 @@ export default function MeetingAnalyticsPage() {
               </TabsContent>
 
               <TabsContent value="transcripts" className="mt-0">
-                <TranscriptsTab />
+                <TranscriptsTab period={period} dateRange={dateRange} />
               </TabsContent>
 
               <TabsContent value="insights" className="mt-0">
-                <InsightsTab />
+                <InsightsTab period={period} dateRange={dateRange} />
               </TabsContent>
 
               <TabsContent value="reports" className="mt-0">
-                <ReportsTab />
+                <ReportsTab period={period} dateRange={dateRange} />
               </TabsContent>
             </motion.div>
           </AnimatePresence>

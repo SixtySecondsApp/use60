@@ -1,0 +1,93 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind"
+    }
+  },
+  "feature": "recording-settings-fix",
+  "createdAt": "2026-02-24",
+  "stories": [
+    {
+      "id": "RECSETTINGS-001",
+      "feature": "recording-settings-fix",
+      "title": "Consolidate save handlers in RecordingSettings.tsx",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "description": "Merged handleSaveSettings and handleSaveRecordingMode into single handler. Removed savingSettings/savingMode split, back to single saving state. Handler now saves ALL fields including join_all_meetings.",
+      "acceptance": [
+        "Single handleSaveSettings saves all fields including join_all_meetings",
+        "Single saving state (no savingSettings/savingMode split)",
+        "Both Save Settings and Save Recording Mode buttons use same handler",
+        "Toggling External Meetings Only and saving actually persists"
+      ],
+      "files": ["src/pages/RecordingSettings.tsx"],
+      "estimatedMinutes": 10,
+      "actualMinutes": 5,
+      "dependencies": { "stories": [], "files": [], "schema": [] }
+    },
+    {
+      "id": "RECSETTINGS-002",
+      "feature": "recording-settings-fix",
+      "title": "Verify NotetakerSettingsTab save buttons match pattern",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "description": "Verified NotetakerSettingsTab already has unified handleSaveSettings with join_all_meetings included. Both Save Settings (line 806) and Save Recording Mode (line 941) buttons call same handler. No changes needed.",
+      "acceptance": [
+        "NotetakerSettingsTab has unified save that includes join_all_meetings",
+        "No orphaned save buttons calling wrong handlers",
+        "Both pages behave identically when saving"
+      ],
+      "files": ["src/components/settings/NotetakerSettingsTab.tsx"],
+      "estimatedMinutes": 8,
+      "actualMinutes": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] }
+    },
+    {
+      "id": "RECSETTINGS-003",
+      "feature": "recording-settings-fix",
+      "title": "Verify recordingService merge behavior",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "description": "Confirmed recordingService.updateRecordingSettings (line 709) uses spread merge: `const updated = { ...current, ...settings }`. Partial updates don't wipe other fields. No changes needed.",
+      "acceptance": [
+        "Partial update does not reset unmentioned fields",
+        "Merge pattern confirmed in service layer"
+      ],
+      "files": ["src/lib/services/recordingService.ts"],
+      "estimatedMinutes": 5,
+      "actualMinutes": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] }
+    },
+    {
+      "id": "RECSETTINGS-004",
+      "feature": "recording-settings-fix",
+      "title": "Unified save buttons use same handler",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "description": "Both 'Save Settings' and 'Save Recording Mode' buttons now call the same handleSaveSettings handler with single saving spinner state. Each saves ALL settings fields. Matches NotetakerSettingsTab pattern.",
+      "acceptance": [
+        "RecordingSettings has one save handler for both buttons",
+        "Each card's save button saves ALL fields",
+        "No confusing dual-save UX"
+      ],
+      "files": ["src/pages/RecordingSettings.tsx"],
+      "estimatedMinutes": 10,
+      "actualMinutes": 3,
+      "dependencies": { "stories": ["RECSETTINGS-001"], "files": [], "schema": [] }
+    }
+  ],
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 4,
+    "currentFeature": "recording-settings-fix",
+    "lastUpdated": "2026-02-24"
+  }
+}

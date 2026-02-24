@@ -58,13 +58,17 @@ export function ConfigureModal({
         {/* Header */}
         <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {logoUrl && (
+            <div className="w-10 h-10 rounded-lg overflow-hidden">
+              {logoUrl ? (
                 <img
                   src={logoUrl}
                   alt={`${integrationName} logo`}
-                  className="w-6 h-6 object-contain"
+                  className="w-full h-full object-cover"
                 />
+              ) : (
+                <div className="w-full h-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center">
+                  {fallbackIcon}
+                </div>
               )}
             </div>
             <div>

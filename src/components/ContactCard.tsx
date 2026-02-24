@@ -105,7 +105,7 @@ const ContactCard: React.FC<ContactCardProps> = ({
     ];
 
     const name = getFullName();
-    const index = name.charCodeAt(0) % colors.length;
+    const index = (name?.charCodeAt(0) || 0) % colors.length;
     return colors[index];
   };
 

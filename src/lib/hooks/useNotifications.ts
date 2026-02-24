@@ -130,6 +130,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
 
       setNotifications(prev => [...prev, ...moreNotifications]);
     } catch (err) {
+      console.error('[useNotifications] loadMore failed:', err);
     }
   }, [user, notifications.length, limit, category]);
 

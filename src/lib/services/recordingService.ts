@@ -717,7 +717,7 @@ class RecordingService {
 
     if (error) {
       logger.error('[RecordingService] updateRecordingSettings error:', error);
-      return null;
+      throw new Error(error.message || 'Failed to save recording settings');
     }
 
     return (data?.recording_settings as unknown as RecordingSettings) || null;

@@ -334,7 +334,7 @@ export const RecordingSettings: React.FC = () => {
     }
   }
 
-  // Save settings
+  // Save all settings (unified handler)
   const handleSaveSettings = async () => {
     if (!activeOrgId) {
       toast.error('No organization selected')

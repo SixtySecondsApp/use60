@@ -22,7 +22,7 @@ import { notificationService, Notification } from '@/lib/services/notificationSe
 
 export default function PendingApprovalPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const { refreshOrgs, switchOrg } = useOrg();
   const [joinRequest, setJoinRequest] = useState<{
     orgName: string;
@@ -263,7 +263,7 @@ export default function PendingApprovalPage() {
 
   const handleLogout = async () => {
     try {
-      await logout();
+      await signOut();
       navigate('/auth/login', { replace: true });
     } catch (err) {
       toast.error('Failed to log out');
