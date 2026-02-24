@@ -6,10 +6,10 @@ import { FathomSettings } from '@/components/integrations/FathomSettings';
 import { FathomSelfMapping } from '@/components/settings/FathomSelfMapping';
 import { FathomUserMapping } from '@/components/settings/FathomUserMapping';
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
+import { useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { useOrgStore } from '@/lib/stores/orgStore';
 
 export function FathomSettingsTab() {
-  const navigate = useNavigate();
   const { isConnected: isFathomConnected, loading } = useFathomIntegration();
   const activeOrgRole = useOrgStore((s) => s.activeOrgRole);
   const isAdmin = activeOrgRole === 'owner' || activeOrgRole === 'admin';
@@ -46,21 +46,7 @@ export function FathomSettingsTab() {
   }
 
   if (!isFathomConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-blue-500/10 dark:bg-blue-500/20 border border-blue-500/20 flex items-center justify-center mb-4">
-          <Video className="h-8 w-8 text-blue-500 dark:text-blue-400" />
-        </div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Connect Fathom</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mb-6">
-          Connect your Fathom account to sync AI meeting notes and transcriptions.
-        </p>
-        <Button onClick={() => navigate('/settings/integrations')} className="gap-2">
-          <ExternalLink className="h-4 w-4" />
-          Go to Integrations
-        </Button>
-      </div>
-    );
+    return <FathomNotConnected />;
   }
 
   return (
@@ -101,6 +87,33 @@ export function FathomSettingsTab() {
           <FathomUserMapping />
         </div>
       )}
+    </div>
+  );
+}
+
+function FathomNotConnected() {
+  const navigate = useNavigate();
+  const { logoUrl } = useIntegrationLogo('fathom');
+
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-16 h-16 rounded-2xl mb-4 overflow-hidden">
+        {logoUrl ? (
+          <img src={logoUrl} alt="Fathom" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 flex items-center justify-center">
+            <Video className="h-8 w-8 text-blue-500 dark:text-blue-400" />
+          </div>
+        )}
+      </div>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Connect Fathom</h3>
+      <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mb-6">
+        Connect your Fathom account to sync AI meeting notes and transcriptions.
+      </p>
+      <Button onClick={() => navigate('/integrations')} className="gap-2">
+        <ExternalLink className="h-4 w-4" />
+        Go to Integrations
+      </Button>
     </div>
   );
 }

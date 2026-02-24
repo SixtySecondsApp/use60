@@ -24,9 +24,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-} from '@/components/ui/dialog';
+  Card,
+  CardContent,
+} from '@/components/ui/card';
 import {
   Calendar,
   Bot,
@@ -177,8 +177,8 @@ export const RecordingSetupWizard: React.FC<RecordingSetupWizardProps> = ({ onCo
   };
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) handleSkipToEnd(); }}>
-      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
+    <Card className="max-w-lg mx-auto overflow-hidden">
+      <CardContent className="p-0">
         {/* Progress Steps */}
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-center justify-between">
@@ -445,8 +445,8 @@ export const RecordingSetupWizard: React.FC<RecordingSetupWizardProps> = ({ onCo
             </WizardCard>
           )}
         </AnimatePresence>
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   );
 };
 

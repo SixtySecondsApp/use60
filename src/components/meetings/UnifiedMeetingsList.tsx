@@ -192,7 +192,7 @@ const ListSkeleton: React.FC<{ view: 'list' | 'grid' }> = ({ view }) => (
     {/* Header — matches real: w-14 h-14 icon + title + subtitle */}
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
       <div className="flex items-center gap-4 min-w-0">
-        <Skeleton className="w-14 h-14 rounded-2xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+        <Skeleton className="w-10 h-10 rounded-xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
         <div className="min-w-0 flex-1">
           <Skeleton className="h-8 sm:h-9 w-32 mb-2 bg-gray-200/60 dark:bg-gray-700/40" />
           <div className="flex items-center gap-2">
@@ -593,8 +593,8 @@ const UnifiedMeetingsList: React.FC = () => {
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full"
       >
         <div className="flex items-center gap-4 min-w-0">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-600/10 dark:bg-emerald-500/20 border border-emerald-600/20 dark:border-emerald-500/30 flex items-center justify-center flex-shrink-0">
-            <Video className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex-shrink-0">
+            <Video className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-bold">
