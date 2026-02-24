@@ -14,7 +14,8 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { shouldSendNotification, recordNotificationSent } from '../_shared/proactive/dedupe.ts';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 // ============================================================================
@@ -27,6 +28,7 @@ interface TaskAnalysisResult {
   organizationId: string;
   overdueTasks: TaskItem[];
   dueTodayTasks: TaskItem[];
+  staleProspectTasks: StaleProspectTask[];
   suggestedActions: TaskAction[];
 }
 
@@ -37,10 +39,20 @@ interface TaskItem {
   due_date: string;
   priority?: string;
   task_type?: string;
+  task_category?: string;
   contact_id?: string;
   contact_name?: string;
   deal_id?: string;
   deal_name?: string;
+  days_overdue: number;
+}
+
+interface StaleProspectTask {
+  id: string;
+  title: string;
+  contact_name: string;
+  contact_id?: string;
+  deal_id?: string;
   days_overdue: number;
 }
 
@@ -136,9 +148,18 @@ async function analyzeAndNotifyAllUsers(supabase: any): Promise<{
     try {
       const result = await analyzeUserTasks(supabase, userId as string);
       
-      if (result.overdueTasks.length > 0 || result.dueTodayTasks.length > 0) {
+      if (result.overdueTasks.length > 0 || result.dueTodayTasks.length > 0 || result.staleProspectTasks.length > 0) {
         results.push(result);
-        
+
+        // Dedup: check if we already sent a task reminder today
+        const canSend = await shouldSendNotification(
+          supabase, 'daily_digest', result.organizationId, result.userId
+        );
+        if (!canSend) {
+          console.log(`[TaskAnalysis] Skipping user ${userId} — already notified today`);
+          continue;
+        }
+
         // Send notification
         const sent = await sendTaskNotification(supabase, result);
         if (sent) notificationsSent++;
@@ -197,11 +218,11 @@ async function analyzeUserTasks(
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  // Get overdue tasks
+  // Get overdue tasks (rep_action and admin only — not prospect_action)
   const { data: overdueRaw } = await supabase
     .from('tasks')
     .select(`
-      id, title, description, due_date, priority, task_type,
+      id, title, description, due_date, priority, task_type, task_category,
       contact_id, deal_id,
       contacts:contact_id(first_name, last_name),
       deals:deal_id(name)
@@ -209,14 +230,15 @@ async function analyzeUserTasks(
     .eq('assigned_to', userId)
     .eq('status', 'pending')
     .lt('due_date', today.toISOString())
+    .in('task_category', ['rep_action', 'admin'])
     .order('due_date', { ascending: true })
     .limit(10);
 
-  // Get tasks due today
+  // Get tasks due today (rep_action and admin only)
   const { data: dueTodayRaw } = await supabase
     .from('tasks')
     .select(`
-      id, title, description, due_date, priority, task_type,
+      id, title, description, due_date, priority, task_type, task_category,
       contact_id, deal_id,
       contacts:contact_id(first_name, last_name),
       deals:deal_id(name)
@@ -225,8 +247,27 @@ async function analyzeUserTasks(
     .eq('status', 'pending')
     .gte('due_date', today.toISOString())
     .lt('due_date', tomorrow.toISOString())
+    .in('task_category', ['rep_action', 'admin'])
     .order('priority', { ascending: false })
     .limit(10);
+
+  // Get stale prospect commitments (>1 day overdue prospect_action tasks)
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const { data: staleProspectRaw } = await supabase
+    .from('tasks')
+    .select(`
+      id, title, due_date, contact_id,
+      contacts:contact_id(first_name, last_name),
+      deal_id
+    `)
+    .eq('assigned_to', userId)
+    .eq('status', 'pending')
+    .eq('task_category', 'prospect_action')
+    .lt('due_date', yesterday.toISOString())
+    .order('due_date', { ascending: true })
+    .limit(5);
 
   // Transform tasks
   const overdueTasks: TaskItem[] = (overdueRaw || []).map((t: any) => ({
@@ -236,9 +277,10 @@ async function analyzeUserTasks(
     due_date: t.due_date,
     priority: t.priority,
     task_type: t.task_type,
+    task_category: t.task_category,
     contact_id: t.contact_id,
-    contact_name: t.contacts 
-      ? `${t.contacts.first_name || ''} ${t.contacts.last_name || ''}`.trim() 
+    contact_name: t.contacts
+      ? `${t.contacts.first_name || ''} ${t.contacts.last_name || ''}`.trim()
       : undefined,
     deal_id: t.deal_id,
     deal_name: t.deals?.name,
@@ -252,13 +294,26 @@ async function analyzeUserTasks(
     due_date: t.due_date,
     priority: t.priority,
     task_type: t.task_type,
+    task_category: t.task_category,
     contact_id: t.contact_id,
-    contact_name: t.contacts 
-      ? `${t.contacts.first_name || ''} ${t.contacts.last_name || ''}`.trim() 
+    contact_name: t.contacts
+      ? `${t.contacts.first_name || ''} ${t.contacts.last_name || ''}`.trim()
       : undefined,
     deal_id: t.deal_id,
     deal_name: t.deals?.name,
     days_overdue: 0,
+  }));
+
+  // Transform stale prospect tasks into follow-up nudges
+  const staleProspectTasks: StaleProspectTask[] = (staleProspectRaw || []).map((t: any) => ({
+    id: t.id,
+    title: t.title,
+    contact_name: t.contacts
+      ? `${t.contacts.first_name || ''} ${t.contacts.last_name || ''}`.trim()
+      : 'Your contact',
+    contact_id: t.contact_id,
+    deal_id: t.deal_id,
+    days_overdue: Math.floor((today.getTime() - new Date(t.due_date).getTime()) / (1000 * 60 * 60 * 24)),
   }));
 
   // Generate suggested actions
@@ -270,6 +325,7 @@ async function analyzeUserTasks(
     organizationId: organizationId || '',
     overdueTasks,
     dueTodayTasks,
+    staleProspectTasks,
     suggestedActions,
   };
 }
@@ -375,24 +431,30 @@ async function sendTaskNotification(
     }
 
     const blocks: any[] = [];
+    const allTasks = [...result.overdueTasks, ...result.dueTodayTasks];
+    const maxDisplay = 5;
+    const topTasks = allTasks.slice(0, maxDisplay);
 
     // Header
     blocks.push({
       type: 'header',
       text: {
         type: 'plain_text',
-        text: `📋 Task Reminder`,
+        text: '📋 Task Reminder',
         emoji: true,
       },
     });
 
-    // Summary
+    // Summary — accurate counts reflecting what's shown vs total
     const summaryParts = [];
     if (result.overdueTasks.length > 0) {
       summaryParts.push(`🔴 ${result.overdueTasks.length} overdue`);
     }
     if (result.dueTodayTasks.length > 0) {
       summaryParts.push(`🟡 ${result.dueTodayTasks.length} due today`);
+    }
+    if (allTasks.length > maxDisplay) {
+      summaryParts.push(`_(showing ${maxDisplay} of ${allTasks.length})_`);
     }
 
     blocks.push({
@@ -405,15 +467,13 @@ async function sendTaskNotification(
 
     blocks.push({ type: 'divider' });
 
-    // Show top overdue tasks
-    const topTasks = [...result.overdueTasks, ...result.dueTodayTasks].slice(0, 3);
-    
+    // Show top tasks with Complete + Snooze + contextual action buttons
     for (const task of topTasks) {
       const emoji = task.days_overdue > 0 ? '🔴' : '🟡';
-      const overdueLabel = task.days_overdue > 0 
-        ? ` _(${task.days_overdue}d overdue)_` 
+      const overdueLabel = task.days_overdue > 0
+        ? ` _(${task.days_overdue}d overdue)_`
         : '';
-      
+
       blocks.push({
         type: 'section',
         text: {
@@ -421,44 +481,101 @@ async function sendTaskNotification(
           text: `${emoji} *${task.title}*${overdueLabel}${task.contact_name ? `\n${task.contact_name}` : ''}`,
         },
       });
+
+      // Always show Done + Snooze buttons, plus contextual actions
+      const taskButtons: any[] = [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Done', emoji: true },
+          action_id: `task_complete`,
+          value: JSON.stringify({ taskId: task.id }),
+          style: 'primary',
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Snooze 1d', emoji: true },
+          action_id: `task_snooze_1d`,
+          value: JSON.stringify({ taskId: task.id }),
+        },
+      ];
+
+      // Add contextual action (draft email, research) if applicable
+      const titleLower = task.title.toLowerCase();
+      if (titleLower.includes('email') || titleLower.includes('follow-up') || titleLower.includes('follow up')) {
+        taskButtons.push({
+          type: 'button',
+          text: { type: 'plain_text', text: 'Draft email', emoji: true },
+          action_id: `task_action_${task.id}_draft_email`,
+          value: JSON.stringify({ taskId: task.id, taskTitle: task.title, actionType: 'draft_email' }),
+        });
+      }
+
+      blocks.push({
+        type: 'actions',
+        elements: taskButtons.slice(0, 5), // Slack max 5 buttons per actions block
+      });
     }
 
-    // Suggested actions
-    if (result.suggestedActions.length > 0) {
+    // Stale prospect commitment nudges
+    if (result.staleProspectTasks.length > 0) {
       blocks.push({ type: 'divider' });
       blocks.push({
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '💡 *Recommended actions:*',
+          text: '*Waiting on others:*',
         },
       });
 
-      const actionButtons = result.suggestedActions.slice(0, 3).map((action, idx) => ({
-        type: 'button',
-        text: {
-          type: 'plain_text',
-          text: action.description.length > 30 
-            ? action.description.substring(0, 28) + '..' 
-            : action.description,
-          emoji: true,
-        },
-        action_id: `task_action_${action.taskId}_${action.actionType}`,
-        value: JSON.stringify(action),
-      }));
+      for (const prospect of result.staleProspectTasks.slice(0, 3)) {
+        const daysText = prospect.days_overdue === 1 ? 'yesterday' : `${prospect.days_overdue} days ago`;
+        blocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `${prospect.contact_name} was meant to _${prospect.title.toLowerCase()}_ ${daysText} but hasn't. Want to follow up?`,
+          },
+        });
 
-      blocks.push({
-        type: 'actions',
-        elements: actionButtons,
-      });
+        blocks.push({
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: 'Draft follow-up email', emoji: true },
+              action_id: `draft_followup::task::${prospect.id}`,
+              value: JSON.stringify({ taskId: prospect.id, contactId: prospect.contact_id }),
+              style: 'primary',
+            },
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: 'Snooze 1d', emoji: true },
+              action_id: `task_snooze_1d`,
+              value: JSON.stringify({ taskId: prospect.id }),
+            },
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: 'Dismiss', emoji: true },
+              action_id: `task_complete`,
+              value: JSON.stringify({ taskId: prospect.id }),
+            },
+          ],
+        });
+      }
     }
 
-    // Footer
+    // Footer — with "View all" link if truncated
+    const footerParts = ['_Reply here to ask about any task_'];
+    if (allTasks.length > maxDisplay) {
+      footerParts.push(`_<https://app.use60.com/tasks?filter=overdue|View all ${allTasks.length} tasks>_`);
+    } else {
+      footerParts.push('_<https://app.use60.com/tasks|View all tasks>_');
+    }
     blocks.push({
       type: 'context',
       elements: [{
         type: 'mrkdwn',
-        text: '_Reply here to ask about any task • <https://app.use60.com/tasks|View all tasks>_',
+        text: footerParts.join(' • '),
       }],
     });
 
@@ -473,12 +590,20 @@ async function sendTaskNotification(
         channel: slackMapping.slack_user_id,
         blocks,
         text: `Task reminder: ${result.overdueTasks.length} overdue, ${result.dueTodayTasks.length} due today`,
+        unfurl_links: false,
+        unfurl_media: false,
       }),
     });
 
     const slackResult = await response.json();
-    
+
     if (slackResult.ok) {
+      // Record for dedup (prevents re-sending within 24h)
+      await recordNotificationSent(
+        supabase, 'daily_digest', result.organizationId, result.userId,
+        slackMapping.slack_user_id, slackResult.ts
+      );
+
       // Log engagement event
       await supabase.rpc('log_copilot_engagement', {
         p_org_id: result.organizationId,
@@ -489,6 +614,7 @@ async function sendTaskNotification(
         p_metadata: {
           overdue_count: result.overdueTasks.length,
           due_today_count: result.dueTodayTasks.length,
+          stale_prospect_count: result.staleProspectTasks.length,
           actions_suggested: result.suggestedActions.length,
         },
       });

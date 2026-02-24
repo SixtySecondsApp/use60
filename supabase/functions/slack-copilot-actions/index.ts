@@ -129,19 +129,40 @@ async function handleSlackInteraction(
     actions: interaction.actions?.map(a => a.action_id),
   });
 
-  // Get user from Slack ID
-  const { data: slackAuth } = await supabase
-    .from('slack_auth')
-    .select('user_id, access_token, organization_id')
+  // Get user from Slack ID via slack_user_mappings
+  const { data: slackMapping } = await supabase
+    .from('slack_user_mappings')
+    .select('sixty_user_id, org_id, slack_user_id')
     .eq('slack_user_id', interaction.user.id)
     .maybeSingle();
 
-  if (!slackAuth) {
-    console.log('[SlackActions] No user found for Slack ID:', interaction.user.id);
+  if (!slackMapping) {
+    console.log('[SlackActions] No user mapping found for Slack ID:', interaction.user.id);
     await sendSlackEphemeral(
       interaction.response_url!,
       'Please connect your Slack account in 60 Settings first.'
     );
+    return;
+  }
+
+  // Get org-level bot token for sending messages
+  const { data: slackOrg } = await supabase
+    .from('slack_org_settings')
+    .select('bot_access_token')
+    .eq('org_id', slackMapping.org_id)
+    .eq('is_connected', true)
+    .maybeSingle();
+
+  // Build a slackAuth-compatible object for existing handlers
+  const slackAuth = {
+    user_id: slackMapping.sixty_user_id,
+    access_token: slackOrg?.bot_access_token || '',
+    organization_id: slackMapping.org_id,
+    slack_user_id: slackMapping.slack_user_id,
+  };
+
+  if (!slackAuth.access_token) {
+    console.log('[SlackActions] No Slack bot token for org:', slackMapping.org_id);
     return;
   }
 
@@ -196,7 +217,99 @@ async function processAction(
     return;
   }
 
+  // Meeting prep confirm/skip buttons
+  if (actionId === 'meeting_prep_confirm') {
+    await handleMeetingPrepConfirm(supabase, slackAuth, interaction, value);
+    return;
+  }
+
+  if (actionId === 'meeting_prep_skip') {
+    await handleMeetingPrepSkip(supabase, slackAuth, interaction, value);
+    return;
+  }
+
   console.log('[SlackActions] Unknown action:', actionId);
+}
+
+// ============================================================================
+// Handle Meeting Prep Confirm / Skip
+// ============================================================================
+
+async function handleMeetingPrepConfirm(
+  supabase: any,
+  slackAuth: any,
+  interaction: SlackInteraction,
+  value: { meeting_id: string; user_id: string; org_id?: string }
+): Promise<void> {
+  // Acknowledge the button click immediately
+  if (interaction.response_url) {
+    await fetch(interaction.response_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        replace_original: true,
+        text: '🔄 Preparing your meeting brief...',
+      }),
+    });
+  }
+
+  try {
+    // Trigger meeting prep for this user's upcoming meetings
+    const { data, error } = await supabase.functions.invoke('proactive-meeting-prep', {
+      body: {
+        action: 'prep_single',
+        userId: value.user_id,
+        organizationId: value.org_id,
+        meetingId: value.meeting_id,
+        skipRelevanceCheck: true,
+      },
+    });
+
+    if (error) throw error;
+
+    // Update the original message to confirm
+    if (interaction.response_url) {
+      await fetch(interaction.response_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          replace_original: true,
+          text: '✅ Meeting brief is being prepared. I\'ll send it to you shortly.',
+        }),
+      });
+    }
+  } catch (err) {
+    console.error('[SlackActions] Meeting prep confirm failed:', err);
+    if (interaction.response_url) {
+      await fetch(interaction.response_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          replace_original: false,
+          text: '❌ Sorry, couldn\'t start the meeting prep. Try opening the meeting in the app.',
+        }),
+      });
+    }
+  }
+}
+
+async function handleMeetingPrepSkip(
+  supabase: any,
+  slackAuth: any,
+  interaction: SlackInteraction,
+  value: { meeting_id?: string }
+): Promise<void> {
+  // Update the original message to show it was skipped
+  if (interaction.response_url) {
+    await fetch(interaction.response_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        replace_original: true,
+        text: '👍 Skipped. I\'ll learn your preferences over time.',
+      }),
+    });
+  }
 }
 
 // ============================================================================
@@ -655,14 +768,32 @@ async function handleSlackEvent(
     text: event.text?.substring(0, 100),
   });
 
-  // Get user from Slack ID
-  const { data: slackAuth } = await supabase
-    .from('slack_auth')
-    .select('user_id, access_token, organization_id')
+  // Get user from Slack ID via slack_user_mappings
+  const { data: slackMapping } = await supabase
+    .from('slack_user_mappings')
+    .select('sixty_user_id, org_id, slack_user_id')
     .eq('slack_user_id', event.user)
     .maybeSingle();
 
-  if (!slackAuth) {
+  if (!slackMapping) {
+    return;
+  }
+
+  const { data: slackOrg } = await supabase
+    .from('slack_org_settings')
+    .select('bot_access_token')
+    .eq('org_id', slackMapping.org_id)
+    .eq('is_connected', true)
+    .maybeSingle();
+
+  const slackAuth = {
+    user_id: slackMapping.sixty_user_id,
+    access_token: slackOrg?.bot_access_token || '',
+    organization_id: slackMapping.org_id,
+    slack_user_id: slackMapping.slack_user_id,
+  };
+
+  if (!slackAuth.access_token) {
     return;
   }
 
@@ -718,6 +849,8 @@ async function sendSlackMessage(
         channel,
         text,
         thread_ts: threadTs,
+        unfurl_links: false,
+        unfurl_media: false,
       }),
     });
 
@@ -751,6 +884,8 @@ async function sendSlackBlocks(
         blocks,
         text: fallbackText, // Fallback for notifications
         thread_ts: threadTs,
+        unfurl_links: false,
+        unfurl_media: false,
       }),
     });
 
