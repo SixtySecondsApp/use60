@@ -193,10 +193,26 @@ ${searchResults}
 
 Extract real company information and generate fictional demo content. Use REAL company data from the search results. Use FICTIONAL names for people and prospect companies.
 
-For the email_preview: under 75 words, lowercase 3-word subject line then body, open with an observation about the prospect's business, end with a "worth a look?" style CTA, use contractions, reference a real product from the search results.
+For the email_preview: Write a cold email following these rules EXACTLY:
+- Under 75 words total. 3rd-5th grade reading level. Use contractions.
+- Open with a specific observation about the prospect's business, NOT "I'm reaching out" or "I saw".
+- One clear ask. Interest-based CTA like "Worth a look?" not "Can we schedule a call?"
+- Sign off with the REAL first name of the CEO/founder of ${domain}. If unknown, use "Alex".
+- CRITICAL FORMATTING: Use actual newline characters (not \\n) to separate every paragraph. The greeting, each body sentence, and sign-off MUST be on separate lines with a blank line between them. Example structure:
+
+Hi [Name],
+
+[Observation about their business in one sentence.]
+
+[One sentence connecting to a real product/feature.] [CTA question.]
+
+Best,
+[First Name]
+
+Do NOT write the email as a single continuous paragraph. Each thought gets its own line.
 
 Return ONLY a JSON object:
-{"company":{"name":"","vertical":"2 word industry","product_summary":"what they do in 2 sentences","value_props":["","",""],"icp_title":"who buys this","icp_company_size":"typical buyer size","icp_industry":"buyer industry","employee_range":"","competitors":["",""]},"outreach":{"target_name":"fictional","target_title":"","target_company":"fictional","personalised_hook":"1 sentence referencing real product","email_preview":"under 75 words cold email"},"meeting":{"attendee_name":"fictional","attendee_company":"fictional","context":"","talking_points":["","",""]},"pipeline":{"deal_name":"fictional — deal type","deal_value":"$XX,000","days_stale":0,"health_score":0,"risk_signal":"","suggested_action":"","signals":[{"label":"","type":"warning"},{"label":"","type":"warning"},{"label":"","type":"positive"},{"label":"","type":"positive"}]}}`;
+{"company":{"name":"","vertical":"2 word industry","product_summary":"what they do in 2 sentences","value_props":["","",""],"icp_title":"who buys this","icp_company_size":"typical buyer size","icp_industry":"buyer industry","employee_range":"","competitors":["",""]},"outreach":{"target_name":"fictional","target_title":"","target_company":"fictional","personalised_hook":"1 sentence referencing real product","email_preview":"under 75 words cold email with proper casing and founder sign-off"},"meeting":{"attendee_name":"fictional","attendee_company":"fictional","context":"","talking_points":["","",""]},"pipeline":{"deal_name":"fictional — deal type","deal_value":"$XX,000","days_stale":0,"health_score":0,"risk_signal":"","suggested_action":"","signals":[{"label":"","type":"warning"},{"label":"","type":"warning"},{"label":"","type":"positive"},{"label":"","type":"positive"}]}}`;
 }
 
 // ============================================================================
