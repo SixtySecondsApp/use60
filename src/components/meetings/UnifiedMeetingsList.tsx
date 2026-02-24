@@ -192,7 +192,7 @@ const ListSkeleton: React.FC<{ view: 'list' | 'grid' }> = ({ view }) => (
     {/* Header — matches real: w-14 h-14 icon + title + subtitle */}
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
       <div className="flex items-center gap-4 min-w-0">
-        <Skeleton className="w-10 h-10 rounded-xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+        <Skeleton className="w-12 h-12 rounded-xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
         <div className="min-w-0 flex-1">
           <Skeleton className="h-8 sm:h-9 w-32 mb-2 bg-gray-200/60 dark:bg-gray-700/40" />
           <div className="flex items-center gap-2">
