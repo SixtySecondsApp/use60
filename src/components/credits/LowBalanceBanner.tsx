@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { AlertTriangle, X, CreditCard, RefreshCw, Sparkles } from 'lucide-react';
 import { useCreditBalance } from '@/lib/hooks/useCreditBalance';
 import { useOrgId } from '@/lib/contexts/OrgContext';
@@ -21,13 +21,16 @@ export function LowBalanceBanner() {
   const { userData } = useUser();
   const isAdmin = userData ? isUserAdmin(userData) : false;
   const navigate = useNavigate();
+  const location = useLocation();
   const [dismissed, setDismissed] = useState(false);
   const welcomeKey = orgId ? `sixty_welcome_credits_${orgId}` : null;
   const [showWelcome, setShowWelcome] = useState(() =>
     welcomeKey ? localStorage.getItem(welcomeKey) === 'pending' : false
   );
 
-  if (!orgId || isLoading || !data || dismissed) return null;
+  // Don't render on full-height pages (copilot, ops) — banner steals viewport space
+  const isFullHeightPage = location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/');
+  if (!orgId || isLoading || !data || dismissed || isFullHeightPage) return null;
 
   const { balance, projectedDaysRemaining, autoTopUp } = data;
 
@@ -100,7 +103,7 @@ export function LowBalanceBanner() {
       </span>
       {isAdmin && !autoTopUpEnabled && (
         <button
-          onClick={() => navigate('/settings/credits')}
+          onClick={() => navigate('/settings/credits?action=topup')}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors flex-shrink-0',
             isZero || isRedLow

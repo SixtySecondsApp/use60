@@ -11,6 +11,16 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNotifications } from '@/lib/hooks/useNotifications';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { Notification, NotificationCategory } from '@/lib/services/notificationService';
 
 interface NotificationCenterProps {
@@ -150,6 +160,7 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabId>('all');
   const [expandedGroup, setExpandedGroup] = useState<TabId | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const {
     notifications,
@@ -159,6 +170,7 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
     markAsRead,
     markAllAsRead,
     deleteNotification,
+    clearAll,
     loadMore
   } = useNotifications({ limit: 50 });
 
@@ -275,6 +287,16 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
                 aria-label="Mark all notifications as read"
               >
                 <CheckCheck className="w-5 h-5" />
+              </button>
+            )}
+            {notifications.length > 0 && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-2 rounded-lg transition-all duration-200 hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
+                title="Delete all notifications"
+                aria-label="Delete all notifications"
+              >
+                <Trash2 className="w-5 h-5" />
               </button>
             )}
             <button
@@ -470,17 +492,26 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
         )}
       </div>
 
-      {/* Footer */}
-      {notifications.length > 0 && (
-        <div className="p-4 sm:p-5 border-t border-gray-200 dark:border-gray-800">
-          <button
-            onClick={loadMore}
-            className="w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-200 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/50"
-          >
-            Load More
-          </button>
-        </div>
-      )}
+      {/* Delete all confirmation dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete all notifications?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all your notifications. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => clearAll()}
+              className="bg-red-600 hover:bg-red-700 focus-visible:ring-red-500"
+            >
+              Delete All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

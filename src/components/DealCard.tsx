@@ -75,7 +75,7 @@ const DealCard: React.FC<DealCardProps> = ({
       'from-teal-500 to-cyan-500',
     ];
     
-    const index = deal.name.charCodeAt(0) % colors.length;
+    const index = (deal.name?.charCodeAt(0) || 0) % colors.length;
     return colors[index];
   };
 
@@ -141,7 +141,7 @@ const DealCard: React.FC<DealCardProps> = ({
 
   // Generate initials from deal name
   const generateInitials = () => {
-    return deal.name.split(' ').map(word => word.charAt(0)).join('').slice(0, 2).toUpperCase();
+    return (deal.name || 'NA').split(' ').map(word => word.charAt(0)).join('').slice(0, 2).toUpperCase();
   };
 
   // Check if deal is high priority (mock for MVP)

@@ -46,8 +46,15 @@ const PieTooltip = ({ active, payload }: any) => {
   );
 };
 
+interface DateRange {
+  start: Date;
+  end: Date;
+}
+
 interface InsightsTabProps {
   timeRange?: string;
+  period?: string;
+  dateRange?: DateRange;
 }
 
 const GRADE_ORDER = ['A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F'];
@@ -95,8 +102,11 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
 };
 
-export function InsightsTab({ timeRange }: InsightsTabProps) {
-  const { data, isLoading, error } = useMaSalesPerformance();
+export function InsightsTab({ timeRange, period, dateRange }: InsightsTabProps) {
+  const startDate = dateRange?.start ? dateRange.start.toISOString() : undefined;
+  const endDate = dateRange?.end ? dateRange.end.toISOString() : undefined;
+
+  const { data, isLoading, error } = useMaSalesPerformance({ startDate, endDate });
 
   const gradeDistribution = useMemo(() => {
     if (!data) return [];

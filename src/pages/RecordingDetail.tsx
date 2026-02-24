@@ -1014,6 +1014,25 @@ export const RecordingDetail: React.FC = () => {
             )}
           </div>
 
+              {/* Coaching Score */}
+              {recording.coach_rating != null && (
+                <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-semibold text-gray-900 dark:text-gray-100">Coaching Score</div>
+                    <span className={cn("text-2xl font-bold", getCoachColor(recording.coach_rating))}>
+                      {Math.round(recording.coach_rating)}/10
+                    </span>
+                  </div>
+                  {recording.coach_summary && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                      {recording.coach_summary}
+                    </p>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          )}
+
           {/* Tabbed Interface: Summary, Transcript, Ask AI, Content */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}

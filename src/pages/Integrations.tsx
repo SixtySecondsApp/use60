@@ -7,7 +7,7 @@ import {
   Users,
   Phone,
   CheckSquare,
-  Zap,
+  Plug,
   Mail,
   Database,
   FileSignature,
@@ -974,30 +974,32 @@ export default function Integrations() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-8">
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8">
-        <div className="flex items-center gap-2">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Integrations</h1>
-          <HelpPanel docSlug="integrations-overview" tooltip="Integrations help" />
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20">
+            <Plug className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Integrations</h1>
+              <HelpPanel docSlug="integrations-overview" tooltip="Integrations help" />
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Connect your favorite tools to supercharge your sales workflow.
+            </p>
+          </div>
         </div>
-        <p className="text-gray-500 dark:text-gray-400 mt-1">
-          Connect your favorite tools to supercharge your sales workflow.
-        </p>
       </div>
 
       <div className="max-w-7xl mx-auto">
         {/* Connected Integrations */}
         <div className="mb-12">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Available Integrations
-              </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Connect these integrations to get started
-              </p>
-            </div>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Available Integrations
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Connect these integrations to get started
+            </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {builtIntegrations

@@ -1,0 +1,615 @@
+{
+  "project": {
+    "name": "Production Bug Fixes & Polish — Feb 24",
+    "description": "Fix 19 production bugs and polish items across the platform: funnel page, charts, date filters, email/CORS, credits UI, notifications, heatmap, dashboard docs, Slack integration, and full documentation audit",
+    "branch": "fix/production-bugs",
+    "createdAt": "2026-02-24T00:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "prod-bugs",
+      "name": "Production Bug Fixes",
+      "status": "pending",
+      "createdAt": "2026-02-24T00:00:00Z"
+    },
+    {
+      "id": "prod-polish",
+      "name": "Production UI Polish",
+      "status": "pending",
+      "createdAt": "2026-02-24T00:00:00Z"
+    },
+    {
+      "id": "docs-audit",
+      "name": "Documentation Audit & Update",
+      "status": "pending",
+      "createdAt": "2026-02-24T00:00:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "PBUG-001",
+      "feature": "prod-bugs",
+      "title": "Fix funnel tab crash when no active sales targets exist",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-002", "PBUG-004", "PBUG-005", "PBUG-006", "PBUG-007"],
+      "acceptance": [
+        "Funnel tab renders correctly when user has no active targets",
+        "Funnel metrics (outbound, meetings, proposals, signed) display from activities data",
+        "No regression when targets DO exist"
+      ],
+      "estimatedMinutes": 5,
+      "files": ["src/pages/SalesFunnel.tsx"],
+      "fix": {
+        "description": "Remove the `if (!targets)` error guard at lines 282-294. Targets not used in render — funnel metrics come from activities via useFunnelMetrics().",
+        "changes": [
+          {
+            "file": "src/pages/SalesFunnel.tsx",
+            "action": "delete",
+            "lines": "282-294",
+            "detail": "Remove entire `if (!targets) { return error-div }` block. Also remove `isLoadingTargets` from loading check if included."
+          }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-002",
+      "feature": "prod-bugs",
+      "title": "Add hover dot to sentiment and talktime charts",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-001", "PBUG-004", "PBUG-005", "PBUG-006", "PBUG-007"],
+      "acceptance": [
+        "Sentiment chart shows hover dot on mouseover (matching volume chart)",
+        "TalkTime chart shows hover dot on mouseover (matching volume chart)",
+        "Volume chart behavior unchanged"
+      ],
+      "estimatedMinutes": 5,
+      "files": ["src/components/insights/TeamTrendsChart.tsx"],
+      "fix": {
+        "description": "Change activeDot={false} to activeDot={{ r: 6 }} on sentiment (line 204) and talkTime (line 266) Area components.",
+        "changes": [
+          { "file": "src/components/insights/TeamTrendsChart.tsx", "line": 204, "detail": "Change `activeDot={false}` → `activeDot={{ r: 6 }}`" },
+          { "file": "src/components/insights/TeamTrendsChart.tsx", "line": 266, "detail": "Change `activeDot={false}` → `activeDot={{ r: 6 }}`" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-003",
+      "feature": "prod-bugs",
+      "title": "Propagate date filter to all Meeting Analytics tabs",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "TranscriptsTab receives and uses dateRange to filter transcripts by date",
+        "InsightsTab receives and uses period/dateRange for sales performance queries",
+        "ReportsTab receives and uses dateRange for report history filtering",
+        "Changing date filter updates data across ALL tabs, not just Dashboard"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/MeetingAnalyticsPage.tsx",
+        "src/components/meeting-analytics/TranscriptsTab.tsx",
+        "src/components/meeting-analytics/InsightsTab.tsx",
+        "src/components/meeting-analytics/ReportsTab.tsx",
+        "src/lib/hooks/useMeetingAnalytics.ts",
+        "src/lib/services/meetingAnalyticsService.ts"
+      ],
+      "fix": {
+        "description": "Wire date filter from page → tabs → hooks → service. useMaSalesPerformance already accepts DashboardParams. Need to add date params to TranscriptListParams and getReportHistory.",
+        "changes": [
+          { "file": "src/pages/MeetingAnalyticsPage.tsx", "lines": "291-299", "detail": "Pass period={period} dateRange={dateRange} to TranscriptsTab, InsightsTab, ReportsTab" },
+          { "file": "src/components/meeting-analytics/TranscriptsTab.tsx", "detail": "Accept period/dateRange props, pass to useMaTranscripts" },
+          { "file": "src/components/meeting-analytics/InsightsTab.tsx", "detail": "Accept period/dateRange props, pass to useMaSalesPerformance({ period, startDate, endDate })" },
+          { "file": "src/components/meeting-analytics/ReportsTab.tsx", "detail": "Accept period/dateRange props, pass to useMaReportHistory" },
+          { "file": "src/lib/services/meetingAnalyticsService.ts", "detail": "Add startDate/endDate to TranscriptListParams and getReportHistory. Append to query strings." },
+          { "file": "src/lib/hooks/useMeetingAnalytics.ts", "detail": "Update useMaTranscripts and useMaReportHistory to accept/pass date params" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-004",
+      "feature": "prod-bugs",
+      "title": "Make credits banner overlay instead of pushing content down",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-001", "PBUG-002", "PBUG-005", "PBUG-006", "PBUG-007"],
+      "acceptance": [
+        "Credits depleted banner overlays content instead of pushing it down",
+        "Chat bar / copilot input remains visible when banner is shown",
+        "Banner sits below top navbar (not covering it)",
+        "Banner does NOT interfere with modals (z-index below modal layer)",
+        "Banner is still dismissible"
+      ],
+      "estimatedMinutes": 10,
+      "files": ["src/components/credits/LowBalanceBanner.tsx", "src/components/AppLayout.tsx"],
+      "fix": {
+        "description": "Change banner from normal document flow to fixed overlay below navbar. z-30 (below modal z-50), with left offset for sidebar.",
+        "changes": [
+          { "file": "src/components/credits/LowBalanceBanner.tsx", "detail": "Add fixed positioning, top offset below navbar (~top-[49px]), left offset to clear sidebar, right-0, z-30" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-005",
+      "feature": "prod-bugs",
+      "title": "Graceful handling of fireflies_integrations 404",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-001", "PBUG-002", "PBUG-004", "PBUG-006", "PBUG-007"],
+      "acceptance": [
+        "No 404 error in console for fireflies_integrations",
+        "Integrations page loads correctly",
+        "Hook works normally when table IS deployed"
+      ],
+      "estimatedMinutes": 5,
+      "files": ["src/lib/hooks/useFirefliesIntegration.ts"],
+      "fix": {
+        "description": "Wrap query in try/catch. If 404/42P01 (table not found), return null gracefully.",
+        "changes": [
+          { "file": "src/lib/hooks/useFirefliesIntegration.ts", "lines": "75-80", "detail": "Add try/catch, silently handle table-not-found errors" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-006",
+      "feature": "prod-bugs",
+      "title": "Add apify-connect to config.toml to fix CORS",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-001", "PBUG-002", "PBUG-004", "PBUG-005", "PBUG-007"],
+      "acceptance": [
+        "apify-connect added to config.toml with verify_jwt = false",
+        "No more CORS errors on integrations page"
+      ],
+      "estimatedMinutes": 2,
+      "files": ["supabase/config.toml"],
+      "fix": {
+        "description": "Add [functions.apify-connect] with verify_jwt = false. Same pattern as fireflies-sync.",
+        "changes": [
+          { "file": "supabase/config.toml", "detail": "Add [functions.apify-connect] entry with verify_jwt = false" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-007",
+      "feature": "prod-bugs",
+      "title": "Replace .single() with .maybeSingle() for waitlist onboarding",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-001", "PBUG-002", "PBUG-004", "PBUG-005", "PBUG-006"],
+      "acceptance": [
+        "No 406 error in console for missing waitlist_onboarding_progress",
+        "Existing progress still loads correctly"
+      ],
+      "estimatedMinutes": 3,
+      "files": ["src/lib/services/onboardingService.ts"],
+      "fix": {
+        "description": "Change .single() to .maybeSingle() at line 115. Remove PGRST116 special-case handling.",
+        "changes": [
+          { "file": "src/lib/services/onboardingService.ts", "line": 115, "detail": "Change .single() → .maybeSingle(), remove PGRST116 error check" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-008",
+      "feature": "prod-bugs",
+      "title": "Fix password reset email 400 error",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-009", "PBUG-010"],
+      "acceptance": [
+        "Password reset email sends successfully from Platform Admin > Users page",
+        "Edge function handles missing user metadata gracefully",
+        "Error responses include actionable error messages"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/send-password-reset-email/index.ts",
+        "src/pages/admin/Users.tsx"
+      ],
+      "fix": {
+        "description": "The edge function chains to encharge-send-email but may fail if firstName extraction fails (listUsers returns limited data). Add error handling for listUsers call (line 122), ensure firstName defaults never produce empty strings, and validate email format before sending.",
+        "changes": [
+          { "file": "supabase/functions/send-password-reset-email/index.ts", "lines": "121-127", "detail": "Add error handling for listUsers call. Ensure firstName defaults to email prefix or 'User'. Log and return clear error if encharge-send-email chain fails." }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-009",
+      "feature": "prod-bugs",
+      "title": "Fix organization invitation CORS error",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-008", "PBUG-010"],
+      "acceptance": [
+        "Organization invitation emails send successfully",
+        "CORS preflight passes for send-organization-invitation",
+        "Resend invitation works without CORS errors"
+      ],
+      "estimatedMinutes": 10,
+      "files": ["supabase/functions/send-organization-invitation/index.ts"],
+      "fix": {
+        "description": "Function uses static wildcard CORS (Access-Control-Allow-Origin: *) which fails with credentials. Replace with dynamic origin checking pattern from send-password-reset-email — check if origin includes use60.com, localhost, etc. and return exact origin.",
+        "changes": [
+          { "file": "supabase/functions/send-organization-invitation/index.ts", "lines": "11-15", "detail": "Replace static corsHeaders with dynamic getAllowedOrigin() function matching send-password-reset-email pattern. Update all Response constructors to use corsHeaders(req)." }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-010",
+      "feature": "prod-bugs",
+      "title": "Fix meeting_index_queue 403 RLS policy",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-008", "PBUG-009"],
+      "acceptance": [
+        "Users can queue meetings for indexing without 403 error",
+        "RLS allows inserting queue items for meetings the user owns or within their org",
+        "Service role still has full access"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/migrations/"],
+      "fix": {
+        "description": "Current RLS requires user_id = auth.uid() but code inserts with meeting.owner_user_id. Create new migration to fix INSERT policy — allow if user owns the meeting OR is in the same org.",
+        "changes": [
+          { "file": "supabase/migrations/20260224200000_fix_meeting_index_queue_rls.sql", "action": "create", "detail": "DROP and recreate INSERT policy to check: is_service_role() OR meeting owner matches auth.uid() OR user is in same org as meeting" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-011",
+      "feature": "prod-polish",
+      "title": "Remove 'Most Popular' tag from quick top-up credit packs",
+      "type": "enhancement",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-012", "PBUG-013", "PBUG-014", "PBUG-015"],
+      "acceptance": [
+        "'Most Popular' badge removed from the quick top-up button context",
+        "Badge still appears on full credit purchase modal pack cards"
+      ],
+      "estimatedMinutes": 5,
+      "files": ["src/components/credits/CreditPurchaseModal.tsx"],
+      "fix": {
+        "description": "Add showPopularBadge prop (default true). When opened from quick top-up / banner context, pass false to hide the badge. The isPopular check at line 88 conditionally renders the badge (lines 92-99).",
+        "changes": [
+          { "file": "src/components/credits/CreditPurchaseModal.tsx", "lines": "88-99", "detail": "Add showPopularBadge prop, conditionally render badge: isPopular && showPopularBadge" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-012",
+      "feature": "prod-polish",
+      "title": "Credits banner Top Up button opens modal directly",
+      "type": "enhancement",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-011", "PBUG-013", "PBUG-014", "PBUG-015"],
+      "acceptance": [
+        "Clicking Top Up in credits depleted banner opens the credit purchase modal",
+        "Same modal behavior as clicking credits indicator in top bar then Top Up"
+      ],
+      "estimatedMinutes": 5,
+      "files": ["src/components/credits/LowBalanceBanner.tsx"],
+      "fix": {
+        "description": "Change navigate('/settings/credits') to navigate('/settings/credits?action=topup'). The CreditsSettingsPage already detects ?action=topup and auto-opens CreditPurchaseModal (lines 117-125).",
+        "changes": [
+          { "file": "src/components/credits/LowBalanceBanner.tsx", "line": 103, "detail": "Change to navigate('/settings/credits?action=topup')" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-013",
+      "feature": "prod-polish",
+      "title": "Fix heatmap single-day selection and date filter display",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-011", "PBUG-012", "PBUG-014", "PBUG-015"],
+      "acceptance": [
+        "Clicking a day on heatmap navigates to activity log with correct single-day filter",
+        "Date display shows 'Feb 24, 2026' not 'Feb 24 – select end'",
+        "Single-click day selection works in ALL DateRangeFilter instances across the app"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/ui/DateRangeFilter.tsx",
+        "src/components/SalesTable.tsx"
+      ],
+      "fix": {
+        "description": "Two issues: (1) SalesTable.tsx:173-174 calls handleCalendarSelect() twice causing intermediate 'select end' state. Fix by adding a setBothDates() method or setting both dates atomically. (2) DateRangeFilter handleCalendarSelect (line 163-172) requires 2 clicks for single day. Add auto-complete: if user clicks one date and doesn't click another within ~500ms, auto-set end = start + 1 day. Apply to all 12+ DateRangeFilter instances app-wide (change is in the hook, so automatic).",
+        "changes": [
+          { "file": "src/components/ui/DateRangeFilter.tsx", "lines": "163-172", "detail": "Add setDateRange(start, end) method for atomic range setting. Add auto-complete timeout for single-click = single day." },
+          { "file": "src/components/SalesTable.tsx", "lines": "173-174", "detail": "Use new atomic setDateRange(start, end) instead of calling handleCalendarSelect twice" }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-014",
+      "feature": "prod-polish",
+      "title": "Add mass delete to notifications and fix Load More",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-011", "PBUG-012", "PBUG-013", "PBUG-015"],
+      "acceptance": [
+        "Delete All button visible in notification panel next to Mark All Read",
+        "Delete All prompts confirmation then clears all notifications",
+        "Load More button either works correctly or is removed"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/notifications/NotificationCenter.tsx",
+        "src/components/NotificationPanel.tsx",
+        "src/lib/hooks/useNotifications.ts"
+      ],
+      "fix": {
+        "description": "clearAll() already exists in useNotifications hook (lines 103-118). NotificationPanel has delete button but NotificationCenter doesn't. Add it. For Load More: hook has silent error catch (line 132-133) and pagination offset bug with filters. Fix error handling and evaluate if Load More is needed (remove if not).",
+        "changes": [
+          { "file": "src/components/notifications/NotificationCenter.tsx", "lines": "270-278", "detail": "Add clearAll button (Trash2 icon) next to Mark All Read. Destructure clearAll from hook." },
+          { "file": "src/lib/hooks/useNotifications.ts", "lines": "121-134", "detail": "Add error logging to loadMore catch block. Fix pagination offset when filters are active." },
+          { "file": "src/components/notifications/NotificationCenter.tsx", "lines": "470-483", "detail": "Remove Load More button if pagination is unreliable, or fix it with proper hasMore check." }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-015",
+      "feature": "prod-polish",
+      "title": "Fix Dashboard overview modal content and :::tip rendering",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-011", "PBUG-012", "PBUG-013", "PBUG-014"],
+      "acceptance": [
+        "Dashboard help panel content reflects ALL current dashboard features",
+        ":::tip admonition blocks render as styled callout boxes, not raw text",
+        "Modal scrolls content without scrolling main page behind it",
+        "No broken formatting"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/docs/HelpPanel.tsx",
+        "supabase/migrations/"
+      ],
+      "fix": {
+        "description": "Three fixes: (1) HelpPanel uses ReactMarkdown with only remark-gfm but no admonition support. Either add remark-directive plugin or use the existing parseCustomBlocks()/CalloutBlock pattern from DocsPage. (2) Create migration to update customer-dashboard doc content to include: KPI metrics grid, team performance, 5 dashboard tabs (Overview, Activity, Funnel, Heatmap, Lead Analytics), date range filter, activation checklist. (3) HelpPanel already has overflow-y-auto (line 85) so scrolling should work — verify body scroll lock.",
+        "changes": [
+          { "file": "src/components/docs/HelpPanel.tsx", "line": 105, "detail": "Add admonition rendering: either import parseCustomBlocks from DocsPage pattern or add remark-directive plugin to ReactMarkdown. Use existing CalloutBlock component." },
+          { "file": "supabase/migrations/20260224200100_update_dashboard_help_content.sql", "action": "create", "detail": "UPDATE docs_articles SET content = (updated markdown) WHERE slug = 'customer-dashboard'. Include KPI grid, team performance, all 5 tabs, date filter, activation checklist." }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-016",
+      "feature": "docs-audit",
+      "title": "Full documentation audit and content update",
+      "type": "enhancement",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["PBUG-015"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "All 37+ docs_articles reviewed against current app features",
+        "Outdated content updated to reflect current UI and functionality",
+        ":::tip and other admonition syntax works in all docs",
+        "No references to removed/renamed features"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["supabase/migrations/"],
+      "fix": {
+        "description": "Create migration(s) to update all outdated docs_articles content. Key gaps found: (1) customer-dashboard outdated (missing KPIs, tabs, team perf). (2) meeting-command-centre needs latest features. (3) 14 undocumented features: calls/voice recording, email actions, fact profiles, leads, events, workflows detail, forms, profiles, roadmap, releases. Priority updates: customer-dashboard, meeting-command-centre, and any docs referencing removed features.",
+        "changes": [
+          { "file": "supabase/migrations/20260224200200_docs_audit_updates.sql", "action": "create", "detail": "Batch UPDATE docs_articles for all outdated content. Focus on customer-dashboard, meeting-command-centre, getting-started, and integration docs that reference changed features." }
+        ],
+        "auditFindings": {
+          "totalDocs": 42,
+          "currentDocs": 37,
+          "outdatedDocs": ["customer-dashboard", "meeting-command-centre"],
+          "undocumentedFeatures": [
+            "Call/Voice Recording (/calls, /voice)",
+            "Email Actions (/email-actions)",
+            "Fact Profiles (/fact-profiles)",
+            "Leads (/leads)",
+            "Events (/events)",
+            "Forms (/form)",
+            "Profiles (/profiles)",
+            "Roadmap (/roadmap)",
+            "Releases (/releases)"
+          ],
+          "missingDocTypes": [
+            "FAQ/Troubleshooting",
+            "Release Notes section",
+            "Glossary"
+          ]
+        }
+      }
+    },
+    {
+      "id": "PBUG-017",
+      "feature": "prod-bugs",
+      "title": "Fix Slack user ID detection for self-mapping",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["PBUG-018"],
+      "parallelWith": ["PBUG-019"],
+      "acceptance": [
+        "Users can link their Slack account without needing to DM the bot first",
+        "Self-mapping works via email match when slack_user_mappings record exists",
+        "Clear error message if no mapping found, with actionable instructions"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/slack-self-map/index.ts",
+        "supabase/functions/slack-events/index.ts",
+        "src/components/settings/SlackSelfMapping.tsx"
+      ],
+      "fix": {
+        "description": "The slack-self-map function (lines 73-114) searches slack_user_mappings by slack_user_id or email. If the record doesn't exist (user never DMed bot or team_join event missed), linking fails with 'Slack user not found'. Three issues: (1) slack-events team_join handler (line 223) skips entirely if Slack user has no email in profile — should still create mapping with null email. (2) slack-self-map should attempt to fetch Slack user info via Slack API as fallback when no mapping exists, creating the mapping on-the-fly. (3) SlackSelfMapping UI should show clearer instructions and a 'Refresh/Retry' button.",
+        "changes": [
+          { "file": "supabase/functions/slack-events/index.ts", "lines": "223-228", "detail": "Always create slack_user_mappings record on team_join, even when email is null. Set is_auto_matched=false when email missing." },
+          { "file": "supabase/functions/slack-self-map/index.ts", "lines": "73-114", "detail": "Add fallback: if no mapping found by email, call Slack users.lookupByEmail API to find user and create mapping on-the-fly. Also handle case where Slack email differs from platform email by attempting Slack API lookup." },
+          { "file": "src/components/settings/SlackSelfMapping.tsx", "detail": "Improve error UX: show specific instructions (DM the bot, check email matches), add Retry/Refresh button." }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-018",
+      "feature": "prod-polish",
+      "title": "Filter Slack team mapping to only show org members",
+      "type": "enhancement",
+      "status": "pending",
+      "priority": 18,
+      "dependencies": { "stories": ["PBUG-017"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-019"],
+      "acceptance": [
+        "Slack user mapping table only shows users who are members of the connected organization",
+        "External Slack workspace users not in the org are filtered out",
+        "Admin can still see unmapped org members to complete mapping"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/settings/SlackUserMapping.tsx",
+        "src/lib/hooks/useSlackSettings.ts"
+      ],
+      "fix": {
+        "description": "Currently SlackUserMapping shows ALL slack_user_mappings for the org (all workspace users). Filter the displayed list to only include mappings where: (a) sixty_user_id is already mapped to an org member, OR (b) slack_email matches an org member's email. Use the existing useOrgMembers() hook (already imported, line 33-34) to get org member emails, then filter slack mappings against that list.",
+        "changes": [
+          { "file": "src/components/settings/SlackUserMapping.tsx", "lines": "40-86", "detail": "After fetching slack_user_mappings, filter to only show entries where slack_email matches an org member email OR sixty_user_id matches an org member. Add toggle/checkbox 'Show all workspace users' for admin override if needed." },
+          { "file": "src/lib/hooks/useSlackSettings.ts", "detail": "Optionally add org_member_emails filter param to the mappings query to do server-side filtering." }
+        ]
+      }
+    },
+    {
+      "id": "PBUG-019",
+      "feature": "prod-polish",
+      "title": "Remove duplicate subtitle in Slack User Mapping section",
+      "type": "bugfix",
+      "status": "pending",
+      "priority": 19,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PBUG-017", "PBUG-018"],
+      "acceptance": [
+        "Only one description line appears under User Mapping heading",
+        "No duplicate 'Map Slack users to Sixty users...' text"
+      ],
+      "estimatedMinutes": 2,
+      "files": [
+        "src/components/settings/SlackUserMapping.tsx"
+      ],
+      "fix": {
+        "description": "Two descriptions render: SlackSettings.tsx:1744 (CardDescription: 'Map Slack users to Sixty users for @mentions and direct messages.') and SlackUserMapping.tsx:91 (internal p tag: 'Map Slack users to Sixty users for @mentions and DMs'). Remove the internal one from SlackUserMapping since the parent Card already provides it.",
+        "changes": [
+          { "file": "src/components/settings/SlackUserMapping.tsx", "line": 91, "detail": "Remove the <p> tag with duplicate description text. The parent CardDescription in SlackSettings.tsx already provides this." }
+        ]
+      }
+    }
+  ],
+
+  "execution": {
+    "totalStories": 19,
+    "completedStories": 0,
+    "currentFeature": "prod-bugs",
+    "lastUpdated": "2026-02-24T00:00:00Z",
+    "estimatedTotalMinutes": 227,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "label": "Quick independent fixes",
+        "stories": ["PBUG-001", "PBUG-002", "PBUG-005", "PBUG-006", "PBUG-007"],
+        "estimatedMinutes": 20,
+        "note": "All single-file, independent — run in parallel"
+      },
+      {
+        "group": 2,
+        "label": "CORS and email fixes",
+        "stories": ["PBUG-008", "PBUG-009", "PBUG-010"],
+        "estimatedMinutes": 40,
+        "note": "Edge function + migration fixes — parallel with each other"
+      },
+      {
+        "group": 3,
+        "label": "Credits and banner UI",
+        "stories": ["PBUG-004", "PBUG-011", "PBUG-012"],
+        "estimatedMinutes": 20,
+        "note": "Credits banner overlay + Top Up modal + Most Popular tag — parallel"
+      },
+      {
+        "group": 4,
+        "label": "Date filter propagation",
+        "stories": ["PBUG-003", "PBUG-013"],
+        "estimatedMinutes": 45,
+        "note": "Meeting analytics date wiring + heatmap/DateRangeFilter single-day fix"
+      },
+      {
+        "group": 5,
+        "label": "Notifications and dashboard modal",
+        "stories": ["PBUG-014", "PBUG-015"],
+        "estimatedMinutes": 35,
+        "note": "Notification delete all + dashboard help panel + admonition rendering"
+      },
+      {
+        "group": 6,
+        "label": "Slack integration fixes",
+        "stories": ["PBUG-017", "PBUG-018", "PBUG-019"],
+        "estimatedMinutes": 37,
+        "note": "Slack self-map fix + team mapping filter + duplicate subtitle removal. PBUG-019 is independent, PBUG-018 depends on PBUG-017."
+      },
+      {
+        "group": 7,
+        "label": "Documentation audit",
+        "stories": ["PBUG-016"],
+        "estimatedMinutes": 30,
+        "note": "Depends on PBUG-015. Full content review and migration updates."
+      }
+    ]
+  }
+}

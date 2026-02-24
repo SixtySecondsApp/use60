@@ -89,7 +89,7 @@ export function SalesTable() {
   const { userData } = useUser(); // Get user data for admin check
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [activityToDelete, setActivityToDelete] = useState<string | null>(null);
-  const { filters, setFilters, resetFilters } = useActivityFilters();
+  const { filters, setFilters, resetFilters, dateRangeExplicit } = useActivityFilters();
   
   // Multi-select functionality
   const [selectedActivities, setSelectedActivities] = useState<Set<string>>(new Set());
@@ -155,9 +155,12 @@ export function SalesTable() {
     }
   };
   
-  // One-time sync from global filters (e.g., when arriving from dashboard)
+  // One-time sync from global filters (e.g., heatmap click → activity tab)
+  // Only syncs when dateRange was explicitly set (dateRangeExplicit flag).
+  // Skips default store dateRange to avoid overriding the date filter's "month" preset on tab switch.
   useEffect(() => {
     if (hasSyncedFromFilters.current) return;
+    if (!dateRangeExplicit) return;
     const fr = filters.dateRange;
     if (!fr) return;
 
@@ -169,12 +172,11 @@ export function SalesTable() {
       });
     }
 
-    // Set custom range from global filter
-    dateFilter.handleCalendarSelect(new Date(fr.start));
-    dateFilter.handleCalendarSelect(new Date(fr.end));
+    // Set custom range from global filter (atomic — avoids intermediate "select end" state)
+    dateFilter.setCustomRange(new Date(fr.start), new Date(fr.end));
     hasSyncedFromFilters.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.dateRange]);
+  }, [filters.dateRange, dateRangeExplicit]);
 
   // Calculate the current and previous date ranges based on the date filter
   const { currentDateRange, previousDateRange } = useMemo(() => {

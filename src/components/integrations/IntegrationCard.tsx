@@ -81,7 +81,7 @@ function IntegrationLogo({
           src={logoUrl}
           alt={`${name} logo`}
           className={cn(
-            'w-8 h-8 object-contain transition-opacity duration-150',
+            'w-full h-full object-cover transition-opacity duration-150',
             loaded ? 'opacity-100' : 'opacity-0'
           )}
           decoding="async"
@@ -137,7 +137,7 @@ export function IntegrationCard({
                 <img
                   src={sixtyLogo}
                   alt="Sixty logo"
-                  className="w-8 h-8 object-contain"
+                  className="w-full h-full object-cover"
                   decoding="async"
                   loading="eager"
                 />

@@ -132,8 +132,8 @@ export default function Calls() {
       <div className="flex items-start justify-between gap-6 mb-6">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-              <PhoneCall className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20">
+              <PhoneCall className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Calls</h1>

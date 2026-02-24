@@ -107,8 +107,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             success: false,
-            error:
-              'No Slack mapping found for your email yet. Please DM the Sixty bot in Slack once, then retry.',
+            error: `No Slack mapping found for your email (${userEmail}). Please make sure your Slack profile email matches, or ask your admin to refresh Slack users.`,
           }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );

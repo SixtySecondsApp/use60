@@ -125,10 +125,10 @@ export function useMaSalesPerformance(params: DashboardParams = {}) {
 // Reports
 // =====================================================
 
-export function useMaReportHistory(limit?: number) {
+export function useMaReportHistory(params: { limit?: number; startDate?: string; endDate?: string } = {}) {
   return useQuery({
-    queryKey: ['meeting-analytics', 'report-history', limit],
-    queryFn: () => maService.getReportHistory(limit),
+    queryKey: ['meeting-analytics', 'report-history', params],
+    queryFn: () => maService.getReportHistory(params),
     staleTime: STALE_TIME,
   });
 }

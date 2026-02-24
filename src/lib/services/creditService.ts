@@ -506,6 +506,28 @@ export async function updateAutoTopUpSettings(
 // ============================================================================
 
 /**
+ * Extract numeric balance from RPC response.
+ * PostgREST can return scalar as number, or wrapped as [number] or { balance_credits }.
+ */
+function extractBalanceFromRpcResponse(value: unknown): number {
+  if (typeof value === 'number' && !Number.isNaN(value)) return value;
+  if (Array.isArray(value) && value.length > 0) {
+    const first = value[0];
+    if (typeof first === 'number') return first;
+    if (first && typeof first === 'object' && 'balance_credits' in first) {
+      return Number((first as { balance_credits: unknown }).balance_credits) || 0;
+    }
+  }
+  if (value && typeof value === 'object' && 'balance_credits' in value) {
+    return Number((value as { balance_credits: unknown }).balance_credits) || 0;
+  }
+  if (value && typeof value === 'object' && 'balance' in value) {
+    return Number((value as { balance: unknown }).balance) || 0;
+  }
+  throw new Error('Unexpected RPC response format');
+}
+
+/**
  * Admin-only: Grant credits to an org without payment.
  * Uses the add_credits_pack PL/pgSQL function with source 'bonus'.
  */
@@ -535,10 +557,10 @@ export async function grantCredits(
       throw new Error(legacyError.message || 'Failed to grant credits');
     }
 
-    return legacyData as number;
+    return extractBalanceFromRpcResponse(legacyData);
   }
 
-  return data as number; // new balance
+  return extractBalanceFromRpcResponse(data);
 }
 
 // ============================================================================

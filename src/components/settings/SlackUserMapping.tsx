@@ -44,6 +44,20 @@ export function SlackUserMapping({ onRefresh, isRefreshing }: SlackUserMappingPr
 
   const isLoading = mappingsLoading || membersLoading;
 
+  // PBUG-018: Only show Slack mappings for users who are org members.
+  // This filters out external Slack workspace users who are not part of the org.
+  const orgMemberEmails = new Set(
+    (orgMembers || []).map((m) => (m.email || '').toLowerCase()).filter(Boolean)
+  );
+  const orgMemberIds = new Set((orgMembers || []).map((m) => m.user_id).filter(Boolean));
+
+  const filteredMappings = (mappings || []).filter((mapping) => {
+    const slackEmail = (mapping.slack_email || '').toLowerCase();
+    if (slackEmail && orgMemberEmails.has(slackEmail)) return true;
+    if (mapping.sixty_user_id && orgMemberIds.has(mapping.sixty_user_id)) return true;
+    return false;
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -86,10 +100,7 @@ export function SlackUserMapping({ onRefresh, isRefreshing }: SlackUserMappingPr
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Map Slack users to Sixty users for @mentions and DMs
-        </p>
+      <div className="flex items-center justify-end">
         {onRefresh && (
           <Button variant="outline" size="sm" onClick={onRefresh} disabled={isRefreshing}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -108,14 +119,14 @@ export function SlackUserMapping({ onRefresh, isRefreshing }: SlackUserMappingPr
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(!mappings || mappings.length === 0) ? (
+            {filteredMappings.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                  No Slack users found. Users will appear here after they interact with the Sixty bot.
+                  No org members found in Slack. Users will appear here after they join the workspace and interact with the Sixty bot.
                 </TableCell>
               </TableRow>
             ) : (
-              mappings.map((mapping) => (
+              filteredMappings.map((mapping) => (
                 <TableRow key={mapping.id}>
                   <TableCell>
                     <div className="flex flex-col">
@@ -160,21 +171,21 @@ export function SlackUserMapping({ onRefresh, isRefreshing }: SlackUserMappingPr
         </Table>
       </div>
 
-      {mappings && mappings.length > 0 && (
+      {filteredMappings.length > 0 && (
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Badge variant="default" className="bg-green-600">
               <Check className="h-3 w-3 mr-1" />
               Mapped
             </Badge>
-            <span>{mappings.filter((m) => m.sixty_user_id).length}</span>
+            <span>{filteredMappings.filter((m) => m.sixty_user_id).length}</span>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="border-yellow-500 text-yellow-600">
               <AlertCircle className="h-3 w-3 mr-1" />
               Unmapped
             </Badge>
-            <span>{mappings.filter((m) => !m.sixty_user_id).length}</span>
+            <span>{filteredMappings.filter((m) => !m.sixty_user_id).length}</span>
           </div>
         </div>
       )}

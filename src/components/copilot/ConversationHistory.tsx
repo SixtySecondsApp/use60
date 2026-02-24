@@ -93,7 +93,7 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
       )}
 
       {/* Conversation List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto scrollbar-custom">
         {!conversations || conversations.length === 0 ? (
           <div className={cn(
             'flex flex-col items-center justify-center text-center',
