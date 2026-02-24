@@ -129,8 +129,8 @@ export default function ProspectingHub() {
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Page header */}
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800/60 bg-gradient-to-br from-blue-500/20 to-purple-500/20">
-            <Search className="h-5 w-5 text-blue-400" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20">
+            <Search className="h-6 w-6 text-emerald-400" />
           </div>
           <div>
             <h1 className="text-2xl font-semibold text-zinc-100">Prospecting</h1>

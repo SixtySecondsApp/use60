@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2, Circle, Clock, Sparkles, Send, Mail, FileText, Phone,
   Search, ChevronDown, ChevronRight, Building2, CalendarClock, AlertTriangle,
-  Bot, Eye, Pencil, X, MoreHorizontal, Filter, ArrowUpDown, Zap, Brain,
+  Bot, Eye, Pencil, X, MoreHorizontal, Filter, ArrowUpDown, Zap, Brain, Crosshair,
   MessageSquare, Target, TrendingUp, BarChart3, Users, Loader2, Check,
   RefreshCw, BellRing, Inbox, ListFilter, LayoutGrid, Calendar,
   ArrowRight, ExternalLink, Flame, Timer, Shield, Lightbulb, FileSearch,
@@ -945,8 +945,8 @@ export default function CommandCentreDemo() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 shadow-lg shadow-blue-500/20">
-                <Zap className="h-5 w-5 text-white" />
+              <div className="flex items-center justify-center w-12 h-12 rounded-xl border border-gray-200 dark:border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20">
+                <Crosshair className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-gray-100">Command Centre</h1>

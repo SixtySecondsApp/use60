@@ -593,8 +593,8 @@ const UnifiedMeetingsList: React.FC = () => {
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full"
       >
         <div className="flex items-center gap-4 min-w-0">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex-shrink-0">
-            <Video className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex-shrink-0">
+            <Video className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-bold">

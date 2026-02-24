@@ -7,7 +7,7 @@ import {
   Users,
   Phone,
   CheckSquare,
-  Zap,
+  Plug,
   Mail,
   Database,
   FileSignature,
@@ -975,8 +975,8 @@ export default function Integrations() {
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8">
         <div className="flex items-center gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-800/60 bg-gradient-to-br from-blue-500/20 to-purple-500/20">
-            <Zap className="h-5 w-5 text-blue-500 dark:text-blue-400" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-800/60 bg-gradient-to-br from-emerald-500/20 to-blue-500/20">
+            <Plug className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
           </div>
           <div>
             <div className="flex items-center gap-2">
