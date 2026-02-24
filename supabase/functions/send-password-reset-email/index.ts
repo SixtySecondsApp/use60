@@ -66,6 +66,8 @@ serve(async (req) => {
       );
     }
 
+    const normalizedEmail = request.email.toLowerCase().trim();
+
     // Create admin client
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: {
@@ -118,31 +120,84 @@ serve(async (req) => {
       );
     }
 
-    // Get user data to extract first name
-    const { data: { users }, error: userError } = await supabaseAdmin.auth.admin.listUsers();
-    const user = users?.find(u => u.email?.toLowerCase() === request.email.toLowerCase());
-    const firstName = user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'User';
+    // Resolve the user first name for the email template.
+    // Uses paginated listUsers (capped at 1000 rows) instead of unbounded listUsers().
+    // Wrapped in try/catch so a lookup failure never blocks the password reset.
+    let firstName: string;
+    try {
+      const { data: userData, error: userError } = await supabaseAdmin.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000,
+      });
 
-    // Call encharge-send-email to send the password reset email
-    const enchargeFunctionUrl = `${SUPABASE_URL}/functions/v1/encharge-send-email`;
-    
-    const emailResponse = await fetch(enchargeFunctionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        'apikey': SUPABASE_SERVICE_ROLE_KEY,
-      },
-      body: JSON.stringify({
-        template_type: 'password_reset',
-        to_email: request.email,
-        to_name: firstName,
-        variables: {
-          first_name: firstName,
-          reset_link: recoveryData.properties.action_link,
+      if (userError) {
+        // Non-fatal: log and fall back to email prefix
+        console.warn(
+          '[send-password-reset-email] listUsers error (non-fatal, using email prefix):',
+          userError.message
+        );
+        firstName = normalizedEmail.split('@')[0] || 'User';
+      } else {
+        const matchedUser = userData?.users?.find(
+          (u) => u.email?.toLowerCase() === normalizedEmail
+        );
+        const rawName = matchedUser?.user_metadata?.first_name;
+        // Use rawName only when non-empty string; otherwise fall back to email prefix
+        firstName =
+          typeof rawName === 'string' && rawName.trim()
+            ? rawName.trim()
+            : normalizedEmail.split('@')[0] || 'User';
+
+        console.log(
+          '[send-password-reset-email] Resolved firstName:', firstName,
+          '| userFound:', !!matchedUser
+        );
+      }
+    } catch (userLookupErr) {
+      // Non-fatal: an unexpected throw during lookup must not abort the reset
+      console.warn(
+        '[send-password-reset-email] User lookup threw unexpectedly (non-fatal):',
+        userLookupErr
+      );
+      firstName = normalizedEmail.split('@')[0] || 'User';
+    }
+
+    // Call encharge-send-email to deliver the password reset email
+    const enchargeFunctionUrl = SUPABASE_URL + '/functions/v1/encharge-send-email';
+
+    let emailResponse: Response;
+    try {
+      emailResponse = await fetch(enchargeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY,
+          'apikey': SUPABASE_SERVICE_ROLE_KEY,
         },
-      }),
-    });
+        body: JSON.stringify({
+          template_type: 'password_reset',
+          to_email: normalizedEmail,
+          to_name: firstName,
+          variables: {
+            first_name: firstName,
+            reset_link: recoveryData.properties.action_link,
+          },
+        }),
+      });
+    } catch (fetchErr) {
+      // Network-level failure reaching encharge-send-email (DNS, timeout, etc.)
+      console.error(
+        '[send-password-reset-email] Network error calling encharge-send-email:',
+        fetchErr
+      );
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Email service unreachable: ' + (fetchErr instanceof Error ? fetchErr.message : String(fetchErr)),
+        }),
+        { status: 502, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } }
+      );
+    }
 
     if (!emailResponse.ok) {
       let errorData: any = { error: `HTTP ${emailResponse.status}` };
@@ -159,7 +214,7 @@ serve(async (req) => {
         // Keep default errorData
       }
       
-      console.error('[send-password-reset-email] Email sending error:', {
+      console.error('[send-password-reset-email] encharge-send-email returned non-OK:', {
         status: emailResponse.status,
         error: errorData
       });
@@ -167,10 +222,11 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: errorData.error || `Failed to send email: ${emailResponse.status}`,
+          error: 'Email service error (' + emailResponse.status + '): ' + (errorData.error || errorData.message || JSON.stringify(errorData)),
         }),
         {
-          status: 400,
+          // 502 = upstream service failure; not a client error
+          status: 502,
           headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         }
       );
@@ -184,24 +240,24 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Invalid response from email service',
+          error: 'Invalid JSON response from email service',
         }),
         {
-          status: 400,
+          status: 502,
           headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         }
       );
     }
 
     if (!emailResult || !emailResult.success) {
-      console.error('[send-password-reset-email] Email sending failed:', emailResult);
+      console.error('[send-password-reset-email] Email sending reported failure:', emailResult);
       return new Response(
         JSON.stringify({
           success: false,
-          error: emailResult?.error || 'Email sending failed',
+          error: emailResult?.error || 'Email service reported a sending failure',
         }),
         {
-          status: 400,
+          status: 502,
           headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         }
       );
