@@ -14,6 +14,7 @@ export interface OrgMember {
   email: string;
   name: string | null;
   role: string;
+  avatar_url?: string | null;
 }
 
 export function useOrgMembers() {
@@ -40,31 +41,46 @@ export function useOrgMembers() {
       const userIds = memberships.map((m) => m.user_id);
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
-        .select('id, email, first_name, last_name')
+        .select('id, email, first_name, last_name, avatar_url')
         .in('id', userIds);
 
       if (profileError) throw profileError;
 
       // Create a lookup map for profiles
-      type ProfileData = { id: string; email: string; first_name: string | null; last_name: string | null };
+      type ProfileData = { id: string; email: string; first_name: string | null; last_name: string | null; avatar_url: string | null };
       const profileMap = new Map<string, ProfileData>(
         profiles?.map((p) => [p.id, p as ProfileData]) || []
       );
 
       // Transform the data to a flat structure
-      return memberships.map((member) => {
+      const members = memberships.map((member) => {
         const profile = profileMap.get(member.user_id);
         // Construct name from first_name and last_name
         const name = profile
           ? [profile.first_name, profile.last_name].filter(Boolean).join(' ') || null
           : null;
+
+        // Debug: log if user is missing names
+        if (!name && profile?.email) {
+          console.warn('[useOrgMembers] User missing names:', {
+            userId: member.user_id,
+            email: profile.email,
+            hasProfile: !!profile,
+            first_name: profile?.first_name,
+            last_name: profile?.last_name,
+          });
+        }
+
         return {
           user_id: member.user_id,
           email: profile?.email || '',
           name,
           role: member.role,
+          avatar_url: profile?.avatar_url || null,
         };
       }) as OrgMember[];
+
+      return members;
     },
     enabled: !!orgId,
   });

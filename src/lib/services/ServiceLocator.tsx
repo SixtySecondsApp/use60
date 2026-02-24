@@ -7,9 +7,9 @@
 import React from 'react';
 import { getService, hasService } from '../container/ServiceRegistration';
 import { SERVICE_TOKENS } from '../container/DIContainer';
-import { 
-  IDealService, 
-  IFinancialService, 
+import {
+  IDealService,
+  IFinancialService,
   IValidationService,
   INotificationService,
   IPermissionService,
@@ -18,6 +18,10 @@ import {
 import { IApplicationConfig } from '../interfaces/IConfiguration';
 import { IRepository } from '../interfaces/IDataRepository';
 import { DealWithRelationships } from '../hooks/deals/types/dealTypes';
+import { OpsTableService } from './opsTableService';
+import { productProfileService } from './productProfileService';
+import { commandCentreItemsService } from './commandCentreItemsService';
+import { supabase } from '@/lib/supabase/clientV2';
 
 /**
  * Centralized service locator for business services
@@ -86,6 +90,25 @@ export class ServiceLocator {
     return hasService(SERVICE_TOKENS.CACHE_PROVIDER)
       ? getService(SERVICE_TOKENS.CACHE_PROVIDER)
       : null;
+  }
+
+  // Ops Table Service (lazy singleton)
+  private _opsTableService: OpsTableService | null = null;
+  get opsTableService(): OpsTableService {
+    if (!this._opsTableService) {
+      this._opsTableService = new OpsTableService(supabase);
+    }
+    return this._opsTableService;
+  }
+
+  // Product Profile Service (standalone export, accessed via ServiceLocator for consistency)
+  get productProfileService() {
+    return productProfileService;
+  }
+
+  // Command Centre Items Service (standalone singleton export)
+  get commandCentreItemsService() {
+    return commandCentreItemsService;
   }
 
   /**

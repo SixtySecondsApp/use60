@@ -1,0 +1,187 @@
+{
+  "feature": "organization-deactivation",
+  "issue": "foreign-key-mismatch",
+  "createdAt": "2026-02-05T15:00:00Z",
+  "reportedSymptom": "PGRST200 error when trying to deactivate organization - 'Could not find a relationship between organization_memberships and profiles in the schema cache'",
+  "consoleErrors": [
+    "GET .../organization_memberships?select=...profiles!organization_memberships_user_id_fkey... 400 (Bad Request)",
+    "PGRST200: Could not find a relationship between 'organization_memberships' and 'profiles' in the schema cache",
+    "[OrganizationDeactivationService] Error fetching org members: {code: 'PGRST200', ...}",
+    "Error loading members: {code: 'PGRST200', message: \"Could not find a relationship...\"}"
+  ],
+  "rootCause": {
+    "id": "BUG-001",
+    "summary": "Foreign key constraint name mismatch - code references FK that doesn't exist",
+    "file": "src/lib/services/organizationDeactivationService.ts",
+    "line": 133,
+    "confidence": 0.99,
+    "explanation": "The code uses PostgREST join syntax with FK hint 'organization_memberships_user_id_fkey', but the actual database constraint is named 'organization_memberships_profiles_fk'. PostgREST searches for the exact constraint name and throws PGRST200 when not found. Migration 20260202213000 changed the FK from auth.users to profiles with a new constraint name, but code wasn't updated."
+  },
+  "bugs": [
+    {
+      "id": "BUG-001",
+      "title": "Fix foreign key constraint name in getAllOrgMembers query",
+      "severity": "critical",
+      "priority": "P0",
+      "status": "fixed",
+      "fixedAt": "2026-02-05T14:50:30Z",
+      "actualMinutes": 3,
+      "file": "src/lib/services/organizationDeactivationService.ts",
+      "lines": "127-138",
+      "description": "PostgREST join syntax uses wrong FK constraint name 'organization_memberships_user_id_fkey' which doesn't exist. Actual constraint is 'organization_memberships_profiles_fk'. This causes PGRST200 error on every deactivation attempt.",
+      "approach": "Update FK reference from 'organization_memberships_user_id_fkey' to 'organization_memberships_profiles_fk' in the .select() query. This matches the actual constraint created by migration 20260202213000.",
+      "estimatedMinutes": 5,
+      "dependencies": [],
+      "blocks": [],
+      "codeChanges": {
+        "location": "src/lib/services/organizationDeactivationService.ts:127-138",
+        "changes": [
+          {
+            "type": "modify",
+            "line": 133,
+            "before": "profiles!organization_memberships_user_id_fkey(id, email, full_name)",
+            "after": "profiles!organization_memberships_profiles_fk(id, email, full_name)"
+          }
+        ]
+      },
+      "testCases": [
+        "Load members for org with owner only (1 member)",
+        "Load members for org with multiple members",
+        "Load members for org with removed members (excluded from results)",
+        "Verify correct member data returned (id, email, full_name, role)",
+        "Proceed through all 3 deactivation dialog steps",
+        "Successfully complete organization deactivation"
+      ]
+    },
+    {
+      "id": "BUG-002",
+      "title": "Improve error message specificity for PGRST200 errors",
+      "severity": "medium",
+      "priority": "P2",
+      "status": "fixed",
+      "fixedAt": "2026-02-05T14:50:45Z",
+      "actualMinutes": 2,
+      "file": "src/lib/services/organizationDeactivationService.ts",
+      "lines": "147-150",
+      "description": "Generic error handling doesn't distinguish between system configuration errors (PGRST200), network errors, or permission errors. User sees 'Failed to load organization members' for all cases, making it unclear if retry will help or if they should contact support.",
+      "approach": "Add error type detection in catch block. Check for error.code === 'PGRST200' and throw user-friendly message indicating system configuration issue. Also check for network errors. This helps users understand whether to retry or contact support.",
+      "estimatedMinutes": 5,
+      "dependencies": [],
+      "blocks": [],
+      "codeChanges": {
+        "location": "src/lib/services/organizationDeactivationService.ts:147-150",
+        "changes": [
+          {
+            "type": "modify",
+            "lineRange": "147-150",
+            "before": "} catch (error) {\n  logger.error('[OrganizationDeactivationService] Error fetching org members:', error);\n  throw error;\n}",
+            "after": "} catch (error) {\n  logger.error('[OrganizationDeactivationService] Error fetching org members:', error);\n\n  // Check for common error patterns\n  if (error?.code === 'PGRST200') {\n    // Schema relationship error - system configuration issue\n    logger.error('PostgREST schema relationship error - check FK constraints');\n    throw new Error('System configuration error. Please contact support.');\n  }\n\n  if (error?.message?.includes('network')) {\n    throw new Error('Network error. Please check your connection and try again.');\n  }\n\n  throw error; // Re-throw unknown errors\n}"
+          }
+        ]
+      },
+      "testCases": [
+        "PGRST200 error shows 'System configuration error' message",
+        "Network error shows 'Network error' message",
+        "Unknown errors still bubble up with original message",
+        "Error messages are user-friendly and actionable"
+      ]
+    },
+    {
+      "id": "BUG-003",
+      "title": "Add FK constraint verification migration",
+      "severity": "low",
+      "priority": "P3",
+      "status": "fixed",
+      "fixedAt": "2026-02-05T14:51:00Z",
+      "actualMinutes": 3,
+      "file": "supabase/migrations/new_verify_fk_constraints.sql",
+      "lines": "N/A",
+      "description": "No automated verification that expected FK constraints exist. This allows FK mismatches to go undetected until runtime. Future schema changes could break code without immediate feedback.",
+      "approach": "Create a new migration that verifies critical FK constraints exist using DO block. Query pg_constraint for 'organization_memberships_profiles_fk' and RAISE EXCEPTION if not found. This makes schema issues fail fast at migration time.",
+      "estimatedMinutes": 10,
+      "dependencies": [
+        "BUG-001"
+      ],
+      "blocks": [],
+      "codeChanges": {
+        "location": "supabase/migrations/[timestamp]_verify_org_memberships_fk.sql",
+        "changes": [
+          {
+            "type": "add",
+            "content": "-- Verify organization_memberships → profiles FK exists\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_constraint\n    WHERE conname = 'organization_memberships_profiles_fk'\n    AND conrelid = 'organization_memberships'::regclass\n  ) THEN\n    RAISE EXCEPTION 'Missing FK constraint: organization_memberships_profiles_fk';\n  END IF;\nEND $$;"
+          }
+        ]
+      },
+      "testCases": [
+        "Migration succeeds when FK exists",
+        "Migration fails with clear error when FK missing",
+        "Verification doesn't modify any data"
+      ]
+    }
+  ],
+  "testPlan": {
+    "manual": [
+      "Create test org with owner only",
+      "Navigate to Organization Settings",
+      "Click 'Deactivate Organization'",
+      "Select deactivation reason",
+      "Click 'Continue'",
+      "Verify: Members list loads showing owner",
+      "Verify: No PGRST200 error in console",
+      "Check 'I understand' checkbox",
+      "Click 'Continue to Confirmation'",
+      "Type 'DEACTIVATE'",
+      "Click 'Deactivate Organization'",
+      "Verify: Success toast, redirected to org selection",
+      "Test with org having multiple members",
+      "Test with org having removed members (should be excluded)",
+      "Test error handling with network disconnected"
+    ],
+    "automated": [
+      "Unit test: getAllOrgMembers returns members with correct FK",
+      "Unit test: getAllOrgMembers excludes removed members",
+      "Unit test: PGRST200 error shows user-friendly message",
+      "Integration test: Full deactivation flow with single owner",
+      "Integration test: Deactivation with multiple members",
+      "Integration test: Member list excludes removed members"
+    ]
+  },
+  "technicalNotes": {
+    "fkMismatchExplanation": "PostgREST resource embedding syntax 'profiles!{fk_name}(columns)' requires the exact FK constraint name from pg_constraint. The code used 'organization_memberships_user_id_fkey' which was the old constraint from when user_id referenced auth.users. Migration 20260202213000 changed it to reference profiles.id with new constraint name 'organization_memberships_profiles_fk'. PostgREST performs FK lookup at query time and throws PGRST200 when the named constraint doesn't exist.",
+    "keyFiles": [
+      "src/lib/services/organizationDeactivationService.ts - Service with FK reference",
+      "src/components/dialogs/DeactivateOrganizationDialog.tsx - UI calling service",
+      "supabase/migrations/20260202213000_add_organization_memberships_profiles_fk.sql - Migration that changed FK",
+      "supabase/migrations/00000000000000_baseline.sql - Shows old FK name"
+    ],
+    "postgreSQLContext": "PostgREST searches pg_constraint table for the FK name. Old constraint 'organization_memberships_user_id_fkey' referenced auth.users(id). New constraint 'organization_memberships_profiles_fk' references profiles(id). Both cannot coexist on same column, so old one was replaced.",
+    "preventionMeasures": [
+      "Establish FK naming convention and document it",
+      "Search codebase for FK references before renaming: git grep 'old_fk_name'",
+      "Add integration tests that actually query database with joins (not mocked)",
+      "Create migration checklist: search code, update joins, test",
+      "Consider linting rule to detect FK references and validate against schema"
+    ],
+    "agentAnalysis": {
+      "codeTracer": "Mapped execution from button click → handleGoToReview → getAllOrgMembers → Supabase query with wrong FK → PGRST200 error → user-visible failure",
+      "logicAnalyzer": "Identified FK reference mismatch - code uses non-existent constraint name causing PostgREST lookup failure",
+      "errorTracker": "Found error handling gap - generic error message doesn't help user distinguish system config error from transient issues",
+      "edgeCaseHunter": "Confirmed 100% failure rate - affects all orgs regardless of member count, all users attempting deactivation"
+    }
+  },
+  "totalEstimatedMinutes": 20,
+  "fixOrder": [
+    "BUG-001 (Critical) - Fix FK constraint name (unblocks feature)",
+    "BUG-002 (Medium) - Improve error messages (parallel with BUG-001)",
+    "BUG-003 (Low) - Add FK verification migration (after BUG-001 confirmed working)"
+  ],
+  "severity": "critical",
+  "impactAssessment": {
+    "severity": "Critical",
+    "userImpact": "All owners attempting to deactivate organizations are completely blocked",
+    "dataRisk": "None - read operation only",
+    "frequency": "100% failure rate on every deactivation attempt",
+    "workaround": "None available to users",
+    "affectedUsers": "All organization owners who attempt deactivation"
+  }
+}

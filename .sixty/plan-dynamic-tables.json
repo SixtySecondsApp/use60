@@ -1,0 +1,428 @@
+{
+  "project": {
+    "name": "Dynamic Tables",
+    "description": "Clay-style AI-powered lead enrichment & data processing layer — conversational lead search, agent enrichment, and outbound push",
+    "createdAt": "2026-02-04T18:00:00Z",
+    "branch": "feat/dynamic-tables",
+    "prd": "dynamic tables/dynamic_tables_brief.md",
+    "design": "dynamic tables/dynamic_table_design.jsx"
+  },
+
+  "features": [
+    {
+      "id": "dt-schema",
+      "name": "Database Schema & Data Layer",
+      "status": "pending",
+      "priority": 1,
+      "description": "Tables, RLS, indexes, and services for dynamic tables, rows, columns, enrichment jobs"
+    },
+    {
+      "id": "dt-table-engine",
+      "name": "Table Engine UI",
+      "status": "pending",
+      "priority": 2,
+      "description": "Spreadsheet-like table component with editable cells, column management, bulk actions"
+    },
+    {
+      "id": "dt-page",
+      "name": "Dynamic Tables Page & Routing",
+      "status": "pending",
+      "priority": 3,
+      "description": "Page shell, routing, navigation entry, table list view"
+    },
+    {
+      "id": "dt-copilot",
+      "name": "Copilot Integration",
+      "status": "pending",
+      "priority": 4,
+      "description": "Skills, structured response, and copilot tool definitions for dynamic table interaction"
+    },
+    {
+      "id": "dt-apollo",
+      "name": "Apollo Integration",
+      "status": "pending",
+      "priority": 5,
+      "description": "Apollo people/company search via edge function, lead sourcing into tables"
+    },
+    {
+      "id": "dt-enrichment",
+      "name": "AI Enrichment Engine",
+      "status": "pending",
+      "priority": 6,
+      "description": "Agent-powered row enrichment with Apify MCP, confidence scoring, retry logic"
+    },
+    {
+      "id": "dt-instantly",
+      "name": "Instantly Outbound Push",
+      "status": "pending",
+      "priority": 7,
+      "description": "Push selected leads to Instantly campaigns with mapped variables and preview/confirm"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "DT-001",
+      "feature": "dt-schema",
+      "title": "Create dynamic_tables and dynamic_table_columns migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["DT-002", "DT-003", "DT-005", "DT-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "dynamic_tables table with id, org_id, name, description, source_query, created_by, created_at, updated_at",
+        "dynamic_table_columns table with id, table_id, key, label, type enum (text/email/url/number/boolean/enrichment/status), is_enrichment, enrichment_prompt, position, width, created_at",
+        "RLS policies: users see tables in their org, can create/update/delete own tables",
+        "Indexes on org_id, table_id, created_by"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260204180000_dynamic_tables_schema.sql"
+      ]
+    },
+    {
+      "id": "DT-002",
+      "feature": "dt-schema",
+      "title": "Create dynamic_table_rows and dynamic_table_cells migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["DT-001"], "files": [], "schema": ["dynamic_tables", "dynamic_table_columns"] },
+      "blocks": ["DT-005", "DT-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "dynamic_table_rows table with id, table_id, row_index, source_id (Apollo ID etc), source_data JSONB, created_at",
+        "dynamic_table_cells table with id, row_id, column_id, value TEXT, confidence REAL (0-1), source TEXT, status enum (none/pending/complete/failed), created_at, updated_at",
+        "RLS policies inheriting from parent table ownership",
+        "Cascade deletes from tables → rows → cells"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260204180001_dynamic_table_rows_cells.sql"
+      ]
+    },
+    {
+      "id": "DT-003",
+      "feature": "dt-schema",
+      "title": "Create enrichment_jobs table and queue schema",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["DT-001"], "files": [], "schema": ["dynamic_tables"] },
+      "blocks": ["DT-014"],
+      "parallelWith": ["DT-002"],
+      "acceptance": [
+        "enrichment_jobs table with id, table_id, column_id, status enum (queued/running/complete/failed), total_rows, processed_rows, failed_rows, started_at, completed_at",
+        "enrichment_job_results table with id, job_id, row_id, result TEXT, confidence REAL, error TEXT, processed_at",
+        "RLS policies matching parent table access"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260204180002_enrichment_jobs.sql"
+      ]
+    },
+    {
+      "id": "DT-004",
+      "feature": "dt-schema",
+      "title": "Create dynamicTableService with CRUD operations",
+      "type": "service",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["DT-002"], "files": [], "schema": ["dynamic_tables", "dynamic_table_rows", "dynamic_table_cells"] },
+      "blocks": ["DT-006", "DT-007", "DT-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "DynamicTableService class with createTable, getTable, listTables, deleteTable methods",
+        "addRows, updateCell, deleteRows, getTableData (paginated) methods",
+        "addColumn, updateColumn, removeColumn, reorderColumns methods",
+        "Follows existing service pattern (see copilotMemoryService)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/services/dynamicTableService.ts"
+      ]
+    },
+    {
+      "id": "DT-005",
+      "feature": "dt-table-engine",
+      "title": "Build DynamicTable component with virtual scrolling and editable cells",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["DT-001", "DT-002"], "files": [], "schema": [] },
+      "blocks": ["DT-007", "DT-008"],
+      "parallelWith": ["DT-004"],
+      "acceptance": [
+        "TanStack Table-based component matching design reference (dynamic_table_design.jsx)",
+        "Virtual scrolling for 1000+ rows using @tanstack/react-virtual",
+        "Editable cells with click-to-edit pattern",
+        "Sticky header row + sticky first column (checkbox)",
+        "Column type icons and enrichment column highlighting (violet tint)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/dynamic-tables/DynamicTable.tsx",
+        "src/components/dynamic-tables/DynamicTableCell.tsx"
+      ]
+    },
+    {
+      "id": "DT-006",
+      "feature": "dt-table-engine",
+      "title": "Build column management — add, reorder, resize, delete columns",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["DT-005", "DT-004"], "files": [], "schema": [] },
+      "blocks": ["DT-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "Add Column modal with name, type selection, enrichment prompt textarea",
+        "Enrichment template picker (Recent News, Tech Stack, Competitors, Pain Points)",
+        "Column header dropdown menu: rename, hide, delete, sort asc/desc",
+        "Drag-to-resize column widths with persistence"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/dynamic-tables/AddColumnModal.tsx",
+        "src/components/dynamic-tables/ColumnHeaderMenu.tsx"
+      ]
+    },
+    {
+      "id": "DT-007",
+      "feature": "dt-table-engine",
+      "title": "Build bulk actions bar — select, delete, enrich, push",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["DT-005", "DT-004"], "files": [], "schema": [] },
+      "blocks": ["DT-016"],
+      "parallelWith": ["DT-006"],
+      "acceptance": [
+        "Select all / deselect all checkbox in header",
+        "Floating action bar appears when rows are selected: count, Enrich, Push to Instantly, Delete",
+        "Confirmation dialog for destructive actions (delete)",
+        "Enrichment progress bar in action bar during bulk enrichment"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/dynamic-tables/BulkActionsBar.tsx"
+      ]
+    },
+    {
+      "id": "DT-008",
+      "feature": "dt-page",
+      "title": "Create DynamicTables page with list view and routing",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["DT-005"], "files": [], "schema": [] },
+      "blocks": ["DT-009"],
+      "parallelWith": ["DT-006", "DT-007"],
+      "acceptance": [
+        "Route /dynamic-tables added to routeConfig.ts, lazyPages.tsx, App.tsx",
+        "Navigation entry in sidebar under a 'Data' or 'Prospecting' section",
+        "List view showing user's tables: name, row count, last updated, source",
+        "New Table button + empty state for first-time users"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/DynamicTablesPage.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/routes/lazyPages.tsx"
+      ]
+    },
+    {
+      "id": "DT-009",
+      "feature": "dt-page",
+      "title": "Create single table detail view with query bar",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["DT-008", "DT-004"], "files": [], "schema": [] },
+      "blocks": ["DT-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "Route /dynamic-tables/:id renders full table detail view",
+        "Natural language query bar above table for refining/extending dataset",
+        "Table metadata header: name, row count, enrichment stats, last updated",
+        "Back to list navigation"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/DynamicTableDetailPage.tsx"
+      ]
+    },
+    {
+      "id": "DT-010",
+      "feature": "dt-copilot",
+      "title": "Add dynamic_table structured response type and component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["DT-005"], "files": ["src/components/copilot/types.ts"], "schema": [] },
+      "blocks": ["DT-012"],
+      "parallelWith": ["DT-009"],
+      "acceptance": [
+        "DynamicTableResponseData type added to copilot types",
+        "DynamicTableResponse component renders inline table preview in copilot chat",
+        "Action buttons: Open Table, Add Enrichment, Push to Instantly",
+        "Routing case added to CopilotResponse.tsx"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/copilot/responses/DynamicTableResponse.tsx",
+        "src/components/copilot/types.ts",
+        "src/components/copilot/CopilotResponse.tsx"
+      ]
+    },
+    {
+      "id": "DT-011",
+      "feature": "dt-apollo",
+      "title": "Create Apollo edge function for people search",
+      "type": "backend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["DT-012", "DT-013"],
+      "parallelWith": ["DT-001", "DT-002", "DT-003", "DT-005"],
+      "acceptance": [
+        "Edge function supabase/functions/apollo-search/ accepts search params (title, company_size, industry, location, funding_stage)",
+        "Calls Apollo People Search API and returns structured results",
+        "Rate limiting and error handling for Apollo API quotas",
+        "Returns normalized contact data: name, title, company, email, linkedin, phone, funding"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/apollo-search/index.ts"
+      ]
+    },
+    {
+      "id": "DT-012",
+      "feature": "dt-copilot",
+      "title": "Create copilot skill for natural language lead search",
+      "type": "backend",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": ["DT-011", "DT-010", "DT-009", "DT-004"], "files": [], "schema": ["dynamic_tables"] },
+      "blocks": ["DT-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "Skill 'dynamic-table-search' in platform_skills translates natural language to Apollo search params",
+        "Skill calls apollo-search edge function and creates a dynamic_table with results",
+        "Returns structured response type 'dynamic_table' with table preview",
+        "Supports conversational refinement: 'narrow to companies with 50-200 employees' updates existing table"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/copilot-autonomous/skills/dynamic-table-search.ts"
+      ]
+    },
+    {
+      "id": "DT-013",
+      "feature": "dt-apollo",
+      "title": "Wire Apollo search results into table creation flow",
+      "type": "integration",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["DT-011", "DT-012", "DT-004"], "files": [], "schema": ["dynamic_tables", "dynamic_table_rows"] },
+      "blocks": ["DT-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "Apollo results auto-generate column definitions based on returned fields",
+        "Rows are inserted with source_id = Apollo contact ID, source_data = raw Apollo response",
+        "Cells populated for all standard columns (name, title, company, email, linkedin, phone, funding)",
+        "Query refinement preserves existing enrichment data for rows that remain"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/dynamicTableService.ts",
+        "src/lib/services/apolloTableAdapter.ts"
+      ]
+    },
+    {
+      "id": "DT-014",
+      "feature": "dt-enrichment",
+      "title": "Build enrichment engine edge function with Apify MCP",
+      "type": "backend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["DT-003", "DT-006", "DT-013"], "files": [], "schema": ["enrichment_jobs"] },
+      "blocks": ["DT-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function supabase/functions/enrich-table-column/ processes enrichment jobs row by row",
+        "Uses Claude to plan enrichment approach per column prompt",
+        "Calls Apify actors (LinkedIn profile, Google search, web scrape) via tool use",
+        "Writes results to dynamic_table_cells with confidence scores and source attribution",
+        "SSE progress streaming back to frontend"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/enrich-table-column/index.ts"
+      ]
+    },
+    {
+      "id": "DT-015",
+      "feature": "dt-enrichment",
+      "title": "Wire enrichment UI — progress, confidence badges, retry failed rows",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["DT-014"], "files": [], "schema": [] },
+      "blocks": ["DT-016"],
+      "parallelWith": [],
+      "acceptance": [
+        "Enrichment progress bar shows per-column progress (X/Y rows processed)",
+        "Confidence badge per cell: green (>0.8), yellow (0.5-0.8), red (<0.5)",
+        "Failed cells show error icon with retry button",
+        "Bulk retry action for all failed cells in a column"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/dynamic-tables/EnrichmentProgress.tsx",
+        "src/components/dynamic-tables/ConfidenceBadge.tsx"
+      ]
+    },
+    {
+      "id": "DT-016",
+      "feature": "dt-instantly",
+      "title": "Create Instantly push edge function and preview/confirm UI",
+      "type": "integration",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["DT-007", "DT-015"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function supabase/functions/instantly-push/ creates campaign and adds leads to Instantly",
+        "Preview modal shows selected rows with mapped variables before push",
+        "Variable mapping UI: map table columns to Instantly variables (first_name, email, company, custom_vars)",
+        "Confirmation step with count and campaign name before executing",
+        "Success/error toast feedback after push completes"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/instantly-push/index.ts",
+        "src/components/dynamic-tables/InstantlyPushModal.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 16,
+    "completedStories": 0,
+    "currentFeature": "dt-schema",
+    "lastUpdated": "2026-02-04T18:00:00Z",
+    "parallelGroups": [
+      { "group": 1, "stories": ["DT-001"], "description": "Foundation schema" },
+      { "group": 2, "stories": ["DT-002", "DT-003", "DT-011"], "description": "Row/cell schema + enrichment schema + Apollo edge fn (parallel)" },
+      { "group": 3, "stories": ["DT-004", "DT-005"], "description": "Service layer + table UI (parallel)" },
+      { "group": 4, "stories": ["DT-006", "DT-007", "DT-008", "DT-010"], "description": "Column mgmt + bulk actions + page + copilot response (parallel)" },
+      { "group": 5, "stories": ["DT-009", "DT-012"], "description": "Detail view + copilot skill" },
+      { "group": 6, "stories": ["DT-013", "DT-014"], "description": "Apollo adapter + enrichment engine" },
+      { "group": 7, "stories": ["DT-015", "DT-016"], "description": "Enrichment UI + Instantly push" }
+    ]
+  }
+}

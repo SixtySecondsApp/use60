@@ -1,0 +1,212 @@
+{
+  "feature": {
+    "id": "ops-collect-more",
+    "name": "Ops: Edit Filters & Collect More Data",
+    "description": "Allow users to view/edit Apollo search filters and collect additional leads into an existing ops table. Enables the iterative workflow: create small list → review → adjust filters → collect more.",
+    "status": "complete",
+    "prd": null,
+    "createdAt": "2026-02-09T00:00:00Z"
+  },
+  "stories": [
+    {
+      "id": "OCM-001",
+      "feature": "ops-collect-more",
+      "title": "Extract ApolloFilterEditor from ApolloSearchWizard",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/components/ops/ApolloSearchWizard.tsx"],
+        "schema": []
+      },
+      "blocks": ["OCM-002", "OCM-004"],
+      "parallelWith": ["OCM-003"],
+      "acceptance": [
+        "New ApolloFilterEditor.tsx exports constants (SENIORITY_OPTIONS, DEPARTMENT_OPTIONS, etc.), sub-components (ChipSelect, TagInput, LocationTagInput), and the ApolloFilterEditor form component",
+        "ApolloSearchWizard imports from ApolloFilterEditor and renders identically to before",
+        "No visual or behavioral change to the existing Apollo search wizard"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/ApolloFilterEditor.tsx",
+        "src/components/ops/ApolloSearchWizard.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "OCM-002",
+      "feature": "ops-collect-more",
+      "title": "Create ApolloFilterSheet side panel for editing filters",
+      "type": "feature",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["OCM-001"],
+        "files": ["src/components/ops/ApolloFilterEditor.tsx"],
+        "schema": ["dynamic_tables"]
+      },
+      "blocks": ["OCM-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Sheet opens from right side, pre-populated with current table.source_query filters",
+        "User can modify any filter (titles, locations, seniority, departments, company size, funding, domains, keywords)",
+        "Save button updates dynamic_tables.source_query via opsTableService.updateTable()",
+        "Cancel discards changes and closes sheet"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/ApolloFilterSheet.tsx",
+        "src/lib/services/opsTableService.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "OCM-003",
+      "feature": "ops-collect-more",
+      "title": "Create apollo-collect-more edge function with shared dedup",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/copilot-dynamic-table/index.ts",
+          "supabase/functions/_shared/corsHelper.ts"
+        ],
+        "schema": ["dynamic_tables", "dynamic_table_rows", "dynamic_table_cells", "dynamic_table_columns"]
+      },
+      "blocks": ["OCM-005"],
+      "parallelWith": ["OCM-001"],
+      "acceptance": [
+        "Edge function accepts {table_id, search_params, desired_count, auto_enrich?} and appends net-new contacts to existing table",
+        "Dedup logic extracted to _shared/apolloDedup.ts and used by both apollo-collect-more and copilot-dynamic-table",
+        "Row indices continue from max existing row_index; row_count updated on dynamic_tables",
+        "Returns {rows_added, total_searched, duplicates_skipped, new_row_count}",
+        "Uses getCorsHeaders(req) from corsHelper.ts and pins @supabase/supabase-js@2.43.4"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/apollo-collect-more/index.ts",
+        "supabase/functions/_shared/apolloDedup.ts",
+        "supabase/functions/copilot-dynamic-table/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "OCM-004",
+      "feature": "ops-collect-more",
+      "title": "Create ApolloCollectMoreModal with count presets",
+      "type": "feature",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["OCM-001"],
+        "files": ["src/components/ops/ApolloFilterEditor.tsx"],
+        "schema": []
+      },
+      "blocks": ["OCM-006"],
+      "parallelWith": ["OCM-005"],
+      "acceptance": [
+        "Dialog modal shows read-only filter summary chips from current source_query",
+        "Count selector with presets: 10 | 25 | 50 | 100 (default 25)",
+        "Optional email/phone enrichment toggles",
+        "Loading state while collecting, success toast with rows_added and duplicates_skipped"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/ApolloCollectMoreModal.tsx",
+        "src/lib/hooks/useApolloCollectMore.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "OCM-005",
+      "feature": "ops-collect-more",
+      "title": "Create useApolloCollectMore hook and deploy edge function",
+      "type": "integration",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["OCM-003"],
+        "files": ["supabase/functions/apollo-collect-more/index.ts"],
+        "schema": []
+      },
+      "blocks": ["OCM-006"],
+      "parallelWith": ["OCM-004"],
+      "acceptance": [
+        "useApolloCollectMore hook wraps supabase.functions.invoke('apollo-collect-more') as useMutation",
+        "On success invalidates ['ops-table', tableId] and ['ops-table-data', tableId] queries",
+        "Edge function deployed to staging with --no-verify-jwt"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/hooks/useApolloCollectMore.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "OCM-006",
+      "feature": "ops-collect-more",
+      "title": "Wire ApolloSourceControls into OpsDetailPage toolbar",
+      "type": "feature",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["OCM-002", "OCM-004", "OCM-005"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Purple 'Filters' and 'Collect More' buttons appear in toolbar for source_type='apollo' tables only",
+        "Buttons do NOT appear for CSV, HubSpot, manual, or copilot-sourced tables",
+        "Filters button opens ApolloFilterSheet; Collect More opens ApolloCollectMoreModal",
+        "Full flow works: edit filters → save → collect more → new rows appear in table"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/ApolloSourceControls.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 6,
+    "currentFeature": "ops-collect-more",
+    "parallelGroups": [
+      ["OCM-001", "OCM-003"],
+      ["OCM-002", "OCM-004", "OCM-005"],
+      ["OCM-006"]
+    ],
+    "estimatedTotalMinutes": 140,
+    "lastUpdated": "2026-02-09T00:00:00Z"
+  }
+}

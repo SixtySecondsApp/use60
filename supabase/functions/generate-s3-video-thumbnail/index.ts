@@ -43,23 +43,73 @@ interface ThumbnailResult {
 // =============================================================================
 
 /**
+ * Generate a presigned URL for an S3 video file
+ * This allows the Lambda to fetch the video directly
+ */
+async function generatePresignedVideoUrl(s3Key: string): Promise<string | null> {
+  try {
+    const s3Client = new S3Client({
+      region: Deno.env.get('AWS_REGION') || 'eu-west-2',
+      credentials: {
+        accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID')!,
+        secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY')!,
+      },
+    });
+
+    const bucketName = Deno.env.get('AWS_S3_BUCKET') || 'use60-application';
+
+    const signedUrl = await getSignedUrl(
+      s3Client,
+      new GetObjectCommand({
+        Bucket: bucketName,
+        Key: s3Key,
+      }),
+      { expiresIn: 60 * 15 } // 15 minutes - enough for Lambda to download and process
+    );
+
+    console.log(`[Thumbnail] Generated presigned URL for ${s3Key}`);
+    return signedUrl;
+  } catch (error) {
+    console.error('[Thumbnail] Failed to generate presigned URL:', error);
+    return null;
+  }
+}
+
+/**
  * Call AWS Lambda function to generate thumbnail using ffmpeg
+ * Uses the existing Fathom thumbnail Lambda with presigned S3 URLs
  * Lambda extracts a frame from the video and uploads to S3
  */
 async function callLambdaThumbnailGenerator(
   s3Key: string,
   timestampSeconds: number = 30
 ): Promise<ThumbnailResult> {
-  const lambdaUrl = Deno.env.get('AWS_LAMBDA_THUMBNAIL_URL');
+  // Use the existing Fathom thumbnail Lambda - it accepts any video URL
+  const lambdaUrl = Deno.env.get('AWS_LAMBDA_THUMBNAIL_URL') ||
+    Deno.env.get('CUSTOM_THUMBNAIL_API_URL') ||
+    'https://pnip1dhixe.execute-api.eu-west-2.amazonaws.com/fathom-thumbnail-generator/thumbnail';
+
   const lambdaApiKey = Deno.env.get('AWS_LAMBDA_API_KEY');
 
-  if (!lambdaUrl) {
-    console.warn('[Thumbnail] Lambda URL not configured, using fallback');
-    return { success: false, error: 'Lambda not configured' };
-  }
-
   try {
+    // Generate presigned URL for the S3 video
+    const videoUrl = await generatePresignedVideoUrl(s3Key);
+    if (!videoUrl) {
+      return { success: false, error: 'Failed to generate presigned URL for video' };
+    }
+
     console.log(`[Thumbnail] Calling Lambda for ${s3Key} at ${timestampSeconds}s`);
+
+    console.log(`[Thumbnail] Lambda URL: ${lambdaUrl}`);
+    console.log(`[Thumbnail] API key configured: ${!!lambdaApiKey}`);
+    console.log(`[Thumbnail] Video URL length: ${videoUrl.length} chars`);
+    console.log(`[Thumbnail] Timestamp: ${timestampSeconds}s`);
+
+    const requestBody = {
+      // Use fathom_url field - the Lambda accepts any video URL
+      fathom_url: videoUrl,
+      timestamp_seconds: timestampSeconds,
+    };
 
     const response = await fetch(lambdaUrl, {
       method: 'POST',
@@ -67,28 +117,35 @@ async function callLambdaThumbnailGenerator(
         'Content-Type': 'application/json',
         ...(lambdaApiKey && { 'x-api-key': lambdaApiKey }),
       },
-      body: JSON.stringify({
-        s3_key: s3Key,
-        timestamp_seconds: timestampSeconds,
-        output_format: 'jpg',
-        width: 480,
-        height: 270,
-      }),
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(90000), // 90 second timeout for video processing
     });
 
+    const responseText = await response.text();
+    console.log(`[Thumbnail] Lambda response status: ${response.status}`);
+    console.log(`[Thumbnail] Lambda response body: ${responseText.substring(0, 500)}`);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Lambda error: ${response.status} - ${errorText}`);
+      throw new Error(`Lambda error: ${response.status} - ${responseText}`);
     }
 
-    const result = await response.json();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      throw new Error(`Lambda returned invalid JSON: ${responseText.substring(0, 200)}`);
+    }
 
-    if (result.thumbnail_s3_key) {
-      console.log(`[Thumbnail] Lambda success: ${result.thumbnail_s3_key}`);
+    // Lambda returns http_url and s3_location
+    if (result.http_url || result.thumbnail_url) {
+      const thumbnailUrl = result.http_url || result.thumbnail_url;
+      const thumbnailS3Key = result.s3_location || result.thumbnail_s3_key;
+
+      console.log(`[Thumbnail] Lambda success: ${thumbnailUrl}`);
       return {
         success: true,
-        thumbnail_s3_key: result.thumbnail_s3_key,
-        thumbnail_url: result.thumbnail_url,
+        thumbnail_s3_key: thumbnailS3Key,
+        thumbnail_url: thumbnailUrl,
       };
     }
 
@@ -121,16 +178,31 @@ async function generatePlaceholderThumbnail(
 
   const bucketName = Deno.env.get('AWS_S3_BUCKET') || 'use60-application';
 
-  // Create a simple SVG placeholder with meeting initial
+  // Create a video-themed SVG placeholder with meeting info
   const initial = (meetingTitle || 'M')[0].toUpperCase();
   const colors = ['#4F46E5', '#7C3AED', '#2563EB', '#0891B2', '#059669'];
   const color = colors[initial.charCodeAt(0) % colors.length];
+  const truncatedTitle = (meetingTitle || 'Recording').substring(0, 40);
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270">
-      <rect width="480" height="270" fill="${color}"/>
-      <text x="240" y="150" font-family="Arial, sans-serif" font-size="100" fill="white" text-anchor="middle" dominant-baseline="middle">${initial}</text>
-      <text x="240" y="220" font-family="Arial, sans-serif" font-size="16" fill="rgba(255,255,255,0.7)" text-anchor="middle">60 Notetaker Recording</text>
+      <defs>
+        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:${color};stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#1E1E2E;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <rect width="480" height="270" fill="url(#bgGrad)"/>
+      <!-- Play button circle -->
+      <circle cx="240" cy="120" r="40" fill="rgba(255,255,255,0.2)"/>
+      <polygon points="230,100 260,120 230,140" fill="white"/>
+      <!-- Meeting title -->
+      <text x="240" y="190" font-family="Arial, sans-serif" font-size="14" fill="white" text-anchor="middle" font-weight="bold">${truncatedTitle}</text>
+      <!-- Subtitle -->
+      <text x="240" y="215" font-family="Arial, sans-serif" font-size="12" fill="rgba(255,255,255,0.7)" text-anchor="middle">60 Notetaker Recording</text>
+      <!-- Initial badge -->
+      <circle cx="420" cy="40" r="25" fill="rgba(255,255,255,0.3)"/>
+      <text x="420" y="47" font-family="Arial, sans-serif" font-size="20" fill="white" text-anchor="middle" dominant-baseline="middle" font-weight="bold">${initial}</text>
     </svg>
   `;
 
@@ -291,6 +363,15 @@ async function generateThumbnail(
       await supabase.from('recordings').update(updateFields).eq('id', targetId);
     } else {
       await supabase.from('meetings').update(updateFields).eq('id', targetId);
+    }
+
+    // Also update the linked meeting/recording if applicable (same as Lambda success path)
+    if (targetTable === 'recordings' && bot_id) {
+      await supabase
+        .from('meetings')
+        .update(updateFields)
+        .eq('bot_id', bot_id)
+        .eq('source_type', '60_notetaker');
     }
   }
 

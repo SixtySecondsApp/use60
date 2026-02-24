@@ -362,7 +362,6 @@ export function useEmailActions() {
       );
     },
     enabled: !!activeOrg?.id && !!user?.id,
-    refetchInterval: 30000, // Refetch every 30 seconds
   });
 
   // Set up real-time subscription for HITL approvals

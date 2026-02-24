@@ -1,13 +1,14 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { captureException } from '../_shared/sentryEdge.ts'
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const preflightResponse = handleCorsPreflightRequest(req)
+  if (preflightResponse) return preflightResponse
+
+  const corsHeaders = getCorsHeaders(req)
 
   try {
     // Get the authorization header
@@ -70,7 +71,7 @@ serve(async (req) => {
     // Get user email before deletion for cleanup
     const { data: userProfile } = await supabaseAdmin
       .from('profiles')
-      .select('email')
+      .select('email, first_name, last_name')
       .eq('id', userId)
       .single()
 
@@ -89,33 +90,83 @@ serve(async (req) => {
         .eq('email', userProfile.email.toLowerCase())
     }
 
-    // Delete from profiles (this will cascade to related records if foreign keys are set up)
+    // Anonymize the profile: clear personal data but keep name visible for audit trail in meetings/tasks
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .delete()
+      .update({
+        email: `deleted_${userId}@deleted.local`,
+        avatar_url: null,
+        bio: null,
+        clerk_user_id: null,
+        auth_provider: 'deleted',
+        updated_at: new Date().toISOString()
+      })
       .eq('id', userId)
 
     if (profileError) {
-      console.error('Error deleting profile:', profileError)
+      console.error('Error anonymizing profile:', profileError)
       return new Response(
         JSON.stringify({ error: `Failed to delete profile: ${profileError.message}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Try to delete from auth.users (may fail if user doesn't exist there, which is okay)
-    try {
-      await supabaseAdmin.auth.admin.deleteUser(userId)
-    } catch (authError: any) {
-      // It's okay if auth user doesn't exist - profile might have been created without auth
-      console.log('Note: Could not delete auth user (may not exist):', authError.message)
+    // Delete from auth.users to revoke access (user can sign up again with same email)
+    // IMPORTANT: auth.admin.deleteUser() returns { data, error } — it does NOT throw.
+    // We must check the returned error object, not rely on try/catch.
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+
+    if (authDeleteError) {
+      // Only ignore if auth user truly doesn't exist (404)
+      const isNotFound = authDeleteError.status === 404 ||
+        (authDeleteError as any)?.code === 'user_not_found' ||
+        authDeleteError.message?.includes('not found')
+
+      if (isNotFound) {
+        console.log('Note: Auth user does not exist (already deleted or never created):', authDeleteError.message)
+      } else {
+        // Auth deletion failed for a real reason - return error
+        console.error('Error deleting auth user:', authDeleteError)
+        return new Response(
+          JSON.stringify({
+            error: `Failed to delete auth user: ${authDeleteError.message || 'Unknown error'}`,
+            code: 'AUTH_DELETION_FAILED',
+            details: authDeleteError
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    } else {
+      console.log('Auth user deleted successfully:', userId)
+    }
+
+    // Reset waitlist entry so user can be re-invited
+    // Find by original email (before anonymization) and reset status to 'pending'
+    if (userProfile.email) {
+      const { error: waitlistError } = await supabaseAdmin
+        .from('meetings_waitlist')
+        .update({
+          status: 'pending',
+          user_id: null,
+          converted_at: null,
+          invitation_accepted_at: null,
+        })
+        .eq('email', userProfile.email.toLowerCase())
+        .in('status', ['converted', 'released'])
+
+      if (waitlistError) {
+        // Non-fatal: log but don't fail the deletion
+        console.warn('Failed to reset waitlist entry (non-fatal):', waitlistError.message)
+      } else {
+        console.log('Waitlist entry reset to pending for:', userProfile.email)
+      }
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: 'User deleted successfully',
-        userId 
+        userId
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

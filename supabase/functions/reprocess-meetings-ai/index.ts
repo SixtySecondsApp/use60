@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import { analyzeTranscriptWithClaude, deduplicateActionItems, type TranscriptAnalysis } from '../fathom-sync/aiAnalysis.ts'
 import { captureException } from '../_shared/sentryEdge.ts'
 
@@ -54,9 +54,9 @@ serve(async (req) => {
       .not('transcript_text', 'is', null)
       .order('meeting_start', { ascending: false })
 
-    // Only filter by coach_rating if NOT forcing reprocessing
+    // Only process meetings without ANY AI analysis (check sentiment_score which both old and new pipelines set)
     if (!force) {
-      query = query.is('coach_rating', null) // Only process meetings that haven't been AI analyzed yet
+      query = query.is('sentiment_score', null)
     }
 
     // Apply filters

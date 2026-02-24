@@ -23,7 +23,7 @@ import logger from '@/lib/utils/logger';
 // Types
 // ============================================================================
 
-export type MeetingSource = 'google_calendar' | 'savvycal' | 'fathom' | 'teams';
+export type MeetingSource = 'google_calendar' | 'savvycal' | 'fathom' | 'teams' | 'fireflies';
 export type MeetingStatus = 'confirmed' | 'tentative' | 'cancelled' | 'completed';
 export type MeetingType = 'sales' | 'client' | 'internal' | 'unknown';
 export type AttendeeResponseStatus = 'accepted' | 'declined' | 'tentative' | 'needsAction';
@@ -152,6 +152,7 @@ interface FathomMeetingRow {
   thumbnail_url: string | null;
   fathom_embed_url: string | null;
   calendar_invitees_type: string | null;
+  provider?: string;
 }
 
 interface SavvyCalLeadRow {
@@ -509,8 +510,8 @@ class UnifiedMeetingService {
 
     return {
       id: fathom.id,
-      source: 'fathom',
-      sourceId: fathom.fathom_recording_id,
+      source: (fathom.provider === 'fireflies' ? 'fireflies' : 'fathom') as MeetingSource,
+      sourceId: fathom.fathom_recording_id || fathom.id,
       title: fathom.title || 'Recorded Meeting',
       startTime,
       endTime,

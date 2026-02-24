@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { useTableSubscription } from '@/lib/hooks/useRealtimeHub';
 import { toast } from 'sonner';
 
@@ -40,6 +41,7 @@ export interface FirefliesSyncState {
 
 export function useFirefliesIntegration() {
   const { user } = useAuth();
+  const activeOrgId = useOrgStore((s) => s.activeOrgId);
   // Per-user integration: any user can manage their own Fireflies connection
   const canManage = true;
   // Supabase typed client may not include all integration tables - use narrow escape hatch
@@ -48,6 +50,7 @@ export function useFirefliesIntegration() {
   const [integration, setIntegration] = useState<FirefliesIntegration | null>(null);
   const [syncState, setSyncState] = useState<FirefliesSyncState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lifetimeMeetingsCount, setLifetimeMeetingsCount] = useState<number>(0);
   const [syncInProgress, setSyncInProgress] = useState(false);
@@ -64,7 +67,8 @@ export function useFirefliesIntegration() {
 
     const fetchIntegration = async () => {
       try {
-        setLoading(true);
+        // Only show loading spinner on first load, not on refetches
+        if (!initialLoadDone) setLoading(true);
         setError(null);
 
         // Get active user integration (per-user)
@@ -113,6 +117,7 @@ export function useFirefliesIntegration() {
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
+        setInitialLoadDone(true);
       }
     };
 
@@ -268,22 +273,38 @@ export function useFirefliesIntegration() {
         throw new Error(response.data?.error || 'Invalid API key');
       }
 
-      // API key is valid - create the integration
-      const { error: insertError } = await supabaseAny
+      // API key is valid - create or reactivate the integration
+      // First check if an inactive integration exists (from a previous disconnect)
+      const { data: existingIntegration } = await supabaseAny
         .from('fireflies_integrations')
-        .insert({
-          user_id: user.id,
-          api_key: apiKey,
-          fireflies_user_email: email || null,
-          is_active: true,
-        });
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-      if (insertError) {
-        // Check if integration already exists
-        if (insertError.code === '23505') {
-          throw new Error('You already have a Fireflies integration. Disconnect first to reconnect.');
-        }
-        throw insertError;
+      if (existingIntegration) {
+        // Reactivate existing integration with new API key
+        const { error: updateError } = await supabaseAny
+          .from('fireflies_integrations')
+          .update({
+            api_key: apiKey,
+            fireflies_user_email: email || null,
+            is_active: true,
+          })
+          .eq('id', existingIntegration.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new integration
+        const { error: insertError } = await supabaseAny
+          .from('fireflies_integrations')
+          .insert({
+            user_id: user.id,
+            api_key: apiKey,
+            fireflies_user_email: email || null,
+            is_active: true,
+          });
+
+        if (insertError) throw insertError;
       }
 
       toast.success('Fireflies Connected!', {
@@ -400,6 +421,7 @@ export function useFirefliesIntegration() {
           start_date: params?.start_date,
           end_date: params?.end_date,
           limit: params?.limit,
+          org_id: activeOrgId,
         },
       });
 

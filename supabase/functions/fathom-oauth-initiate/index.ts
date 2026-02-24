@@ -103,6 +103,9 @@ serve(async (req) => {
     authUrl.searchParams.set('scope', 'public_api') // Only supported scope
     authUrl.searchParams.set('state', state)
 
+    console.log('[fathom-oauth-initiate] Generated URL:', authUrl.toString())
+    console.log('[fathom-oauth-initiate] Redirect URI:', redirectUri)
+
     return new Response(
       JSON.stringify({
         success: true,

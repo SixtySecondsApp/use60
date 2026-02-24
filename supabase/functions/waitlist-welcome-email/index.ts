@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { crypto } from 'https://deno.land/std@0.190.0/crypto/mod.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -15,10 +15,17 @@ interface WelcomeEmailRequest {
 }
 
 /**
- * Base64 encode string
+ * Base64 encode string (UTF-8 safe)
  */
 function base64Encode(str: string): string {
-  return btoa(str);
+  // Convert string to UTF-8 bytes, then to base64
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(str);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 /**
@@ -122,10 +129,32 @@ async function sendEmailViaSES(
   }
 
   const url = new URL(`https://email.${AWS_REGION}.amazonaws.com/`);
-  const fromEmail = 'noreply@use60.com';
+  const fromEmail = Deno.env.get('SES_FROM_EMAIL') || 'app@use60.com';
 
-  // Build raw MIME message
-  const message = `From: ${fromEmail}\r\nTo: ${toEmail}\r\nSubject: ${subject}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${htmlBody}`;
+  // Build raw MIME message with multipart/alternative for deliverability
+  const boundary = `----=_Part_${Date.now()}`;
+  const plainText = htmlBody.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  const message = [
+    `From: 60 <${fromEmail}>`,
+    `To: ${toEmail}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/plain; charset=UTF-8`,
+    `Content-Transfer-Encoding: 7bit`,
+    ``,
+    plainText,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=UTF-8`,
+    `Content-Transfer-Encoding: 7bit`,
+    ``,
+    htmlBody,
+    ``,
+    `--${boundary}--`,
+  ].join('\r\n');
   const encodedMessage = base64Encode(message);
 
   const params = new URLSearchParams();
@@ -244,7 +273,7 @@ serve(async (req) => {
     }
 
     // Replace template variables
-    let htmlBody = template.html_template || '';
+    let htmlBody = template.html_body || '';
 
     const variables = {
       user_name: firstName,

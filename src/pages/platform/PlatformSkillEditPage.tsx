@@ -16,9 +16,11 @@ import {
   Server,
   LayoutTemplate,
   Workflow,
+  GitBranch,
   FileCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { SkillDocumentEditor } from '@/components/platform/SkillDocumentEditor';
 import {
   type PlatformSkill,
@@ -39,6 +41,7 @@ const CATEGORY_ICONS: Record<SkillCategory, React.ElementType> = {
   workflows: Workflow,
   'data-access': Server,
   'output-format': LayoutTemplate,
+  'agent-sequence': GitBranch,
 };
 
 const CATEGORY_COLORS: Record<SkillCategory, string> = {
@@ -48,6 +51,7 @@ const CATEGORY_COLORS: Record<SkillCategory, string> = {
   workflows: 'from-orange-500 to-amber-600',
   'data-access': 'from-slate-500 to-gray-600',
   'output-format': 'from-pink-500 to-rose-600',
+  'agent-sequence': 'from-violet-500 to-indigo-600',
 };
 
 const VALID_CATEGORIES = SKILL_CATEGORIES.map(c => c.value);
@@ -152,6 +156,7 @@ export default function PlatformSkillEditPage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 flex flex-col">
+      <BackToPlatform />
       {/* Header */}
       <div className="border-b border-gray-200 dark:border-gray-700/50 shrink-0">
         <div className="max-w-6xl mx-auto px-6 py-4">

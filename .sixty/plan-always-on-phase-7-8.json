@@ -1,0 +1,702 @@
+{
+  "project": {
+    "name": "Always-On Copilot — Phase 7 & 8",
+    "description": "Conversational Slack Interface (PRD-22), Progressive Agent Learning (PRD-23 Revised), Graduated Autonomy (PRD-24).",
+    "source": "docs/copilot/always_on_60/use60_master_plan.md",
+    "createdAt": "2026-02-22T12:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "conversational-slack",
+      "name": "Conversational Slack Interface (PRD-22)",
+      "phase": 7,
+      "status": "complete",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#prd-22",
+      "description": "Rep DMs the agent in Slack and gets intelligent responses backed by all intelligence layers — deal status, pipeline queries, competitive info, draft generation, coaching on demand.",
+      "existingInfra": [
+        "supabase/functions/slack-events/index.ts — event listener with signature verification",
+        "supabase/functions/slack-interactive/index.ts — button/modal handler",
+        "supabase/functions/_shared/orchestrator/fleetRouter.ts — event routing",
+        "supabase/functions/_shared/orchestrator/contextLoader.ts — context assembly",
+        "54+ Slack-related edge functions already deployed",
+        "slackIntentParser.ts — basic intent parsing exists",
+        "Slack Block Kit builder utilities"
+      ]
+    },
+    {
+      "id": "progressive-learning",
+      "name": "Progressive Agent Learning & Configuration (PRD-23 Revised)",
+      "phase": 8,
+      "status": "complete",
+      "prd": "PRD-23 Revised — Progressive Agent Learning & Configuration",
+      "description": "Replace the cancelled onboarding wizard with a progressive learning system: extended research step pre-fills config, contextual questions asked one at a time when relevant, settings page with completeness indicator. No wizard — agent learns progressively.",
+      "replacesFeature": "onboarding-wizard (cancelled)",
+      "existingInfra": [
+        "agent_config_org_overrides + agent_config_user_overrides tables (PRD-01 — complete)",
+        "agent_config_defaults with 66 seed values across 9 agent types",
+        "resolve_agent_config() + resolve_agent_config_all() RPCs",
+        "agent-config-admin edge function with 10 handlers",
+        "agentConfigService.ts + useAgentConfig.ts frontend hooks",
+        "Onboarding V2 flow (WebsiteInput → Enrichment → SkillsConfig → Complete)",
+        "enrich-organization + deep-enrich-organization edge functions",
+        "SalesMethodologySettings.tsx + apply_methodology() for methodology picker",
+        "AutonomySettingsPage.tsx with ActionPolicyGrid for autonomy config",
+        "40+ existing settings pages covering all config areas",
+        "deliverySlack.ts + slack-interactive for Slack message delivery and button handling",
+        "ActivationChecklist.tsx — closest existing progress tracker UI"
+      ]
+    },
+    {
+      "id": "graduated-autonomy",
+      "name": "Graduated Autonomy System (PRD-24)",
+      "phase": 8,
+      "status": "complete",
+      "prd": "docs/copilot/always_on_60/use60_master_plan.md#prd-24",
+      "description": "The agent earns trust over time. Based on approval patterns, it suggests promoting specific actions from 'require approval' to 'auto-approve' — growing autonomy as the org gains confidence.",
+      "existingInfra": [
+        "supabase/functions/_shared/orchestrator/autonomyResolver.ts — preset-based resolution",
+        "supabase/functions/_shared/orchestrator/autonomyTracker.ts — decision logging",
+        "crm_approval_queue table — pending approvals with status lifecycle",
+        "agent_activity feed — in-app activity tracking",
+        "HITL Slack handlers — approve/reject/edit buttons",
+        "8 action types with risk levels already defined"
+      ]
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "CONV-001",
+      "feature": "conversational-slack",
+      "title": "Add Slack DM listener and thread state management",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["supabase/functions/slack-events/index.ts"], "schema": [] },
+      "blocks": ["CONV-002", "CONV-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "slack-events handler detects DM messages to the bot (im.message events)",
+        "Thread state stored in copilot_conversations with slack_thread_ts reference",
+        "Bot responds with typing indicator while processing",
+        "Duplicate message protection via idempotency key on slack event_id"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-events/index.ts",
+        "supabase/functions/slack-events/handlers/dmHandler.ts",
+        "supabase/migrations/YYYYMMDD_slack_conversation_threads.sql"
+      ]
+    },
+    {
+      "id": "CONV-002",
+      "feature": "conversational-slack",
+      "title": "Build conversational intent classifier for Slack DMs",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["CONV-001"], "files": [], "schema": [] },
+      "blocks": ["CONV-004", "CONV-005", "CONV-006", "CONV-007"],
+      "parallelWith": ["CONV-003"],
+      "acceptance": [
+        "Classifies intents: deal_query, pipeline_query, history_query, action_request, competitive_query, coaching_query, general_chat",
+        "Returns confidence score per intent with extracted entities (deal name, contact name, date range)",
+        "Falls back to general_chat for unclassified messages",
+        "Uses Claude Haiku for fast classification (<500ms)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/intentClassifier.ts",
+        "supabase/functions/_shared/slack-copilot/types.ts"
+      ]
+    },
+    {
+      "id": "CONV-003",
+      "feature": "conversational-slack",
+      "title": "Build context assembly engine for conversational queries",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["CONV-001"], "files": ["supabase/functions/_shared/orchestrator/contextLoader.ts"], "schema": [] },
+      "blocks": ["CONV-004", "CONV-005", "CONV-006", "CONV-007"],
+      "parallelWith": ["CONV-002"],
+      "acceptance": [
+        "Assembles context from deals, contacts, meetings, activities based on intent type",
+        "Loads thread history for multi-turn context (last 10 messages)",
+        "Respects RLS — only loads data the user owns",
+        "Returns structured context object with relevant data and token budget management"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/contextAssembler.ts",
+        "supabase/functions/_shared/slack-copilot/threadMemory.ts"
+      ]
+    },
+    {
+      "id": "CONV-004",
+      "feature": "conversational-slack",
+      "title": "Implement deal and pipeline query handlers",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["CONV-002", "CONV-003"], "files": [], "schema": [] },
+      "blocks": ["CONV-009"],
+      "parallelWith": ["CONV-005", "CONV-006", "CONV-007"],
+      "acceptance": [
+        "Handles 'What's happening with [deal]?' — returns deal summary with risk, stage, last activity",
+        "Handles 'Which deals are at risk?' — returns ranked risk list with evidence",
+        "Handles 'Am I on track for Q1?' — returns pipeline math vs target with gap analysis",
+        "Responses formatted as Slack Block Kit messages with action buttons"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/dealQueryHandler.ts",
+        "supabase/functions/_shared/slack-copilot/handlers/pipelineQueryHandler.ts",
+        "supabase/functions/_shared/slack-copilot/responseFormatter.ts"
+      ]
+    },
+    {
+      "id": "CONV-005",
+      "feature": "conversational-slack",
+      "title": "Implement history and contact query handlers",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["CONV-002", "CONV-003"], "files": [], "schema": [] },
+      "blocks": ["CONV-009"],
+      "parallelWith": ["CONV-004", "CONV-006", "CONV-007"],
+      "acceptance": [
+        "Handles 'When did I last talk to [person]?' — returns last meeting/email with summary",
+        "Handles 'What do we know about [contact/company]?' — returns enriched profile",
+        "Handles 'Show my meetings this week' — returns calendar summary with prep status",
+        "Entity resolution for ambiguous names using existing resolve_entity pattern"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/historyQueryHandler.ts",
+        "supabase/functions/_shared/slack-copilot/handlers/contactQueryHandler.ts"
+      ]
+    },
+    {
+      "id": "CONV-006",
+      "feature": "conversational-slack",
+      "title": "Implement action execution from conversation",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["CONV-002", "CONV-003"], "files": [], "schema": [] },
+      "blocks": ["CONV-009"],
+      "parallelWith": ["CONV-004", "CONV-005", "CONV-007"],
+      "acceptance": [
+        "Handles 'Draft a follow-up for [deal]' — generates email draft and presents for approval",
+        "Handles 'Create a task to [action]' — creates task with HITL confirmation",
+        "Handles 'Send that email' — executes approved draft via existing email send flow",
+        "Uses autonomy resolver to determine auto vs approval for each action type"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/actionHandler.ts",
+        "supabase/functions/_shared/slack-copilot/handlers/draftHandler.ts"
+      ]
+    },
+    {
+      "id": "CONV-007",
+      "feature": "conversational-slack",
+      "title": "Implement competitive and coaching query handlers",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["CONV-002", "CONV-003"], "files": [], "schema": [] },
+      "blocks": ["CONV-009"],
+      "parallelWith": ["CONV-004", "CONV-005", "CONV-006"],
+      "acceptance": [
+        "Handles 'What works against [competitor]?' — returns battlecard from competitive_intelligence",
+        "Handles 'How should I handle [objection]?' — returns playbook response with proof points",
+        "Handles 'How am I doing this week?' — returns personal performance snapshot",
+        "Graceful degradation when intelligence layers have no data yet"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/competitiveQueryHandler.ts",
+        "supabase/functions/_shared/slack-copilot/handlers/coachingQueryHandler.ts"
+      ]
+    },
+    {
+      "id": "CONV-008",
+      "feature": "conversational-slack",
+      "title": "Build Slack copilot orchestrator edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["CONV-004", "CONV-005", "CONV-006", "CONV-007"], "files": [], "schema": [] },
+      "blocks": ["CONV-009", "CONV-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "New slack-copilot edge function wires intent → context → handler → response pipeline",
+        "Called by slack-events DM handler with user context and thread state",
+        "Multi-turn: maintains conversation context across thread replies",
+        "Handles errors gracefully with user-friendly Slack messages"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/slack-copilot/index.ts",
+        "supabase/functions/_shared/slack-copilot/orchestrator.ts"
+      ]
+    },
+    {
+      "id": "CONV-009",
+      "feature": "conversational-slack",
+      "title": "Add rate limiting and credit management for Slack copilot",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["CONV-008"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CONV-010"],
+      "acceptance": [
+        "Per-user rate limit: max 30 conversational queries per hour",
+        "Credit consumption tracking per query type (simple lookup vs AI generation)",
+        "Graceful rate limit message with cooldown timer",
+        "Org-level monthly budget cap with warning at 80% usage"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/rateLimiter.ts",
+        "supabase/functions/_shared/slack-copilot/creditTracker.ts"
+      ]
+    },
+    {
+      "id": "CONV-010",
+      "feature": "conversational-slack",
+      "title": "Polish Slack Block Kit response templates and error states",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["CONV-008"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CONV-009"],
+      "acceptance": [
+        "Consistent Block Kit templates for each response type (deal summary, pipeline view, draft preview)",
+        "Action buttons: Open in 60, Approve, Edit, Dismiss on all actionable responses",
+        "Error states: rate limited, no data found, processing timeout",
+        "Help command (/sixty help) lists available conversational queries"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/templates/dealSummary.ts",
+        "supabase/functions/_shared/slack-copilot/templates/pipelineView.ts",
+        "supabase/functions/_shared/slack-copilot/templates/draftPreview.ts",
+        "supabase/functions/_shared/slack-copilot/templates/errorStates.ts"
+      ]
+    },
+
+    {
+      "id": "LEARN-001",
+      "feature": "progressive-learning",
+      "title": "Create agent_config_questions table and completeness tracking schema",
+      "type": "schema",
+      "status": "complete",
+      "priority": 20,
+      "dependencies": { "stories": [], "files": [], "schema": ["agent_config_org_overrides", "agent_config_user_overrides"] },
+      "blocks": ["LEARN-002", "LEARN-003", "LEARN-005", "LEARN-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "agent_config_questions table created with columns: id, org_id, user_id, config_key, question_template, trigger_event, trigger_condition (JSONB), priority, category, status, asked_at, answered_at, answer_value (JSONB), delivery_channel (slack/in_app)",
+        "RLS policies: users see own questions, admins see org questions",
+        "get_config_completeness(p_org_id, p_user_id) RPC returns tier (functional/tuned/optimised/learning) and percentage",
+        "Unique constraint on (org_id, user_id, config_key) prevents duplicate questions"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_agent_config_questions.sql"
+      ]
+    },
+    {
+      "id": "LEARN-002",
+      "feature": "progressive-learning",
+      "title": "Extend research step to infer agent configuration from webscrape",
+      "type": "backend",
+      "status": "complete",
+      "priority": 21,
+      "dependencies": { "stories": ["LEARN-001"], "files": ["supabase/functions/enrich-organization/index.ts"], "schema": [] },
+      "blocks": ["LEARN-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "enrich-organization extended to infer: sales_methodology, sales_motion_type, fiscal_year_start, key_competitors (array), target_customer_profile",
+        "Inference prompts use company domain enrichment data + webscrape content (pricing page, case studies, FAQ, comparison pages)",
+        "Each inferred value includes confidence score (low/medium/high) stored alongside in JSONB",
+        "Results written to new inferred_agent_config column on organisation_enrichments (or returned in enrichment response)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/enrich-organization/index.ts",
+        "supabase/functions/_shared/enrichment/agentConfigInference.ts"
+      ]
+    },
+    {
+      "id": "LEARN-003",
+      "feature": "progressive-learning",
+      "title": "Build bootstrap confirmation screen after onboarding enrichment",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 22,
+      "dependencies": { "stories": ["LEARN-001", "LEARN-002"], "files": ["src/pages/onboarding/v2/EnrichmentResultStep.tsx"], "schema": [] },
+      "blocks": ["LEARN-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "New AgentConfigConfirmStep.tsx shown after EnrichmentResultStep in onboarding V2 flow",
+        "Displays inferred config items with confidence indicators and edit-in-place capability",
+        "Single 'Looks good' button writes all confirmed values to agent_config_org_overrides via agentConfigService",
+        "'Edit in Settings' link skips confirmation and lets user configure manually later",
+        "Low-confidence items highlighted with 'We're not sure about this — you can change it anytime'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/onboarding/v2/AgentConfigConfirmStep.tsx",
+        "src/pages/onboarding/v2/OnboardingV2.tsx"
+      ]
+    },
+    {
+      "id": "LEARN-004",
+      "feature": "progressive-learning",
+      "title": "Write inferred config to config engine on bootstrap confirm",
+      "type": "backend",
+      "status": "complete",
+      "priority": 23,
+      "dependencies": { "stories": ["LEARN-003"], "files": ["supabase/functions/agent-config-admin/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["LEARN-005"],
+      "acceptance": [
+        "New confirm-bootstrap-config handler in agent-config-admin accepts batch of inferred config items",
+        "Writes each confirmed item to agent_config_org_overrides with source: 'bootstrap_inference'",
+        "If methodology detected with high confidence, calls apply_methodology() to set methodology-specific defaults",
+        "CRM stage mapping auto-detected from HubSpot pipeline data written to stage_mapping config key"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/agent-config-admin/index.ts",
+        "supabase/functions/agent-config-admin/handlers/bootstrapConfig.ts"
+      ]
+    },
+    {
+      "id": "LEARN-005",
+      "feature": "progressive-learning",
+      "title": "Build contextual question trigger evaluation engine",
+      "type": "backend",
+      "status": "complete",
+      "priority": 24,
+      "dependencies": { "stories": ["LEARN-001"], "files": [], "schema": ["agent_config_questions"] },
+      "blocks": ["LEARN-006", "LEARN-007"],
+      "parallelWith": ["LEARN-004"],
+      "acceptance": [
+        "evaluate-config-questions edge function checks pending questions against trigger conditions",
+        "Trigger conditions supported: config_not_set, delivery_count (event count threshold), approval_count_gte, time_since_setup",
+        "Rate limiting enforced: max 1 question per day per user, skip during quiet hours, 2h post-meeting buffer",
+        "Returns next eligible question (highest priority, oldest pending) or null if none ready"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/evaluate-config-questions/index.ts",
+        "supabase/functions/_shared/config/questionEvaluator.ts"
+      ]
+    },
+    {
+      "id": "LEARN-006",
+      "feature": "progressive-learning",
+      "title": "Deliver contextual questions via Slack DM or in-app notification",
+      "type": "backend",
+      "status": "complete",
+      "priority": 25,
+      "dependencies": { "stories": ["LEARN-005"], "files": ["supabase/functions/_shared/proactive/deliverySlack.ts", "supabase/functions/_shared/proactive/deliveryInApp.ts"], "schema": [] },
+      "blocks": ["LEARN-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Delivery checks Slack connection first — if connected, sends Block Kit message with option buttons; if not, delivers via in-app notification with inline answer UI",
+        "Each message includes question text, context explanation, option buttons/choices, and 'Set in Settings' link",
+        "Message metadata includes question_id and config_key for answer routing",
+        "In-app delivery uses existing notification system with a structured question card component"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/config/questionDelivery.ts",
+        "supabase/functions/_shared/config/questionBlockKit.ts",
+        "supabase/functions/_shared/config/questionInApp.ts"
+      ]
+    },
+    {
+      "id": "LEARN-007",
+      "feature": "progressive-learning",
+      "title": "Handle contextual question answers from Slack and in-app",
+      "type": "backend",
+      "status": "complete",
+      "priority": 26,
+      "dependencies": { "stories": ["LEARN-005", "LEARN-006"], "files": ["supabase/functions/slack-interactive/index.ts"], "schema": [] },
+      "blocks": ["LEARN-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "slack-interactive extended with config_question_answer action handler for Slack button clicks",
+        "New answer-config-question edge function handles in-app answers (called from frontend)",
+        "Answer written to agent_config_org_overrides (org-level) or agent_config_user_overrides (user-level) based on config_key scope",
+        "Question status updated to 'answered' with answered_at timestamp and answer_value"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-interactive/handlers/configQuestionAnswer.ts",
+        "supabase/functions/answer-config-question/index.ts"
+      ]
+    },
+    {
+      "id": "LEARN-008",
+      "feature": "progressive-learning",
+      "title": "Seed all contextual question templates into the question queue",
+      "type": "backend",
+      "status": "complete",
+      "priority": 27,
+      "dependencies": { "stories": ["LEARN-007"], "files": [], "schema": ["agent_config_questions"] },
+      "blocks": [],
+      "parallelWith": ["LEARN-009"],
+      "acceptance": [
+        "Seed migration inserts ~20 question templates covering: revenue targets, daily rhythm, autonomy, methodology, signal preferences",
+        "Each template includes: config_key, question_template with variable placeholders, trigger_event, trigger_condition JSONB, category",
+        "Org-scoped questions (methodology, targets) vs user-scoped questions (briefing time, quiet hours) correctly differentiated",
+        "initialize-onboarding extended to copy templates into agent_config_questions for new orgs"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_seed_config_question_templates.sql",
+        "supabase/functions/initialize-onboarding/index.ts"
+      ]
+    },
+    {
+      "id": "LEARN-009",
+      "feature": "progressive-learning",
+      "title": "Build config completeness indicator for settings page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 28,
+      "dependencies": { "stories": ["LEARN-001"], "files": ["src/pages/Settings.tsx"], "schema": [] },
+      "blocks": ["LEARN-010"],
+      "parallelWith": ["LEARN-008"],
+      "acceptance": [
+        "ConfigCompletenessCard component shows tier (Functional/Tuned/Optimised/Learning) with progress bar",
+        "Expandable section lists unanswered config items grouped by category with 'Configure now' links",
+        "Calls get_config_completeness RPC and displays percentage + tier label",
+        "Embedded at top of Settings page, visible to all users"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/settings/ConfigCompletenessCard.tsx",
+        "src/lib/hooks/useConfigCompleteness.ts",
+        "src/pages/Settings.tsx"
+      ]
+    },
+    {
+      "id": "LEARN-010",
+      "feature": "progressive-learning",
+      "title": "Wire question engine into orchestrator event hooks",
+      "type": "backend",
+      "status": "complete",
+      "priority": 29,
+      "dependencies": { "stories": ["LEARN-009"], "files": ["supabase/functions/_shared/orchestrator/runner.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Orchestrator runner emits events that trigger question evaluation: morning_briefing_delivered, meeting_processed, crm_update_approved",
+        "After each agent execution, runner calls evaluate-config-questions if event type matches a trigger",
+        "Questions delivered asynchronously (fire-and-forget) — never blocks agent execution",
+        "Skip evaluation if user answered a question within last 24 hours (rate limit)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/functions/_shared/config/questionTriggerHook.ts"
+      ]
+    },
+
+    {
+      "id": "GRAD-001",
+      "feature": "graduated-autonomy",
+      "title": "Build approval rate analytics and tracking system",
+      "type": "backend",
+      "status": "complete",
+      "priority": 30,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/orchestrator/autonomyTracker.ts"], "schema": ["crm_approval_queue"] },
+      "blocks": ["GRAD-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "Per-action-type approval/rejection/edit rates calculated over configurable windows (7d, 30d, 90d)",
+        "Tracked metrics: approval_count, rejection_count, edit_count, auto_approved_count per action type",
+        "get_autonomy_analytics RPC returns rates for all action types for an org",
+        "Historical data backfilled from existing crm_approval_queue and agent_activity records"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_autonomy_analytics.sql",
+        "supabase/functions/_shared/orchestrator/autonomyAnalytics.ts"
+      ]
+    },
+    {
+      "id": "GRAD-002",
+      "feature": "graduated-autonomy",
+      "title": "Implement promotion rules engine",
+      "type": "backend",
+      "status": "complete",
+      "priority": 31,
+      "dependencies": { "stories": ["GRAD-001"], "files": [], "schema": [] },
+      "blocks": ["GRAD-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Configurable promotion thresholds: min_approvals (default 30), max_rejection_rate (default 5%), min_days_active (default 14)",
+        "Daily evaluation job checks all action types against promotion criteria",
+        "Demotion trigger: rejection rate exceeds 15% in trailing 7-day window after promotion",
+        "Promotion candidates stored in autonomy_promotion_queue with evidence"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/promotionEngine.ts",
+        "supabase/migrations/YYYYMMDD_autonomy_promotion_queue.sql"
+      ]
+    },
+    {
+      "id": "GRAD-003",
+      "feature": "graduated-autonomy",
+      "title": "Build promotion suggestion delivery via Slack and settings UI",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 32,
+      "dependencies": { "stories": ["GRAD-002"], "files": [], "schema": [] },
+      "blocks": ["GRAD-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Slack message: 'CRM field updates: 42 approved, 0 corrections in 30 days. Auto-approve this action?' with Yes/No buttons",
+        "Settings UI banner: promotion suggestions displayed inline in Autonomy settings",
+        "One-click promotion: 'Yes' updates agent_config_org_overrides and clears queue entry",
+        "Reject: snoozes suggestion for 30 days"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/autonomy-promotion-notify/index.ts",
+        "src/components/settings/AutonomyPromotionBanner.tsx",
+        "supabase/functions/slack-interactive/handlers/autonomyPromotion.ts"
+      ]
+    },
+    {
+      "id": "GRAD-004",
+      "feature": "graduated-autonomy",
+      "title": "Implement demotion handling and safety net",
+      "type": "backend",
+      "status": "complete",
+      "priority": 33,
+      "dependencies": { "stories": ["GRAD-003"], "files": [], "schema": [] },
+      "blocks": ["GRAD-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Auto-demotion when rejection rate spikes >15% in 7-day window post-promotion",
+        "Demotion reverts action to previous approval policy with Slack notification",
+        "Cooldown: demoted actions cannot be re-promoted for 30 days",
+        "Audit trail: all promotions/demotions logged with evidence in autonomy_audit_log"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/demotionHandler.ts",
+        "supabase/migrations/YYYYMMDD_autonomy_audit_log.sql"
+      ]
+    },
+    {
+      "id": "GRAD-005",
+      "feature": "graduated-autonomy",
+      "title": "Build autonomy progression dashboard in settings UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 34,
+      "dependencies": { "stories": ["GRAD-004"], "files": [], "schema": [] },
+      "blocks": ["GRAD-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Visual timeline showing autonomy progression per action type over time",
+        "Current status per action: auto/approve/suggest with approval rate sparkline",
+        "Stats summary: 'X actions auto-approved, Y corrections, Z% accuracy this month'",
+        "Promotion history: list of past promotions/demotions with dates and evidence"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/settings/AutonomyProgressionDashboard.tsx",
+        "src/components/settings/AutonomyActionCard.tsx",
+        "src/lib/hooks/useAutonomyAnalytics.ts"
+      ]
+    },
+    {
+      "id": "GRAD-006",
+      "feature": "graduated-autonomy",
+      "title": "Add manager controls for org-wide autonomy policies",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 35,
+      "dependencies": { "stories": ["GRAD-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Manager role can set which actions are eligible for auto-promotion (org-wide toggle per action)",
+        "Manager can set max autonomy ceiling per action type (e.g. 'email send can never be auto')",
+        "Per-rep autonomy override view: see and adjust individual rep's autonomy levels",
+        "Org-level analytics: team approval rates, promotion velocity across all reps"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/settings/ManagerAutonomyControls.tsx",
+        "supabase/functions/agent-config-admin/handlers/managerControls.ts",
+        "src/lib/hooks/useManagerAutonomy.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 26,
+    "completedStories": 26,
+    "features": {
+      "conversational-slack": { "stories": 10, "estimatedMinutes": 255, "parallelGroups": 3 },
+      "progressive-learning": { "stories": 10, "estimatedMinutes": 240, "parallelGroups": 2 },
+      "graduated-autonomy": { "stories": 6, "estimatedMinutes": 145, "parallelGroups": 0 }
+    },
+    "totalEstimatedMinutes": 640,
+    "totalEstimatedHours": "8-10 hours (with parallel execution)",
+    "lastUpdated": "2026-02-22T22:00:00Z"
+  },
+
+  "dependencyGraph": {
+    "phase7": {
+      "group1_foundation": ["CONV-001"],
+      "group2_parallel": ["CONV-002", "CONV-003"],
+      "group3_parallel": ["CONV-004", "CONV-005", "CONV-006", "CONV-007"],
+      "group4_integration": ["CONV-008"],
+      "group5_polish": ["CONV-009", "CONV-010"]
+    },
+    "phase8_learning": {
+      "group1_schema": ["LEARN-001"],
+      "group2_research": ["LEARN-002"],
+      "group3_parallel": ["LEARN-003", "LEARN-005", "LEARN-009"],
+      "group4_parallel": ["LEARN-004", "LEARN-006"],
+      "group5_handlers": ["LEARN-007"],
+      "group6_parallel": ["LEARN-008", "LEARN-009"],
+      "group7_wiring": ["LEARN-010"]
+    },
+    "phase8_autonomy": {
+      "group1": ["GRAD-001"],
+      "group2": ["GRAD-002"],
+      "group3": ["GRAD-003"],
+      "group4": ["GRAD-004"],
+      "group5": ["GRAD-005"],
+      "group6": ["GRAD-006"]
+    },
+    "crossFeature": {
+      "note": "LEARN and GRAD are independent of each other and of CONV. LEARN uses existing config engine (PRD-01 complete). GRAD uses existing autonomy resolver + HITL. All three features can be developed in parallel by different team members.",
+      "sharedInfra": [
+        "agent_config_org_overrides — written by LEARN (bootstrap + question answers) and GRAD (promotion approvals)",
+        "slack-interactive/index.ts — extended by both LEARN-007 (question answers) and GRAD-003 (promotion buttons)",
+        "orchestrator/runner.ts — extended by LEARN-010 (question trigger hooks)"
+      ]
+    }
+  }
+}

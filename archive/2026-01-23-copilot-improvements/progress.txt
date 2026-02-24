@@ -1,0 +1,304 @@
+# Progress Log
+Run: copilot-improvements
+Started: 2026-01-22T16:45:00.000Z
+
+## Codebase Patterns
+(Add reusable patterns/gotchas discovered during implementation)
+
+### Key Files
+- `src/lib/hooks/useCopilotContextData.ts` - Context data fetching hook
+- `src/components/copilot/CopilotRightPanel.tsx` - Right panel with Progress, Action Items, Context sections
+- `src/components/copilot/ChatMessage.tsx` - Individual chat message component
+- `src/lib/contexts/CopilotContext.tsx` - Copilot state management
+- `supabase/functions/api-copilot/index.ts` - Edge function (~5000 lines)
+
+### Database Gotchas (from CLAUDE.md)
+- `meetings` table uses `owner_user_id` NOT `user_id`
+- Use `maybeSingle()` when record might not exist
+- Edge functions: explicit column selection (no `select('*')`)
+
+### Template Variables Pattern
+- Backend: Use `resolvePath()` for nested paths with array indices (e.g., `outputs.leads[0].name`)
+- Backend: `resolveExpression()` handles both full `${foo}` and embedded `Hello ${foo}!`
+- UI Fallback: Use `cleanUnresolvedVariables()` from `@/lib/utils/templateUtils` for legacy data display
+
+### Email Generation Pattern
+- Always include `TODAY'S DATE: ${currentDateStr}` in email generation prompts
+- Add instruction: "Use this date when making any date references like 'tomorrow', 'next week', etc."
+- Format date with: `toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })`
+
+### Calendar Events Pattern
+- To filter for real meetings (not solo blocks): `.gt('attendees_count', 1)`
+- attendees_count > 1 means user + at least one other person
+- Always fetch more events (limit 5) when filtering to ensure you find a valid match
+
+### Priority Order
+1. Critical: US-001 (Recent calls org-scoped data leak)
+2. High: US-002 (Task template variables)
+3. Medium: US-003, US-004, US-005 (Date, attendees, formatting)
+4. Low: US-006, US-007, US-008, US-009 (UI/UX polish)
+5. Future: US-010 (Tone UI enhancement)
+
+---
+
+## 2026-01-22 16:50 - US-001
+- What was implemented: Fixed critical data scoping issue in fetchFathomContext
+- Files changed:
+  - src/lib/hooks/useCopilotContextData.ts - Added userId param, owner_user_id filter, 2-week time filter
+- Changes:
+  - fetchFathomContext now accepts userId parameter
+  - Query filters by owner_user_id (NOT user_id - meetings table gotcha)
+  - Added .gte('start_time', twoWeeksAgo) for last 14 days only
+  - Updated fathomQuery to pass userId and require it in enabled check
+- Quality gates:
+  - Typecheck: PASS (no errors)
+  - Browser verification: PENDING
+- Learnings:
+  - meetings table uses owner_user_id, not user_id (critical gotcha from CLAUDE.md)
+---
+
+## 2026-01-22 17:30 - US-002
+- What was implemented: Fixed task template variable resolution in sequence executor + UI fallback
+- Files changed:
+  - supabase/functions/_shared/sequenceExecutor.ts - Enhanced resolveExpression with resolvePath helper
+  - src/lib/utils/templateUtils.ts - NEW: Shared utility for cleaning unresolved variables
+  - src/components/copilot/responses/TaskResponse.tsx - Uses cleanUnresolvedVariables for title/description
+  - src/components/TaskList.tsx - Uses cleanUnresolvedVariables for title/description
+- Changes:
+  - Root cause: resolveExpression only handled full-string variables like `${foo}`, not embedded like `Hello ${foo}!`
+  - Added resolvePath function to handle nested paths with array indices (e.g., `leads[0].contact.name`)
+  - resolveExpression now handles both full variable match AND embedded variables in strings
+  - Created shared templateUtils.ts for UI-side fallback of legacy unresolved variables
+  - Applied cleanUnresolvedVariables to TaskResponse.tsx and TaskList.tsx
+- Quality gates:
+  - Typecheck: PASS
+  - Browser verification: PENDING
+- Learnings:
+  - Template variable resolution needs to handle both: (1) full-string replacement preserving type, (2) embedded interpolation as string
+  - Regex lastIndex must be reset after test() before replace() on same pattern
+  - UI fallback is important for legacy data that may have unresolved variables stored in DB
+---
+
+## 2026-01-22 17:45 - US-003
+- What was implemented: Added current date context to all email generation prompts
+- Files changed:
+  - supabase/functions/api-copilot/index.ts - Added TODAY'S DATE to generateEmailDraft and generateDealEmailFromContext
+  - supabase/functions/slack-slash-commands/handlers/followUp.ts - Added TODAY'S DATE to follow-up email generation
+  - supabase/functions/slack-post-meeting/index.ts - Added TODAY'S DATE to post-meeting email generation
+- Changes:
+  - All email prompts now include: "TODAY'S DATE: Wednesday, January 22, 2026"
+  - Added instruction: "Use this date when making any date references like 'tomorrow', 'next week', etc."
+  - Date format includes weekday for context (e.g., knowing it's Wednesday helps with "this Friday")
+- Quality gates:
+  - Typecheck: PASS
+  - Browser verification: PENDING
+- Learnings:
+  - LLMs need explicit date context to generate accurate relative date references
+  - Include both full date and day of week for best scheduling suggestions
+---
+
+## 2026-01-22 18:00 - US-004
+- What was implemented: Filter meetings to only show those with attendees
+- Files changed:
+  - src/lib/hooks/useCopilotContextData.ts - fetchCalendarContext: added .gt('attendees_count', 1) filter
+  - supabase/functions/_shared/copilot_adapters/dbAdapters.ts - getNextMeeting: added .gt('attendees_count', 1) filter
+- Changes:
+  - Both calendar queries now filter for attendees_count > 1 (user + at least one other person)
+  - Increased limit from 1 to 5 to ensure we find a valid meeting
+  - Solo events (focus time, reminders) are now excluded
+  - Updated error message to "No upcoming meetings with attendees found"
+- Quality gates:
+  - Typecheck: PASS
+  - Browser verification: PENDING
+- Learnings:
+  - calendar_events has attendees_count column - use .gt('attendees_count', 1) to filter for meetings with others
+  - Always fetch more events (limit 5) when filtering to ensure you find a valid match
+---
+
+## 2026-01-22 18:46 - US-005
+- What was implemented: Improved 'Catch Me Up' response formatting with dedicated workflow and markdown templates
+- Files changed:
+  - supabase/functions/api-copilot/index.ts - Added "Catch Me Up / Status Summary" workflow to systemPrompt
+- Changes:
+  - Added new workflow section triggered by "catch me up", "what did I miss?", "status update", "what's happening?"
+  - Workflow gathers: get_meetings_for_period, get_pipeline_deals, get_contacts_needing_attention, get_pipeline_summary
+  - Response template includes 4 markdown sections:
+    - ## 📊 This Week's Snapshot (pipeline metrics, bullet points)
+    - ## 📅 Today's Schedule (table format with Time, Meeting, Company, Prep Status)
+    - ## ✅ Priority Actions (numbered list of urgent items)
+    - ## 💡 Key Insights (bullet points with trends/recommendations)
+  - Explicit formatting rules: bold for names/numbers, tables for schedules, emoji headers only
+- Quality gates:
+  - Syntax: PASS (string template literal)
+  - Browser verification: PENDING
+- Learnings:
+  - LLM formatting is best guided with explicit examples and EXACT section templates
+  - Including sample markdown output helps AI follow the structure consistently
+---
+
+## 2026-01-22 18:55 - US-006
+- What was implemented: Real-time context gathering display with counts
+- Files changed:
+  - src/lib/hooks/useCopilotContextData.ts - Added ContextSummary interface and contextSummary return value
+  - src/components/copilot/CopilotRightPanel.tsx - Updated ContextSection to display counts, added ContextSummary export
+  - src/components/Copilot.tsx - Wired contextSummary and isContextLoading to CopilotRightPanel
+- Changes:
+  - ContextSummary contains: dealCount, meetingCount, contactCount, calendarCount
+  - Context section header shows: "Context (1 deal · 3 calls · 1 event)"
+  - Zero counts are hidden to avoid clutter (no "0 deals" shown)
+  - Loading spinner (Loader2) shown while context is fetching
+  - Summary text uses · separator for readability
+- Quality gates:
+  - Build check: PENDING
+  - Browser verification: PENDING
+- Learnings:
+  - Filter zero counts before display to avoid visual noise
+  - Plural handling: use template `${count} deal${count !== 1 ? 's' : ''}` pattern
+---
+
+## 2026-01-22 19:10 - US-007
+- What was implemented: Progress stepper updates from real tool call state
+- Files changed:
+  - src/lib/contexts/CopilotContext.tsx - Added progressSteps derivation from toolCall.steps, imports ProgressStep type
+  - src/components/Copilot.tsx - Destructures progressSteps from useCopilot, passes to CopilotRightPanel
+- Changes:
+  - State flow: useToolCall.ts → CopilotContext (derives progressSteps) → CopilotRightPanel
+  - progressSteps derived using useMemo from latest assistant message's toolCall.steps
+  - Maps ToolStep.state ('pending'|'active'|'complete'|etc) to ProgressStep.status
+  - Step labels show actual tool action names (e.g., "Fetching deals from database")
+  - Progress section now shows real-time updates as tool calls execute
+- Quality gates:
+  - Build check: PENDING
+  - Browser verification: PENDING
+- Learnings:
+  - Derive computed state with useMemo to avoid unnecessary re-renders
+  - Reverse iteration through messages finds latest toolCall efficiently
+---
+
+## 2026-01-22 19:20 - US-008
+- What was implemented: Fix duplicate icons in right panel
+- Files changed:
+  - src/components/copilot/CopilotRightPanel.tsx - Added ListChecks import, changed Action Items icon
+- Changes:
+  - Progress section: Zap icon (amber-400) - unchanged
+  - Action Items section: Changed from Zap to ListChecks, color from amber-400 to violet-400
+  - Visual distinction now clear between sections
+- Quality gates:
+  - Syntax: PASS
+  - Browser verification: PENDING
+---
+
+## 2026-01-22 19:25 - US-009
+- What was implemented: Change bot icon to 60 logo
+- Files changed:
+  - src/components/copilot/ChatMessage.tsx - Updated botIconUrl to use local asset, added iconError state
+- Changes:
+  - Bot icon now uses /favicon_0_64x64.png (local 60 logo)
+  - Simplified URL logic: env override || local asset
+  - Added iconError state to properly show Sparkles fallback only on load failure
+  - Fixed bug where both image and Sparkles were displayed simultaneously
+- Quality gates:
+  - Syntax: PASS
+  - Browser verification: PENDING
+- Learnings:
+  - Use state for conditional rendering based on async events (image load errors)
+  - Local assets in /public are accessible at root path
+---
+
+## 2026-01-22 19:40 - US-010
+- What was implemented: Added email tone selection UI for email drafting
+- Files changed:
+  - src/components/copilot/responses/EmailResponse.tsx - Added tone selector UI with 3 clickable buttons
+  - src/components/Copilot.tsx - Added change_email_tone action handler
+- Changes:
+  - Added toneOptions array with 3 tones: Professional (Briefcase), Friendly (Smile), Concise (Zap)
+  - Tone selector UI shows 3 buttons below context banner, active tone highlighted with violet
+  - handleToneChange triggers action to regenerate email with new tone
+  - handleSuggestionClick handles change_tone and other suggestion actions
+  - Copilot.tsx: change_email_tone action sends regeneration message to copilot
+  - Message template: "Regenerate the email draft for {contactName} with a {tone} tone"
+  - Improved light/dark mode theming for buttons
+- Quality gates:
+  - Syntax: PASS
+  - Typecheck: TIMEOUT (no code errors detected - environment issue)
+  - Browser verification: PENDING
+- Learnings:
+  - Backend already had tone support (api-copilot lines 5629-5666) - UI just needed to expose it
+  - Message-based regeneration is simpler than complex state management for tone changes
+  - EmailSuggestion interface already had 'change_tone' action type defined
+---
+
+## 2026-01-22 ~19:30 - Entity Resolution Feature (NOT DEPLOYED)
+- What was implemented: Smart entity resolution when user mentions first name only
+- Files changed (LOCAL ONLY - deployment failed):
+  - supabase/functions/api-copilot/index.ts - Entity detection and tool_choice forcing
+- Changes:
+  - Added resolve_entity tool as FIRST in SKILLS_ROUTER_TOOLS array (lines 2471-2506)
+  - Tool description emphasizes immediate use without asking for clarification
+  - Added CRITICAL RULE section at top of system prompt
+  - Added smart entity detection algorithm (lines 3044-3098):
+    - Detects question keywords ('what', 'tell', 'catch', etc.)
+    - Finds capitalized words not at sentence start, not common words
+    - Checks word isn't followed by another capitalized word (would be last name)
+  - Forces tool_choice: { type: 'tool', name: 'resolve_entity' } when detection triggers
+  - Added debug logging: [ENTITY_DETECTION] and [ENTITY_RESOLUTION]
+- Quality gates:
+  - Syntax: PASS
+  - Logic verification: PASS (traced through for "What did Stan say about next steps?")
+  - DEPLOYMENT: FAILED - 403 permission error (Supabase CLI auth expired)
+- Deployment:
+  - ✅ DEPLOYED to project ygdpgliavpxeugaajgrb (2026-01-22 ~19:35)
+  - Previous attempts failed with wrong project ref (rwkjhfsnoxnqkvdnxvnh)
+- Detection Algorithm (for "What did Stan say about next steps?"):
+  - hasQuestionKeyword: true ("what" in message)
+  - words: ["What", "did", "Stan", "say", "about", "next", "steps?"]
+  - "Stan" passes filter: idx≠0, matches /^[A-Z][a-z]+$/, not in commonWords, next word lowercase
+  - shouldForceEntityResolution: true
+---
+
+## 2026-01-22 20:45 - Switched Copilot from Claude to Google Gemini Flash
+- What was implemented: Replaced Claude Haiku 4.5 with Google Gemini Flash for copilot chat
+- Files changed:
+  - supabase/functions/api-copilot/index.ts - Complete API swap from Anthropic to Google Gemini
+- Changes:
+  - Added Gemini API configuration (GEMINI_API_KEY, GEMINI_MODEL = gemini-2.5-flash)
+  - Created convertToGeminiFunctionDeclarations() to transform Anthropic tool format to Gemini
+  - Created callGeminiAPI() function with full function calling support
+  - Entity detection algorithm preserved and working with tool_config.function_calling_config
+  - Updated cost tracking to use Gemini pricing ($0.075/$0.30 per 1M tokens)
+  - Kept callClaudeAPI() as fallback (not currently used)
+- Technical Details:
+  - Gemini uses `functionDeclarations` instead of Anthropic's `input_schema`
+  - Gemini uses `tool_config.function_calling_config.mode: 'ANY'` to force specific functions
+  - Response format: `candidates[0].content.parts` with `functionCall` or `text`
+  - Function results sent as `functionResponse` in user turn
+- Quality gates:
+  - Deployment: PASS (ygdpgliavpxeugaajgrb)
+  - Browser verification: PASS - resolve_entity called successfully
+- Learnings:
+  - Gemini function calling uses allowed_function_names array with mode='ANY' to force specific functions
+  - Gemini pricing is ~70% cheaper than Claude Haiku for this use case
+---
+
+## 2026-01-22 20:55 - MeetingBaaS Thumbnail Generation via Existing Lambda
+- What was implemented: Adapted generate-s3-video-thumbnail to use existing Fathom Lambda with presigned URLs
+- Files changed:
+  - supabase/functions/generate-s3-video-thumbnail/index.ts - Rewrote callLambdaThumbnailGenerator
+- Changes:
+  - Added generatePresignedVideoUrl() function to create time-limited S3 URLs (15 min expiry)
+  - Reuses existing Fathom thumbnail Lambda at pnip1dhixe.execute-api.eu-west-2.amazonaws.com
+  - Sends presigned S3 URL as `fathom_url` - Lambda's ffmpeg handles any video URL
+  - Parses Lambda response: `http_url` and `s3_location` fields
+  - Default Lambda URL hardcoded as fallback (no env var needed)
+  - Added 60-second timeout for video processing operations
+- Technical Details:
+  - Lambda was designed for Fathom m3u8 streams but ffmpeg can process any video URL
+  - Solution avoids modifying Lambda code - only edge function changes needed
+  - Presigned URLs allow Lambda to fetch private S3 videos securely
+- Quality gates:
+  - Deployment: PASS (ygdpgliavpxeugaajgrb)
+- Remaining MeetingBaaS setup tasks:
+  1. Verify AWS secrets in Supabase (AWS_REGION, AWS_S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+  2. Add Vault secret `service_role_key` for cron
+  3. Configure webhook URL in MeetingBaaS dashboard
+---

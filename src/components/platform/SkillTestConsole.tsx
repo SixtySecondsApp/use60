@@ -5,17 +5,23 @@
  * tool executions + output.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { Play, Loader2, TerminalSquare, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Play, Loader2, TerminalSquare, AlertTriangle, ChevronDown, ChevronUp, Eye, Code, Info } from 'lucide-react';
+import { MAPRenderer, isMAPContent, type MAPTask } from './MAPRenderer';
+import { SkillOutputRenderer } from './SkillOutputRenderer';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { getSupabaseHeaders } from '@/lib/utils/apiUtils';
+import { supabase } from '@/lib/supabase/clientV2';
 import { useOrgStore } from '@/lib/stores/orgStore';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { type PlatformSkill } from '@/lib/services/platformSkillService';
 import {
   type EntityType,
   type EntityTestMode,
@@ -39,6 +45,10 @@ import { useTestEmails, type TestEmail } from '@/lib/hooks/useTestEmails';
 import { TestActivityList } from './TestActivityList';
 import { TestActivitySearch } from './TestActivitySearch';
 import { useTestActivities, type TestActivity } from '@/lib/hooks/useTestActivities';
+// Meeting imports
+import { TestMeetingList } from './TestMeetingList';
+import { TestMeetingSearch } from './TestMeetingSearch';
+import { useTestMeetings, type TestMeeting } from '@/lib/hooks/useTestMeetings';
 
 type TestMode = 'readonly' | 'mock';
 
@@ -67,23 +77,121 @@ interface TestSkillResponse {
 }
 
 // Union type for selected entities
-type SelectedEntity = TestContact | TestDeal | TestEmail | TestActivity | null;
+type SelectedEntity = TestContact | TestDeal | TestEmail | TestActivity | TestMeeting | null;
 
-export function SkillTestConsole({ skillKey }: { skillKey: string }) {
+interface SkillTestConsoleProps {
+  skillKey: string;
+  initialInput?: string;
+}
+
+/**
+ * Map requires_context fields to entity types
+ * Note: transcript_id maps to meeting since transcripts come from meetings
+ */
+const CONTEXT_TO_ENTITY_MAP: Record<string, EntityType> = {
+  deal_id: 'deal',
+  contact_id: 'contact',
+  meeting_id: 'meeting',
+  transcript_id: 'meeting', // Transcripts are part of meetings
+  email_id: 'email',
+  activity_id: 'activity',
+};
+
+/**
+ * Extract required entity types from skill's requires_context
+ */
+function getRequiredEntityTypes(requiresContext: string[] | undefined): EntityType[] {
+  if (!requiresContext || requiresContext.length === 0) return [];
+
+  const entityTypes: EntityType[] = [];
+  for (const ctx of requiresContext) {
+    const entityType = CONTEXT_TO_ENTITY_MAP[ctx];
+    if (entityType && !entityTypes.includes(entityType)) {
+      entityTypes.push(entityType);
+    }
+  }
+  return entityTypes;
+}
+
+/**
+ * Fetch skill by key
+ */
+async function fetchSkillByKey(skillKey: string): Promise<PlatformSkill | null> {
+  const { data, error } = await supabase
+    .from('platform_skills')
+    .select('*')
+    .eq('skill_key', skillKey)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching skill:', error);
+    return null;
+  }
+
+  return data as PlatformSkill | null;
+}
+
+export function SkillTestConsole({ skillKey, initialInput }: SkillTestConsoleProps) {
   const { activeOrgId, loadOrganizations, isLoading } = useOrgStore();
   const { user } = useAuth();
 
-  const [testInput, setTestInput] = useState('Run this skill for a call prep briefing.');
+  const [testInput, setTestInput] = useState(initialInput || 'Run this skill for a call prep briefing.');
   const [mode, setMode] = useState<TestMode>('readonly');
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<TestSkillResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [outputView, setOutputView] = useState<'rendered' | 'raw'>('rendered');
+
+  // Track if initialInput changes and update testInput accordingly
+  const prevInitialInputRef = useRef(initialInput);
+  useEffect(() => {
+    if (initialInput && initialInput !== prevInitialInputRef.current) {
+      setTestInput(initialInput);
+      prevInitialInputRef.current = initialInput;
+    }
+  }, [initialInput]);
 
   // Entity testing states
   const [entityType, setEntityType] = useState<EntityType>('contact');
   const [entityMode, setEntityMode] = useState<EntityTestMode>('none');
   const [selectedEntity, setSelectedEntity] = useState<SelectedEntity>(null);
   const [showEntitySection, setShowEntitySection] = useState(false);
+
+  // Fetch skill metadata to get required context
+  const { data: skill } = useQuery({
+    queryKey: ['platform-skill', skillKey],
+    queryFn: () => fetchSkillByKey(skillKey),
+    enabled: !!skillKey,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Compute required entity types from skill's requires_context
+  const requiredEntityTypes = useMemo(() => {
+    return getRequiredEntityTypes(skill?.frontmatter?.requires_context);
+  }, [skill?.frontmatter?.requires_context]);
+
+  // Check if required context is satisfied
+  const isRequiredContextSatisfied = useMemo(() => {
+    if (requiredEntityTypes.length === 0) return true;
+    // Check if selected entity matches one of the required types
+    return requiredEntityTypes.includes(entityType) && selectedEntity !== null;
+  }, [requiredEntityTypes, entityType, selectedEntity]);
+
+  // Auto-expand entity section and pre-select entity type when skill requires context
+  useEffect(() => {
+    if (requiredEntityTypes.length > 0) {
+      // Auto-expand entity section
+      setShowEntitySection(true);
+      // Pre-select the first required entity type if not already set
+      if (!requiredEntityTypes.includes(entityType)) {
+        setEntityType(requiredEntityTypes[0]);
+      }
+      // Set mode to 'good' if currently 'none'
+      if (entityMode === 'none') {
+        setEntityMode('good');
+      }
+    }
+  }, [requiredEntityTypes, entityType, entityMode]);
 
   // Derive tier mode for fetching (good/average/bad only, not 'none' or 'custom')
   const tierMode: QualityTier | null =
@@ -117,6 +225,13 @@ export function SkillTestConsole({ skillKey }: { skillKey: string }) {
     limit: 10,
   });
 
+  // Fetch meetings when entity type is 'meeting'
+  const { meetings, isLoading: isLoadingMeetings } = useTestMeetings({
+    mode: tierMode || 'good',
+    enabled: !!tierMode && entityType === 'meeting' && !!user?.id,
+    limit: 10,
+  });
+
   // Reset selected entity when entity type or mode changes
   const handleEntityTypeChange = (newType: EntityType) => {
     setEntityType(newType);
@@ -138,12 +253,16 @@ export function SkillTestConsole({ skillKey }: { skillKey: string }) {
 
   const canRun = useMemo(() => {
     const hasSkill = !!skillKey && !!activeOrgId && !isRunning;
+    // If skill requires specific context, ensure it's provided
+    if (!isRequiredContextSatisfied) {
+      return false;
+    }
     // If entity mode requires a selection, ensure one is selected
     if (entityMode !== 'none' && !selectedEntity) {
       return false;
     }
     return hasSkill;
-  }, [skillKey, activeOrgId, isRunning, entityMode, selectedEntity]);
+  }, [skillKey, activeOrgId, isRunning, entityMode, selectedEntity, isRequiredContextSatisfied]);
 
   /**
    * Build entity context based on the entity type and selected entity
@@ -216,6 +335,24 @@ export function SkillTestConsole({ skillKey }: { skillKey: string }) {
           quality_score: activity.qualityScore.score,
         };
       }
+      case 'meeting': {
+        const meeting = selectedEntity as TestMeeting;
+        return {
+          id: meeting.id,
+          title: meeting.title,
+          meeting_start: meeting.meeting_start,
+          duration_minutes: meeting.duration_minutes,
+          summary: meeting.summary,
+          transcript_text: meeting.transcript_text,
+          transcript_excerpt: meeting.transcript_excerpt,
+          company_id: meeting.company_id,
+          company_name: meeting.company_name,
+          primary_contact_id: meeting.primary_contact_id,
+          contact_name: meeting.contact_name,
+          quality_tier: meeting.qualityScore.tier,
+          quality_score: meeting.qualityScore.score,
+        };
+      }
       default:
         return null;
     }
@@ -243,6 +380,10 @@ export function SkillTestConsole({ skillKey }: { skillKey: string }) {
       case 'activity': {
         const activity = selectedEntity as TestActivity;
         return activity.client_name;
+      }
+      case 'meeting': {
+        const meeting = selectedEntity as TestMeeting;
+        return meeting.title || 'Untitled Meeting';
       }
       default:
         return '';
@@ -277,6 +418,16 @@ export function SkillTestConsole({ skillKey }: { skillKey: string }) {
           requestBody.contact_test_mode = entityMode;
           requestBody.contact_context = entityContext;
         }
+
+        // For meetings, also set transcript_id since transcripts are part of meetings
+        if (entityType === 'meeting') {
+          requestBody.transcript_id = entityContext.id;
+          requestBody.transcript_context = {
+            id: entityContext.id,
+            text: entityContext.transcript_text,
+            excerpt: entityContext.transcript_excerpt,
+          };
+        }
       }
 
       const resp = await fetch(`${API_BASE_URL}/api-copilot/actions/test-skill`, {
@@ -297,6 +448,121 @@ export function SkillTestConsole({ skillKey }: { skillKey: string }) {
     } finally {
       setIsRunning(false);
     }
+  };
+
+  /**
+   * Get the deal ID if a deal is selected
+   */
+  const getSelectedDealId = (): string | undefined => {
+    if (entityType === 'deal' && selectedEntity) {
+      return (selectedEntity as TestDeal).id;
+    }
+    return undefined;
+  };
+
+  /**
+   * Parse a date string like "Jan 21" or "Jan 21, 2026" into ISO format
+   */
+  const parseDateString = (dateStr: string): string | null => {
+    if (!dateStr) return null;
+
+    try {
+      // Try direct date parse first
+      let date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString();
+      }
+
+      // Handle formats like "Jan 21" - assume current or next year
+      const monthDayMatch = dateStr.match(/^([A-Za-z]+)\s+(\d+)/);
+      if (monthDayMatch) {
+        const [, month, day] = monthDayMatch;
+        const currentYear = new Date().getFullYear();
+        date = new Date(`${month} ${day}, ${currentYear}`);
+
+        // If the date is in the past, use next year
+        if (date < new Date()) {
+          date = new Date(`${month} ${day}, ${currentYear + 1}`);
+        }
+
+        if (!isNaN(date.getTime())) {
+          return date.toISOString();
+        }
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * Map priority string to task priority enum
+   */
+  const mapPriority = (priority: string): 'low' | 'medium' | 'high' | 'urgent' => {
+    const p = priority.toLowerCase();
+    if (p === 'high' || p === 'urgent' || p === 'critical') return 'high';
+    if (p === 'medium' || p === 'normal') return 'medium';
+    return 'low';
+  };
+
+  /**
+   * Handle task creation via direct Supabase insertion
+   */
+  const handleCreateTask = async (task: MAPTask): Promise<void> => {
+    const dealId = getSelectedDealId();
+
+    if (!user?.id) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      const dueDate = parseDateString(task.dueDate);
+
+      const { error } = await supabase
+        .from('tasks')
+        .insert({
+          title: task.title,
+          description: task.description?.join('\n') || null,
+          due_date: dueDate,
+          priority: mapPriority(task.priority),
+          status: 'pending',
+          task_type: 'follow_up',
+          assigned_to: user.id,
+          created_by: user.id,
+          deal_id: dealId || null,
+          metadata: {
+            source: 'map_builder',
+            owner: task.owner,
+          },
+        });
+
+      if (error) {
+        console.error('Supabase error creating task:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Failed to create task:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Handle creating all tasks via copilot API
+   */
+  const handleCreateAllTasks = async (tasks: MAPTask[]): Promise<void> => {
+    for (const task of tasks) {
+      await handleCreateTask(task);
+    }
+  };
+
+  /**
+   * Handle plan acceptance
+   */
+  const handleAcceptPlan = async (): Promise<void> => {
+    // For now, accepting the plan is just a local state change in MAPRenderer
+    // Could be extended to call an API to store the plan acceptance
+    toast.success('Plan accepted! You can now create tasks.');
   };
 
   return (
@@ -320,7 +586,46 @@ export function SkillTestConsole({ skillKey }: { skillKey: string }) {
           <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-800/50 dark:bg-amber-900/10 dark:text-amber-200">
             <AlertTriangle className="w-4 h-4 mt-0.5" />
             <div className="text-sm">
-              No active org selected. The test endpoint runs against the authenticated user’s org membership.
+              No active org selected. The test endpoint runs against the authenticated user's org membership.
+            </div>
+          </div>
+        )}
+
+        {/* Required Context Banner */}
+        {requiredEntityTypes.length > 0 && (
+          <div className={cn(
+            "flex items-start gap-2 rounded-md border p-3",
+            isRequiredContextSatisfied
+              ? "border-green-200 bg-green-50 text-green-900 dark:border-green-800/50 dark:bg-green-900/10 dark:text-green-200"
+              : "border-purple-200 bg-purple-50 text-purple-900 dark:border-purple-800/50 dark:bg-purple-900/10 dark:text-purple-200"
+          )}>
+            <Info className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <span className="font-medium">Required context:</span>{' '}
+              {requiredEntityTypes.map((type, idx) => (
+                <Badge
+                  key={type}
+                  variant="outline"
+                  className={cn(
+                    "mx-1 text-xs font-mono",
+                    entityType === type && selectedEntity
+                      ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700"
+                      : "bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-700"
+                  )}
+                >
+                  {type}_id
+                </Badge>
+              ))}
+              {!isRequiredContextSatisfied && (
+                <span className="ml-1 text-purple-700 dark:text-purple-300">
+                  — Select {requiredEntityTypes.length === 1 ? `a ${requiredEntityTypes[0]}` : 'an entity'} below to run this skill
+                </span>
+              )}
+              {isRequiredContextSatisfied && (
+                <span className="ml-1 text-green-700 dark:text-green-300">
+                  ✓ Context provided
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -457,6 +762,23 @@ export function SkillTestConsole({ skillKey }: { skillKey: string }) {
                   onSelect={(activity) => setSelectedEntity(activity)}
                 />
               )}
+
+              {/* Meeting List/Search */}
+              {entityType === 'meeting' && tierMode && (
+                <TestMeetingList
+                  meetings={meetings}
+                  isLoading={isLoadingMeetings}
+                  selectedMeetingId={(selectedEntity as TestMeeting | null)?.id || null}
+                  onSelect={(meeting) => setSelectedEntity(meeting)}
+                  tier={tierMode}
+                />
+              )}
+              {entityType === 'meeting' && entityMode === 'custom' && (
+                <TestMeetingSearch
+                  selectedMeeting={selectedEntity as TestMeeting | null}
+                  onSelect={(meeting) => setSelectedEntity(meeting)}
+                />
+              )}
             </div>
           )}
         </div>
@@ -465,16 +787,62 @@ export function SkillTestConsole({ skillKey }: { skillKey: string }) {
 
         {result && (
           <div className="space-y-4">
-            <div className="rounded-md border border-gray-200 dark:border-gray-800 p-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Output</div>
-                {result.usage && (
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    tokens: {result.usage.input_tokens} in / {result.usage.output_tokens} out
-                  </div>
+            <div className="rounded-md border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Output</div>
+                  {result.usage && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {result.usage.input_tokens} in / {result.usage.output_tokens} out
+                    </div>
+                  )}
+                </div>
+                <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setOutputView('rendered')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5',
+                      outputView === 'rendered'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    )}
+                  >
+                    <Eye className="w-3 h-3" />
+                    Rendered
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOutputView('raw')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5',
+                      outputView === 'raw'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    )}
+                  >
+                    <Code className="w-3 h-3" />
+                    Raw
+                  </button>
+                </div>
+              </div>
+              <div className="p-4 max-h-[600px] overflow-y-auto">
+                {outputView === 'rendered' ? (
+                  isMAPContent(result.output) ? (
+                    <MAPRenderer
+                      content={result.output}
+                      dealId={getSelectedDealId()}
+                      onCreateTask={handleCreateTask}
+                      onCreateAllTasks={handleCreateAllTasks}
+                      onAcceptPlan={handleAcceptPlan}
+                    />
+                  ) : (
+                    <SkillOutputRenderer content={result.output} />
+                  )
+                ) : (
+                  <pre className="whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200 font-mono">{result.output}</pre>
                 )}
               </div>
-              <pre className="mt-2 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{result.output}</pre>
             </div>
 
             <div className="rounded-md border border-gray-200 dark:border-gray-800 p-3">

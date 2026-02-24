@@ -1,44 +1,58 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
 import { useUser } from '@/lib/hooks/useUser';
 import { useSalesData } from '@/lib/hooks/useSalesData';
 import { useTargets } from '@/lib/hooks/useTargets';
-import { Users, Phone, FileText, PoundSterling, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Phone, FileText, PoundSterling, TrendingUp } from 'lucide-react';
 import { useActivityFilters } from '@/lib/hooks/useActivityFilters';
 import { useNavigate } from 'react-router-dom';
 import { useActivities } from '@/lib/hooks/useActivities';
-import { startOfMonth, endOfMonth, format, addMonths, subMonths } from 'date-fns';
+import { startOfMonth, endOfMonth } from 'date-fns';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
+import { cn } from '@/lib/utils';
 
 // Separate loading skeleton component for better code splitting
 function FunnelSkeleton() {
   return (
-    <div className="p-4 sm:p-6 lg:p-8 mt-12 lg:mt-0 animate-pulse">
+    <div className="p-4 sm:p-6 lg:p-8 mt-12 lg:mt-0">
       <div className="max-w-7xl mx-auto">
+        {/* Header — matches icon + title/subtitle row + date filter pill */}
         <div className="mb-6 sm:mb-8 lg:mb-12">
-          <div className="h-8 w-48 bg-gray-200 dark:bg-gray-800 rounded-lg mb-2" />
-          <div className="h-4 w-64 bg-gray-200 dark:bg-gray-800 rounded-lg" />
-        </div>
-        <div className="relative max-w-4xl mx-auto space-y-4">
-          {[100, 80, 60, 40].map((width, i) => (
-            <div key={i} className="mb-4">
-              <div className="flex items-center gap-4 mb-2">
-                <div className="w-10 h-10 bg-gray-200 dark:bg-gray-800 rounded-lg" />
-                <div>
-                  <div className="h-6 w-32 bg-gray-200 dark:bg-gray-800 rounded-lg mb-1" />
-                  <div className="h-8 w-16 bg-gray-200 dark:bg-gray-800 rounded-lg" />
-                </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <Skeleton className="w-12 h-12 rounded-2xl" />
+              <div>
+                <Skeleton className="h-7 w-36 mb-1.5" />
+                <Skeleton className="h-4 w-64" />
               </div>
-              <div className="h-16 bg-gray-200 dark:bg-gray-800 rounded-xl" style={{ width: `${width}%` }} />
+            </div>
+            <Skeleton className="h-10 w-44 rounded-xl" />
+          </div>
+        </div>
+
+        {/* 4 metric cards — matches grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 lg:mb-12">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="bg-white dark:bg-gray-900/80 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700/50 shadow-sm dark:shadow-none">
+              <Skeleton className="h-4 w-28 mb-2" />
+              <Skeleton className="h-9 w-20 mb-1" />
+              <Skeleton className="h-3 w-36" />
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mt-8">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white dark:bg-gray-900/80 backdrop-blur-sm rounded-xl p-6 border border-gray-200 dark:border-gray-700/50 shadow-sm dark:shadow-none">
-              <div className="h-6 w-32 bg-gray-200 dark:bg-gray-800 rounded-lg mb-2" />
-              <div className="h-10 w-24 bg-gray-200 dark:bg-gray-800 rounded-lg mb-1" />
-              <div className="h-4 w-40 bg-gray-200 dark:bg-gray-800 rounded-lg" />
-            </div>
+
+        {/* Funnel bars — 4 stages tapering from 100% to ~36% */}
+        <div className="flex flex-col items-center max-w-2xl mx-auto w-full gap-1">
+          {[100, 78, 56, 36].map((width, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <Skeleton className="h-4 w-32 rounded-full my-0.5" />}
+              <Skeleton
+                className="h-16 rounded-xl"
+                style={{ width: `${width}%` }}
+              />
+            </React.Fragment>
           ))}
         </div>
       </div>
@@ -66,7 +80,7 @@ function useFunnelMetrics(activities: any[] | undefined, selectedMonth: Date) {
     const now = new Date();
     // If selected month is current month, cap at today; otherwise use end of month
     const effectiveEnd = monthEnd > now ? now : monthEnd;
-    
+
     const monthActivities = activities.filter(activity => {
       const activityDate = new Date(activity.date);
       return activityDate >= monthStart && activityDate <= effectiveEnd;
@@ -74,31 +88,31 @@ function useFunnelMetrics(activities: any[] | undefined, selectedMonth: Date) {
 
     const outboundCount = monthActivities
       .filter(a => a.type === 'outbound')
-      .reduce((sum, a) => sum + (a.quantity || 1), 0);
-    
+      .reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+
     // Meetings held (completed status only)
     const meetingsHeld = monthActivities
       .filter(a => a.type === 'meeting' && a.status === 'completed')
-      .reduce((sum, a) => sum + (a.quantity || 1), 0);
-    
+      .reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+
     // Total meetings booked (including no-shows and cancellations)
     const meetingsBooked = monthActivities
       .filter(a => a.type === 'meeting')
-      .reduce((sum, a) => sum + (a.quantity || 1), 0);
-    
+      .reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+
     const proposalsCount = monthActivities
       .filter(a => a.type === 'proposal')
-      .reduce((sum, a) => sum + (a.quantity || 1), 0);
+      .reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
     const closedCount = monthActivities
       .filter(a => a.type === 'sale')
-      .reduce((sum, a) => sum + (a.quantity || 1), 0);
+      .reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
 
-    const meetingToProposalRate = meetingsHeld > 0 
-        ? Math.round((proposalsCount / meetingsHeld) * 100) 
+    const meetingToProposalRate = meetingsHeld > 0
+        ? Math.round((proposalsCount / meetingsHeld) * 100)
         : 0;
 
-    const proposalWinRate = proposalsCount > 0 
-        ? Math.round((closedCount / proposalsCount) * 100) 
+    const proposalWinRate = proposalsCount > 0
+        ? Math.round((closedCount / proposalsCount) * 100)
         : 0;
 
     const totalRevenue = monthActivities
@@ -112,12 +126,12 @@ function useFunnelMetrics(activities: any[] | undefined, selectedMonth: Date) {
       if (closedSales.length === 0) return 0;
 
       const velocities = [];
-      
+
       for (const sale of closedSales) {
         // Find the first activity for this deal (using deal_id for accurate linking)
         const firstActivity = activities
-          .filter(a => 
-            a.deal_id === sale.deal_id && 
+          .filter(a =>
+            a.deal_id === sale.deal_id &&
             (a.type === 'meeting' || a.type === 'outbound' || a.type === 'proposal')
           )
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
@@ -126,7 +140,7 @@ function useFunnelMetrics(activities: any[] | undefined, selectedMonth: Date) {
           const firstActivityDate = new Date(firstActivity.date);
           const closeDate = new Date(sale.date);
           const daysDiff = Math.ceil((closeDate.getTime() - firstActivityDate.getTime()) / (1000 * 60 * 60 * 24));
-          
+
           if (daysDiff >= 0) {
             velocities.push(daysDiff);
           }
@@ -136,11 +150,11 @@ function useFunnelMetrics(activities: any[] | undefined, selectedMonth: Date) {
       // Fallback to client name matching for deals without proper linking
       if (velocities.length === 0) {
         const unlinkedSales = monthActivities.filter(a => a.type === 'sale' && !a.deal_id);
-        
+
         for (const sale of unlinkedSales) {
           const firstMeeting = activities
-            .filter(a => 
-              a.type === 'meeting' && 
+            .filter(a =>
+              a.type === 'meeting' &&
               a.client_name === sale.client_name
             )
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
@@ -149,7 +163,7 @@ function useFunnelMetrics(activities: any[] | undefined, selectedMonth: Date) {
             const meetingDate = new Date(firstMeeting.date);
             const closeDate = new Date(sale.date);
             const daysDiff = Math.ceil((closeDate.getTime() - meetingDate.getTime()) / (1000 * 60 * 60 * 24));
-            
+
             if (daysDiff >= 0) {
               velocities.push(daysDiff);
             }
@@ -157,7 +171,7 @@ function useFunnelMetrics(activities: any[] | undefined, selectedMonth: Date) {
         }
       }
 
-      return velocities.length > 0 
+      return velocities.length > 0
         ? Math.round(velocities.reduce((sum, v) => sum + v, 0) / velocities.length)
         : 0;
     };
@@ -178,25 +192,25 @@ function useFunnelMetrics(activities: any[] | undefined, selectedMonth: Date) {
   }, [activities, selectedMonth]);
 }
 
+const FUNNEL_COLORS = {
+  blue:    { bar: 'bg-blue-500/10 border-blue-500/25 hover:bg-blue-500/20 hover:border-blue-500/40',   icon: 'bg-blue-500/10 border-blue-500/20',   text: 'text-blue-500 dark:text-blue-400' },
+  violet:  { bar: 'bg-violet-500/10 border-violet-500/25 hover:bg-violet-500/20 hover:border-violet-500/40', icon: 'bg-violet-500/10 border-violet-500/20', text: 'text-violet-500 dark:text-violet-400' },
+  orange:  { bar: 'bg-orange-500/10 border-orange-500/25 hover:bg-orange-500/20 hover:border-orange-500/40', icon: 'bg-orange-500/10 border-orange-500/20', text: 'text-orange-500 dark:text-orange-400' },
+  emerald: { bar: 'bg-emerald-500/10 border-emerald-500/25 hover:bg-emerald-500/20 hover:border-emerald-500/40', icon: 'bg-emerald-500/10 border-emerald-500/20', text: 'text-emerald-500 dark:text-emerald-400' },
+} as const;
+
 export default function SalesFunnel() {
   const { userData } = useUser();
   const navigate = useNavigate();
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  
-  // Calculate date range based on selected month
-  const dateRange = useMemo(() => {
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    const now = new Date();
-    return {
-      start,
-      end: end > now ? now : end,
-    };
-  }, [currentMonth]);
-  
+  const { symbol } = useOrgMoney();
+  const dateFilter = useDateRangeFilter();
+
   const { setFilters } = useActivityFilters();
   const { activities, isLoading: isLoadingActivities } = useActivities();
-  const { data: salesData, isLoading: isLoadingSales } = useSalesData(dateRange.start, dateRange.end);
+  const { data: salesData, isLoading: isLoadingSales } = useSalesData(
+    dateFilter.dateRange?.start ?? startOfMonth(new Date()),
+    dateFilter.dateRange?.end ?? new Date(),
+  );
   const { data: targets, isLoading: isLoadingTargets } = useTargets(userData?.id);
   const [showContent, setShowContent] = useState(false);
 
@@ -220,7 +234,7 @@ export default function SalesFunnel() {
   }, [isAnyLoading]);
 
   // Use the separated metrics hook
-  const funnelMetrics = useFunnelMetrics(activities, currentMonth);
+  const funnelMetrics = useFunnelMetrics(activities, dateFilter.currentMonth);
 
   // Define funnel stages with memoization
   const funnelStages = useMemo(() => [
@@ -280,7 +294,7 @@ export default function SalesFunnel() {
   }
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
@@ -290,132 +304,35 @@ export default function SalesFunnel() {
         {/* Header */}
         <div className="mb-6 sm:mb-8 lg:mb-12">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Sales Funnel</h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">Visualise your sales pipeline conversion rates</p>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600/10 dark:bg-emerald-500/20 border border-emerald-600/20 dark:border-emerald-500/30 flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Sales Funnel</h1>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Visualise your sales pipeline conversion rates</p>
+                </div>
+              </div>
             </div>
-            
-            {/* Month Navigation */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setCurrentMonth(prev => subMonths(prev, 1))}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              </button>
-              <span className="text-base sm:text-lg font-medium text-emerald-600 dark:text-emerald-500 min-w-[140px] text-center">
-                {format(currentMonth, 'MMMM yyyy')}
-              </span>
-              <button
-                onClick={() => {
-                  const nextMonth = addMonths(currentMonth, 1);
-                  // Don't allow going beyond current month
-                  if (nextMonth <= new Date()) {
-                    setCurrentMonth(nextMonth);
-                  }
-                }}
-                disabled={addMonths(currentMonth, 1) > new Date()}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Next month"
-              >
-                <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              </button>
+
+            {/* Date Range Filter — month navigator + calendar popover */}
+            <div className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl px-4 py-2.5 shadow-sm">
+              <DateRangeFilter {...dateFilter} />
             </div>
           </div>
         </div>
 
-        {/* Funnel Visualization */}
-        <div className="relative max-w-4xl mx-auto">
-          {funnelStages.map((stage, index) => {
-            const maxValue = Math.max(...funnelStages.map(s => s.value));
-            const width = maxValue > 0 ? (stage.value / maxValue) * 100 : 0;
-            
-            // For meetings, calculate additional width for total booked
-            const totalBookedWidth = stage.totalBooked && maxValue > 0 
-              ? (stage.totalBooked / maxValue) * 100 
-              : width;
-            
-            return (
-              <div key={stage.id} className="mb-4">
-                <div className="flex items-center gap-4 mb-2">
-                  <div className={`p-2 rounded-lg ${
-                    stage.color === 'blue'
-                      ? 'bg-blue-400/10 dark:bg-blue-400/5'
-                      : `bg-${stage.color}-500/10`
-                  } border ${
-                    stage.color === 'blue'
-                      ? 'border-blue-500/20 dark:border-blue-500/10'
-                      : `border-${stage.color}-500/20`
-                  }`}>
-                    <stage.icon className={`w-5 h-5 ${
-                      stage.color === 'blue'
-                        ? 'text-blue-500 dark:text-blue-400'
-                        : `text-${stage.color}-500`
-                    }`} />
-                  </div>
-                  <div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-medium text-gray-900 dark:text-white">{stage.label}</span>
-                      <span className="text-sm text-gray-600 dark:text-gray-400">{stage.description}</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{stage.value}</div>
-                      {stage.totalBooked && stage.totalBooked !== stage.value && (
-                        <div className="text-lg text-gray-600 dark:text-gray-400">/ {stage.totalBooked}</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="relative">
-                  {/* Background bar for total meetings booked (grey) - only for meetings */}
-                  {stage.id === 'meetings' && stage.totalBooked && stage.totalBooked > stage.value && (
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${totalBookedWidth}%` }}
-                      transition={{ duration: 0.4, ease: "easeOut" }}
-                      className="h-16 bg-gray-300/30 dark:bg-gray-600/20 border border-gray-400/40 dark:border-gray-600/30 backdrop-blur-xl rounded-xl absolute inset-0"
-                    />
-                  )}
-
-                  {/* Main bar */}
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${width}%` }}
-                    transition={{ duration: 0.4, ease: "easeOut", delay: 0.1 }}
-                    onClick={() => {
-                      setFilters({
-                        type: stage.id === 'closed' ? 'sale' : stage.id,
-                        dateRange
-                      });
-                      navigate('/activity');
-                    }}
-                    className={`h-16 ${
-                      stage.color === 'blue'
-                        ? 'bg-blue-400/15 dark:bg-blue-400/5 border-blue-500/30 dark:border-blue-500/10 hover:bg-blue-400/25 dark:hover:bg-blue-400/10 hover:border-blue-500/40 dark:hover:border-blue-500/20 hover:shadow-blue-400/20 dark:hover:shadow-blue-400/10'
-                        : `bg-${stage.color}-500/15 dark:bg-${stage.color}-500/10 border-${stage.color}-500/30 dark:border-${stage.color}-500/20 hover:bg-${stage.color}-500/25 dark:hover:bg-${stage.color}-500/20 hover:border-${stage.color}-500/50 dark:hover:border-${stage.color}-500/40 hover:shadow-${stage.color}-500/30 dark:hover:shadow-${stage.color}-500/20`
-                    } backdrop-blur-xl border rounded-xl relative overflow-hidden group transition-all duration-300 hover:shadow-lg cursor-pointer z-10`}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 dark:via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
-                    {index < funnelStages.length - 1 && (
-                      <div className="absolute -bottom-4 left-1/2 w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[16px] border-gray-300/50 dark:border-gray-800/50" style={{ transform: 'translateX(-50%)' }} />
-                    )}
-                  </motion.div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Key Metrics Display */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mt-8 lg:mt-12">
+        {/* Key Metrics Display — above the funnel */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 lg:mb-12">
           {/* Meeting Conversion Rate Card */}
           <div className="bg-white dark:bg-gray-900/80 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700/50 shadow-sm dark:shadow-none">
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Meeting Conversion</p>
             <p className="text-3xl font-bold text-gray-900 dark:text-white">{funnelMetrics.meetingToProposalRate}%</p>
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">Meetings to Proposals</p>
           </div>
-          {/* Proposal Win Rate Card (was Overall Conversion) */}
+          {/* Proposal Win Rate Card */}
           <div className="bg-white dark:bg-gray-900/80 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700/50 shadow-sm dark:shadow-none">
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Proposal Win Rate</p>
             <p className="text-3xl font-bold text-gray-900 dark:text-white">{funnelMetrics.proposalWinRate}%</p>
@@ -424,7 +341,7 @@ export default function SalesFunnel() {
           {/* Average Deal Size Card */}
           <div className="bg-white dark:bg-gray-900/80 backdrop-blur-sm rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-700/50 shadow-sm dark:shadow-none">
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Avg. Deal Size</p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-white">£{funnelMetrics.avgDealSize?.toLocaleString() || 0}</p>
+            <p className="text-3xl font-bold text-gray-900 dark:text-white">{symbol}{funnelMetrics.avgDealSize?.toLocaleString() || 0}</p>
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">Average value of signed deals</p>
           </div>
           {/* Sales Velocity Card */}
@@ -433,6 +350,76 @@ export default function SalesFunnel() {
             <p className="text-3xl font-bold text-gray-900 dark:text-white">{funnelMetrics.avgSalesVelocity || '-'} Days</p>
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">Average time to close deal</p>
           </div>
+        </div>
+
+        {/* Funnel Visualization */}
+        <div className="flex flex-col items-center max-w-2xl mx-auto w-full">
+          {funnelStages.map((stage, index) => {
+            const topValue = funnelStages[0].value;
+            // Minimum visual widths ensure a tapered funnel shape even with zero data
+            const minWidths = [100, 78, 56, 36];
+            const dataWidth = topValue > 0 ? (stage.value / topValue) * 100 : 0;
+            const widthPct = Math.max(dataWidth, minWidths[index]);
+
+            const prevStage = index > 0 ? funnelStages[index - 1] : null;
+            const conversionRate = prevStage && prevStage.value > 0
+              ? Math.round((stage.value / prevStage.value) * 100)
+              : null;
+
+            const colors = FUNNEL_COLORS[stage.color as keyof typeof FUNNEL_COLORS];
+
+            return (
+              <React.Fragment key={stage.id}>
+                {/* Conversion rate connector between stages */}
+                {index > 0 && (
+                  <div className="flex items-center gap-3 py-1.5">
+                    <div className="w-px h-3 bg-gray-300 dark:bg-gray-700" />
+                    <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">
+                      {conversionRate !== null ? `${conversionRate}% converted` : '—'}
+                    </span>
+                    <div className="w-px h-3 bg-gray-300 dark:bg-gray-700" />
+                  </div>
+                )}
+
+                {/* Stage bar — centered and tapering */}
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: 'easeOut', delay: index * 0.07 }}
+                  style={{ width: `${widthPct}%` }}
+                  onClick={() => {
+                    setFilters({
+                      type: stage.id === 'closed' ? 'sale' : stage.id,
+                      dateRange: dateFilter.dateRange,
+                    });
+                    navigate('/dashboard?tab=activity');
+                  }}
+                  className={cn(
+                    'relative rounded-xl border px-5 py-4 cursor-pointer transition-all duration-200 hover:shadow-md backdrop-blur-sm',
+                    colors.bar
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={cn('p-2 rounded-lg border shrink-0', colors.icon)}>
+                        <stage.icon className={cn('w-4 h-4', colors.text)} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 dark:text-white text-sm leading-tight">{stage.label}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{stage.description}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{stage.value}</p>
+                      {stage.id === 'meetings' && (stage.totalBooked ?? 0) > 0 && stage.totalBooked !== stage.value && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">/ {stage.totalBooked} booked</p>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              </React.Fragment>
+            );
+          })}
         </div>
       </div>
     </motion.div>

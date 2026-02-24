@@ -1,17 +1,15 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/corsHelper.ts";
 import { getAuthContext } from "../_shared/edgeAuth.ts";
+import { logAICostEvent, checkCreditBalance } from "../_shared/costTracking.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
-const JSON_HEADERS = {
-  ...corsHeaders,
-  "Content-Type": "application/json",
-};
+// JSON_HEADERS is computed per-request using getCorsHeaders(req) in the serve handler
 
 const OPENAI_MODEL =
   Deno.env.get("LEAD_PREP_MODEL") ??
@@ -190,9 +188,11 @@ interface IntakeResponse {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
+
+  const cors = getCorsHeaders(req);
+  const JSON_HEADERS = { ...cors, "Content-Type": "application/json" };
 
   if (req.method !== "POST") {
     return new Response(
@@ -339,6 +339,28 @@ serve(async (req) => {
       }
 
       try {
+        // Resolve org for credit tracking
+        const leadOrgId = (lead.metadata as any)?.org_id ?? null;
+        let resolvedOrgId: string | null = leadOrgId;
+        if (!resolvedOrgId && lead.owner_id) {
+          const { data: membership } = await supabase
+            .from("organization_memberships")
+            .select("org_id")
+            .eq("user_id", lead.owner_id)
+            .limit(1)
+            .maybeSingle();
+          resolvedOrgId = membership?.org_id ?? null;
+        }
+
+        // Check credit balance before AI calls for this lead
+        if (resolvedOrgId) {
+          const creditCheck = await checkCreditBalance(supabase, resolvedOrgId);
+          if (!creditCheck.allowed) {
+            console.warn(`[process-lead-prep] Insufficient credits for org ${resolvedOrgId}, skipping lead ${lead.id}`);
+            continue;
+          }
+        }
+
         const companyResearch = await fetchCompanyResearch(lead);
         const plan = await generateLeadPrepPlan(lead, companyResearch);
         const prospectTimezone = lead.contact_timezone || lead.meeting_timezone;
@@ -350,6 +372,16 @@ serve(async (req) => {
 
         await replaceLeadPrepNotes(supabase, lead, plan, now);
         await updateLeadSuccess(supabase, lead, plan, companyResearch, summary, now);
+
+        // Update the company fact profile with research findings (non-blocking)
+        updateFactProfileResearch(supabase, lead, companyResearch, plan).catch((err) => {
+          console.error(`[process-lead-prep] Fact profile update failed (non-fatal):`, err);
+        });
+
+        // Log AI cost for Gemini research and lead prep calls
+        if (lead.owner_id && resolvedOrgId) {
+          logAICostEvent(supabase, lead.owner_id, resolvedOrgId, 'gemini', GEMINI_MODEL, 800, 600, 'research_enrichment').catch(() => {});
+        }
 
         processed += 1;
       } catch (leadError) {
@@ -2280,4 +2312,111 @@ function toStringArray(value: unknown, fallback: string[] = []): string[] {
   }
 
   return [...fallback];
+}
+
+/**
+ * After successful lead prep, update the company's fact profile with research data.
+ * Maps CompanyResearch + LeadPrepPlan.company fields to FactProfileResearchData sections.
+ * Only updates profiles that exist and have research_status='pending' or 'researching'.
+ */
+async function updateFactProfileResearch(
+  supabase: SupabaseClient,
+  lead: LeadRecord,
+  research: CompanyResearch | null,
+  plan: LeadPrepPlan,
+): Promise<void> {
+  if (!lead.domain) return;
+
+  // Find org_id from lead metadata or owner's org membership
+  let orgId: string | null = (lead.metadata as any)?.org_id ?? null;
+  if (!orgId && lead.owner_id) {
+    const { data: membership } = await supabase
+      .from("organization_memberships")
+      .select("org_id")
+      .eq("user_id", lead.owner_id)
+      .limit(1)
+      .maybeSingle();
+    orgId = membership?.org_id ?? null;
+  }
+  if (!orgId) return;
+
+  // Find the fact profile for this domain
+  const { data: profile } = await supabase
+    .from("client_fact_profiles")
+    .select("id, research_status, research_data")
+    .eq("organization_id", orgId)
+    .eq("company_domain", lead.domain)
+    .eq("is_org_profile", false)
+    .maybeSingle();
+
+  if (!profile) return;
+
+  // Only update if research hasn't already been completed by a richer source
+  if (profile.research_status === "complete") {
+    const existingData = profile.research_data as Record<string, unknown> | null;
+    if (existingData?.company_overview && (existingData.company_overview as any)?.description) {
+      console.log(`[process-lead-prep] Fact profile ${profile.id} already has complete research, skipping`);
+      return;
+    }
+  }
+
+  // Build partial research data from lead prep findings
+  const companyInfo = plan.company_info || {};
+  const now = new Date().toISOString();
+
+  const researchData: Record<string, unknown> = {
+    company_overview: {
+      name: lead.company?.name || lead.domain?.split(".")[0] || "",
+      tagline: "",
+      description: companyInfo.business_model || research?.summary || "",
+      founded_year: null,
+      headquarters: "",
+      company_type: "",
+      website: lead.company?.website || `https://${lead.domain}`,
+    },
+    market_position: {
+      industry: lead.company?.industry || "",
+      sub_industries: [],
+      target_market: "",
+      market_size: "",
+      differentiators: [],
+      competitors: companyInfo.competitive_landscape ? [companyInfo.competitive_landscape] : [],
+    },
+    team_leadership: {
+      employee_count: null,
+      employee_range: lead.company?.size || "",
+      key_people: [],
+      departments: [],
+      hiring_signals: [],
+    },
+    technology: {
+      tech_stack: companyInfo.technology_stack || [],
+      platforms: [],
+      integrations: [],
+    },
+    recent_activity: {
+      news: (companyInfo.recent_news_highlights || research?.recent_news || []).map(
+        (item: string) => ({ title: item, url: "", date: now.split("T")[0] })
+      ),
+      awards: [],
+      milestones: research?.key_metrics || [],
+      reviews_summary: {},
+    },
+  };
+
+  const { error } = await supabase
+    .from("client_fact_profiles")
+    .update({
+      research_data: researchData,
+      research_status: "complete",
+      research_completed_at: now,
+    })
+    .eq("id", profile.id);
+
+  if (error) {
+    console.error(`[process-lead-prep] Failed to update fact profile ${profile.id}:`, error);
+    return;
+  }
+
+  console.log(`[process-lead-prep] Updated fact profile ${profile.id} with lead prep research`);
 }

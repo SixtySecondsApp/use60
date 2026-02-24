@@ -1,0 +1,96 @@
+{
+  "feature": {
+    "id": "notetaker-quality",
+    "name": "60 Notetaker Recording Quality Settings",
+    "description": "Change default compression to 480p and add platform admin UI to configure video quality (480p/720p/1080p) across the Lambda compression pipeline",
+    "status": "pending",
+    "createdAt": "2026-01-27T16:00:00Z"
+  },
+  "stories": [
+    {
+      "id": "QUAL-001",
+      "feature": "notetaker-quality",
+      "title": "Parameterize Lambda compression resolution",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["lambda-compress-upload/compress.py", "lambda-compress-upload/handler.py"],
+        "schema": []
+      },
+      "blocks": ["QUAL-003"],
+      "parallelWith": ["QUAL-002"],
+      "acceptance": [
+        "compress_video() accepts resolution parameter (default 480)",
+        "handler.py reads video_quality from event payload and maps to resolution int",
+        "FFmpeg uses scale=-2:{resolution} instead of hardcoded 720",
+        "Lambda Docker image rebuilt and deployed to ECR"
+      ],
+      "files": [
+        "lambda-compress-upload/compress.py",
+        "lambda-compress-upload/handler.py"
+      ]
+    },
+    {
+      "id": "QUAL-002",
+      "feature": "notetaker-quality",
+      "title": "Build platform admin Video Quality settings page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/platform/NotetakerBranding.tsx"],
+        "schema": ["app_settings"]
+      },
+      "blocks": ["QUAL-003"],
+      "parallelWith": ["QUAL-001"],
+      "acceptance": [
+        "New page at /platform/integrations/notetaker-video-quality",
+        "Radio group with 480p (default), 720p, 1080p options with size estimates",
+        "Loads/saves from app_settings table (key: notetaker_video_quality)",
+        "Registered in App.tsx routes and PlatformDashboard cards"
+      ],
+      "files": [
+        "src/pages/platform/NotetakerVideoQuality.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx",
+        "src/pages/platform/PlatformDashboard.tsx"
+      ]
+    },
+    {
+      "id": "QUAL-003",
+      "feature": "notetaker-quality",
+      "title": "Wire quality setting through edge function to Lambda payload",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["QUAL-001", "QUAL-002"],
+        "files": ["supabase/functions/upload-recording-to-s3/index.ts"],
+        "schema": ["app_settings"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "upload-recording-to-s3 fetches notetaker_video_quality from app_settings",
+        "video_quality field added to Lambda payload (defaults to '480p')",
+        "Edge function deployed to production",
+        "End-to-end test: Lambda logs show correct resolution from admin setting"
+      ],
+      "files": [
+        "supabase/functions/upload-recording-to-s3/index.ts"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 3,
+    "completedStories": 0,
+    "parallelGroups": [
+      ["QUAL-001", "QUAL-002"],
+      ["QUAL-003"]
+    ],
+    "lastUpdated": "2026-01-27T16:00:00Z"
+  }
+}

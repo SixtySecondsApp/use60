@@ -1,0 +1,190 @@
+{
+  "feature": {
+    "id": "ops-ai-query",
+    "name": "AI-Powered Query Bar for Ops Tables",
+    "description": "Connect the Ops query bar to Claude Haiku 4.5 to enable natural language queries like 'delete rows with blank names' or 'remove emails containing sixtyseconds.video'. Uses preview-first pattern for destructive actions.",
+    "status": "complete",
+    "createdAt": "2026-02-05T00:00:00Z",
+    "completedAt": "2026-02-05T14:40:00Z"
+  },
+
+  "stories": [
+    {
+      "id": "OPSAI-001",
+      "title": "Create ops-table-ai-query edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+
+      "description": "Create a new Supabase edge function that receives natural language queries along with table schema, calls Claude Haiku 4.5 to parse the intent, and returns a structured operation object.",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/_shared/cors.ts"],
+        "schema": ["dynamic_tables", "dynamic_table_columns"]
+      },
+      "blocks": ["OPSAI-002", "OPSAI-003"],
+
+      "acceptance": [
+        "Edge function accepts POST with { tableId, query, columns[] }",
+        "Calls Claude Haiku 4.5 (claude-haiku-4-5-20250121) via Anthropic API",
+        "Returns structured { action, conditions[], targetColumn?, newValue? }",
+        "Handles filter, delete, and update action types",
+        "Returns user-friendly error messages for unparseable queries"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "Use tool_use pattern - define tools for filter/delete/update actions. Claude will select the appropriate tool based on user intent. Model: claude-haiku-4-5-20250121"
+    },
+    {
+      "id": "OPSAI-002",
+      "title": "Add preview query to opsTableService",
+      "type": "service",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Add a method to opsTableService that takes the parsed AI operation and returns matching rows for preview (without executing the action).",
+
+      "dependencies": {
+        "stories": ["OPSAI-001"],
+        "files": ["src/lib/services/opsTableService.ts"],
+        "schema": []
+      },
+      "blocks": ["OPSAI-004"],
+
+      "acceptance": [
+        "New method: previewAiQuery(tableId, operation) → { matchingRows, totalCount }",
+        "Reuses existing filter logic from getFilteredRowIds",
+        "Supports all operators: equals, contains, is_empty, starts_with, etc.",
+        "Limits preview to first 100 rows for performance"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "src/lib/services/opsTableService.ts"
+      ]
+    },
+    {
+      "id": "OPSAI-003",
+      "title": "Add execute mutation to opsTableService",
+      "type": "service",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Add a method to execute the AI-parsed operation (delete rows, update cells, or apply filter) after user confirmation.",
+
+      "dependencies": {
+        "stories": ["OPSAI-001"],
+        "files": ["src/lib/services/opsTableService.ts"],
+        "schema": []
+      },
+      "blocks": ["OPSAI-004"],
+
+      "acceptance": [
+        "New method: executeAiQuery(tableId, operation) → { affectedCount, success }",
+        "For delete: calls existing deleteRows() with matching row IDs",
+        "For update: batch updates cells matching conditions",
+        "For filter: returns filter conditions to apply to view",
+        "Returns count of affected rows"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "src/lib/services/opsTableService.ts"
+      ]
+    },
+    {
+      "id": "OPSAI-004",
+      "title": "Build AiQueryPreviewModal component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+
+      "description": "Create a modal that shows the preview of matching rows before executing destructive actions. Shows row count, sample data, and Confirm/Cancel buttons.",
+
+      "dependencies": {
+        "stories": ["OPSAI-002", "OPSAI-003"],
+        "files": ["src/components/ui/dialog.tsx"],
+        "schema": []
+      },
+      "blocks": ["OPSAI-005"],
+
+      "acceptance": [
+        "Modal shows: action type, condition summary, affected row count",
+        "Table preview of first 10 matching rows",
+        "Red 'Delete X rows' or blue 'Update X rows' confirm button",
+        "Cancel button closes modal without action",
+        "Loading state while fetching preview"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/components/ops/AiQueryPreviewModal.tsx"
+      ]
+    },
+    {
+      "id": "OPSAI-005",
+      "title": "Wire query bar to AI flow in OpsDetailPage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "Connect the existing query bar input to the AI query flow: submit → parse → preview modal → confirm → execute.",
+
+      "dependencies": {
+        "stories": ["OPSAI-004"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Query submission calls ops-table-ai-query edge function",
+        "Shows loading spinner in query bar while parsing",
+        "Opens AiQueryPreviewModal with parsed operation",
+        "On confirm: executes operation, shows success toast, refreshes table",
+        "On cancel: clears query input",
+        "Filter actions apply directly without modal (non-destructive)"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/pages/OpsDetailPage.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 5,
+    "completedStories": 0,
+    "estimatedMinutes": 95,
+    "parallelGroups": [
+      ["OPSAI-001"],
+      ["OPSAI-002", "OPSAI-003"],
+      ["OPSAI-004"],
+      ["OPSAI-005"]
+    ]
+  },
+
+  "technicalContext": {
+    "aiModel": "claude-haiku-4-5-20250121",
+    "apiProvider": "Anthropic",
+    "existingPatterns": {
+      "edgeFunctions": "supabase/functions/*/index.ts pattern with CORS headers",
+      "serviceLayer": "opsTableService.ts for all table operations",
+      "filterLogic": "getFilteredRowIds() in opsTableService for server-side filtering"
+    },
+    "envVariables": [
+      "ANTHROPIC_API_KEY (required for Claude Haiku 4.5)"
+    ]
+  }
+}

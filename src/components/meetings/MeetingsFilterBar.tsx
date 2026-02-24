@@ -10,14 +10,23 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog'
-import { Filter, X, Loader2 } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Filter, X, Loader2, Video, Mic, Radio, Bot } from 'lucide-react'
 import { SortControl } from './SortControl'
 import { DurationFilter } from './filters/DurationFilter'
 import { SentimentFilter } from './filters/SentimentFilter'
 import { CoachingScoreFilter } from './filters/CoachingScoreFilter'
-import { DateFilter, DateRangePreset, DateRange } from '@/components/ui/date-filter'
+import { DateRangeFilter, UseDateRangeFilterReturn } from '@/components/ui/DateRangeFilter'
 import { OwnerFilterV3 } from '@/components/OwnerFilterV3'
 import { cn } from '@/lib/utils'
+import type { UnifiedSource } from '@/lib/types/unifiedMeeting'
+import type { RecordingStatus, MeetingPlatform } from '@/lib/types/meetingBaaS'
 
 interface MeetingsFilterBarProps {
   // Search
@@ -32,9 +41,7 @@ interface MeetingsFilterBarProps {
   onSortDirectionToggle: () => void
 
   // Filters
-  datePreset: DateRangePreset
-  customDateRange: DateRange | null
-  onDateChange: (preset: DateRangePreset, range: DateRange | null) => void
+  dateFilter: UseDateRangeFilterReturn
 
   selectedRepId: string | null | undefined
   onRepChange: (repId: string | null | undefined) => void
@@ -49,6 +56,14 @@ interface MeetingsFilterBarProps {
   coachingCategory: string
   onCoachingChange: (category: string) => void
 
+  // Source / Status / Platform filters (unified list)
+  sourceFilter?: UnifiedSource | 'all'
+  onSourceChange?: (source: UnifiedSource | 'all') => void
+  statusFilter?: RecordingStatus | 'all'
+  onStatusChange?: (status: RecordingStatus | 'all') => void
+  platformFilter?: MeetingPlatform | 'all'
+  onPlatformChange?: (platform: MeetingPlatform | 'all') => void
+
   // Clear
   activeFilterCount: number
   onClearAll: () => void
@@ -62,9 +77,7 @@ export const MeetingsFilterBar: React.FC<MeetingsFilterBarProps> = ({
   sortDirection,
   onSortFieldChange,
   onSortDirectionToggle,
-  datePreset,
-  customDateRange,
-  onDateChange,
+  dateFilter,
   selectedRepId,
   onRepChange,
   scope,
@@ -74,6 +87,12 @@ export const MeetingsFilterBar: React.FC<MeetingsFilterBarProps> = ({
   onSentimentChange,
   coachingCategory,
   onCoachingChange,
+  sourceFilter = 'all',
+  onSourceChange,
+  statusFilter = 'all',
+  onStatusChange,
+  platformFilter = 'all',
+  onPlatformChange,
   activeFilterCount,
   onClearAll
 }) => {
@@ -116,13 +135,59 @@ export const MeetingsFilterBar: React.FC<MeetingsFilterBarProps> = ({
 
           {/* Row 2: Filters */}
           <div className="flex flex-wrap items-center gap-2">
-            <DateFilter
-              value={datePreset}
-              customRange={customDateRange}
-              onPresetChange={(preset) => onDateChange(preset, customDateRange)}
-              onCustomRangeChange={(range) => onDateChange(datePreset, range)}
-              compact
-            />
+            {onSourceChange && (
+              <Select value={sourceFilter} onValueChange={(v) => onSourceChange(v as UnifiedSource | 'all')}>
+                <SelectTrigger className="w-[140px] h-9 text-xs bg-white/80 dark:bg-gray-900/40 border-gray-200/50 dark:border-gray-700/30">
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="fathom">
+                    <span className="flex items-center gap-1.5"><Video className="h-3 w-3" /> Fathom</span>
+                  </SelectItem>
+                  <SelectItem value="fireflies">
+                    <span className="flex items-center gap-1.5"><Mic className="h-3 w-3" /> Fireflies</span>
+                  </SelectItem>
+                  <SelectItem value="voice">
+                    <span className="flex items-center gap-1.5"><Radio className="h-3 w-3" /> Voice</span>
+                  </SelectItem>
+                  <SelectItem value="60_notetaker">
+                    <span className="flex items-center gap-1.5"><Bot className="h-3 w-3" /> 60 Notetaker</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            {onStatusChange && (sourceFilter === 'all' || sourceFilter === '60_notetaker') && (
+              <Select value={statusFilter} onValueChange={(v) => onStatusChange(v as RecordingStatus | 'all')}>
+                <SelectTrigger className="w-[130px] h-9 text-xs bg-white/80 dark:bg-gray-900/40 border-gray-200/50 dark:border-gray-700/30">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="ready">Ready</SelectItem>
+                  <SelectItem value="processing">Processing</SelectItem>
+                  <SelectItem value="recording">Recording</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            {onPlatformChange && (sourceFilter === 'all' || sourceFilter === '60_notetaker') && (
+              <Select value={platformFilter} onValueChange={(v) => onPlatformChange(v as MeetingPlatform | 'all')}>
+                <SelectTrigger className="w-[140px] h-9 text-xs bg-white/80 dark:bg-gray-900/40 border-gray-200/50 dark:border-gray-700/30">
+                  <SelectValue placeholder="Platform" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Platforms</SelectItem>
+                  <SelectItem value="zoom">Zoom</SelectItem>
+                  <SelectItem value="google_meet">Google Meet</SelectItem>
+                  <SelectItem value="microsoft_teams">Teams</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            <DateRangeFilter {...dateFilter} />
 
             {scope === 'team' && (
               <OwnerFilterV3
@@ -225,6 +290,68 @@ export const MeetingsFilterBar: React.FC<MeetingsFilterBarProps> = ({
               </DialogHeader>
 
               <div className="space-y-4 pt-4">
+                {/* Source */}
+                {onSourceChange && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">
+                      Source
+                    </label>
+                    <Select value={sourceFilter} onValueChange={(v) => onSourceChange(v as UnifiedSource | 'all')}>
+                      <SelectTrigger className="w-full bg-white/80 dark:bg-gray-900/40">
+                        <SelectValue placeholder="Source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sources</SelectItem>
+                        <SelectItem value="fathom">Fathom</SelectItem>
+                        <SelectItem value="fireflies">Fireflies</SelectItem>
+                        <SelectItem value="voice">Voice</SelectItem>
+                        <SelectItem value="60_notetaker">60 Notetaker</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Status (visible when source includes 60_notetaker) */}
+                {onStatusChange && (sourceFilter === 'all' || sourceFilter === '60_notetaker') && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">
+                      Recording Status
+                    </label>
+                    <Select value={statusFilter} onValueChange={(v) => onStatusChange(v as RecordingStatus | 'all')}>
+                      <SelectTrigger className="w-full bg-white/80 dark:bg-gray-900/40">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="ready">Ready</SelectItem>
+                        <SelectItem value="processing">Processing</SelectItem>
+                        <SelectItem value="recording">Recording</SelectItem>
+                        <SelectItem value="failed">Failed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Platform (visible when source includes 60_notetaker) */}
+                {onPlatformChange && (sourceFilter === 'all' || sourceFilter === '60_notetaker') && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">
+                      Platform
+                    </label>
+                    <Select value={platformFilter} onValueChange={(v) => onPlatformChange(v as MeetingPlatform | 'all')}>
+                      <SelectTrigger className="w-full bg-white/80 dark:bg-gray-900/40">
+                        <SelectValue placeholder="Platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Platforms</SelectItem>
+                        <SelectItem value="zoom">Zoom</SelectItem>
+                        <SelectItem value="google_meet">Google Meet</SelectItem>
+                        <SelectItem value="microsoft_teams">Teams</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 {/* Sort */}
                 <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">
@@ -243,12 +370,7 @@ export const MeetingsFilterBar: React.FC<MeetingsFilterBarProps> = ({
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">
                     Date Range
                   </label>
-                  <DateFilter
-                    value={datePreset}
-                    customRange={customDateRange}
-                    onPresetChange={(preset) => onDateChange(preset, customDateRange)}
-                    onCustomRangeChange={(range) => onDateChange(datePreset, range)}
-                  />
+                  <DateRangeFilter {...dateFilter} />
                 </div>
 
                 {/* Rep Filter - Only show in team scope */}

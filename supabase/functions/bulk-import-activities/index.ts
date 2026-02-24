@@ -2,7 +2,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 // @ts-ignore: Deno/LSP type resolution issue
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 // Define the expected structure of an activity row (as received in JSON)
 interface ActivityInsert {
@@ -27,9 +27,9 @@ interface ActivityInsert {
 // Remove COLUMN_ORDER and EXPECTED_COLUMNS constants
 export default async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests explicitly
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     // 1. Initialize Supabase Admin Client (use service_role key)

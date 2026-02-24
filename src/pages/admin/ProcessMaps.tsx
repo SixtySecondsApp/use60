@@ -169,9 +169,9 @@ const AVAILABLE_PROCESSES: Array<{
   {
     type: 'integration',
     name: 'meetingbaas',
-    label: 'MeetingBaaS',
+    label: '60 Notetaker',
     icon: <Video className="h-4 w-4 text-red-500" />,
-    description: 'Automatic meeting recording with bot deployment',
+    description: 'Bot recording + S3 storage + transcription + thumbnail generation',
   },
   {
     type: 'workflow',

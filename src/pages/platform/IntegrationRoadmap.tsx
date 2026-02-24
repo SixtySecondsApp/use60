@@ -31,6 +31,7 @@ import {
   Search,
   Link as LinkIcon,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -842,6 +843,7 @@ export default function IntegrationRoadmap({ embedded = false }: IntegrationRoad
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <BackToPlatform />
         {content}
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { HubSpotClient, HubSpotError } from '../_shared/hubspot.ts'
 
 type QueueJob = {
@@ -1456,9 +1456,9 @@ async function handleJob(params: {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-
-  // Service-role only
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);// Service-role only
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   const authHeader = req.headers.get('Authorization') || ''
   if (!serviceRoleKey || authHeader.trim() !== `Bearer ${serviceRoleKey}`) {

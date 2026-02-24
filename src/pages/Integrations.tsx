@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Calendar,
@@ -16,7 +16,10 @@ import {
   Sparkles,
   Info,
   ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
+import { HelpPanel } from '@/components/docs/HelpPanel';
+import { motion } from 'framer-motion';
 import {
   Tooltip,
   TooltipContent,
@@ -33,7 +36,13 @@ import { SavvyCalConfigModal } from '@/components/integrations/SavvyCalConfigMod
 import { SlackConfigModal } from '@/components/integrations/SlackConfigModal';
 import { JustCallConfigModal } from '@/components/integrations/JustCallConfigModal';
 import { HubSpotConfigModal } from '@/components/integrations/HubSpotConfigModal';
+import { AttioConfigModal } from '@/components/integrations/AttioConfigModal';
 import { NotetakerConfigModal } from '@/components/integrations/NotetakerConfigModal';
+import { FirefliesConfigModal } from '@/components/integrations/FirefliesConfigModal';
+import { ApolloConfigModal } from '@/components/integrations/ApolloConfigModal';
+import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
+import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
+import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
 
 // Hooks and stores
 import { useGoogleIntegration } from '@/lib/stores/integrationStore';
@@ -42,8 +51,15 @@ import { useSlackIntegration } from '@/lib/hooks/useSlackIntegration';
 import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
 import { useSavvyCalIntegration } from '@/lib/hooks/useSavvyCalIntegration';
 import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
+import { useAttioIntegration } from '@/lib/hooks/useAttioIntegration';
 import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
-import { getIntegrationDomain, getLogoS3Url, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
+import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
+import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
+import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
+import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
+import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
+import { getIntegrationDomain, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
+import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { useUser } from '@/lib/hooks/useUser';
 import { IntegrationVoteState, useIntegrationUpvotes } from '@/lib/hooks/useIntegrationUpvotes';
 import { useBrandingSettings } from '@/lib/hooks/useBrandingSettings';
@@ -170,53 +186,112 @@ function CategorySection({
   toggleUpvote: (args: { integrationId: string; integrationName: string; description?: string }) => Promise<void>;
   sixtyLogoUrl?: string | null;
 }) {
+  const [isExpanded, setIsExpanded] = useState(() => {
+    // Load from localStorage, default to collapsed
+    try {
+      const stored = localStorage.getItem(`integrations-section-${category.id}`);
+      return stored ? JSON.parse(stored) : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggle = () => {
+    const newState = !isExpanded;
+    setIsExpanded(newState);
+    try {
+      localStorage.setItem(`integrations-section-${category.id}`, JSON.stringify(newState));
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="mb-12">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-          {category.icon}
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{category.name}</h2>
-            {category.tooltip && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                      <Info className="w-4 h-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-xs text-sm">
-                    <p className="font-medium mb-1">How it works with Sixty:</p>
-                    <p className="text-gray-600 dark:text-gray-300">{category.tooltip}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
+      {/* Collapsible Header */}
+      <motion.button
+        onClick={handleToggle}
+        className="w-full flex items-center justify-between mb-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
+      >
+        <div className="flex items-center gap-3 flex-1 text-left">
+          <div className="p-2 rounded-lg bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors">
+            {category.icon}
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{category.description}</p>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {category.name}
+              </h2>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {category.integrations.length} items
+              </span>
+              {category.tooltip && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0"
+                      >
+                        <Info className="w-4 h-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="max-w-xs text-sm bg-gray-900 dark:bg-white text-white dark:text-gray-900 border border-gray-700 dark:border-gray-200"
+                    >
+                      <p className="font-medium mb-1">How it works with Sixty:</p>
+                      <p className="text-gray-100 dark:text-gray-800">{category.tooltip}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{category.description}</p>
+          </div>
         </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {category.integrations.map((integration) => {
-          const status = isBuilt ? getIntegrationStatus(integration.id) : 'coming_soon';
-          const vote = !isBuilt ? getVoteState(integration.id) : null;
-          return (
-            <IntegrationCardWithLogo
-              key={integration.id}
-              config={integration}
-              isBuilt={isBuilt}
-              status={status}
-              onAction={isBuilt ? () => onBuiltAction(integration.id) : undefined}
-              actionLoading={builtActionLoadingById[integration.id]}
-              vote={vote}
-              onToggleUpvote={!isBuilt ? toggleUpvote : undefined}
-              sixtyLogoUrl={sixtyLogoUrl}
-            />
-          );
-        })}
-      </div>
+
+        {/* Chevron Icon */}
+        <motion.div
+          initial={false}
+          animate={{ rotate: isExpanded ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          className="flex-shrink-0 ml-2"
+        >
+          <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
+        </motion.div>
+      </motion.button>
+
+      {/* Expandable Cards Section */}
+      {isExpanded && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2 }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        >
+          {category.integrations.map((integration) => {
+            const status = isBuilt ? getIntegrationStatus(integration.id) : 'coming_soon';
+            const vote = !isBuilt ? getVoteState(integration.id) : null;
+            return (
+              <IntegrationCardWithLogo
+                key={integration.id}
+                config={integration}
+                isBuilt={isBuilt}
+                status={status}
+                onAction={isBuilt ? () => onBuiltAction(integration.id) : undefined}
+                actionLoading={builtActionLoadingById[integration.id]}
+                vote={vote}
+                onToggleUpvote={!isBuilt ? toggleUpvote : undefined}
+                sixtyLogoUrl={sixtyLogoUrl}
+              />
+            );
+          })}
+        </motion.div>
+      )}
     </div>
   );
 }
@@ -345,6 +420,22 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'attio',
+    name: 'Attio',
+    description: 'Bi-directional CRM sync + AI writeback.',
+    permissions: [
+      { title: 'Read/write records', description: 'Sync people, companies, and deals both ways.' },
+      { title: 'Read/write lists', description: 'Manage list memberships and entries.' },
+      { title: 'Create notes', description: 'Write meeting summaries back to Attio.' },
+      { title: 'Webhooks', description: 'Real-time record change notifications.' },
+    ],
+    brandColor: 'violet',
+    iconBgColor: 'bg-violet-50 dark:bg-violet-900/20',
+    iconBorderColor: 'border-violet-100 dark:border-violet-800/40',
+    fallbackIcon: <Users className="w-6 h-6 text-violet-600 dark:text-violet-400" />,
+    isBuilt: true,
+  },
+  {
     id: '60-notetaker',
     name: '60 Notetaker',
     description: 'Auto-record & transcribe your meetings.',
@@ -358,6 +449,79 @@ const builtIntegrations: IntegrationConfig[] = [
     iconBgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
     iconBorderColor: 'border-emerald-100 dark:border-emerald-800/40',
     fallbackIcon: <img src={DEFAULT_SIXTY_ICON_URL} alt="60" className="w-6 h-6 rounded" />,
+    isBuilt: true,
+  },
+  {
+    id: 'fireflies',
+    name: 'Fireflies.ai',
+    description: 'AI meeting notes & transcription.',
+    permissions: [
+      { title: 'Access recordings', description: 'View and sync meeting recordings.' },
+      { title: 'Read transcripts', description: 'Access meeting transcripts and notes.' },
+      { title: 'View insights', description: 'Import AI-generated meeting insights.' },
+    ],
+    brandColor: 'yellow',
+    iconBgColor: 'bg-yellow-50 dark:bg-yellow-900/20',
+    iconBorderColor: 'border-yellow-100 dark:border-yellow-800/40',
+    fallbackIcon: <Video className="w-6 h-6 text-yellow-500" />,
+    isBuilt: true,
+  },
+  {
+    id: 'apollo',
+    name: 'Apollo.io',
+    description: 'Sales intelligence & lead search.',
+    permissions: [
+      { title: 'Search leads', description: 'Search Apollo database for prospects.' },
+      { title: 'Enrich contacts', description: 'Enrich contact data with Apollo intelligence.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    iconBorderColor: 'border-blue-100 dark:border-blue-800/40',
+    fallbackIcon: <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'ai-ark',
+    name: 'AI Ark',
+    description: 'B2B data, AI search & enrichment.',
+    permissions: [
+      { title: 'Search companies', description: 'Find companies by firmographic filters and AI similarity.' },
+      { title: 'Search people', description: 'Find contacts by role, seniority, and department.' },
+      { title: 'Enrich records', description: 'Refresh contact data with current job titles and emails.' },
+    ],
+    brandColor: 'violet',
+    iconBgColor: 'bg-violet-50 dark:bg-violet-900/20',
+    iconBorderColor: 'border-violet-100 dark:border-violet-800/40',
+    fallbackIcon: <Database className="w-6 h-6 text-violet-600 dark:text-violet-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'instantly',
+    name: 'Instantly',
+    description: 'Cold email campaigns at scale.',
+    permissions: [
+      { title: 'Push leads', description: 'Add leads to Instantly campaigns.' },
+      { title: 'Create campaigns', description: 'Create new email campaigns.' },
+    ],
+    brandColor: 'gray',
+    iconBgColor: 'bg-gray-50 dark:bg-gray-800',
+    iconBorderColor: 'border-gray-200 dark:border-gray-700',
+    fallbackIcon: <Mail className="w-6 h-6 text-gray-600 dark:text-gray-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'apify',
+    name: 'Apify',
+    description: 'Run any web scraping actor from the Apify marketplace.',
+    permissions: [
+      { title: 'Run actors', description: 'Execute any Apify actor with custom inputs.' },
+      { title: 'Store results', description: 'Raw results stored and available for mapping.' },
+      { title: 'Track runs', description: 'Monitor run status, costs, and record counts.' },
+    ],
+    brandColor: 'emerald',
+    iconBgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
+    iconBorderColor: 'border-emerald-100 dark:border-emerald-800/40',
+    fallbackIcon: <Bot className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />,
     isBuilt: true,
   },
 ];
@@ -374,7 +538,7 @@ const integrationCategories: IntegrationCategory[] = [
     tooltip: 'Syncs meeting transcripts and AI insights directly to contact records. Automatically links meetings to deals and creates follow-up tasks based on action items discussed.',
     icon: <Video className="w-5 h-5" />,
     integrations: [
-      { id: 'fireflies', name: 'Fireflies.ai', description: 'AI meeting notes & transcription.', fallbackIcon: <Video className="w-6 h-6 text-yellow-500" /> },
+      // Fireflies is now a built integration (moved to builtIntegrations array)
       { id: 'otter', name: 'Otter.ai', description: 'Real-time transcription.', fallbackIcon: <Video className="w-6 h-6 text-blue-500" /> },
       { id: 'granola', name: 'Granola', description: 'AI note-taking assistant.', fallbackIcon: <Video className="w-6 h-6 text-amber-600" /> },
       { id: 'gong', name: 'Gong', description: 'Revenue intelligence platform.', fallbackIcon: <Video className="w-6 h-6 text-purple-500" /> },
@@ -410,8 +574,6 @@ const integrationCategories: IntegrationCategory[] = [
       { id: 'bullhorn', name: 'Bullhorn', description: 'Staffing & recruiting CRM.', fallbackIcon: <Users className="w-6 h-6 text-amber-600" /> },
       { id: 'highlevel', name: 'GoHighLevel', description: 'All-in-one agency CRM.', fallbackIcon: <Users className="w-6 h-6 text-blue-600" /> },
       { id: 'copper', name: 'Copper', description: 'Google Workspace CRM.', fallbackIcon: <Users className="w-6 h-6 text-orange-400" /> },
-      { id: 'attio', name: 'Attio', description: 'Next-gen CRM for startups.', fallbackIcon: <Users className="w-6 h-6 text-violet-500" /> },
-      { id: 'folk', name: 'Folk', description: 'CRM for relationship builders.', fallbackIcon: <Users className="w-6 h-6 text-pink-500" /> },
     ],
   },
   {
@@ -460,20 +622,6 @@ const integrationCategories: IntegrationCategory[] = [
     ],
   },
   {
-    id: 'automation',
-    name: 'Automation & No-Code',
-    description: 'Connect everything together',
-    tooltip: 'Trigger workflows when deals change stages or activities are logged. Push data to any tool and pull updates back into Sixty automatically.',
-    icon: <Zap className="w-5 h-5" />,
-    integrations: [
-      { id: 'zapier', name: 'Zapier', description: 'Connect 5000+ apps.', fallbackIcon: <Zap className="w-6 h-6 text-orange-500" /> },
-      { id: 'make', name: 'Make', description: 'Visual automation platform.', fallbackIcon: <Zap className="w-6 h-6 text-purple-500" /> },
-      { id: 'n8n', name: 'n8n', description: 'Open-source workflows.', fallbackIcon: <Zap className="w-6 h-6 text-red-500" /> },
-      { id: 'webhooks', name: 'Webhooks', description: 'Custom integrations.', fallbackIcon: <Zap className="w-6 h-6 text-gray-600 dark:text-gray-400" /> },
-      { id: 'tray', name: 'Tray.io', description: 'Enterprise automation.', fallbackIcon: <Zap className="w-6 h-6 text-blue-500" /> },
-    ],
-  },
-  {
     id: 'communication',
     name: 'Team Communication',
     description: 'Stay connected with your team',
@@ -488,82 +636,11 @@ const integrationCategories: IntegrationCategory[] = [
 ];
 
 // =====================================================
-// SUGGESTED INTEGRATIONS (20 High-Value Additions)
-// =====================================================
-
-const suggestedIntegrations: IntegrationCategory[] = [
-  {
-    id: 'email-outreach',
-    name: 'Email & Outreach',
-    description: 'Automate your email campaigns',
-    tooltip: 'Logs outbound email activities automatically. Syncs email sequences to contact timelines and tracks opens/clicks as engagement signals on deals.',
-    icon: <Mail className="w-5 h-5" />,
-    integrations: [
-      { id: 'lemlist', name: 'Lemlist', description: 'Cold email outreach.', fallbackIcon: <Mail className="w-6 h-6 text-purple-500" /> },
-      { id: 'apollo', name: 'Apollo.io', description: 'Sales intelligence & outreach.', fallbackIcon: <Mail className="w-6 h-6 text-blue-600" /> },
-      { id: 'outreach', name: 'Outreach', description: 'Sales engagement platform.', fallbackIcon: <Mail className="w-6 h-6 text-purple-600" /> },
-      { id: 'salesloft', name: 'Salesloft', description: 'Revenue workflow platform.', fallbackIcon: <Mail className="w-6 h-6 text-blue-500" /> },
-      { id: 'instantly', name: 'Instantly', description: 'Cold email at scale.', fallbackIcon: <Mail className="w-6 h-6 text-gray-700 dark:text-gray-300" /> },
-    ],
-  },
-  {
-    id: 'sales-intelligence',
-    name: 'Sales Intelligence',
-    description: 'Enrich your leads with data',
-    tooltip: 'Auto-enriches contacts with company data, phone numbers, and social profiles. Fills in missing fields and keeps your contact database accurate and complete.',
-    icon: <Database className="w-5 h-5" />,
-    integrations: [
-      { id: 'linkedin-sales-navigator', name: 'LinkedIn Sales Nav', description: 'Social selling platform.', fallbackIcon: <Database className="w-6 h-6 text-blue-700" /> },
-      { id: 'zoominfo', name: 'ZoomInfo', description: 'B2B contact database.', fallbackIcon: <Database className="w-6 h-6 text-green-500" /> },
-      { id: 'clearbit', name: 'Clearbit', description: 'Data enrichment.', fallbackIcon: <Database className="w-6 h-6 text-blue-500" /> },
-      { id: 'lusha', name: 'Lusha', description: 'Contact data platform.', fallbackIcon: <Database className="w-6 h-6 text-pink-500" /> },
-      { id: 'cognism', name: 'Cognism', description: 'GDPR-compliant B2B data.', fallbackIcon: <Database className="w-6 h-6 text-indigo-500" /> },
-    ],
-  },
-  {
-    id: 'esignature',
-    name: 'E-Signature & Documents',
-    description: 'Close deals faster',
-    tooltip: 'Moves deals to "Signed" stage automatically when contracts are executed. Tracks document views and creates activities for proposal sends.',
-    icon: <FileSignature className="w-5 h-5" />,
-    integrations: [
-      { id: 'docusign', name: 'DocuSign', description: 'E-signature leader.', fallbackIcon: <FileSignature className="w-6 h-6 text-yellow-600" /> },
-      { id: 'pandadoc', name: 'PandaDoc', description: 'Document automation.', fallbackIcon: <FileSignature className="w-6 h-6 text-green-500" /> },
-      { id: 'hellosign', name: 'HelloSign', description: 'Simple e-signatures.', fallbackIcon: <FileSignature className="w-6 h-6 text-blue-500" /> },
-      { id: 'proposify', name: 'Proposify', description: 'Proposal software.', fallbackIcon: <FileSignature className="w-6 h-6 text-teal-500" /> },
-    ],
-  },
-  {
-    id: 'payments',
-    name: 'Payments & Billing',
-    description: 'Get paid faster',
-    tooltip: 'Reconciles deal values with actual payments received. Updates deal status when invoices are paid and calculates accurate revenue metrics.',
-    icon: <CreditCard className="w-5 h-5" />,
-    integrations: [
-      { id: 'stripe', name: 'Stripe', description: 'Payment processing.', fallbackIcon: <CreditCard className="w-6 h-6 text-purple-600" /> },
-      { id: 'quickbooks', name: 'QuickBooks', description: 'Accounting software.', fallbackIcon: <CreditCard className="w-6 h-6 text-green-600" /> },
-      { id: 'xero', name: 'Xero', description: 'Cloud accounting.', fallbackIcon: <CreditCard className="w-6 h-6 text-blue-500" /> },
-      { id: 'chargebee', name: 'Chargebee', description: 'Subscription billing.', fallbackIcon: <CreditCard className="w-6 h-6 text-orange-500" /> },
-    ],
-  },
-  {
-    id: 'ai-productivity',
-    name: 'AI & Productivity',
-    description: 'Supercharge with AI',
-    tooltip: 'Powers AI-generated email drafts, meeting summaries, and deal insights. Extends Meeting Intelligence features with custom AI capabilities.',
-    icon: <Bot className="w-5 h-5" />,
-    integrations: [
-      { id: 'openai', name: 'OpenAI / ChatGPT', description: 'AI assistant integration.', fallbackIcon: <Bot className="w-6 h-6 text-green-500" /> },
-      { id: 'anthropic', name: 'Anthropic / Claude', description: 'AI for enterprises.', fallbackIcon: <Bot className="w-6 h-6 text-orange-500" /> },
-    ],
-  },
-];
-
-// =====================================================
 // MAIN COMPONENT
 // =====================================================
 
 export default function Integrations() {
+  const navigate = useNavigate();
   const hubspotEnabled = isHubSpotIntegrationEnabled();
   const [searchParams] = useSearchParams();
   useUser(); // ensures auth/user is initialized (needed for upvotes under Clerk)
@@ -573,7 +650,6 @@ export default function Integrations() {
   const allComingSoonIntegrationIds = useMemo(() => {
     const ids: string[] = [];
     for (const cat of integrationCategories) ids.push(...cat.integrations.map((i) => i.id));
-    for (const cat of suggestedIntegrations) ids.push(...cat.integrations.map((i) => i.id));
     return ids;
   }, []);
 
@@ -603,6 +679,8 @@ export default function Integrations() {
 
   const { isConnected: hubspotConnected, loading: hubspotLoading, connectHubSpot } = useHubSpotIntegration(hubspotEnabled);
 
+  const { isConnected: attioConnected, loading: attioLoading, connectAttio } = useAttioIntegration();
+
   const {
     isConnected: notetakerConnected,
     isLoading: notetakerLoading,
@@ -610,6 +688,31 @@ export default function Integrations() {
     needsCalendar: notetakerNeedsCalendar,
     status: notetakerStatus,
   } = useNotetakerIntegration();
+
+  const {
+    isConnected: firefliesConnected,
+    loading: firefliesLoading,
+  } = useFirefliesIntegration();
+
+  const {
+    isConnected: apolloConnected,
+    loading: apolloLoading,
+  } = useApolloIntegration();
+
+  const {
+    isConnected: aiArkConnected,
+    loading: aiArkLoading,
+  } = useAiArkIntegration();
+
+  const {
+    isConnected: instantlyConnected,
+    loading: instantlyLoading,
+  } = useInstantlyIntegration();
+
+  const {
+    isConnected: apifyConnected,
+    loading: apifyLoading,
+  } = useApifyIntegration();
 
   // Modal states
   const [activeConnectModal, setActiveConnectModal] = useState<string | null>(null);
@@ -639,6 +742,13 @@ export default function Integrations() {
     } else if (hubspotError) {
       const desc = searchParams.get('hubspot_error_description');
       toast.error(`Failed to connect HubSpot: ${desc || hubspotError}`);
+      window.history.replaceState({}, '', '/integrations');
+    } else if (searchParams.get('attio_success') === 'true') {
+      toast.success('Attio connected successfully!');
+      window.history.replaceState({}, '', '/integrations');
+    } else if (searchParams.get('attio_error')) {
+      const attioErr = searchParams.get('attio_error');
+      toast.error(`Failed to connect Attio: ${attioErr}`);
       window.history.replaceState({}, '', '/integrations');
     } else if (fathomStatus === 'connected') {
       toast.success('Fathom connected successfully!', {
@@ -679,11 +789,23 @@ export default function Integrations() {
         return justcallConnected ? 'active' : 'inactive';
       case 'hubspot':
         return hubspotConnected ? 'active' : 'inactive';
+      case 'attio':
+        return attioConnected ? 'active' : 'inactive';
       case '60-notetaker':
         // Show as inactive if org hasn't enabled, or if user needs to set up
         if (!notetakerOrgEnabled) return 'inactive';
         if (notetakerNeedsCalendar) return 'syncing'; // Shows "needs setup" state
         return notetakerConnected ? 'active' : 'inactive';
+      case 'fireflies':
+        return firefliesConnected ? 'active' : 'inactive';
+      case 'apollo':
+        return apolloConnected ? 'active' : 'inactive';
+      case 'ai-ark':
+        return aiArkConnected ? 'active' : 'inactive';
+      case 'instantly':
+        return instantlyConnected ? 'active' : 'inactive';
+      case 'apify':
+        return apifyConnected ? 'active' : 'inactive';
       default:
         return 'coming_soon';
     }
@@ -696,11 +818,46 @@ export default function Integrations() {
     const status = getIntegrationStatus(integrationId);
 
     if (status === 'active' || status === 'syncing') {
+      // Meeting recorders navigate to dedicated settings pages when connected
+      if (integrationId === 'fathom') {
+        navigate('/settings/integrations/fathom');
+        return;
+      }
+      if (integrationId === 'fireflies') {
+        navigate('/settings/integrations/fireflies');
+        return;
+      }
+      if (integrationId === '60-notetaker') {
+        navigate('/meetings/recordings/settings');
+        return;
+      }
+      // Other integrations use config modals
       setActiveConfigModal(integrationId);
     } else {
       // JustCall is API-key based (no OAuth flow) so go straight to config.
       if (integrationId === 'justcall') {
         setActiveConfigModal('justcall');
+        return;
+      }
+      // Fireflies is API-key based - go straight to config modal for initial connection
+      if (integrationId === 'fireflies') {
+        setActiveConfigModal('fireflies');
+        return;
+      }
+      if (integrationId === 'apollo') {
+        setActiveConfigModal('apollo');
+        return;
+      }
+      if (integrationId === 'ai-ark') {
+        setActiveConfigModal('ai-ark');
+        return;
+      }
+      if (integrationId === 'instantly') {
+        setActiveConfigModal('instantly');
+        return;
+      }
+      if (integrationId === 'apify') {
+        setActiveConfigModal('apify');
         return;
       }
       // 60 Notetaker goes straight to config modal (handles its own enable flow)
@@ -753,6 +910,10 @@ export default function Integrations() {
           await connectHubSpot();
           setActiveConnectModal(null);
           break;
+        case 'attio':
+          await connectAttio();
+          setActiveConnectModal(null);
+          break;
         default:
           toast.info('Integration coming soon');
           setActiveConnectModal(null);
@@ -777,23 +938,29 @@ export default function Integrations() {
       savvycal: savvycalLoading,
       hubspot: hubspotLoading,
       '60-notetaker': notetakerLoading,
+      fireflies: firefliesLoading,
+      apollo: apolloLoading,
+      'ai-ark': aiArkLoading,
+      instantly: instantlyLoading,
+      apify: apifyLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, instantlyLoading, apifyLoading]
   );
 
-  // Preload cached S3 logo URLs on page load to prevent any visible swap/flicker.
+  // Preload logo.dev URLs on page load to prevent any visible swap/flicker.
   useEffect(() => {
     const allIds = [
       ...builtIntegrations.map((i) => i.id),
       ...integrationCategories.flatMap((c) => c.integrations.map((i) => i.id)),
-      ...suggestedIntegrations.flatMap((c) => c.integrations.map((i) => i.id)),
     ];
 
     // De-dupe
-    const urls = Array.from(new Set(allIds.map((id) => getLogoS3Url(getIntegrationDomain(id)))));
+    const domains = Array.from(new Set(allIds.map((id) => getIntegrationDomain(id))));
 
-    for (const url of urls) {
+    for (const domain of domains) {
       try {
+        const url = getLogoDevUrl(domain);
+        if (!url) continue;
         const img = new Image();
         img.decoding = 'async';
         img.src = url;
@@ -807,7 +974,10 @@ export default function Integrations() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-8">
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Integrations</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Integrations</h1>
+          <HelpPanel docSlug="integrations-overview" tooltip="Integrations help" />
+        </div>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
           Connect your favorite tools to supercharge your sales workflow.
         </p>
@@ -876,32 +1046,6 @@ export default function Integrations() {
           ))}
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-gray-200 dark:border-gray-800 my-8" />
-
-        {/* Suggested Integrations */}
-        <div className="mb-8">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-            Suggested Integrations
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
-            Popular tools that could supercharge your workflow
-          </p>
-
-          {suggestedIntegrations.map((category) => (
-            <CategorySection
-              key={category.id}
-              category={category}
-              isBuilt={false}
-              getIntegrationStatus={getIntegrationStatus}
-              onBuiltAction={(integrationId) => handleCardAction(integrationId, true)}
-              builtActionLoadingById={builtActionLoadingById}
-              getVoteState={getVoteState}
-              toggleUpvote={toggleUpvote}
-              sixtyLogoUrl={sixtyLogoUrl}
-            />
-          ))}
-        </div>
 
       </div>
 
@@ -946,8 +1090,32 @@ export default function Integrations() {
         open={hubspotEnabled && activeConfigModal === 'hubspot'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
+      <AttioConfigModal
+        open={activeConfigModal === 'attio'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
       <NotetakerConfigModal
         open={activeConfigModal === '60-notetaker'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <FirefliesConfigModal
+        open={activeConfigModal === 'fireflies'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <ApolloConfigModal
+        open={activeConfigModal === 'apollo'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <AiArkConfigModal
+        open={activeConfigModal === 'ai-ark'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <InstantlyConfigModal
+        open={activeConfigModal === 'instantly'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <ApifyConfigModal
+        open={activeConfigModal === 'apify'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
     </div>

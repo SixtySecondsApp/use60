@@ -116,7 +116,16 @@ export function AccessCodeInput({
       {/* Helper text when no code entered */}
       {!value && !error && (
         <p className="text-xs text-gray-500">
-          Need a code? Join our waitlist at sixty.io to request access.
+          Need a code? Join our waitlist at{' '}
+          <a
+            href="https://www.use60.com/waitlist"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:underline"
+          >
+            use60.com/waitlist
+          </a>{' '}
+          to request access.
         </p>
       )}
     </div>

@@ -139,8 +139,8 @@ class OpenAIAssistantService {
       }
     }
 
-    // Fallback to environment variable
-    this.apiKey = import.meta.env.VITE_OPENAI_API_KEY || null;
+    // SECURITY: API keys must NOT be in frontend environment variables.
+    this.apiKey = null;
     
     if (!this.apiKey) {
     }

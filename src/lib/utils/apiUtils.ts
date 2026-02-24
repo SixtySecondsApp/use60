@@ -106,7 +106,9 @@ export async function fetchWithRetry(
       // Handle authentication errors specially
       if (error instanceof Error && error.name === 'AuthenticationError') {
         logger.error('Authentication error:', error.message);
-        toast.error('Please log in to access this feature');
+        if (config.showToast) {
+          toast.error('Please log in to access this feature');
+        }
         throw error;
       }
       

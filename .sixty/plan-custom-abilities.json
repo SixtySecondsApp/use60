@@ -1,0 +1,443 @@
+{
+  "feature": "custom-abilities",
+  "name": "Custom Org Abilities — Configurable Workflow Engine",
+  "status": "pending",
+  "createdAt": "2026-02-15T15:00:00Z",
+  "consultReport": ".sixty/consult/custom-org-abilities.md",
+  "prerequisitePlan": ".sixty/plan-proactive-config.json",
+  "description": "Enable orgs to build custom abilities (event sequences/workflows) by merging the skills system with the orchestrator. Move sequence definitions from hardcoded TypeScript to organization_skills. Add custom step types (AI prompt, webhook, Slack message, data query/update) and custom triggers (cron, webhook, data change, manual). Build sequence builder UI for admins.",
+
+  "stories": [
+    {
+      "id": "ABIL-001",
+      "title": "Add orchestrator_config column and seed 9 system sequences as platform_skills",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "phase": "A",
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/orchestrator/eventSequences.ts"] },
+      "blocks": ["ABIL-002", "ABIL-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "New column orchestrator_config (JSONB, nullable) on platform_skills table",
+        "9 system sequences seeded as platform_skills rows with skill_type='orchestrator-sequence', is_system flag in orchestrator_config",
+        "Each seeded row's orchestrator_config.steps matches the current EVENT_SEQUENCES definition exactly",
+        "orchestrator_config schema: { event_type, is_system, steps[], triggers[], default_enabled }",
+        "Steps schema: { skill, type, config, requires_context[], requires_approval, criticality, depends_on[], timeout_ms }"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260217000001_add_orchestrator_config_to_skills.sql"
+      ],
+      "notes": "This is the bridge migration. The 9 existing sequences become platform_skills rows. Each step definition is a 1:1 translation of the hardcoded SequenceStep objects in eventSequences.ts into JSONB. The is_system flag prevents orgs from deleting system sequences. The orchestrator_config column is nullable so existing non-orchestrator skills are unaffected. Seed data should use the exact same skill names as ADAPTER_REGISTRY keys. Triggers for system sequences: meeting_ended has event trigger, pre_meeting_90min has cron trigger, etc."
+    },
+    {
+      "id": "ABIL-002",
+      "title": "Create step type resolver with generic custom step framework",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "phase": "A",
+      "dependencies": { "stories": ["ABIL-001"] },
+      "blocks": ["ABIL-003", "ABIL-004", "ABIL-005", "ABIL-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "New file stepResolver.ts that takes a step definition (from DB JSONB) and returns a SkillAdapter",
+        "For type='builtin': returns adapter from ADAPTER_REGISTRY (existing behavior)",
+        "For type='ai_prompt': returns genericAiPromptAdapter with prompt template + model config",
+        "For type='webhook': returns genericWebhookAdapter with URL + method + body template",
+        "For type='slack_message': returns genericSlackMessageAdapter with Block Kit template",
+        "For type='data_query'/'data_update': returns genericDataAdapter with table + operation config",
+        "Variable resolution engine: resolves ${event.payload.X}, ${context.tier1.user.name}, ${outputs.step-name.field} in templates"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/stepResolver.ts"
+      ],
+      "notes": "This is the key architectural piece. When the runner encounters a step, it calls resolveStep(stepDefinition) which returns a SkillAdapter. For builtin steps, it delegates to the existing ADAPTER_REGISTRY. For custom types, it returns a generic adapter that handles the step type. The variable resolution engine uses the same pattern as skill frontmatter: resolvePath() for nested access, resolveExpression() for template substitution. The generic adapters are created in subsequent stories — this story creates the framework and the builtin resolver."
+    },
+    {
+      "id": "ABIL-003",
+      "title": "Make getSequenceForEvent() data-driven with DB-first resolution",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "phase": "A",
+      "dependencies": { "stories": ["ABIL-001", "ABIL-002"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "getSequenceForEvent(eventType, orgId?) queries organization_skills first for orchestrator_config.event_type match",
+        "Falls back to platform_skills if no org-specific override",
+        "Falls back to hardcoded EVENT_SEQUENCES if no DB match (deprecated path with warning)",
+        "Parses orchestrator_config.steps into SequenceStep[] via step resolver",
+        "Org-specific customizations take precedence over system defaults",
+        "Caches result per (eventType, orgId) for request lifetime to avoid repeated queries"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/eventSequences.ts",
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ],
+      "notes": "The critical change: eventSequences.ts getSequenceForEvent() becomes async and accepts optional orgId. The runner passes event.org_id. Resolution order: (1) organization_skills with orchestrator_config.event_type match and org_id match, (2) platform_skills with orchestrator_config.event_type match (system defaults), (3) hardcoded EVENT_SEQUENCES fallback. The hardcoded fallback ensures zero regression — existing behavior works even if DB is empty. Once stable, the hardcoded constants can be removed."
+    },
+    {
+      "id": "ABIL-004",
+      "title": "Implement custom AI prompt adapter",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "phase": "B",
+      "dependencies": { "stories": ["ABIL-002"] },
+      "blocks": [],
+      "parallelWith": ["ABIL-005", "ABIL-006"],
+      "acceptance": [
+        "Generic adapter that takes step config: { model: 'claude-haiku'|'claude-sonnet'|'gemini-flash', prompt_template: string, system_prompt?: string, output_schema?: object, max_tokens?: number }",
+        "Resolves ${variable} placeholders in prompt_template from SequenceState",
+        "Calls Claude or Gemini API with resolved prompt, returns structured output",
+        "If output_schema defined: validates response against schema, retries once on parse failure",
+        "Cost tracking: records token usage and USD cost in step result",
+        "Fallback: returns error if API key missing (ANTHROPIC_API_KEY or GOOGLE_AI_KEY)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/customAiPrompt.ts"
+      ],
+      "notes": "This is the most valuable custom step type. Orgs can define AI-powered steps like 'Summarize this deal for the weekly report' or 'Score this email for urgency'. Uses the same AI calling patterns as existing adapters (Claude Haiku for structured output, Gemini for search-grounded). Template variables give access to all context tiers and previous step outputs. The output_schema field enables structured extraction (JSON mode)."
+    },
+    {
+      "id": "ABIL-005",
+      "title": "Implement custom webhook and Slack message adapters",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "phase": "B",
+      "dependencies": { "stories": ["ABIL-002"] },
+      "blocks": [],
+      "parallelWith": ["ABIL-004", "ABIL-006"],
+      "acceptance": [
+        "Webhook adapter config: { url, method, headers, body_template, timeout_ms, expected_status }",
+        "URL and body template support ${variable} resolution from SequenceState",
+        "Webhook responses stored in step output for downstream steps",
+        "Timeout default 10s, max 30s, with retry on 5xx",
+        "Slack message adapter config: { blocks_template, target: 'user_dm'|'channel', channel_id?, actions?: ActionDefinition[] }",
+        "Block Kit template supports ${variable} resolution in text fields",
+        "HITL: if actions defined, sets pending_approval with action button config",
+        "Security: webhook URLs validated against org allowlist (stored in proactive_agent_config)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/customWebhook.ts",
+        "supabase/functions/_shared/orchestrator/adapters/customSlackMessage.ts"
+      ],
+      "notes": "Two adapters in one story since they share the variable resolution engine. The webhook adapter is essential for integrating with external tools (Zapier, CRMs, custom APIs). The Slack message adapter lets orgs send custom notifications without writing code. Security: webhook URLs must be from admin-approved domains stored in proactive_agent_config.allowed_webhook_domains. HTTPS enforced."
+    },
+    {
+      "id": "ABIL-006",
+      "title": "Implement custom data query and data update adapters",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "phase": "B",
+      "dependencies": { "stories": ["ABIL-002"] },
+      "blocks": [],
+      "parallelWith": ["ABIL-004", "ABIL-005"],
+      "acceptance": [
+        "Data query adapter config: { table, select, filters, order_by, limit }",
+        "Whitelisted tables only: contacts, deals, companies, activities, meetings, calendar_events, tasks",
+        "Filters support ${variable} resolution and operators: eq, neq, gt, lt, gte, lte, in, like",
+        "Data update adapter config: { table, set: Record<string, value>, where: filters }",
+        "Update limited to whitelisted columns per table (no id, user_id, org_id modification)",
+        "Both adapters use user-scoped Supabase client (RLS enforced)",
+        "Audit trail: data updates logged with step_id and job_id for traceability"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/customDataQuery.ts",
+        "supabase/functions/_shared/orchestrator/adapters/customDataUpdate.ts"
+      ],
+      "notes": "These let orgs build data-driven workflows without code. Example: query deals where stage='Proposal' and last_activity > 14 days, then update a custom field. Guardrails: (1) table whitelist (7 tables), (2) column whitelist per table (no sensitive fields), (3) max 100 rows per query, (4) max 50 updates per step, (5) user-scoped client respects RLS, (6) all updates audited. The filters DSL is simple: { field: string, op: string, value: any }."
+    },
+    {
+      "id": "ABIL-007",
+      "title": "Create custom cron scheduler with org_cron_schedules table",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "phase": "C",
+      "dependencies": { "stories": ["ABIL-003"] },
+      "blocks": [],
+      "parallelWith": ["ABIL-008", "ABIL-009"],
+      "acceptance": [
+        "New table org_cron_schedules: org_id, sequence_skill_key, cron_expression, timezone, is_enabled, last_run_at, next_run_at, created_at",
+        "RLS: org admins can CRUD, regular users can read",
+        "New edge function cron-scheduler (runs every minute via pg_cron or external cron)",
+        "Checks for schedules where next_run_at <= now() AND is_enabled = true",
+        "Fires orchestrator event for each due schedule with idempotency_key containing date+schedule_id",
+        "Updates next_run_at based on cron expression after firing",
+        "Supports standard cron expressions (minute, hour, day, month, weekday)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260217000002_add_org_cron_schedules.sql",
+        "supabase/functions/cron-scheduler/index.ts"
+      ],
+      "notes": "The cron scheduler runs every minute, checks for due schedules, and fires events. Uses a simple next_run_at approach: after firing, calculate next_run_at from cron expression. This avoids complex cron parsing at runtime. The edge function uses service role to query all orgs' schedules. Idempotency key prevents duplicate fires if the cron function runs more than once per minute. Timezone support via cron expression evaluation in user's timezone."
+    },
+    {
+      "id": "ABIL-008",
+      "title": "Create webhook trigger endpoint with per-org API key",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "phase": "C",
+      "dependencies": { "stories": ["ABIL-003"] },
+      "blocks": [],
+      "parallelWith": ["ABIL-007", "ABIL-009"],
+      "acceptance": [
+        "New edge function org-webhook-trigger (verify_jwt = false) at /functions/v1/org-webhook-trigger",
+        "URL format: ?org_id=X&event_type=Y with X-API-Key header",
+        "API keys stored in proactive_agent_config.webhook_api_keys (array of hashed keys)",
+        "Validates: API key matches org, event_type exists in org's sequences, payload matches expected schema",
+        "Fires orchestrator event with source='webhook:external' and idempotency_key from payload or auto-generated",
+        "Rate limiting: max 100 events per org per minute",
+        "Returns 200 with job_id on success, 401/403/422/429 on failure"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/org-webhook-trigger/index.ts",
+        "supabase/functions/org-webhook-trigger/config.toml"
+      ],
+      "notes": "This lets external systems (Zapier, CRMs, custom apps) trigger org abilities via HTTP. The API key is generated when the org creates a webhook trigger and stored as a SHA-256 hash in proactive_agent_config. Rate limiting uses a sliding window counter in Redis or a simple table check. The verify_jwt=false is needed since external systems can't send Supabase JWTs. Must deploy with --no-verify-jwt flag."
+    },
+    {
+      "id": "ABIL-009",
+      "title": "Create data change trigger system with pg_notify",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "phase": "C",
+      "dependencies": { "stories": ["ABIL-003"] },
+      "blocks": [],
+      "parallelWith": ["ABIL-007", "ABIL-008"],
+      "acceptance": [
+        "New table org_data_triggers: org_id, sequence_skill_key, table_name, operation (INSERT/UPDATE), condition_expression (JSONB), is_enabled",
+        "Condition DSL: { field, op, value } or { field, changed_from, changed_to } for UPDATE triggers",
+        "DB trigger functions on whitelisted tables (deals, contacts, activities) that check org_data_triggers",
+        "Matching triggers fire pg_notify with org_id, event_type, changed row data",
+        "Listener edge function (or Supabase Realtime channel) picks up notifications and fires orchestrator events",
+        "Rate limiting: max 10 trigger fires per org per table per minute (debounce rapid changes)",
+        "Idempotency: trigger_type:table:row_id:timestamp key"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/20260217000003_add_org_data_triggers.sql",
+        "supabase/functions/data-change-listener/index.ts"
+      ],
+      "notes": "The most complex trigger type. DB-level triggers on INSERT/UPDATE check org_data_triggers for matching conditions. If matched, fire pg_notify. A listener function (could be Supabase Realtime subscription or a polling edge function) picks up notifications and fires orchestrator events. Rate limiting prevents trigger storms (e.g., bulk import of 1000 contacts). Condition evaluation is done in SQL for performance. Example: org defines 'when deal.stage changes to Proposal, run proposal_generation sequence'. The whitelisted tables (deals, contacts, activities) are the same as customDataQuery."
+    },
+    {
+      "id": "ABIL-010",
+      "title": "Add manual trigger UI with entity context selection",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "phase": "C",
+      "dependencies": { "stories": ["ABIL-003"] },
+      "blocks": [],
+      "parallelWith": ["ABIL-007", "ABIL-008", "ABIL-009"],
+      "acceptance": [
+        "\"Run Now\" button on each ability card in Agent Abilities page",
+        "If sequence requires entity context: shows entity picker dialog (select deal, contact, or meeting)",
+        "Fires orchestrator event with source='manual:ui' and selected entity in payload",
+        "Shows real-time progress via sequence_jobs polling (step-by-step status)",
+        "Disabled when ability is disabled or prerequisites not met",
+        "Result displayed in Agent Activity feed when complete"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/agent/AbilityCard.tsx",
+        "src/components/agent/RunAbilityDialog.tsx",
+        "src/hooks/useOrchestratorJob.ts"
+      ],
+      "notes": "The simplest trigger type from an infrastructure perspective — it just POSTs to agent-orchestrator. The UI complexity is in the entity picker (which deal/contact/meeting to run against) and the real-time progress display. useOrchestratorJob.ts likely already exists for the demo page — reuse it. The entity picker should use existing search components (ContactSearch, DealSearch, MeetingSearch)."
+    },
+    {
+      "id": "ABIL-011",
+      "title": "Build sequence builder form for creating custom abilities",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "phase": "D",
+      "dependencies": { "stories": ["ABIL-004", "ABIL-005", "ABIL-006"] },
+      "blocks": ["ABIL-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "New admin page at /settings/ability-builder accessible from Proactive Agent settings",
+        "Step 1: Name, description, icon selection, event_type (auto-generated from name)",
+        "Step 2: Add steps — drag-to-reorder list with step type selector (builtin adapter, AI prompt, webhook, Slack message, data query, data update)",
+        "Per-step configuration form varies by type: AI prompt shows model+template editor, webhook shows URL+method+body, etc.",
+        "Step 3: Configure trigger(s) — add one or more triggers (cron schedule picker, webhook URL display, data change condition builder, manual toggle)",
+        "Step 4: Review and save — summary of all steps and triggers, save as platform_skill or organization_skill",
+        "Variable helper: sidebar showing available ${variables} from context and previous step outputs"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/settings/AbilityBuilder.tsx",
+        "src/components/agent/StepConfigurator.tsx",
+        "src/components/agent/TriggerConfigurator.tsx",
+        "src/routes/lazyPages.tsx"
+      ],
+      "notes": "This is the main builder UI. Uses a multi-step wizard pattern (similar to ProposalWorkflowSettings). The step configurator renders different forms per step type: (1) builtin: dropdown of available adapters, (2) ai_prompt: Monaco editor for prompt template + model selector + output schema builder, (3) webhook: URL input + method selector + headers/body editor, (4) slack_message: Block Kit template editor with preview, (5) data_query/update: table selector + column picker + filter builder. The variable sidebar helps users insert ${context.tier1.user.name} etc."
+    },
+    {
+      "id": "ABIL-012",
+      "title": "Add test and preview mode for custom abilities",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 12,
+      "phase": "D",
+      "dependencies": { "stories": ["ABIL-011"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "\"Test Run\" button in ability builder that executes with dry_run=true flag",
+        "Dry run mode: steps execute but delivery adapters log instead of sending (no real Slack messages, no real webhooks)",
+        "Step-by-step result display: shows input, output, duration, cost estimate for each step",
+        "AI prompt preview: shows resolved prompt with sample data before executing",
+        "Slack message preview: renders Block Kit JSON as visual preview",
+        "Error highlighting: if a step fails, shows error context and suggests fixes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/AbilityTestRunner.tsx",
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ],
+      "notes": "The test mode adds a dry_run flag to OrchestratorEvent. When dry_run=true, the runner still executes all steps but delivery adapters (Slack, email, webhook) log their would-be output instead of actually sending. This is safe because: (1) AI prompts still execute (to test output quality), (2) data queries still execute (to test filters), (3) data updates are skipped (logged only), (4) webhooks are skipped (logged only), (5) Slack messages are returned as Block Kit JSON for visual preview. Cost is real for AI steps — warn the user."
+    },
+    {
+      "id": "ABIL-013",
+      "title": "Sync system sequences to org_skills and handle org customizations",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "phase": "E",
+      "dependencies": { "stories": ["ABIL-001", "ABIL-003"] },
+      "blocks": [],
+      "parallelWith": ["ABIL-014"],
+      "acceptance": [
+        "sync-skills.ts extended to handle orchestrator-sequence skill type",
+        "System sequences (is_system=true) compiled to each org's organization_skills automatically",
+        "Org customizations preserved during re-sync (custom steps added to system sequence, step order changes)",
+        "New system sequences added upstream automatically appear for all orgs on next sync",
+        "Removed system sequences handled gracefully (marked deprecated, not deleted from orgs)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "scripts/sync-skills.ts"
+      ],
+      "notes": "The sync system must handle the merge between system defaults and org customizations. When a system sequence is updated (e.g., new step added to meeting_ended), the sync should add it to all orgs that haven't customized that sequence. For orgs with customizations, preserve their changes and flag that the system default has been updated. This is similar to how platform_skills → organization_skills compilation already works."
+    },
+    {
+      "id": "ABIL-014",
+      "title": "Add ability management UI (publish, enable, analytics)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 14,
+      "phase": "E",
+      "dependencies": { "stories": ["ABIL-011"] },
+      "blocks": [],
+      "parallelWith": ["ABIL-013"],
+      "acceptance": [
+        "Admin abilities list page showing all abilities (system + custom) with status badges",
+        "Publish/unpublish toggle per custom ability (unpublished = draft, not executable)",
+        "Enable/disable toggle (disabled = won't fire even if triggered)",
+        "Basic analytics per ability: total runs, success rate, avg duration, last run time",
+        "Ability detail view: execution history from sequence_jobs, step-level timing breakdown",
+        "Delete custom ability (with confirmation, system abilities cannot be deleted)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/settings/AbilityManagement.tsx",
+        "src/components/agent/AbilityAnalytics.tsx"
+      ],
+      "notes": "The management UI gives admins visibility into how abilities are performing. Analytics are derived from sequence_jobs table (already tracks all executions). System abilities show a 'System' badge and cannot be deleted. Custom abilities show 'Custom' badge and can be edited/deleted. The execution history is a filtered view of sequence_jobs for the specific event_type."
+    }
+  ],
+
+  "phases": {
+    "A": {
+      "name": "Foundation — Data-Driven Sequences",
+      "stories": ["ABIL-001", "ABIL-002", "ABIL-003"],
+      "estimatedMinutes": 80,
+      "status": "pending",
+      "description": "Move sequence definitions from hardcoded TypeScript to database. Seed 9 system sequences as platform_skills. Create step type resolver framework. Make getSequenceForEvent() query DB first with hardcoded fallback. Zero regression — existing behavior preserved."
+    },
+    "B": {
+      "name": "Custom Step Types",
+      "stories": ["ABIL-004", "ABIL-005", "ABIL-006"],
+      "estimatedMinutes": 75,
+      "status": "pending",
+      "description": "Implement generic adapters for custom step types: AI prompt (Claude/Gemini with template), webhook (HTTP call), Slack message (Block Kit with HITL), data query (parameterized read), data update (guarded write). All with ${variable} resolution from SequenceState."
+    },
+    "C": {
+      "name": "Trigger System",
+      "stories": ["ABIL-007", "ABIL-008", "ABIL-009", "ABIL-010"],
+      "estimatedMinutes": 95,
+      "status": "pending",
+      "description": "Four trigger types: custom cron scheduler (org_cron_schedules + cron edge function), webhook endpoint (per-org API key), data change triggers (pg_notify + condition evaluation), and manual trigger from UI with entity selection."
+    },
+    "D": {
+      "name": "Builder UI",
+      "stories": ["ABIL-011", "ABIL-012"],
+      "estimatedMinutes": 55,
+      "status": "pending",
+      "description": "Admin-facing sequence builder with multi-step wizard: name/describe → add/configure steps → configure triggers → review/save. Plus test/preview mode with dry_run execution and visual Slack preview."
+    },
+    "E": {
+      "name": "Sync & Management",
+      "stories": ["ABIL-013", "ABIL-014"],
+      "estimatedMinutes": 45,
+      "status": "pending",
+      "description": "Sync system sequences to org_skills with customization preservation. Ability management UI with publish/enable toggles, execution analytics, and history."
+    }
+  },
+
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 0,
+    "estimatedTotalMinutes": 350,
+    "parallelOpportunities": [
+      { "group": ["ABIL-004", "ABIL-005", "ABIL-006"], "reason": "Independent adapter files, no overlap" },
+      { "group": ["ABIL-007", "ABIL-008", "ABIL-009", "ABIL-010"], "reason": "Independent trigger systems, different edge functions" },
+      { "group": ["ABIL-013", "ABIL-014"], "reason": "Backend sync vs frontend management, no overlap" }
+    ],
+    "sequenceReadinessAfter": {
+      "phaseA": "9 system sequences work from DB instead of hardcoded — zero regression, foundation ready",
+      "phaseB": "Orgs can define custom steps in sequences (AI prompts, webhooks, Slack messages, data operations)",
+      "phaseC": "4 trigger types available: cron, webhook, data change, manual — custom abilities can fire automatically",
+      "phaseD": "Admin UI for building and testing custom abilities without code",
+      "phaseE": "Full lifecycle: create → test → publish → monitor → iterate"
+    },
+    "customStepTypes": {
+      "ai_prompt": "Call Claude/Gemini with org-defined prompt template and output schema",
+      "webhook": "HTTP call to external service with variable-resolved URL/body",
+      "slack_message": "Send custom Block Kit message with optional HITL action buttons",
+      "data_query": "Parameterized read from whitelisted CRM tables",
+      "data_update": "Guarded write to whitelisted CRM columns with audit trail"
+    },
+    "triggerTypes": {
+      "cron": "Org-defined schedule — org_cron_schedules table + cron-scheduler edge function",
+      "webhook": "External HTTP endpoint — org-webhook-trigger with per-org API key",
+      "data_change": "DB triggers on key tables — pg_notify + condition evaluation",
+      "manual": "UI button with entity context selection"
+    },
+    "securityGuardrails": {
+      "webhooks": "Admin-approved domain allowlist, HTTPS enforced",
+      "data_access": "7 whitelisted tables, column-level restrictions, user-scoped RLS",
+      "data_updates": "Max 50 rows per step, audit trail, no sensitive column modification",
+      "ai_prompts": "Token limits, cost budgets per org, model restrictions",
+      "triggers": "Rate limiting per org per trigger type, idempotency keys"
+    }
+  }
+}

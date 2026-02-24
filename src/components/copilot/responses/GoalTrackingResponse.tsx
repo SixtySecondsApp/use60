@@ -75,11 +75,11 @@ export const GoalTrackingResponse: React.FC<GoalTrackingResponseProps> = ({ data
   return (
     <div className="space-y-6">
       {/* Overall Progress Summary */}
-      <div className="bg-gradient-to-r from-gray-900/80 to-gray-800/80 backdrop-blur-sm border border-gray-800/50 rounded-lg p-6">
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-900/80 dark:to-gray-800/80 backdrop-blur-sm border border-gray-200 dark:border-gray-800/50 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <Target className="w-6 h-6 text-blue-400" />
-            <h3 className="text-lg font-semibold text-gray-100">Goal Progress - {period.label}</h3>
+            <Target className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Goal Progress - {period.label}</h3>
           </div>
           <div className="text-right">
             <div className="text-3xl font-bold text-gray-100">{overallProgress.toFixed(0)}%</div>

@@ -13,8 +13,8 @@ export function Skeleton({ className, variant = 'shimmer' }: SkeletonProps) {
   return (
     <div
       className={cn(
-        'bg-gray-800/50 rounded',
-        variant === 'shimmer' && 'animate-shimmer bg-gradient-to-r from-gray-800/50 via-gray-700/50 to-gray-800/50 bg-[length:200%_100%]',
+        'bg-gray-200 dark:bg-gray-800/50 rounded',
+        variant === 'shimmer' && 'animate-shimmer bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 dark:from-gray-800/50 dark:via-gray-700/50 dark:to-gray-800/50 bg-[length:200%_100%]',
         variant === 'pulse' && 'animate-pulse',
         className
       )}

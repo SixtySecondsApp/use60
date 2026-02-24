@@ -60,7 +60,7 @@ export function extractBusinessDomain(email: string): string | null {
 /**
  * Calculate string similarity using Levenshtein distance
  */
-function calculateStringSimilarity(str1: string, str2: string): number {
+export function calculateStringSimilarity(str1: string, str2: string): number {
   const s1 = str1.toLowerCase()
   const s2 = str2.toLowerCase()
 
@@ -102,7 +102,7 @@ function calculateStringSimilarity(str1: string, str2: string): number {
 /**
  * Normalize company name for fuzzy matching
  */
-function normalizeCompanyName(name: string): string {
+export function normalizeCompanyName(name: string): string {
   if (!name) return ''
 
   let normalized = name.toLowerCase().trim()
@@ -226,7 +226,8 @@ export async function createCompanyFromDomain(
   supabase: SupabaseClient,
   domain: string,
   userId: string,
-  suggestedName?: string
+  suggestedName?: string,
+  source: string = 'fathom_meeting'
 ): Promise<Company | null> {
   if (!domain || !userId) {
     return null
@@ -267,7 +268,7 @@ export async function createCompanyFromDomain(
       domain: domain.toLowerCase(),
       website: `https://${domain}`,
       owner_id: userId,
-      source: 'fathom_meeting',
+      source,
       first_seen_at: new Date().toISOString(),
     })
     .select()
@@ -291,7 +292,8 @@ export async function matchOrCreateCompany(
   supabase: SupabaseClient,
   email: string,
   userId: string,
-  contactName?: string
+  contactName?: string,
+  source: string = 'fathom_meeting'
 ): Promise<{ company: Company | null; isNew: boolean }> {
   const domain = extractBusinessDomain(email)
 
@@ -330,6 +332,6 @@ export async function matchOrCreateCompany(
   }
 
   // Create new company
-  const newCompany = await createCompanyFromDomain(supabase, domain, userId, contactName)
+  const newCompany = await createCompanyFromDomain(supabase, domain, userId, contactName, source)
   return { company: newCompany, isNew: !!newCompany }
 }

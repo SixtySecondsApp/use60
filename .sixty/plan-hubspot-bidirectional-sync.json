@@ -1,0 +1,253 @@
+{
+  "project": {
+    "name": "HubSpot Bi-Directional Sync",
+    "description": "Add bi-directional sync between HubSpot lists and OpsTable: immediate write-back on cell edit, new contact auto-detection, removed contact flagging, sync-level history with revert, and subtle orange left border on HubSpot-linked columns.",
+    "createdAt": "2026-02-06T12:00:00Z",
+    "branch": "feat/hubspot-bidirectional-sync",
+    "consultedAt": "2026-02-06T12:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "hubspot-bisync",
+      "name": "HubSpot Bi-Directional Sync",
+      "status": "pending",
+      "priority": 0,
+      "description": "Bi-directional sync between HubSpot and OpsTable with immediate write-back, sync history, removed contact detection, and visual indicators."
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "BISYNC-001",
+      "feature": "hubspot-bisync",
+      "title": "Create database migration for bi-directional sync schema",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["dynamic_tables", "dynamic_table_rows", "dynamic_table_cells"] },
+      "blocks": ["BISYNC-002", "BISYNC-003", "BISYNC-005", "BISYNC-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Create hubspot_sync_history table with: id, table_id, synced_by, synced_at, new/updated/removed counts, snapshot JSONB, sync_duration_ms, error_message",
+        "Add hubspot_removed_at TIMESTAMPTZ column to dynamic_table_rows (default NULL)",
+        "Add hubspot_last_pushed_at TIMESTAMPTZ column to dynamic_table_cells (default NULL)",
+        "RLS: org members can SELECT sync history; service role has full access",
+        "Indexes on table_id + synced_at DESC and hubspot_removed_at"
+      ],
+      "files": [
+        "supabase/migrations/20260208000000_hubspot_bidirectional_sync.sql"
+      ]
+    },
+    {
+      "id": "BISYNC-002",
+      "feature": "hubspot-bisync",
+      "title": "Add orange left border styling for HubSpot-linked columns",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["BISYNC-001"], "files": ["src/components/ops/OpsTable.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["BISYNC-003"],
+      "acceptance": [
+        "Add hubspot_property_name to Column interface in OpsTable.tsx",
+        "Add hubspot_removed_at to Row interface in OpsTable.tsx",
+        "Column headers with hubspot_property_name get border-l-2 border-l-orange-500/60",
+        "Cell wrappers with hubspot_property_name get same orange left border",
+        "Removed rows (hubspot_removed_at set) show opacity-50 and line-through text"
+      ],
+      "files": [
+        "src/components/ops/OpsTable.tsx"
+      ]
+    },
+    {
+      "id": "BISYNC-003",
+      "feature": "hubspot-bisync",
+      "title": "Add sync direction setting to import wizard and table settings",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["BISYNC-001"], "files": ["src/components/ops/HubSpotImportWizard.tsx"], "schema": [] },
+      "blocks": ["BISYNC-004"],
+      "parallelWith": ["BISYNC-002"],
+      "acceptance": [
+        "Add sync direction toggle in HubSpotImportWizard Step 1 (pull_only / bidirectional)",
+        "Pass sync_direction in import request body, store in source_query JSONB",
+        "Create HubSpotSyncSettingsModal for changing direction on existing tables",
+        "Bi-directional mode shows info box explaining write-back behavior",
+        "Update import-from-hubspot edge function to accept and store sync_direction"
+      ],
+      "files": [
+        "src/components/ops/HubSpotImportWizard.tsx",
+        "src/components/ops/HubSpotSyncSettingsModal.tsx",
+        "supabase/functions/import-from-hubspot/index.ts"
+      ]
+    },
+    {
+      "id": "BISYNC-004",
+      "feature": "hubspot-bisync",
+      "title": "Create push-cell-to-hubspot edge function for immediate write-back",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["BISYNC-003"], "files": [], "schema": ["hubspot_sync_history"] },
+      "blocks": ["BISYNC-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function: push-cell-to-hubspot accepting { table_id, row_id, column_id, new_value }",
+        "Verify table sync_direction is 'bidirectional' before proceeding",
+        "Look up column.hubspot_property_name and row.source_id (HubSpot contact ID)",
+        "PATCH HubSpot API /crm/v3/objects/contacts/{source_id} with property update",
+        "Update cell.hubspot_last_pushed_at to NOW() on success",
+        "Return { success: true } or { success: false, error: '...' } — never throw"
+      ],
+      "files": [
+        "supabase/functions/push-cell-to-hubspot/index.ts"
+      ]
+    },
+    {
+      "id": "BISYNC-005",
+      "feature": "hubspot-bisync",
+      "title": "Create write-back hook and inject into cell edit flow",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["BISYNC-004", "BISYNC-001"], "files": ["src/pages/OpsDetailPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Create useHubSpotWriteBack hook wrapping supabase.functions.invoke('push-cell-to-hubspot')",
+        "On error: toast 'Failed to push to HubSpot. Your edit was saved locally.'",
+        "Fire-and-forget pattern: write-back does not block UI",
+        "Modify OpsDetailPage.handleCellEdit to trigger write-back on success when bi-directional + HubSpot column",
+        "Only trigger for columns with hubspot_property_name on bidirectional tables"
+      ],
+      "files": [
+        "src/lib/hooks/useHubSpotWriteBack.ts",
+        "src/pages/OpsDetailPage.tsx"
+      ]
+    },
+    {
+      "id": "BISYNC-006",
+      "feature": "hubspot-bisync",
+      "title": "Add removed contact detection and sync history to sync function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["BISYNC-001"], "files": ["supabase/functions/sync-hubspot-ops-table/index.ts"], "schema": ["hubspot_sync_history"] },
+      "blocks": ["BISYNC-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Accumulate all HubSpot contact IDs during list membership pagination",
+        "After sync: flag rows not in current list (SET hubspot_removed_at = NOW())",
+        "Un-flag rows that returned to the list (SET hubspot_removed_at = NULL)",
+        "Skip overwriting cells where hubspot_last_pushed_at > last_synced_at (loop prevention)",
+        "Snapshot cell values before and after sync, record in hubspot_sync_history",
+        "Return removed_rows and returned_rows counts in response"
+      ],
+      "files": [
+        "supabase/functions/sync-hubspot-ops-table/index.ts"
+      ]
+    },
+    {
+      "id": "BISYNC-007",
+      "feature": "hubspot-bisync",
+      "title": "Build sync history UI with revert functionality",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["BISYNC-006"], "files": ["src/pages/OpsDetailPage.tsx"], "schema": ["hubspot_sync_history"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Create HubSpotSyncHistory sheet component showing last 20 syncs",
+        "Each entry: timestamp, new/updated/removed counts, revert button",
+        "Create revert-hubspot-sync edge function that restores snapshot",
+        "Revert: restore old cell values, delete added rows, un-flag removed rows",
+        "Add 'Sync History' button (clock icon) next to sync button in OpsDetailPage",
+        "Update useHubSpotSync toast to show removed/returned counts"
+      ],
+      "files": [
+        "src/components/ops/HubSpotSyncHistory.tsx",
+        "supabase/functions/revert-hubspot-sync/index.ts",
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/hooks/useHubSpotSync.ts"
+      ]
+    }
+  ],
+
+  "phases": {
+    "phase1": {
+      "name": "Foundation (Schema + Visuals)",
+      "stories": ["BISYNC-001", "BISYNC-002", "BISYNC-003"],
+      "description": "Database migration, orange border styling, sync direction setting in import wizard and table settings.",
+      "status": "pending"
+    },
+    "phase2": {
+      "name": "Write-Back Core",
+      "stories": ["BISYNC-004", "BISYNC-005"],
+      "description": "Edge function for HubSpot write-back, hook integration into cell edit flow.",
+      "status": "pending"
+    },
+    "phase3": {
+      "name": "Sync Intelligence + History",
+      "stories": ["BISYNC-006", "BISYNC-007"],
+      "description": "Removed contact detection, sync history recording with snapshots, revert UI.",
+      "status": "pending"
+    }
+  },
+
+  "architectureDecisions": [
+    {
+      "decision": "Immediate write-back (fire-and-forget) on cell edit, not batched",
+      "rationale": "User requested immediate sync. Cell edit saves locally first, then async push to HubSpot. UI is never blocked. Errors show toast but don't rollback local edit."
+    },
+    {
+      "decision": "Write-back loop prevention via hubspot_last_pushed_at",
+      "rationale": "When sync pulls from HubSpot, it skips cells where hubspot_last_pushed_at > last_synced_at. This prevents a user's recent edit from being overwritten by the next pull sync."
+    },
+    {
+      "decision": "Sync-level history (not cell-level) for revert",
+      "rationale": "User chose sync-level granularity. Each sync records a snapshot of old/new values. Reverting restores the entire batch. Simpler than tracking every individual cell edit."
+    },
+    {
+      "decision": "Removed contacts flagged (not deleted) with dimmed styling",
+      "rationale": "Contacts removed from HubSpot list stay in the table with opacity-50 and line-through. Preserves enrichment data and user notes on those rows."
+    },
+    {
+      "decision": "Orange left border (border-l-2 border-l-orange-500/60) for HubSpot columns",
+      "rationale": "Follows the existing enrichment column pattern (violet background). Orange is the HubSpot brand color. Left border is subtle but visible, doesn't interfere with cell content."
+    },
+    {
+      "decision": "Sync direction stored in source_query JSONB, not a separate column",
+      "rationale": "No schema migration needed for the setting itself. source_query already stores HubSpot-specific metadata (list_id, last_synced_at). Natural fit."
+    }
+  ],
+
+  "risks": [
+    {
+      "severity": "medium",
+      "area": "api-limits",
+      "issue": "HubSpot API rate limits on write-back (every cell edit triggers a PATCH)",
+      "mitigation": "Write-back is fire-and-forget. Errors show toast. No retry — user can manually sync. HubSpot allows 100 requests/10 seconds per access token."
+    },
+    {
+      "severity": "medium",
+      "area": "data-conflict",
+      "issue": "Revert may overwrite user edits made after the sync",
+      "mitigation": "Revert confirmation dialog warns user. Only the most recent sync should typically be reverted."
+    },
+    {
+      "severity": "low",
+      "area": "performance",
+      "issue": "Sync history snapshots can be large for tables with many rows",
+      "mitigation": "Only snapshot cells that actually changed (diff, not full table). Consider 30-day retention policy later."
+    },
+    {
+      "severity": "low",
+      "area": "edge-case",
+      "issue": "List membership pagination must track ALL IDs for removed contact detection",
+      "mitigation": "Accumulate IDs in a Set during existing pagination loop. Memory overhead is minimal (just string IDs)."
+    }
+  ]
+}

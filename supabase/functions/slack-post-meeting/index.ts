@@ -3,7 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
   buildMeetingDebriefMessage,
   buildHITLApprovalMessage,
@@ -11,6 +11,7 @@ import {
   type HITLApprovalData,
 } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
+import { loadProactiveContext, type ProactiveContext } from '../_shared/proactive/orgContext.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -78,7 +79,22 @@ async function analyzeMeeting(meeting: MeetingData): Promise<{
     };
   }
 
-  const transcript = meeting.transcript || meeting.summary || 'No transcript available';
+  // If no transcript AND no summary, skip AI analysis — there's nothing to analyze.
+  if (!meeting.transcript && !meeting.summary) {
+    console.log('[slack-post-meeting] No transcript or summary available — skipping AI analysis');
+    return {
+      summary: 'No recording was captured for this meeting. Connect 60 Notetaker or Fathom to get full meeting intelligence.',
+      sentiment: 'neutral',
+      sentimentScore: 50,
+      talkTimeRep: 50,
+      talkTimeCustomer: 50,
+      actionItems: [],
+      coachingInsight: 'No transcript available — review your notes and add follow-up tasks manually.',
+      keyQuotes: [],
+    };
+  }
+
+  const transcript = meeting.transcript || meeting.summary || '';
   const attendees = meeting.attendees?.join(', ') || 'Unknown attendees';
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -156,6 +172,8 @@ Return your analysis as JSON with this exact structure:
 
 /**
  * Generate a follow-up email draft (HITL content).
+ * Uses rich proactive context (writing style, tone, org) and the 5-section
+ * methodology from the post-meeting-followup-drafter skill.
  * Fail-soft: return a deterministic draft if AI isn't configured.
  */
 async function generateFollowUpDraft(input: {
@@ -163,16 +181,111 @@ async function generateFollowUpDraft(input: {
   attendeeNameOrEmail: string;
   summary: string;
   actionItems: Array<{ task: string; dueInDays: number }>;
+  context: ProactiveContext;
+  companyName?: string;
+  dealName?: string;
+  dealStage?: string;
+  sentiment?: 'positive' | 'neutral' | 'challenging';
+  keyQuotes?: string[];
+  transcript?: string;
 }): Promise<{ subject: string; body: string }> {
-  const subject = `Following up: ${input.meetingTitle}`;
+  const { context: ctx } = input;
+  const firstName = ctx.user.firstName || 'there';
+  const lastName = ctx.user.lastName || '';
+  const signoff = ctx.writingStyle?.signoffs?.[0] || ctx.toneSettings?.emailSignOff || 'Best';
+  const fallbackSubject = `Following up: ${input.meetingTitle}`;
 
   if (!anthropicApiKey) {
     const bullets = input.actionItems.slice(0, 4).map((a) => `- ${a.task}`).join('\n');
-    const body = `Hi ${input.attendeeNameOrEmail},\n\nThanks again for your time today.\n\nQuick recap:\n${input.summary}\n\nProposed next steps:\n${bullets || '- Confirm next steps and timeline'}\n\nBest,\n`;
-    return { subject, body };
+    const body = `Hi ${input.attendeeNameOrEmail},\n\nThanks again for your time today.\n\nQuick recap:\n${input.summary}\n\nProposed next steps:\n${bullets || '- Confirm next steps and timeline'}\n\n${signoff},\n${firstName}`;
+    return { subject: fallbackSubject, body };
   }
 
   try {
+    const today = new Date();
+    const currentDateStr = today.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    // Build writing style instructions
+    const ws = ctx.writingStyle;
+    const ts = ctx.toneSettings;
+    const wordsToAvoid = ts?.wordsToAvoid?.length
+      ? ts.wordsToAvoid
+      : [];
+
+    let styleBlock = '';
+    if (ws) {
+      styleBlock = `WRITING STYLE: ${ws.toneDescription || ws.name}
+- Formality: ${ws.formality}/5, Directness: ${ws.directness}/5, Warmth: ${ws.warmth}/5
+${ws.commonPhrases.length ? `- Common phrases the user uses: ${ws.commonPhrases.join(', ')}` : ''}
+- Sign off with: "${signoff}"
+${wordsToAvoid.length ? `- NEVER use these words/phrases: ${wordsToAvoid.join(', ')}` : ''}`;
+    }
+
+    // Tone calibration based on sentiment
+    const sentiment = input.sentiment || 'neutral';
+    let toneCalibration = '';
+    if (sentiment === 'positive') {
+      toneCalibration = '- Warm, confident, forward-looking. Direct CTA.';
+    } else if (sentiment === 'challenging') {
+      toneCalibration = '- Empathetic, direct, solution-oriented. Address the top concern.';
+    } else {
+      toneCalibration = '- Professional, helpful. Value-add CTA.';
+    }
+
+    const systemPrompt = `You are writing a follow-up email AS ${firstName} ${lastName}, from their first-person perspective.
+This email will be sent from ${firstName}'s email account — write it exactly as they would type it.
+
+${styleBlock}
+
+EMAIL STRUCTURE (5 sections):
+1. Opening + Recap (2-3 sentences) — reference something specific from the meeting
+2. "What We Heard" (3-5 bullets) — mirror the recipient's own words/concerns back to them
+3. Decisions + Commitments (if any were made)
+4. Next Steps (2-3 items with owners and dates)
+5. CTA — single specific ask, NOT "let me know if you have questions"
+
+TONE CALIBRATION:
+- Meeting sentiment was ${sentiment}
+${toneCalibration}
+
+RULES:
+- Write in FIRST PERSON as ${firstName} — never say "${firstName} and I" or "our team and I"
+- Keep under 200 words
+- Use the recipient's language, not sales jargon
+- Do NOT re-pitch features. This is a recap, not a sales pitch.
+- Every next step needs an owner and a date
+
+Return ONLY valid JSON: { "subject": "...", "body": "..." }`;
+
+    // Build enriched user message
+    const keyQuotesBlock = input.keyQuotes?.length
+      ? `\nKEY QUOTES FROM RECIPIENT:\n${input.keyQuotes.map((q) => `- "${q}"`).join('\n')}`
+      : '';
+
+    const transcriptBlock = input.transcript
+      ? `\nTRANSCRIPT EXCERPT:\n${input.transcript.substring(0, 3000)}`
+      : '';
+
+    const userMessage = `Draft a follow-up email.
+
+TODAY'S DATE: ${currentDateStr}
+SENDER: ${firstName} ${lastName} (${ctx.org.name})
+MEETING: ${input.meetingTitle}
+RECIPIENT: ${input.attendeeNameOrEmail}
+${input.companyName ? `COMPANY: ${input.companyName}` : ''}
+${input.dealName ? `DEAL: ${input.dealName}${input.dealStage ? ` (${input.dealStage})` : ''}` : ''}
+MEETING SENTIMENT: ${sentiment}
+SUMMARY: ${input.summary}${keyQuotesBlock}
+NEXT STEPS:
+${input.actionItems.slice(0, 6).map((a) => `- ${a.task}`).join('\n') || '- Confirm next steps'}${transcriptBlock}
+
+Return JSON: { "subject": "...", "body": "..." }`;
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -182,24 +295,10 @@ async function generateFollowUpDraft(input: {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 800,
+        max_tokens: 1200,
         temperature: 0.5,
-        system:
-          'You write concise, friendly follow-up emails for sales calls. Return ONLY valid JSON with { "subject": "...", "body": "..." }',
-        messages: [
-          {
-            role: 'user',
-            content: `Draft a follow-up email.
-
-MEETING: ${input.meetingTitle}
-RECIPIENT: ${input.attendeeNameOrEmail}
-SUMMARY: ${input.summary}
-NEXT STEPS:
-${input.actionItems.slice(0, 6).map((a) => `- ${a.task}`).join('\n') || '- Confirm next steps'}
-
-Return JSON: { "subject": "...", "body": "..." }`,
-          },
-        ],
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
       }),
     });
 
@@ -214,13 +313,14 @@ Return JSON: { "subject": "...", "body": "..." }`,
     const parsed = JSON.parse(candidate);
 
     return {
-      subject: String(parsed.subject || subject).slice(0, 200),
+      subject: String(parsed.subject || fallbackSubject).slice(0, 200),
       body: String(parsed.body || '').slice(0, 5000),
     };
   } catch (e) {
+    console.warn('[slack-post-meeting] generateFollowUpDraft AI failed, using fallback:', (e as any)?.message);
     const bullets = input.actionItems.slice(0, 4).map((a) => `- ${a.task}`).join('\n');
-    const body = `Hi ${input.attendeeNameOrEmail},\n\nThanks again for your time today.\n\nQuick recap:\n${input.summary}\n\nProposed next steps:\n${bullets || '- Confirm next steps and timeline'}\n\nBest,\n`;
-    return { subject, body };
+    const body = `Hi ${input.attendeeNameOrEmail},\n\nThanks again for your time today.\n\nQuick recap:\n${input.summary}\n\nProposed next steps:\n${bullets || '- Confirm next steps and timeline'}\n\n${signoff},\n${firstName}`;
+    return { subject: fallbackSubject, body };
   }
 }
 
@@ -437,9 +537,9 @@ async function recordNotification(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const body = await req.json().catch(() => ({} as any));
@@ -935,11 +1035,34 @@ serve(async (req) => {
           : null;
 
         if (ownerSlackId && externalAttendee?.email) {
+          // Load user writing style and org context for personalized email
+          const proactiveContext = await loadProactiveContext(supabase, effectiveOrgId, meeting.owner_user_id);
+
+          // Resolve company name from the company_id lookup done earlier
+          let companyName: string | undefined;
+          try {
+            if (meeting.company_id) {
+              const { data: co } = await supabase
+                .from('companies')
+                .select('name')
+                .eq('id', meeting.company_id)
+                .maybeSingle();
+              companyName = (co as any)?.name || undefined;
+            }
+          } catch { /* non-fatal */ }
+
           const draft = await generateFollowUpDraft({
             meetingTitle: meeting.title || 'Meeting',
             attendeeNameOrEmail: externalAttendee?.name || externalAttendee?.email,
             summary: analysis.summary,
             actionItems: (analysis.actionItems || []).map((a) => ({ task: a.task, dueInDays: a.dueInDays })),
+            context: proactiveContext,
+            companyName,
+            dealName: (deal as any)?.name,
+            dealStage: (deal as any)?.stage_id,
+            sentiment: analysis.sentiment,
+            keyQuotes: analysis.keyQuotes,
+            transcript: meeting.transcript_text?.substring(0, 3000),
           });
 
           const approvalId = crypto.randomUUID();

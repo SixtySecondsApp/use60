@@ -12,7 +12,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.8'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import {
   refreshTokens,
   exchangeAccessTokenForRestToken,
@@ -26,9 +26,9 @@ const BULLHORN_CLIENT_SECRET = Deno.env.get('BULLHORN_CLIENT_SECRET') || ''
 
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders })
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     // This can be called by cron or by admin

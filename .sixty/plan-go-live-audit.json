@@ -1,0 +1,462 @@
+{
+  "feature": "go-live-audit",
+  "name": "Go-Live Audit Fixes",
+  "description": "Security blockers, copilot UX gaps, CRM stubs, and technical debt identified in the pre-launch audit. Auth and dev-hub tickets excluded per user decision.",
+  "createdAt": "2026-02-18T00:00:00Z",
+  "status": "complete",
+  "completedAt": "2026-02-18T22:30:00Z",
+
+  "phases": {
+    "week1": {
+      "name": "Security & CRM Blockers",
+      "goal": "Zero exploitable attack surface before any user touches production",
+      "stories": ["GLIVE-001", "GLIVE-002", "GLIVE-003", "GLIVE-004", "GLIVE-005", "GLIVE-006"]
+    },
+    "week2": {
+      "name": "Copilot UX & Skill Quality",
+      "goal": "Default copilot mode shows rich response cards; all skills load correctly",
+      "stories": ["GLIVE-007", "GLIVE-008", "GLIVE-009", "GLIVE-010", "GLIVE-011"]
+    },
+    "week3": {
+      "name": "Technical Debt",
+      "goal": "Type safety restored; queries guarded; CORS hardened",
+      "stories": ["GLIVE-012", "GLIVE-013", "GLIVE-014"]
+    }
+  },
+
+  "parallelGroups": [
+    {
+      "group": ["GLIVE-001", "GLIVE-002", "GLIVE-003"],
+      "reason": "Webhook & config fixes — different files, no overlap",
+      "week": 1
+    },
+    {
+      "group": ["GLIVE-004", "GLIVE-005", "GLIVE-006"],
+      "reason": "Fathom OAuth refactor — can run parallel to webhook fixes above",
+      "week": 1,
+      "note": "GLIVE-005 depends on GLIVE-004"
+    },
+    {
+      "group": ["GLIVE-008", "GLIVE-009", "GLIVE-010", "GLIVE-011"],
+      "reason": "All touch different files, can run in parallel after GLIVE-007 is complete",
+      "week": 2
+    },
+    {
+      "group": ["GLIVE-012", "GLIVE-013", "GLIVE-014"],
+      "reason": "Completely independent tech debt — different files",
+      "week": 3
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "GLIVE-001",
+      "feature": "go-live-audit",
+      "phase": "week1",
+      "title": "Re-enable MeetingBaaS webhook signature verification",
+      "type": "security",
+      "status": "complete",
+      "completedAt": "2026-02-18T21:00:00Z",
+      "priority": 1,
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/meetingbaas-webhook/index.ts"
+      ],
+      "context": "Lines 264-267 contain a TODO comment that deliberately bypasses signature verification 'for debugging'. Any party can POST fake webhook events to this endpoint and trigger recording completions, transcript generation, and data writes.",
+      "acceptance": [
+        "Signature verification re-enabled and not bypassable via any flag or env var",
+        "MeetingBaaS webhook secret configured in environment variables (staging + prod)",
+        "Invalid signature returns 401 — no data is processed",
+        "Existing valid webhook calls from MeetingBaaS still succeed"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-002", "GLIVE-003", "GLIVE-004"]
+    },
+    {
+      "id": "GLIVE-002",
+      "feature": "go-live-audit",
+      "phase": "week1",
+      "title": "Remove hardcoded staging UUIDs from MeetingBaaS webhook",
+      "type": "security",
+      "status": "complete",
+      "completedAt": "2026-02-18T21:00:00Z",
+      "priority": 2,
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/meetingbaas-webhook/index.ts"
+      ],
+      "context": "Lines 1813 and 1835 have specific org UUID and user UUID hardcoded as staging fallbacks. If isStaging detection fails in production, recordings are written to the wrong org.",
+      "acceptance": [
+        "All hardcoded staging UUIDs removed",
+        "If org cannot be identified from webhook payload, return 400 with clear error",
+        "No auto-record-creation fallback in production path",
+        "Staging environment detection uses SUPABASE_URL env var, not hardcoded IDs"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-001", "GLIVE-003", "GLIVE-004"]
+    },
+    {
+      "id": "GLIVE-003",
+      "feature": "go-live-audit",
+      "phase": "week1",
+      "title": "Add X-Goog-Channel-Token validation to Google Calendar webhook",
+      "type": "security",
+      "status": "complete",
+      "completedAt": "2026-02-18T21:00:00Z",
+      "priority": 3,
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/google-calendar-webhook/index.ts"
+      ],
+      "context": "The Google Calendar webhook handler has no authentication at all. Anyone can POST to this endpoint to trigger a calendar sync. This is an open DOS vector and can cause uncontrolled syncs.",
+      "acceptance": [
+        "Validate X-Goog-Channel-Token header matches the token stored when channel was registered",
+        "Validate X-Goog-Resource-State header is a known value (sync, exists, not_exists)",
+        "Requests missing or with invalid token return 401",
+        "Rate limit enforced per user/org (max 10 syncs/min)",
+        "Token storage location documented (which DB table/column)"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-001", "GLIVE-002", "GLIVE-004"]
+    },
+    {
+      "id": "GLIVE-004",
+      "feature": "go-live-audit",
+      "phase": "week1",
+      "title": "Create fathom-oauth-token edge function for server-side token exchange",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-18T21:00:00Z",
+      "priority": 4,
+      "estimatedMinutes": 60,
+      "files": [
+        "supabase/functions/fathom-oauth-token/index.ts",
+        "supabase/functions/_shared/corsHelper.ts"
+      ],
+      "context": "Fathom OAuth client_id and client_secret are currently passed via VITE_ prefixed env vars (fathomApiService.ts:199-200), exposing them in the browser bundle. The OAuth token exchange and all token refreshes must move server-side.",
+      "acceptance": [
+        "New edge function `fathom-oauth-token` accepts { code, grant_type } and returns { access_token, refresh_token }",
+        "Function uses FATHOM_CLIENT_SECRET server env var (not VITE_)",
+        "Function uses getCorsHeaders(req) from corsHelper.ts",
+        "Function is JWT-protected — only authenticated users can exchange tokens",
+        "Handles both `authorization_code` and `refresh_token` grant types"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["GLIVE-005"],
+      "parallelWith": ["GLIVE-001", "GLIVE-002", "GLIVE-003"]
+    },
+    {
+      "id": "GLIVE-005",
+      "feature": "go-live-audit",
+      "phase": "week1",
+      "title": "Remove VITE_FATHOM_CLIENT_SECRET and update fathomApiService to call edge function",
+      "type": "security",
+      "status": "complete",
+      "completedAt": "2026-02-18T21:00:00Z",
+      "priority": 5,
+      "estimatedMinutes": 45,
+      "files": [
+        "src/lib/services/fathomApiService.ts",
+        ".env.development",
+        ".env.staging",
+        ".env.production"
+      ],
+      "context": "After GLIVE-004 creates the backend token exchange function, update the frontend service to call the edge function instead of handling OAuth directly. Remove all VITE_FATHOM_CLIENT_SECRET references.",
+      "acceptance": [
+        "VITE_FATHOM_CLIENT_SECRET removed from all .env files and fathomApiService.ts",
+        "fathomApiService.ts calls /functions/v1/fathom-oauth-token for token exchange",
+        "fathomApiService.ts calls /functions/v1/fathom-oauth-token for token refresh",
+        "client_secret is never present in any browser-side code or network request",
+        "Fathom OAuth flow still works end-to-end after refactor"
+      ],
+      "dependencies": { "stories": ["GLIVE-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": []
+    },
+    {
+      "id": "GLIVE-006",
+      "feature": "go-live-audit",
+      "phase": "week1",
+      "title": "Fix webhook renewal migration — initialize app.settings config",
+      "type": "schema",
+      "status": "complete",
+      "completedAt": "2026-02-18T21:00:00Z",
+      "priority": 6,
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/20260221000000_schedule_webhook_renewal.sql"
+      ],
+      "context": "renew_expiring_calendar_webhooks() reads app.settings.supabase_url and app.settings.service_role_key via current_setting() but nothing in the codebase initializes these settings. The function silently fails every day.",
+      "acceptance": [
+        "Migration updated to set app.settings.supabase_url and app.settings.service_role_key via ALTER DATABASE or a separate settings migration",
+        "OR function refactored to read from Deno.env (via a companion edge function) instead of current_setting()",
+        "Google Calendar webhook renewal job runs successfully in staging",
+        "Failure of individual renewals logged to a table (not silent)"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-001", "GLIVE-002", "GLIVE-003", "GLIVE-004"]
+    },
+
+    {
+      "id": "GLIVE-007",
+      "feature": "go-live-audit",
+      "phase": "week2",
+      "title": "Implement detectAndStructureResponse in copilot-autonomous edge function",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-18T00:00:00Z",
+      "completedBy": "opus",
+      "notes": "Infrastructure was already in place. Fixed array aliasing bug and routing priority. 109/109 tests pass.",
+      "priority": 7,
+      "estimatedMinutes": 120,
+      "note": "Largest story in plan — deliberately over 30min due to complexity. May be split during execution if needed.",
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts",
+        "supabase/functions/api-copilot/index.ts"
+      ],
+      "context": "copilot-autonomous is the default mode but only emits plain text. api-copilot has a detectAndStructureResponse() function that maps tool execution metadata to one of 48 structured response types. This mapping logic needs to be ported to copilot-autonomous so it emits structured_response SSE events that the frontend can render as rich cards.",
+      "acceptance": [
+        "Audit api-copilot/index.ts detectAndStructureResponse() and extract the tool-name → response-type mapping table",
+        "Port the mapping logic into copilot-autonomous/index.ts (or a shared _shared/structuredResponse.ts helper)",
+        "After each tool execution, emit a `structured_response` SSE event with { type, data } payload",
+        "At minimum, the top 10 most-used response types are mapped correctly",
+        "Existing plain-text fallback remains for unrecognized tool types"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": []
+    },
+    {
+      "id": "GLIVE-008",
+      "feature": "go-live-audit",
+      "phase": "week2",
+      "title": "Fix 10 skill validation errors in SKILL.md files",
+      "type": "content",
+      "status": "complete",
+      "completedAt": "2026-02-18T21:00:00Z",
+      "priority": 8,
+      "estimatedMinutes": 30,
+      "files": [
+        ".claude/skills/objection-to-playbook/SKILL.md",
+        ".claude/skills/ops-enrichment-manager/SKILL.md",
+        ".claude/skills/proposal/SKILL.md",
+        ".claude/skills/proposal-generator/SKILL.md",
+        ".claude/skills/qbr-scheduler/SKILL.md",
+        ".claude/skills/slack-block-kit/SKILL.md",
+        ".claude/skills/trial-conversion-drafter/SKILL.md",
+        ".claude/skills/warm-intro-drafter/SKILL.md"
+      ],
+      "context": "npm run validate-skills reports 10 errors: invalid agent_affinity values (customer-success, operations, sales, proposals, integrations, notifications, trial-conversion, relationships) and invalid category values (relationship-ai etc). Skills with errors don't compile into organization_skills and aren't available to the copilot.",
+      "acceptance": [
+        "npm run validate-skills passes with 0 errors",
+        "All agent_affinity values are from the valid set: pipeline, outreach, research, crm_ops, meetings, prospecting",
+        "All category values are from the valid set in the skill frontmatter spec",
+        "npm run sync-skills completes and all 8 affected skills appear in organization_skills table"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-009", "GLIVE-010", "GLIVE-011"]
+    },
+    {
+      "id": "GLIVE-009",
+      "feature": "go-live-audit",
+      "phase": "week2",
+      "title": "Fix copilot routing — move standard table intent check below sequence matching",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-18T00:00:00Z",
+      "completedBy": "opus",
+      "notes": "Fixed as part of GLIVE-007. detectStandardTableIntent() now runs after sequences and skills. Also fixed array aliasing bug in applyProviderPreference().",
+      "priority": 9,
+      "estimatedMinutes": 45,
+      "files": [
+        "src/lib/services/copilotRoutingService.ts",
+        "tests/unit/copilot/copilot-autonomous-e2e.test.ts",
+        "tests/unit/services/copilotRoutingService.test.ts"
+      ],
+      "context": "detectStandardTableIntent() runs before sequence matching in routeToSkill(). This causes 'show me my pipeline' to route to query-standard-table instead of seq-pipeline-focus-tasks. The fix is to move the standard table check to run only AFTER sequence and skill matching have failed.",
+      "acceptance": [
+        "routeToSkill('show me my pipeline') returns seq-pipeline-focus-tasks",
+        "detectStandardTableIntent() is called only when step 1 (sequences) and step 2 (skills) both return no match",
+        "Previously passing routing tests still pass",
+        "The 5 E2E test failures in copilot-autonomous-e2e.test.ts are reduced (pipeline routing failure fixed)"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-008", "GLIVE-010", "GLIVE-011"]
+    },
+    {
+      "id": "GLIVE-010",
+      "feature": "go-live-audit",
+      "phase": "week2",
+      "title": "Apply rate limiting middleware to copilot-autonomous handler",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-18T22:00:00Z",
+      "priority": 10,
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts",
+        "supabase/functions/_shared/rateLimiter.ts"
+      ],
+      "context": "rateLimitMiddleware is imported at the top of copilot-autonomous/index.ts and RATE_LIMIT_CONFIGS is also imported, but neither is applied to the request handler. The function has no DOS protection.",
+      "acceptance": [
+        "rateLimitMiddleware applied to the main handler using an appropriate RATE_LIMIT_CONFIGS preset",
+        "Requests exceeding the limit receive a 429 response with a Retry-After header",
+        "Rate limiting is per-user (keyed on JWT sub), not per-IP",
+        "Limit set to a reasonable value (e.g. 20 req/min per user)"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-008", "GLIVE-009", "GLIVE-011"]
+    },
+    {
+      "id": "GLIVE-011",
+      "feature": "go-live-audit",
+      "phase": "week2",
+      "title": "Add try/catch around tool execution loop in copilot-autonomous",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-18T00:00:00Z",
+      "completedBy": "opus",
+      "notes": "Try/catch was already in place at lines 2082-2148 of copilot-autonomous/index.ts. Story verified complete.",
+      "priority": 11,
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "context": "The agentic tool execution loop calls executeToolCall() without a try/catch. A single tool failure crashes the entire iteration and returns an error to the user. The fix is to wrap each call, return a structured error result to Claude, and allow the loop to continue or gracefully degrade.",
+      "acceptance": [
+        "executeToolCall() is wrapped in try/catch",
+        "On failure, a structured error result is returned to Claude (e.g. { error: 'Tool X failed: <message>' })",
+        "The agentic loop continues after a tool failure — Claude can retry or respond with partial results",
+        "Error is logged with tool name, input, and error message for observability",
+        "User receives a meaningful partial response rather than a 500 error"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-008", "GLIVE-009", "GLIVE-010"]
+    },
+
+    {
+      "id": "GLIVE-012",
+      "feature": "go-live-audit",
+      "phase": "week1",
+      "title": "Implement actual contact deletion in ContactsTable",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-18T22:30:00Z",
+      "priority": 12,
+      "estimatedMinutes": 45,
+      "files": [
+        "src/pages/contacts/ContactsTable.tsx",
+        "src/lib/services/contactService.ts"
+      ],
+      "context": "confirmDeleteContact() at line 511-516 shows a success toast but does not delete the contact. The actual delete call and the refreshContacts() call are commented out. This is a fake operation that appears to work to the user but does nothing.",
+      "acceptance": [
+        "confirmDeleteContact() calls contactService.deleteContact(contactId)",
+        "On success: toast.success shown, contact removed from local state, list refreshes",
+        "On failure: toast.error shown with meaningful message, no state mutation",
+        "Soft delete or hard delete matches the existing pattern in contactService (check which is used elsewhere)",
+        "RLS policy permits the deletion (contact must be owned by the user's org)"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-001", "GLIVE-002", "GLIVE-003", "GLIVE-006"]
+    },
+    {
+      "id": "GLIVE-013",
+      "feature": "go-live-audit",
+      "phase": "week3",
+      "title": "Remove @ts-nocheck from useActivities, useOriginalActivities, and useTasks",
+      "type": "refactor",
+      "status": "complete",
+      "completedAt": "2026-02-18T22:30:00Z",
+      "priority": 13,
+      "estimatedMinutes": 90,
+      "note": "Allow over 30min — requires careful type restoration in 3 files",
+      "files": [
+        "src/lib/hooks/useActivities.ts",
+        "src/lib/hooks/useOriginalActivities.ts",
+        "src/lib/hooks/useTasks.ts"
+      ],
+      "context": "All three hooks have @ts-nocheck at module level, disabling all TypeScript checks. These power the deal, task, and activity feeds. Type mismatches won't be caught until runtime.",
+      "acceptance": [
+        "@ts-nocheck removed from all three files",
+        "All type errors resolved (use existing type definitions from src/lib/types/)",
+        "npm run build passes with no new TypeScript errors",
+        "Existing behaviour unchanged — no runtime regressions"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-014", "GLIVE-015"]
+    },
+    {
+      "id": "GLIVE-014",
+      "feature": "go-live-audit",
+      "phase": "week3",
+      "title": "Add limit() and cursor pagination to deals query",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-18T22:00:00Z",
+      "priority": 14,
+      "estimatedMinutes": 30,
+      "files": [
+        "src/lib/hooks/deals/usePipelineData.ts"
+      ],
+      "context": "The fallback deals query has no limit() clause. On a large dataset this could return 10,000+ rows and crash the browser. Add limit(1000) as an immediate fix and optionally implement cursor pagination for the paginated table view.",
+      "acceptance": [
+        "All deals queries have an explicit limit() — minimum limit(1000) as a safety cap",
+        "If paginated table view exists, implement cursor-based pagination (not offset)",
+        "Loading states are handled correctly when paginating",
+        "No visual regression in the Pipeline board or Deals table"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-013", "GLIVE-015"]
+    },
+    {
+      "id": "GLIVE-015",
+      "feature": "go-live-audit",
+      "phase": "week3",
+      "title": "Migrate remaining legacy corsHeaders to getCorsHeaders(req) in edge functions",
+      "type": "security",
+      "status": "complete",
+      "completedAt": "2026-02-18T22:00:00Z",
+      "priority": 15,
+      "estimatedMinutes": 90,
+      "note": "90+ functions affected — use grep to find all usages, migrate in batches",
+      "files": [
+        "supabase/functions/**/*.ts"
+      ],
+      "context": "65+ newer functions already use getCorsHeaders(req) from _shared/corsHelper.ts for origin-validated CORS. 90+ legacy functions still use the old static corsHeaders with wildcard '*' origin. While RLS enforces data access, the wildcard CORS reduces defense-in-depth.",
+      "acceptance": [
+        "Grep for 'from.*cors.ts' and 'corsHeaders' returns zero results (or only in corsHelper.ts itself)",
+        "All functions use getCorsHeaders(req) and return dynamic CORS headers based on allowed origin list",
+        "No CORS regressions — the app still works from localhost:5175 and app.use60.com",
+        "Legacy cors.ts file removed or deprecated with a comment"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GLIVE-013", "GLIVE-014"]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 15,
+    "completedStories": 15,
+    "currentPhase": "complete",
+    "lastUpdated": "2026-02-18T22:30:00Z"
+  },
+
+  "riskNotes": [
+    "GLIVE-007 (structured_response) is the highest-risk story — estimate is 2h but could expand. Run first in week 2 with dedicated focus.",
+    "GLIVE-005 is blocked by GLIVE-004 — do not start until edge function is deployed and tested.",
+    "GLIVE-001 requires the MeetingBaaS webhook secret to be available. Confirm secret with MeetingBaaS before starting.",
+    "GLIVE-015 touches 90+ files — use a script to find all usages and do a systematic find-and-replace to avoid missing any."
+  ]
+}

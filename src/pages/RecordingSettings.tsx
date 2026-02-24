@@ -68,7 +68,10 @@ import {
   ExternalLink,
   Loader2,
   Link2,
-  Unlink
+  Unlink,
+  Pencil,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react'
 import type { RecordingSettings as RecordingSettingsType, RecordingRule, DomainMode, RecordingRuleInsert } from '@/lib/types/meetingBaaS'
 
@@ -103,13 +106,40 @@ const RuleCard: React.FC<{
   rule: RecordingRule
   onDelete: (id: string) => void
   onToggle: (id: string, isActive: boolean) => void
-}> = ({ rule, onDelete, onToggle }) => (
+  onEdit: (rule: RecordingRule) => void
+  onMoveUp?: () => void
+  onMoveDown?: () => void
+  isFirst?: boolean
+  isLast?: boolean
+}> = ({ rule, onDelete, onToggle, onEdit, onMoveUp, onMoveDown, isFirst, isLast }) => (
   <motion.div
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
+    layout
     className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30"
   >
     <div className="flex items-start justify-between">
+      {/* Priority reorder buttons */}
+      <div className="flex flex-col mr-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onMoveUp}
+          disabled={isFirst}
+          className="h-6 w-6 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+        >
+          <ChevronUp className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onMoveDown}
+          disabled={isLast}
+          className="h-6 w-6 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </Button>
+      </div>
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-2">
           <h4 className="font-medium text-gray-900 dark:text-gray-100">
@@ -149,6 +179,14 @@ const RuleCard: React.FC<{
           checked={rule.is_active}
           onCheckedChange={(checked) => onToggle(rule.id, checked)}
         />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onEdit(rule)}
+          className="text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
         <Button
           variant="ghost"
           size="icon"
@@ -209,16 +247,27 @@ export const RecordingSettings: React.FC = () => {
   const [selectedCalendarId, setSelectedCalendarId] = useState('primary')
   const [saving, setSaving] = useState(false)
 
-  // Add Rule Modal state
-  const [showAddRuleModal, setShowAddRuleModal] = useState(false)
-  const [newRuleName, setNewRuleName] = useState('')
-  const [newRuleDomainMode, setNewRuleDomainMode] = useState<DomainMode>('external_only')
-  const [newRuleSpecificDomains, setNewRuleSpecificDomains] = useState('')
-  const [newRuleMinAttendees, setNewRuleMinAttendees] = useState('1')
-  const [newRuleMaxAttendees, setNewRuleMaxAttendees] = useState('')
-  const [newRuleTitleKeywords, setNewRuleTitleKeywords] = useState('')
-  const [newRuleExcludeKeywords, setNewRuleExcludeKeywords] = useState('')
+  // Rule Modal state (shared between add and edit)
+  const [showRuleModal, setShowRuleModal] = useState(false)
+  const [editingRule, setEditingRule] = useState<RecordingRule | null>(null)
+  const [ruleName, setRuleName] = useState('')
+  const [ruleDomainMode, setRuleDomainMode] = useState<DomainMode>('external_only')
+  const [ruleSpecificDomains, setRuleSpecificDomains] = useState('')
+  const [ruleMinAttendees, setRuleMinAttendees] = useState('1')
+  const [ruleMaxAttendees, setRuleMaxAttendees] = useState('')
+  const [ruleTitleKeywords, setRuleTitleKeywords] = useState('')
+  const [ruleExcludeKeywords, setRuleExcludeKeywords] = useState('')
   const [savingRule, setSavingRule] = useState(false)
+
+  // Legacy alias for backward compatibility
+  const showAddRuleModal = showRuleModal && !editingRule
+  const setShowAddRuleModal = (open: boolean) => {
+    if (open) {
+      setEditingRule(null)
+      resetRuleForm()
+    }
+    setShowRuleModal(open)
+  }
 
   // Enable Auto-Recording Prompt state
   const [showAutoRecordPrompt, setShowAutoRecordPrompt] = useState(false)
@@ -336,15 +385,29 @@ export const RecordingSettings: React.FC = () => {
     }
   }
 
-  // Reset new rule form
+  // Reset rule form
   const resetRuleForm = () => {
-    setNewRuleName('')
-    setNewRuleDomainMode('external_only')
-    setNewRuleSpecificDomains('')
-    setNewRuleMinAttendees('1')
-    setNewRuleMaxAttendees('')
-    setNewRuleTitleKeywords('')
-    setNewRuleExcludeKeywords('')
+    setRuleName('')
+    setRuleDomainMode('external_only')
+    setRuleSpecificDomains('')
+    setRuleMinAttendees('1')
+    setRuleMaxAttendees('')
+    setRuleTitleKeywords('')
+    setRuleExcludeKeywords('')
+    setEditingRule(null)
+  }
+
+  // Open edit modal with rule data
+  const handleEditRule = (rule: RecordingRule) => {
+    setEditingRule(rule)
+    setRuleName(rule.name)
+    setRuleDomainMode(rule.domain_mode)
+    setRuleSpecificDomains(rule.specific_domains?.join(', ') || '')
+    setRuleMinAttendees(rule.min_attendee_count?.toString() || '1')
+    setRuleMaxAttendees(rule.max_attendee_count?.toString() || '')
+    setRuleTitleKeywords(rule.title_keywords?.join(', ') || '')
+    setRuleExcludeKeywords(rule.title_keywords_exclude?.join(', ') || '')
+    setShowRuleModal(true)
   }
 
   // Handle enabling auto-recording from prompt
@@ -365,7 +428,7 @@ export const RecordingSettings: React.FC = () => {
       toast.error('No organization selected')
       return
     }
-    if (!newRuleName.trim()) {
+    if (!ruleName.trim()) {
       toast.error('Please enter a rule name')
       return
     }
@@ -374,33 +437,121 @@ export const RecordingSettings: React.FC = () => {
     try {
       const rule: RecordingRuleInsert = {
         org_id: activeOrgId,
-        name: newRuleName.trim(),
+        name: ruleName.trim(),
         is_active: true,
         priority: (rules?.length || 0) + 1,
-        domain_mode: newRuleDomainMode,
-        specific_domains: newRuleDomainMode === 'specific_domains' && newRuleSpecificDomains
-          ? newRuleSpecificDomains.split(',').map(d => d.trim()).filter(Boolean)
+        domain_mode: ruleDomainMode,
+        specific_domains: ruleDomainMode === 'specific_domains' && ruleSpecificDomains
+          ? ruleSpecificDomains.split(',').map(d => d.trim()).filter(Boolean)
           : null,
-        min_attendee_count: parseInt(newRuleMinAttendees) || 1,
-        max_attendee_count: newRuleMaxAttendees ? parseInt(newRuleMaxAttendees) : null,
-        title_keywords: newRuleTitleKeywords
-          ? newRuleTitleKeywords.split(',').map(k => k.trim()).filter(Boolean)
+        min_attendee_count: parseInt(ruleMinAttendees) || 1,
+        max_attendee_count: ruleMaxAttendees ? parseInt(ruleMaxAttendees) : null,
+        title_keywords: ruleTitleKeywords
+          ? ruleTitleKeywords.split(',').map(k => k.trim()).filter(Boolean)
           : null,
-        title_keywords_exclude: newRuleExcludeKeywords
-          ? newRuleExcludeKeywords.split(',').map(k => k.trim()).filter(Boolean)
+        title_keywords_exclude: ruleExcludeKeywords
+          ? ruleExcludeKeywords.split(',').map(k => k.trim()).filter(Boolean)
           : null,
       }
 
       await recordingService.createRecordingRule(rule)
       toast.success('Recording rule created')
       resetRuleForm()
-      setShowAddRuleModal(false)
+      setShowRuleModal(false)
       refetchRules()
     } catch (error) {
       console.error('Failed to create rule:', error)
       toast.error('Failed to create rule')
     } finally {
       setSavingRule(false)
+    }
+  }
+
+  // Update existing rule
+  const handleUpdateRule = async () => {
+    if (!editingRule) return
+    if (!ruleName.trim()) {
+      toast.error('Please enter a rule name')
+      return
+    }
+
+    setSavingRule(true)
+    try {
+      const updates: Partial<RecordingRule> = {
+        name: ruleName.trim(),
+        domain_mode: ruleDomainMode,
+        specific_domains: ruleDomainMode === 'specific_domains' && ruleSpecificDomains
+          ? ruleSpecificDomains.split(',').map(d => d.trim()).filter(Boolean)
+          : null,
+        min_attendee_count: parseInt(ruleMinAttendees) || 1,
+        max_attendee_count: ruleMaxAttendees ? parseInt(ruleMaxAttendees) : null,
+        title_keywords: ruleTitleKeywords
+          ? ruleTitleKeywords.split(',').map(k => k.trim()).filter(Boolean)
+          : null,
+        title_keywords_exclude: ruleExcludeKeywords
+          ? ruleExcludeKeywords.split(',').map(k => k.trim()).filter(Boolean)
+          : null,
+      }
+
+      await recordingService.updateRecordingRule(editingRule.id, updates)
+      toast.success('Recording rule updated')
+      resetRuleForm()
+      setShowRuleModal(false)
+      refetchRules()
+    } catch (error) {
+      console.error('Failed to update rule:', error)
+      toast.error('Failed to update rule')
+    } finally {
+      setSavingRule(false)
+    }
+  }
+
+  // Save rule (create or update)
+  const handleSaveRule = async () => {
+    if (editingRule) {
+      await handleUpdateRule()
+    } else {
+      await handleCreateRule()
+    }
+  }
+
+  // Move rule up in priority (swap with rule above)
+  const handleMoveRuleUp = async (index: number) => {
+    if (!rules || index <= 0) return
+
+    const currentRule = rules[index]
+    const aboveRule = rules[index - 1]
+
+    try {
+      // Swap priorities
+      await Promise.all([
+        recordingService.updateRecordingRule(currentRule.id, { priority: aboveRule.priority }),
+        recordingService.updateRecordingRule(aboveRule.id, { priority: currentRule.priority }),
+      ])
+      refetchRules()
+    } catch (error) {
+      console.error('Failed to reorder rules:', error)
+      toast.error('Failed to reorder rules')
+    }
+  }
+
+  // Move rule down in priority (swap with rule below)
+  const handleMoveRuleDown = async (index: number) => {
+    if (!rules || index >= rules.length - 1) return
+
+    const currentRule = rules[index]
+    const belowRule = rules[index + 1]
+
+    try {
+      // Swap priorities
+      await Promise.all([
+        recordingService.updateRecordingRule(currentRule.id, { priority: belowRule.priority }),
+        recordingService.updateRecordingRule(belowRule.id, { priority: currentRule.priority }),
+      ])
+      refetchRules()
+    } catch (error) {
+      console.error('Failed to reorder rules:', error)
+      toast.error('Failed to reorder rules')
     }
   }
 
@@ -448,7 +599,7 @@ export const RecordingSettings: React.FC = () => {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => navigate('/meetings/recordings')}
+          onClick={() => navigate('/meetings')}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -743,12 +894,17 @@ export const RecordingSettings: React.FC = () => {
 
                 {rules && rules.length > 0 ? (
                   <div className="space-y-3">
-                    {rules.map((rule) => (
+                    {rules.map((rule, index) => (
                       <RuleCard
                         key={rule.id}
                         rule={rule}
                         onDelete={handleDeleteRule}
                         onToggle={handleToggleRule}
+                        onEdit={handleEditRule}
+                        onMoveUp={() => handleMoveRuleUp(index)}
+                        onMoveDown={() => handleMoveRuleDown(index)}
+                        isFirst={index === 0}
+                        isLast={index === rules.length - 1}
                       />
                     ))}
                   </div>
@@ -1077,16 +1233,21 @@ export const RecordingSettings: React.FC = () => {
         selectedCalendarName={calendarsData?.calendars?.find((c: { id: string }) => c.id === selectedCalendarId)?.summary}
       />
 
-      {/* Add Rule Modal */}
-      <Dialog open={showAddRuleModal} onOpenChange={setShowAddRuleModal}>
+      {/* Rule Modal (Create/Edit) */}
+      <Dialog open={showRuleModal} onOpenChange={(open) => {
+        if (!open) resetRuleForm()
+        setShowRuleModal(open)
+      }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-emerald-600" />
-              Create Recording Rule
+              {editingRule ? 'Edit Recording Rule' : 'Create Recording Rule'}
             </DialogTitle>
             <DialogDescription>
-              Define which meetings the 60 Notetaker should automatically record
+              {editingRule
+                ? 'Update the criteria for when the 60 Notetaker should record meetings'
+                : 'Define which meetings the 60 Notetaker should automatically record'}
             </DialogDescription>
           </DialogHeader>
 
@@ -1097,8 +1258,8 @@ export const RecordingSettings: React.FC = () => {
               <Input
                 id="ruleName"
                 placeholder="e.g., External Sales Calls"
-                value={newRuleName}
-                onChange={(e) => setNewRuleName(e.target.value)}
+                value={ruleName}
+                onChange={(e) => setRuleName(e.target.value)}
               />
             </div>
 
@@ -1106,8 +1267,8 @@ export const RecordingSettings: React.FC = () => {
             <div className="space-y-2">
               <Label htmlFor="domainMode">Who to Record</Label>
               <Select
-                value={newRuleDomainMode}
-                onValueChange={(value) => setNewRuleDomainMode(value as DomainMode)}
+                value={ruleDomainMode}
+                onValueChange={(value) => setRuleDomainMode(value as DomainMode)}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -1120,22 +1281,22 @@ export const RecordingSettings: React.FC = () => {
                 </SelectContent>
               </Select>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {newRuleDomainMode === 'external_only' && 'Only record when attendees are from outside your company'}
-                {newRuleDomainMode === 'internal_only' && 'Only record internal team meetings'}
-                {newRuleDomainMode === 'specific_domains' && 'Only record meetings with specific email domains'}
-                {newRuleDomainMode === 'all' && 'Record all meetings matching other criteria'}
+                {ruleDomainMode === 'external_only' && 'Only record when attendees are from outside your company'}
+                {ruleDomainMode === 'internal_only' && 'Only record internal team meetings'}
+                {ruleDomainMode === 'specific_domains' && 'Only record meetings with specific email domains'}
+                {ruleDomainMode === 'all' && 'Record all meetings matching other criteria'}
               </p>
             </div>
 
             {/* Specific Domains (conditional) */}
-            {newRuleDomainMode === 'specific_domains' && (
+            {ruleDomainMode === 'specific_domains' && (
               <div className="space-y-2">
                 <Label htmlFor="specificDomains">Domains (comma-separated)</Label>
                 <Input
                   id="specificDomains"
                   placeholder="e.g., acme.com, bigco.com"
-                  value={newRuleSpecificDomains}
-                  onChange={(e) => setNewRuleSpecificDomains(e.target.value)}
+                  value={ruleSpecificDomains}
+                  onChange={(e) => setRuleSpecificDomains(e.target.value)}
                 />
               </div>
             )}
@@ -1149,8 +1310,8 @@ export const RecordingSettings: React.FC = () => {
                   type="number"
                   min="1"
                   placeholder="1"
-                  value={newRuleMinAttendees}
-                  onChange={(e) => setNewRuleMinAttendees(e.target.value)}
+                  value={ruleMinAttendees}
+                  onChange={(e) => setRuleMinAttendees(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -1160,8 +1321,8 @@ export const RecordingSettings: React.FC = () => {
                   type="number"
                   min="1"
                   placeholder="No limit"
-                  value={newRuleMaxAttendees}
-                  onChange={(e) => setNewRuleMaxAttendees(e.target.value)}
+                  value={ruleMaxAttendees}
+                  onChange={(e) => setRuleMaxAttendees(e.target.value)}
                 />
               </div>
             </div>
@@ -1172,8 +1333,8 @@ export const RecordingSettings: React.FC = () => {
               <Input
                 id="titleKeywords"
                 placeholder="e.g., demo, discovery, sales"
-                value={newRuleTitleKeywords}
-                onChange={(e) => setNewRuleTitleKeywords(e.target.value)}
+                value={ruleTitleKeywords}
+                onChange={(e) => setRuleTitleKeywords(e.target.value)}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Only record if meeting title contains these keywords (comma-separated)
@@ -1186,8 +1347,8 @@ export const RecordingSettings: React.FC = () => {
               <Input
                 id="excludeKeywords"
                 placeholder="e.g., internal, 1:1, standup"
-                value={newRuleExcludeKeywords}
-                onChange={(e) => setNewRuleExcludeKeywords(e.target.value)}
+                value={ruleExcludeKeywords}
+                onChange={(e) => setRuleExcludeKeywords(e.target.value)}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Skip recording if meeting title contains these keywords (comma-separated)
@@ -1200,22 +1361,24 @@ export const RecordingSettings: React.FC = () => {
               variant="outline"
               onClick={() => {
                 resetRuleForm()
-                setShowAddRuleModal(false)
+                setShowRuleModal(false)
               }}
             >
               Cancel
             </Button>
             <Button
-              onClick={handleCreateRule}
-              disabled={savingRule || !newRuleName.trim()}
+              onClick={handleSaveRule}
+              disabled={savingRule || !ruleName.trim()}
               className="bg-emerald-600 hover:bg-emerald-700"
             >
               {savingRule ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : editingRule ? (
+                <Save className="mr-2 h-4 w-4" />
               ) : (
                 <Plus className="mr-2 h-4 w-4" />
               )}
-              Create Rule
+              {editingRule ? 'Save Changes' : 'Create Rule'}
             </Button>
           </DialogFooter>
         </DialogContent>

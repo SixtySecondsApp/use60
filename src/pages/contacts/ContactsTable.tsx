@@ -18,6 +18,7 @@ import {
   Square,
   X
 } from 'lucide-react';
+import { HelpPanel } from '@/components/docs/HelpPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -506,12 +507,23 @@ export default function ContactsTable() {
   // Confirm delete
   const confirmDeleteContact = async () => {
     if (!deletingContact) return;
-    
-    // TODO: Implement actual delete logic
-    toast.success(`Contact "${formatName(deletingContact)}" deleted successfully`);
-    setDeletingContact(null);
-    // Refresh contacts list
-    // refreshContacts();
+
+    try {
+      const { error } = await supabase
+        .from('contacts')
+        .delete()
+        .eq('id', deletingContact.id);
+
+      if (error) throw error;
+
+      // Remove the deleted contact from local state
+      setContacts(prev => prev.filter(c => c.id !== deletingContact.id));
+      setDeletingContact(null);
+      toast.success(`Contact "${formatName(deletingContact)}" deleted`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      toast.error(`Failed to delete contact: ${message}`);
+    }
   };
 
   // Handle add new contact
@@ -549,16 +561,17 @@ export default function ContactsTable() {
   }
 
   return (
-    <div>
+    <div className="overflow-x-hidden">
       {/* CRM Navigation */}
       <CRMNavigation />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <Users className="w-8 h-8 text-green-400" />
             <h1 className="text-3xl font-bold text-[#1E293B] dark:text-white">Contacts</h1>
+            <HelpPanel docSlug="contacts-crm" tooltip="Contacts help" />
           </div>
           <p className="text-[#64748B] dark:text-gray-400">
             Manage your contact database • {filteredAndSortedContacts.length} of {contacts.length} contacts • Click any row to view details
@@ -689,8 +702,9 @@ export default function ContactsTable() {
       </AnimatePresence>
 
       {/* Table */}
-      <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-[#E2E8F0] dark:border-gray-800 overflow-hidden shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
-        <Table>
+      <div className="bg-white dark:bg-gray-900/50 rounded-xl border border-[#E2E8F0] dark:border-gray-800 overflow-x-auto scrollbar-accent shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
+        <div className="min-w-[900px]">
+          <Table>
           <TableHeader>
             <TableRow className="border-[#E2E8F0] dark:border-gray-800 hover:bg-slate-50 dark:hover:bg-gray-800/50">
               {/* Select All Checkbox - Only show when in select mode */}
@@ -889,7 +903,8 @@ export default function ContactsTable() {
             ))}
           </TableBody>
         </Table>
-        
+        </div>
+
         {filteredAndSortedContacts.length === 0 && (
           <div className="text-center py-12">
             <Users className="w-12 h-12 text-gray-600 mx-auto mb-4" />

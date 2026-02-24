@@ -11,7 +11,8 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { legacyCorsHeaders as corsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { logFlatRateCostEvent } from '../_shared/costTracking.ts';
 import {
   createMeetingBaaSClient,
   MeetingBaaSClient,
@@ -20,6 +21,7 @@ import {
   formatEntryMessage,
   checkRecordingQuota,
   getPlatformDefaultBotImage,
+  getPlatformDefaultRecordingLimit,
   DEFAULT_BOT_NAME,
   DEFAULT_BOT_IMAGE,
   DEFAULT_ENTRY_MESSAGE,
@@ -59,11 +61,13 @@ interface RecordingInsert {
   meeting_url: string;
   meeting_title: string | null;
   calendar_event_id: string | null;
+  attendees: Array<{ email: string; name?: string }> | null;
   status: string;
 }
 
 interface MeetingInsert {
   source_type: '60_notetaker';
+  provider: '60_notetaker';
   org_id: string;
   owner_user_id: string;
   title: string | null;
@@ -72,6 +76,7 @@ interface MeetingInsert {
   processing_status: string;
   recording_id?: string;
   bot_id?: string;
+  meeting_start?: string;
 }
 
 interface BotDeploymentInsert {
@@ -169,13 +174,14 @@ async function incrementUsageCount(
       })
       .eq('id', existing.id);
   } else {
-    // Create new usage record
+    // Create new usage record using platform default limit
+    const defaultLimit = await getPlatformDefaultRecordingLimit(supabase);
     await supabase.from('recording_usage').insert({
       org_id: orgId,
       period_start: periodStart.toISOString().split('T')[0],
       period_end: periodEnd.toISOString().split('T')[0],
       recordings_count: 1,
-      recordings_limit: 20, // Default limit
+      recordings_limit: defaultLimit,
       total_duration_seconds: 0,
       storage_used_bytes: 0,
     });
@@ -240,6 +246,9 @@ serve(async (req) => {
     return preflightResponse;
   }
 
+  // Build CORS headers from the actual request origin
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
@@ -278,6 +287,12 @@ serve(async (req) => {
       console.log(`[DeployBot] Service role call for user: ${userId}`);
     } else {
       // Regular user JWT call
+      const jwt = authHeader.replace('Bearer ', '');
+
+      // Log JWT info for debugging (just the header, not the full token)
+      const jwtParts = jwt.split('.');
+      console.log(`[DeployBot] JWT received - parts: ${jwtParts.length}, header length: ${jwtParts[0]?.length || 0}`);
+
       supabase = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -285,22 +300,32 @@ serve(async (req) => {
           global: {
             headers: { Authorization: authHeader },
           },
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
         }
       );
 
-      // Get user info from JWT
+      // Get user info from JWT - pass token explicitly like api-copilot does
       const {
         data: { user },
         error: userError,
-      } = await supabase.auth.getUser();
+      } = await supabase.auth.getUser(jwt);
 
       if (userError || !user) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        console.error('[DeployBot] Auth error:', userError?.message, 'code:', userError?.code, 'status:', userError?.status);
+        return new Response(JSON.stringify({
+          error: 'Unauthorized',
+          details: userError?.message,
+          code: userError?.code,
+        }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       userId = user.id;
+      console.log(`[DeployBot] User authenticated: ${userId}`);
     }
 
     // Parse request body
@@ -428,6 +453,26 @@ serve(async (req) => {
       );
     }
 
+    // Resolve attendees: from request body, or from calendar event
+    let resolvedAttendees: Array<{ email: string; name?: string }> | null = body.attendees || null;
+
+    if (!resolvedAttendees && body.calendar_event_id) {
+      try {
+        const { data: calendarEvent } = await supabase
+          .from('calendar_events')
+          .select('attendees')
+          .eq('id', body.calendar_event_id)
+          .maybeSingle();
+
+        if (calendarEvent?.attendees && Array.isArray(calendarEvent.attendees)) {
+          resolvedAttendees = calendarEvent.attendees;
+          console.log(`[DeployBot] Resolved ${resolvedAttendees.length} attendees from calendar event`);
+        }
+      } catch (e) {
+        console.warn('[DeployBot] Failed to fetch calendar event attendees:', e);
+      }
+    }
+
     // Create recording record
     const recordingData: RecordingInsert = {
       org_id: orgId,
@@ -436,6 +481,7 @@ serve(async (req) => {
       meeting_url: body.meeting_url,
       meeting_title: body.meeting_title || null,
       calendar_event_id: body.calendar_event_id || null,
+      attendees: resolvedAttendees,
       status: 'pending',
     };
 
@@ -471,6 +517,10 @@ serve(async (req) => {
       recording_mode: 'speaker_view',
       webhook_url: buildWebhookUrl(webhookToken),
       deduplication_key: recording.id,
+      // Enable MeetingBaaS transcription so we get transcript.ready webhook
+      speech_to_text: {
+        provider: 'Default',
+      },
     };
 
     // If scheduled, set reserved flag
@@ -544,6 +594,7 @@ serve(async (req) => {
     // Create unified meeting record for 60 Notetaker recordings
     const meetingData: MeetingInsert = {
       source_type: '60_notetaker',
+      provider: '60_notetaker',
       org_id: orgId,
       owner_user_id: userId,
       title: body.meeting_title || null,
@@ -552,6 +603,7 @@ serve(async (req) => {
       processing_status: 'bot_joining',
       recording_id: recording.id,
       bot_id: botResponse.id,
+      meeting_start: body.scheduled_time || new Date().toISOString(),
     };
 
     const { error: meetingError } = await supabase
@@ -588,6 +640,34 @@ serve(async (req) => {
 
     // Increment usage count
     await incrementUsageCount(supabase, orgId);
+
+    // Deduct credits for notetaker bot (non-blocking — bot deployment is not gated on credits)
+    try {
+      const serviceClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+      const { data: menuEntry } = await serviceClient
+        .from('credit_menu')
+        .select('cost_low, cost_medium, cost_high, is_active, free_with_sub')
+        .eq('action_id', 'notetaker_bot')
+        .maybeSingle();
+
+      if (menuEntry?.is_active && !menuEntry.free_with_sub) {
+        const cost = (menuEntry.cost_medium as number) ?? 2.0;
+        await logFlatRateCostEvent(
+          serviceClient,
+          userId,
+          orgId,
+          'meetingbaas',
+          'notetaker-bot-deployment',
+          cost,
+          'notetaker_bot',
+        );
+      }
+    } catch (creditErr) {
+      console.error('[DeployBot] Credit deduction failed (non-blocking):', creditErr);
+    }
 
     console.log('[DeployBot] Bot deployed successfully:', {
       recordingId: recording.id,

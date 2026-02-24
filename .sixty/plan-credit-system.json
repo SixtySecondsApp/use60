@@ -1,0 +1,637 @@
+{
+  "project": {
+    "name": "AI Credit Control System",
+    "template": "existing-codebase",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "payments": "stripe",
+      "styling": "tailwind"
+    },
+    "createdAt": "2026-02-10T12:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "credit-system",
+      "name": "AI Credit Control System",
+      "status": "pending",
+      "description": "Prepay credit system for all AI usage with Stripe top-up, org-configurable planner/driver models per feature, and rich credit widget in the top bar",
+      "consultReport": "Consulting session 2026-02-10: Token-based passthrough, all AI features metered, planner+driver model config, Stripe credit packs, hard block at zero, rich top-right widget",
+      "createdAt": "2026-02-10T12:00:00Z"
+    }
+  ],
+
+  "existingInfrastructure": {
+    "note": "DO NOT REBUILD - extend these existing systems",
+    "tables": [
+      "ai_models (provider pricing per million tokens)",
+      "ai_feature_config (features -> primary + fallback models)",
+      "org_ai_config (org-level model overrides)",
+      "ai_cost_events (per-call usage tracking with feature_key)"
+    ],
+    "functions": [
+      "_shared/costTracking.ts (logAICostEvent, checkAgentBudget, extractAnthropicUsage, extractGeminiUsage)",
+      "_shared/stripe.ts (getStripeClient, getOrCreateStripeCustomer)",
+      "create-checkout-session (subscription checkout - template for credit checkout)",
+      "stripe-webhook (webhook handler - extend for credit purchases)"
+    ],
+    "views": [
+      "ai_usage_by_feature",
+      "ai_usage_by_org",
+      "ai_usage_by_user"
+    ],
+    "rpcFunctions": [
+      "calculate_token_cost(provider, model, input_tokens, output_tokens)",
+      "get_model_for_feature(feature_key, org_id)",
+      "get_org_effective_ai_config(org_id)"
+    ],
+    "frontendServices": [
+      "src/lib/services/aiProvider.ts (resolveModelForFeature, logUsage)",
+      "src/lib/services/costAnalysisService.ts (usage aggregation)",
+      "src/lib/services/billingAnalyticsService.ts (MRR, churn)",
+      "src/lib/services/stripeSyncService.ts (Stripe product sync)",
+      "src/lib/services/subscriptionService.ts (subscription management)"
+    ]
+  },
+
+  "stories": [
+    {
+      "id": "CRED-001",
+      "feature": "credit-system",
+      "title": "Create credit balance and transaction ledger tables",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["organizations", "ai_cost_events", "auth.users"]
+      },
+      "blocks": ["CRED-003", "CRED-004", "CRED-005", "CRED-006", "CRED-008"],
+      "parallelWith": ["CRED-002"],
+      "acceptance": [
+        "org_credit_balance table with balance_credits, lifetime_purchased, lifetime_consumed, low_balance_threshold, auto_topup fields",
+        "credit_transactions ledger table with type (purchase/deduction/refund/adjustment/bonus), amount, balance_after, stripe refs, ai_cost_event ref",
+        "deduct_credits(org_id, amount, description, feature_key, cost_event_id) function that atomically deducts and records transaction",
+        "RLS: org members read balance, org admins manage settings",
+        "Indexes on org_id + created_at for transaction queries"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260210100001_credit_balance_tables.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "creditModel": "1 credit = $1 USD. Balance stored as DECIMAL(12,4). Usage deducts the estimated_cost from calculate_token_cost().",
+        "atomicDeduction": "Use a PL/pgSQL function with FOR UPDATE lock on org_credit_balance to prevent race conditions",
+        "transactionTypes": "purchase (Stripe), deduction (AI usage), refund (Stripe refund), adjustment (manual admin), bonus (promotional)"
+      }
+    },
+    {
+      "id": "CRED-002",
+      "feature": "credit-system",
+      "title": "Add planner model support to feature config tables",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["ai_feature_config", "org_ai_config", "ai_models"]
+      },
+      "blocks": ["CRED-007", "CRED-013"],
+      "parallelWith": ["CRED-001"],
+      "acceptance": [
+        "ai_feature_config gains planner_model_id (nullable FK to ai_models) - not all features need planning",
+        "org_ai_config gains planner_model_id (nullable FK to ai_models) - org-level planner override",
+        "get_org_effective_ai_config() updated to return planner_model info alongside driver model",
+        "get_model_for_feature() updated with p_role parameter ('driver' default, 'planner' for planning model)",
+        "Existing primary_model_id remains as the 'driver' model - no breaking changes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260210100002_planner_model_support.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "concept": "Each AI feature can have a planner model (reasoning/routing/tool selection) and a driver model (execution/generation). Orgs can configure both independently. More powerful planner = smarter routing but higher cost. More powerful driver = better output but higher cost.",
+        "backwardCompat": "primary_model_id stays as driver. fallback_model_id stays. planner_model_id is new and nullable. Features without planning (e.g., email categorization) leave planner NULL.",
+        "seedData": "Set planner models for copilot_chat (routing decisions), copilot_autonomous (tool selection), generate_proposal (structure planning)"
+      }
+    },
+    {
+      "id": "CRED-003",
+      "feature": "credit-system",
+      "title": "Create Stripe credit pack checkout edge function",
+      "type": "api",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["CRED-001"],
+        "files": ["supabase/functions/_shared/stripe.ts", "supabase/functions/create-checkout-session/index.ts"],
+        "schema": ["org_credit_balance"]
+      },
+      "blocks": ["CRED-005", "CRED-011"],
+      "parallelWith": ["CRED-004", "CRED-006"],
+      "acceptance": [
+        "New edge function create-credit-checkout that creates a Stripe checkout session for credit packs",
+        "Mode: payment (one-time), not subscription",
+        "Accepts org_id and credit_pack (e.g., 10, 25, 50, 100, 250) or custom_amount",
+        "Auth: requires org admin/owner role",
+        "Returns checkout URL for redirect"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/create-credit-checkout/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "stripeMode": "payment (one-time), not subscription",
+        "packs": [
+          {"credits": 10, "price_usd": 10, "label": "$10"},
+          {"credits": 25, "price_usd": 25, "label": "$25"},
+          {"credits": 50, "price_usd": 50, "label": "$50"},
+          {"credits": 100, "price_usd": 100, "label": "$100"},
+          {"credits": 250, "price_usd": 250, "label": "$250"}
+        ],
+        "pattern": "Based on existing create-checkout-session/index.ts - same auth, CORS, customer lookup pattern",
+        "metadata": "Store org_id, credit_amount, user_id in session metadata for webhook processing"
+      }
+    },
+    {
+      "id": "CRED-004",
+      "feature": "credit-system",
+      "title": "Add credit deduction and balance check to costTracking",
+      "type": "api",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["CRED-001"],
+        "files": ["supabase/functions/_shared/costTracking.ts"],
+        "schema": ["org_credit_balance", "credit_transactions"]
+      },
+      "blocks": ["CRED-007", "CRED-014"],
+      "parallelWith": ["CRED-003", "CRED-006"],
+      "acceptance": [
+        "logAICostEvent() now also calls deduct_credits RPC after logging the cost event",
+        "New checkCreditBalance(supabaseClient, orgId) function returns {allowed, balance, message}",
+        "Hard block: returns allowed=false when balance <= 0",
+        "Graceful: if credit tables don't exist yet, returns allowed=true (backward compat during rollout)",
+        "No changes to existing function signatures - credit deduction is additive"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/costTracking.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "deductionFlow": "logAICostEvent() -> calculate cost -> insert ai_cost_events -> call deduct_credits(org_id, cost, 'AI usage: {feature}', feature_key, cost_event.id)",
+        "balanceCheck": "SELECT balance_credits FROM org_credit_balance WHERE org_id = p_org_id. Return allowed=false if <= 0 or row doesn't exist (org hasn't purchased credits).",
+        "raceCondition": "deduct_credits uses FOR UPDATE row lock in DB function, so concurrent calls are serialized"
+      }
+    },
+    {
+      "id": "CRED-005",
+      "feature": "credit-system",
+      "title": "Extend stripe-webhook for credit purchase fulfillment",
+      "type": "api",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["CRED-001", "CRED-003"],
+        "files": ["supabase/functions/stripe-webhook/index.ts"],
+        "schema": ["org_credit_balance", "credit_transactions"]
+      },
+      "blocks": ["CRED-011"],
+      "parallelWith": ["CRED-007"],
+      "acceptance": [
+        "stripe-webhook handles checkout.session.completed where mode=payment and metadata contains credit_amount",
+        "On credit purchase: upserts org_credit_balance (adds credits), inserts credit_transaction with type=purchase",
+        "Idempotent: checks stripe_session_id in credit_transactions to prevent double-credit",
+        "Handles refund events: deducts credits back, inserts transaction with type=refund"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/stripe-webhook/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null
+    },
+    {
+      "id": "CRED-006",
+      "feature": "credit-system",
+      "title": "Create get-credit-balance edge function",
+      "type": "api",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["CRED-001"],
+        "files": [],
+        "schema": ["org_credit_balance", "ai_cost_events"]
+      },
+      "blocks": ["CRED-008", "CRED-010"],
+      "parallelWith": ["CRED-003", "CRED-004"],
+      "acceptance": [
+        "Edge function returns: balance, daily_burn_rate (last 7d avg), projected_days_remaining, usage_by_feature (last 30d), last_purchase_date",
+        "Auth: any org member can read balance",
+        "Response optimized for the credit widget (single call for all widget data)",
+        "Handles org with no credit balance row gracefully (returns 0 balance)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/get-credit-balance/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "burnRate": "SELECT SUM(estimated_cost) / 7 FROM ai_cost_events WHERE org_id = ? AND created_at > NOW() - INTERVAL '7 days'",
+        "projectedDays": "balance / daily_burn_rate, capped at 999",
+        "usageByFeature": "GROUP BY feature_key, SUM(estimated_cost) for last 30d, top 5 features"
+      }
+    },
+    {
+      "id": "CRED-007",
+      "feature": "credit-system",
+      "title": "Wire credit check + planner/driver model resolution to copilot edge functions",
+      "type": "api",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["CRED-002", "CRED-004"],
+        "files": [
+          "supabase/functions/copilot-autonomous/index.ts",
+          "supabase/functions/api-copilot/index.ts",
+          "supabase/functions/_shared/costTracking.ts"
+        ],
+        "schema": ["org_credit_balance"]
+      },
+      "blocks": ["CRED-014"],
+      "parallelWith": ["CRED-005"],
+      "acceptance": [
+        "copilot-autonomous checks credit balance before starting (hard block if zero)",
+        "copilot-autonomous uses planner model for initial tool selection round, driver model for execution",
+        "api-copilot checks credit balance before starting",
+        "Both return structured error response when credits exhausted",
+        "Existing checkAgentBudget still works alongside credit check"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts",
+        "supabase/functions/api-copilot/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "plannerDriverFlow": "For copilot-autonomous: 1) Check credits. 2) Call get_model_for_feature('copilot_autonomous', orgId, 'planner') for first tool_use call. 3) Call get_model_for_feature('copilot_autonomous', orgId, 'driver') for execution/response. 4) Log both costs separately.",
+        "errorResponse": "Return 402 with {error: 'insufficient_credits', message: 'Your organization has run out of AI credits. Please top up to continue.', balance: 0}"
+      }
+    },
+    {
+      "id": "CRED-008",
+      "feature": "credit-system",
+      "title": "Create creditService and useCreditBalance hook",
+      "type": "frontend-service",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["CRED-001", "CRED-006"],
+        "files": [
+          "src/lib/services/costAnalysisService.ts"
+        ],
+        "schema": []
+      },
+      "blocks": ["CRED-009", "CRED-010", "CRED-011", "CRED-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "creditService.ts with: getBalance(orgId), getTransactions(orgId, filters), purchaseCredits(orgId, pack), getUsageBreakdown(orgId, dateRange)",
+        "useCreditBalance hook with React Query (30s polling for near-realtime balance updates)",
+        "Returns typed CreditBalance interface: balance, burnRate, projectedDays, usageByFeature[], lastPurchaseDate",
+        "Hook integrated with org context (auto-uses current org)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/services/creditService.ts",
+        "src/lib/hooks/useCreditBalance.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "queryKey": "['credit-balance', orgId]",
+        "pollingInterval": "30000ms (30s) - good balance between freshness and cost",
+        "pattern": "Follow existing service patterns (see costAnalysisService.ts, subscriptionService.ts)"
+      }
+    },
+    {
+      "id": "CRED-009",
+      "feature": "credit-system",
+      "title": "Create credit gate component for hard block on zero balance",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["CRED-008"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["CRED-014"],
+      "parallelWith": ["CRED-010"],
+      "acceptance": [
+        "CreditGate component wraps AI features and blocks interaction when balance = 0",
+        "Shows inline message: 'No AI credits remaining. Top up to continue.' with Top Up button",
+        "useRequireCredits() hook returns { hasCredits, isLoading, balance, TopUpPrompt }",
+        "Non-admin users see 'Contact your admin to top up credits'",
+        "Admin users see direct 'Top Up Credits' button"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/credits/CreditGate.tsx",
+        "src/lib/hooks/useRequireCredits.ts"
+      ],
+      "designRef": null,
+      "ticketId": null
+    },
+    {
+      "id": "CRED-010",
+      "feature": "credit-system",
+      "title": "Build credit widget for top-right header bar",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["CRED-008"],
+        "files": ["src/components/AppLayout.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["CRED-009"],
+      "acceptance": [
+        "CreditWidget renders in AppLayout top bar (right side, before NotificationBell)",
+        "Shows credit balance with color coding: green (>50% of avg monthly), yellow (25-50%), red (<25%)",
+        "Click opens dropdown with: usage by feature (top 5, pie/bar), daily burn rate, projected days remaining, recent transactions (last 5), 'Top Up' CTA button, link to full Settings > Credits page",
+        "Responsive: on mobile shows just the balance number, dropdown on tap",
+        "Uses Lucide CreditCard icon (already imported)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/credits/CreditWidget.tsx",
+        "src/components/credits/CreditWidgetDropdown.tsx",
+        "src/components/AppLayout.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "colorLogic": "If projectedDays > 14 -> green. 7-14 -> yellow. <7 -> red. Zero -> pulsing red.",
+        "placement": "Between SmartSearch and NotificationBell in AppLayout top bar",
+        "dropdown": "Uses Radix DropdownMenu from @/components/ui/dropdown-menu"
+      }
+    },
+    {
+      "id": "CRED-011",
+      "feature": "credit-system",
+      "title": "Build credit purchase flow with Stripe checkout",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["CRED-005", "CRED-008"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["CRED-012", "CRED-013"],
+      "acceptance": [
+        "CreditPurchaseModal with credit pack options ($10, $25, $50, $100, $250)",
+        "Shows current balance + what new balance will be after purchase",
+        "Custom amount input for amounts outside standard packs",
+        "Clicking a pack triggers creditService.purchaseCredits() -> redirects to Stripe checkout",
+        "Success/cancel return URLs handled (success updates balance optimistically)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/credits/CreditPurchaseModal.tsx",
+        "src/pages/settings/CreditPurchaseSuccess.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "packs": "$10, $25, $50, $100, $250 — org admins only",
+        "stripeRedirect": "Opens Stripe checkout in same tab, returns to /settings/credits/success?session_id=xxx",
+        "successPage": "Shows confirmation, new balance, link back to app"
+      }
+    },
+    {
+      "id": "CRED-012",
+      "feature": "credit-system",
+      "title": "Build Settings > Credits page with usage history and purchase log",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["CRED-008"],
+        "files": [
+          "src/pages/settings/OrganizationSettingsPage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["CRED-011", "CRED-013"],
+      "acceptance": [
+        "New 'Credits' tab in organization settings",
+        "Shows: current balance (large), burn rate chart (last 30d), usage breakdown by feature (bar chart), transaction log (filterable table with type, amount, date, description)",
+        "Admins see 'Top Up Credits' button that opens CreditPurchaseModal",
+        "Links to model configuration (CRED-013) for configuring planner/driver models"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/settings/CreditsSettingsPage.tsx",
+        "src/components/credits/UsageChart.tsx",
+        "src/components/credits/TransactionLog.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "routing": "Add 'Credits & AI' tab to org settings. Route: /settings/credits",
+        "charts": "Use existing chart patterns (see BillingAnalytics.tsx for reference)",
+        "transactionTable": "Paginated, filterable by type (purchase/deduction/refund). Most recent first."
+      }
+    },
+    {
+      "id": "CRED-013",
+      "feature": "credit-system",
+      "title": "Build model configuration UI for planner/driver per feature",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["CRED-002", "CRED-008"],
+        "files": [
+          "src/pages/settings/AISettings.tsx"
+        ],
+        "schema": ["org_ai_config"]
+      },
+      "blocks": [],
+      "parallelWith": ["CRED-011", "CRED-012"],
+      "acceptance": [
+        "New 'AI Models' section within Credits settings page (or own tab)",
+        "Lists all AI features grouped by category (Copilot, Enrichment, Meetings, Content, etc.)",
+        "Each feature shows: planner model selector (if feature supports planning), driver model selector, estimated cost indicator ($/1K calls based on model pricing)",
+        "Model selectors show available models from ai_models table with pricing",
+        "Save updates org_ai_config table. Reset button reverts to platform defaults."
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/credits/ModelConfigPanel.tsx",
+        "src/components/credits/FeatureModelRow.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "dataSource": "Calls get_org_effective_ai_config(orgId) RPC to get current config. Lists ai_models for dropdown options.",
+        "costIndicator": "Show relative cost badge: 'Economy' (cheapest 25%), 'Standard' (middle), 'Power' (top 25%) based on model pricing",
+        "presets": "Quick-set presets: 'Economy' (cheapest models everywhere), 'Balanced' (mix), 'Maximum Intelligence' (most capable everywhere)"
+      }
+    },
+    {
+      "id": "CRED-014",
+      "feature": "credit-system",
+      "title": "Wire credit check to all remaining AI call sites",
+      "type": "integration",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["CRED-004", "CRED-007", "CRED-009"],
+        "files": [
+          "src/lib/services/aiProvider.ts",
+          "supabase/functions/_shared/costTracking.ts"
+        ],
+        "schema": []
+      },
+      "blocks": ["CRED-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "aiProvider.ts complete() method checks credits before making AI call (uses supabase.functions.invoke('get-credit-balance') or direct query)",
+        "All edge functions that call AI (enrichment, meeting summary, proposals, etc.) check credit balance via checkCreditBalance()",
+        "Frontend AI callers show CreditGate or toast error when credits exhausted",
+        "Workflow AI nodes check credits and fail gracefully with descriptive error"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/lib/services/aiProvider.ts",
+        "supabase/functions/process-recording/index.ts",
+        "supabase/functions/enrich-crm-record/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "frontendPattern": "In aiProvider.complete(): if (!creditBalance.allowed) throw new InsufficientCreditsError(). Callers catch and show toast.",
+        "edgeFunctionPattern": "At top of each AI edge function: const credits = await checkCreditBalance(client, orgId); if (!credits.allowed) return 402 response.",
+        "backwardCompat": "If org_credit_balance row doesn't exist, allow the call (org hasn't been migrated to credit system yet)"
+      }
+    },
+    {
+      "id": "CRED-015",
+      "feature": "credit-system",
+      "title": "Add low balance notifications and auto-topup trigger",
+      "type": "api",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["CRED-014"],
+        "files": [],
+        "schema": ["org_credit_balance"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Database trigger on org_credit_balance: when balance drops below low_balance_threshold, insert notification for org admins",
+        "If auto_topup_enabled and balance < auto_topup_threshold: create Stripe payment intent for auto_topup_amount",
+        "In-app notification banner when balance is low (yellow warning)",
+        "Email notification to org admins when balance hits zero"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260210100003_credit_notifications.sql",
+        "supabase/functions/credit-auto-topup/index.ts",
+        "src/components/credits/LowBalanceBanner.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "implementation": {
+        "trigger": "AFTER UPDATE trigger on org_credit_balance checks if NEW.balance_credits < NEW.low_balance_threshold",
+        "autoTopup": "If enabled, calls create-credit-checkout with saved payment method (requires Stripe customer has payment method on file)",
+        "notifications": "Use existing notification system (NotificationBell) for in-app. Add notification type 'credit_low_balance'."
+      }
+    }
+  ],
+
+  "execution": {
+    "totalStories": 15,
+    "completedStories": 0,
+    "currentFeature": "credit-system",
+    "estimatedTotalMinutes": 375,
+    "estimatedHours": "6-8 hours (with parallel execution)",
+    "lastUpdated": "2026-02-10T12:00:00Z",
+    "parallelGroups": [
+      {
+        "group": 1,
+        "name": "Schema Foundation",
+        "stories": ["CRED-001", "CRED-002"],
+        "description": "Both schema changes are independent - run in parallel"
+      },
+      {
+        "group": 2,
+        "name": "Backend APIs",
+        "stories": ["CRED-003", "CRED-004", "CRED-006"],
+        "description": "All depend on CRED-001 but are independent of each other. CRED-003 and CRED-006 can run in parallel. CRED-004 modifies shared costTracking.ts."
+      },
+      {
+        "group": 3,
+        "name": "Backend Integration",
+        "stories": ["CRED-005", "CRED-007"],
+        "description": "Webhook extension and copilot wiring can run in parallel"
+      },
+      {
+        "group": 4,
+        "name": "Frontend Foundation",
+        "stories": ["CRED-008"],
+        "description": "Service + hook - foundation for all UI stories"
+      },
+      {
+        "group": 5,
+        "name": "Frontend UI",
+        "stories": ["CRED-009", "CRED-010", "CRED-011", "CRED-012", "CRED-013"],
+        "description": "All UI components can largely be built in parallel after CRED-008"
+      },
+      {
+        "group": 6,
+        "name": "Final Integration",
+        "stories": ["CRED-014", "CRED-015"],
+        "description": "Wire everything together, then add notifications"
+      }
+    ]
+  },
+
+  "dependencyGraph": {
+    "CRED-001": {"depends": [], "blocks": ["CRED-003", "CRED-004", "CRED-005", "CRED-006", "CRED-008"]},
+    "CRED-002": {"depends": [], "blocks": ["CRED-007", "CRED-013"]},
+    "CRED-003": {"depends": ["CRED-001"], "blocks": ["CRED-005", "CRED-011"]},
+    "CRED-004": {"depends": ["CRED-001"], "blocks": ["CRED-007", "CRED-014"]},
+    "CRED-005": {"depends": ["CRED-001", "CRED-003"], "blocks": ["CRED-011"]},
+    "CRED-006": {"depends": ["CRED-001"], "blocks": ["CRED-008", "CRED-010"]},
+    "CRED-007": {"depends": ["CRED-002", "CRED-004"], "blocks": ["CRED-014"]},
+    "CRED-008": {"depends": ["CRED-001", "CRED-006"], "blocks": ["CRED-009", "CRED-010", "CRED-011", "CRED-012", "CRED-013"]},
+    "CRED-009": {"depends": ["CRED-008"], "blocks": ["CRED-014"]},
+    "CRED-010": {"depends": ["CRED-008"], "blocks": []},
+    "CRED-011": {"depends": ["CRED-005", "CRED-008"], "blocks": []},
+    "CRED-012": {"depends": ["CRED-008"], "blocks": []},
+    "CRED-013": {"depends": ["CRED-002", "CRED-008"], "blocks": []},
+    "CRED-014": {"depends": ["CRED-004", "CRED-007", "CRED-009"], "blocks": ["CRED-015"]},
+    "CRED-015": {"depends": ["CRED-014"], "blocks": []}
+  }
+}

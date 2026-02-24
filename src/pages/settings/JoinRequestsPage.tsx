@@ -2,37 +2,38 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Check, X, Clock, Users } from 'lucide-react';
-import { joinRequestService } from '@/lib/services/joinRequestService';
+import { getPendingJoinRequests, approveJoinRequest, rejectJoinRequest } from '@/lib/services/joinRequestService';
 import { useOrgStore } from '@/lib/stores/orgStore';
+import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
 
 export function JoinRequestsPage() {
   const { activeOrgId } = useOrgStore();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'pending' | 'all'>('pending');
 
   // Fetch join requests
-  const { data: joinRequests, isLoading } = useQuery({
+  const { data: joinRequests, isLoading, error } = useQuery({
     queryKey: ['join-requests', activeOrgId, filter],
     queryFn: () => {
-      if (!activeOrgId) return [];
-      return filter === 'pending'
-        ? joinRequestService.getPendingJoinRequests(activeOrgId)
-        : joinRequestService.getJoinRequests(activeOrgId);
+      if (!activeOrgId) throw new Error('No active organization');
+      return getPendingJoinRequests(activeOrgId);
     },
     enabled: !!activeOrgId,
+    retry: 2,
   });
 
   // Approve mutation
   const approveMutation = useMutation({
-    mutationFn: (requestId: string) => joinRequestService.approveJoinRequest(requestId),
+    mutationFn: (requestId: string) => approveJoinRequest(requestId, user?.id || ''),
     onSuccess: (result) => {
       if (result.success) {
         toast.success('Join request approved');
         queryClient.invalidateQueries({ queryKey: ['join-requests'] });
         queryClient.invalidateQueries({ queryKey: ['organization-members'] });
       } else {
-        toast.error(result.message);
+        toast.error(result.error);
       }
     },
     onError: () => {
@@ -43,13 +44,13 @@ export function JoinRequestsPage() {
   // Reject mutation
   const rejectMutation = useMutation({
     mutationFn: ({ requestId, reason }: { requestId: string; reason?: string }) =>
-      joinRequestService.rejectJoinRequest(requestId, reason),
+      rejectJoinRequest(requestId, user?.id || '', reason),
     onSuccess: (result) => {
       if (result.success) {
         toast.success('Join request rejected');
         queryClient.invalidateQueries({ queryKey: ['join-requests'] });
       } else {
-        toast.error(result.message);
+        toast.error(result.error);
       }
     },
     onError: () => {
@@ -100,8 +101,18 @@ export function JoinRequestsPage() {
         </div>
       )}
 
+      {/* Error State */}
+      {error && (
+        <div className="mb-4 bg-red-500/20 border border-red-500 rounded-lg p-4">
+          <p className="text-red-400 font-medium">Failed to load join requests</p>
+          <p className="text-red-300 text-sm mt-1">
+            {error instanceof Error ? error.message : 'Unknown error occurred'}
+          </p>
+        </div>
+      )}
+
       {/* Empty State */}
-      {!isLoading && (!joinRequests || joinRequests.length === 0) && (
+      {!isLoading && !error && (!joinRequests || joinRequests.length === 0) && (
         <div className="text-center py-12 bg-gray-900 rounded-xl border border-gray-800">
           <Users className="w-12 h-12 text-gray-600 mx-auto mb-3" />
           <p className="text-gray-400">
@@ -111,7 +122,7 @@ export function JoinRequestsPage() {
       )}
 
       {/* Join Requests List */}
-      {!isLoading && joinRequests && joinRequests.length > 0 && (
+      {!isLoading && !error && joinRequests && joinRequests.length > 0 && (
         <div className="space-y-3">
           {joinRequests.map((request) => (
             <motion.div

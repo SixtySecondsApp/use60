@@ -1,0 +1,165 @@
+================================================================================
+                EMAIL SYSTEM STANDARDIZATION - COMPLETE PLAN
+================================================================================
+
+Generated: 2025-02-03
+Status: READY TO EXECUTE
+Priority: CRITICAL (Go-live blocking)
+Estimated Time: 2.5 hours
+Branch: fix/go-live-bug-fixes
+
+================================================================================
+WHAT'S BEING FIXED
+================================================================================
+
+CRITICAL BUGS (Do First):
+1. Column name bug in waitlist-welcome-email (html_template → html_body)
+2. Missing authentication on waitlist-welcome-email (completely open)
+
+SYSTEM ISSUES:
+3. Code duplication - AWS SES signing code in 2 places
+4. Duplicate function - send-waitlist-welcome is just a wrapper
+5. Inconsistent authentication - 4 different patterns across functions
+6. Inconsistent variables - Same URL has 3 different names
+7. Incomplete logging - Only encharge-send-email logs; others don't
+
+================================================================================
+8-STORY EXECUTION PLAN
+================================================================================
+
+PHASE 1: Critical Fixes (15 min) - HIGHEST PRIORITY
+  EMAIL-001: Fix html_template → html_body column name           (5 min)
+  EMAIL-002: Add EDGE_FUNCTION_SECRET auth to waitlist-welcome   (10 min)
+
+PHASE 2: Consolidation (35 min)
+  EMAIL-003: Remove duplicate AWS SES code, use _shared/ses.ts    (20 min)
+  EMAIL-004: Delete send-waitlist-welcome wrapper function        (15 min)
+
+PHASE 3: Standardization (60 min)
+  EMAIL-005: Standardize auth pattern EDGE_FUNCTION_SECRET        (25 min)
+  EMAIL-006: Standardize template variable names                  (20 min)
+  EMAIL-007: Add logging to all email functions                   (15 min)
+
+PHASE 4: Verification (20 min)
+  EMAIL-008: Integration test all three email flows               (20 min)
+
+TOTAL: ~2.5 hours
+
+================================================================================
+KEY IMPROVEMENTS
+================================================================================
+
+Authentication:
+  BEFORE: 4 different patterns (JWT, service role, no auth, etc.)
+  AFTER: Single pattern - EDGE_FUNCTION_SECRET header everywhere
+
+Code:
+  BEFORE: AWS SES signing code duplicated in multiple places
+  AFTER: Single implementation in _shared/ses.ts, imported by all
+
+Variables:
+  BEFORE: Inconsistent names (user_name vs first_name, action_url vs 
+          invitation_link vs magic_link)
+  AFTER: Standard names everywhere (recipient_name, action_url, 
+         organization_name, etc.)
+
+Logging:
+  BEFORE: Only encharge-send-email logs to email_logs table
+  AFTER: All email sends logged consistently
+
+Result:
+  ✅ Organization invitations work reliably
+  ✅ Waitlist welcome emails work reliably
+  ✅ Early access/waitlist invite emails work reliably
+  ✅ Complete audit trail in email_logs
+  ✅ 30% less code, 0% duplication
+
+================================================================================
+FILES GENERATED
+================================================================================
+
+.sixty/
+├── plan.json                     # Execution plan with all 8 stories
+├── IMPLEMENTATION_GUIDE.md       # Step-by-step instructions (detailed)
+├── SUMMARY.md                    # Executive summary (overview)
+└── EMAIL_FIX_PLAN.txt           # This file (quick reference)
+
+View these in order:
+1. EMAIL_FIX_PLAN.txt (you are here) - Quick overview
+2. SUMMARY.md - Full context and risk assessment
+3. IMPLEMENTATION_GUIDE.md - Detailed step-by-step instructions
+4. plan.json - Structured execution plan with dependencies
+
+================================================================================
+HOW TO PROCEED
+================================================================================
+
+Option 1: Execute Stories Yourself
+  1. Read IMPLEMENTATION_GUIDE.md carefully
+  2. Follow EMAIL-001 through EMAIL-008 step-by-step
+  3. Run EMAIL-008 integration test to verify
+  4. Commit changes to fix/go-live-bug-fixes branch
+  5. Create PR and deploy
+
+Option 2: Request Implementation
+  1. Review this summary and SUMMARY.md
+  2. Ask Claude to implement all stories
+  3. Review provided code changes
+  4. Commit and deploy
+
+================================================================================
+RISK ASSESSMENT
+================================================================================
+
+Risk Level: VERY LOW
+
+Why:
+  • Email failures are non-blocking (system continues working)
+  • All changes are internal to edge functions
+  • No breaking API changes
+  • No database migrations
+  • Can test thoroughly in staging first
+
+Rollback:
+  • Just revert the commit
+  • Takes 30 seconds
+  • No side effects
+
+================================================================================
+SUCCESS CRITERIA
+================================================================================
+
+✅ All three email types work end-to-end:
+   - Organization invitations send via AWS SES
+   - Waitlist welcome emails send via AWS SES  
+   - Early access/waitlist invite emails send via AWS SES
+
+✅ All sends logged to email_logs table with:
+   - email_type, to_email, user_id, status
+   - metadata (template variables, message_id)
+   - sent_via (aws_ses)
+
+✅ All functions use consistent patterns:
+   - Authentication: EDGE_FUNCTION_SECRET header
+   - Variables: recipient_name, action_url, organization_name, etc.
+   - Logging: email_logs table schema
+   - Error handling: Graceful non-blocking failures
+
+✅ No code duplication:
+   - AWS SES code only in _shared/ses.ts
+   - All functions import it
+   - No duplicate wrapper functions
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Review SUMMARY.md (5 min read) - full context
+2. Read IMPLEMENTATION_GUIDE.md - detailed instructions  
+3. Either execute stories yourself OR ask Claude to implement
+4. Run integration test (EMAIL-008)
+5. Commit and deploy to fix/go-live-bug-fixes branch
+
+All the information you need is in the .sixty/ directory.
+
+Good luck! 🚀

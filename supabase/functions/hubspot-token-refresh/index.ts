@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -115,11 +115,12 @@ serve(async (req) => {
 
           if (isPermFailure) {
             // Mark integration as disconnected/inactive (user must reconnect)
-            await supabase
-              .from('hubspot_org_integrations')
-              .update({ is_active: false, is_connected: false, updated_at: new Date().toISOString() })
-              .eq('org_id', orgId)
-              .catch(() => {})
+            try {
+              await supabase
+                .from('hubspot_org_integrations')
+                .update({ is_active: false, is_connected: false, updated_at: new Date().toISOString() })
+                .eq('org_id', orgId)
+            } catch { /* ignore */ }
 
             results.push({ org_id: orgId, status: 'needs_reconnect', message: 'Refresh token expired/invalid; reconnect required' })
           } else {
@@ -150,11 +151,12 @@ serve(async (req) => {
         }
 
         // Ensure integration stays marked connected
-        await supabase
-          .from('hubspot_org_integrations')
-          .update({ is_connected: true, is_active: true, updated_at: new Date().toISOString() })
-          .eq('org_id', orgId)
-          .catch(() => {})
+        try {
+          await supabase
+            .from('hubspot_org_integrations')
+            .update({ is_connected: true, is_active: true, updated_at: new Date().toISOString() })
+            .eq('org_id', orgId)
+        } catch { /* ignore */ }
 
         results.push({ org_id: orgId, status: 'refreshed', message: 'Token refreshed', expires_at: tokenExpiresAt })
       } catch (e) {

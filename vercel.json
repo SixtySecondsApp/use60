@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "framework": "vite",
+  "outputDirectory": "dist",
   "headers": [
     {
       "source": "/api/(.*)",
@@ -139,6 +139,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/webhooks/:path*",
+      "destination": "https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/:path*"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
@@ -166,7 +170,7 @@
     },
     {
       "path": "/api/cron/google-token-refresh",
-      "schedule": "30 */4 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/google-context-sync",
@@ -182,7 +186,7 @@
     },
     {
       "path": "/api/cron/slack-morning-brief",
-      "schedule": "0 8 * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/slack-stale-deals",
@@ -205,12 +209,52 @@
       "schedule": "10 * * * *"
     },
     {
+      "path": "/api/cron/slack-snooze-check",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/slack-expire-actions",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/slack-deal-momentum",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/slack-deal-risk-alert",
+      "schedule": "15,45 * * * *"
+    },
+    {
+      "path": "/api/cron/slack-campaign-alerts",
+      "schedule": "20,50 * * * *"
+    },
+    {
+      "path": "/api/cron/slack-task-reminders",
+      "schedule": "30 8 * * *"
+    },
+    {
       "path": "/api/cron/hubspot-process-queue",
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/hubspot-token-refresh",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/cron/waitlist-daily-digest",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-expired-invitations",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/slack-account-monitor",
+      "schedule": "30 6 * * 1"
+    },
+    {
+      "path": "/api/cron/slack-account-digest",
+      "schedule": "0 7 * * 1"
     }
   ]
 } 

@@ -63,12 +63,41 @@ verify_jwt = false
 [functions.api-copilot]
 verify_jwt = false
 
+# Meeting Analytics (called from staging.use60.com; CORS preflight must succeed)
+[functions.meeting-analytics]
+verify_jwt = false
+
 # Gmail (called directly from browser; uses in-function auth + allowlist-based CORS)
 [functions.google-gmail]
 verify_jwt = false
 
+# Slack OAuth callback - redirect from Slack, no auth header
+[functions.slack-oauth-callback]
+verify_jwt = false
+
+# Slack event subscriptions - webhook from Slack, uses Slack signing secret
+[functions.slack-events]
+verify_jwt = false
+
+# Slack slash commands - webhook from Slack, uses Slack signing secret
+[functions.slack-slash-commands]
+verify_jwt = false
+
 # Slack interactive webhooks (buttons, modals) - uses Slack signature verification
 [functions.slack-interactive]
+verify_jwt = false
+
+# Slack channel listing & test message - handle auth internally via getAuthContext
+[functions.slack-list-channels]
+verify_jwt = false
+
+[functions.slack-test-message]
+verify_jwt = false
+
+[functions.slack-self-map]
+verify_jwt = false
+
+[functions.slack-refresh-user-channels]
 verify_jwt = false
 
 # HITL test endpoint - for testing approval flows
@@ -77,6 +106,34 @@ verify_jwt = false
 
 # Fireflies integration - we handle auth manually inside the function
 [functions.fireflies-sync]
+verify_jwt = false
+
+# Google Calendar API - called from browser to sync/manage calendar
+# Handle auth internally (CORS preflight needs to work)
+[functions.google-calendar]
+verify_jwt = false
+
+# Google test connection - verifies Google API access for various services
+[functions.google-test-connection]
+verify_jwt = false
+
+# Google Tasks API - manages user tasks
+[functions.google-tasks]
+verify_jwt = false
+
+# Google Docs API - reads/writes documents
+[functions.google-docs]
+verify_jwt = false
+
+[functions.google-docs-create]
+verify_jwt = false
+
+# Google Drive API - file management
+[functions.google-drive]
+verify_jwt = false
+
+# Google Workspace batch operations
+[functions.google-workspace-batch]
 verify_jwt = false
 
 # Google Calendar webhook - receives push notifications from Google Calendar API
@@ -94,9 +151,29 @@ verify_jwt = false
 [functions.meetingbaas-webhook]
 verify_jwt = false
 
+# Deploy recording bot - called from browser with user JWT
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.deploy-recording-bot]
+verify_jwt = false
+
+# Stop recording bot - called from browser with user JWT
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.stop-recording-bot]
+verify_jwt = false
+
+# Get recording URL - called from browser with user JWT
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.get-recording-url]
+verify_jwt = false
+
 # Process recording - called internally by meetingbaas-webhook
 # Triggered by webhook handler, so no JWT verification needed
 [functions.process-recording]
+verify_jwt = false
+
+# Poll stuck bots - fallback for missed MeetingBaaS webhooks
+# Called internally or via cron, uses service role key for auth
+[functions.poll-stuck-bots]
 verify_jwt = false
 
 # MeetingBaaS Connect Calendar - called from frontend with user JWT
@@ -125,10 +202,146 @@ verify_jwt = false
 [functions.google-oauth-initiate]
 verify_jwt = false
 
+# Google OAuth callback - public GET endpoint, Google redirects here with auth code
+# No JWT possible - this is a redirect from Google's servers
+[functions.google-oauth-callback]
+verify_jwt = false
+
+# Google OAuth callback (public variant) - handles both GET redirect and POST exchange
+[functions.google-oauth-callback-public]
+verify_jwt = false
+
+# OAuth exchange function - exchanges code for tokens
+# Called from browser with user JWT, handles auth manually (CORS preflight needs to work)
+[functions.google-oauth-exchange]
+verify_jwt = false
+
 [functions.hubspot-oauth-initiate]
 verify_jwt = false
 
-# Password reset email - called from admin panel with user JWT
+# Fathom integration - called from browser, handle auth internally
+# OAuth initiate/callback + sync/disconnect + user mapping
+[functions.fathom-oauth-initiate]
+verify_jwt = false
+
+[functions.fathom-oauth-callback]
+verify_jwt = false
+
+[functions.fathom-sync]
+verify_jwt = false
+
+[functions.fathom-disconnect]
+verify_jwt = false
+
+[functions.fathom-self-map]
+verify_jwt = false
+
+[functions.fathom-update-user-mapping]
+verify_jwt = false
+
+[functions.fetch-transcript]
+verify_jwt = false
+
+[functions.backfill-transcripts]
+verify_jwt = false
+
+# Thumbnail generation - called internally by fathom-sync and backfill-thumbnails
+[functions.generate-video-thumbnail-v2]
+verify_jwt = false
+
+[functions.backfill-thumbnails]
+verify_jwt = false
+
+# Analytics web vitals - called from browser, no auth needed for telemetry
+[functions.analytics-web-vitals]
+verify_jwt = false
+
+# Org capabilities check - called from browser with user JWT
 # We handle auth verification manually inside the function (CORS preflight needs to work)
-[functions.send-password-reset-email]
+[functions.check-org-capabilities]
+verify_jwt = false
+
+# Autonomous copilot - called from browser with user JWT
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.copilot-autonomous]
+verify_jwt = false
+
+# Validate waitlist magic token - called from browser without user JWT
+# This is a public endpoint for the signup flow, no authentication required
+# We handle validation by checking token existence and expiry in the database
+[functions.validate-waitlist-token]
+verify_jwt = false
+
+# Delete organization - called from admin panel with user JWT
+# We handle auth verification manually inside the function (admin check)
+[functions.delete-organization]
+verify_jwt = false
+
+# Cleanup incomplete onboarding - scheduled/manual cleanup of abandoned org records
+# Called by pg_cron or admin trigger with CRON_SECRET or service role key
+[functions.cleanup-incomplete-onboarding]
+verify_jwt = false
+
+# Save organization skills - called from browser during onboarding
+# Function decodes JWT manually inside the handler (CORS preflight needs to work)
+[functions.save-organization-skills]
+verify_jwt = false
+
+# Compile organization skills - called from browser during onboarding and settings
+# Uses service role key internally, handles auth manually
+[functions.compile-organization-skills]
+verify_jwt = false
+
+# Deep enrich organization - called from browser during onboarding and settings
+# Uses service role key internally, handles auth manually
+[functions.deep-enrich-organization]
+verify_jwt = false
+
+# Exa abilities demo - called directly from browser (CORS preflight must pass)
+# Auth is enforced manually inside the function via supabase.auth.getUser()
+[functions.exa-abilities-demo]
+verify_jwt = false
+
+# Meeting Analytics cron - triggered by pg_cron for scheduled reports
+[functions.meeting-analytics-cron]
+verify_jwt = false
+
+# Generate waitlist token - called from admin panel with user JWT
+# Admin auth handled manually inside the function (CORS preflight needs to work)
+[functions.generate-waitlist-token]
+verify_jwt = false
+
+# Delete user - called from admin panel with user JWT
+# Admin auth handled manually inside the function (CORS preflight needs to work)
+[functions.delete-user]
+verify_jwt = false
+
+# Send removal email - called from admin panel with user JWT or edge function secret
+# Auth handled manually inside the function (supports both JWT and edge secret)
+[functions.send-removal-email]
+verify_jwt = false
+
+# Invite user - called from browser with user JWT
+# Admin auth handled manually inside the function (CORS preflight needs to work)
+[functions.invite-user]
+verify_jwt = false
+
+# Batch signed URLs - called from browser to fetch signed S3 URLs for video thumbnails
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.get-batch-signed-urls]
+verify_jwt = false
+
+# Get invitation by token - public endpoint for invitation signup flow
+# No auth needed - validates invitation token from database
+[functions.get-invitation-by-token]
+verify_jwt = false
+
+# Send organization invitation - called from browser with user JWT
+# Handles CORS manually inside function (CORS preflight needs to work)
+[functions.send-organization-invitation]
+verify_jwt = false
+
+# Meeting structured summary - called from browser with user JWT
+# Uses service role internally; CORS handled in function
+[functions.meeting-process-structured-summary]
 verify_jwt = false

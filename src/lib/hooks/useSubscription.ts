@@ -26,6 +26,10 @@ import {
   changePlan,
   isOnFreeTier,
   getFreeTierUsageStatus,
+  getTrialProgress,
+  updateSubscription,
+  type UpdateSubscriptionRequest,
+  type TrialProgress,
 } from '../services/subscriptionService';
 import {
   getPublicPlans,
@@ -388,6 +392,22 @@ export function useStartFreeTrial() {
 }
 
 /**
+ * Update an existing subscription (upgrade/downgrade/cycle change via Stripe).
+ * Invalidates subscription cache on success.
+ */
+export function useUpdateSubscription() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: UpdateSubscriptionRequest) => updateSubscription(request),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.org(variables.org_id) });
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.summary(variables.org_id) });
+    },
+  });
+}
+
+/**
  * Change subscription plan
  */
 export function useChangePlan() {
@@ -396,13 +416,13 @@ export function useChangePlan() {
   return useMutation({
     mutationFn: ({
       orgId,
-      newPlanId,
+      newPlanSlug,
       billingCycle = 'monthly' as BillingCycle,
     }: {
       orgId: string;
-      newPlanId: string;
+      newPlanSlug: 'basic' | 'pro';
       billingCycle?: BillingCycle;
-    }) => changePlan(orgId, newPlanId, billingCycle),
+    }) => changePlan(orgId, newPlanSlug, billingCycle),
     onSuccess: (data) => {
       if (data.url) {
         window.location.href = data.url;
@@ -506,5 +526,23 @@ export function useFreeTierUsageStatus(orgId: string | undefined) {
     queryFn: () => getFreeTierUsageStatus(orgId!),
     enabled: !!orgId && !!user && !loading, // Wait for auth to complete before querying
     staleTime: 1000 * 60 * 2, // 2 minutes - usage changes more frequently
+  });
+}
+
+// Re-export TrialProgress type for consumers
+export type { TrialProgress };
+
+/**
+ * Get trial progress details for an organization
+ * Returns null if not trialing. Includes meetings and days tracking.
+ */
+export function useTrialProgress(orgId: string | undefined) {
+  const { user, loading } = useAuth();
+
+  return useQuery({
+    queryKey: [...subscriptionKeys.org(orgId || ''), 'trial-progress'],
+    queryFn: () => getTrialProgress(orgId!),
+    enabled: !!orgId && !!user && !loading,
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 }

@@ -1,7 +1,7 @@
 import { type ReactNode, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { LeadWithPrep } from '@/lib/services/leadService';
-import { ClipboardList, Globe, Mail, Timer, User, Building2, ExternalLink, Activity, Calendar, Sparkles } from 'lucide-react';
+import { ClipboardList, Globe, Mail, Timer, User, Building2, ExternalLink, Activity, Calendar, Sparkles, Briefcase, Users, Cpu, Newspaper, ArrowUpRight } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import { Button } from '@/components/ui/button';
@@ -172,6 +172,8 @@ export function LeadDetailPanel({ lead }: LeadDetailPanelProps) {
           <InfoTile icon={Mail} label="Scheduler" value={lead.scheduler_email ?? 'N/A'} />
         </section>
 
+        <CompanyIntelCard lead={lead} />
+
         {lead.prep_summary && (
           <section className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-200">
@@ -266,6 +268,139 @@ export function LeadDetailPanel({ lead }: LeadDetailPanelProps) {
         </section>
       </div>
     </div>
+  );
+}
+
+function CompanyIntelCard({ lead }: { lead: LeadWithPrep }) {
+  const company = lead.company as {
+    id: string;
+    name: string;
+    domain: string | null;
+    industry: string | null;
+    size: string | null;
+    enrichment_data: Record<string, unknown> | null;
+  } | null;
+
+  if (!company) return null;
+
+  const enrichment = company.enrichment_data || {};
+  const description = (enrichment.description as string) || (enrichment.short_description as string) || null;
+  const techStack = (enrichment.technology_names as string[]) || (enrichment.technologies as string[]) || null;
+  const recentNews = (enrichment.news as Array<{ title: string; url?: string; date?: string }>) || null;
+  const founded = enrichment.founded_year as number | null;
+  const revenue = enrichment.estimated_annual_revenue as string | null;
+  const headquarters = (enrichment.headquarters as string) || (enrichment.city && enrichment.state ? `${enrichment.city}, ${enrichment.state}` : null);
+
+  const hasEnrichment = description || techStack?.length || recentNews?.length || founded || revenue;
+
+  return (
+    <section className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-500/20 dark:bg-blue-500/5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-200">
+          <Building2 className="h-4 w-4" />
+          Company Intelligence
+        </h3>
+        <Link
+          to={`/profiles?tab=companies&search=${encodeURIComponent(company.domain || company.name)}`}
+          className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200 transition-colors"
+        >
+          View Profile
+          <ArrowUpRight className="h-3 w-3" />
+        </Link>
+      </div>
+
+      {/* Core company info row */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        <span className="inline-flex items-center gap-1 rounded-full bg-white/80 dark:bg-gray-800/50 px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 border border-gray-200/60 dark:border-gray-700/40">
+          <Building2 className="h-3 w-3 text-gray-400" />
+          {company.name}
+        </span>
+        {company.industry && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 dark:bg-indigo-500/15 px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-300">
+            <Briefcase className="h-3 w-3" />
+            {company.industry}
+          </span>
+        )}
+        {company.size && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 dark:bg-violet-500/15 px-2.5 py-1 text-xs font-medium text-violet-600 dark:text-violet-300">
+            <Users className="h-3 w-3" />
+            {company.size}
+          </span>
+        )}
+        {founded && (
+          <span className="text-xs text-gray-500 dark:text-gray-400 self-center">
+            Est. {founded}
+          </span>
+        )}
+        {revenue && (
+          <span className="text-xs text-gray-500 dark:text-gray-400 self-center">
+            {revenue}
+          </span>
+        )}
+      </div>
+
+      {description && (
+        <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-3 line-clamp-3">
+          {description}
+        </p>
+      )}
+
+      {techStack && techStack.length > 0 && (
+        <div className="mb-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Cpu className="h-3 w-3 text-gray-400" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Tech Stack</span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {techStack.slice(0, 8).map((tech) => (
+              <span
+                key={tech}
+                className="inline-flex rounded-md bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400"
+              >
+                {tech}
+              </span>
+            ))}
+            {techStack.length > 8 && (
+              <span className="text-[10px] text-gray-400 self-center">+{techStack.length - 8} more</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {recentNews && recentNews.length > 0 && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Newspaper className="h-3 w-3 text-gray-400" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Recent News</span>
+          </div>
+          <div className="space-y-1">
+            {recentNews.slice(0, 3).map((item, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <div className="w-1 h-1 rounded-full bg-blue-400 mt-1.5 flex-shrink-0" />
+                {item.url ? (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-blue-600 dark:text-blue-300 hover:underline line-clamp-1"
+                  >
+                    {item.title}
+                  </a>
+                ) : (
+                  <span className="text-xs text-gray-600 dark:text-gray-300 line-clamp-1">{item.title}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!hasEnrichment && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+          No enrichment data yet. Company research will populate on next lead prep.
+        </p>
+      )}
+    </section>
   );
 }
 

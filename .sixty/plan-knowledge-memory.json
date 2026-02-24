@@ -1,0 +1,442 @@
+{
+  "feature": {
+    "id": "knowledge-memory",
+    "name": "Phase 5: Knowledge & Memory (PRD-16, PRD-17, PRD-18)",
+    "phase": 5,
+    "status": "complete",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#Phase-5",
+    "description": "The agent gets smarter with every interaction. Relationship graph maps connections across deals, competitive intelligence accumulates from every call, and cross-deal pattern recognition surfaces insights no individual deal view would catch.",
+    "createdAt": "2026-02-22T20:00:00Z",
+    "dependencies": {
+      "completed": [
+        "PRD-01: Agent Configuration Engine",
+        "PRD-02: Fleet Orchestrator & Event Router",
+        "PRD-03: Auto CRM Update Agent",
+        "PRD-04: Deal Risk Scorer Agent",
+        "PRD-05: Re-engagement Trigger Agent",
+        "PRD-06: Enhanced Morning Briefing",
+        "PRD-07: End-of-Day Synthesis",
+        "PRD-08: Internal Meeting Prep",
+        "PRD-09: Sales Methodology Settings",
+        "PRD-10: Autonomy & Approval Policy Settings",
+        "PRD-11: CRM Field Mapping",
+        "PRD-12: Custom SOP Builder",
+        "PRD-13: Email Signal Processing",
+        "PRD-14: Contact Engagement Patterns",
+        "PRD-15: Ambient Signal Layer & Deal Temperature"
+      ],
+      "existingInfrastructure": [
+        "relationship_health_scores + relationship_health_history tables (signal weights: communication 25%, response 30%, engagement 20%, sentiment 15%, meeting 10%)",
+        "relationshipHealthService.ts — calculateRelationshipHealth(), getGhostRiskRelationships(), full RelationshipHealthScore interface with ghost detection",
+        "dealHealthService.ts — DealHealthScore with predicted_days_to_close, sentiment_trend, stage_velocity_score",
+        "contact_meeting_insights + company_meeting_insights tables (baseline contact/company analytics from meetings)",
+        "relationship_milestones table (onboarding_checkin, qbr_due, renewal_reminder, trial_ending, contract_expiring)",
+        "communication_events table (emails with AI analysis: sentiment, topics, urgency, ghost_risk, direction, response_time_hours)",
+        "contact_engagement_patterns table (avg_response_time, best_email_day/hour, response_trend — from Phase 4)",
+        "email_signal_events table (meeting_request, pricing_question, competitor_mention, forward_detected — from Phase 4)",
+        "deal_signal_temperature table (temperature 0-100, trend, top_signals — from Phase 4)",
+        "pipeline_snapshots table + pipeline math RPCs (calculate_pipeline_math, get_hot_deals)",
+        "42 orchestrator adapters in _shared/orchestrator/adapters/ (morningBriefing, eodSynthesis, preMeeting, dealRisk, etc.)",
+        "6 command centre loaders in _shared/commandCentre/loaders/ (pipeline, crm, calendar, transcript, history, email)",
+        "Fleet orchestrator with event routing + sequence chaining + fleet_event_routes table",
+        "agent_config_defaults seeded for all agent types with 3-layer config resolution",
+        "Apollo enrichment integration (job changes, funding, company data)",
+        "Post-meeting analysis pipeline (extract-action-items, meeting transcript analysis)",
+        "DealDetailsModal.tsx showing deal temperature, company info, contacts, stages"
+      ]
+    }
+  },
+
+  "stories": [
+    {
+      "id": "KNW-001",
+      "prd": "PRD-16",
+      "title": "Create contact_graph table with relationship mapping schema",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["contacts", "deals", "organizations"] },
+      "blocks": ["KNW-002", "KNW-003", "KNW-004"],
+      "parallelWith": ["KNW-005", "KNW-009"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "contact_graph table created: id, org_id, contact_id (FK contacts), linked_contact_id (FK contacts nullable), relationship_type enum (colleague, former_colleague, manager, report, partner, referral, unknown), shared_company (text), overlap_start_date/overlap_end_date (date nullable), interaction_count (int default 0), relationship_strength (0-100 numeric), last_interaction_at (timestamptz), discovery_source enum (meeting_attendees, crm_import, apollo_enrichment, email_thread, manual), metadata (jsonb default '{}'), created_at, updated_at",
+        "contact_company_history table created: id, org_id, contact_id (FK contacts), company_name (text), company_domain (text nullable), title (text nullable), started_at (date nullable), ended_at (date nullable), is_current (boolean default true), source enum (apollo, crm, meeting, manual), created_at",
+        "RLS: org-isolated SELECT/INSERT/UPDATE for authenticated users via org membership",
+        "Unique constraint on (org_id, contact_id, linked_contact_id, shared_company) to prevent duplicate edges",
+        "Indexes on (org_id, contact_id), (org_id, linked_contact_id), (org_id, relationship_strength DESC), (org_id, contact_id, relationship_type)"
+      ],
+      "files": [
+        "supabase/migrations/20260223000001_contact_graph_schema.sql"
+      ]
+    },
+    {
+      "id": "KNW-002",
+      "prd": "PRD-16",
+      "title": "Build relationship graph population edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["KNW-001"], "files": [], "schema": ["contact_graph", "contact_company_history"] },
+      "blocks": ["KNW-003", "KNW-004"],
+      "parallelWith": ["KNW-006"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent-relationship-graph edge function created",
+        "Three population modes: (1) post_meeting — extracts attendee relationships from meeting, creates edges for co-attendees with shared_company, increments interaction_count; (2) enrichment — processes Apollo enrichment data to build contact_company_history and detect former_colleague relationships; (3) batch — full org recalculation of relationship_strength scores",
+        "Relationship strength calculation: interaction_count (40%), recency — days since last interaction (30%), sentiment — avg from relationship_health_scores (20%), deal_value — total deal value involving this contact pair (10%)",
+        "Cross-deal connection detection: query contact_company_history to find contacts who shared the same company in overlapping date ranges → create former_colleague edges",
+        "Company change detection: compare current Apollo title/company vs contact_company_history.is_current — if changed, update history and emit company_change event for re-engagement",
+        "Uses getCorsHeaders(req) from _shared/corsHelper.ts, reads agent config via resolve_agent_config"
+      ],
+      "files": [
+        "supabase/functions/agent-relationship-graph/index.ts"
+      ]
+    },
+    {
+      "id": "KNW-003",
+      "prd": "PRD-16",
+      "title": "Wire relationship graph into fleet orchestrator and pre-meeting prep",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["KNW-001", "KNW-002"], "files": [], "schema": ["fleet_event_routes", "contact_graph"] },
+      "blocks": ["KNW-004", "KNW-013"],
+      "parallelWith": ["KNW-007", "KNW-010"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Fleet event route: meeting_completed → agent-relationship-graph (post_meeting mode) — builds/updates edges from attendees",
+        "Fleet event route: contact_enriched → agent-relationship-graph (enrichment mode) — processes Apollo data",
+        "Fleet event route: contact_company_changed → agent-reengagement — triggers re-engagement check",
+        "Cron: weekly batch recalculation of relationship_strength (Sunday 3am UTC)",
+        "preMeetingPrep.ts adapter enhanced: loads contact_graph edges for meeting attendees, includes 'Previously worked at X with your contact Y' context in briefing",
+        "Warm intro detection: when loading pre-meeting context for new prospects, query contact_graph for any existing connections to attendees"
+      ],
+      "files": [
+        "supabase/migrations/20260223000002_relationship_graph_fleet_routes.sql",
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ]
+    },
+    {
+      "id": "KNW-004",
+      "prd": "PRD-16",
+      "title": "Build relationship graph UI components and deal detail integration",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["KNW-001", "KNW-002", "KNW-003"], "files": [], "schema": ["contact_graph"] },
+      "blocks": ["KNW-013"],
+      "parallelWith": ["KNW-008", "KNW-011"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "ContactRelationshipCard.tsx component: shows contact's known connections as avatars with relationship type badges (colleague, former colleague, etc.), relationship strength bar, last interaction date",
+        "WarmIntroSuggestion.tsx component: card shown in prospecting context — 'You know James (former colleague at Meridian) who could introduce you to Sarah at TechFlow'",
+        "DealDetailsModal.tsx enhanced: new 'Relationships' section showing contact graph edges for deal contacts, sorted by relationship_strength DESC",
+        "Contact detail view enhanced: relationship history timeline (companies worked at, when, connections made)",
+        "Components use existing design patterns (glassmorphism cards, Lucide icons, light/dark mode)"
+      ],
+      "files": [
+        "src/components/contacts/ContactRelationshipCard.tsx",
+        "src/components/contacts/WarmIntroSuggestion.tsx",
+        "src/components/DealDetailsModal.tsx"
+      ]
+    },
+    {
+      "id": "KNW-005",
+      "prd": "PRD-17",
+      "title": "Create competitive_intelligence table and competitor tracking schema",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations", "deals", "meetings"] },
+      "blocks": ["KNW-006", "KNW-007", "KNW-008"],
+      "parallelWith": ["KNW-001", "KNW-009"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "competitive_mentions table created: id, org_id, deal_id (FK deals nullable), meeting_id (FK meetings nullable), competitor_name (text NOT NULL), mention_context (text — excerpt from transcript), sentiment enum (positive, negative, neutral), category enum (pricing, features, support, brand, integration, performance, other), strengths_mentioned (text[] default '{}'), weaknesses_mentioned (text[] default '{}'), pricing_discussed (boolean default false), pricing_detail (text nullable), deal_outcome enum (won, lost, pending, unknown) default 'unknown', detected_by enum (post_meeting_analysis, manual, email_signal) default 'post_meeting_analysis', created_at, updated_at",
+        "competitor_profiles table created: id, org_id, competitor_name (text NOT NULL), mention_count (int default 0), win_count (int default 0), loss_count (int default 0), win_rate (numeric nullable), common_strengths (jsonb default '[]' — [{strength, count}]), common_weaknesses (jsonb default '[]'), effective_counters (jsonb default '[]' — [{counter, source_deal_id, win}]), last_mentioned_at (timestamptz), battlecard_content (text nullable — admin-uploaded markdown), auto_battlecard (text nullable — AI-generated from data), created_at, updated_at",
+        "RLS: org-isolated for both tables, service_role full access",
+        "Unique constraint on competitor_profiles (org_id, competitor_name lower-cased)",
+        "Indexes on competitive_mentions (org_id, competitor_name, created_at), (org_id, deal_id), (org_id, meeting_id)"
+      ],
+      "files": [
+        "supabase/migrations/20260223000003_competitive_intelligence_schema.sql"
+      ]
+    },
+    {
+      "id": "KNW-006",
+      "prd": "PRD-17",
+      "title": "Build competitive mention extraction and profile aggregation edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["KNW-005"], "files": [], "schema": ["competitive_mentions", "competitor_profiles"] },
+      "blocks": ["KNW-007", "KNW-008"],
+      "parallelWith": ["KNW-002"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent-competitive-intel edge function created",
+        "Two modes: (1) extract — takes meeting_id, loads transcript, uses Claude Haiku to extract competitor mentions with context, sentiment, category, strengths/weaknesses; (2) aggregate — recalculates competitor_profiles from all competitive_mentions for an org",
+        "Extraction prompt: structured JSON output — competitor name, sentiment, what was said (context), category, any pricing discussed, strengths/weaknesses mentioned",
+        "Profile aggregation: counts mentions/wins/losses, calculates win_rate, ranks common strengths/weaknesses by frequency, selects most effective counter-positioning from winning deals",
+        "Auto-battlecard generation: after 5+ mentions, Claude Haiku generates battlecard from accumulated data (strengths, weaknesses, effective counters, pricing intelligence)",
+        "Deduplication: normalize competitor names (case-insensitive, trim), merge close variants via Levenshtein or exact match",
+        "Uses getCorsHeaders(req), reads agent config via resolve_agent_config"
+      ],
+      "files": [
+        "supabase/functions/agent-competitive-intel/index.ts"
+      ]
+    },
+    {
+      "id": "KNW-007",
+      "prd": "PRD-17",
+      "title": "Wire competitive intelligence into fleet orchestrator and briefings",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["KNW-005", "KNW-006"], "files": [], "schema": ["fleet_event_routes", "competitive_mentions"] },
+      "blocks": ["KNW-008", "KNW-013"],
+      "parallelWith": ["KNW-003", "KNW-010"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Fleet event route: meeting_completed → agent-competitive-intel (extract mode) — runs after post-meeting analysis",
+        "Fleet event route: email_signal.competitor_mention → agent-competitive-intel (extract mode from email context)",
+        "Fleet sequence: competitive_profile_update — triggered when mention_count crosses threshold (5, 10, 25), recalculates profile + regenerates auto-battlecard",
+        "Competitive trend Slack adapter: weekly digest of competitive mentions — 'CompetitorX appeared in 4 deals this month (up from 1 last month)'",
+        "preMeetingPrep.ts enhanced: when deal has competitor_mention in recent meetings, include battlecard in briefing",
+        "Morning briefing enhanced: competitive section — 'Competitors spotted this week' summary if any new mentions"
+      ],
+      "files": [
+        "supabase/migrations/20260223000004_competitive_intel_fleet_routes.sql",
+        "supabase/functions/_shared/orchestrator/adapters/competitiveIntelSlack.ts",
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts",
+        "supabase/functions/_shared/orchestrator/adapters/morningBriefing.ts"
+      ]
+    },
+    {
+      "id": "KNW-008",
+      "prd": "PRD-17",
+      "title": "Build competitive intelligence UI — battlecard viewer and admin upload",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["KNW-005", "KNW-006", "KNW-007"], "files": [], "schema": ["competitive_mentions", "competitor_profiles"] },
+      "blocks": ["KNW-013"],
+      "parallelWith": ["KNW-004", "KNW-011"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "CompetitorProfileCard.tsx component: shows competitor name, mention count, win rate gauge, last mentioned date, top strengths/weaknesses as tags",
+        "BattlecardViewer.tsx component: renders battlecard_content (admin) or auto_battlecard (AI-generated) as formatted markdown — sections for strengths, weaknesses, counter-positioning, pricing intel",
+        "CompetitiveIntelligencePage.tsx: new page under /intelligence/competitive — lists all tracked competitors as profile cards, click to expand battlecard, admin can upload/edit battlecard_content",
+        "Route registered in routeConfig.ts under Intelligence section (Swords icon from Lucide)",
+        "DealDetailsModal.tsx enhanced: if deal has competitive_mentions, show competitor badge with quick-view battlecard tooltip",
+        "Admin upload: textarea for manual battlecard markdown with preview pane, saves to competitor_profiles.battlecard_content"
+      ],
+      "files": [
+        "src/components/intelligence/CompetitorProfileCard.tsx",
+        "src/components/intelligence/BattlecardViewer.tsx",
+        "src/pages/CompetitiveIntelligencePage.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/components/DealDetailsModal.tsx"
+      ]
+    },
+    {
+      "id": "KNW-009",
+      "prd": "PRD-18",
+      "title": "Create pipeline_patterns table and pattern type schema",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations", "pipeline_snapshots"] },
+      "blocks": ["KNW-010", "KNW-011"],
+      "parallelWith": ["KNW-001", "KNW-005"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "pipeline_patterns table created: id, org_id, pattern_type enum (objection_cluster, stage_bottleneck, engagement_correlation, win_loss_factor, rep_behavior, velocity_anomaly), title (text — AI-generated human-readable title), description (text — actionable insight text), confidence (numeric 0-1), supporting_evidence (jsonb — {deals: [{deal_id, name, value, metric}], stats: {metric_name, value, benchmark}}), affected_deal_ids (uuid[] default '{}'), actionable_deals (jsonb default '[]' — [{deal_id, name, recommended_action}]), severity enum (info, warning, critical) default 'info', status enum (active, dismissed, resolved, expired) default 'active', dismissed_by (uuid nullable), expires_at (timestamptz — auto-set to 14 days from creation), created_at, updated_at",
+        "RLS: org-isolated SELECT for authenticated users, service_role full CRUD",
+        "Indexes on (org_id, pattern_type, status, created_at DESC), (org_id, status, severity)",
+        "Expiration: patterns auto-expire after 14 days (status → expired via cron or application check)"
+      ],
+      "files": [
+        "supabase/migrations/20260223000005_pipeline_patterns_schema.sql"
+      ]
+    },
+    {
+      "id": "KNW-010",
+      "prd": "PRD-18",
+      "title": "Build cross-deal pattern analysis edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["KNW-009"], "files": [], "schema": ["pipeline_patterns", "pipeline_snapshots", "deals", "deal_health_scores"] },
+      "blocks": ["KNW-011", "KNW-012"],
+      "parallelWith": ["KNW-003", "KNW-007"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent-pipeline-patterns edge function created",
+        "Runs in batch mode (weekly) analysing all active and recently closed deals (last 90 days) for the org",
+        "Pattern detection algorithms: (1) Stage bottleneck — deals stuck longer than 1.5x org average at any stage; (2) Win/loss correlation — compare meeting count, multi-threading, response speed, follow-up timing between won and lost deals; (3) Velocity anomaly — deals progressing 2x faster or slower than average; (4) Engagement correlation — email/meeting frequency patterns in progressing vs stalling deals; (5) Objection clustering — group similar competitive_mentions and email_signal objections by theme",
+        "AI insight generation: Claude Haiku summarises statistical patterns into 1-2 sentence actionable coaching insights (e.g. 'Deals with 3+ meetings in Discovery close at 3x the rate — 2 deals are approaching day 15 without meeting #3')",
+        "Minimum data thresholds: skip pattern types with <5 relevant deals (prevents spurious patterns)",
+        "Writes to pipeline_patterns table, marks previous active patterns of same type as expired",
+        "Returns array of detected patterns with confidence scores"
+      ],
+      "files": [
+        "supabase/functions/agent-pipeline-patterns/index.ts"
+      ]
+    },
+    {
+      "id": "KNW-011",
+      "prd": "PRD-18",
+      "title": "Wire patterns into fleet orchestrator, briefings, and Slack delivery",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["KNW-009", "KNW-010"], "files": [], "schema": ["fleet_event_routes", "pipeline_patterns"] },
+      "blocks": ["KNW-012", "KNW-013"],
+      "parallelWith": ["KNW-004", "KNW-008"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Cron schedule: weekly Monday 6am UTC — agent-pipeline-patterns batch run via fleet_event_routes",
+        "Fleet event route: pipeline_pattern.critical → pipelinePatternSlack adapter (immediate alert for critical patterns)",
+        "pipelinePatternSlack.ts adapter: Slack Block Kit message with pattern title, insight text, affected deals list, action buttons [View Deals] [Dismiss]",
+        "Morning briefing enhanced: 'Pipeline Insights' section — top 2 active patterns with actionable_deals if any match today's meetings",
+        "EOD synthesis enhanced: reference new patterns detected today",
+        "Deal risk scorer integration: active pipeline_patterns that reference a deal add context to risk assessment"
+      ],
+      "files": [
+        "supabase/migrations/20260223000006_pipeline_patterns_fleet_routes.sql",
+        "supabase/functions/_shared/orchestrator/adapters/pipelinePatternSlack.ts",
+        "supabase/functions/_shared/orchestrator/adapters/morningBriefing.ts",
+        "supabase/functions/_shared/orchestrator/adapters/eodSynthesis.ts"
+      ]
+    },
+    {
+      "id": "KNW-012",
+      "prd": "PRD-18",
+      "title": "Build pipeline patterns dashboard widget and deal detail integration",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["KNW-010", "KNW-011"], "files": [], "schema": ["pipeline_patterns"] },
+      "blocks": ["KNW-013"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "PipelineInsightsCard.tsx component: shows active patterns as cards with severity badge (info/warning/critical), title, description, affected deal count, dismiss button",
+        "PatternDetailSheet.tsx component: expanded view — full evidence (deals table with metrics), recommended actions per deal, trend chart if applicable",
+        "Pipeline page enhanced: 'Insights' section above pipeline board showing top 3 active patterns",
+        "Deal detail enhanced: if deal appears in pattern's affected_deal_ids, show insight badge with pattern title and recommended action",
+        "Components use existing design patterns (glassmorphism, Lucide icons, light/dark, !top-16 for sheets)"
+      ],
+      "files": [
+        "src/components/intelligence/PipelineInsightsCard.tsx",
+        "src/components/intelligence/PatternDetailSheet.tsx",
+        "src/components/pipeline/PipelinePage.tsx",
+        "src/components/DealDetailsModal.tsx"
+      ]
+    },
+    {
+      "id": "KNW-013",
+      "prd": "PRD-16/17/18",
+      "title": "Build Knowledge & Memory settings UI and deploy to staging",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["KNW-003", "KNW-004", "KNW-007", "KNW-008", "KNW-011", "KNW-012"], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["KNW-014"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "KnowledgeMemorySettings.tsx created in src/pages/settings/",
+        "Route /settings/knowledge-memory registered in routeConfig.ts under Agent Configuration section",
+        "Relationship Graph section: enable/disable graph population, warm intro suggestions toggle, graph data sources (meetings, Apollo, email threads — toggles)",
+        "Competitive Intelligence section: enable/disable auto-extraction, competitor names to track (admin text input), battlecard auto-generation toggle, weekly digest toggle",
+        "Pipeline Patterns section: enable/disable weekly analysis, pattern types to track (toggles per type), minimum confidence threshold slider (0.5-0.9), alert severity threshold (info/warning/critical)",
+        "All settings read/write via agent config resolution chain (defaults → org overrides)",
+        "Uses existing settings page patterns (SettingsPageWrapper, glassmorphism cards)"
+      ],
+      "files": [
+        "src/pages/settings/KnowledgeMemorySettings.tsx",
+        "src/lib/routes/routeConfig.ts"
+      ]
+    },
+    {
+      "id": "KNW-014",
+      "prd": "PRD-16/17/18",
+      "title": "Seed agent config defaults and deploy all Phase 5 to staging",
+      "type": "test",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["KNW-013"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent_config_defaults seeded for: relationship_graph, competitive_intelligence, pipeline_patterns agent types with sensible defaults",
+        "All 3 new edge functions deployed to staging with --no-verify-jwt",
+        "All 6 migrations applied to staging without errors",
+        "E2E test: insert test meeting with 3 attendees → agent-relationship-graph creates edges → contact_graph rows created",
+        "E2E test: insert test meeting transcript mentioning CompetitorX → agent-competitive-intel extracts mention → competitive_mentions row created → competitor_profiles updated",
+        "E2E test: agent-pipeline-patterns batch run on test org with 10+ deals → pipeline_patterns rows created with valid insights",
+        "Frontend: all 3 settings pages load, toggles persist, competitive intelligence page renders",
+        "Build passes: npm run build with no TypeScript errors"
+      ],
+      "files": [
+        "supabase/migrations/20260223000007_knowledge_memory_agent_config.sql"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 0,
+    "estimatedHours": "6-8 hours (with parallel execution)",
+    "parallelGroups": [
+      { "group": 1, "stories": ["KNW-001", "KNW-005", "KNW-009"], "description": "Schema: contact_graph + competitive_intelligence + pipeline_patterns tables (all 3 in parallel)" },
+      { "group": 2, "stories": ["KNW-002", "KNW-006", "KNW-010"], "description": "Core edge functions: relationship graph + competitive intel + pattern analysis (all 3 in parallel)" },
+      { "group": 3, "stories": ["KNW-003", "KNW-007", "KNW-011"], "description": "Wiring: fleet routes + briefing integration + Slack delivery (all 3 in parallel)" },
+      { "group": 4, "stories": ["KNW-004", "KNW-008", "KNW-012"], "description": "Frontend: relationship UI + competitive UI + patterns dashboard (all 3 in parallel)" },
+      { "group": 5, "stories": ["KNW-013"], "description": "Settings UI: unified Knowledge & Memory settings page" },
+      { "group": 6, "stories": ["KNW-014"], "description": "Deploy + seed config + E2E test" }
+    ]
+  },
+
+  "architectureNotes": {
+    "designDecisions": [
+      "MAXIMIZE parallelism — all 3 PRDs are independent at the schema and edge function layers. Groups 1-4 each run all 3 PRDs in parallel, merging only at group 5 (settings) and group 6 (deploy).",
+      "Build ON existing health infrastructure — relationshipHealthService already calculates relationship strength, sentiment trends, ghost detection. contact_graph ADDS the cross-deal connection layer (who knows who) rather than replacing health scoring.",
+      "Competitive intelligence accumulates passively — every meeting transcript is analysed for competitor mentions automatically via fleet orchestrator. No manual input required (though admin can upload battlecards). Auto-battlecard generation after 5+ mentions.",
+      "Pattern detection uses statistical thresholds, not ML — stage bottleneck at 1.5x average, velocity anomaly at 2x deviation, minimum 5 deals per pattern type. AI (Claude Haiku) only used for natural language insight generation, not pattern detection itself.",
+      "14-day pattern expiration — pipeline patterns auto-expire to prevent stale insights. Weekly re-analysis refreshes with current data. Dismissed patterns don't resurface.",
+      "Relationship graph is directional but stored as undirected edges — contact_id → linked_contact_id, but queries work both directions. Unique constraint prevents duplicate edges."
+    ],
+    "existingCodeToModify": [
+      "preMeeting.ts adapter — add relationship context and battlecard from contact_graph/competitive intelligence",
+      "morningBriefing.ts adapter — add Pipeline Insights section and competitive mentions summary",
+      "eodSynthesis.ts adapter — add pattern detection summary",
+      "DealDetailsModal.tsx — add relationship section, competitor badge, pattern insight badge",
+      "routeConfig.ts — add /intelligence/competitive route and /settings/knowledge-memory"
+    ],
+    "newEdgeFunctions": [
+      "agent-relationship-graph — build and maintain contact relationship graph (KNW-002)",
+      "agent-competitive-intel — extract competitor mentions and aggregate profiles (KNW-006)",
+      "agent-pipeline-patterns — weekly cross-deal pattern analysis (KNW-010)"
+    ],
+    "newTables": [
+      "contact_graph — relationship edges between contacts with strength scoring (KNW-001)",
+      "contact_company_history — job history timeline per contact for cross-company detection (KNW-001)",
+      "competitive_mentions — individual competitor mentions from meetings/emails (KNW-005)",
+      "competitor_profiles — aggregated competitor data with battlecards (KNW-005)",
+      "pipeline_patterns — detected cross-deal patterns with evidence and actionable insights (KNW-009)"
+    ],
+    "reusePatterns": [
+      "Slack delivery: reuse _shared/proactive/ delivery subsystem and Block Kit patterns from dealTemperatureSlack.ts",
+      "Fleet routing: follow exact pattern from 20260222900004 (email signal fleet routes)",
+      "Agent config: add relationship_graph, competitive_intelligence, pipeline_patterns agent types to defaults",
+      "Orchestrator adapters: follow existing adapter patterns (competitiveIntelSlack.ts, pipelinePatternSlack.ts modelled on dealTemperatureSlack.ts)",
+      "Command centre loaders: relationship/competitive data integrated via existing loader pattern",
+      "Settings pages: follow existing SettingsPageWrapper + glassmorphism card pattern from SignalIntelligenceSettings.tsx"
+    ]
+  }
+}

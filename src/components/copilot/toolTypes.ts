@@ -9,12 +9,16 @@ export type ToolType =
   | 'email_draft'
   | 'email_search'
   | 'calendar_search'
+  | 'next_meeting_prep'
+  | 'post_meeting_followup_pack'
   | 'contact_lookup'
   | 'contact_search'
   | 'deal_health'
   | 'meeting_analysis'
   | 'roadmap_create'
-  | 'sales_coach';
+  | 'sales_coach'
+  | 'entity_resolution' // Smart contact/person lookup by first name
+  | 'general_query'; // Fallback for all other queries - ensures loading animation for every message
 
 export type ToolState = 
   | 'pending'
@@ -23,7 +27,8 @@ export type ToolState =
   | 'processing'
   | 'completing'
   | 'complete'
-  | 'active';
+  | 'active'
+  | 'error';
 
 export interface ToolStep {
   id: string;
@@ -32,6 +37,8 @@ export interface ToolStep {
   state: ToolState;
   duration?: number;
   metadata?: Record<string, any>;
+  capability?: string;
+  provider?: string;
 }
 
 export interface ToolCall {
@@ -43,5 +50,9 @@ export interface ToolCall {
   steps: ToolStep[];
   result?: any;
   error?: string;
+  capability?: string;
+  provider?: string;
+  /** AI-generated contextual label based on user query */
+  customLabel?: string;
 }
 

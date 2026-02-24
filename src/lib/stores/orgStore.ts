@@ -19,6 +19,15 @@ export interface Organization {
   updated_at: string;
   is_active: boolean;
 
+  // Organization branding
+  logo_url?: string | null;
+  remove_logo?: boolean;
+
+  // Deactivation audit fields
+  deactivated_at?: string | null;
+  deactivated_by?: string | null;
+  deactivation_reason?: string | null;
+
   // Org-level preferences / enrichment (nullable in DB, optional here for backwards compatibility)
   currency_code?: string | null;
   currency_locale?: string | null;
@@ -63,6 +72,8 @@ interface OrgStore {
   getUserRole: (orgId: string) => 'owner' | 'admin' | 'member' | 'readonly' | null;
   getActiveOrgRole: () => 'owner' | 'admin' | 'member' | 'readonly' | null;
   isOrgMember: (orgId: string) => boolean;
+  subscribeToOrgChanges: (userId: string) => (() => void) | null;
+  updateOrganization: (org: Organization) => void;
   clear: () => void;
 }
 
@@ -138,14 +149,45 @@ export const useOrgStore = create<OrgStore>()(
           }
 
           // Fetch memberships with organization details
-          const { data: memberships, error: membershipsError } = await (supabase as any)
+          // Try with member_status filter first (for ORGREM-016 support)
+          let memberships: any[] = [];
+          let membershipsError: any = null;
+
+          // Try to query with member_status filter (only active memberships)
+          const { data: dataWithStatus, error: errorWithStatus } = await (supabase as any)
             .from('organization_memberships')
             .select(`
               *,
               organization:organizations(*)
             `)
             .eq('user_id', user.id)
+            .eq('member_status', 'active')
             .order('created_at', { ascending: true });
+
+          if (!errorWithStatus) {
+            // member_status column exists and query succeeded
+            memberships = dataWithStatus || [];
+          } else if (errorWithStatus?.code === '42703' || errorWithStatus?.code === '400') {
+            // Column doesn't exist (42703 = column doesn't exist, 400 = bad request)
+            // Fall back to fetching all memberships (assume all are active)
+            logger.log('[OrgStore] member_status column not available, falling back to basic query');
+            const { data: basicData, error: basicError } = await (supabase as any)
+              .from('organization_memberships')
+              .select(`
+                *,
+                organization:organizations(*)
+              `)
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: true });
+
+            if (basicError) {
+              membershipsError = basicError;
+            } else {
+              memberships = basicData || [];
+            }
+          } else {
+            membershipsError = errorWithStatus;
+          }
 
           if (membershipsError) throw membershipsError;
 
@@ -158,43 +200,59 @@ export const useOrgStore = create<OrgStore>()(
             organization: m.organization,
           }));
 
+          // Keep ALL organizations including inactive ones in the store
+          // We need inactive org data to display on the InactiveOrganizationScreen
           const orgs: Organization[] = orgMemberships
             .map((m) => m.organization)
             .filter((org): org is Organization => org !== undefined);
 
           // Choose active org (priority order):
-          // 1) persisted activeOrgId if valid
-          // 2) VITE_DEFAULT_ORG_ID if it exists in memberships
-          // 3) org with name matching "Sixty Seconds" (case-insensitive) with most meetings
-          // 4) org with most meetings (fallback)
-          // 5) first org
+          // 1) persisted activeOrgId if valid AND ACTIVE (inactive orgs should not auto-select)
+          // 2) VITE_DEFAULT_ORG_ID if it exists and is active
+          // 3) org with name matching "Sixty Seconds" (case-insensitive) with most meetings (active only)
+          // 4) org with most meetings (active only, fallback)
+          // 5) first ACTIVE org
+          // 6) null (user will be prompted to select/create org)
           let activeOrgId = get().activeOrgId;
 
-          const isValidPersisted = !!activeOrgId && orgs.some((o) => o.id === activeOrgId);
-          if (!isValidPersisted) activeOrgId = null;
+          // Only keep persisted org if it's ACTIVE
+          const persistedOrg = orgs.find((o) => o.id === activeOrgId);
+          const isValidAndActive = !!persistedOrg && persistedOrg.is_active !== false;
+          if (!isValidAndActive) {
+            logger.log('[OrgStore] Persisted org is invalid or inactive, clearing selection');
+            activeOrgId = null;
+          }
 
           const envDefaultOrgId = getDefaultOrgId();
-          if (!activeOrgId && envDefaultOrgId && orgs.some((o) => o.id === envDefaultOrgId)) {
+          if (!activeOrgId && envDefaultOrgId && orgs.some((o) => o.id === envDefaultOrgId && o.is_active !== false)) {
             activeOrgId = envDefaultOrgId;
           }
 
           if (!activeOrgId && orgs.length > 1) {
-            // Count meetings per org (lightweight: head:true)
-            // Prefer orgs with transcripts since Meeting Intelligence relies on transcript data.
-            const counts = await Promise.all(
-              orgs.map(async (org) => {
-                try {
-                  const { count } = await (supabase as any)
-                    .from('meetings')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('org_id', org.id)
-                    .or('transcript.not.is.null,transcript_text.not.is.null');
-                  return { orgId: org.id, orgName: org.name, count: count ?? 0 };
-                } catch (e) {
-                  return { orgId: org.id, orgName: org.name, count: 0 };
-                }
-              })
-            );
+            // Filter to only active orgs when selecting default
+            const activeOrgs = orgs.filter((o) => o.is_active !== false);
+
+            // Single batched query instead of N individual count queries per org
+            const orgIds = activeOrgs.map((o) => o.id);
+            let countsByOrg: Record<string, number> = {};
+            try {
+              const { data: meetingData } = await (supabase as any)
+                .from('meetings')
+                .select('org_id')
+                .in('org_id', orgIds)
+                .or('transcript.not.is.null,transcript_text.not.is.null')
+                .limit(1000);
+              for (const m of meetingData || []) {
+                countsByOrg[m.org_id] = (countsByOrg[m.org_id] || 0) + 1;
+              }
+            } catch (e) {
+              // Fallback: all counts 0
+            }
+            const counts = activeOrgs.map((org) => ({
+              orgId: org.id,
+              orgName: org.name,
+              count: countsByOrg[org.id] || 0,
+            }));
 
             const isSixtySeconds = (name: string) => /sixty\s*seconds/i.test(name);
             const sixtySecondsOrgs = counts.filter((c) => isSixtySeconds(c.orgName));
@@ -213,7 +271,9 @@ export const useOrgStore = create<OrgStore>()(
           }
 
           if (!activeOrgId) {
-            activeOrgId = orgs[0]?.id || null;
+            // Prefer first active org, fallback to any org if all are inactive
+            const firstActiveOrg = orgs.find((o) => o.is_active !== false);
+            activeOrgId = firstActiveOrg?.id || orgs[0]?.id || null;
           }
 
           // Get role for active org
@@ -336,6 +396,58 @@ export const useOrgStore = create<OrgStore>()(
        */
       isOrgMember: (orgId: string): boolean => {
         return get().getUserRole(orgId) !== null;
+      },
+
+      /**
+       * Update a single organization in the store (for realtime updates)
+       */
+      updateOrganization: (org: Organization) => {
+        const { organizations } = get();
+        const updatedOrgs = organizations.map((o) =>
+          o.id === org.id ? { ...o, ...org } : o
+        );
+        set({ organizations: updatedOrgs });
+        logger.log('[OrgStore] Organization updated:', org.id);
+      },
+
+      /**
+       * Subscribe to realtime changes on the organizations table
+       * Returns an unsubscribe function
+       */
+      subscribeToOrgChanges: (userId: string) => {
+        try {
+          logger.log('[OrgStore] Setting up realtime subscription to organizations table');
+
+          const channel = supabase
+            .channel('org-changes')
+            .on(
+              'postgres_changes',
+              {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'organizations',
+              },
+              (payload: any) => {
+                logger.log('[OrgStore] Organization UPDATE detected:', payload);
+
+                // Update the organization in the store
+                const updatedOrg = payload.new as Organization;
+                get().updateOrganization(updatedOrg);
+              }
+            )
+            .subscribe((status) => {
+              logger.log('[OrgStore] Subscription status:', status);
+            });
+
+          // Return unsubscribe function
+          return () => {
+            supabase.removeChannel(channel);
+            logger.log('[OrgStore] Unsubscribed from organization changes');
+          };
+        } catch (error) {
+          logger.error('[OrgStore] Error setting up org subscription:', error);
+          return null;
+        }
       },
 
       /**

@@ -38,13 +38,15 @@ export function useDealCRUD(
               *,
               deal_stages:stage_id(id, name, color, default_probability)
             `);
-          
+
           // Only filter by owner if effectiveOwnerId is provided
           if (effectiveOwnerId) {
             query = query.eq('owner_id', effectiveOwnerId);
           }
-          
-          const result = await query.order('created_at', { ascending: false });
+
+          const result = await query
+            .order('created_at', { ascending: false })
+            .limit(500); // Safety cap — paginate for orgs with large deal counts
             
           serviceDealsData = result.data;
           serviceError = result.error;
@@ -83,7 +85,9 @@ export function useDealCRUD(
           query = query.eq('owner_id', effectiveOwnerId);
         }
 
-        const result = await query.order('created_at', { ascending: false });
+        const result = await query
+          .order('created_at', { ascending: false })
+          .limit(500); // Safety cap — paginate for orgs with large deal counts
 
         dealsData = result.data;
         queryError = result.error;
@@ -98,12 +102,14 @@ export function useDealCRUD(
               *,
               deal_stages:stage_id(id, name, color, default_probability)
             `);
-          
+
           if (effectiveOwnerId) {
             adminQuery = adminQuery.eq('owner_id', effectiveOwnerId);
           }
-          
-          const adminResult = await adminQuery.order('created_at', { ascending: false });
+
+          const adminResult = await adminQuery
+            .order('created_at', { ascending: false })
+            .limit(500); // Safety cap — paginate for orgs with large deal counts
           dealsData = adminResult.data;
           queryError = adminResult.error;
         }

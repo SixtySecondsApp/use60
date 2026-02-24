@@ -5,7 +5,7 @@
  * Uses fathom_user_mappings table for explicit mappings and profiles table as fallback.
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 
 export interface OwnerResolutionResult {
   ownerUserId: string

@@ -140,7 +140,7 @@ export class GoogleIntegrationAPI {
       .from('google_integrations')
       .select('id')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (!integration) return;
 
@@ -164,34 +164,77 @@ export class GoogleIntegrationAPI {
   }
 
   /**
-   * Get service-specific status (this will be expanded when we add service proxy functions)
-   * For now, returns basic status based on integration existence
+   * Get service-specific status from service_preferences column.
+   * Falls back to all-enabled if the column doesn't exist yet (pre-migration).
    */
   static async getServiceStatus(): Promise<GoogleServiceStatus> {
-    const integration = await GoogleIntegrationAPI.getIntegrationStatus();
-    
-    if (!integration) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
       return { gmail: false, calendar: false, drive: false };
     }
 
-    // For now, if integration exists and is active, assume all services are available
-    // This will be refined when we add individual service management
-    return { gmail: true, calendar: true, drive: true };
+    const { data, error } = await supabase
+      .from('google_integrations')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error || !data) {
+      return { gmail: false, calendar: false, drive: false };
+    }
+
+    const prefs = data.service_preferences;
+    if (!prefs) {
+      // Column not yet populated — default all enabled
+      return { gmail: true, calendar: true, drive: true };
+    }
+
+    return {
+      gmail: prefs.gmail !== false,
+      calendar: prefs.calendar !== false,
+      drive: prefs.drive !== false,
+    };
   }
 
   /**
-   * Toggle a specific Google service (placeholder for future implementation)
-   * This will be implemented when we add service proxy Edge Functions
+   * Toggle a specific Google service by persisting to service_preferences column.
    */
   static async toggleService(service: keyof GoogleServiceStatus, enabled: boolean): Promise<void> {
-    // For now, this is a placeholder
-    // In the future, this would call service-specific Edge Functions
-    // to enable/disable specific Google services
-    // TODO: Implement when service proxy functions are created
-    // This would involve:
-    // 1. Updating service preferences in database
-    // 2. Calling service-specific setup/teardown functions
-    // 3. Managing service-specific permissions
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Read current preferences first
+    const { data: current, error: readError } = await supabase
+      .from('google_integrations')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (readError || !current) {
+      throw new Error('Google integration not found');
+    }
+
+    const currentPrefs = current.service_preferences ?? {
+      gmail: true,
+      calendar: true,
+      drive: true,
+    };
+
+    const updatedPrefs = { ...currentPrefs, [service]: enabled };
+
+    const { error: updateError } = await supabase
+      .from('google_integrations')
+      .update({ service_preferences: updatedPrefs })
+      .eq('user_id', user.id)
+      .eq('is_active', true);
+
+    if (updateError) {
+      throw new Error(updateError.message || `Failed to update ${service} preference`);
+    }
   }
 
   /**
@@ -262,15 +305,55 @@ export class GoogleIntegrationAPI {
    * Returns detailed status for each service
    */
   static async testConnection(): Promise<GoogleTestConnectionResult> {
-    const { data, error } = await supabase.functions.invoke('google-test-connection', {
-      body: {}
-    });
+    try {
+      const { data, error } = await supabase.functions.invoke('google-test-connection', {
+        body: {}
+      });
 
-    if (error) {
-      throw new Error(error.message || 'Failed to test connection');
+      // Log full response for debugging
+      console.log('[googleIntegration.testConnection] Response:', { data, error });
+
+      // Handle invoke-level errors (network, non-2xx that slipped through, etc.)
+      if (error) {
+        console.error('[googleIntegration.testConnection] Invoke error:', error);
+        return {
+          success: false,
+          connected: false,
+          error: error.message || 'Failed to test connection',
+          services: {
+            userinfo: { ok: false, message: 'Invoke error' },
+            gmail: { ok: false, message: 'Invoke error' },
+            calendar: { ok: false, message: 'Invoke error' },
+            tasks: { ok: false, message: 'Invoke error' },
+          },
+        };
+      }
+
+      // The function always returns 200 with data.
+      // If data.success is false, return the data as-is so the UI can show error details.
+      if (data && !data.success) {
+        console.error('[googleIntegration.testConnection] Function returned error:', data);
+        const debugInfo = data.debugInfo || '';
+        const currentStep = data.currentStep || '';
+        console.error(`[googleIntegration.testConnection] Debug: ${debugInfo}, Step: ${currentStep}`);
+        return data;
+      }
+
+      return data;
+    } catch (err) {
+      console.error('[googleIntegration.testConnection] Unexpected error:', err);
+      return {
+        success: false,
+        connected: false,
+        error: err instanceof Error ? err.message : 'Test connection failed',
+        services: {
+          userinfo: { ok: false, message: 'Unexpected error' },
+          gmail: { ok: false, message: 'Unexpected error' },
+          calendar: { ok: false, message: 'Unexpected error' },
+          tasks: { ok: false, message: 'Unexpected error' },
+        },
+      };
     }
-
-    return data;
   }
 }
 

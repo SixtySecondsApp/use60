@@ -46,10 +46,8 @@ BEGIN
   ORDER BY full_name;
 END;
 $$;
-
 COMMENT ON FUNCTION public.get_team_members_with_connected_accounts()
 IS 'Returns team members with active Fathom integrations who have meetings with transcripts';
-
 -- =============================================================================
 -- Fix: get_org_meeting_index_status
 -- =============================================================================
@@ -87,12 +85,10 @@ BEGIN
     AND m.transcript_text != '';
 END;
 $$;
-
 -- Ensure grants are in place
 GRANT EXECUTE ON FUNCTION public.get_team_members_with_connected_accounts() TO anon;
 GRANT EXECUTE ON FUNCTION public.get_team_members_with_connected_accounts() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_team_members_with_connected_accounts() TO service_role;
-
 GRANT EXECUTE ON FUNCTION public.get_org_meeting_index_status(uuid, uuid) TO anon;
 GRANT EXECUTE ON FUNCTION public.get_org_meeting_index_status(uuid, uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_org_meeting_index_status(uuid, uuid) TO service_role;

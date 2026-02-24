@@ -1,48 +1,64 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback, useTransition } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { motion } from 'framer-motion';
 import { useUser } from '@/lib/hooks/useUser';
 import { useTargets } from '@/lib/hooks/useTargets';
 import { useActivityFilters } from '@/lib/hooks/useActivityFilters';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useRecentDeals } from '@/lib/hooks/useLazyActivities';
 import { useDashboardMetrics } from '@/lib/hooks/useDashboardMetrics';
-import { format, startOfMonth, endOfMonth, subMonths, addMonths, isAfter, isBefore, getDate } from 'date-fns';
 import {
   PoundSterling,
   Phone,
   Users,
   FileText,
-  ChevronLeft,
-  ChevronRight,
   ArrowUp,
   ArrowDown,
   TrendingUp,
   TrendingDown,
+  Minus,
+  BarChart2,
+  LayoutDashboard,
+  Activity as ActivityIcon,
+  LineChart,
+  Grid3X3,
+  Sparkles,
 } from 'lucide-react';
-import { LazySalesActivityChart } from '@/components/LazySalesActivityChart';
 import ReactDOM from 'react-dom';
-import { LazySubscriptionStats } from '@/components/LazySubscriptionStats';
-import { MonthYearPicker } from '@/components/MonthYearPicker';
 import { PendingJoinRequestBanner } from '@/components/PendingJoinRequestBanner';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
+import { HelpPanel } from '@/components/docs/HelpPanel';
 import logger from '@/lib/utils/logger';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
+import { TeamKPIGrid } from '@/components/insights/TeamKPIGrid';
+import { TeamComparisonMatrix } from '@/components/insights/TeamComparisonMatrix';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ActivationChecklist } from '@/components/dashboard/ActivationChecklist';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
+
+const LazyActivityLog = lazy(() => import('@/pages/ActivityLog'));
+const LazySalesFunnel = lazy(() => import('@/pages/SalesFunnel'));
+const LazyHeatmap = lazy(() => import('@/pages/Heatmap'));
+const LazyLeadAnalytics = lazy(() => import('@/components/leads/LeadAnalyticsCard').then(m => ({ default: m.LeadAnalyticsCard })));
 
 interface MetricCardProps {
   title: string;
   value: number;
   target: number;
-  trend: number;
+  trend: number | null;
   icon: React.ElementType;
   type?: string;
+  metricKey?: string;
   dateRange: {
     start: Date;
     end: Date;
   };
   previousMonthTotal?: number;
+  totalTrend?: number | null;
   isLoadingComparisons?: boolean;
   hasComparisons?: boolean;
   isInitialLoad?: boolean;
+  onNavigateToActivity?: () => void;
 }
 
 interface TooltipProps {
@@ -93,9 +109,10 @@ const Tooltip = ({ show, content, position }: TooltipProps) => {
   );
 };
 
-const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, dateRange, previousMonthTotal, isLoadingComparisons, hasComparisons, isInitialLoad = false }: MetricCardProps) => {
-  const navigate = useNavigate();
+const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, metricKey, dateRange, previousMonthTotal, totalTrend: totalTrendProp, isLoadingComparisons, hasComparisons, isInitialLoad = false, onNavigateToActivity }: MetricCardProps) => {
   const { setFilters } = useActivityFilters();
+  const navigate = useNavigate();
+  const { symbol } = useOrgMoney();
   const [showTrendTooltip, setShowTrendTooltip] = useState(false);
   const [showTotalTooltip, setShowTotalTooltip] = useState(false);
   const [trendPosition, setTrendPosition] = useState({ x: 0, y: 0 });
@@ -105,9 +122,13 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
 
   const handleClick = () => {
     try {
-      if (type) {
+      if (metricKey) {
+        navigate(`/settings/goals?metric=${metricKey}`);
+      } else if (type) {
         setFilters({ type, dateRange });
-        navigate('/activity', { state: { preserveFilters: true } });
+        if (onNavigateToActivity) {
+          onNavigateToActivity();
+        }
       }
     } catch (error) {
       logger.error('Navigation error:', error);
@@ -129,28 +150,20 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
     }
   };
 
-  // Calculate trend against previous month's total with error handling
-  const totalTrend = useMemo(() => {
-    try {
-      if (!previousMonthTotal || previousMonthTotal === 0) return 0;
-      return Math.round(((value - previousMonthTotal) / previousMonthTotal) * 100);
-    } catch (error) {
-      logger.error('Error calculating total trend:', error);
-      return 0;
-    }
-  }, [value, previousMonthTotal]);
+  // Use totalTrend from props (computed by useDashboardMetrics hook) for consistency
+  const totalTrend = totalTrendProp === undefined ? 0 : totalTrendProp;
 
   // Helper function for arrow styling
-  const getArrowClass = (trendValue: number) => {
-    return trendValue >= 0 
-      ? 'text-emerald-500' 
-      : 'text-red-500';
+  const getArrowClass = (trendValue: number | null) => {
+    if (trendValue === null || trendValue === 0) return 'text-gray-500';
+    return trendValue > 0 ? 'text-emerald-500' : 'text-red-500';
   };
 
   // Get background colors based on trend values
-  const getTrendBg = (trendValue: number) => {
-    return trendValue >= 0 
-      ? 'bg-emerald-500/10 border-emerald-500/30' 
+  const getTrendBg = (trendValue: number | null) => {
+    if (trendValue === null || trendValue === 0) return 'bg-gray-500/10 border-gray-500/30';
+    return trendValue > 0
+      ? 'bg-emerald-500/10 border-emerald-500/30'
       : 'bg-red-500/10 border-red-500/30';
   };
 
@@ -206,7 +219,7 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-medium text-[#1E293B] dark:text-white">{title}</span>
-            <span className="text-xs text-[#64748B] dark:text-gray-500">This month</span>
+            <span className="text-xs text-[#64748B] dark:text-gray-500">Current period</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -230,19 +243,32 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
                 </>
               ) : (
                 <>
-                  {trend >= 0 ? (
-                    <TrendingUp className={`w-4 h-4 ${getArrowClass(trend)}`} />
+                  {trend === null ? (
+                    <>
+                      <Minus className="w-4 h-4 text-gray-500" />
+                      <span className="text-xs font-semibold text-gray-500">New</span>
+                    </>
+                  ) : trend === 0 ? (
+                    <>
+                      <Minus className="w-4 h-4 text-gray-500" />
+                      <span className="text-xs font-semibold text-gray-500">0%</span>
+                    </>
+                  ) : trend > 0 ? (
+                    <>
+                      <TrendingUp className={`w-4 h-4 ${getArrowClass(trend)}`} />
+                      <span className={`text-xs font-semibold ${getArrowClass(trend)}`}>+{trend}%</span>
+                    </>
                   ) : (
-                    <TrendingDown className={`w-4 h-4 ${getArrowClass(trend)}`} />
+                    <>
+                      <TrendingDown className={`w-4 h-4 ${getArrowClass(trend)}`} />
+                      <span className={`text-xs font-semibold ${getArrowClass(trend)}`}>{trend}%</span>
+                    </>
                   )}
-                  <span className={`text-xs font-semibold ${getArrowClass(trend)}`}>
-                    {trend >= 0 ? '+' : ''}{trend}%
-                  </span>
                 </>
               )}
             </div>
           </div>
-          
+
           {/* Arrow for total previous month comparison */}
           <div 
             ref={totalRef}
@@ -263,58 +289,72 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
                 </>
               ) : (
                 <>
-                  {totalTrend >= 0 ? (
-                    <ArrowUp className={`w-4 h-4 ${getArrowClass(totalTrend)}`} />
+                  {totalTrend === null ? (
+                    <>
+                      <Minus className="w-4 h-4 text-gray-500" />
+                      <span className="text-xs font-semibold text-gray-500">New</span>
+                    </>
+                  ) : totalTrend === 0 ? (
+                    <>
+                      <Minus className="w-4 h-4 text-gray-500" />
+                      <span className="text-xs font-semibold text-gray-500">0%</span>
+                    </>
+                  ) : totalTrend > 0 ? (
+                    <>
+                      <ArrowUp className={`w-4 h-4 ${getArrowClass(totalTrend)}`} />
+                      <span className={`text-xs font-semibold ${getArrowClass(totalTrend)}`}>+{totalTrend}%</span>
+                    </>
                   ) : (
-                    <ArrowDown className={`w-4 h-4 ${getArrowClass(totalTrend)}`} />
+                    <>
+                      <ArrowDown className={`w-4 h-4 ${getArrowClass(totalTrend)}`} />
+                      <span className={`text-xs font-semibold ${getArrowClass(totalTrend)}`}>{totalTrend}%</span>
+                    </>
                   )}
-                  <span className={`text-xs font-semibold ${getArrowClass(totalTrend)}`}>
-                    {totalTrend >= 0 ? '+' : ''}{totalTrend}%
-                  </span>
                 </>
               )}
             </div>
           </div>
-          
+
           {/* Tooltips using Portal */}
-          <Tooltip 
+          <Tooltip
             show={showTrendTooltip}
             position={trendPosition}
             content={{
-              title: "Vs. same point last month",
-              message: trend >= 0 ? "Growing faster" : "Growing slower",
-              positive: trend >= 0
+              title: "Vs. same point last period",
+              message: trend === null ? "No prior data to compare" : trend > 0 ? "Ahead of last period's pace" : trend < 0 ? "Behind last period's pace" : "Same as last period's pace",
+              positive: trend !== null && trend > 0
             }}
           />
-          
-          <Tooltip 
+
+          <Tooltip
             show={showTotalTooltip}
             position={totalPosition}
             content={{
-              title: "Vs. previous month's total",
-              message: totalTrend >= 0 ? "Already ahead of last month" : "Behind last month's performance",
-              positive: totalTrend >= 0
+              title: "Vs. previous period's total",
+              message: totalTrend === null ? "No prior data to compare" : totalTrend > 0 ? "Already ahead of last period" : totalTrend < 0 ? "Behind last period's total" : "Matching last period's total",
+              positive: totalTrend !== null && totalTrend > 0
             }}
           />
         </div>
       </div>
       
       <div className="space-y-3 flex-1">
+        {/* TODO: Currency symbol should come from organization settings */}
         <div className="flex items-baseline gap-2 flex-wrap">
           {isInitialLoad ? (
             <div className="flex items-baseline gap-2">
               <div className="w-24 h-9 bg-slate-200 dark:bg-gray-800/50 rounded animate-pulse" />
               <span className="text-xs sm:text-sm text-[#64748B] dark:text-gray-500 font-medium">
-                / {title === 'New Business' ? `£${target.toLocaleString()}` : target}
+                / {title === 'New Business' ? `${symbol}${target.toLocaleString()}` : target}
               </span>
             </div>
           ) : (
             <>
               <span className="text-2xl sm:text-3xl font-bold text-[#1E293B] dark:text-white transition-none" suppressHydrationWarning>
-                {title === 'New Business' ? `£${value.toLocaleString()}` : value}
+                {title === 'New Business' ? `${symbol}${value.toLocaleString()}` : value}
               </span>
               <span className="text-xs sm:text-sm text-[#64748B] dark:text-gray-500 font-medium">
-                / {title === 'New Business' ? `£${target.toLocaleString()}` : target}
+                / {title === 'New Business' ? `${symbol}${target.toLocaleString()}` : target}
               </span>
             </>
           )}
@@ -332,12 +372,15 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
                   ? 'bg-violet-500/80'
                   : 'bg-orange-500/80'
               }`}
-              style={{ width: `${Math.min(100, (value / target) * 100)}%` }}
+              style={{ width: `${target > 0 ? Math.min(100, (value / target) * 100) : 0}%` }}
             ></div>
           </div>
           <div className="text-xs text-[#64748B] dark:text-gray-400 flex justify-between items-center gap-2">
             <span>Progress</span>
-            <span className="font-medium">{Math.round((value / target) * 100)}%</span>
+            {target > 0
+              ? <span className="font-medium">{Math.round((value / target) * 100)}%</span>
+              : <span className="font-medium text-[#64748B]/60 dark:text-gray-500">Set goal →</span>
+            }
           </div>
         </div>
       </div>
@@ -351,83 +394,123 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
     prevProps.target === nextProps.target &&
     prevProps.trend === nextProps.trend &&
     prevProps.previousMonthTotal === nextProps.previousMonthTotal &&
+    prevProps.totalTrend === nextProps.totalTrend &&
     prevProps.isLoadingComparisons === nextProps.isLoadingComparisons &&
     prevProps.hasComparisons === nextProps.hasComparisons &&
-    prevProps.isInitialLoad === nextProps.isInitialLoad
+    prevProps.isInitialLoad === nextProps.isInitialLoad &&
+    prevProps.onNavigateToActivity === nextProps.onNavigateToActivity &&
+    prevProps.dateRange?.start?.getTime() === nextProps.dateRange?.start?.getTime() &&
+    prevProps.dateRange?.end?.getTime() === nextProps.dateRange?.end?.getTime()
   );
 });
 
 // Skeleton loader component for the dashboard
 function DashboardSkeleton() {
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 mt-12 lg:mt-0 animate-pulse">
-      {/* Header skeleton */}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 mt-12 lg:mt-0">
+      {/* Header skeleton — matches "Welcome back, [name]" + subtitle + date picker row */}
       <div className="space-y-1 mb-6 sm:mb-8">
-        <div className="h-8 w-48 bg-slate-200 dark:bg-gray-800 rounded-lg mb-2" />
-        <div className="h-4 w-64 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+        <Skeleton className="h-9 w-56" />
+        <div className="flex items-center justify-between mt-2">
+          <Skeleton className="h-4 w-72" />
+          <Skeleton className="h-9 w-44 rounded-xl" />
+        </div>
       </div>
 
-      {/* Metrics grid skeleton */}
+      {/* Tab bar skeleton — 5 tabs: Overview / Activity / Funnel / Heatmap / Lead Analytics */}
+      <div className="mb-6 flex gap-1 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 rounded-lg p-1 w-fit shadow-sm">
+        {[96, 80, 72, 84, 112].map((w, i) => (
+          <Skeleton key={i} className="h-8 rounded-md" style={{ width: w }} />
+        ))}
+      </div>
+
+      {/* KPI metric cards grid — 2-col matching real grid-cols-1 sm:grid-cols-2 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-8">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-[#E2E8F0] dark:border-gray-800/50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="rounded-3xl p-6 sm:p-7 border border-transparent dark:border-gray-800/50 bg-white dark:bg-gray-900/50 shadow-sm dark:shadow-none flex flex-col"
+          >
+            {/* Card header: icon + title/subtitle + two trend badges */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+                <Skeleton className="w-10 h-10 rounded-xl" />
                 <div>
-                  <div className="h-4 w-24 bg-slate-200 dark:bg-gray-800 rounded-lg mb-1" />
-                  <div className="h-3 w-16 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+                  <Skeleton className="h-4 w-24 mb-1" />
+                  <Skeleton className="h-3 w-20" />
                 </div>
               </div>
               <div className="flex gap-2">
-                <div className="w-16 h-8 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+                <Skeleton className="h-8 w-14 rounded-lg" />
+                <Skeleton className="h-8 w-14 rounded-lg" />
               </div>
             </div>
-            <div className="space-y-2">
-              <div className="h-8 w-32 bg-slate-200 dark:bg-gray-800 rounded-lg mb-2" />
-              <div className="space-y-1">
-                <div className="h-2 bg-slate-200 dark:bg-gray-800 rounded-full" />
-                <div className="flex justify-between">
-                  <div className="h-3 w-16 bg-slate-200 dark:bg-gray-800 rounded-lg" />
-                  <div className="h-3 w-8 bg-slate-200 dark:bg-gray-800 rounded-lg" />
-                </div>
-              </div>
+            {/* Value + target */}
+            <div className="flex items-baseline gap-2 mb-3">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            {/* Progress bar + label row */}
+            <Skeleton className="h-2.5 w-full rounded-full mb-2" />
+            <div className="flex justify-between">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-8" />
             </div>
           </div>
         ))}
       </div>
 
-      {/* Chart skeleton */}
-      <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-[#E2E8F0] dark:border-gray-800/50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none mb-8">
-        <div className="h-6 w-48 bg-slate-200 dark:bg-gray-800 rounded-lg mb-8" />
-        <div className="h-64 w-full bg-slate-200 dark:bg-gray-800 rounded-lg" />
-      </div>
-
-      {/* Recent deals skeleton */}
-      <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-[#E2E8F0] dark:border-gray-800/50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none">
-        <div className="flex justify-between items-center mb-6">
-          <div className="h-6 w-36 bg-slate-200 dark:bg-gray-800 rounded-lg" />
-          <div className="h-9 w-48 bg-slate-200 dark:bg-gray-800 rounded-lg" />
+      {/* Team Performance section placeholder */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="w-5 h-5 rounded" />
+          <Skeleton className="h-6 w-44" />
         </div>
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-slate-100 dark:bg-gray-800/50 rounded-xl p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-slate-200 dark:bg-gray-700 rounded-lg" />
-                  <div>
-                    <div className="h-5 w-32 bg-slate-200 dark:bg-gray-700 rounded-lg mb-1" />
-                    <div className="h-4 w-48 bg-slate-200 dark:bg-gray-700 rounded-lg" />
-                  </div>
-                </div>
-                <div>
-                  <div className="h-6 w-24 bg-slate-200 dark:bg-gray-700 rounded-lg mb-1" />
-                  <div className="h-4 w-16 bg-slate-200 dark:bg-gray-700 rounded-lg" />
-                </div>
-              </div>
+        {/* KPI grid row placeholder */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl p-4 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 shadow-sm">
+              <Skeleton className="h-4 w-20 mb-2" />
+              <Skeleton className="h-7 w-16 mb-1" />
+              <Skeleton className="h-3 w-24" />
             </div>
           ))}
         </div>
+        {/* Comparison matrix placeholder */}
+        <div className="rounded-3xl border border-transparent dark:border-gray-800/50 bg-white dark:bg-gray-900/50 shadow-sm p-6">
+          <Skeleton className="h-5 w-40 mb-4" />
+          <Skeleton className="h-48 w-full rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TeamPerformanceSection({ dateRange, period }: { dateRange: { start: Date; end: Date }; period: number }) {
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-5 h-5 text-violet-500" />
+            <h2 className="text-xl font-semibold text-[#1E293B] dark:text-white">Team Performance</h2>
+          </div>
+          <p className="text-sm text-[#64748B] dark:text-gray-400 mt-0.5">
+            Meeting analytics and rep performance metrics
+          </p>
+        </div>
+        {/* Date label removed - redundant with date picker */}
+      </div>
+
+      {/* KPI Grid */}
+      <div className="mb-4">
+        <TeamKPIGrid period={period} dateRange={dateRange} onCardClick={() => {}} />
+      </div>
+
+      {/* Trends Chart */}
+      <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-3xl border border-transparent dark:border-gray-800/50 shadow-sm dark:shadow-none p-6">
+        <TeamComparisonMatrix period={period} dateRange={dateRange} onRepClick={() => {}} />
       </div>
     </div>
   );
@@ -435,55 +518,39 @@ function DashboardSkeleton() {
 
 export default function Dashboard() {
   // Move all hooks to the top
-  const [searchQuery, setSearchQuery] = useState('');
   const [showContent, setShowContent] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date());
-  const [isPending, startTransition] = useTransition();
-  
-  // Safe month navigation handlers with transition
-  const handlePreviousMonth = () => {
-    try {
-      startTransition(() => {
-        setSelectedMonth(prev => {
-          const newMonth = subMonths(prev, 1);
-          // Ensure the date is valid
-          if (isNaN(newMonth.getTime())) {
-            logger.error('Invalid date after subtracting month');
-            return prev;
-          }
-          return newMonth;
-        });
-      });
-    } catch (error) {
-      logger.error('Error navigating to previous month:', error);
+  const dateFilter = useDateRangeFilter();
+
+  // Derive the active dateRange from the filter (always defined for presets)
+  const activeDateRange = useMemo(() => {
+    if (dateFilter.dateRange) {
+      return dateFilter.dateRange;
     }
-  };
-  
-  const handleNextMonth = () => {
-    try {
-      startTransition(() => {
-        setSelectedMonth(prev => {
-          const newMonth = addMonths(prev, 1);
-          // Ensure the date is valid
-          if (isNaN(newMonth.getTime())) {
-            logger.error('Invalid date after adding month');
-            return prev;
-          }
-          // Don't go beyond current month
-          if (newMonth > new Date()) {
-            return prev;
-          }
-          return newMonth;
-        });
-      });
-    } catch (error) {
-      logger.error('Error navigating to next month:', error);
-    }
-  };
+    // Fallback: last 30 days
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    return { start, end };
+  }, [dateFilter.dateRange]);
+
   const { userData, isLoading: isLoadingUser, session } = useUser();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { setFilters } = useActivityFilters();
+
+  // Tab state from URL
+  const activeTab = searchParams.get('tab') || 'overview';
+  const setTab = useCallback((tab: string) => {
+    if (tab === 'overview') {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab }, { replace: true });
+    }
+  }, [setSearchParams]);
+
+  const navigateToActivityTab = useCallback(() => {
+    setTab('activity');
+  }, [setTab]);
 
   // Check for Fathom connection success notification
   useEffect(() => {
@@ -612,47 +679,13 @@ export default function Dashboard() {
     hasComparisons,
     currentMonthActivities,
     refreshDashboard
-  } = useDashboardMetrics(selectedMonth, showContent && !!userId && !!targets);
+  } = useDashboardMetrics(activeDateRange, showContent && !!userId && !isLoadingSales);
   
-  // Lazy load recent deals only when user scrolls to that section
-  const [loadRecentDeals, setLoadRecentDeals] = useState(false);
-  const [dealsLoadTimeout, setDealsLoadTimeout] = useState(false);
-  const { activities: recentDeals, isLoading: isLoadingDeals } = useRecentDeals(loadRecentDeals);
-
-  // Add timeout for loading deals (10 seconds)
-  useEffect(() => {
-    if (loadRecentDeals && isLoadingDeals) {
-      const timeout = setTimeout(() => {
-        setDealsLoadTimeout(true);
-      }, 10000); // 10 second timeout
-
-      return () => clearTimeout(timeout);
-    } else if (!isLoadingDeals) {
-      setDealsLoadTimeout(false);
-    }
-  }, [loadRecentDeals, isLoadingDeals]);
-
-  const selectedMonthRange = useMemo(() => {
-    const start = startOfMonth(selectedMonth);
-    const end = endOfMonth(selectedMonth);
-    return { start, end };
-  }, [selectedMonth]);
-
-  // All metrics are now handled by useDashboardMetrics hook with caching
-
-  // Filter deals based on search query - use recent deals if loaded, otherwise current month activities
-  const filteredDeals = useMemo(() => {
-    const dealsToFilter = loadRecentDeals ? recentDeals : currentMonthActivities.filter(a => a.type === 'sale');
-    return dealsToFilter.filter(activity => 
-      activity.type === 'sale' &&
-      (activity.client_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-       activity.amount?.toString().includes(searchQuery) ||
-       activity.details?.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  }, [recentDeals, currentMonthActivities, searchQuery, loadRecentDeals]);
+  const selectedMonthRange = activeDateRange;
 
   // Check if any data is loading - include metrics check
-  const isAnyLoading = isInitialLoad || isLoadingSales || isLoadingUser || (!userData && !session) || !targets;
+  // Note: targets can be null (user has no targets set) — that's not a loading state
+  const isAnyLoading = isInitialLoad || isLoadingSales || isLoadingUser || (!userData && !session);
 
   // Remove logging to prevent re-renders
 
@@ -664,28 +697,6 @@ export default function Dashboard() {
     }
   }, [isAnyLoading, showContent]); // Added showContent to deps to prevent re-running
 
-  // Intersection observer for lazy loading recent deals
-  const recentDealsRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    if (!recentDealsRef.current || loadRecentDeals) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry.isIntersecting) {
-          setLoadRecentDeals(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.1, rootMargin: '50px' }
-    );
-
-    observer.observe(recentDealsRef.current);
-    
-    return () => observer.disconnect();
-  }, [loadRecentDeals, showContent]);
-
   // Single loading check to prevent flicker
   if (!showContent || isAnyLoading) {
     return <DashboardSkeleton />;
@@ -696,33 +707,62 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
       {/* Header with Month Selection */}
       <div className="space-y-1 mt-12 lg:mt-0 mb-6 sm:mb-8">
-        <h1 className="text-3xl font-bold text-[#1E293B] dark:text-white">Welcome back{userData?.first_name ? `, ${userData.first_name}` : ''}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-[#1E293B] dark:text-white">Welcome back{userData?.first_name ? `, ${userData.first_name}` : ''}</h1>
+          <HelpPanel docSlug="customer-dashboard" tooltip="Dashboard help" />
+        </div>
         <div className="flex items-center justify-between mt-2">
           <p className="text-[#64748B] dark:text-gray-400">Here's how your sales performance is tracking</p>
-          <div className="flex items-center gap-2 bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-2 border border-transparent dark:border-gray-800/50 shadow-sm dark:shadow-none">
-            <button
-              onClick={handlePreviousMonth}
-              className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
-              title="Previous month"
-            >
-              <ChevronLeft className="w-4 h-4 text-[#64748B] dark:text-gray-400" />
-            </button>
-            <MonthYearPicker
-              value={selectedMonth}
-              onChange={setSelectedMonth}
-              maxDate={new Date()}
-            />
-            <button
-              onClick={handleNextMonth}
-              className="p-1.5 hover:bg-slate-100 dark:hover:bg-gray-800/50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={selectedMonth >= new Date()}
-              title="Next month"
-            >
-              <ChevronRight className="w-4 h-4 text-[#64748B] dark:text-gray-400" />
-            </button>
+          <div className={activeTab !== 'overview' ? 'invisible' : ''}>
+            <DateRangeFilter {...dateFilter} />
           </div>
         </div>
       </div>
+
+      {/* Dashboard Tabs */}
+      <Tabs value={activeTab} onValueChange={setTab} className="mb-6">
+        <TabsList className="bg-white border border-transparent shadow-sm dark:bg-gray-900/50 dark:backdrop-blur-xl dark:border-gray-800/50">
+          <TabsTrigger
+            value="overview"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger
+            value="activity"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <ActivityIcon className="w-4 h-4" />
+            Activity
+          </TabsTrigger>
+          <TabsTrigger
+            value="funnel"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <LineChart className="w-4 h-4" />
+            Funnel
+          </TabsTrigger>
+          <TabsTrigger
+            value="heatmap"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <Grid3X3 className="w-4 h-4" />
+            Heatmap
+          </TabsTrigger>
+          <TabsTrigger
+            value="leads"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <Sparkles className="w-4 h-4" />
+            Lead Analytics
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview">
+
+      {/* Activation Checklist for new users */}
+      <ActivationChecklist />
 
       {/* Pending Join Request Banner */}
       <div className="mb-6">
@@ -735,197 +775,157 @@ export default function Dashboard() {
           key="revenue-metric"
           title="New Business"
           value={metrics.revenue}
-          target={targets.revenue_target}
+          target={targets?.revenue_target ?? 0}
           trend={trends.revenue}
+          totalTrend={totalTrends.revenue}
           icon={PoundSterling}
           type="sale"
+          metricKey="new-business"
           dateRange={selectedMonthRange}
           previousMonthTotal={previousMonthTotals.revenue}
           isLoadingComparisons={isLoadingComparisons}
           hasComparisons={hasComparisons}
           isInitialLoad={false}
+          onNavigateToActivity={navigateToActivityTab}
         />
         <MetricCard
           key="outbound-metric"
           title="Outbound"
           value={metrics.outbound}
-          target={targets.outbound_target}
+          target={targets?.outbound_target ?? 0}
           trend={trends.outbound}
+          totalTrend={totalTrends.outbound}
           icon={Phone}
           type="outbound"
+          metricKey="outbound"
           dateRange={selectedMonthRange}
           previousMonthTotal={previousMonthTotals.outbound}
           isLoadingComparisons={isLoadingComparisons}
           hasComparisons={hasComparisons}
           isInitialLoad={false}
+          onNavigateToActivity={navigateToActivityTab}
         />
         <MetricCard
           key="meetings-metric"
           title="Meetings"
           value={metrics.meetings}
-          target={targets.meetings_target}
+          target={targets?.meetings_target ?? 0}
           trend={trends.meetings}
+          totalTrend={totalTrends.meetings}
           icon={Users}
           type="meeting"
+          metricKey="meetings"
           dateRange={selectedMonthRange}
           previousMonthTotal={previousMonthTotals.meetings}
           isLoadingComparisons={isLoadingComparisons}
           hasComparisons={hasComparisons}
           isInitialLoad={false}
+          onNavigateToActivity={navigateToActivityTab}
         />
         <MetricCard
           key="proposals-metric"
           title="Proposals"
           value={metrics.proposals}
-          target={targets.proposal_target}
+          target={targets?.proposal_target ?? 0}
           trend={trends.proposals}
+          totalTrend={totalTrends.proposals}
           icon={FileText}
           type="proposal"
+          metricKey="proposals"
           dateRange={selectedMonthRange}
           previousMonthTotal={previousMonthTotals.proposals}
           isLoadingComparisons={isLoadingComparisons}
           hasComparisons={hasComparisons}
           isInitialLoad={false}
+          onNavigateToActivity={navigateToActivityTab}
         />
       </div>
 
-      {/* Sales Activity Chart */}
-      <div className="mb-8">
-        <LazySalesActivityChart selectedMonth={selectedMonth} />
-      </div>
+      {/* Team Performance Section */}
+      <TeamPerformanceSection dateRange={selectedMonthRange} period={dateFilter.period} />
+        </TabsContent>
 
-      {/* MRR Subscription Statistics */}
-      <div className="mb-8">
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold text-[#1E293B] dark:text-white">Subscription Revenue</h2>
-          <p className="text-sm text-[#64748B] dark:text-gray-400">Track your monthly recurring revenue and client metrics</p>
-        </div>
-        <LazySubscriptionStats
-          onClick={(cardTitle) => {
-            // Navigate to subscriptions page when clicking on MRR cards
-            navigate('/subscriptions');
-          }}
-        />
-      </div>
-
-      {/* Recent Deals Section */}
-      <div ref={recentDealsRef} className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-[#E2E8F0] dark:border-gray-800/50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none mb-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-          <h2 className="text-xl font-semibold text-[#1E293B] dark:text-white">Recent Deals</h2>
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by client or amount..."
-              className="w-full py-2 px-3 bg-slate-100 dark:bg-gray-800 border border-[#E2E8F0] dark:border-gray-700 rounded-xl text-[#1E293B] dark:text-white placeholder-[#94A3B8] dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
-            />
-          </div>
-        </div>
-        <div className="space-y-3">
-          {!loadRecentDeals ? (
-            // Show loading placeholder when recent deals haven't been loaded yet
-            <div className="text-center py-8">
-              <div className="text-gray-600 dark:text-gray-500">Loading recent deals...</div>
-            </div>
-          ) : dealsLoadTimeout ? (
-            // Show error state if loading takes too long
-            <div className="text-center py-8">
-              <div className="text-amber-600 dark:text-amber-400 mb-2">Loading is taking longer than expected</div>
-              <button
-                onClick={() => {
-                  setDealsLoadTimeout(false);
-                  setLoadRecentDeals(false);
-                  setTimeout(() => setLoadRecentDeals(true), 100);
-                }}
-                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                Retry
-              </button>
-            </div>
-          ) : isLoadingDeals ? (
-            // Show loading state while fetching
-            <div className="text-center py-8">
-              <div className="text-gray-600 dark:text-gray-500">Fetching deals...</div>
-            </div>
-          ) : (
-            filteredDeals.map((deal) => (
-            <motion.div
-              key={deal.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              whileHover={{ 
-                scale: 1.02,
-                transition: { duration: 0.2 }
-              }}
-              whileTap={{ scale: 0.98 }}
-              className="bg-slate-100 dark:bg-gray-800/50 rounded-xl p-3 sm:p-4 hover:bg-slate-200 dark:hover:bg-gray-800/70 transition-all duration-300 group hover:shadow-lg hover:shadow-emerald-500/10 border border-transparent hover:border-emerald-500/20 relative overflow-hidden cursor-pointer"
-              onClick={() => {
-                setFilters({
-                  type: 'sale',
-                  dateRange: {
-                    start: new Date(deal.date),
-                    end: new Date(deal.date)
-                  }
-                });
-                navigate('/activity');
-              }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-400/[0.03] dark:via-white/[0.03] to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <motion.div
-                    className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300"
-                    whileHover={{ rotate: [0, -10, 10, -5, 5, 0] }}
-                    transition={{ duration: 0.5 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFilters({
-                        type: 'sale',
-                        dateRange: {
-                          start: new Date(deal.date),
-                          end: new Date(deal.date)
-                        }
-                      });
-                      navigate('/activity');
-                    }}
-                  >
-                    <PoundSterling className="w-5 h-5 text-emerald-500" />
-                  </motion.div>
-                  <div>
-                    <h3 className="font-medium text-[#1E293B] dark:text-white group-hover:text-emerald-500 transition-colors duration-300">
-                      {deal.client_name}
-                    </h3>
-                    <p className="text-sm text-[#64748B] dark:text-gray-400">
-                      {deal.details} • {format(new Date(deal.date), 'MMM d, yyyy')}
-                    </p>
+        <TabsContent value="activity">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Suspense fallback={
+              <div className="space-y-3 pt-4">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center gap-4 rounded-xl p-4 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50">
+                    <Skeleton className="w-10 h-10 rounded-lg shrink-0" />
+                    <div className="flex-1">
+                      <Skeleton className="h-4 w-40 mb-1.5" />
+                      <Skeleton className="h-3 w-56" />
+                    </div>
+                    <Skeleton className="h-6 w-16 rounded-full" />
                   </div>
-                </div>
-                <div className="text-left sm:text-right">
-                  <div className="text-lg font-bold text-[#1E293B] dark:text-white group-hover:text-emerald-400 transition-colors duration-300">
-                    £{(deal.amount || 0).toLocaleString()}
-                  </div>
-                  <div className="text-sm text-emerald-500 group-hover:text-emerald-400 transition-colors duration-300">Signed</div>
-                </div>
+                ))}
               </div>
-            </motion.div>
-          )))}
-          
-          {loadRecentDeals && filteredDeals.length === 0 && (
-            <div className="text-center py-8">
-              <div className="text-[#64748B] dark:text-gray-400">No matching deals found</div>
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="mt-2 text-violet-500 hover:text-violet-400 text-sm"
-                >
-                  Clear search
-                </button>
-              )}
+            }>
+              <LazyActivityLog />
+            </Suspense>
+          </motion.div>
+        </TabsContent>
+
+        <TabsContent value="funnel">
+          <Suspense fallback={
+            <div className="pt-4 space-y-4 max-w-2xl mx-auto">
+              {[100, 78, 56, 36].map((w, i) => (
+                <Skeleton key={i} className="h-16 rounded-xl" style={{ width: `${w}%` }} />
+              ))}
             </div>
-          )}
-        </div>
-      </div>
+          }>
+            <LazySalesFunnel />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="heatmap">
+          <Suspense fallback={
+            <div className="pt-4 rounded-xl bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 p-4">
+              <div className="grid grid-cols-[30px_repeat(7,1fr)] gap-1">
+                {/* day labels */}
+                <div />
+                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (
+                  <Skeleton key={d} className="h-5 w-full rounded" />
+                ))}
+                {/* 5 weeks of cells */}
+                {Array.from({ length: 5 }).map((_, w) => (
+                  <React.Fragment key={w}>
+                    <Skeleton className="h-8 w-full rounded" />
+                    {Array.from({ length: 7 }).map((_, d) => (
+                      <Skeleton key={d} className="aspect-square w-full rounded" />
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          }>
+            <LazyHeatmap />
+          </Suspense>
+        </TabsContent>
+
+        <TabsContent value="leads">
+          <Suspense fallback={
+            <div className="pt-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="rounded-xl p-5 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50">
+                    <Skeleton className="h-4 w-24 mb-2" />
+                    <Skeleton className="h-8 w-16 mb-1" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                ))}
+              </div>
+              <Skeleton className="h-64 w-full rounded-xl" />
+            </div>
+          }>
+            <LazyLeadAnalytics />
+          </Suspense>
+        </TabsContent>
+      </Tabs>
       </div>
     </div>
   );

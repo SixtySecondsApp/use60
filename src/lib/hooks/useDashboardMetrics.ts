@@ -1,11 +1,10 @@
 // Cached dashboard metrics with progressive loading and comparison calculations
 // Avoids recomputation until user activities change
 
-import { useMemo, useEffect, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDate, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { getDate, endOfMonth } from 'date-fns';
 import { useProgressiveDashboardData } from './useLazyActivities';
-import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
 import { useViewMode } from '@/contexts/ViewModeContext';
 import { useAuthUser } from './useAuthUser';
@@ -23,16 +22,16 @@ interface DashboardComparisons {
   previousToDate: DashboardMetrics;
   previousTotal: DashboardMetrics;
   trends: {
-    revenue: number;
-    outbound: number;
-    meetings: number;
-    proposals: number;
+    revenue: number | null;
+    outbound: number | null;
+    meetings: number | null;
+    proposals: number | null;
   };
   totalTrends: {
-    revenue: number;
-    outbound: number;
-    meetings: number;
-    proposals: number;
+    revenue: number | null;
+    outbound: number | null;
+    meetings: number | null;
+    proposals: number | null;
   };
 }
 
@@ -69,49 +68,63 @@ function calculateMetrics(activities: any[]): DashboardMetrics {
   }
 }
 
-// Calculate trend percentage
-function calculateTrend(current: number, previous: number): number {
-  if (previous === 0) return current > 0 ? 100 : 0;
+// Calculate trend percentage — returns null when comparison is meaningless (no prior data)
+function calculateTrend(current: number, previous: number): number | null {
+  if (previous === 0) return current > 0 ? null : 0;
   return Math.round(((current - previous) / previous) * 100);
 }
 
-export function useDashboardMetrics(selectedMonth: Date, enabled: boolean = true) {
+export function useDashboardMetrics(dateRange: { start: Date; end: Date }, enabled: boolean = true) {
   const queryClient = useQueryClient();
   const { isViewMode, viewedUser } = useViewMode();
   const { data: authUser } = useAuthUser(); // Get cached auth user from React Query
   const authUserId = authUser?.id;
-  
-  // Progressive data loading
-  const { 
-    currentMonth, 
-    previousMonth, 
-    isInitialLoad, 
-    isLoadingComparisons,
-    hasComparisons 
-  } = useProgressiveDashboardData(selectedMonth, enabled);
 
-  // Current day of month for same-day comparisons
+  // Compute a previous period of the same duration, shifted back
+  const rangeDurationMs = dateRange.end.getTime() - dateRange.start.getTime();
+  const previousDateRange = useMemo(() => ({
+    start: new Date(dateRange.start.getTime() - rangeDurationMs),
+    end: new Date(dateRange.end.getTime() - rangeDurationMs),
+  }), [dateRange.start.getTime(), dateRange.end.getTime(), rangeDurationMs]);
+
+  // Progressive data loading — pass dateRange directly
+  const {
+    currentMonth,
+    previousMonth,
+    isInitialLoad,
+    isLoadingComparisons,
+    hasComparisons
+  } = useProgressiveDashboardData(dateRange, previousDateRange, enabled);
+
+  // Current day of month for same-day comparisons (only relevant for month-aligned ranges)
   const currentDayOfMonth = useMemo(() => {
     try {
-      return getDate(new Date());
+      const now = new Date();
+      const selectedMonth = dateRange.start;
+      const isCurrentMonth = selectedMonth.getFullYear() === now.getFullYear() && selectedMonth.getMonth() === now.getMonth();
+      if (isCurrentMonth) {
+        return getDate(now); // Today's day for current month
+      }
+      // For past months, use the last day (include all days for full month comparison)
+      return getDate(endOfMonth(selectedMonth));
     } catch (error) {
       logger.error('Error getting current day of month:', error);
       return 1;
     }
-  }, []);
+  }, [dateRange.start]);
 
-  // Cache key for metrics - includes timestamp to ensure invalidation works
+  // Cache key for metrics - includes dateRange ISO strings for correct invalidation
   const cacheKey = [
-    'dashboard-metrics', 
-    selectedMonth.getFullYear(), 
-    selectedMonth.getMonth(),
+    'dashboard-metrics',
+    dateRange.start.toISOString(),
+    dateRange.end.toISOString(),
     currentMonth.activities?.length ?? 'loading',
     previousMonth.activities?.length ?? 'loading',
     currentDayOfMonth,
     // Add ViewMode user to cache key
     isViewMode && viewedUser ? `view-${viewedUser.id}` : 'own',
     // Add a timestamp component that changes when activities change
-    currentMonth.activities ? JSON.stringify(currentMonth.activities.map(a => a.id)).slice(0, 20) : 'no-data'
+    currentMonth.activities ? `${currentMonth.activities.length}-${currentMonth.activities[0]?.id || 'empty'}` : 'no-data'
   ];
 
   // Cached calculations - only recomputes when activities change
@@ -165,19 +178,18 @@ export function useDashboardMetrics(selectedMonth: Date, enabled: boolean = true
     },
     enabled: Boolean(enabled && currentMonth.activities !== undefined),
     staleTime: 5 * 60 * 1000, // 5 minutes - prevent excessive recalculation
-    cacheTime: 10 * 60 * 1000, // 10 minutes - keep cache longer
+    gcTime: 10 * 60 * 1000, // 10 minutes - keep cache longer
     refetchOnWindowFocus: false, // Don't refetch on window focus to prevent flicker
     refetchOnMount: false, // Don't refetch on mount if we have cached data
-    keepPreviousData: true, // Keep showing old data while calculating new data
     placeholderData: previousData => previousData, // Use previous data as placeholder
   });
 
   // Invalidate cache when activities change
-  const invalidateMetrics = () => {
+  const invalidateMetrics = useCallback(() => {
     logger.log('🔄 Invalidating dashboard metrics and activities cache');
     queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
     queryClient.invalidateQueries({ queryKey: ['activities-lazy'] });
-  };
+  }, [queryClient]);
 
   // Use centralized realtime hub instead of creating separate channel
   // This reduces WebSocket connections by sharing with other subscriptions

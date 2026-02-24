@@ -12,6 +12,7 @@ interface ActionItem {
   category: 'call' | 'email' | 'meeting' | 'follow_up' | 'proposal' | 'demo' | 'general'
   priority: 'high' | 'medium' | 'low'
   confidence: number
+  timestampSeconds: number | null // seconds into the call where this was discussed
 }
 
 interface TalkTimeAnalysis {
@@ -516,6 +517,10 @@ Please analyze the transcript and provide:
      * 0.7-0.9: Strong indication ("We should...")
      * 0.5-0.7: Implied action ("That would be helpful...")
      * <0.5: Unclear or speculative
+   - Timestamp: If the transcript contains [HH:MM:SS] time markers, identify the approximate
+     timestamp (in seconds) where this action item was discussed or agreed upon.
+     Convert [HH:MM:SS] to seconds (e.g., [00:05:32] = 332). If no timestamp markers
+     are present in the transcript, use null.
 
 2. TALK TIME ANALYSIS:
    Analyze who spoke more during the call:
@@ -563,7 +568,8 @@ Return ONLY valid JSON in this exact format and include ONLY 3-8 of the most imp
       "category": "proposal",
       "priority": "high",
       "importance": "high",
-      "confidence": 0.95
+      "confidence": 0.95,
+      "timestampSeconds": 332
     },
     {
       "title": "Schedule technical demo with engineering team",
@@ -573,7 +579,8 @@ Return ONLY valid JSON in this exact format and include ONLY 3-8 of the most imp
       "category": "demo",
       "priority": "high",
       "importance": "high",
-      "confidence": 0.9
+      "confidence": 0.9,
+      "timestampSeconds": 1245
     },
     {
       "title": "Review proposal and provide feedback to team",
@@ -583,7 +590,8 @@ Return ONLY valid JSON in this exact format and include ONLY 3-8 of the most imp
       "category": "follow_up",
       "priority": "medium",
       "importance": "medium",
-      "confidence": 0.85
+      "confidence": 0.85,
+      "timestampSeconds": 1580
     },
     {
       "title": "Get budget approval from finance",
@@ -593,7 +601,8 @@ Return ONLY valid JSON in this exact format and include ONLY 3-8 of the most imp
       "category": "general",
       "priority": "high",
       "importance": "medium",
-      "confidence": 0.8
+      "confidence": 0.8,
+      "timestampSeconds": null
     }
   ],
   "talkTime": {
@@ -700,6 +709,7 @@ function parseClaudeResponse(content: string): TranscriptAnalysis {
       category: validateCategory(item.category),
       priority: validatePriority(item.priority),
       confidence: Math.min(Math.max(Number(item.confidence || 0.5), 0), 1),
+      timestampSeconds: item.timestampSeconds != null ? Math.max(0, Math.floor(Number(item.timestampSeconds))) : null,
     }))
 
     // Validate and normalize talk time

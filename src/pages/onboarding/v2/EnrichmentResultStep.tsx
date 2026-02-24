@@ -6,19 +6,62 @@
  * User then proceeds to verify/amend the AI-generated skills in the tabbed config step.
  */
 
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, ChevronRight } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
+import { supabase } from '@/lib/supabase/clientV2';
 
 export function EnrichmentResultStep() {
-  const { enrichment, setStep } = useOnboardingV2Store();
+  const { enrichment, setStep, organizationId, setEnrichment, resetAndCleanup } = useOnboardingV2Store();
+  const queryClient = useQueryClient();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleStartOver = async () => {
+    if (isResetting) return;
+    setIsResetting(true);
+    try {
+      await resetAndCleanup(queryClient);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  // Load enrichment from database if not in store
+  useEffect(() => {
+    if (!enrichment && organizationId) {
+      setIsLoading(true);
+      supabase
+        .from('organization_enrichment')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (data) {
+            setEnrichment(data);
+          } else if (error) {
+            console.error('Failed to load enrichment:', error);
+          }
+          setIsLoading(false);
+        });
+    }
+  }, [organizationId, enrichment, setEnrichment]);
 
   const handleContinue = () => {
-    // Go to skills_config where user can verify/amend AI-generated skill data
-    setStep('skills_config');
+    // Go to agent_config_confirm where user reviews AI-inferred agent settings
+    setStep('agent_config_confirm');
   };
 
   if (!enrichment) {
+    if (isLoading) {
+      return (
+        <div className="w-full max-w-2xl mx-auto px-4 py-8 text-center">
+          <p className="text-gray-400">Loading enrichment data...</p>
+        </div>
+      );
+    }
     return null;
   }
 
@@ -127,6 +170,17 @@ export function EnrichmentResultStep() {
             Review AI Suggestions
             <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
           </button>
+
+          {/* Start Over Link */}
+          <div className="mt-4 pt-4 border-t border-gray-800/50 text-center">
+            <button
+              onClick={handleStartOver}
+              disabled={isResetting}
+              className="text-xs text-gray-500 hover:text-gray-400 transition-colors disabled:opacity-50"
+            >
+              {isResetting ? 'Resetting...' : 'Start over'}
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>

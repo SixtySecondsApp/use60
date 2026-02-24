@@ -27,6 +27,8 @@ const DEFAULT_COOLDOWNS: Record<ProactiveNotificationType, CooldownConfig> = {
   meeting_prep: { windowMinutes: 60, keySuffix: 'entity' }, // 1 hour per meeting
   meeting_debrief: { windowMinutes: 24 * 60, keySuffix: 'entity' }, // 1 day per meeting
   daily_digest: { windowMinutes: 24 * 60 }, // 1 day
+  account_signal_alert: { windowMinutes: 24 * 60, keySuffix: 'entity' }, // 1 day per account
+  account_intelligence_digest: { windowMinutes: 7 * 24 * 60 }, // 7 days (weekly)
 };
 
 /**

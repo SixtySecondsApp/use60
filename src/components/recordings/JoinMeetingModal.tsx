@@ -3,6 +3,9 @@
  *
  * Modal for manually starting a recording by pasting a meeting link.
  * Supports Zoom, Google Meet, and Microsoft Teams.
+ *
+ * Attendees are automatically detected from MeetingBaaS webhook (bot.completed)
+ * so no manual input is needed here.
  */
 
 import React, { useState } from 'react'
@@ -78,10 +81,12 @@ export const JoinMeetingModal: React.FC<JoinMeetingModalProps> = ({
       return
     }
 
-    const result = await onJoin(meetingUrl.trim(), meetingTitle.trim() || undefined)
+    const result = await onJoin(
+      meetingUrl.trim(),
+      meetingTitle.trim() || undefined
+    )
 
     if (result.success) {
-      // Reset form and close modal
       setMeetingUrl('')
       setMeetingTitle('')
       onOpenChange(false)

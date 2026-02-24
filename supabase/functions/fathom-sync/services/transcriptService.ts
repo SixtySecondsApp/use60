@@ -5,10 +5,44 @@
  * for Fathom meeting recordings.
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import { calculateTranscriptFetchCooldownMinutes } from './helpers.ts'
-import { fetchTranscriptFromFathom, fetchSummaryFromFathom } from '../../_shared/fathomTranscript.ts'
+import { fetchTranscriptFromFathom, fetchTranscriptStructuredFromFathom, fetchSummaryFromFathom, type TranscriptSegment } from '../../_shared/fathomTranscript.ts'
 import { analyzeTranscriptWithClaude, deduplicateActionItems, type TranscriptAnalysis } from '../aiAnalysis.ts'
+
+/**
+ * Extract storable summary text from Fathom API response.
+ * Fathom may return:
+ *   - { summary: "plain text" }
+ *   - { summary: { template_name, markdown_formatted } }
+ *   - { template_name, markdown_formatted } (summary IS the root object)
+ * Returns JSON string for objects (frontend parses), plain string for text, or null.
+ */
+function extractSummaryText(data: any): string | null {
+  if (!data) return null
+  // Case 1: data.summary exists
+  if (data.summary) {
+    if (typeof data.summary === 'string') return data.summary
+    if (data.summary.markdown_formatted) return JSON.stringify(data.summary)
+  }
+  // Case 2: data itself has markdown_formatted (no summary wrapper)
+  if (data.markdown_formatted) return JSON.stringify(data)
+  // Case 3: data itself is a non-empty string
+  if (typeof data === 'string' && data.length > 0) return data
+  return null
+}
+
+/**
+ * Extract human-readable summary text for AI condensation.
+ */
+function extractReadableSummary(data: any): string | null {
+  if (!data) return null
+  if (data.summary?.markdown_formatted) return data.summary.markdown_formatted
+  if (typeof data.summary === 'string') return data.summary
+  if (data.markdown_formatted) return data.markdown_formatted
+  if (typeof data === 'string') return data
+  return null
+}
 
 /**
  * Condense a meeting summary into one-liners via edge function
@@ -97,13 +131,13 @@ export async function storeAIActionItems(
     return 0
   }
 
+  let storedCount = 0
   for (const item of uniqueAIActionItems) {
-    await supabase
+    const { error } = await supabase
       .from('meeting_action_items')
       .insert({
         meeting_id: meetingId,
         title: item.title,
-        description: item.title,
         priority: item.priority,
         category: item.category,
         assignee_name: item.assignedTo || null,
@@ -115,12 +149,18 @@ export async function storeAIActionItems(
         completed: false,
         synced_to_task: false,
         task_id: null,
-        timestamp_seconds: null,
+        timestamp_seconds: item.timestampSeconds ?? null,
         playback_url: null,
       })
+
+    if (error) {
+      console.error(`[transcriptService] Failed to insert AI action item for meeting ${meetingId}:`, error.code, error.message)
+    } else {
+      storedCount++
+    }
   }
 
-  return uniqueAIActionItems.length
+  return storedCount
 }
 
 /**
@@ -162,6 +202,35 @@ export async function autoFetchTranscriptAndAnalyze(
       }
 
       if (hasAIAnalysis && existingActionItems && existingActionItems.length > 0) {
+        // Still fetch summary if missing before returning
+        if (!meeting.summary) {
+          const recordingId = call.recording_id || call.id || meeting.fathom_recording_id
+          if (recordingId) {
+            console.log(`📋 Meeting ${meeting.id} has transcript+AI but no summary — fetching from Fathom (recording: ${recordingId})`)
+            try {
+              const summaryData = await fetchSummaryFromFathom(integration.access_token, String(recordingId))
+              console.log(`📋 Summary API response for meeting ${meeting.id}:`, JSON.stringify(summaryData)?.substring(0, 500))
+              const summaryText = extractSummaryText(summaryData)
+              if (summaryText) {
+                await supabase
+                  .from('meetings')
+                  .update({ summary: summaryText })
+                  .eq('id', meeting.id)
+                console.log(`✅ Summary fetched and stored for meeting ${meeting.id} (${summaryText.length} chars)`)
+
+                const readableSummary = extractReadableSummary(summaryData)
+                if (readableSummary) {
+                  condenseMeetingSummary(supabase, meeting.id, readableSummary, meeting.title || 'Meeting')
+                    .catch(() => undefined)
+                }
+              } else {
+                console.log(`ℹ️  Summary response had no extractable text for meeting ${meeting.id}`)
+              }
+            } catch (err) {
+              console.warn(`⚠️  Failed to fetch summary for meeting ${meeting.id}:`, err instanceof Error ? err.message : String(err))
+            }
+          }
+        }
         console.log(`✅ Meeting ${meeting.id} already has AI analysis and action items - skipping`)
         return
       }
@@ -199,24 +268,40 @@ export async function autoFetchTranscriptAndAnalyze(
         .eq('id', meeting.id)
 
       const accessToken = integration.access_token
-      transcript = await fetchTranscriptFromFathom(accessToken, String(recordingId))
+      const structuredResult = await fetchTranscriptStructuredFromFathom(accessToken, String(recordingId))
 
-      if (!transcript) {
+      if (!structuredResult?.text) {
         console.log(`ℹ️  Transcript not yet available for meeting ${meeting.id} (recording ID: ${recordingId}) - will retry later`)
         return
       }
 
+      transcript = structuredResult.text
       console.log(`✅ Successfully fetched transcript for meeting ${meeting.id} (${transcript.length} characters)`)
+
+      // Enrich participants from transcript speaker emails (non-fatal)
+      if (structuredResult.segments.length > 0) {
+        try {
+          await enrichParticipantsFromTranscriptEmails(
+            supabase, meeting.id, structuredResult.segments, meeting.owner_user_id || userId
+          )
+        } catch (enrichErr) {
+          console.warn(`⚠️  Failed to enrich participants from transcript emails:`, enrichErr instanceof Error ? enrichErr.message : String(enrichErr))
+        }
+      }
 
       // Fetch enhanced summary
       let summaryData: any = null
       try {
         summaryData = await fetchSummaryFromFathom(accessToken, String(recordingId))
-        if (summaryData) {
-          console.log(`✅ Successfully fetched enhanced summary for meeting ${meeting.id}`)
-        }
+        console.log(`📋 Summary API response for meeting ${meeting.id} (new transcript path):`, JSON.stringify(summaryData)?.substring(0, 500))
       } catch (error) {
         console.error(`⚠️  Failed to fetch enhanced summary for meeting ${meeting.id}:`, error instanceof Error ? error.message : String(error))
+      }
+
+      // Extract summary text using shared helper
+      const summaryText = extractSummaryText(summaryData)
+      if (summaryText) {
+        console.log(`✅ Summary extracted for meeting ${meeting.id} (${summaryText.length} chars)`)
       }
 
       // Store transcript immediately
@@ -224,7 +309,7 @@ export async function autoFetchTranscriptAndAnalyze(
         .from('meetings')
         .update({
           transcript_text: transcript,
-          summary: summaryData?.summary || meeting.summary,
+          ...(summaryText ? { summary: summaryText } : {}),
         })
         .eq('id', meeting.id)
 
@@ -232,10 +317,10 @@ export async function autoFetchTranscriptAndAnalyze(
       console.log(`🔍 Queueing meeting ${meeting.id} for AI search indexing`)
       await queueMeetingForIndexing(supabase, meeting.id, meeting.owner_user_id || userId)
 
-      // Condense summary (non-blocking)
-      const finalSummary = summaryData?.summary || meeting.summary
-      if (finalSummary && finalSummary.length > 0) {
-        condenseMeetingSummary(supabase, meeting.id, finalSummary, meeting.title || 'Meeting')
+      // Condense summary (non-blocking) — use readable text for AI condensation
+      const readableSummary = extractReadableSummary(summaryData) || meeting.summary
+      if (readableSummary && typeof readableSummary === 'string' && readableSummary.length > 0) {
+        condenseMeetingSummary(supabase, meeting.id, readableSummary, meeting.title || 'Meeting')
           .catch(() => undefined)
       }
     } else {
@@ -243,8 +328,36 @@ export async function autoFetchTranscriptAndAnalyze(
       console.log(`🔍 Queueing existing transcript meeting ${meeting.id} for AI search indexing`)
       await queueMeetingForIndexing(supabase, meeting.id, meeting.owner_user_id || userId)
 
-      // Condense existing summary if not already done
-      if (meeting.summary && !meeting.summary_oneliner) {
+      // Fetch summary if missing (transcript exists but summary was not available at first sync)
+      if (!meeting.summary) {
+        const recordingId = call.recording_id || call.id || meeting.fathom_recording_id
+        if (recordingId) {
+          console.log(`📋 Meeting ${meeting.id} has transcript but no summary (else path) — fetching from Fathom (recording: ${recordingId})`)
+          try {
+            const summaryData = await fetchSummaryFromFathom(integration.access_token, String(recordingId))
+            console.log(`📋 Summary API response for meeting ${meeting.id} (else path):`, JSON.stringify(summaryData)?.substring(0, 500))
+            const summaryText = extractSummaryText(summaryData)
+            if (summaryText) {
+              await supabase
+                .from('meetings')
+                .update({ summary: summaryText })
+                .eq('id', meeting.id)
+              console.log(`✅ Summary fetched and stored for meeting ${meeting.id} (${summaryText.length} chars)`)
+
+              const readableSummary = extractReadableSummary(summaryData)
+              if (readableSummary) {
+                condenseMeetingSummary(supabase, meeting.id, readableSummary, meeting.title || 'Meeting')
+                  .catch(() => undefined)
+              }
+            } else {
+              console.log(`ℹ️  Summary response had no extractable text for meeting ${meeting.id}`)
+            }
+          } catch (err) {
+            console.warn(`⚠️  Failed to fetch summary for meeting ${meeting.id}:`, err instanceof Error ? err.message : String(err))
+          }
+        }
+      } else if (!meeting.summary_oneliner) {
+        // Condense existing summary if not already done
         condenseMeetingSummary(supabase, meeting.id, meeting.summary, meeting.title || 'Meeting')
           .catch(() => undefined)
       }
@@ -320,6 +433,56 @@ export async function autoFetchTranscriptAndAnalyze(
       console.log(`✅ Stored ${storedCount} AI-generated action items for meeting ${meeting.id}`)
     }
 
+    // Generate fallback summary from AI analysis if Fathom didn't provide one
+    const { data: currentMeeting } = await supabase
+      .from('meetings')
+      .select('summary')
+      .eq('id', meeting.id)
+      .single()
+
+    if (!currentMeeting?.summary && analysis.coaching?.summary) {
+      console.log(`📝 Generating fallback summary from AI analysis for meeting ${meeting.id}`)
+      const fallbackSummary = analysis.coaching.summary
+      await supabase
+        .from('meetings')
+        .update({ summary: fallbackSummary })
+        .eq('id', meeting.id)
+      console.log(`✅ Fallback summary stored for meeting ${meeting.id} (${fallbackSummary.length} chars)`)
+
+      // Condense the fallback summary
+      condenseMeetingSummary(supabase, meeting.id, fallbackSummary, meeting.title || 'Meeting')
+        .catch(() => undefined)
+    }
+
+    // Trigger orchestrator for post-meeting workflows (fire-and-forget)
+    const orchestratorOrgId = meetingOrgId
+    if (orchestratorOrgId) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+      if (supabaseUrl && serviceRoleKey) {
+        fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'meeting_ended',
+            source: 'edge:fathom-sync',
+            org_id: orchestratorOrgId,
+            user_id: meeting.owner_user_id || userId,
+            payload: {
+              meeting_id: meeting.id,
+              title: meeting.title,
+              transcript_available: true,
+            },
+            idempotency_key: `meeting_ended:${meeting.id}`,
+          }),
+        }).catch(err => console.error('[fathom-sync] Orchestrator trigger failed:', err))
+        console.log(`🚀 Orchestrator triggered for meeting ${meeting.id} (source: fathom-sync)`)
+      }
+    }
+
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     const isMissingApiKey = errorMessage.includes('ANTHROPIC_API_KEY')
@@ -333,6 +496,101 @@ export async function autoFetchTranscriptAndAnalyze(
 
     if (error instanceof Error && error.stack) {
       console.error(`Stack trace:`, error.stack.substring(0, 500))
+    }
+  }
+}
+
+// ── CRM enrichment from transcript speaker emails ──────────────────
+
+/**
+ * Extract unique speaker emails from transcript segments
+ */
+function extractUniqueSpeakerEmails(
+  segments: TranscriptSegment[]
+): Array<{ name: string; email: string }> {
+  const seen = new Set<string>()
+  const result: Array<{ name: string; email: string }> = []
+  for (const seg of segments) {
+    if (seg.speaker_email && !seen.has(seg.speaker_email.toLowerCase())) {
+      seen.add(seg.speaker_email.toLowerCase())
+      result.push({ name: seg.speaker_name || '', email: seg.speaker_email })
+    }
+  }
+  return result
+}
+
+/**
+ * Enrich meeting participants with emails discovered in transcript.
+ * Conservative: adds unknown speakers as meeting_attendees or links
+ * existing contacts via meeting_contacts. Does NOT auto-create contacts.
+ */
+async function enrichParticipantsFromTranscriptEmails(
+  supabase: SupabaseClient,
+  meetingId: string,
+  segments: TranscriptSegment[],
+  userId: string
+): Promise<void> {
+  const speakerEmails = extractUniqueSpeakerEmails(segments)
+  if (speakerEmails.length === 0) return
+
+  console.log(`[transcript-service] Found ${speakerEmails.length} speaker email(s) in transcript for meeting ${meetingId}`)
+
+  for (const speaker of speakerEmails) {
+    try {
+      // Check if already tracked as meeting_attendee
+      const { data: existingAttendee } = await supabase
+        .from('meeting_attendees')
+        .select('id')
+        .eq('meeting_id', meetingId)
+        .eq('email', speaker.email)
+        .limit(1)
+        .maybeSingle()
+
+      if (existingAttendee) continue // Already tracked
+
+      // Check if this email matches an existing contact
+      const { data: existingContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('email', speaker.email)
+        .eq('owner_id', userId)
+        .limit(1)
+        .maybeSingle()
+
+      if (existingContact) {
+        // Link existing contact to meeting if not already linked
+        const { error: linkError } = await supabase
+          .from('meeting_contacts')
+          .upsert({
+            meeting_id: meetingId,
+            contact_id: existingContact.id,
+            is_primary: false,
+            role: 'speaker',
+          }, { onConflict: 'meeting_id,contact_id' })
+
+        if (!linkError) {
+          console.log(`[transcript-service] Linked existing contact ${speaker.email} to meeting ${meetingId}`)
+        }
+        continue
+      }
+
+      // New speaker not in calendar_invitees or contacts — add as meeting_attendee
+      const { error: insertError } = await supabase
+        .from('meeting_attendees')
+        .insert({
+          meeting_id: meetingId,
+          name: speaker.name,
+          email: speaker.email,
+          is_external: true,
+          role: 'speaker',
+        })
+
+      if (!insertError) {
+        console.log(`[transcript-service] Added transcript speaker ${speaker.email} as attendee for meeting ${meetingId}`)
+      }
+    } catch (err) {
+      // Non-fatal per speaker
+      console.warn(`[transcript-service] Error enriching speaker ${speaker.email}:`, err instanceof Error ? err.message : String(err))
     }
   }
 }

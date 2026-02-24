@@ -50,6 +50,23 @@ interface OrgWithSettings {
   recording_settings: RecordingSettings | null;
 }
 
+interface NotetakerUserSettings {
+  user_id: string;
+  org_id: string;
+  is_enabled: boolean;
+  auto_record_external: boolean;
+  auto_record_internal: boolean;
+  selected_calendar_id: string | null;
+}
+
+interface MeetingBaaSCalendar {
+  id: string;
+  user_id: string;
+  org_id: string;
+  calendar_id: string | null;
+  bot_scheduling_enabled: boolean;
+}
+
 interface CalendarEvent {
   id: string;
   user_id: string;
@@ -60,6 +77,7 @@ interface CalendarEvent {
   meeting_url: string | null;
   attendees_count: number;
   organizer_email: string | null;
+  calendar_id: string | null;
   raw_data: {
     attendees?: Array<{ email: string; responseStatus?: string }>;
   } | null;
@@ -152,6 +170,7 @@ async function deployBotForEvent(
         meeting_url: event.meeting_url,
         meeting_title: event.title,
         calendar_event_id: event.id,
+        scheduled_time: event.start_time, // Tell MeetingBaaS to wait until this time
         // Auto-join doesn't pass attendees - the webhook will handle this
       }),
     });
@@ -179,6 +198,8 @@ async function deployBotForEvent(
 
 /**
  * Process a single organization's upcoming events
+ * Now respects per-user calendar selection and recording preferences
+ * Skips calendars with native MeetingBaaS bot scheduling enabled
  */
 async function processOrgEvents(
   supabase: SupabaseClient,
@@ -188,71 +209,135 @@ async function processOrgEvents(
 ): Promise<{ events_checked: number; bots_deployed: number; errors: string[] }> {
   const result = { events_checked: 0, bots_deployed: 0, errors: [] as string[] };
 
-  const settings = org.recording_settings || {};
-  const externalOnly = settings.auto_record_external_only !== false; // Default true
+  const orgSettings = org.recording_settings || {};
 
-  // Query calendar events for this org in the time window
-  const { data: events, error } = await supabase
-    .from('calendar_events')
-    .select(`
-      id,
-      user_id,
-      org_id,
-      title,
-      start_time,
-      end_time,
-      meeting_url,
-      attendees_count,
-      organizer_email,
-      raw_data
-    `)
+  // Get all users who have notetaker enabled for this org
+  const { data: enabledUsers, error: usersError } = await supabase
+    .from('notetaker_user_settings')
+    .select('user_id, org_id, is_enabled, auto_record_external, auto_record_internal, selected_calendar_id')
     .eq('org_id', org.id)
-    .gte('start_time', windowStart.toISOString())
-    .lte('start_time', windowEnd.toISOString())
-    .not('meeting_url', 'is', null);
+    .eq('is_enabled', true);
 
-  if (error) {
-    result.errors.push(`Failed to query events for org ${org.id}: ${error.message}`);
+  if (usersError) {
+    result.errors.push(`Failed to query notetaker users for org ${org.id}: ${usersError.message}`);
     return result;
   }
 
-  if (!events || events.length === 0) {
+  if (!enabledUsers || enabledUsers.length === 0) {
+    console.log(`[AutoJoin] No users with notetaker enabled for org ${org.id}`);
     return result;
   }
 
-  for (const event of events as CalendarEvent[]) {
-    result.events_checked++;
+  // Get calendars with native MeetingBaaS bot scheduling enabled
+  // These calendars are handled by MeetingBaaS directly, so we skip them
+  const { data: nativeSchedulingCalendars, error: calError } = await supabase
+    .from('meetingbaas_calendars')
+    .select('id, user_id, org_id, calendar_id, bot_scheduling_enabled')
+    .eq('org_id', org.id)
+    .eq('bot_scheduling_enabled', true);
 
-    // Skip if no valid meeting URL
-    if (!event.meeting_url || !isValidMeetingUrl(event.meeting_url)) {
+  if (calError) {
+    console.warn(`[AutoJoin] Failed to check native scheduling calendars: ${calError.message}`);
+    // Continue anyway - better to potentially duplicate than skip
+  }
+
+  // Build a set of user_ids with native bot scheduling enabled
+  const usersWithNativeScheduling = new Set<string>(
+    (nativeSchedulingCalendars as MeetingBaaSCalendar[] || []).map(c => c.user_id)
+  );
+
+  if (usersWithNativeScheduling.size > 0) {
+    console.log(`[AutoJoin] ${usersWithNativeScheduling.size} users have native MeetingBaaS bot scheduling (will skip)`);
+  }
+
+  console.log(`[AutoJoin] Found ${enabledUsers.length} users with notetaker enabled in org ${org.id}`);
+
+  // Process each user's calendar events
+  for (const userSettings of enabledUsers as NotetakerUserSettings[]) {
+    // Skip users with native MeetingBaaS bot scheduling enabled
+    // MeetingBaaS handles bot deployment automatically for these users
+    if (usersWithNativeScheduling.has(userSettings.user_id)) {
+      console.log(`[AutoJoin] Skipping user ${userSettings.user_id} - native MeetingBaaS bot scheduling enabled`);
       continue;
     }
 
-    // Skip if external-only mode and no external attendees
-    if (externalOnly) {
-      const attendeeEmails = getAttendeeEmails(event);
-      if (!hasExternalAttendees(attendeeEmails, org.company_domain)) {
-        console.log(`[AutoJoin] Skipping internal-only event: ${event.title}`);
+    // Build query for this user's calendar events
+    let eventsQuery = supabase
+      .from('calendar_events')
+      .select(`
+        id,
+        user_id,
+        org_id,
+        title,
+        start_time,
+        end_time,
+        meeting_url,
+        attendees_count,
+        organizer_email,
+        raw_data,
+        calendar_id
+      `)
+      .eq('user_id', userSettings.user_id)
+      .gte('start_time', windowStart.toISOString())
+      .lte('start_time', windowEnd.toISOString())
+      .not('meeting_url', 'is', null);
+
+    // Filter by selected calendar if specified (not 'primary' or null)
+    // Note: 'primary' means use all calendars, specific ID means only that calendar
+    if (userSettings.selected_calendar_id && userSettings.selected_calendar_id !== 'primary') {
+      eventsQuery = eventsQuery.eq('calendar_id', userSettings.selected_calendar_id);
+    }
+
+    const { data: events, error: eventsError } = await eventsQuery;
+
+    if (eventsError) {
+      result.errors.push(`Failed to query events for user ${userSettings.user_id}: ${eventsError.message}`);
+      continue;
+    }
+
+    if (!events || events.length === 0) {
+      continue;
+    }
+
+    for (const event of events as CalendarEvent[]) {
+      result.events_checked++;
+
+      // Skip if no valid meeting URL
+      if (!event.meeting_url || !isValidMeetingUrl(event.meeting_url)) {
         continue;
       }
-    }
 
-    // Skip if already recording
-    const alreadyRecording = await hasExistingRecording(supabase, event.id);
-    if (alreadyRecording) {
-      console.log(`[AutoJoin] Skipping, already recording: ${event.title}`);
-      continue;
-    }
+      // Check attendee type based on user preferences
+      const attendeeEmails = getAttendeeEmails(event);
+      const isExternal = hasExternalAttendees(attendeeEmails, org.company_domain);
 
-    // Deploy bot
-    console.log(`[AutoJoin] Deploying bot for: ${event.title} (${event.meeting_url})`);
-    const deployResult = await deployBotForEvent(supabase, event, org.id);
+      // Skip based on user's external/internal preferences
+      if (isExternal && !userSettings.auto_record_external) {
+        console.log(`[AutoJoin] Skipping external event (user pref): ${event.title}`);
+        continue;
+      }
+      if (!isExternal && !userSettings.auto_record_internal) {
+        console.log(`[AutoJoin] Skipping internal event (user pref): ${event.title}`);
+        continue;
+      }
 
-    if (deployResult.success) {
-      result.bots_deployed++;
-      console.log(`[AutoJoin] Bot deployed, recording_id: ${deployResult.recording_id}`);
-    } else {
-      result.errors.push(`Failed to deploy for event ${event.id}: ${deployResult.error}`);
+      // Skip if already recording
+      const alreadyRecording = await hasExistingRecording(supabase, event.id);
+      if (alreadyRecording) {
+        console.log(`[AutoJoin] Skipping, already recording: ${event.title}`);
+        continue;
+      }
+
+      // Deploy bot
+      console.log(`[AutoJoin] Deploying bot for: ${event.title} (${event.meeting_url}) [user: ${userSettings.user_id}]`);
+      const deployResult = await deployBotForEvent(supabase, event, org.id);
+
+      if (deployResult.success) {
+        result.bots_deployed++;
+        console.log(`[AutoJoin] Bot deployed, recording_id: ${deployResult.recording_id}`);
+      } else {
+        result.errors.push(`Failed to deploy for event ${event.id}: ${deployResult.error}`);
+      }
     }
   }
 

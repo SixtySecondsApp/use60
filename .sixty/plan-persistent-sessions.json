@@ -1,0 +1,581 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "feature": "persistent-sessions",
+    "createdAt": "2026-02-03T10:00:00Z",
+    "branch": "feature/persistent-sessions-memory"
+  },
+
+  "features": [
+    {
+      "id": "persistent-sessions",
+      "name": "Persistent Sessions with Memory",
+      "status": "complete",
+      "description": "Implement a persistent 'main session' model for the copilot where users have one continuous conversation (like texting a friend), with automatic memory extraction and proactive recall.",
+      "prd": null,
+      "consultReport": null,
+      "createdAt": "2026-02-03T10:00:00Z",
+      "completedAt": "2026-02-03T22:40:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "MEM-001",
+      "feature": "persistent-sessions",
+      "title": "Create copilot_memories table with RLS",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["auth.users", "deals", "contacts", "companies"]
+      },
+      "blocks": ["MEM-003", "MEM-004"],
+      "parallelWith": ["MEM-002"],
+      "acceptance": [
+        "copilot_memories table created with columns: id, user_id, clerk_org_id, category, subject, content, context_summary",
+        "Entity linking columns: deal_id, contact_id, company_id with proper FK constraints",
+        "Metadata columns: confidence, source_message_ids, last_accessed_at, access_count",
+        "RLS policy: Users can manage only their own memories",
+        "Indexes on user_id, category, subject, deal_id, contact_id"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "supabase/migrations/20260203110000_copilot_memories.sql"
+      ]
+    },
+    {
+      "id": "MEM-002",
+      "feature": "persistent-sessions",
+      "title": "Add main session tracking to copilot_conversations",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["copilot_conversations"]
+      },
+      "blocks": ["MEM-005"],
+      "parallelWith": ["MEM-001"],
+      "acceptance": [
+        "copilot_conversations has is_main_session BOOLEAN column",
+        "copilot_conversations has total_tokens_estimate INTEGER column",
+        "copilot_conversations has last_compaction_at TIMESTAMPTZ column",
+        "Unique partial index ensures only one main session per user",
+        "Migration handles existing data gracefully"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "supabase/migrations/20260203110001_copilot_session_updates.sql"
+      ]
+    },
+    {
+      "id": "MEM-003",
+      "feature": "persistent-sessions",
+      "title": "Create copilot_session_summaries table",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["MEM-001"],
+        "files": [],
+        "schema": ["copilot_conversations"]
+      },
+      "blocks": ["MEM-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "copilot_session_summaries table created with proper FK to conversations",
+        "Columns: summary, key_points (JSONB), message_range_start/end UUIDs",
+        "Columns: messages_summarized, tokens_before, tokens_after for metrics",
+        "RLS policy: Users can view summaries for their own conversations",
+        "Indexes on user_id and conversation_id"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "supabase/migrations/20260203110002_copilot_session_summaries.sql"
+      ]
+    },
+    {
+      "id": "MEM-004",
+      "feature": "persistent-sessions",
+      "title": "Add memory types to copilot type definitions",
+      "type": "types",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["MEM-001"],
+        "files": ["src/lib/types/copilot.ts"],
+        "schema": []
+      },
+      "blocks": ["MEM-006", "MEM-008"],
+      "parallelWith": ["MEM-003"],
+      "acceptance": [
+        "CopilotMemory interface with all DB columns typed",
+        "MemoryCategory type union: 'deal' | 'relationship' | 'preference' | 'commitment' | 'fact'",
+        "ExtractedMemory interface for LLM extraction output",
+        "MemoryInput interface for storing new memories",
+        "CompactionResult interface for compaction operation results"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/types/copilot.ts"
+      ]
+    },
+    {
+      "id": "MEM-005",
+      "feature": "persistent-sessions",
+      "title": "Create CopilotSessionService - getMainSession",
+      "type": "service",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["MEM-002"],
+        "files": [],
+        "schema": ["copilot_conversations"]
+      },
+      "blocks": ["MEM-009", "MEM-010"],
+      "parallelWith": ["MEM-006"],
+      "acceptance": [
+        "CopilotSessionService class created with Supabase client injection",
+        "getMainSession(userId) returns existing main session or creates new one",
+        "Uses maybeSingle() pattern for safe retrieval",
+        "Sets is_main_session=true on creation",
+        "Returns typed CopilotConversation object"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/services/copilotSessionService.ts"
+      ]
+    },
+    {
+      "id": "MEM-006",
+      "feature": "persistent-sessions",
+      "title": "Create CopilotMemoryService - storeMemory and basic retrieval",
+      "type": "service",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["MEM-004"],
+        "files": [],
+        "schema": ["copilot_memories"]
+      },
+      "blocks": ["MEM-008"],
+      "parallelWith": ["MEM-005"],
+      "acceptance": [
+        "CopilotMemoryService class with Supabase client injection",
+        "storeMemory(memory: MemoryInput) inserts with entity linking",
+        "getMemoriesByCategory(userId, category) returns filtered memories",
+        "recordAccess(memoryId) updates last_accessed_at and access_count",
+        "Uses explicit column selection (not select('*'))"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/services/copilotMemoryService.ts"
+      ]
+    },
+    {
+      "id": "MEM-007",
+      "feature": "persistent-sessions",
+      "title": "Add session compaction methods to CopilotSessionService",
+      "type": "service",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["MEM-003", "MEM-005"],
+        "files": ["src/lib/services/copilotSessionService.ts"],
+        "schema": ["copilot_session_summaries"]
+      },
+      "blocks": ["MEM-011"],
+      "parallelWith": ["MEM-008"],
+      "acceptance": [
+        "estimateTokens(text) utility returns rough token count (chars/4)",
+        "needsCompaction(conversationId) checks total_tokens_estimate > 80k threshold",
+        "loadAllMessages(conversationId) fetches full message history",
+        "findSplitPoint(messages, targetSize) finds where to split for compaction",
+        "Constants: COMPACTION_THRESHOLD=80000, TARGET_CONTEXT_SIZE=20000"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/services/copilotSessionService.ts"
+      ]
+    },
+    {
+      "id": "MEM-008",
+      "feature": "persistent-sessions",
+      "title": "Add memory extraction to CopilotMemoryService",
+      "type": "service",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["MEM-006", "MEM-004"],
+        "files": ["src/lib/services/copilotMemoryService.ts"],
+        "schema": []
+      },
+      "blocks": ["MEM-011"],
+      "parallelWith": ["MEM-007"],
+      "acceptance": [
+        "MEMORY_EXTRACTION_PROMPT constant with category definitions",
+        "extractMemories(messages) calls Claude to extract structured memories",
+        "Parses JSON response into ExtractedMemory[] array",
+        "Handles extraction errors gracefully with empty array fallback",
+        "Links extracted memories to entities by name matching"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/services/copilotMemoryService.ts"
+      ]
+    },
+    {
+      "id": "MEM-009",
+      "feature": "persistent-sessions",
+      "title": "Add message persistence to CopilotSessionService",
+      "type": "service",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["MEM-005"],
+        "files": ["src/lib/services/copilotSessionService.ts"],
+        "schema": ["copilot_messages"]
+      },
+      "blocks": ["MEM-012"],
+      "parallelWith": ["MEM-007", "MEM-008"],
+      "acceptance": [
+        "addMessage(conversationId, message) persists single message to DB",
+        "loadMessages(conversationId, limit, before?) returns paginated messages",
+        "updateTokenEstimate(conversationId) recalculates total_tokens_estimate",
+        "Messages include tool_calls in metadata JSONB",
+        "Returns properly typed CopilotMessage objects"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/services/copilotSessionService.ts"
+      ]
+    },
+    {
+      "id": "MEM-010",
+      "feature": "persistent-sessions",
+      "title": "Add memory recall to CopilotMemoryService",
+      "type": "service",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["MEM-005", "MEM-006"],
+        "files": ["src/lib/services/copilotMemoryService.ts"],
+        "schema": []
+      },
+      "blocks": ["MEM-013"],
+      "parallelWith": ["MEM-011"],
+      "acceptance": [
+        "recallRelevant(userId, context, limit) returns contextually relevant memories",
+        "Uses keyword matching on subject and content fields",
+        "Filters by recent access (last_accessed_at) as relevance signal",
+        "Returns top N memories ordered by relevance score",
+        "Updates access stats for returned memories"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/services/copilotMemoryService.ts"
+      ]
+    },
+    {
+      "id": "MEM-011",
+      "feature": "persistent-sessions",
+      "title": "Implement full compaction flow",
+      "type": "service",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["MEM-007", "MEM-008"],
+        "files": ["src/lib/services/copilotSessionService.ts", "src/lib/services/copilotMemoryService.ts"],
+        "schema": []
+      },
+      "blocks": ["MEM-014"],
+      "parallelWith": ["MEM-010"],
+      "acceptance": [
+        "compactSession(conversationId) orchestrates full compaction flow",
+        "Generates summary of old messages via Claude call",
+        "Extracts memories from summarized messages via MemoryService",
+        "Stores summary in copilot_session_summaries table",
+        "Soft-deletes compacted messages (is_compacted=true or delete)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/services/copilotSessionService.ts"
+      ]
+    },
+    {
+      "id": "MEM-012",
+      "feature": "persistent-sessions",
+      "title": "Update useCopilotChat to load persisted session",
+      "type": "hook",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["MEM-009"],
+        "files": ["src/lib/hooks/useCopilotChat.ts"],
+        "schema": []
+      },
+      "blocks": ["MEM-015"],
+      "parallelWith": ["MEM-013"],
+      "acceptance": [
+        "useEffect loads main session on mount via sessionService.getMainSession",
+        "Loads last N messages from session on init",
+        "Sets conversationId state for message persistence",
+        "Shows loading state while fetching session",
+        "Handles session load errors gracefully"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/hooks/useCopilotChat.ts"
+      ]
+    },
+    {
+      "id": "MEM-013",
+      "feature": "persistent-sessions",
+      "title": "Update edge function to inject memory context",
+      "type": "api",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["MEM-010"],
+        "files": ["supabase/functions/copilot-autonomous/index.ts"],
+        "schema": ["copilot_memories"]
+      },
+      "blocks": ["MEM-015"],
+      "parallelWith": ["MEM-012"],
+      "acceptance": [
+        "buildContextWithMemories() retrieves relevant memories for user message",
+        "Formats memories as '## Relevant Memories' section in system prompt",
+        "MEMORY_SYSTEM_ADDITION constant added to system prompt",
+        "Memory context injected before Claude call",
+        "Handles empty memories gracefully (no section added)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    {
+      "id": "MEM-014",
+      "feature": "persistent-sessions",
+      "title": "Add compaction check to edge function",
+      "type": "api",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["MEM-011"],
+        "files": ["supabase/functions/copilot-autonomous/index.ts"],
+        "schema": []
+      },
+      "blocks": ["MEM-015"],
+      "parallelWith": ["MEM-012", "MEM-013"],
+      "acceptance": [
+        "handleCompactionIfNeeded() called at start of execution",
+        "Checks needsCompaction() and triggers compactSession() if needed",
+        "Compaction runs async/background (doesn't block response)",
+        "Logs compaction events for observability",
+        "Updates last_compaction_at timestamp on conversation"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    {
+      "id": "MEM-015",
+      "feature": "persistent-sessions",
+      "title": "Wire message persistence in useCopilotChat",
+      "type": "hook",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["MEM-012", "MEM-013", "MEM-014"],
+        "files": ["src/lib/hooks/useCopilotChat.ts"],
+        "schema": []
+      },
+      "blocks": ["MEM-016"],
+      "parallelWith": [],
+      "acceptance": [
+        "persistMessage callback saves user messages to DB immediately",
+        "Assistant messages saved after streaming completes",
+        "Tool calls included in message metadata",
+        "Token estimate updated after each message pair",
+        "Error handling for persistence failures (non-blocking)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "src/lib/hooks/useCopilotChat.ts"
+      ]
+    },
+    {
+      "id": "MEM-016",
+      "feature": "persistent-sessions",
+      "title": "End-to-end testing for session persistence",
+      "type": "testing",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["MEM-015"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Test: User closes/reopens browser and sees previous messages",
+        "Test: New messages persist to DB correctly",
+        "Test: Session compaction triggers at threshold and extracts memories",
+        "Test: Relevant memories appear in copilot responses",
+        "Test: Multiple users have isolated sessions"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "completedAt": "2026-02-03T22:40:00Z",
+      "files": [
+        "tests/unit/copilot/session-persistence.test.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 16,
+    "completedStories": 16,
+    "currentFeature": "persistent-sessions",
+    "estimatedHours": 4.5,
+    "actualHours": null,
+    "parallelGroups": [
+      {
+        "name": "Schema Foundation",
+        "stories": ["MEM-001", "MEM-002"],
+        "status": "complete",
+        "note": "Can run in parallel - independent tables"
+      },
+      {
+        "name": "Schema Extension",
+        "stories": ["MEM-003", "MEM-004"],
+        "status": "complete",
+        "note": "Can run in parallel - summaries table + types"
+      },
+      {
+        "name": "Core Services",
+        "stories": ["MEM-005", "MEM-006"],
+        "status": "complete",
+        "note": "Can run in parallel - session service + memory service"
+      },
+      {
+        "name": "Service Methods",
+        "stories": ["MEM-007", "MEM-008", "MEM-009"],
+        "status": "complete",
+        "note": "Compaction, extraction, persistence methods"
+      },
+      {
+        "name": "Advanced Features",
+        "stories": ["MEM-010", "MEM-011"],
+        "status": "complete",
+        "note": "Memory recall + full compaction flow"
+      },
+      {
+        "name": "Integration",
+        "stories": ["MEM-012", "MEM-013", "MEM-014"],
+        "status": "complete",
+        "note": "Hook updates + edge function updates - can run in parallel"
+      },
+      {
+        "name": "Final Wiring",
+        "stories": ["MEM-015"],
+        "status": "complete"
+      },
+      {
+        "name": "Testing",
+        "stories": ["MEM-016"],
+        "status": "complete"
+      }
+    ]
+  },
+
+  "architecture": {
+    "overview": "Persistent main session model where each user has one continuous conversation. Messages persist to database, and when approaching token limits, old messages are summarized and memories extracted. Relevant memories are proactively injected into context.",
+    "components": {
+      "CopilotSessionService": "Manages main session, message persistence, compaction flow",
+      "CopilotMemoryService": "Stores/retrieves memories, handles extraction and recall",
+      "useCopilotChat": "Updated to load persisted session and save messages",
+      "copilot-autonomous": "Edge function with memory injection and compaction triggers"
+    },
+    "dataFlow": [
+      "1. User opens copilot → getMainSession() loads or creates session",
+      "2. Previous messages loaded from copilot_messages",
+      "3. User sends message → persisted immediately",
+      "4. Edge function recalls relevant memories → injects into system prompt",
+      "5. Claude responds with memory-aware context",
+      "6. Response persisted, token estimate updated",
+      "7. If tokens > 80k → compaction triggered (async)",
+      "8. Compaction: summarize old messages, extract memories, soft-delete"
+    ],
+    "keyDecisions": {
+      "singleMainSession": "One persistent session per user simplifies UX - like texting a friend",
+      "tokenThreshold": "80k compaction threshold leaves room for context while preventing overflow",
+      "keywordRecall": "Start with keyword matching for memory recall (can add embeddings later)",
+      "asyncCompaction": "Compaction runs async to not block user responses"
+    }
+  },
+
+  "risks": [
+    {
+      "risk": "Memory extraction quality varies with conversation content",
+      "mitigation": "Structured extraction prompt, confidence scores, human review option"
+    },
+    {
+      "risk": "Compaction could lose important context",
+      "mitigation": "Summaries stored, memories extracted before deletion, keep recent 20k tokens"
+    },
+    {
+      "risk": "Too many memories could clutter context",
+      "mitigation": "Limit to top 10 relevant memories, use access stats for recency weighting"
+    },
+    {
+      "risk": "Keyword matching may miss semantically relevant memories",
+      "mitigation": "Plan for future embedding-based search, start simple and iterate"
+    }
+  ],
+
+  "successCriteria": [
+    "User can close browser and return to continue same conversation",
+    "Conversation automatically compacts when approaching token limits",
+    "Key facts extracted and stored as searchable memories",
+    "Copilot proactively references relevant past context",
+    "No data loss during compaction - summaries preserve key information"
+  ]
+}

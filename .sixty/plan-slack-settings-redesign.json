@@ -1,0 +1,133 @@
+{
+  "feature": "slack-settings-redesign",
+  "consultReport": ".sixty/consult/slack-settings-redesign.md",
+  "createdAt": "2026-02-21",
+  "stories": [
+    {
+      "id": "SLACK-UI-001",
+      "title": "Add Status Grid Overview component to Features tab",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "estimatedMinutes": 25,
+      "dependencies": [],
+      "blocks": ["SLACK-UI-003"],
+      "acceptance": [
+        "New SlackStatusGrid component renders at top of Features tab",
+        "Shows all 4 features with on/off indicator (green dot vs gray), feature name, and destination (channel name or 'DM' or 'Off')",
+        "Shows all 8 agent alert categories with on/off indicator and channel name or 'Not set'",
+        "Agent alerts displayed in a 2-column grid within the overview card",
+        "Reads from existing notificationSettings data — no new queries"
+      ],
+      "files": [
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "description": "Create a compact status grid card that sits at the top of the Features tab. It provides an at-a-glance view of all configured features and agent alert channels. Each row shows: status indicator (colored dot), feature/alert name, and destination (channel name, 'DM', or 'Off'/'Not set'). Features section shows 4 rows, Agent Alerts section shows 8 items in a 2-column layout. Uses existing notificationSettingsByFeature map and AGENT_ALERT_CATEGORIES constant. No new data fetching needed."
+    },
+    {
+      "id": "SLACK-UI-002",
+      "title": "Refactor FeatureSettingsCard to compact 2x2 layout with expandable details",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 30,
+      "dependencies": [],
+      "blocks": [],
+      "acceptance": [
+        "Each feature card shows: icon, title, toggle switch, and channel selector inline in the card header — all visible without expanding",
+        "A 'Configure' button/link reveals the full settings (delivery method radio group, schedule, stakeholders, thresholds) inline below",
+        "Cards use tighter padding (p-3 instead of p-4, reduced spacing between elements)",
+        "2x2 grid layout preserved on large screens",
+        "All existing FeatureSettingsCard functionality preserved (delivery method, schedule, stakeholders, thresholds, test button)",
+        "Cards start collapsed — only toggle + channel visible by default"
+      ],
+      "files": [
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "description": "Refactor the existing FeatureSettingsCard component. Currently when enabled, all controls (delivery method radios, channel selector, schedule, stakeholders, thresholds) are shown immediately, making each card very tall (~400-600px). Change to: always show icon + title + toggle + channel selector in the card header. Add a 'Configure' text button that toggles visibility of the detailed settings section. Reduce padding/spacing throughout. The test button moves inside the expandable section."
+    },
+    {
+      "id": "SLACK-UI-003",
+      "title": "Promote Agent Alerts section and add visual parity with features",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "estimatedMinutes": 15,
+      "dependencies": ["SLACK-UI-001"],
+      "blocks": [],
+      "acceptance": [
+        "Agent Alerts section appears directly below the status grid overview (before the feature cards grid)",
+        "Section has a clear heading with icon, matching the visual weight of the features section heading",
+        "Compact row layout preserved (icon + label + channel selector per row)",
+        "Test Alert button remains at bottom of section",
+        "Section is fully visible without scrolling past feature cards"
+      ],
+      "files": [
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "description": "Move the Agent Alerts section from below the 2x2 feature cards grid to directly below the status grid overview. This ensures it's visible without scrolling. The current compact row layout (icon + label + channel selector) is already good — just needs to be repositioned. Add a section heading that matches the features heading style. Reorder the Features tab layout to: (1) Status Grid Overview, (2) Agent Alerts, (3) Feature Cards 2x2 grid."
+    },
+    {
+      "id": "SLACK-UI-004",
+      "title": "Tighten Personal tab layout with compact proactive agent list",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "estimatedMinutes": 20,
+      "dependencies": [],
+      "blocks": [],
+      "acceptance": [
+        "Personal tab 2-column layout preserved",
+        "Card padding reduced (CardContent pt-4 instead of pt-5, tighter internal spacing)",
+        "ProactiveAgentPreferences items render in a compact table-like layout: one row per sequence with icon, label, toggle, and delivery selector all inline",
+        "Remove the per-item description text (keep it as title attribute for hover)",
+        "Remove the per-item icon background boxes — use inline icons instead",
+        "NotificationPreferences items use tighter py-1 spacing (already close, just verify)",
+        "MorningBriefPreferences uses more compact layout"
+      ],
+      "files": [
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "description": "Tighten the Personal tab layout. The ProactiveAgentPreferences component currently renders each of 9 sequences as a bordered card with icon box, title, description, toggle, and delivery selector — taking ~100px height each (~900px total). Redesign to a compact table-like list: each row is a single line with inline icon (no background box), label, toggle on the right, and a small delivery channel selector. Remove description text (move to title attr). Reduce CardContent padding across all Personal tab cards."
+    },
+    {
+      "id": "SLACK-UI-005",
+      "title": "Add non-admin overview card on Personal tab",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "estimatedMinutes": 10,
+      "dependencies": ["SLACK-UI-001"],
+      "blocks": [],
+      "acceptance": [
+        "Non-admin users see a compact status summary card at top of Personal tab showing org feature status",
+        "Shows which features are enabled/disabled and their delivery destinations (read-only)",
+        "Replaces the current simple Alert + 2-column text at the bottom of Personal tab",
+        "Reuses the same status grid visual style from the admin Features tab but in read-only mode"
+      ],
+      "files": [
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "description": "For non-admin users, replace the current bottom-of-page Alert + sparse text summary with a compact read-only status overview card at the TOP of the Personal tab. Reuse the visual style from SlackStatusGrid (story SLACK-UI-001) but without edit controls. Shows feature names + status + destination as read-only text. This gives non-admins visibility into org settings without needing to scroll."
+    }
+  ],
+  "execution": {
+    "totalStories": 5,
+    "parallelGroups": [
+      {
+        "stories": ["SLACK-UI-001", "SLACK-UI-002", "SLACK-UI-004"],
+        "reason": "Independent components: status grid, feature card refactor, and personal tab changes don't overlap"
+      },
+      {
+        "stories": ["SLACK-UI-003", "SLACK-UI-005"],
+        "reason": "Both depend on SLACK-UI-001 status grid, can run in parallel after it"
+      }
+    ],
+    "estimatedTotal": "100 minutes (~1.5 hours)",
+    "mvp": {
+      "stories": ["SLACK-UI-001", "SLACK-UI-002", "SLACK-UI-003"],
+      "estimate": "70 minutes",
+      "delivers": "Status grid overview, compact feature cards, promoted agent alerts — solves the core discoverability problem"
+    }
+  }
+}

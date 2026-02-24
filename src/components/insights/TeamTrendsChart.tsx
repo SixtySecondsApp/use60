@@ -16,30 +16,24 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
-  Legend,
 } from 'recharts';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, addDays } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BarChart3, Smile, Clock, AlertCircle } from 'lucide-react';
+import { BarChart3, Smile, Clock, AlertCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useTeamTrends, useTeamTimeSeries, type TimePeriod } from '@/lib/hooks/useTeamAnalytics';
+import { useTeamTrends, type TimePeriod } from '@/lib/hooks/useTeamAnalytics';
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface TeamTrendsChartProps {
   period: TimePeriod;
+  dateRange?: { start: Date; end: Date };
   className?: string;
 }
-
-// Color palette for multi-line charts
-const REP_COLORS = [
-  '#3b82f6', // blue
-  '#10b981', // emerald
-  '#8b5cf6', // violet
-  '#f59e0b', // amber
-  '#ec4899', // pink
-  '#06b6d4', // cyan
-  '#f97316', // orange
-  '#6366f1', // indigo
-];
 
 // Skeleton for loading state
 export const TeamTrendsChartSkeleton = () => (
@@ -85,14 +79,32 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
+/** Format a date string for the X axis based on the selected period */
+function formatDateLabel(dateStr: string, period: TimePeriod): string {
+  const d = parseISO(dateStr);
+  if (period === 90) {
+    // 3-day bucket: show range like "Feb 1-3"
+    const end = addDays(d, 2);
+    return `${format(d, 'MMM d')}-${format(end, 'd')}`;
+  }
+  return format(d, 'MMM d');
+}
+
+/** X-axis tick interval to avoid label crowding */
+function getXAxisInterval(period: TimePeriod): number {
+  if (period === 7) return 0; // show all 7 labels
+  if (period === 30) return 4; // every 5th label (~6 visible)
+  return 3; // 90-day: every 4th bucket (~8 visible)
+}
+
 // Meeting Volume Chart (Area chart)
-function MeetingVolumeChart({ data }: { data: Array<{ date: string; count: number }> }) {
+function MeetingVolumeChart({ data, period }: { data: Array<{ date: string; count: number }>; period: TimePeriod }) {
   const chartData = useMemo(() => {
     return data.map((d) => ({
       ...d,
-      dateFormatted: format(parseISO(d.date), 'MMM d'),
+      dateFormatted: formatDateLabel(d.date, period),
     }));
-  }, [data]);
+  }, [data, period]);
 
   if (chartData.length === 0) {
     return (
@@ -115,8 +127,12 @@ function MeetingVolumeChart({ data }: { data: Array<{ date: string; count: numbe
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis
             dataKey="dateFormatted"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 11 }}
             className="text-gray-600 dark:text-gray-400"
+            interval={getXAxisInterval(period)}
+            angle={period === 7 ? 0 : -45}
+            textAnchor={period === 7 ? 'middle' : 'end'}
+            height={period === 7 ? 30 : 50}
           />
           <YAxis
             allowDecimals={false}
@@ -138,36 +154,21 @@ function MeetingVolumeChart({ data }: { data: Array<{ date: string; count: numbe
   );
 }
 
-// Sentiment Trend Chart (Multi-line per rep + team average)
-function SentimentTrendChart({
-  data,
-  showIndividualReps = true,
-}: {
-  data: Array<{ date: string; avg: number | null }>;
-  showIndividualReps?: boolean;
-}) {
+// Sentiment Trend Chart — area chart matching Volume style
+function SentimentTrendChart({ data, period }: { data: Array<{ date: string; avg: number | null }>; period: TimePeriod }) {
   const chartData = useMemo(() => {
-    return data
-      .filter((d) => d.avg !== null)
-      .map((d) => ({
-        ...d,
-        dateFormatted: format(parseISO(d.date), 'MMM d'),
-        sentiment: d.avg,
-      }));
-  }, [data]);
-
-  if (chartData.length === 0) {
-    return (
-      <div className="h-72 flex items-center justify-center text-gray-500 dark:text-gray-400">
-        No sentiment data available
-      </div>
-    );
-  }
+    return data.map((d) => ({
+      ...d,
+      dateFormatted: formatDateLabel(d.date, period),
+      // Null means no data for that day — treat as 0 so the chart anchors at baseline
+      sentiment: d.avg !== null ? d.avg * 10 : 0,
+    }));
+  }, [data, period]);
 
   return (
     <div className="h-72">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={chartData}>
+        <AreaChart data={chartData}>
           <defs>
             <linearGradient id="sentimentGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -177,51 +178,48 @@ function SentimentTrendChart({
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis
             dataKey="dateFormatted"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 11 }}
             className="text-gray-600 dark:text-gray-400"
+            interval={getXAxisInterval(period)}
+            angle={period === 7 ? 0 : -45}
+            textAnchor={period === 7 ? 'middle' : 'end'}
+            height={period === 7 ? 30 : 50}
           />
           <YAxis
-            domain={[-1, 1]}
+            domain={[-10, 10]}
             tick={{ fontSize: 12 }}
             className="text-gray-600 dark:text-gray-400"
-            tickFormatter={(value) => value.toFixed(1)}
+            tickFormatter={(value) => value.toFixed(0)}
           />
           <Tooltip content={<CustomTooltip />} />
-          <ReferenceLine y={0} stroke="#6b7280" strokeDasharray="3 3" />
-          <Line
+          <ReferenceLine y={0} stroke="#6b7280" strokeDasharray="3 3" strokeOpacity={0.5} />
+          <Area
             type="monotone"
             dataKey="sentiment"
-            name="Team Avg"
+            name="Sentiment"
             stroke="#10b981"
             strokeWidth={2}
+            fill="url(#sentimentGradient)"
             dot={false}
-            activeDot={{ r: 4, fill: '#10b981' }}
+            activeDot={false}
+            unit=" / 10"
           />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
 // Talk Time Chart with ideal zone highlighting
-function TalkTimeChart({ data }: { data: Array<{ date: string; avg: number | null }> }) {
+function TalkTimeChart({ data, period }: { data: Array<{ date: string; avg: number | null }>; period: TimePeriod }) {
   const chartData = useMemo(() => {
-    return data
-      .filter((d) => d.avg !== null)
-      .map((d) => ({
-        ...d,
-        dateFormatted: format(parseISO(d.date), 'MMM d'),
-        talkTime: d.avg,
-      }));
-  }, [data]);
-
-  if (chartData.length === 0) {
-    return (
-      <div className="h-72 flex items-center justify-center text-gray-500 dark:text-gray-400">
-        No talk time data available
-      </div>
-    );
-  }
+    return data.map((d) => ({
+      ...d,
+      dateFormatted: formatDateLabel(d.date, period),
+      // Null means no data for that day — treat as 0 so the chart anchors at baseline
+      talkTime: d.avg ?? 0,
+    }));
+  }, [data, period]);
 
   return (
     <div className="h-72">
@@ -232,17 +230,16 @@ function TalkTimeChart({ data }: { data: Array<{ date: string; avg: number | nul
               <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
               <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
             </linearGradient>
-            {/* Ideal zone gradient */}
-            <linearGradient id="idealZone" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.1} />
-              <stop offset="95%" stopColor="#22c55e" stopOpacity={0.05} />
-            </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis
             dataKey="dateFormatted"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 11 }}
             className="text-gray-600 dark:text-gray-400"
+            interval={getXAxisInterval(period)}
+            angle={period === 7 ? 0 : -45}
+            textAnchor={period === 7 ? 'middle' : 'end'}
+            height={period === 7 ? 30 : 50}
           />
           <YAxis
             domain={[0, 100]}
@@ -265,6 +262,8 @@ function TalkTimeChart({ data }: { data: Array<{ date: string; avg: number | nul
             strokeWidth={2}
             fill="url(#talkTimeGradient)"
             unit="%"
+            dot={false}
+            activeDot={false}
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -279,22 +278,52 @@ function TalkTimeChart({ data }: { data: Array<{ date: string; avg: number | nul
   );
 }
 
-export function TeamTrendsChart({ period, className }: TeamTrendsChartProps) {
-  const { data, isLoading, error } = useTeamTrends(period);
+/** Info icon with hover tooltip */
+function TabInfoTooltip({ text }: { text: string }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <UITooltip>
+        <TooltipTrigger asChild>
+          <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[200px] text-xs">
+          {text}
+        </TooltipContent>
+      </UITooltip>
+    </TooltipProvider>
+  );
+}
 
-  if (isLoading) {
+const TAB_CLASS =
+  'flex items-center gap-2 text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm';
+
+export function TeamTrendsChart({ period, dateRange, className }: TeamTrendsChartProps) {
+  const { data, isPending, error } = useTeamTrends(period, dateRange);
+
+  // isPending covers both "actively fetching" and "query disabled" — show skeleton instead of error
+  if (isPending) {
     return <TeamTrendsChartSkeleton />;
   }
 
-  if (error || !data) {
+  if (error) {
+    const msg = error instanceof Error
+      ? error.message
+      : (error as { message?: string })?.message ?? JSON.stringify(error);
     return (
       <div className={cn(
         'bg-white dark:bg-gray-900/40 rounded-2xl border border-red-200 dark:border-red-800/30 p-6',
         className
       )}>
-        <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
-          <AlertCircle className="w-5 h-5" />
-          <span>Failed to load trend data</span>
+        <div className="flex flex-col gap-1 text-red-600 dark:text-red-400">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <span className="font-medium">Failed to load trend data</span>
+          </div>
+          {msg && (
+            <p className="text-xs text-red-500/80 dark:text-red-400/70 ml-8 font-mono break-all">
+              {msg}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -306,51 +335,45 @@ export function TeamTrendsChart({ period, className }: TeamTrendsChartProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
       className={cn(
-        'bg-white dark:bg-gray-900/40 rounded-2xl border border-gray-200 dark:border-gray-700/30 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-lg dark:shadow-black/10',
+        'bg-white dark:bg-gray-900/40 rounded-2xl border border-gray-200 dark:border-gray-700/30 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-lg dark:shadow-black/10 flex flex-col',
         className
       )}
     >
-      <div className="p-6">
+      <div className="p-6 flex-1">
         <Tabs defaultValue="volume" className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               Performance Trends
             </h2>
             <TabsList className="bg-gray-100 dark:bg-gray-800/50 p-1 rounded-lg">
-              <TabsTrigger
-                value="volume"
-                className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm"
-              >
+              <TabsTrigger value="volume" className={TAB_CLASS}>
                 <BarChart3 className="w-3.5 h-3.5" />
                 Volume
+                <TabInfoTooltip text="How many calls you're having." />
               </TabsTrigger>
-              <TabsTrigger
-                value="sentiment"
-                className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm"
-              >
+              <TabsTrigger value="sentiment" className={TAB_CLASS}>
                 <Smile className="w-3.5 h-3.5" />
                 Sentiment
+                <TabInfoTooltip text="How our AI is ranking your calls. 10 is great! -10 is not so great!" />
               </TabsTrigger>
-              <TabsTrigger
-                value="talktime"
-                className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm"
-              >
+              <TabsTrigger value="talktime" className={TAB_CLASS}>
                 <Clock className="w-3.5 h-3.5" />
                 Talk Time
+                <TabInfoTooltip text="What percentage of the call are you talking vs listening." />
               </TabsTrigger>
             </TabsList>
           </div>
 
           <TabsContent value="volume" className="mt-0">
-            <MeetingVolumeChart data={data.meetingVolume} />
+            <MeetingVolumeChart data={data.meetingVolume} period={period} />
           </TabsContent>
 
           <TabsContent value="sentiment" className="mt-0">
-            <SentimentTrendChart data={data.sentimentTrend} />
+            <SentimentTrendChart data={data.sentimentTrend} period={period} />
           </TabsContent>
 
           <TabsContent value="talktime" className="mt-0">
-            <TalkTimeChart data={data.talkTimeTrend} />
+            <TalkTimeChart data={data.talkTimeTrend} period={period} />
           </TabsContent>
         </Tabs>
       </div>

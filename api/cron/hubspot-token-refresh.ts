@@ -21,32 +21,53 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl) throw new Error('Missing SUPABASE_URL');
-    if (!supabaseServiceKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
-
-    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/hubspot-token-refresh`;
-
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${supabaseServiceKey}`,
+    // Refresh tokens for both production and staging environments
+    const environments = [
+      {
+        name: 'production',
+        url: process.env.SUPABASE_URL,
+        key: process.env.SUPABASE_SERVICE_ROLE_KEY,
       },
-    });
+      {
+        name: 'staging',
+        url: process.env.SUPABASE_STAGING_URL || 'https://caerqjzvuerejfrdtygb.supabase.co',
+        key: process.env.SUPABASE_STAGING_SERVICE_ROLE_KEY,
+      },
+    ];
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Edge function error: ${response.status} - ${errorText}`);
+    const results: Record<string, any> = {};
+
+    for (const env of environments) {
+      if (!env.url || !env.key) {
+        results[env.name] = { skipped: true, reason: 'Missing URL or service key' };
+        continue;
+      }
+
+      try {
+        const edgeFunctionUrl = `${env.url}/functions/v1/hubspot-token-refresh`;
+        const response = await fetch(edgeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${env.key}`,
+          },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          results[env.name] = { success: false, error: `${response.status} - ${errorText}` };
+        } else {
+          const data = await response.json();
+          results[env.name] = { success: true, ...data };
+        }
+      } catch (envError: any) {
+        results[env.name] = { success: false, error: envError.message };
+      }
     }
-
-    const data = await response.json() as Record<string, unknown>;
 
     return res.status(200).json({
       success: true,
-      ...(typeof data === 'object' && data !== null ? data : {}),
+      results,
       triggeredBy: 'vercel-cron',
       timestamp: new Date().toISOString(),
     });

@@ -120,18 +120,9 @@ export class AIProviderService {
    * Load API keys from environment variables
    */
   private loadFromEnvironment(): void {
-    const envKeys = {
-      openai: import.meta.env.VITE_OPENAI_API_KEY,
-      anthropic: import.meta.env.VITE_ANTHROPIC_API_KEY,
-      openrouter: import.meta.env.VITE_OPENROUTER_API_KEY,
-      gemini: import.meta.env.VITE_GEMINI_API_KEY,
-    };
-
-    Object.entries(envKeys).forEach(([provider, key]) => {
-      if (key && !this.apiKeys.has(provider)) {
-        this.apiKeys.set(provider, key);
-      }
-    });
+    // SECURITY: AI API keys must NOT be in frontend environment variables.
+    // They are loaded from user_settings in the database via initialize().
+    // If keys are needed server-side, use edge functions instead.
   }
 
   /**
@@ -169,6 +160,34 @@ export class AIProviderService {
     try {
       // Ensure we have a user ID for tracking and tools
       const effectiveUserId = userId || 'ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459'; // Fallback to dev user ID
+
+      // Check credit balance before making AI call
+      try {
+        const { data: membership } = await supabase
+          .from('organization_memberships')
+          .select('org_id')
+          .eq('user_id', effectiveUserId)
+          .limit(1)
+          .maybeSingle();
+
+        if (membership?.org_id) {
+          const { data: balance } = await supabase
+            .from('org_credit_balance')
+            .select('balance_credits')
+            .eq('org_id', membership.org_id)
+            .maybeSingle();
+
+          // Only block if balance row exists and is <= 0
+          if (balance && (balance.balance_credits ?? 0) <= 0) {
+            throw new Error('INSUFFICIENT_CREDITS');
+          }
+        }
+      } catch (creditErr) {
+        // Re-throw INSUFFICIENT_CREDITS, swallow everything else (fail open)
+        if (creditErr instanceof Error && creditErr.message === 'INSUFFICIENT_CREDITS') {
+          throw creditErr;
+        }
+      }
       // Interpolate variables in prompts
       const systemPrompt = interpolateVariables(config.systemPrompt, variables);
       const userPrompt = interpolateVariables(config.userPrompt, variables);
@@ -1366,6 +1385,11 @@ export class AIProviderService {
     // Also log to cost tracking table if provider/model are available
     if (response.provider && response.model) {
       try {
+        const supportedProvider = response.provider === 'anthropic' || response.provider === 'gemini';
+        if (!supportedProvider) {
+          return;
+        }
+
         // Get user's organization ID
         const { data: membership } = await supabase
           .from('organization_memberships')
@@ -1373,7 +1397,7 @@ export class AIProviderService {
           .eq('user_id', userId)
           .order('created_at', { ascending: true })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (membership?.org_id) {
           // Calculate cost using database function
@@ -1388,17 +1412,32 @@ export class AIProviderService {
             const estimatedCost = typeof costData === 'number' ? costData : parseFloat(costData);
 
             // Log to ai_cost_events table
-            await supabase.from('ai_cost_events').insert({
-              org_id: membership.org_id,
-              user_id: userId,
-              provider: response.provider as 'anthropic' | 'gemini',
-              model: response.model,
-              feature: workflowId ? 'workflow' : null,
-              input_tokens: response.usage.promptTokens,
-              output_tokens: response.usage.completionTokens,
-              estimated_cost: estimatedCost,
-              metadata: workflowId ? { workflow_id: workflowId } : null,
-            });
+            const { data: insertedCostEvent } = await supabase
+              .from('ai_cost_events')
+              .insert({
+                org_id: membership.org_id,
+                user_id: userId,
+                provider: response.provider,
+                model: response.model,
+                feature: workflowId ? 'workflow' : null,
+                feature_key: workflowId ? 'workflow' : null,
+                input_tokens: response.usage.promptTokens,
+                output_tokens: response.usage.completionTokens,
+                estimated_cost: estimatedCost,
+                metadata: workflowId ? { workflow_id: workflowId } : null,
+              })
+              .select('id')
+              .single();
+
+            if (estimatedCost > 0) {
+              await supabase.rpc('deduct_credits', {
+                p_org_id: membership.org_id,
+                p_amount: estimatedCost,
+                p_description: `AI usage: ${workflowId ? 'workflow' : 'unknown'}`,
+                p_feature_key: workflowId ? 'workflow' : null,
+                p_cost_event_id: insertedCostEvent?.id ?? null,
+              });
+            }
           }
         }
       } catch (err) {

@@ -1,0 +1,148 @@
+{
+  "project": {
+    "name": "Dynamic Tables — CSV Import",
+    "description": "Add CSV upload as a second table creation method alongside Apollo search. Users can upload a CSV, map columns, preview data, and create a Dynamic Table.",
+    "createdAt": "2026-02-04T21:00:00Z",
+    "branch": "feat/dynamic-tables",
+    "parent_plan": ".sixty/plan-dynamic-tables.json"
+  },
+
+  "features": [
+    {
+      "id": "dt-csv-import",
+      "name": "CSV Import to Dynamic Tables",
+      "status": "done",
+      "priority": 1,
+      "description": "4-step wizard (Upload → Map Columns → Preview → Import) that creates a Dynamic Table from a CSV file, reusing existing PapaParse infrastructure and DynamicTableService"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "CSV-001",
+      "feature": "dt-csv-import",
+      "title": "CSV parsing service for Dynamic Tables",
+      "type": "frontend",
+      "status": "done",
+      "priority": 1,
+
+      "description": "Create a service that wraps the existing csvImportService parsing + auto-detection for Dynamic Table column mapping. Reuse parseCSVFile() directly. Create new autoDetectColumnType() that maps headers to Dynamic Table column types (text, email, url, number, person, company, linkedin, date). Create transformCSVToDynamicTableRows() that converts parsed rows into the {cells: Record<string, string>} format needed by DynamicTableService.addRows().",
+
+      "dependencies": { "stories": [], "files": ["src/lib/services/csvImportService.ts", "src/lib/services/dynamicTableService.ts"], "schema": [] },
+      "blocks": ["CSV-002", "CSV-003"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "csvDynamicTableService.ts exports parseCSVFile (re-exported from csvImportService), autoDetectColumnType(header, sampleValues) → column type, and transformRows(rows, columnMap) → DynamicTableService-compatible format",
+        "autoDetectColumnType correctly identifies: email patterns → 'email', URL patterns → 'url', LinkedIn URLs → 'linkedin', numeric-only → 'number', name-like → 'person', company-like → 'company', date-like → 'date', fallback → 'text'",
+        "transformRows maps each CSV row to {cells: Record<string, string>} using the user's column key mapping"
+      ],
+
+      "files": [
+        "src/lib/services/csvDynamicTableService.ts"
+      ]
+    },
+    {
+      "id": "CSV-002",
+      "feature": "dt-csv-import",
+      "title": "CSV Import Wizard container + Upload step",
+      "type": "frontend",
+      "status": "done",
+      "priority": 2,
+
+      "description": "Create CSVImportDynamicTableWizard as a Dialog-based 4-step wizard (Upload → Map Columns → Preview → Import). Manages central state: step, file, headers, rows, columnDefs[], columnMappings, importProgress. Step 1 reuses the existing CSVImportUpload component's drag-drop pattern (or creates a lightweight clone). On file select, parse with parseCSVFile() and advance to step 2. Wizard is opened from DynamicTablesPage via a new 'Upload CSV' button (alongside the existing 'New Table' button that goes to copilot).",
+
+      "dependencies": { "stories": ["CSV-001"], "files": [], "schema": [] },
+      "blocks": ["CSV-004"],
+      "parallelWith": ["CSV-003"],
+
+      "acceptance": [
+        "CSVImportDynamicTableWizard renders as a Dialog with 4 step indicators",
+        "Step 1 shows drag-drop zone accepting .csv files (max 10MB), parses on select, advances to step 2",
+        "DynamicTablesPage has 'Upload CSV' button that opens the wizard",
+        "Back/Continue navigation between steps, Cancel closes dialog"
+      ],
+
+      "files": [
+        "src/components/dynamic-tables/CSVImportDynamicTableWizard.tsx",
+        "src/pages/DynamicTablesPage.tsx"
+      ]
+    },
+    {
+      "id": "CSV-003",
+      "feature": "dt-csv-import",
+      "title": "Column mapping step with type assignment",
+      "type": "frontend",
+      "status": "done",
+      "priority": 3,
+
+      "description": "Build the Step 2 component: CSVColumnMappingStep. Shows a table with rows for each CSV column: [CSV Header] [Sample Values (first 3)] [Column Type dropdown] [Include? checkbox]. Column types: text, email, url, number, person, company, linkedin, date. Auto-detect types on mount using autoDetectColumnType(). User can rename column labels, change types, and exclude columns. Must include at least 1 column to proceed. Also allow setting a table name (default: filename without extension).",
+
+      "dependencies": { "stories": ["CSV-001"], "files": [], "schema": [] },
+      "blocks": ["CSV-004"],
+      "parallelWith": ["CSV-002"],
+
+      "acceptance": [
+        "Each CSV column shown with: header name (editable label), 3 sample values, type dropdown (auto-detected default), include checkbox",
+        "Table name input field at top (defaults to filename without .csv)",
+        "At least 1 column must be included to enable Continue",
+        "Column keys auto-generated from header names (lowercase, underscored, deduplicated)"
+      ],
+
+      "files": [
+        "src/components/dynamic-tables/CSVColumnMappingStep.tsx"
+      ]
+    },
+    {
+      "id": "CSV-004",
+      "feature": "dt-csv-import",
+      "title": "Preview step + Import execution with progress",
+      "type": "frontend",
+      "status": "done",
+      "priority": 4,
+
+      "description": "Build Step 3 (preview) and Step 4 (import) as part of the wizard. Step 3: Show first 5 rows in a table using the user's column definitions. Show row count summary ('N rows will be imported'). Show validation warnings (empty required fields, etc.). Step 4: On 'Import' click, call DynamicTableService.createTable() with source_type='csv', then create columns with addColumn(), then bulk insert rows with addRows(). Show progress bar. On completion, show success message with 'Open Table' button that navigates to the detail page.",
+
+      "dependencies": { "stories": ["CSV-002", "CSV-003"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Step 3 shows preview table with column headers and first 5 rows of data",
+        "Row count summary shown: 'Ready to import N rows with M columns'",
+        "Step 4 shows progress: creating table → adding columns → inserting rows → complete",
+        "On completion, 'Open Table' button navigates to /dynamic-tables/{table_id}",
+        "Errors during import shown with toast + ability to retry"
+      ],
+
+      "files": [
+        "src/components/dynamic-tables/CSVImportDynamicTableWizard.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 4,
+    "groups": [
+      {
+        "id": 1,
+        "name": "Service layer",
+        "stories": ["CSV-001"],
+        "note": "Foundation: parsing + type detection + row transformation"
+      },
+      {
+        "id": 2,
+        "name": "Parallel: Wizard shell + Column mapping",
+        "stories": ["CSV-002", "CSV-003"],
+        "note": "CSV-002 (wizard container + upload step) and CSV-003 (column mapping UI) can be built in parallel since they're separate components"
+      },
+      {
+        "id": 3,
+        "name": "Preview + Import execution",
+        "stories": ["CSV-004"],
+        "note": "Depends on both the wizard shell and column mapping being done"
+      }
+    ]
+  }
+}

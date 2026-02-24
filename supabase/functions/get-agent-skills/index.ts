@@ -4,9 +4,15 @@
  * MCP-compatible endpoint for AI agents to retrieve organization skills.
  * Returns compiled skills with frontmatter metadata and content.
  *
+ * V2 Features:
+ * - Folder structure included in response
+ * - Child documents (prompts, examples, assets) included
+ * - @ references resolved and inlined
+ * - Backward compatible with existing agent calls
+ *
  * Actions:
  * - list: Get all skills for an organization (with optional filters)
- * - get: Get a single skill by key
+ * - get: Get a single skill by key (includes folder structure)
  * - search: Search skills by query string
  *
  * @see platform-controlled-skills-for-orgs.md - Phase 5: Agent Integration
@@ -27,19 +33,58 @@ import {
 interface AgentSkillsRequest {
   action: 'list' | 'get' | 'search';
   organization_id: string;
-  category?: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format';
+  category?: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format' | 'agent-sequence';
+  kind?: 'skill' | 'sequence' | 'all';
   enabled_only?: boolean;
   skill_key?: string;
   query?: string;
+  /** V2: Include folder structure and documents in response */
+  include_documents?: boolean;
+  /** V2: Resolve @ references in content */
+  resolve_references?: boolean;
+  /**
+   * Progressive disclosure tier:
+   * - 'metadata': Frontmatter only (name, description, triggers, I/O) — ~100 tokens/skill
+   * - 'instructions': Frontmatter + content_template (default, backward-compatible)
+   * - 'full': Everything + resolved references from skill_documents
+   */
+  tier?: 'metadata' | 'instructions' | 'full';
+}
+
+/** V2: Skill document (child document within a skill folder) */
+interface SkillDocument {
+  id: string;
+  title: string;
+  doc_type: 'prompt' | 'example' | 'asset' | 'reference' | 'template';
+  content: string;
+  folder_path?: string;
+}
+
+/** V2: Skill folder structure */
+interface SkillFolder {
+  id: string;
+  name: string;
+  path: string;
+  documents: SkillDocument[];
 }
 
 interface AgentSkill {
   skill_key: string;
+  kind: 'skill' | 'sequence';
   category: string;
   frontmatter: Record<string, unknown>;
   content: string;
+  step_count?: number;
   is_enabled: boolean;
   version: number;
+  /** V2: Folder structure (when include_documents=true) */
+  folders?: SkillFolder[];
+  /** V2: Root-level documents (when include_documents=true) */
+  documents?: SkillDocument[];
+  /** V2: Compiled content with resolved references (when resolve_references=true) */
+  compiled_content?: string;
+  /** V2: Unresolved reference warnings */
+  reference_warnings?: string[];
 }
 
 interface AgentSkillsResponse {
@@ -48,6 +93,8 @@ interface AgentSkillsResponse {
   skill?: AgentSkill | null;
   count?: number;
   error?: string;
+  /** V2: API version indicator */
+  api_version?: string;
 }
 
 // =============================================================================
@@ -93,6 +140,7 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      global: { headers: { Authorization: authHeader } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
@@ -113,9 +161,13 @@ serve(async (req) => {
       action = 'list',
       organization_id,
       category,
+      kind = 'all',
       enabled_only = true,
       skill_key,
       query,
+      include_documents = false,
+      resolve_references = false,
+      tier = 'instructions',
     } = requestBody;
 
     // Validate organization_id
@@ -127,7 +179,7 @@ serve(async (req) => {
     const { data: membership, error: membershipError } = await supabase
       .from('organization_memberships')
       .select('id')
-      .eq('organization_id', organization_id)
+      .eq('org_id', organization_id)
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -140,26 +192,29 @@ serve(async (req) => {
 
     switch (action) {
       case 'list':
-        response = await listSkills(supabase, organization_id, category, enabled_only);
+        response = await listSkills(supabase, organization_id, category, enabled_only, kind, tier);
         break;
 
       case 'get':
         if (!skill_key) {
           return errorResponse('skill_key is required for get action', req, 400);
         }
-        response = await getSkill(supabase, organization_id, skill_key);
+        response = await getSkill(supabase, organization_id, skill_key, include_documents || tier === 'full', resolve_references || tier === 'full');
         break;
 
       case 'search':
         if (!query) {
           return errorResponse('query is required for search action', req, 400);
         }
-        response = await searchSkills(supabase, organization_id, query, category, enabled_only);
+        response = await searchSkills(supabase, organization_id, query, category, enabled_only, kind, tier);
         break;
 
       default:
         return errorResponse(`Unknown action: ${action}`, req, 400);
     }
+
+    // Add API version to response
+    response.api_version = '2.0';
 
     return jsonResponse(response, req);
   } catch (error) {
@@ -177,7 +232,9 @@ async function listSkills(
   supabase: ReturnType<typeof createClient>,
   organizationId: string,
   category?: string,
-  enabledOnly = true
+  enabledOnly = true,
+  kind: 'skill' | 'sequence' | 'all' = 'all',
+  tier: 'metadata' | 'instructions' | 'full' = 'instructions'
 ): Promise<AgentSkillsResponse> {
   try {
     // Use the RPC function to get compiled skills
@@ -191,18 +248,37 @@ async function listSkills(
       throw error;
     }
 
-    let filteredSkills: AgentSkill[] = (skills || []).map((s: any) => ({
-      skill_key: s.skill_key,
-      category: s.category || 'uncategorized',
-      frontmatter: s.frontmatter || {},
-      content: s.content || '',
-      is_enabled: s.is_enabled ?? true,
-      version: s.version ?? 1,
-    }));
+    let filteredSkills: AgentSkill[] = (skills || []).map((s: any) => {
+      const category = s.category || 'uncategorized';
+      const frontmatter = s.frontmatter || {};
+      const isSequence = category === 'agent-sequence';
+      const stepCount = Array.isArray(frontmatter?.sequence_steps)
+        ? frontmatter.sequence_steps.length
+        : undefined;
+
+      return {
+        skill_key: s.skill_key,
+        kind: isSequence ? 'sequence' : 'skill',
+        category,
+        frontmatter,
+        // Tier: 'metadata' omits content to save tokens (~100 tokens/skill vs ~5000)
+        content: tier === 'metadata' ? '' : (s.content || ''),
+        step_count: stepCount,
+        is_enabled: s.is_enabled ?? true,
+        version: s.version ?? 1,
+      };
+    });
 
     // Apply category filter
     if (category) {
       filteredSkills = filteredSkills.filter((s) => s.category === category);
+    }
+
+    // Apply kind filter
+    if (kind === 'sequence') {
+      filteredSkills = filteredSkills.filter((s) => s.category === 'agent-sequence');
+    } else if (kind === 'skill') {
+      filteredSkills = filteredSkills.filter((s) => s.category !== 'agent-sequence');
     }
 
     // Apply enabled filter
@@ -223,13 +299,15 @@ async function listSkills(
 }
 
 // =============================================================================
-// Get Single Skill
+// Get Single Skill (V2: with folder structure and reference resolution)
 // =============================================================================
 
 async function getSkill(
   supabase: ReturnType<typeof createClient>,
   organizationId: string,
-  skillKey: string
+  skillKey: string,
+  includeDocuments = false,
+  resolveReferences = false
 ): Promise<AgentSkillsResponse> {
   try {
     // Use the RPC function and filter to the specific skill
@@ -252,22 +330,208 @@ async function getSkill(
       };
     }
 
+    // Build basic skill response
+    const agentSkill: AgentSkill = {
+      skill_key: skill.skill_key,
+      category: skill.category || 'uncategorized',
+      frontmatter: skill.frontmatter || {},
+      content: skill.content || '',
+      is_enabled: skill.is_enabled ?? true,
+      version: skill.version ?? 1,
+    };
+
+    // V2: Include folder documents if requested
+    if (includeDocuments) {
+      // Get the skill ID for folder lookup (may need to query by skill_key)
+      let skillId = skill.skill_id || skill.id;
+
+      if (!skillId) {
+        // Query the platform_skills table to get the ID
+        const { data: platformSkill } = await supabase
+          .from('platform_skills')
+          .select('id')
+          .eq('skill_key', skillKey)
+          .single();
+
+        skillId = platformSkill?.id;
+      }
+
+      if (skillId) {
+        const { folders, documents } = await getSkillFolderStructure(supabase, skillId);
+        agentSkill.folders = folders;
+        agentSkill.documents = documents;
+      }
+    }
+
+    // V2: Resolve @ references if requested
+    if (resolveReferences && includeDocuments) {
+      const { compiledContent, warnings } = resolveSkillReferences(
+        agentSkill.content,
+        agentSkill.documents || [],
+        agentSkill.folders || []
+      );
+      agentSkill.compiled_content = compiledContent;
+      if (warnings.length > 0) {
+        agentSkill.reference_warnings = warnings;
+      }
+    }
+
     return {
       success: true,
-      skill: {
-        skill_key: skill.skill_key,
-        category: skill.category || 'uncategorized',
-        frontmatter: skill.frontmatter || {},
-        content: skill.content || '',
-        is_enabled: skill.is_enabled ?? true,
-        version: skill.version ?? 1,
-      },
+      skill: agentSkill,
     };
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
     console.error('[getSkill] Error:', errorMessage);
     return { success: false, error: errorMessage };
   }
+}
+
+// =============================================================================
+// V2 Helper: Get Skill Folder Structure
+// =============================================================================
+
+async function getSkillFolderStructure(
+  supabase: ReturnType<typeof createClient>,
+  skillId: string
+): Promise<{ folders: SkillFolder[]; documents: SkillDocument[] }> {
+  // Get all folders for this skill
+  const { data: foldersData, error: foldersError } = await supabase
+    .from('skill_folders')
+    .select('id, name, parent_folder_id, sort_order')
+    .eq('skill_id', skillId)
+    .order('sort_order');
+
+  if (foldersError) {
+    console.error('[getSkillFolderStructure] Folders error:', foldersError);
+    return { folders: [], documents: [] };
+  }
+
+  // Get all documents for this skill
+  const { data: documentsData, error: documentsError } = await supabase
+    .from('skill_documents')
+    .select('id, title, doc_type, content, folder_id, sort_order')
+    .eq('skill_id', skillId)
+    .order('sort_order');
+
+  if (documentsError) {
+    console.error('[getSkillFolderStructure] Documents error:', documentsError);
+    return { folders: [], documents: [] };
+  }
+
+  // Build folder path map
+  const folderPathMap = new Map<string, string>();
+  const buildPath = (folderId: string | null, folders: any[]): string => {
+    if (!folderId) return '';
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder) return '';
+    const parentPath = buildPath(folder.parent_folder_id, folders);
+    return parentPath ? `${parentPath}/${folder.name}` : folder.name;
+  };
+
+  for (const folder of foldersData || []) {
+    folderPathMap.set(folder.id, buildPath(folder.id, foldersData || []));
+  }
+
+  // Build folder structure with nested documents
+  const folders: SkillFolder[] = [];
+  const rootDocuments: SkillDocument[] = [];
+
+  for (const folder of foldersData || []) {
+    const folderDocs = (documentsData || [])
+      .filter((d: any) => d.folder_id === folder.id)
+      .map((d: any) => ({
+        id: d.id,
+        title: d.title,
+        doc_type: d.doc_type,
+        content: d.content,
+        folder_path: folderPathMap.get(folder.id),
+      }));
+
+    folders.push({
+      id: folder.id,
+      name: folder.name,
+      path: folderPathMap.get(folder.id) || folder.name,
+      documents: folderDocs,
+    });
+  }
+
+  // Get root-level documents (no folder)
+  for (const doc of documentsData || []) {
+    if (!doc.folder_id) {
+      rootDocuments.push({
+        id: doc.id,
+        title: doc.title,
+        doc_type: doc.doc_type,
+        content: doc.content,
+      });
+    }
+  }
+
+  return { folders, documents: rootDocuments };
+}
+
+// =============================================================================
+// V2 Helper: Resolve @ References
+// =============================================================================
+
+function resolveSkillReferences(
+  content: string,
+  rootDocuments: SkillDocument[],
+  folders: SkillFolder[]
+): { compiledContent: string; warnings: string[] } {
+  const warnings: string[] = [];
+
+  // Build a map of all documents by path
+  const documentMap = new Map<string, string>();
+
+  // Add root documents
+  for (const doc of rootDocuments) {
+    documentMap.set(doc.title, doc.content);
+    documentMap.set(`${doc.title}.md`, doc.content);
+  }
+
+  // Add folder documents
+  for (const folder of folders) {
+    for (const doc of folder.documents) {
+      const path = `${folder.path}/${doc.title}`;
+      documentMap.set(path, doc.content);
+      documentMap.set(`${path}.md`, doc.content);
+      // Also add short path (folder/doc)
+      documentMap.set(`${folder.name}/${doc.title}`, doc.content);
+      documentMap.set(`${folder.name}/${doc.title}.md`, doc.content);
+    }
+  }
+
+  // Replace @ references
+  const atMentionRegex = /@([\w\-\/\.]+)/g;
+  let resolvedContent = content;
+  let match;
+  const matches: Array<{ full: string; path: string; start: number; end: number }> = [];
+
+  while ((match = atMentionRegex.exec(content)) !== null) {
+    matches.push({
+      full: match[0],
+      path: match[1],
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+
+  // Replace from end to start to preserve positions
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const m = matches[i];
+    const docContent = documentMap.get(m.path);
+
+    if (docContent !== undefined) {
+      resolvedContent =
+        resolvedContent.slice(0, m.start) + docContent + resolvedContent.slice(m.end);
+    } else {
+      warnings.push(`Unresolved reference: ${m.full}`);
+    }
+  }
+
+  return { compiledContent: resolvedContent, warnings };
 }
 
 // =============================================================================
@@ -279,7 +543,9 @@ async function searchSkills(
   organizationId: string,
   query: string,
   category?: string,
-  enabledOnly = true
+  enabledOnly = true,
+  kind: 'skill' | 'sequence' | 'all' = 'all',
+  tier: 'metadata' | 'instructions' | 'full' = 'instructions'
 ): Promise<AgentSkillsResponse> {
   try {
     // Get all skills first
@@ -319,18 +585,36 @@ async function searchSkills(
 
         return false;
       })
-      .map((s: any) => ({
-        skill_key: s.skill_key,
-        category: s.category || 'uncategorized',
-        frontmatter: s.frontmatter || {},
-        content: s.content || '',
-        is_enabled: s.is_enabled ?? true,
-        version: s.version ?? 1,
-      }));
+      .map((s: any) => {
+        const category = s.category || 'uncategorized';
+        const frontmatter = s.frontmatter || {};
+        const isSequence = category === 'agent-sequence';
+        const stepCount = Array.isArray(frontmatter?.sequence_steps)
+          ? frontmatter.sequence_steps.length
+          : undefined;
+
+        return {
+          skill_key: s.skill_key,
+          kind: isSequence ? 'sequence' : 'skill',
+          category,
+          frontmatter,
+          content: tier === 'metadata' ? '' : (s.content || ''),
+          step_count: stepCount,
+          is_enabled: s.is_enabled ?? true,
+          version: s.version ?? 1,
+        };
+      });
 
     // Apply category filter
     if (category) {
       filteredSkills = filteredSkills.filter((s) => s.category === category);
+    }
+
+    // Apply kind filter
+    if (kind === 'sequence') {
+      filteredSkills = filteredSkills.filter((s) => s.category === 'agent-sequence');
+    } else if (kind === 'skill') {
+      filteredSkills = filteredSkills.filter((s) => s.category !== 'agent-sequence');
     }
 
     // Apply enabled filter

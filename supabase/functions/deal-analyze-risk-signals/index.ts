@@ -22,7 +22,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { captureException } from '../_shared/sentryEdge.ts';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { loadRiskScorerConfig } from '../_shared/orchestrator/riskScorerConfig.ts';
+import type { RiskScorerConfig, RiskScorerWeights } from '../_shared/orchestrator/riskScorerConfig.ts';
+import { getPlaybooksForDeal } from '../_shared/orchestrator/riskPlaybooks.ts';
+import type { InterventionPlaybook } from '../_shared/orchestrator/riskPlaybooks.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -542,17 +546,37 @@ async function saveRiskSignals(
 }
 
 /**
- * Recalculate deal risk aggregate
+ * Recalculate deal risk aggregate — weighted model (PRD-04 RSK-003)
+ *
+ * 4-dimension weighted scoring: engagement, champion, momentum, sentiment.
+ * Weights are configurable via PRD-01 Agent Configuration Engine.
  */
 async function recalculateRiskAggregate(
   supabase: ReturnType<typeof createClient>,
   dealId: string,
   orgId: string
 ): Promise<any> {
+  // Load config-driven weights from PRD-01 config engine
+  let scorerConfig: RiskScorerConfig | null = null;
+  try {
+    scorerConfig = await loadRiskScorerConfig(supabase, orgId);
+  } catch {
+    console.warn('[deal-analyze-risk-signals] Config load failed, using defaults');
+  }
+  const weights: RiskScorerWeights = scorerConfig?.weights ?? {
+    engagement: 0.25, champion: 0.25, momentum: 0.25, sentiment: 0.25,
+  };
+
+  // Signal-to-dimension classification
+  const ENGAGEMENT_SIGNALS = ['stalled_deal'];
+  const CHAMPION_SIGNALS = ['champion_silent', 'stakeholder_concern'];
+  const MOMENTUM_SIGNALS = ['timeline_slip', 'decision_delay', 'scope_creep'];
+  const SENTIMENT_SIGNALS = ['budget_concern', 'competitor_mention', 'sentiment_decline', 'objection_unresolved'];
+
   // Get all active signals for this deal
   const { data: signals } = await supabase
     .from('deal_risk_signals')
-    .select('*')
+    .select('id, signal_type, severity, title, description, evidence, confidence_score')
     .eq('deal_id', dealId)
     .eq('is_resolved', false)
     .eq('auto_dismissed', false);
@@ -565,13 +589,41 @@ async function recalculateRiskAggregate(
   const mediumCount = activeSignals.filter(s => s.severity === 'medium').length;
   const lowCount = activeSignals.filter(s => s.severity === 'low').length;
 
-  // Calculate risk score (0-100)
-  const riskScore = Math.min(100,
-    (criticalCount * 40) +
-    (highCount * 25) +
-    (mediumCount * 10) +
-    (lowCount * 5)
-  );
+  // Per-dimension score calculation
+  const severityPoints = (severity: string): number => {
+    switch (severity) {
+      case 'critical': return 40;
+      case 'high': return 25;
+      case 'medium': return 15;
+      case 'low': return 5;
+      default: return 0;
+    }
+  };
+
+  const dimensionScore = (signalTypes: string[]): number => {
+    const dimSignals = activeSignals.filter(s => signalTypes.includes(s.signal_type));
+    return Math.min(100, dimSignals.reduce((sum, s) => sum + severityPoints(s.severity), 0));
+  };
+
+  const engagementScore = dimensionScore(ENGAGEMENT_SIGNALS);
+  const championScore = dimensionScore(CHAMPION_SIGNALS);
+  const momentumScore = dimensionScore(MOMENTUM_SIGNALS);
+  const sentimentScore = dimensionScore(SENTIMENT_SIGNALS);
+
+  // Weighted composite score
+  const riskScore = Math.min(100, Math.round(
+    engagementScore * weights.engagement +
+    championScore * weights.champion +
+    momentumScore * weights.momentum +
+    sentimentScore * weights.sentiment
+  ));
+
+  const scoreBreakdown = {
+    engagement: engagementScore,
+    champion: championScore,
+    momentum: momentumScore,
+    sentiment: sentimentScore,
+  };
 
   // Determine overall risk level
   let overallRiskLevel: RiskSeverity;
@@ -579,7 +631,7 @@ async function recalculateRiskAggregate(
     overallRiskLevel = 'critical';
   } else if (highCount >= 2 || riskScore >= 50) {
     overallRiskLevel = 'high';
-  } else if (mediumCount >= 2 || riskScore >= 25) {
+  } else if (highCount >= 1 || mediumCount >= 2 || riskScore >= 25) {
     overallRiskLevel = 'medium';
   } else {
     overallRiskLevel = 'low';
@@ -590,6 +642,23 @@ async function recalculateRiskAggregate(
   for (const signal of activeSignals) {
     signalBreakdown[signal.signal_type as RiskSignalType] =
       (signalBreakdown[signal.signal_type as RiskSignalType] || 0) + 1;
+  }
+
+  // Also upsert deal_risk_scores with score_breakdown
+  try {
+    await supabase.rpc('upsert_deal_risk_score', {
+      p_org_id: orgId,
+      p_deal_id: dealId,
+      p_score: riskScore,
+      p_signals: activeSignals.map(s => ({
+        type: s.signal_type,
+        weight: severityPoints(s.severity),
+        description: s.title,
+      })),
+      p_score_breakdown: scoreBreakdown,
+    });
+  } catch (err) {
+    console.warn('[deal-analyze-risk-signals] Failed to upsert deal_risk_scores:', err);
   }
 
   // Get meeting metrics for sentiment trend
@@ -685,47 +754,77 @@ async function recalculateRiskAggregate(
     }
   }
 
-  // Generate recommended actions
-  const recommendedActions: Array<{ action: string; priority: 'high' | 'medium' | 'low'; rationale: string }> = [];
+  // Generate recommended actions via playbook engine (RSK-007)
+  let recommendedActions: Array<{ action: string; priority: 'high' | 'medium' | 'low'; rationale: string; signal_type?: string }> = [];
 
-  if (criticalCount > 0) {
-    recommendedActions.push({
-      action: 'Schedule urgent review meeting with deal owner',
-      priority: 'high',
-      rationale: `${criticalCount} critical risk signal(s) detected`,
-    });
+  // Get deal context for playbook generation
+  const { data: dealInfo } = await supabase
+    .from('deals')
+    .select('name, value, stage, primary_contact_id, owner_id')
+    .eq('id', dealId)
+    .maybeSingle();
+
+  let championName: string | null = null;
+  if (dealInfo?.primary_contact_id) {
+    const { data: contact } = await supabase
+      .from('contacts')
+      .select('first_name, last_name')
+      .eq('id', dealInfo.primary_contact_id)
+      .maybeSingle();
+    if (contact) championName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || null;
   }
 
-  if (signalBreakdown.champion_silent) {
-    recommendedActions.push({
-      action: 'Re-engage primary contact with value-add content',
-      priority: 'high',
-      rationale: 'Champion has gone silent',
-    });
+  // Extract competitor names from competitor_mention signals
+  const competitorSignals = activeSignals.filter(s => s.signal_type === 'competitor_mention');
+  const competitorNames: string[] = [];
+  for (const cs of competitorSignals) {
+    if (cs.evidence?.context) competitorNames.push(cs.evidence.context);
   }
 
-  if (signalBreakdown.competitor_mention) {
-    recommendedActions.push({
-      action: 'Prepare competitive differentiation talking points',
-      priority: 'medium',
-      rationale: 'Competitor(s) mentioned in recent meetings',
-    });
-  }
+  const dealContext = {
+    deal_name: dealInfo?.name || 'Unknown Deal',
+    deal_value: dealInfo?.value ?? null,
+    deal_stage: dealInfo?.stage || 'unknown',
+    days_in_stage: 0, // Will be set by aggregate calculation
+    champion_name: championName,
+    champion_days_silent: null as number | null,
+    competitor_names: [...new Set(competitorNames)],
+    owner_name: null as string | null,
+  };
 
-  if (signalBreakdown.budget_concern) {
-    recommendedActions.push({
-      action: 'Review pricing and ROI documentation',
-      priority: 'high',
-      rationale: 'Budget concerns raised',
-    });
-  }
+  // Build signal contexts for playbook engine
+  const signalContexts = activeSignals.map(s => ({
+    signal_type: s.signal_type,
+    severity: s.severity,
+    title: s.title || s.signal_type,
+    description: s.description || '',
+    evidence: s.evidence || null,
+  }));
 
-  if (signalBreakdown.stalled_deal) {
-    recommendedActions.push({
-      action: 'Create re-engagement campaign',
-      priority: 'high',
-      rationale: 'Deal has stalled with no recent activity',
-    });
+  try {
+    const playbooks = getPlaybooksForDeal(signalContexts, dealContext, 5);
+    recommendedActions = playbooks.map(p => ({
+      action: p.action,
+      priority: p.priority,
+      rationale: p.reason,
+      signal_type: p.signal_type,
+    }));
+  } catch (err) {
+    console.warn('[deal-analyze-risk-signals] Playbook generation failed, using fallback:', err);
+    // Fallback to basic recommendations
+    if (criticalCount > 0) {
+      recommendedActions.push({
+        action: 'Schedule urgent review meeting with deal owner',
+        priority: 'high',
+        rationale: `${criticalCount} critical risk signal(s) detected`,
+      });
+    }
+    if (signalBreakdown.champion_silent) {
+      recommendedActions.push({ action: 'Re-engage primary contact', priority: 'high', rationale: 'Champion has gone silent' });
+    }
+    if (signalBreakdown.stalled_deal) {
+      recommendedActions.push({ action: 'Create re-engagement plan', priority: 'high', rationale: 'Deal stalled' });
+    }
   }
 
   // Generate risk summary
@@ -1243,9 +1342,9 @@ function generateRiskSummary(signals: any[], riskLevel: RiskSeverity, riskScore:
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const { meetingId, dealId, forceReanalyze = false, processForwardMovement = false }: RequestBody = await req.json();

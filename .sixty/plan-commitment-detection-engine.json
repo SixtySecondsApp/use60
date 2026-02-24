@@ -1,0 +1,191 @@
+{
+  "feature": "commitment-detection-engine",
+  "description": "Detect commitments from meeting transcripts and automatically action them via Intent Action Registry pattern",
+  "createdAt": "2026-02-20T00:00:00Z",
+  "consultReport": ".sixty/consult/commitment-detection-engine.md",
+  "stories": [
+    {
+      "id": "CDE-001",
+      "title": "Expand detect-intents with 5 new intent types + deadline parsing",
+      "type": "backend",
+      "status": "pending",
+      "description": "Add pricing_request, stakeholder_introduction, competitive_mention, timeline_signal, objection_blocker intent types to the detect-intents edge function prompt. Add deadline_parsed (ISO 8601) field to commitment output schema. Update TypeScript interfaces.",
+      "files": [
+        "supabase/functions/detect-intents/index.ts"
+      ],
+      "acceptance_criteria": [
+        "9 total intent types recognized (4 existing + 5 new)",
+        "Each new intent has 3+ trigger phrase examples in prompt",
+        "deadline_parsed returns ISO 8601 date or null",
+        "Existing intent detection unchanged (backward compatible)"
+      ],
+      "dependencies": [],
+      "estimate": "30min"
+    },
+    {
+      "id": "CDE-002",
+      "title": "Create Intent Action Registry",
+      "type": "backend",
+      "status": "pending",
+      "description": "Create _shared/orchestrator/intentActionRegistry.ts with IntentActionConfig interface, registry mapping all 9 intents to task types/deliverables/slack actions/skills, CHANNEL_KEYWORD_MAP for Slack routing, and resolveIntentAction() + resolveSlackChannel() exports.",
+      "files": [
+        "supabase/functions/_shared/orchestrator/intentActionRegistry.ts"
+      ],
+      "acceptance_criteria": [
+        "All 9 intent types have a config entry",
+        "resolveIntentAction(commitment) returns full action config",
+        "resolveSlackChannel(commitment) returns channel name or null",
+        "Confidence thresholds: 0.7+ auto-action, 0.5-0.7 suggestion-only",
+        "TypeScript types exported for downstream use"
+      ],
+      "dependencies": [],
+      "estimate": "25min"
+    },
+    {
+      "id": "CDE-003",
+      "title": "Wire registry into detect-intents orchestrator adapter",
+      "type": "backend",
+      "status": "pending",
+      "description": "Replace hardcoded send_proposal/schedule_meeting event queuing in detectIntents adapter with registry-driven resolution. Use resolveIntentAction() for all intent types. Pass deadline_parsed into queued events. Apply confidence_threshold gating.",
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/detectIntents.ts"
+      ],
+      "acceptance_criteria": [
+        "All 9 intent types queue appropriate follow-up events",
+        "Confidence threshold respected (below threshold = no auto-action)",
+        "deadline_parsed passed through in event metadata",
+        "Existing send_proposal and schedule_meeting behavior preserved"
+      ],
+      "dependencies": ["CDE-001", "CDE-002"],
+      "estimate": "25min"
+    },
+    {
+      "id": "CDE-004",
+      "title": "Deadline passthrough in task-signal-processor",
+      "type": "backend",
+      "status": "pending",
+      "description": "Update task-signal-processor to accept due_date from signal metadata (from detect-intents extracted deadline). Use as due_date and expires_at when provided. Fall back to existing hardcoded expiry.",
+      "files": [
+        "supabase/functions/task-signal-processor/index.ts"
+      ],
+      "acceptance_criteria": [
+        "Extracted deadline used as due_date when present",
+        "expires_at set to deadline + 4 hours buffer",
+        "Existing fallback expiry unchanged when no deadline",
+        "verbal_commitment_detected signal type accepts due_date"
+      ],
+      "dependencies": ["CDE-001"],
+      "estimate": "15min"
+    },
+    {
+      "id": "CDE-005",
+      "title": "Add Slack channel ping action",
+      "type": "backend",
+      "status": "pending",
+      "description": "Create pingSlackChannel orchestrator adapter. Resolves channel from commitment context using CHANNEL_KEYWORD_MAP. Sends Block Kit message with commitment context. Uses existing deliverySlack.ts. Graceful fallback to DM when channel not found.",
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/pingSlackChannel.ts"
+      ],
+      "acceptance_criteria": [
+        "Resolves channel from commitment phrase/context keywords",
+        "Sends Block Kit message with rep name, commitment, contact, meeting link",
+        "Falls back to DM to rep if channel not found",
+        "Uses existing deliverySlack rate limiting and quiet hours"
+      ],
+      "dependencies": ["CDE-002"],
+      "estimate": "25min"
+    },
+    {
+      "id": "CDE-006",
+      "title": "Wire skill-based actions for competitive/objection intents",
+      "type": "backend",
+      "status": "pending",
+      "description": "In detectIntents adapter: competitive_mention queues competitor-intel skill execution, objection_blocker queues objection-to-playbook skill, stakeholder_introduction queues detect_new_stakeholder (existing), timeline_signal queues deal timeline update.",
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/detectIntents.ts"
+      ],
+      "acceptance_criteria": [
+        "competitive_mention fires competitor-intel skill with company context",
+        "objection_blocker fires objection-to-playbook with objection text",
+        "stakeholder_introduction reuses existing detect_new_stakeholder step",
+        "timeline_signal queues CRM update event with extracted date"
+      ],
+      "dependencies": ["CDE-003"],
+      "estimate": "20min"
+    },
+    {
+      "id": "CDE-007",
+      "title": "CRM auto-update actions for timeline and pricing intents",
+      "type": "backend",
+      "status": "pending",
+      "description": "Create updateDealTimeline adapter for timeline_signal (updates close_date). Extend CRM update flow for pricing_request (tag deal) and competitive_mention (MEDDICC Competition field). All with HITL approval via existing pattern.",
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/updateDealTimeline.ts"
+      ],
+      "acceptance_criteria": [
+        "timeline_signal updates deal close_date (with HITL approval)",
+        "pricing_request adds 'Pricing Requested' tag to deal metadata",
+        "competitive_mention updates MEDDICC Competition field",
+        "All CRM updates go through HITL approval flow"
+      ],
+      "dependencies": ["CDE-003"],
+      "estimate": "25min"
+    },
+    {
+      "id": "CDE-008",
+      "title": "Update detect-intents SKILL.md with new intent documentation",
+      "type": "docs",
+      "status": "pending",
+      "description": "Update the detect-intents skill documentation to reflect all 9 intent types, the registry pattern, and action mappings.",
+      "files": [
+        "skills/atomic/detect-intents/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "All 9 intent types documented with examples",
+        "Action mapping table included",
+        "Confidence thresholds documented"
+      ],
+      "dependencies": ["CDE-001"],
+      "estimate": "10min"
+    },
+    {
+      "id": "CDE-009",
+      "title": "Deploy to staging and end-to-end test",
+      "type": "test",
+      "status": "pending",
+      "description": "Deploy all modified edge functions to staging with --no-verify-jwt. Test with sample transcript containing all 9 intent types. Verify tasks created, Slack pings sent, deadlines respected, skills fired.",
+      "files": [],
+      "acceptance_criteria": [
+        "All 9 intent types detected from test transcript",
+        "Tasks created with correct deliverable_type and due_date",
+        "Slack channel pings sent for check_with_team intents",
+        "competitor-intel and objection-to-playbook skills fired",
+        "CRM updates queued with HITL approval",
+        "No regressions in existing send_proposal/schedule_meeting flow"
+      ],
+      "dependencies": ["CDE-003", "CDE-004", "CDE-005", "CDE-006", "CDE-007", "CDE-008"],
+      "estimate": "30min"
+    }
+  ],
+  "parallel_opportunities": [
+    {
+      "group": ["CDE-001", "CDE-002"],
+      "reason": "No file overlap — prompt changes and registry are independent",
+      "time_saved": "25min"
+    },
+    {
+      "group": ["CDE-004", "CDE-005"],
+      "reason": "Different edge functions, no dependencies on each other",
+      "time_saved": "15min"
+    },
+    {
+      "group": ["CDE-006", "CDE-007"],
+      "reason": "Different adapters, both depend on CDE-003 but not each other",
+      "time_saved": "20min"
+    }
+  ],
+  "total_estimate": {
+    "sequential": "3.5 hours",
+    "with_parallel": "2-2.5 hours"
+  }
+}

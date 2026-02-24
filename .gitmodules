@@ -1,0 +1,3 @@
+[submodule "meeting-translation"]
+	path = meeting-translation
+	url = https://github.com/SixtySecondsApp/meeting-translation.git

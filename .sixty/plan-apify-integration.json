@@ -1,0 +1,683 @@
+{
+  "project": {
+    "name": "Apify Integration — Ops Platform",
+    "description": "Generic Apify integration: connect org accounts, run any actor, auto-map results, GDPR flagging, copilot MCP layer",
+    "createdAt": "2026-02-09T18:00:00Z",
+    "prd": "PRD provided inline via 60/dev-plan command"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "edgeFunctions": "deno"
+  },
+
+  "codebaseContext": {
+    "credentialStorage": "integration_credentials table (organization_id + provider unique constraint, credentials JSONB)",
+    "existingApifyFunction": "run-apify-actor — row-level enrichment for dynamic table columns (SEPARATE use case from this PRD)",
+    "dynamicTables": "dynamic_tables → dynamic_table_columns → dynamic_table_rows → dynamic_table_cells (4-table hierarchy)",
+    "edgeFunctionAuth": "JWT from Authorization header → supabase.auth.getUser() → org membership check",
+    "corsPattern": "getCorsHeaders(req) from _shared/corsHelper.ts (NOT legacy corsHeaders)",
+    "supabaseImport": "Pin to @2.43.4: import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'",
+    "frontendServicePattern": "apolloSearchService.ts / aiArkSearchService.ts — types + service class + export",
+    "configModalPattern": "AiArkConfigModal.tsx — modal with token input, validation, connect/disconnect",
+    "rlsHelpers": "is_service_role(), can_access_org_data(org_id), can_admin_org(org_id)"
+  },
+
+  "features": [
+    {
+      "id": "apify-schema",
+      "name": "Database Schema & Migrations",
+      "status": "pending",
+      "priority": 1,
+      "phase": 1,
+      "description": "Create all database tables, RLS policies, and indexes for the Apify integration"
+    },
+    {
+      "id": "apify-backend",
+      "name": "Edge Functions — Core Pipeline",
+      "status": "pending",
+      "priority": 2,
+      "phase": 1,
+      "description": "Edge functions for connection, actor introspection, run orchestration, and webhook handling"
+    },
+    {
+      "id": "apify-ui",
+      "name": "Frontend — Connection, Run Builder & History",
+      "status": "pending",
+      "priority": 3,
+      "phase": 1,
+      "description": "Config modal, Integrations page card, dynamic form renderer, run builder, run history"
+    },
+    {
+      "id": "apify-mapping",
+      "name": "Mapping Engine & Auto-Map",
+      "status": "pending",
+      "priority": 4,
+      "phase": 2,
+      "description": "Transform functions, auto-mapping engine, system templates, GDPR flagging, mapping editor UI"
+    },
+    {
+      "id": "apify-results",
+      "name": "Results Explorer & Bulk Actions",
+      "status": "pending",
+      "priority": 5,
+      "phase": 2,
+      "description": "Paginated results explorer, GDPR flag indicators, CRM sync, CSV export, bulk actions"
+    },
+    {
+      "id": "apify-copilot",
+      "name": "Copilot MCP Integration",
+      "status": "pending",
+      "priority": 6,
+      "phase": 3,
+      "description": "MCP server connection, copilot skills for actor browsing/run management, pipeline handoff"
+    },
+    {
+      "id": "apify-ops",
+      "name": "Ops Integration & Polish",
+      "status": "pending",
+      "priority": 7,
+      "phase": 3,
+      "description": "Cost tracking, purge cron job, event emission, production hardening"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "APFY-001",
+      "feature": "apify-schema",
+      "title": "Create core Apify tables migration (actor_schema_cache, apify_runs, apify_results)",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["integration_credentials"] },
+      "blocks": ["APFY-003", "APFY-004", "APFY-005", "APFY-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "actor_schema_cache table with (org_id, actor_id) unique constraint and 24h TTL pattern",
+        "apify_runs table with status enum, cost tracking, and all columns per PRD",
+        "apify_results table with expires_at for 30-day purge, mapping_status tracking",
+        "RLS policies: service-role for credentials access, org-member for runs/results read",
+        "Indexes on org_id, status, created_at for common query patterns"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260210000000_apify_core_schema.sql"
+      ],
+      "designRef": null,
+      "notes": "Use integration_credentials (existing) for Apify API token storage with provider='apify'. Do NOT create a new org_integrations table. Follow instantly_org_credentials pattern for RLS."
+    },
+    {
+      "id": "APFY-002",
+      "feature": "apify-schema",
+      "title": "Create mapping engine tables migration (mapping_templates, mapped_records)",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["APFY-001"], "files": [], "schema": ["apify_runs"] },
+      "blocks": ["APFY-013", "APFY-014", "APFY-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "mapping_templates table with field_mappings JSONB, org_id nullable for system templates",
+        "mapped_records table with (org_id, template_id, dedup_key) unique constraint",
+        "gdpr_flags text[] column on mapped_records",
+        "RLS: system templates (org_id IS NULL) readable by all authenticated users",
+        "Seed 2 system templates: Google Maps Lead Gen, Website Crawler Contact Extraction"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260210000001_apify_mapping_schema.sql"
+      ],
+      "notes": "System templates have org_id = NULL and is_system = true. Field mappings JSONB schema matches PRD spec exactly."
+    },
+    {
+      "id": "APFY-003",
+      "feature": "apify-backend",
+      "title": "Create apify-connect edge function (validate, store, disconnect)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["APFY-001"], "files": ["supabase/functions/_shared/corsHelper.ts"], "schema": ["integration_credentials"] },
+      "blocks": ["APFY-004", "APFY-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "POST with action='connect': validates token via GET /v2/users/me, upserts integration_credentials",
+        "POST with action='disconnect': sets is_active=false on integration_credentials row",
+        "POST with action='revalidate': re-checks token validity, updates metadata",
+        "Returns username, plan info, available credits on successful connect",
+        "Uses getCorsHeaders(req), pins supabase-js@2.43.4, validates JWT auth"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/apify-connect/index.ts"
+      ],
+      "notes": "Store token in integration_credentials.credentials JSONB as { api_token: '...', username: '...', plan: '...' }. Follow apollo-search auth pattern: read JWT, get user, check org membership."
+    },
+    {
+      "id": "APFY-004",
+      "feature": "apify-backend",
+      "title": "Create apify-actor-introspect edge function (schema fetch + cache)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["APFY-001", "APFY-003"], "files": [], "schema": ["actor_schema_cache"] },
+      "blocks": ["APFY-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "Accepts { actor_id } and fetches actor metadata from Apify API",
+        "Caches result in actor_schema_cache with fetched_at timestamp",
+        "Returns cached result if fetched_at < 24 hours ago",
+        "Extracts input_schema, actor_name, actor_description, default_input from Apify response",
+        "Handles actor not found (404) and invalid token (401) gracefully"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/apify-actor-introspect/index.ts"
+      ],
+      "notes": "Apify API: GET /v2/acts/{actorId}?token={org_token}. Response includes inputSchema and defaultRunOptions."
+    },
+    {
+      "id": "APFY-005",
+      "feature": "apify-backend",
+      "title": "Create apify-run-start edge function (trigger actor run with rate limiting)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["APFY-001", "APFY-003"], "files": [], "schema": ["apify_runs"] },
+      "blocks": ["APFY-006"],
+      "parallelWith": ["APFY-004"],
+      "acceptance": [
+        "Accepts { actor_id, input, mapping_template_id?, auto_map? }",
+        "Checks rate limits: max 5 concurrent, soft warn at 20/hour and 100/day",
+        "Creates apify_runs record with status='pending', then starts actor via Apify API",
+        "Configures webhook URL pointing to apify-run-webhook function",
+        "Updates run record with apify_run_id and status='running'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/apify-run-start/index.ts"
+      ],
+      "notes": "Rate limit queries run against apify_runs table. Soft warnings return { warning, require_confirmation: true }. Hard blocks return 429. Webhook URL format: {SUPABASE_URL}/functions/v1/apify-run-webhook"
+    },
+    {
+      "id": "APFY-006",
+      "feature": "apify-backend",
+      "title": "Create apify-run-webhook edge function (fetch dataset + store raw results)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["APFY-001", "APFY-005"], "files": [], "schema": ["apify_runs", "apify_results"] },
+      "blocks": ["APFY-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "Receives Apify webhook payload, looks up apify_runs record by apify_run_id",
+        "On SUCCEEDED: fetches dataset items in pages of 1000 via Apify API",
+        "Inserts raw items into apify_results with expires_at = now() + 30 days",
+        "On FAILED: updates run with error_message and status='failed'",
+        "Updates run record with total_records count and status='complete'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/apify-run-webhook/index.ts"
+      ],
+      "notes": "Webhook does NOT apply mapping in Phase 1 — raw storage only. Mapping pipeline added in APFY-013. Use --no-verify-jwt for webhook endpoint (external caller). Validate webhook authenticity via run_id lookup."
+    },
+    {
+      "id": "APFY-007",
+      "feature": "apify-backend",
+      "title": "Create apify-auto-map edge function (generate mapping from output)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["APFY-002", "APFY-006"], "files": [], "schema": ["mapping_templates", "apify_results"] },
+      "blocks": ["APFY-016"],
+      "parallelWith": [],
+      "acceptance": [
+        "Accepts { run_id } or { sample_data: [...] }",
+        "Flattens JSON structure and detects field names, types, nesting",
+        "Applies field name heuristics (title→name, phone→phone, etc.) with confidence scoring",
+        "Auto-detects dedup key (preference: url > placeId > email > phone > name+address)",
+        "Returns proposed mapping with confidence scores for UI review"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/apify-auto-map/index.ts"
+      ],
+      "notes": "Heuristics table from PRD. Confidence levels: high (well-known pattern), medium (probable), low (unknown/kept as-is). Also detects transforms: phone-shaped → normalise_phone, email-shaped → lowercase."
+    },
+    {
+      "id": "APFY-008",
+      "feature": "apify-ui",
+      "title": "Create ApifyConfigModal component (connect/disconnect/validate)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["APFY-003"], "files": ["src/components/integrations/AiArkConfigModal.tsx"], "schema": [] },
+      "blocks": ["APFY-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "Modal with token input field, Connect button, validation spinner",
+        "Connected state shows: Apify username, plan tier, remaining credits",
+        "Disconnect and Re-validate buttons in connected state",
+        "Error handling with toast feedback for invalid tokens",
+        "Follows AiArkConfigModal.tsx pattern exactly"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/integrations/ApifyConfigModal.tsx"
+      ],
+      "notes": "Follow AiArkConfigModal pattern. Use supabase.functions.invoke('apify-connect') for all operations. Show credits from metadata."
+    },
+    {
+      "id": "APFY-009",
+      "feature": "apify-ui",
+      "title": "Add Apify card to Integrations page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["APFY-008"], "files": ["src/pages/Integrations.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Apify integration card appears in the integrations grid",
+        "Card shows connection status (connected/disconnected)",
+        "Click opens ApifyConfigModal",
+        "Connected state shows username and credit balance",
+        "Uses Lucide icon (Bot or Boxes), not emoji"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/pages/Integrations.tsx"
+      ],
+      "notes": "Follow the existing pattern for integration cards on the page. Check how Apollo/Instantly/AI Ark cards are rendered."
+    },
+    {
+      "id": "APFY-010",
+      "feature": "apify-ui",
+      "title": "Create JSON Schema dynamic form renderer component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["APFY-004"], "files": [], "schema": [] },
+      "blocks": ["APFY-011"],
+      "parallelWith": ["APFY-008", "APFY-009"],
+      "acceptance": [
+        "Renders string → TextInput, string+enum → Select, integer/number → NumberInput",
+        "Renders boolean → Toggle, array of string → TagInput, object → collapsible section",
+        "Uses schema title/description for labels and help text",
+        "Pre-fills default values from schema",
+        "Marks required fields as mandatory with visual indicator"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ops/ApifySchemaForm.tsx"
+      ],
+      "notes": "This is the key UX innovation. Must handle nested JSON Schema recursively. Support editor: 'textarea' hint. Use existing Radix UI primitives (Input, Select, Switch, etc.) from @/components/ui/."
+    },
+    {
+      "id": "APFY-011",
+      "feature": "apify-ui",
+      "title": "Create Apify Run Builder page (actor selector + form + start)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["APFY-005", "APFY-010"], "files": [], "schema": [] },
+      "blocks": ["APFY-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "Actor selector with search/autocomplete or manual ID entry",
+        "Dynamic input form rendered via ApifySchemaForm when actor selected",
+        "Mapping template selector dropdown (system + org templates, auto-generate, raw only)",
+        "Start Run button with rate limit warning display",
+        "Loading states and error handling with toast feedback"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ops/ApifyRunBuilder.tsx"
+      ],
+      "notes": "Calls apify-actor-introspect on actor selection to get schema. Calls apify-run-start on submit. Show cost estimate from actor metadata if available."
+    },
+    {
+      "id": "APFY-012",
+      "feature": "apify-ui",
+      "title": "Create Apify Run History table and detail view",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": ["APFY-006", "APFY-011"], "files": [], "schema": ["apify_runs"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Paginated table: date, actor name, template, status, record counts, cost, duration",
+        "Click to expand shows: results summary, errors, raw JSON viewer",
+        "Re-run button copies input config to run builder",
+        "Status badges with color coding (pending/running/complete/failed)",
+        "Auto-refresh for running jobs (polling or realtime subscription)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ops/ApifyRunHistory.tsx",
+        "src/components/ops/ApifyRunDetail.tsx"
+      ],
+      "notes": "Query apify_runs table with org_id filter. Show raw JSON from apify_results for detail view. Use existing Table/DataTable patterns from @/components/ui/."
+    },
+    {
+      "id": "APFY-013",
+      "feature": "apify-mapping",
+      "title": "Create shared transform functions utility",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["APFY-002"], "files": [], "schema": [] },
+      "blocks": ["APFY-014", "APFY-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "normalise_phone: any phone string → E.164 format",
+        "lowercase, uppercase, trim: string transforms",
+        "extract_domain: URL → domain, parse_date: date string → ISO 8601",
+        "to_integer, to_float, join_array, first, stringify, boolean transforms",
+        "All transforms handle null/undefined input gracefully (return null)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/apifyTransforms.ts"
+      ],
+      "notes": "Shared utility importable by apify-run-webhook and apify-auto-map. normalise_phone should handle UK (+44) and US (+1) formats at minimum. Use a simple regex-based approach, not a full phone parsing library."
+    },
+    {
+      "id": "APFY-014",
+      "feature": "apify-mapping",
+      "title": "Add mapping pipeline to apify-run-webhook",
+      "type": "backend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["APFY-006", "APFY-013"], "files": ["supabase/functions/apify-run-webhook/index.ts"], "schema": ["mapping_templates", "mapped_records"] },
+      "blocks": ["APFY-017"],
+      "parallelWith": [],
+      "acceptance": [
+        "If mapping_template_id set: apply field mappings + transforms to raw results",
+        "Upsert into mapped_records with dedup on (org_id, template_id, dedup_key)",
+        "Log mapping errors to apify_results.mapping_error",
+        "If no template but auto_map=true: call apify-auto-map, save draft template, apply",
+        "Update run with mapped_records_count, error_records_count"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/apify-run-webhook/index.ts"
+      ],
+      "notes": "Extend the webhook function from APFY-006. Apply transforms from _shared/apifyTransforms.ts. Handle nested source paths like 'location.lat' with dot notation resolver."
+    },
+    {
+      "id": "APFY-015",
+      "feature": "apify-mapping",
+      "title": "Implement GDPR personal email detection in mapping pipeline",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["APFY-014"], "files": ["supabase/functions/apify-run-webhook/index.ts"], "schema": [] },
+      "blocks": ["APFY-017"],
+      "parallelWith": [],
+      "acceptance": [
+        "Check fields mapped to 'email' against personal email domain list (gmail, yahoo, hotmail, etc.)",
+        "Set gdpr_flags = ['personal_email'] on flagged mapped_records",
+        "Update run with gdpr_flagged_count",
+        "Personal domain list includes all 18 domains from PRD",
+        "No blocking — flagging only, orgs make their own decisions"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/gdprCheck.ts",
+        "supabase/functions/apify-run-webhook/index.ts"
+      ],
+      "notes": "Extract into shared utility for reuse. Domain list: gmail.com, yahoo.com, hotmail.com, outlook.com, icloud.com, aol.com, protonmail.com, mail.com, live.com, me.com, googlemail.com, ymail.com, rocketmail.com, btinternet.com, sky.com, virgin.net, ntlworld.com, talktalk.net."
+    },
+    {
+      "id": "APFY-016",
+      "feature": "apify-mapping",
+      "title": "Create mapping template editor and auto-map review UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["APFY-007", "APFY-014"], "files": [], "schema": ["mapping_templates"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Two-column view: source fields (left) ↔ target fields (right) with drag/connect",
+        "Confidence badges (high=green, medium=yellow, low=red) on each mapping row",
+        "Editable target field names and transform selector dropdowns",
+        "Dedup key selector dropdown from mapped fields",
+        "Save as Template button creating org-scoped mapping_templates row"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/ops/ApifyMappingEditor.tsx",
+        "src/components/ops/ApifyAutoMapReview.tsx"
+      ],
+      "notes": "ApifyAutoMapReview is shown after first run with auto-generate option. ApifyMappingEditor is the full manual editor. Both share the two-column layout. Use Radix primitives."
+    },
+    {
+      "id": "APFY-017",
+      "feature": "apify-results",
+      "title": "Create Results Explorer page with GDPR indicators",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": { "stories": ["APFY-014", "APFY-015"], "files": [], "schema": ["mapped_records"] },
+      "blocks": ["APFY-018"],
+      "parallelWith": ["APFY-016"],
+      "acceptance": [
+        "Paginated table with columns adapted from the mapping template",
+        "GDPR warning icon (ShieldAlert) on flagged rows",
+        "Filters: run, record_type, sync_status, gdpr_flags, date range",
+        "Full-text search across mapped data JSONB",
+        "Toggle to view raw JSON for any record"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ops/ApifyResultsExplorer.tsx"
+      ],
+      "notes": "Columns are dynamic based on the mapping template's field_mappings. Use the existing DataTable patterns. GDPR icon uses Lucide ShieldAlert, not emoji."
+    },
+    {
+      "id": "APFY-018",
+      "feature": "apify-results",
+      "title": "Add bulk actions (CRM sync with GDPR confirmation, CSV export)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 18,
+      "dependencies": { "stories": ["APFY-017"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Checkbox selection on results table rows",
+        "Sync to CRM button: if selection includes GDPR-flagged records, show confirmation dialog",
+        "GDPR dialog: 'X records contain personal email addresses. Confirm lawful basis to proceed.'",
+        "Export CSV button: downloads selected or all filtered records as CSV",
+        "Delete selected records action with confirmation"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/ops/ApifyBulkActions.tsx",
+        "src/components/ops/ApifyGdprConfirmDialog.tsx"
+      ],
+      "notes": "CRM sync updates mapped_records.sync_status. CSV export generates client-side. Follow BulkActionsBar pattern from existing ops components."
+    },
+    {
+      "id": "APFY-019",
+      "feature": "apify-ui",
+      "title": "Create Apify frontend service layer and React hooks",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 19,
+      "dependencies": { "stories": ["APFY-003", "APFY-004", "APFY-005"], "files": [], "schema": [] },
+      "blocks": ["APFY-011", "APFY-012"],
+      "parallelWith": ["APFY-008"],
+      "acceptance": [
+        "apifyService.ts with methods: connect, disconnect, revalidate, introspectActor, startRun, getRuns, getRunDetail, getResults",
+        "useApifyIntegration hook: connection status, connect/disconnect/revalidate",
+        "useApifyRuns hook: run history with pagination, auto-refresh for active runs",
+        "useApifyResults hook: mapped results with filters and pagination",
+        "All hooks use React Query with proper cache keys"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/services/apifyService.ts",
+        "src/lib/hooks/useApifyIntegration.ts"
+      ],
+      "notes": "Follow apolloSearchService.ts + useAiArkIntegration.ts patterns exactly. Use supabase.functions.invoke() for edge function calls (NOT raw fetch). Service methods return typed results."
+    },
+    {
+      "id": "APFY-020",
+      "feature": "apify-copilot",
+      "title": "Create Apify copilot skills (actor browsing, run management)",
+      "type": "copilot",
+      "status": "pending",
+      "priority": 20,
+      "dependencies": { "stories": ["APFY-005", "APFY-006"], "files": [], "schema": [] },
+      "blocks": ["APFY-021"],
+      "parallelWith": [],
+      "acceptance": [
+        "Atomic skill: apify-actor-browse — search Apify marketplace, recommend actors",
+        "Atomic skill: apify-run-trigger — construct input from natural language, start run",
+        "Atomic skill: apify-results-query — query mapped_records with natural language filters",
+        "Sequence: seq-apify-scrape-flow — browse → configure → run → report results",
+        "All skills follow SKILL.md frontmatter V2 format with triggers"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/apify-actor-browse/SKILL.md",
+        "skills/atomic/apify-run-trigger/SKILL.md",
+        "skills/atomic/apify-results-query/SKILL.md",
+        "skills/sequences/seq-apify-scrape-flow/SKILL.md"
+      ],
+      "notes": "Skills invoke edge functions via execute_action tool. Sequence chains: browse actor → get schema → build input → start run → wait → report. Follow existing skill patterns in skills/atomic/."
+    },
+    {
+      "id": "APFY-021",
+      "feature": "apify-copilot",
+      "title": "Implement MCP server connection with org token injection",
+      "type": "copilot",
+      "status": "pending",
+      "priority": 21,
+      "dependencies": { "stories": ["APFY-020"], "files": ["src/lib/copilot/agent/autonomousExecutor.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "MCP server config: { type: 'url', url: 'https://mcp.apify.com/sse', authorization_token: '{decrypted_token}' }",
+        "Token decrypted server-side from integration_credentials at session start",
+        "MCP server only loaded if org has active Apify connection",
+        "Fallback message if not connected: 'Connect Apify in Settings > Integrations first'",
+        "Copilot-triggered runs route through apify-run-start (NOT MCP run endpoint)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts",
+        "src/lib/copilot/agent/autonomousExecutor.ts"
+      ],
+      "notes": "Token injection happens at copilot session init. MCP is for reads (actor search, status, dataset exploration). Writes go through pipeline edge functions. Follow routing rules table in PRD."
+    },
+    {
+      "id": "APFY-022",
+      "feature": "apify-ops",
+      "title": "Add cost tracking and monthly summary to integration settings",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 22,
+      "dependencies": { "stories": ["APFY-009", "APFY-012"], "files": [], "schema": ["apify_runs"] },
+      "blocks": [],
+      "parallelWith": ["APFY-023"],
+      "acceptance": [
+        "Monthly cost summary on Apify integration settings (aggregated from apify_runs.cost_usd)",
+        "Per-run cost displayed in run history table",
+        "Cost trend chart (last 30 days) in integration settings",
+        "Cost data populated from Apify run metadata on webhook completion"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/integrations/ApifyConfigModal.tsx",
+        "src/components/ops/ApifyRunHistory.tsx"
+      ],
+      "notes": "cost_usd comes from Apify run metadata. Query: SELECT SUM(cost_usd) FROM apify_runs WHERE org_id = ? AND created_at > date_trunc('month', now()). Add to existing components, not new files."
+    },
+    {
+      "id": "APFY-023",
+      "feature": "apify-ops",
+      "title": "Create 30-day purge cron job for apify_results",
+      "type": "schema",
+      "status": "pending",
+      "priority": 23,
+      "dependencies": { "stories": ["APFY-001"], "files": [], "schema": ["apify_results"] },
+      "blocks": [],
+      "parallelWith": ["APFY-022"],
+      "acceptance": [
+        "pg_cron job scheduled at 0 3 * * * (daily 3am UTC)",
+        "Deletes from apify_results WHERE expires_at < now()",
+        "Wrapper function follows call_proactive_edge_function pattern or direct SQL",
+        "Migration file creates the cron schedule",
+        "No impact on mapped_records (retained indefinitely)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260210000002_apify_purge_cron.sql"
+      ],
+      "notes": "Follow existing cron pattern from 20260124100004_setup_proactive_cron_jobs.sql. Direct SQL DELETE is fine here — no need for an edge function wrapper since it's a simple purge."
+    },
+    {
+      "id": "APFY-024",
+      "feature": "apify-ui",
+      "title": "Create Apify Ops page with tab navigation (Builder, History, Results)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 24,
+      "dependencies": { "stories": ["APFY-011", "APFY-012", "APFY-017"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New page at /platform/ops/apify or section within existing Ops page",
+        "Tab navigation: Run Builder | Run History | Results Explorer",
+        "Tabs compose existing components: ApifyRunBuilder, ApifyRunHistory, ApifyResultsExplorer",
+        "Breadcrumb navigation and proper page title",
+        "Gate behind Apify connection status (show connect prompt if not connected)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/ApifyOpsPage.tsx",
+        "src/App.tsx"
+      ],
+      "notes": "Register route in App.tsx. Follow existing ops page patterns. SheetContent panels must include !top-16 !h-[calc(100vh-4rem)] if used."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 24,
+    "completedStories": 0,
+    "currentFeature": null,
+    "lastUpdated": "2026-02-09T18:00:00Z",
+    "phases": {
+      "phase1": {
+        "name": "Connection & Core Pipeline",
+        "stories": ["APFY-001", "APFY-003", "APFY-004", "APFY-005", "APFY-006", "APFY-008", "APFY-009", "APFY-010", "APFY-011", "APFY-012", "APFY-019"],
+        "estimatedHours": "4-5"
+      },
+      "phase2": {
+        "name": "Mapping Engine & Results",
+        "stories": ["APFY-002", "APFY-007", "APFY-013", "APFY-014", "APFY-015", "APFY-016", "APFY-017", "APFY-018"],
+        "estimatedHours": "3-4"
+      },
+      "phase3": {
+        "name": "Copilot, Ops & Polish",
+        "stories": ["APFY-020", "APFY-021", "APFY-022", "APFY-023", "APFY-024"],
+        "estimatedHours": "2-3"
+      }
+    },
+    "parallelGroups": [
+      ["APFY-004", "APFY-005"],
+      ["APFY-008", "APFY-009", "APFY-019"],
+      ["APFY-010", "APFY-019"],
+      ["APFY-016", "APFY-017"],
+      ["APFY-022", "APFY-023"]
+    ]
+  }
+}

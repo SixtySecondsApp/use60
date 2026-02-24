@@ -4,6 +4,7 @@
 
 -- First, check if the policy already exists and drop it if it does
 DROP POLICY IF EXISTS "Anyone can view invitations by valid token" ON "public"."organization_invitations";
+DROP POLICY IF EXISTS "Allow public invitation view by token" ON "public"."organization_invitations";
 
 -- Create permissive policy for SELECT - allows public access
 CREATE POLICY "Allow public invitation view by token" ON "public"."organization_invitations"

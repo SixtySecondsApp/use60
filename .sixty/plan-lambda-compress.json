@@ -1,0 +1,276 @@
+{
+  "project": {
+    "name": "Lambda Video Compression + S3 Upload Pipeline",
+    "description": "Replace edge function streaming upload with async Lambda pipeline: Edge function triggers Lambda → Lambda downloads, compresses (720p), uploads to S3 → Lambda calls back with results. Solves WORKER_LIMIT (546) timeout on large recordings (~500MB).",
+    "createdAt": "2026-01-27T12:15:00Z",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "storage": "aws-s3",
+      "functions": "edge-functions",
+      "compute": "aws-lambda",
+      "language": "python-3.12"
+    }
+  },
+
+  "features": [
+    {
+      "id": "lambda-fn",
+      "name": "Lambda Compress & Upload Function",
+      "status": "pending",
+      "priority": 1,
+      "description": "Docker-based Lambda with FFmpeg that downloads from MeetingBaaS, compresses to 720p, uploads to S3, and calls back to edge function"
+    },
+    {
+      "id": "edge-refactor",
+      "name": "Edge Function Refactor",
+      "status": "pending",
+      "priority": 2,
+      "description": "Modify upload-recording-to-s3 to invoke Lambda async instead of streaming directly, and create process-compress-callback to receive results"
+    },
+    {
+      "id": "schema-update",
+      "name": "Schema & Status Updates",
+      "status": "pending",
+      "priority": 3,
+      "description": "Add 'processing' status to s3_upload_status enum and compression tracking columns"
+    },
+    {
+      "id": "deploy-test",
+      "name": "Deployment & E2E Testing",
+      "status": "pending",
+      "priority": 4,
+      "description": "Deploy Lambda to ECR, deploy edge functions to staging, and validate end-to-end flow"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "COMP-001",
+      "feature": "schema-update",
+      "title": "Add 'processing' status and compression columns to recordings table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["recordings"]
+      },
+      "blocks": ["COMP-003", "COMP-004", "COMP-005"],
+      "parallelWith": ["COMP-002"],
+      "acceptance": [
+        "Migration adds 'processing' value to s3_upload_status enum (ALTER TYPE ... ADD VALUE)",
+        "New columns: compression_ratio NUMERIC, original_size_bytes BIGINT, compressed_size_bytes BIGINT, compression_duration_seconds INTEGER",
+        "Migration is idempotent (IF NOT EXISTS guards)",
+        "Existing pending/uploading/complete/failed statuses unaffected"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260127120000_add_processing_status_and_compression.sql"
+      ]
+    },
+    {
+      "id": "COMP-002",
+      "feature": "lambda-fn",
+      "title": "Create Lambda function with Dockerfile, handler, and FFmpeg compression",
+      "type": "feature",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["COMP-006"],
+      "parallelWith": ["COMP-001"],
+      "acceptance": [
+        "Dockerfile builds Python 3.12 image with static FFmpeg binary",
+        "handler.py orchestrates: download → compress → upload → callback",
+        "FFmpeg compresses to 720p H.264 CRF 23 medium preset with faststart",
+        "Multipart S3 upload with progress logging",
+        "HMAC-SHA256 signature on callback request for authentication",
+        "Error handling: catches download/compress/upload failures and calls back with error status"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "lambda-compress-upload/Dockerfile",
+        "lambda-compress-upload/handler.py",
+        "lambda-compress-upload/compress.py",
+        "lambda-compress-upload/s3_upload.py",
+        "lambda-compress-upload/download.py",
+        "lambda-compress-upload/requirements.txt"
+      ]
+    },
+    {
+      "id": "COMP-003",
+      "feature": "edge-refactor",
+      "title": "Modify upload-recording-to-s3 to invoke Lambda async instead of streaming",
+      "type": "refactor",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["COMP-001"],
+        "files": ["supabase/functions/upload-recording-to-s3/index.ts"],
+        "schema": ["recordings"]
+      },
+      "blocks": ["COMP-006"],
+      "parallelWith": ["COMP-004"],
+      "acceptance": [
+        "Replaces streamUploadToS3 call with AWS Lambda InvokeCommand (InvocationType: 'Event')",
+        "Sets s3_upload_status='processing' after successful Lambda invocation",
+        "Edge function returns 202 immediately (no WORKER_LIMIT risk)",
+        "Lambda payload includes: recording_id, video_url, audio_url, s3_bucket, s3_video_key, s3_audio_key, callback_url, callback_secret",
+        "Falls back to error status if Lambda invocation fails"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/upload-recording-to-s3/index.ts"
+      ]
+    },
+    {
+      "id": "COMP-004",
+      "feature": "edge-refactor",
+      "title": "Create process-compress-callback edge function",
+      "type": "feature",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["COMP-001"],
+        "files": ["supabase/functions/_shared/recordingCompleteSync.ts"],
+        "schema": ["recordings"]
+      },
+      "blocks": ["COMP-006"],
+      "parallelWith": ["COMP-003"],
+      "acceptance": [
+        "Verifies callback authenticity via HMAC-SHA256 signature header",
+        "Updates recordings table: s3_upload_status, s3_video_url, s3_audio_url, s3_file_size_bytes, compression_ratio, compressed_size_bytes",
+        "On success: calls syncRecordingToMeeting() to sync URLs to meetings table",
+        "On success: triggers thumbnail generation via existing generate-s3-video-thumbnail",
+        "On failure: sets s3_upload_status='failed' with error message from Lambda"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/process-compress-callback/index.ts"
+      ]
+    },
+    {
+      "id": "COMP-005",
+      "feature": "edge-refactor",
+      "title": "Update poll-s3-upload-queue to handle 'processing' status",
+      "type": "fix",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["COMP-001"],
+        "files": ["supabase/functions/poll-s3-upload-queue/index.ts"],
+        "schema": ["recordings"]
+      },
+      "blocks": ["COMP-006"],
+      "parallelWith": ["COMP-003", "COMP-004"],
+      "acceptance": [
+        "Excludes recordings with s3_upload_status='processing' from queue (they're in Lambda)",
+        "Adds stale processing detection: if 'processing' for >20 minutes, reset to 'pending' for retry",
+        "Logs count of currently-processing recordings for monitoring",
+        "No change to existing pending/failed retry logic"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/poll-s3-upload-queue/index.ts"
+      ]
+    },
+    {
+      "id": "COMP-006",
+      "feature": "deploy-test",
+      "title": "Deploy Lambda to ECR + edge functions to staging and test E2E",
+      "type": "deploy",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["COMP-002", "COMP-003", "COMP-004", "COMP-005"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Lambda Docker image built and pushed to ECR (eu-west-2)",
+        "Lambda function created with 3072MB memory, 15min timeout, 10GB ephemeral storage",
+        "Lambda IAM role has S3 PutObject on use60-application bucket",
+        "Edge functions deployed: upload-recording-to-s3, process-compress-callback",
+        "Secrets configured: LAMBDA_COMPRESS_FUNCTION_ARN, COMPRESS_CALLBACK_SECRET",
+        "E2E test: trigger recording → verify Lambda invoked → compressed video in S3 → callback updates DB → sync to meetings → thumbnail generated"
+      ],
+      "estimatedMinutes": 30,
+      "files": []
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 0,
+    "currentFeature": null,
+    "lastUpdated": "2026-01-27T12:15:00Z",
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": ["COMP-001", "COMP-002"],
+        "description": "Schema migration + Lambda function (no dependencies between them)"
+      },
+      {
+        "group": 2,
+        "stories": ["COMP-003", "COMP-004", "COMP-005"],
+        "description": "Edge function changes (all depend on COMP-001 schema, can run in parallel)"
+      },
+      {
+        "group": 3,
+        "stories": ["COMP-006"],
+        "description": "Deploy and test (depends on all previous stories)"
+      }
+    ]
+  },
+
+  "secrets": {
+    "new": [
+      {
+        "name": "LAMBDA_COMPRESS_FUNCTION_ARN",
+        "usedBy": ["upload-recording-to-s3"],
+        "purpose": "ARN of the Lambda function for async invocation"
+      },
+      {
+        "name": "COMPRESS_CALLBACK_SECRET",
+        "usedBy": ["process-compress-callback", "lambda-compress-upload"],
+        "purpose": "Shared HMAC secret for callback authentication"
+      }
+    ],
+    "existing": [
+      "AWS_REGION",
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "AWS_S3_BUCKET",
+      "SUPABASE_URL",
+      "SUPABASE_SERVICE_ROLE_KEY"
+    ]
+  },
+
+  "architecture": {
+    "flow": "poll-s3-upload-queue → upload-recording-to-s3 → Lambda (async) → process-compress-callback → syncRecordingToMeeting → thumbnail",
+    "statusProgression": "pending → uploading(legacy) | processing(new) → complete | failed",
+    "compressionSpec": {
+      "resolution": "720p (-vf scale=-2:720)",
+      "codec": "H.264 (libx264)",
+      "quality": "CRF 23",
+      "preset": "medium",
+      "audio": "AAC 128kbps",
+      "container": "MP4 with faststart",
+      "expectedReduction": "~85% (500MB → 50-80MB)"
+    },
+    "lambdaSpec": {
+      "runtime": "Python 3.12 (Docker)",
+      "memory": "3072 MB",
+      "timeout": "15 minutes",
+      "ephemeralStorage": "10 GB",
+      "region": "eu-west-2"
+    }
+  }
+}

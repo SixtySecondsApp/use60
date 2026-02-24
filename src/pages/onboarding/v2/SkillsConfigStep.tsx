@@ -7,6 +7,18 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQueryClient } from '@tanstack/react-query';
+
+// Hide scrollbar on tab navigation
+const scrollbarHideStyle = `
+  .skill-tabs-container::-webkit-scrollbar {
+    display: none;
+  }
+  .skill-tabs-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+`;
 import {
   Check,
   ChevronRight,
@@ -18,7 +30,6 @@ import {
   Trash2,
   Loader,
   Sparkles,
-  AlertCircle,
 } from 'lucide-react';
 import { useOnboardingV2Store, SKILLS, SkillId } from '@/lib/stores/onboardingV2Store';
 import { EditableItem, EditableTag, AddItemButton } from '@/components/onboarding';
@@ -30,6 +41,7 @@ type SkillStatus = 'pending' | 'configured' | 'skipped';
 const MAX_TEXTAREA_LENGTH = 2000;
 const MAX_TAG_LENGTH = 100;
 const MAX_ITEM_LENGTH = 500;
+const MAX_ITEMS = 10;
 
 // Sanitize input to prevent injection attacks
 const sanitizeInput = (input: string): string => {
@@ -37,8 +49,20 @@ const sanitizeInput = (input: string): string => {
 };
 
 export function SkillsConfigStep() {
-  const { skillConfigs, updateSkillConfig, setStep, saveAllSkills, organizationId, enrichment } =
+  const queryClient = useQueryClient();
+  const { skillConfigs, updateSkillConfig, setStep, saveAllSkills, organizationId, enrichment, resetAndCleanup } =
     useOnboardingV2Store();
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleStartOver = async () => {
+    if (isResetting) return;
+    setIsResetting(true);
+    try {
+      await resetAndCleanup(queryClient);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const [currentSkillIndex, setCurrentSkillIndex] = useState(0);
   const [skillStatuses, setSkillStatuses] = useState<Record<SkillId, SkillStatus>>(() =>
@@ -104,6 +128,26 @@ export function SkillsConfigStep() {
     await moveNext();
   }, [activeSkill.id, moveNext]);
 
+  const handleSkipAll = useCallback(async () => {
+    // Mark all remaining skills as skipped and go to complete
+    const updated = { ...skillStatuses };
+    for (const skill of SKILLS) {
+      if (updated[skill.id] === 'pending') {
+        updated[skill.id] = 'skipped';
+      }
+    }
+    setSkillStatuses(updated);
+
+    if (organizationId) {
+      const success = await saveAllSkills(organizationId);
+      if (success) {
+        setStep('complete');
+      }
+    } else {
+      setStep('complete');
+    }
+  }, [skillStatuses, organizationId, saveAllSkills, setStep]);
+
   const renderSkillConfig = () => {
     if (!activeConfig) return null;
 
@@ -147,7 +191,11 @@ export function SkillsConfigStep() {
                     })
                   }
                   placeholder="Add qualification criterion"
+                  disabled={(activeConfig.criteria?.length ?? 0) >= MAX_ITEMS}
                 />
+                {(activeConfig.criteria?.length ?? 0) >= MAX_ITEMS && (
+                  <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+                )}
               </div>
             </div>
 
@@ -186,7 +234,11 @@ export function SkillsConfigStep() {
                     })
                   }
                   placeholder="Add disqualifier"
+                  disabled={(activeConfig.disqualifiers?.length ?? 0) >= MAX_ITEMS}
                 />
+                {(activeConfig.disqualifiers?.length ?? 0) >= MAX_ITEMS && (
+                  <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+                )}
               </div>
             </div>
           </div>
@@ -237,11 +289,15 @@ export function SkillsConfigStep() {
                   questions: [...(activeConfig.questions || []), ''],
                 })
               }
-              className="w-full p-3 border-2 border-dashed rounded-xl text-sm transition-colors flex items-center justify-center gap-2 border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400"
+              disabled={(activeConfig.questions?.length ?? 0) >= MAX_ITEMS}
+              className={`w-full p-3 border-2 border-dashed rounded-xl text-sm transition-colors flex items-center justify-center gap-2 border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400 ${(activeConfig.questions?.length ?? 0) >= MAX_ITEMS ? 'opacity-50 cursor-not-allowed hover:border-gray-700 hover:text-gray-500' : ''}`}
             >
               <Plus className="w-4 h-4" />
               Add question
             </button>
+            {(activeConfig.questions?.length ?? 0) >= MAX_ITEMS && (
+              <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+            )}
           </div>
         );
 
@@ -300,10 +356,14 @@ export function SkillsConfigStep() {
                     setShowAddWordModal(true);
                     setNewWordInput('');
                   }}
-                  className="px-2.5 py-1 border border-dashed text-sm rounded-full transition-colors border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400"
+                  disabled={(activeConfig.avoid?.length ?? 0) >= MAX_ITEMS}
+                  className={`px-2.5 py-1 border border-dashed text-sm rounded-full transition-colors border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400 ${(activeConfig.avoid?.length ?? 0) >= MAX_ITEMS ? 'opacity-50 cursor-not-allowed hover:border-gray-700 hover:text-gray-500' : ''}`}
                 >
                   + Add
                 </button>
+                {(activeConfig.avoid?.length ?? 0) >= MAX_ITEMS && (
+                  <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+                )}
               </div>
             </div>
 
@@ -447,11 +507,15 @@ export function SkillsConfigStep() {
                   ],
                 })
               }
-              className="w-full p-3 border-2 border-dashed rounded-xl text-sm transition-colors flex items-center justify-center gap-2 border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400"
+              disabled={(activeConfig.objections?.length ?? 0) >= MAX_ITEMS}
+              className={`w-full p-3 border-2 border-dashed rounded-xl text-sm transition-colors flex items-center justify-center gap-2 border-gray-700 text-gray-500 hover:border-violet-500 hover:text-violet-400 ${(activeConfig.objections?.length ?? 0) >= MAX_ITEMS ? 'opacity-50 cursor-not-allowed hover:border-gray-700 hover:text-gray-500' : ''}`}
             >
               <Plus className="w-4 h-4" />
               Add objection response
             </button>
+            {(activeConfig.objections?.length ?? 0) >= MAX_ITEMS && (
+              <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+            )}
           </div>
         );
 
@@ -536,7 +600,11 @@ export function SkillsConfigStep() {
                     })
                   }
                   placeholder="Add buying signal"
+                  disabled={(activeConfig.buyingSignals?.length ?? 0) >= MAX_ITEMS}
                 />
+                {(activeConfig.buyingSignals?.length ?? 0) >= MAX_ITEMS && (
+                  <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
+                )}
               </div>
             </div>
           </div>
@@ -619,16 +687,18 @@ export function SkillsConfigStep() {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-2xl mx-auto px-4"
-    >
-      <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 overflow-hidden">
-        {/* Tab Navigation */}
-        <div className="px-4 pt-4 border-b border-gray-800">
-          <div className="flex gap-1 overflow-x-auto pb-0 scrollbar-hide">
+    <>
+      <style>{scrollbarHideStyle}</style>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="w-full max-w-2xl mx-auto px-4"
+      >
+        <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 overflow-hidden">
+          {/* Tab Navigation */}
+          <div className="px-4 pt-4 border-b border-gray-800">
+            <div className="skill-tabs-container flex gap-1 overflow-x-auto pb-0">
             {SKILLS.map((skill, index) => {
               const Icon = skill.icon;
               const status = getSkillStatus(skill.id);
@@ -717,7 +787,25 @@ export function SkillsConfigStep() {
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Skip All & Start Over */}
+        <div className="px-4 sm:px-6 py-3 border-t border-gray-800/50 flex items-center justify-between">
+          <button
+            onClick={handleStartOver}
+            disabled={isResetting}
+            className="text-xs text-gray-500 hover:text-gray-400 transition-colors disabled:opacity-50"
+          >
+            {isResetting ? 'Resetting...' : 'Start over'}
+          </button>
+          <button
+            onClick={handleSkipAll}
+            className="text-xs text-gray-400 hover:text-violet-400 transition-colors font-medium"
+          >
+            Skip All & Finish
+          </button>
+        </div>
       </div>
-    </motion.div>
+      </motion.div>
+    </>
   );
 }

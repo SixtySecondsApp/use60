@@ -1,0 +1,229 @@
+{
+  "project": {
+    "name": "Skill & Sequence Execution History",
+    "description": "Add execution history with full replay preview to Copilot Lab and per-skill/sequence detail views. Admins can browse past runs, see exactly what the user saw (structured response + tool chain), and re-run skills with the same inputs. Last 5 executions per skill retain full structured response payload; older ones keep current truncated storage.",
+    "createdAt": "2026-02-04T00:00:00Z",
+    "consultReport": null
+  },
+  "features": [
+    {
+      "id": "persist-responses",
+      "name": "Persist Structured Responses",
+      "status": "complete",
+      "priority": 1,
+      "description": "Add structured_response JSONB column to copilot_executions, persist full payload from edge function, implement retention policy (keep last 5 per skill, prune older)."
+    },
+    {
+      "id": "history-service",
+      "name": "Execution History Service",
+      "status": "complete",
+      "priority": 2,
+      "description": "Frontend service + React Query hooks to fetch execution history with filters (skill, sequence, user, date, status). Supports global view and per-skill scoped view."
+    },
+    {
+      "id": "lab-history-tab",
+      "name": "Copilot Lab History Tab",
+      "status": "complete",
+      "priority": 3,
+      "description": "New 'History' tab in Copilot Lab with execution list, filters, and full replay panel (tool chain + rendered structured response)."
+    },
+    {
+      "id": "skill-history-tab",
+      "name": "Per-Skill/Sequence History Tab",
+      "status": "complete",
+      "priority": 4,
+      "description": "New 'History' tab on PlatformSkillViewPage showing recent executions for that specific skill/sequence with replay and re-run."
+    }
+  ],
+  "stories": [
+    {
+      "id": "HIST-001",
+      "feature": "persist-responses",
+      "title": "Add structured_response column and retention policy migration",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/migrations/20260203100001_copilot_executions.sql"],
+        "schema": ["copilot_executions", "copilot_tool_calls"]
+      },
+      "blocks": ["HIST-002", "HIST-003", "HIST-004", "HIST-005", "HIST-006", "HIST-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "New `structured_response` JSONB column on copilot_executions table",
+        "New `prune_old_structured_responses()` SQL function that keeps last 5 per skill_key and NULLs older structured_response values",
+        "Index on (skill_key, started_at DESC) for efficient per-skill queries added to copilot_tool_calls",
+        "RLS policies unchanged — admins already have org-wide read access"
+      ],
+      "files": [
+        "supabase/migrations/YYYYMMDD_execution_history_schema.sql"
+      ],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "HIST-002",
+      "feature": "persist-responses",
+      "title": "Persist structured response payload in copilot-autonomous edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["HIST-001"],
+        "files": ["supabase/functions/copilot-autonomous/index.ts"],
+        "schema": ["copilot_executions"]
+      },
+      "blocks": ["HIST-004", "HIST-005", "HIST-006", "HIST-007"],
+      "parallelWith": ["HIST-003"],
+      "acceptance": [
+        "logExecutionComplete() saves full structured_response JSONB when present",
+        "Calls prune_old_structured_responses() after insert to enforce 5-per-skill retention",
+        "Structured response captured from the final Claude response in the agentic loop",
+        "No impact on SSE streaming performance — pruning is async"
+      ],
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "HIST-003",
+      "feature": "persist-responses",
+      "title": "Persist structured response payload in api-copilot edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["HIST-001"],
+        "files": ["supabase/functions/api-copilot/index.ts"],
+        "schema": ["copilot_executions"]
+      },
+      "blocks": ["HIST-004", "HIST-005", "HIST-006", "HIST-007"],
+      "parallelWith": ["HIST-002"],
+      "acceptance": [
+        "api-copilot saves structured_response when returning a structuredResponse payload",
+        "Calls prune_old_structured_responses() after insert to enforce retention",
+        "Works for both sequence and individual skill executions"
+      ],
+      "files": [
+        "supabase/functions/api-copilot/index.ts"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "HIST-004",
+      "feature": "history-service",
+      "title": "Create executionHistoryService and React Query hooks",
+      "type": "frontend-service",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["HIST-001"],
+        "files": ["src/lib/services/", "src/lib/types/copilot.ts"],
+        "schema": ["copilot_executions", "copilot_tool_calls"]
+      },
+      "blocks": ["HIST-005", "HIST-006", "HIST-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "executionHistoryService with methods: getExecutions(filters), getExecutionDetail(id), getExecutionsForSkill(skillKey), reRunExecution(id)",
+        "useExecutionHistory hook with filters: skillKey, sequenceKey, userId, status, dateRange, hasStructuredResponse",
+        "useExecutionDetail hook that fetches execution + tool_calls + structured_response in one query",
+        "TypeScript types for ExecutionHistoryItem, ExecutionDetail, ExecutionFilters"
+      ],
+      "files": [
+        "src/lib/services/executionHistoryService.ts",
+        "src/lib/hooks/useExecutionHistory.ts",
+        "src/lib/types/executionHistory.ts"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "HIST-005",
+      "feature": "lab-history-tab",
+      "title": "Build ExecutionReplayPanel component",
+      "type": "frontend-ui",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["HIST-004"],
+        "files": [
+          "src/components/copilot/CopilotResponse.tsx",
+          "src/components/copilot/ToolCallCard.tsx",
+          "src/components/copilot/ExecutionTelemetry.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["HIST-006", "HIST-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "ExecutionReplayPanel renders full execution: metadata header (user, time, duration, tokens, success/fail), tool call chain with expandable inputs/outputs, and rendered structured response using existing CopilotResponse router",
+        "Re-run button triggers reRunExecution() which opens Playground with same inputs pre-filled",
+        "Handles missing structured_response gracefully (older executions) by showing response_text fallback",
+        "Reuses existing ToolCallCard and CopilotResponse components — no duplication"
+      ],
+      "files": [
+        "src/components/copilot/lab/ExecutionReplayPanel.tsx"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "HIST-006",
+      "feature": "lab-history-tab",
+      "title": "Add History tab to Copilot Lab page",
+      "type": "frontend-ui",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["HIST-005"],
+        "files": ["src/pages/platform/CopilotLabPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["HIST-007"],
+      "acceptance": [
+        "New 'History' tab added to TABS array in CopilotLabPage (icon: History from lucide-react)",
+        "ExecutionHistoryList component with table/list of executions — columns: time, user, skill/sequence, status badge, duration, token count",
+        "Filter bar: skill dropdown, status (success/error/all), date range picker, search by user message",
+        "Clicking a row expands or navigates to ExecutionReplayPanel",
+        "Pagination with React Query infinite scroll or page-based"
+      ],
+      "files": [
+        "src/components/copilot/lab/ExecutionHistoryList.tsx",
+        "src/pages/platform/CopilotLabPage.tsx"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "HIST-007",
+      "feature": "skill-history-tab",
+      "title": "Add History tab to PlatformSkillViewPage",
+      "type": "frontend-ui",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["HIST-005"],
+        "files": ["src/pages/platform/PlatformSkillViewPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["HIST-006"],
+      "acceptance": [
+        "New 'History' tab added to PlatformSkillViewPage tabs (alongside Preview, Edit, Test)",
+        "Shows ExecutionHistoryList scoped to this skill_key (filter pre-applied)",
+        "Clicking a row shows ExecutionReplayPanel inline below the list",
+        "Re-run button opens the Test tab with the same user_message pre-filled",
+        "Shows 'No executions yet' empty state when no history exists"
+      ],
+      "files": [
+        "src/pages/platform/PlatformSkillViewPage.tsx"
+      ],
+      "estimatedMinutes": 20
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 7,
+    "currentFeature": null,
+    "lastUpdated": "2026-02-04T00:00:00Z"
+  }
+}

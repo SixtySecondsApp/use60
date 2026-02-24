@@ -1,0 +1,277 @@
+{
+  "feature": "icp-persona-redesign",
+  "title": "ICP + Buyer Persona Redesign — Naming, Hierarchy, Field Split, and AI Chaining",
+  "createdAt": "2026-02-19T00:00:00Z",
+  "consultReport": ".sixty/consult/icp-persona-redesign.md",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Schema + Types",
+      "description": "Database migration and TypeScript type updates to support hierarchy, rename ibp→persona, and add persona-specific criteria fields."
+    },
+    {
+      "id": "phase-2",
+      "name": "Form Split",
+      "description": "Conditional field rendering in ICPProfileForm — firmographic sections for ICP, demographic+psychographic for Persona. Parent ICP selector for personas."
+    },
+    {
+      "id": "phase-3",
+      "name": "Hierarchical Grid",
+      "description": "Rebuild ICPProfileGrid as grouped hierarchical layout — ICP parent cards with nested persona mini-cards, standalone persona section."
+    },
+    {
+      "id": "phase-4",
+      "name": "AI Auto-Chain",
+      "description": "Update copilot routing and search functions to auto-chain ICP→persona when parent exists."
+    }
+  ],
+  "stories": [
+    {
+      "id": "ICP-R-001",
+      "phase": "phase-1",
+      "title": "Migration: add parent_icp_id, rename ibp→persona, extend criteria JSONB",
+      "type": "schema",
+      "estimate": "20min",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "New migration adds `parent_icp_id UUID REFERENCES icp_profiles(id) ON DELETE SET NULL` column",
+        "UPDATE icp_profiles SET profile_type = 'persona' WHERE profile_type = 'ibp'",
+        "CHECK constraint updated: profile_type IN ('icp', 'persona')",
+        "Index on parent_icp_id for efficient child lookups",
+        "Migration is idempotent and safe to run on all environments"
+      ],
+      "files": [
+        "supabase/migrations/20260219100001_icp_persona_redesign.sql"
+      ]
+    },
+    {
+      "id": "ICP-R-002",
+      "phase": "phase-1",
+      "title": "Update TypeScript types: ICPProfileType, ICPCriteria persona fields",
+      "type": "frontend",
+      "estimate": "15min",
+      "dependencies": ["ICP-R-001"],
+      "acceptance_criteria": [
+        "ICPProfileType = 'icp' | 'persona' (was 'icp' | 'ibp')",
+        "ICPCriteria extended with: pain_points?: string[], buying_triggers?: string[], messaging_angle?: string, product_tag?: string",
+        "ICPProfile interface includes parent_icp_id?: string | null",
+        "All imports across codebase updated — no remaining references to 'ibp' literal",
+        "CreateICPProfilePayload and UpdateICPProfilePayload include parent_icp_id"
+      ],
+      "files": [
+        "src/lib/types/prospecting.ts"
+      ]
+    },
+    {
+      "id": "ICP-R-003",
+      "phase": "phase-1",
+      "title": "Update service layer: icpProfileService ibp→persona, parent_icp_id support",
+      "type": "backend",
+      "estimate": "15min",
+      "dependencies": ["ICP-R-002"],
+      "acceptance_criteria": [
+        "icpProfileService handles parent_icp_id in create/update/duplicate",
+        "Duplicate persona inherits parent_icp_id from source",
+        "Linked ops table naming uses 'Persona' instead of 'IBP' for persona type profiles",
+        "Any 'ibp' string references replaced with 'persona'"
+      ],
+      "files": [
+        "src/lib/services/icpProfileService.ts"
+      ]
+    },
+    {
+      "id": "ICP-R-004",
+      "phase": "phase-1",
+      "title": "Update CRUD hooks: add parent_icp_id to queries and mutations",
+      "type": "frontend",
+      "estimate": "10min",
+      "dependencies": ["ICP-R-003"],
+      "acceptance_criteria": [
+        "useICPProfiles query selects parent_icp_id column",
+        "useCreateICPProfile passes parent_icp_id",
+        "useUpdateICPProfile passes parent_icp_id",
+        "Add useICPProfileChildren(parentId) hook for fetching child personas"
+      ],
+      "files": [
+        "src/lib/hooks/useICPProfilesCRUD.ts"
+      ]
+    },
+    {
+      "id": "ICP-R-005",
+      "phase": "phase-2",
+      "title": "Rename form UI: 'Ideal Buyer Profile' → 'Buyer Persona' with updated copy",
+      "type": "frontend",
+      "estimate": "15min",
+      "dependencies": ["ICP-R-002"],
+      "acceptance_criteria": [
+        "Form type selector shows 'Company ICP' with subtitle 'Define the companies you sell to — industry, size, tech stack'",
+        "Form type selector shows 'Buyer Persona' with subtitle 'Define the people you sell to — titles, seniority, pain points'",
+        "Icon for persona changes from User to UserCircle",
+        "Dialog title adapts: 'Create Company ICP' / 'Create Buyer Persona'",
+        "Dialog description adapts per type"
+      ],
+      "files": [
+        "src/components/prospecting/ICPProfileForm.tsx"
+      ]
+    },
+    {
+      "id": "ICP-R-006",
+      "phase": "phase-2",
+      "title": "Conditional form fields: show firmographic sections for ICP, persona sections for Persona",
+      "type": "frontend",
+      "estimate": "30min",
+      "dependencies": ["ICP-R-005"],
+      "acceptance_criteria": [
+        "When type=icp: show Firmographic Filters (industries, employee ranges, funding, revenue), Technographic, Geography. Hide Persona Filters section.",
+        "When type=persona: show Persona Filters (seniority, departments, titles), NEW Pain Points tag input, NEW Buying Triggers tag input, NEW Messaging Angle textarea, NEW Product/Service Tag text input, Geography. Hide Firmographic section (or show read-only summary if parent ICP selected).",
+        "Shared fields (name, description, status, visibility, provider) always shown",
+        "Switching type clears type-specific fields to avoid stale data"
+      ],
+      "files": [
+        "src/components/prospecting/ICPProfileForm.tsx"
+      ]
+    },
+    {
+      "id": "ICP-R-007",
+      "phase": "phase-2",
+      "title": "Parent ICP selector in persona form",
+      "type": "frontend",
+      "estimate": "20min",
+      "dependencies": ["ICP-R-006", "ICP-R-004"],
+      "acceptance_criteria": [
+        "When type=persona, show 'Parent Company ICP' dropdown at top of form (below type selector)",
+        "Dropdown lists all ICP profiles (profile_type='icp') in the org",
+        "Selection is optional — 'None (standalone)' is default",
+        "When parent selected, show read-only summary card of parent ICP criteria (industries, size, etc.)",
+        "When creating persona from within an ICP group card, parent is pre-selected",
+        "Parent ICP value saved as parent_icp_id on the profile"
+      ],
+      "files": [
+        "src/components/prospecting/ICPProfileForm.tsx"
+      ]
+    },
+    {
+      "id": "ICP-R-008",
+      "phase": "phase-3",
+      "title": "Build ICPGroupCard component — parent ICP card with nested persona mini-cards",
+      "type": "frontend",
+      "estimate": "45min",
+      "dependencies": ["ICP-R-004", "ICP-R-005"],
+      "acceptance_criteria": [
+        "ICPGroupCard renders a large card for the ICP with: name, description, criteria summary, status, actions menu",
+        "Below the ICP info, renders a 'Buyer Personas (N)' section with mini-cards for each child persona",
+        "Mini-cards show: name, product tag, seniority/title summary, actions (edit, delete)",
+        "'+ Add Persona' button inside the group card — opens form with parent pre-selected",
+        "Expand/collapse toggle for the personas section (default: expanded if <=5, collapsed if >5)",
+        "Empty state when ICP has no personas: 'No buyer personas yet — add one to target specific decision-makers'"
+      ],
+      "files": [
+        "src/components/prospecting/ICPGroupCard.tsx"
+      ]
+    },
+    {
+      "id": "ICP-R-009",
+      "phase": "phase-3",
+      "title": "Rebuild ICPProfileGrid as hierarchical grouped layout",
+      "type": "frontend",
+      "estimate": "40min",
+      "dependencies": ["ICP-R-008"],
+      "acceptance_criteria": [
+        "Grid renders ICPGroupCard for each ICP profile, with child personas nested inside",
+        "Standalone personas (no parent_icp_id) shown in a separate 'Standalone Personas' section at bottom",
+        "Profile type filter tabs updated: 'All' | 'Company ICPs' | 'Buyer Personas' | 'Standalone'",
+        "Search filters across both ICPs and personas (matching persona also highlights parent ICP)",
+        "Status filter still works (applied to both ICPs and personas)",
+        "Empty state for standalone section hidden when no standalone personas exist",
+        "New Profile button dropdown: 'New Company ICP' / 'New Buyer Persona'"
+      ],
+      "files": [
+        "src/components/prospecting/ICPProfileGrid.tsx"
+      ]
+    },
+    {
+      "id": "ICP-R-010",
+      "phase": "phase-3",
+      "title": "Update ICPProfileCard: rename badge, update labels, persona visual distinction",
+      "type": "frontend",
+      "estimate": "15min",
+      "dependencies": ["ICP-R-002"],
+      "acceptance_criteria": [
+        "Badge shows 'ICP' or 'PERSONA' (was 'IBP')",
+        "Card subtitle and filter summary adapt per type",
+        "Persona cards show product_tag if present",
+        "Persona cards show parent ICP name as a breadcrumb link if they have a parent",
+        "Delete confirmation message adapts: 'Delete Company ICP' / 'Delete Buyer Persona'"
+      ],
+      "files": [
+        "src/components/prospecting/ICPProfileCard.tsx"
+      ]
+    },
+    {
+      "id": "ICP-R-011",
+      "phase": "phase-4",
+      "title": "Update copilot search to auto-chain ICP→persona when parent exists",
+      "type": "backend",
+      "estimate": "30min",
+      "dependencies": ["ICP-R-003"],
+      "acceptance_criteria": [
+        "When copilot receives a search request for a persona with parent_icp_id:",
+        "  Step 1: Fetch parent ICP criteria",
+        "  Step 2: Search companies using parent ICP firmographic criteria",
+        "  Step 3: Within matched companies, search contacts using persona criteria",
+        "  Step 4: Return combined results (company + contact data)",
+        "When persona has no parent: search contacts directly using persona criteria only",
+        "When searching an ICP directly: search companies only (existing behavior)",
+        "search-crm-with-icp edge function updated to accept optional parent_criteria parameter",
+        "Telemetry logs whether search was chained or direct"
+      ],
+      "files": [
+        "supabase/functions/search-crm-with-icp/index.ts",
+        "supabase/functions/prospecting-search/index.ts",
+        "src/lib/services/icpProfileService.ts"
+      ]
+    },
+    {
+      "id": "ICP-R-012",
+      "phase": "phase-4",
+      "title": "Update copilot routing to distinguish ICP vs persona in skill context",
+      "type": "backend",
+      "estimate": "20min",
+      "dependencies": ["ICP-R-011"],
+      "acceptance_criteria": [
+        "copilotRoutingService passes profile_type and parent_icp_id in skill context",
+        "autonomousExecutor includes parent ICP criteria in tool context when executing persona-related skills",
+        "AI system prompt updated: 'When the user references a Buyer Persona that has a parent Company ICP, always chain company→contact search'",
+        "Existing skills (ai-ark-people-search, ai-ark-company-search) receive correct criteria split"
+      ],
+      "files": [
+        "src/lib/services/copilotRoutingService.ts",
+        "src/lib/copilot/agent/autonomousExecutor.ts"
+      ]
+    }
+  ],
+  "mvp": {
+    "stories": ["ICP-R-001", "ICP-R-002", "ICP-R-003", "ICP-R-004", "ICP-R-005", "ICP-R-006", "ICP-R-007"],
+    "estimate": "~2 hours",
+    "delivers": "Renamed to Buyer Persona, conditional form fields, parent ICP selector — immediate clarity improvement without grid rebuild"
+  },
+  "full_scope": {
+    "stories": ["ICP-R-001", "ICP-R-002", "ICP-R-003", "ICP-R-004", "ICP-R-005", "ICP-R-006", "ICP-R-007", "ICP-R-008", "ICP-R-009", "ICP-R-010", "ICP-R-011", "ICP-R-012"],
+    "estimate": "~5-6 hours",
+    "delivers": "Full redesign — renamed, hierarchical UI, conditional fields, AI auto-chaining"
+  },
+  "parallel_opportunities": [
+    {
+      "group": ["ICP-R-005", "ICP-R-004"],
+      "reason": "Form rename and CRUD hooks are independent — both depend on types but don't overlap"
+    },
+    {
+      "group": ["ICP-R-008", "ICP-R-010"],
+      "reason": "New group card component and card label updates are independent"
+    },
+    {
+      "group": ["ICP-R-011", "ICP-R-009"],
+      "reason": "AI chaining (backend) and grid rebuild (frontend) are independent"
+    }
+  ]
+}

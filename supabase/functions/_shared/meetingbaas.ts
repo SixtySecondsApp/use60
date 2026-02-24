@@ -37,6 +37,10 @@ export interface MeetingBaaSBotConfig {
   webhook_url: string;
   reserved?: boolean;
   deduplication_key?: string;
+  // Speech-to-text configuration for MeetingBaaS transcription
+  speech_to_text?: {
+    provider: 'Default' | 'Gladia' | 'AssemblyAI';
+  };
 }
 
 export interface MeetingBaaSBotResponse {
@@ -79,6 +83,7 @@ export interface RecordingSettings {
   // Auto-join scheduler settings
   auto_record_lead_time_minutes?: number; // Minutes before meeting to join (default: 2)
   auto_record_external_only?: boolean; // Only record meetings with external attendees (default: true)
+  minimum_wait_minutes?: number; // Minimum time bot stays in empty meeting (default: 15)
   webhook_token?: string;
 }
 
@@ -89,7 +94,7 @@ export interface RecordingSettings {
 export const DEFAULT_BOT_NAME = '60 Notetaker';
 // Bot avatar image shown when joining meetings
 export const DEFAULT_BOT_IMAGE =
-  'https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/60-notetaker.jpg';
+  'https://user-upload.s3.eu-west-2.amazonaws.com/erg%20logos/darkLogo/darkLogo-global-1764288016391.png';
 export const DEFAULT_ENTRY_MESSAGE =
   "Hi! I'm here to take notes so {rep_name} can focus on our conversation. 📝";
 
@@ -368,6 +373,7 @@ export function generateWebhookToken(): string {
  * Extract domain from email address
  */
 export function extractDomain(email: string): string | null {
+  if (!email) return null;
   const match = email.match(/@([^@]+)$/);
   return match ? match[1].toLowerCase() : null;
 }
@@ -457,8 +463,9 @@ export async function checkRecordingQuota(
     .maybeSingle();
 
   if (!usage) {
-    // No usage record = under limit (default 20)
-    return { allowed: true, remaining: 20, limit: 20 };
+    // No usage record = under limit, use platform default
+    const defaultLimit = await getPlatformDefaultRecordingLimit(supabase);
+    return { allowed: true, remaining: defaultLimit, limit: defaultLimit };
   }
 
   const remaining = Math.max(0, usage.recordings_limit - usage.recordings_count);
@@ -487,4 +494,19 @@ export async function getPlatformDefaultBotImage(
     .maybeSingle();
 
   return data?.value || null;
+}
+
+/**
+ * Get platform default monthly recording limit from app_settings
+ * Returns the configured limit or 20 as fallback
+ */
+export async function getPlatformDefaultRecordingLimit(supabase: any): Promise<number> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'notetaker_default_recording_limit')
+    .maybeSingle();
+
+  const parsed = parseInt(data?.value ?? '');
+  return isNaN(parsed) ? 20 : parsed;
 }

@@ -26,12 +26,14 @@ import { MCPServer, MCPTool, MCPResource, MCPPrompt } from './mcpServer';
 export interface SkillFrontmatter {
   name: string;
   description: string;
-  category: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format';
+  category: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format' | 'agent-sequence';
   version: number;
   triggers?: string[];
   requires_context?: string[];
   outputs?: string[];
   dependencies?: string[];
+  // Present when category === 'agent-sequence'
+  sequence_steps?: unknown[];
 }
 
 /**
@@ -39,9 +41,11 @@ export interface SkillFrontmatter {
  */
 export interface Skill {
   skill_key: string;
+  kind: 'skill' | 'sequence';
   category: string;
   frontmatter: SkillFrontmatter;
   content: string;
+  step_count?: number;
   is_enabled: boolean;
   version: number;
 }
@@ -95,12 +99,13 @@ export class SkillsProvider {
    * @returns Array of skills
    */
   async listSkills(
-    category?: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format',
-    enabledOnly = true
+    category?: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format' | 'agent-sequence',
+    enabledOnly = true,
+    kind: 'skill' | 'sequence' | 'all' = 'all'
   ): Promise<Skill[]> {
     try {
       // Check cache
-      const cacheKey = `list:${category || 'all'}:${enabledOnly}`;
+      const cacheKey = `list:${category || 'all'}:${enabledOnly}:${kind}`;
       const cached = this.cache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < this.cacheTtl) {
         return cached.data;
@@ -114,6 +119,7 @@ export class SkillsProvider {
             action: 'list',
             organization_id: this.organizationId,
             category,
+            kind,
             enabled_only: enabledOnly,
           },
         }
@@ -208,8 +214,9 @@ export class SkillsProvider {
    */
   async searchSkills(
     query: string,
-    category?: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format',
-    enabledOnly = true
+    category?: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format' | 'agent-sequence',
+    enabledOnly = true,
+    kind: 'skill' | 'sequence' | 'all' = 'all'
   ): Promise<Skill[]> {
     try {
       // Call edge function
@@ -221,6 +228,7 @@ export class SkillsProvider {
             organization_id: this.organizationId,
             query,
             category,
+            kind,
             enabled_only: enabledOnly,
           },
         }
@@ -249,7 +257,7 @@ export class SkillsProvider {
    * @returns Array of skills in that category
    */
   async getSkillsByCategory(
-    category: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format'
+    category: 'sales-ai' | 'writing' | 'enrichment' | 'workflows' | 'data-access' | 'output-format' | 'agent-sequence'
   ): Promise<Skill[]> {
     return this.listSkills(category);
   }

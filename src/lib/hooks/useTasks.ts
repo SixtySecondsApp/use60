@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useUser } from './useUser';
@@ -208,7 +207,7 @@ export function useTasks(
         throw error;
       }
 
-      setTasks(data || []);
+      setTasks((data as unknown as Task[]) || []);
     } catch (err: any) {
       logger.error('Error fetching tasks:', err);
       setError(err);
@@ -270,7 +269,7 @@ export function useTasks(
 
       if (error) throw error;
 
-      setTasks((prev: Task[]) => [data, ...prev]);
+      setTasks((prev: Task[]) => [data as unknown as Task, ...prev]);
       return data;
     } catch (err) {
       logger.error('Error creating task:', err);
@@ -304,8 +303,8 @@ export function useTasks(
 
       if (error) throw error;
 
-      setTasks((prev: Task[]) => prev.map((task: Task) => 
-        task.id === taskId ? data : task
+      setTasks((prev: Task[]) => prev.map((task: Task) =>
+        task.id === taskId ? data as unknown as Task : task
       ));
       return data;
     } catch (err) {
@@ -360,9 +359,9 @@ export function useTasks(
 
       if (error) throw error;
 
-      setTasks((prev: Task[]) => 
+      setTasks((prev: Task[]) =>
         prev.map((task: Task) => {
-          const updatedTask = data.find((updated: Task) => updated.id === task.id);
+          const updatedTask = (data as unknown as Task[]).find((updated: Task) => updated.id === task.id);
           return updatedTask || task;
         })
       );
@@ -509,7 +508,7 @@ export function useTasks(
       if (error) throw error;
 
       // Group tasks by contact
-      const groupedTasks = (data || []).reduce((acc: Record<string, Task[]>, task: Task) => {
+      const groupedTasks = ((data || []) as unknown as Task[]).reduce((acc: Record<string, Task[]>, task: Task) => {
         const contactId = task.contact_id;
         if (contactId) {
           if (!acc[contactId]) {

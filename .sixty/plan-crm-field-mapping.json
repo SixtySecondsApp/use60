@@ -1,0 +1,153 @@
+{
+  "feature": {
+    "id": "crm-field-mapping",
+    "name": "PRD-11: CRM Field Mapping & Write Policies",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-11",
+    "status": "complete",
+    "completedAt": "2026-02-22T10:35:00Z",
+    "phase": "Phase 3 — Personalisation & Settings UI",
+    "effort": "1.5-2 weeks",
+    "dependencies": ["PRD-01 (config engine)", "PRD-03 (CRM update uses field mapping)"],
+    "createdAt": "2026-02-22T00:00:00Z"
+  },
+  "stories": [
+    {
+      "id": "CRM-001",
+      "feature": "crm-field-mapping",
+      "title": "Create crm_field_mappings table and write_policies schema",
+      "type": "schema",
+      "status": "complete",
+      "completedAt": "2026-02-22T10:00:00Z",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CRM-003", "CRM-004", "CRM-005"],
+      "parallelWith": ["CRM-002"],
+      "acceptance": [
+        "crm_field_mappings table: org_id, crm_provider (hubspot/attio/bullhorn), crm_object (contact/deal/company/activity), crm_field_name, crm_field_type, sixty_field_name, confidence (numeric), is_confirmed (boolean), is_excluded (boolean), created_at, updated_at",
+        "crm_write_policies table: org_id, crm_object, field_name, policy (enum: auto/approval/suggest/disabled), created_at, updated_at",
+        "Unique constraint on (org_id, crm_provider, crm_object, crm_field_name)",
+        "RLS: org admins manage, members read"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222800003_crm_field_mapping_schema.sql"
+      ]
+    },
+    {
+      "id": "CRM-002",
+      "feature": "crm-field-mapping",
+      "title": "Add detect_fields and test_mapping handlers to hubspot-admin",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-22T10:05:00Z",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["supabase/functions/hubspot-admin/index.ts"], "schema": [] },
+      "blocks": ["CRM-003"],
+      "parallelWith": ["CRM-001"],
+      "acceptance": [
+        "detect_fields handler: fetches /crm/v3/properties/{objectType} from HubSpot, returns field list with name, type, label, required, groupName",
+        "Auto-classify: maps HubSpot field names to sixty field names with confidence score (exact match=1.0, fuzzy=0.5-0.9)",
+        "test_mapping handler: fetches 5 sample records, applies current mapping, returns success/error per field",
+        "Both handlers use existing hubspot-admin auth pattern (JWT + org admin check)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/hubspot-admin/index.ts"
+      ]
+    },
+    {
+      "id": "CRM-003",
+      "feature": "crm-field-mapping",
+      "title": "Build CRMFieldMappingSettings page with auto-detect flow",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T10:15:00Z",
+      "priority": 2,
+      "dependencies": { "stories": ["CRM-001", "CRM-002"], "files": [], "schema": [] },
+      "blocks": ["CRM-005"],
+      "parallelWith": ["CRM-004"],
+      "acceptance": [
+        "CRMFieldMappingSettings.tsx at src/pages/settings/ registered in routeConfig.ts + Settings.tsx",
+        "Auto-detect button triggers hubspot-admin detect_fields, populates mapping table",
+        "FieldMappingTable: columns = CRM Field | Type | Confidence | Sixty Mapping (select) | Exclude (checkbox)",
+        "Confidence badges: green >= 0.8, yellow >= 0.5, red < 0.5",
+        "Save writes confirmed mappings to crm_field_mappings, toast feedback"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/settings/CRMFieldMappingSettings.tsx",
+        "src/components/settings/FieldMappingTable.tsx",
+        "src/lib/hooks/useCRMFieldMapping.ts",
+        "src/lib/routes/routeConfig.ts",
+        "src/pages/Settings.tsx"
+      ]
+    },
+    {
+      "id": "CRM-004",
+      "feature": "crm-field-mapping",
+      "title": "Build write policy editor per CRM object and field",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-22T10:20:00Z",
+      "priority": 2,
+      "dependencies": { "stories": ["CRM-001"], "files": [], "schema": [] },
+      "blocks": ["CRM-005"],
+      "parallelWith": ["CRM-003"],
+      "acceptance": [
+        "WritePolicyEditor.tsx in src/components/settings/ shows grid: rows = CRM fields, columns = Auto/Approval/Suggest/Disabled radio",
+        "Grouped by CRM object (Contact, Deal, Company sections)",
+        "Bulk actions: 'Set all Contact fields to Approval', 'Set all to Auto'",
+        "Saves to crm_write_policies table, syncs with autonomy_policies where applicable"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/settings/WritePolicyEditor.tsx"
+      ]
+    },
+    {
+      "id": "CRM-005",
+      "feature": "crm-field-mapping",
+      "title": "Wire field mapping into CRM auto-update agent and add test connection",
+      "type": "integration",
+      "status": "complete",
+      "completedAt": "2026-02-22T10:25:00Z",
+      "priority": 3,
+      "dependencies": { "stories": ["CRM-003", "CRM-004"], "files": ["supabase/functions/_shared/orchestrator/adapters/crmUpdate.ts"], "schema": [] },
+      "blocks": ["CRM-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "crmUpdate adapter reads crm_field_mappings to resolve field names before writing to HubSpot",
+        "Write policy respected: auto -> execute, approval -> create HITL, suggest -> suggest only, disabled -> skip field",
+        "Test Connection button on settings page: calls test_mapping handler, shows pass/fail per field",
+        "Methodology-specific custom fields auto-suggested when methodology changes (e.g., MEDDIC -> 6 custom fields)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/crmUpdate.ts",
+        "supabase/functions/_shared/orchestrator/adapters/crmFieldResolver.ts",
+        "src/pages/settings/CRMFieldMappingSettings.tsx"
+      ]
+    },
+    {
+      "id": "CRM-006",
+      "feature": "crm-field-mapping",
+      "title": "Integration test for CRM field mapping and write policies",
+      "type": "test",
+      "status": "complete",
+      "completedAt": "2026-02-22T10:35:00Z",
+      "priority": 4,
+      "dependencies": { "stories": ["CRM-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Vitest suite: auto-detection, confidence scoring, mapping persistence, write policy enforcement, test connection validation",
+        "Test scenarios: all fields auto-mapped, mixed confidence, excluded fields skipped, write policy blocks auto-update, methodology switch adds custom fields"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/settings/__tests__/CRMFieldMappingSettings.test.tsx",
+        "supabase/functions/_shared/orchestrator/__tests__/crmFieldResolver.test.ts"
+      ]
+    }
+  ]
+}

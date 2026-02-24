@@ -60,7 +60,9 @@ export function OnboardingVersionControl() {
           <Badge
             variant="outline"
             className={
-              version === 'v2'
+              version === 'v3'
+                ? 'bg-blue-500/10 text-blue-500 border-blue-500/30'
+                : version === 'v2'
                 ? 'bg-violet-500/10 text-violet-500 border-violet-500/30'
                 : 'bg-gray-500/10 text-gray-500 border-gray-500/30'
             }
@@ -78,7 +80,7 @@ export function OnboardingVersionControl() {
         )}
 
         {/* Version Options */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           {/* V1 Option */}
           <button
             onClick={() => handleVersionChange('v1')}
@@ -125,14 +127,9 @@ export function OnboardingVersionControl() {
                 <Check className="w-5 h-5 text-violet-500" />
               </div>
             )}
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                V2 - Skills
-              </h3>
-              <Badge className="text-xs bg-violet-500/20 text-violet-500 border-violet-500/30">
-                New
-              </Badge>
-            </div>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">
+              V2 - Skills
+            </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               AI-powered onboarding with company analysis and skill configuration
             </p>
@@ -145,6 +142,45 @@ export function OnboardingVersionControl() {
               </Badge>
               <Badge variant="secondary" className="text-xs">
                 Enrichment
+              </Badge>
+            </div>
+          </button>
+
+          {/* V3 Option */}
+          <button
+            onClick={() => handleVersionChange('v3')}
+            disabled={isUpdating}
+            className={`relative p-4 rounded-xl border-2 transition-all text-left ${
+              version === 'v3'
+                ? 'border-blue-500 bg-blue-500/10'
+                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
+          >
+            {version === 'v3' && (
+              <div className="absolute top-3 right-3">
+                <Check className="w-5 h-5 text-blue-500" />
+              </div>
+            )}
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                V3 - Agent Teams
+              </h3>
+              <Badge className="text-xs bg-blue-500/20 text-blue-500 border-blue-500/30">
+                Latest
+              </Badge>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Enhanced enrichment with parallel AI agents for 89% data completeness
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <Badge variant="secondary" className="text-xs">
+                Agent Teams
+              </Badge>
+              <Badge variant="secondary" className="text-xs">
+                Multi-Source
+              </Badge>
+              <Badge variant="secondary" className="text-xs">
+                89% Complete
               </Badge>
             </div>
           </button>
@@ -169,7 +205,9 @@ export function OnboardingVersionControl() {
                     onClick={confirmVersionChange}
                     disabled={isUpdating}
                     className={
-                      showConfirm === 'v2'
+                      showConfirm === 'v3'
+                        ? 'bg-blue-600 hover:bg-blue-700'
+                        : showConfirm === 'v2'
                         ? 'bg-violet-600 hover:bg-violet-700'
                         : 'bg-gray-600 hover:bg-gray-700'
                     }

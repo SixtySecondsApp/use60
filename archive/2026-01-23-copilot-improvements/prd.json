@@ -1,0 +1,182 @@
+{
+  "project": "Copilot Improvements",
+  "runSlug": "copilot-improvements",
+  "branchName": "improve/mcp-copilot",
+  "description": "Fix 10 issues identified during Copilot testing: critical data scoping, template variables, formatting, UI polish",
+  "aiDevHubProjectId": "cae03d2d-74ac-49e6-9da2-aae2440e0c00",
+  "createdAt": "2026-01-22T16:45:00.000Z",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Fix Recent Calls Query Scoping (CRITICAL)",
+      "description": "As a user, I want the 'recent calls' query to only return MY meetings from the last 2 weeks so that I don't see other team members' private meeting data.",
+      "acceptanceCriteria": [
+        "fetchFathomContext function accepts userId parameter in addition to orgId",
+        "Query filters by owner_user_id (not user_id - per CLAUDE.md gotcha)",
+        "Query adds .gte('start_time', twoWeeksAgo) filter for last 14 days",
+        "Caller in useCopilotContextData passes userId to fetchFathomContext",
+        "Test: 'Summarize my recent calls' returns only current user's meetings",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Added userId param to fetchFathomContext, filter by owner_user_id, added 2-week time filter",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-002",
+      "title": "Fix Task Template Variables Not Resolving",
+      "description": "As a user, I want task cards to display actual contact names instead of unresolved template variables like ${outputs.lead_data.leads[0].contact.name}.",
+      "acceptanceCriteria": [
+        "Identify root cause: locate where tasks are created with unresolved variables",
+        "Fix variable interpolation to resolve ${...} syntax before storing in tasks table",
+        "Existing tasks with unresolved variables display gracefully (fallback text)",
+        "New tasks created by workflows have resolved variable values",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Root cause: resolveExpression in sequenceExecutor.ts only handled full-string variables. Fixed by adding resolvePath helper and proper embedded variable interpolation. Added cleanUnresolvedVariables utility for UI fallback.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-003",
+      "title": "Ensure Current Date in Email Prompts",
+      "description": "As a user, I want generated emails to reference the correct current date so that scheduling suggestions and date references are accurate.",
+      "acceptanceCriteria": [
+        "generateEmailDraft() function receives current date in context",
+        "Email prompt includes TODAY'S DATE instruction",
+        "Generated emails reference correct dates for 'tomorrow', 'next week', etc.",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Added TODAY'S DATE context to all email generation prompts: generateEmailDraft, generateDealEmailFromContext, slack-slash-commands/followUp, slack-post-meeting",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-004",
+      "title": "Filter Meetings to Show Only Those With Attendees",
+      "description": "As a user, I want 'next meeting' to only show events where I have someone to meet with, not solo calendar blocks.",
+      "acceptanceCriteria": [
+        "Calendar query adds .not('attendees', 'is', null) filter",
+        "Query fetches more events (limit 5+) to find one with attendees",
+        "Post-query filter ensures at least one non-self attendee",
+        "'Prep me for my next meeting' returns meeting with external participants",
+        "Solo events (focus time, reminders) are excluded",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added .gt('attendees_count', 1) filter to fetchCalendarContext and getNextMeeting adapter. Solo events now excluded.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-005",
+      "title": "Improve 'Catch Me Up' Response Formatting",
+      "description": "As a user, I want the 'catch me up' response to be formatted with clear sections and markdown so it's easy to scan.",
+      "acceptanceCriteria": [
+        "'Catch me up' intent handler adds markdown formatting instructions to prompt",
+        "Response includes ## This Week's Summary section with bullet points",
+        "Response includes ## Today's Schedule section with table format",
+        "Response includes ## Action Items section with numbered list",
+        "Bold formatting used for key numbers and names",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Added dedicated 'Catch Me Up / Status Summary' workflow section to systemPrompt with explicit markdown formatting instructions including sections for This Week's Snapshot, Today's Schedule (table), Priority Actions (numbered), and Key Insights.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-006",
+      "title": "Add Real-Time Context Gathering Display",
+      "description": "As a user, I want to see counts of data being gathered (e.g., '40 deals / 2 meetings') so I know the Copilot is working with my information.",
+      "acceptanceCriteria": [
+        "useCopilotContextData returns summary object with counts (dealCount, meetingCount, contactCount, taskCount)",
+        "CopilotRightPanel Context section header displays counts",
+        "Counts update as context data loads",
+        "Zero counts show appropriate state (no '0 deals' clutter)",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Added ContextSummary interface to useCopilotContextData hook. Updated CopilotRightPanel to accept contextSummary and isContextLoading props. Context section header now shows counts like '1 deal · 3 calls · 1 event' with loading spinner. Zero counts are hidden to avoid clutter.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-007",
+      "title": "Fix Progress Stepper Updates",
+      "description": "As a user, I want the Progress section to show actual steps as the AI processes my request, not just 'Steps will show as the task unfolds'.",
+      "acceptanceCriteria": [
+        "Verify state flow: useToolCall.ts -> CopilotContext -> CopilotRightPanel",
+        "progressSteps state updates when tool calls are made",
+        "Progress indicators animate through pending -> active -> complete states",
+        "Step labels show actual tool/action names",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Added progressSteps derivation from toolCall.steps in CopilotContext using useMemo. State maps ToolStep.state to ProgressStep.status. Wired through Copilot.tsx to CopilotRightPanel.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-008",
+      "title": "Fix Duplicate Icons in Right Panel",
+      "description": "As a user, I want distinct icons for Progress and Action Items sections so I can quickly identify each section.",
+      "acceptanceCriteria": [
+        "Progress section keeps Zap icon",
+        "Action Items section uses ListChecks icon instead of Zap",
+        "Import statement added for new icon",
+        "Visual distinction is clear between sections",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Changed Action Items icon from Zap to ListChecks. Changed color from amber to violet for visual distinction. Progress keeps Zap (amber), Action Items now has ListChecks (violet).",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-009",
+      "title": "Change Bot Icon to 60 Logo",
+      "description": "As a user, I want the Copilot bot messages to show the 60 logo instead of a generic Sparkles icon for brand consistency.",
+      "acceptanceCriteria": [
+        "Identify available 60 logo asset in codebase",
+        "Update ChatMessage.tsx to use local asset instead of Supabase storage URL",
+        "Fallback to Sparkles only if asset fails to load",
+        "Bot icon displays consistently across all messages",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Changed to use /favicon_0_64x64.png (local 60 logo). Added iconError state to properly show Sparkles fallback only on load failure. Simplified URL logic to prioritize local asset.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-010",
+      "title": "Add Email Tone Selection UI",
+      "description": "As a user, I want to select the tone of voice for generated emails (professional, friendly, concise) so I can match my communication style.",
+      "acceptanceCriteria": [
+        "Tone system already exists in api-copilot (professional, friendly, concise)",
+        "Add tone selector UI element when drafting emails",
+        "Selected tone is passed to generateEmailDraft() function",
+        "Default tone is 'professional' if not specified",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Added tone selector UI to EmailResponse.tsx with 3 buttons (Professional, Friendly, Concise). Each has icon (Briefcase, Smile, Zap). Active tone highlighted violet. Clicking triggers regeneration via message to copilot. Backend already had tone support - UI just exposes it.",
+      "aiDevHubTaskId": null
+    }
+  ]
+}

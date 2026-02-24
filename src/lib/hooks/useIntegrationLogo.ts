@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
+import { getLogoDevUrl } from '@/lib/utils/logoDev';
 
 interface LogoResponse {
   logo_url: string | null;
@@ -16,6 +17,12 @@ export interface UseIntegrationLogoOptions {
    */
   enableFetch?: boolean;
 }
+
+// Hardcoded logo URLs for integrations where logo.dev doesn't have good coverage
+const HARDCODED_LOGOS: Record<string, string> = {
+  teams: 'https://erg-application-logos.s3.eu-west-2.amazonaws.com/logos/microsoft-teams.png',
+  'microsoft-teams': 'https://erg-application-logos.s3.eu-west-2.amazonaws.com/logos/microsoft-teams.png',
+};
 
 // Map integration names to their official domains for logo.dev lookup
 const INTEGRATION_DOMAINS: Record<string, string> = {
@@ -40,8 +47,8 @@ const INTEGRATION_DOMAINS: Record<string, string> = {
 
   // Video Conferencing
   zoom: 'zoom.us',
-  teams: 'microsoft.com',
-  'microsoft-teams': 'teams.microsoft.com',
+  teams: 'teams.live.com',
+  'microsoft-teams': 'teams.live.com',
   webex: 'webex.com',
 
   // Calendar & Booking
@@ -119,6 +126,7 @@ const INTEGRATION_DOMAINS: Record<string, string> = {
   outreach: 'outreach.io',
   salesloft: 'salesloft.com',
   apollo: 'apollo.io',
+  instantly: 'instantly.ai',
   'instantly-ai': 'instantly.ai',
   woodpecker: 'woodpecker.co',
   sendgrid: 'sendgrid.com',
@@ -260,6 +268,15 @@ export function useIntegrationLogo(
 
     // Get domain from mapping, or use integrationId as domain if not found
     const normalizedId = integrationId.toLowerCase().trim();
+
+    // Check for hardcoded logos first (e.g., Microsoft Teams)
+    const hardcodedUrl = HARDCODED_LOGOS[normalizedId];
+    if (hardcodedUrl) {
+      setLogoUrl(hardcodedUrl);
+      setIsLoading(false);
+      return;
+    }
+
     const domain = INTEGRATION_DOMAINS[normalizedId] || `${normalizedId}.com`;
 
     if (!domain) {
@@ -273,11 +290,11 @@ export function useIntegrationLogo(
       .replace(/\/$/, '')
       .toLowerCase();
 
-    // Always render a deterministic S3 URL immediately (prevents fallback flicker).
-    // If we've already resolved a better/confirmed URL, use the cached value.
-    const s3Url = getLogoS3Url(normalizedDomain);
+    // Use logo.dev URL as immediate source (CloudFront CDN, reliable in browsers).
+    // If we've already resolved a cached S3 URL, use that instead.
+    const logoDevUrl = getLogoDevUrl(normalizedDomain);
     const cached = logoUrlCache.get(normalizedDomain);
-    setLogoUrl(cached || s3Url);
+    setLogoUrl(cached || logoDevUrl);
 
     // Optionally warm/populate the S3 cache via edge function.
     if (!enableFetch) return;

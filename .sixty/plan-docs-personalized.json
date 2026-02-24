@@ -1,0 +1,576 @@
+{
+  "project": {
+    "name": "Personalized Documentation System V2",
+    "description": "Transform docs from static Ops Intelligence articles into a dynamic, personalized knowledge base that adapts to each org's integrations, user role, and live CRM data — with full platform feature coverage",
+    "createdAt": "2026-02-08T00:00:00Z",
+    "predecessorPlan": "plan-docs-cms.json",
+    "consultReport": "consult/docs-personalized.md"
+  },
+  "features": [
+    {
+      "id": "personalization-engine",
+      "name": "Deep Personalization Engine",
+      "status": "pending",
+      "priority": 1,
+      "description": "Expand template variables, add integration-aware filtering, conditional content blocks, and role-based visibility"
+    },
+    {
+      "id": "visual-quality",
+      "name": "Visual & UX Improvements",
+      "status": "pending",
+      "priority": 2,
+      "description": "Skill level callouts, contextual help panel, table of contents, styled callouts, interactive Try It buttons"
+    },
+    {
+      "id": "content-core",
+      "name": "Core Feature Documentation",
+      "status": "pending",
+      "priority": 3,
+      "description": "Write docs for Pipeline, Meetings, Contacts, Copilot, Tasks — the features every user touches"
+    },
+    {
+      "id": "content-integrations",
+      "name": "Integration Documentation",
+      "status": "pending",
+      "priority": 4,
+      "description": "One guide per active integration, only shown to orgs that have it enabled"
+    },
+    {
+      "id": "content-admin",
+      "name": "Admin & Settings Documentation",
+      "status": "pending",
+      "priority": 5,
+      "description": "Admin configuration guides shown only to admin/owner roles"
+    },
+    {
+      "id": "copilot-docs-search",
+      "name": "Copilot Docs Integration",
+      "status": "pending",
+      "priority": 6,
+      "description": "Copilot can search and surface docs articles when users ask how-to questions"
+    }
+  ],
+  "stories": [
+    {
+      "id": "DOCS-101",
+      "feature": "personalization-engine",
+      "title": "Add metadata schema for integration/role/feature filtering",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["docs_articles"] },
+      "blocks": ["DOCS-102", "DOCS-103"],
+      "acceptance": [
+        "Add migration: docs_articles.metadata gains documented JSONB fields: required_integrations (text[]), required_features (text[]), target_roles (text[]), personalization_context (text[])",
+        "Create docs_personalization_context table: org_id, context_key, context_value (caches org context for fast lookups)",
+        "Index on metadata->>required_integrations for filtering performance"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260208100000_docs_personalization_schema.sql"
+      ]
+    },
+    {
+      "id": "DOCS-102",
+      "feature": "personalization-engine",
+      "title": "Build org context loader for personalized variables",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["DOCS-101"], "files": [], "schema": ["docs_articles"] },
+      "blocks": ["DOCS-104"],
+      "acceptance": [
+        "New React Query hook useDocsPersonalizationContext() loads org context in a single query",
+        "Context includes: org_name, user_first_name, enabled integrations list, user role, first 3 contacts, first 3 deals, first 3 companies, next meeting title, team member names, dynamic table names/columns",
+        "Falls back gracefully to generic placeholders when data is missing",
+        "Context cached for 5 minutes via React Query staleTime"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useDocsPersonalizationContext.ts"
+      ]
+    },
+    {
+      "id": "DOCS-103",
+      "feature": "personalization-engine",
+      "title": "Add integration-aware article filtering to DocsPage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["DOCS-101", "DOCS-102"], "files": ["src/pages/DocsPage.tsx"], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "DocsPage queries org's integration_credentials to get enabled integrations list",
+        "Articles with metadata.required_integrations are hidden if org doesn't have that integration",
+        "Articles with metadata.target_roles are hidden if user's role doesn't match",
+        "Sidebar shows category counts that reflect filtered articles (not total)",
+        "All-pass articles (no required_integrations) always shown"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/DocsPage.tsx"
+      ]
+    },
+    {
+      "id": "DOCS-104",
+      "feature": "personalization-engine",
+      "title": "Expand processTemplateVars with rich org context",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["DOCS-102"], "files": ["src/pages/DocsPage.tsx"], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "processTemplateVars() handles 12+ variable types: {{org_name}}, {{user_first_name}}, {{contact_name}}, {{deal_name}}, {{company_name}}, {{meeting_title}}, {{rep_name}}, {{table_name}}, {{column_name}}, {{integration_name}}, {{pipeline_stage}}, {{task_title}}",
+        "Each variable falls back to a sensible generic (e.g., {{contact_name}} -> 'Sarah Johnson')",
+        "Support conditional blocks: {{#if hubspot_enabled}}...{{/if}} to show/hide integration-specific sections",
+        "Personalized examples render in a highlighted card with 'Personalized for your org' badge"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/DocsPage.tsx",
+        "src/components/docs/PersonalizedExample.tsx"
+      ]
+    },
+    {
+      "id": "DOCS-105",
+      "feature": "visual-quality",
+      "title": "Render skill level blocks as styled callout cards",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": ["src/pages/DocsPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-106"],
+      "acceptance": [
+        ":::beginner content renders in a green-bordered card with 'Beginner' badge and GraduationCap icon",
+        ":::intermediate content renders in a blue-bordered card with 'Intermediate' badge and Zap icon",
+        ":::advanced content renders in a violet-bordered card with 'Advanced' badge and Flame icon",
+        "Cards are collapsible — beginner open by default, others collapsed with 'Show advanced' toggle",
+        "Markdown parsing intercepts these fence blocks before ReactMarkdown renders"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/DocsPage.tsx",
+        "src/components/docs/SkillLevelBlock.tsx"
+      ]
+    },
+    {
+      "id": "DOCS-106",
+      "feature": "visual-quality",
+      "title": "Add styled callout blocks (tip, warning, info, note)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": [], "files": ["src/pages/DocsPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-105"],
+      "acceptance": [
+        ":::tip renders as green callout with Lightbulb icon",
+        ":::warning renders as amber callout with AlertTriangle icon",
+        ":::info renders as blue callout with Info icon",
+        ":::note renders as gray callout with StickyNote icon",
+        "All callouts have rounded corners, colored left border, and subtle background matching DocsPage design system"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/DocsPage.tsx",
+        "src/components/docs/CalloutBlock.tsx"
+      ]
+    },
+    {
+      "id": "DOCS-107",
+      "feature": "visual-quality",
+      "title": "Add floating table of contents for long articles",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": [], "files": ["src/pages/DocsPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-108"],
+      "acceptance": [
+        "Auto-generated TOC from h2/h3 headings in current article",
+        "Renders as a sticky floating panel on the right side of the content area (hidden on mobile)",
+        "Active heading highlighted based on scroll position (IntersectionObserver)",
+        "Click heading scrolls smoothly to that section",
+        "Only shows when article has 3+ headings"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/DocsPage.tsx",
+        "src/components/docs/TableOfContents.tsx"
+      ]
+    },
+    {
+      "id": "DOCS-108",
+      "feature": "visual-quality",
+      "title": "Build contextual help slide-over panel component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["DOCS-109"],
+      "parallelWith": ["DOCS-107"],
+      "acceptance": [
+        "New <HelpPanel docSlug='pipeline-guide' /> component renders a ? icon button",
+        "Click opens a slide-over panel from the right with the article content rendered inline",
+        "Panel has close button, 'Open in Docs' link to /docs#slug, and feedback thumbs",
+        "Uses existing DocsPage markdown rendering (ReactMarkdown + remarkGfm + custom components)",
+        "Fetches article by slug from docs_articles, respects same personalization"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/docs/HelpPanel.tsx"
+      ]
+    },
+    {
+      "id": "DOCS-109",
+      "feature": "visual-quality",
+      "title": "Add HelpPanel buttons to key feature pages",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["DOCS-108"], "files": [], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "HelpPanel added to Pipeline page header linking to pipeline-guide article",
+        "HelpPanel added to Meetings page header linking to meetings-guide article",
+        "HelpPanel added to Contacts page header linking to contacts-guide article",
+        "HelpPanel added to Copilot panel header linking to copilot-guide article",
+        "HelpPanel added to Integrations page header linking to relevant integration doc",
+        "All icons follow existing HelpCircle pattern from OpsDetailPage"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/Pipeline.tsx",
+        "src/pages/MeetingIntelligence.tsx",
+        "src/pages/contacts/ContactsPage.tsx",
+        "src/components/copilot/CopilotRightPanel.tsx",
+        "src/pages/Integrations.tsx"
+      ]
+    },
+    {
+      "id": "DOCS-110",
+      "feature": "visual-quality",
+      "title": "Wire up TryItButton to navigate users to features",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": [], "files": ["src/components/docs/TryItButton.tsx"], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "TryItButton component accepts a route and optional params",
+        "Clicking navigates user to the feature page (e.g., /ops, /pipeline, /meetings)",
+        "Supports deep linking with query params (e.g., /ops?action=create-table)",
+        "Button renders inline in markdown using a custom component override",
+        "Styled as a small pill button: 'Try it' with ArrowRight icon"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/docs/TryItButton.tsx",
+        "src/pages/DocsPage.tsx"
+      ]
+    },
+    {
+      "id": "DOCS-111",
+      "feature": "content-core",
+      "title": "Write Pipeline & Deals documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-112", "DOCS-113"],
+      "acceptance": [
+        "Article: pipeline-guide — Creating deals, 4-stage workflow (SQL > Opportunity > Verbal > Signed), moving deals between stages",
+        "Article: deal-health-scoring — How health scores work, what triggers at-risk status, improving deal health",
+        "Both articles use {{deal_name}}, {{pipeline_stage}}, {{company_name}} for personalized examples",
+        "Includes :::beginner (create your first deal), :::intermediate (bulk operations), :::advanced (automation rules)",
+        "Metadata: target_roles=['rep','admin'], no required_integrations (core feature)"
+      ],
+      "estimatedMinutes": 25,
+      "files": []
+    },
+    {
+      "id": "DOCS-112",
+      "feature": "content-core",
+      "title": "Write Meeting Intelligence documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-111", "DOCS-113"],
+      "acceptance": [
+        "Article: meetings-guide — Overview of meeting intelligence, viewing transcripts, AI summaries, action items",
+        "Article: meeting-recording-setup — Setting up recording via Fathom / 60 Notetaker / Fireflies (conditional blocks per integration)",
+        "Article: meeting-command-centre — Pre-meeting prep, talking points, contact briefs",
+        "Uses {{meeting_title}}, {{contact_name}} for personalized examples",
+        "meeting-recording-setup uses {{#if fathom_enabled}} / {{#if notetaker_enabled}} / {{#if fireflies_enabled}} conditional blocks",
+        "Metadata: meeting-recording-setup has required_integrations=['fathom'] OR ['60_notetaker'] OR ['fireflies'] (shows if ANY enabled)"
+      ],
+      "estimatedMinutes": 30,
+      "files": []
+    },
+    {
+      "id": "DOCS-113",
+      "feature": "content-core",
+      "title": "Write Copilot & AI Assistant documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-111", "DOCS-112"],
+      "acceptance": [
+        "Article: copilot-guide — What the copilot can do, how to use it, example conversations",
+        "Article: copilot-skills — Available skills reference with categories and trigger phrases",
+        "Article: copilot-memory — How the copilot remembers context, deal history, preferences",
+        "Uses {{user_first_name}}, {{deal_name}}, {{contact_name}}, {{company_name}} for personalized examples",
+        "Example conversations reference their real deals: 'Hey {{user_first_name}}, your {{deal_name}} meeting is tomorrow...'",
+        "Metadata: no required_integrations (core feature)"
+      ],
+      "estimatedMinutes": 30,
+      "files": []
+    },
+    {
+      "id": "DOCS-114",
+      "feature": "content-core",
+      "title": "Write Contacts & CRM documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-115"],
+      "acceptance": [
+        "Article: contacts-guide — Importing contacts, managing contact records, merging duplicates, contact timeline",
+        "Article: contacts-enrichment — How AI enrichment works, data sources, enrichment columns",
+        "Uses {{contact_name}}, {{company_name}} for personalized examples",
+        "Includes conditional blocks for HubSpot-specific import instructions",
+        "Metadata: no required_integrations for contacts-guide; contacts-enrichment shows for all"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    },
+    {
+      "id": "DOCS-115",
+      "feature": "content-core",
+      "title": "Write Tasks & Activity documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-114"],
+      "acceptance": [
+        "Article: tasks-guide — Creating tasks, task types, due dates, assignment, completing tasks",
+        "Article: smart-tasks — How auto-task creation works, configuring triggers, task templates",
+        "Article: activity-log — Understanding the activity timeline, activity types, filtering",
+        "Uses {{task_title}}, {{contact_name}}, {{deal_name}} for personalized examples",
+        "Metadata: no required_integrations (core features)"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    },
+    {
+      "id": "DOCS-116",
+      "feature": "content-integrations",
+      "title": "Write HubSpot integration documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-117", "DOCS-118", "DOCS-119"],
+      "acceptance": [
+        "Article: integration-hubspot — Setup guide, bi-directional sync, contact/deal mapping, field mapping",
+        "Covers: connecting HubSpot, choosing sync direction, mapping fields, troubleshooting sync errors",
+        "Includes HubSpot-specific AI features (writeback, notes sync)",
+        "Metadata: required_integrations=['hubspot'], target_roles=['admin']"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    },
+    {
+      "id": "DOCS-117",
+      "feature": "content-integrations",
+      "title": "Write Slack integration documentation",
+      "type": "content",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-116", "DOCS-118", "DOCS-119"],
+      "acceptance": [
+        "Article: integration-slack — Connecting workspace, channel mapping, deal room setup, notification types",
+        "Covers: pipeline alerts, win/loss notifications, task reminders, copilot HITL approvals",
+        "Metadata: required_integrations=['slack'], target_roles=['admin']"
+      ],
+      "estimatedMinutes": 15,
+      "files": []
+    },
+    {
+      "id": "DOCS-118",
+      "feature": "content-integrations",
+      "title": "Write meeting recorder integration docs (Fathom, Fireflies, 60 Notetaker)",
+      "type": "content",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-116", "DOCS-117", "DOCS-119"],
+      "acceptance": [
+        "Article: integration-fathom — Connecting Fathom, user mapping, transcript sync, AI summaries",
+        "Article: integration-60-notetaker — Enabling auto-join bot, recording settings, S3 storage, transcript access",
+        "Article: integration-fireflies — Connecting Fireflies, user mapping, transcript sync",
+        "Each article has required_integrations for its specific integration",
+        "Metadata: target_roles=['admin'] for setup, target_roles=['rep','admin'] for usage sections"
+      ],
+      "estimatedMinutes": 25,
+      "files": []
+    },
+    {
+      "id": "DOCS-119",
+      "feature": "content-integrations",
+      "title": "Write Apollo, Instantly, and JustCall integration docs",
+      "type": "content",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-116", "DOCS-117", "DOCS-118"],
+      "acceptance": [
+        "Article: integration-apollo — Lead search, enrichment, dynamic table queries",
+        "Article: integration-instantly — Campaign creation, lead lists, scheduling, timezone quirks",
+        "Article: integration-justcall — Call sync, transcript access, activity logging",
+        "Each article metadata has required_integrations for its specific integration",
+        "Includes :::tip callouts for known quirks (Apollo endpoint, Instantly timezone enum)"
+      ],
+      "estimatedMinutes": 25,
+      "files": []
+    },
+    {
+      "id": "DOCS-120",
+      "feature": "content-admin",
+      "title": "Write Getting Started and Onboarding guide",
+      "type": "content",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-121"],
+      "acceptance": [
+        "Article: getting-started — Welcome to 60, platform overview, what you can do, first steps",
+        "Article: onboarding-guide — What happens during onboarding, why data is collected, how it personalizes the AI",
+        "getting-started uses {{org_name}}, {{user_first_name}} to welcome the user personally",
+        "Metadata: no filters (shown to everyone)"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    },
+    {
+      "id": "DOCS-121",
+      "feature": "content-admin",
+      "title": "Write Admin Settings and Team Management docs",
+      "type": "content",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["DOCS-104"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DOCS-120"],
+      "acceptance": [
+        "Article: admin-settings — Overview of all admin settings, what each controls",
+        "Article: team-management — Inviting members, roles (admin/owner/rep), removing members",
+        "Article: ai-configuration — AI provider setup, model selection, custom prompts",
+        "All articles: metadata target_roles=['admin','owner']"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    },
+    {
+      "id": "DOCS-122",
+      "feature": "copilot-docs-search",
+      "title": "Add docs search skill to copilot",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["DOCS-111", "DOCS-112", "DOCS-113"], "files": [], "schema": ["docs_articles"] },
+      "blocks": [],
+      "acceptance": [
+        "New atomic skill: search-documentation — copilot can search docs_articles by keyword",
+        "Skill uses execute_action(search_docs, { query }) to find relevant articles",
+        "Returns article title, slug, and relevant excerpt",
+        "Copilot responds with formatted answer plus 'Read more: [Article Title](/docs#slug)' link",
+        "Handles 'how do I...' and 'help with...' queries by searching docs first"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/search-documentation/SKILL.md",
+        "skills/atomic/search-documentation/references/.gitkeep",
+        "skills/atomic/search-documentation/scripts/.gitkeep",
+        "skills/atomic/search-documentation/assets/.gitkeep"
+      ]
+    },
+    {
+      "id": "DOCS-123",
+      "feature": "personalization-engine",
+      "title": "Add docs_articles metadata to DocsAdminPage editor",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["DOCS-101"], "files": ["src/pages/platform/DocsAdminPage.tsx"], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "DocsAdminPage editor gains 'Visibility' section below metadata fields",
+        "Multi-select for required_integrations (checkboxes: hubspot, slack, fathom, fireflies, 60_notetaker, apollo, instantly, justcall)",
+        "Multi-select for target_roles (checkboxes: admin, owner, rep)",
+        "Preview badge shows who will see this article: 'Visible to: Admins with HubSpot'",
+        "Saves to metadata JSONB field via existing docs-api update action"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/DocsAdminPage.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 23,
+    "completedStories": 0,
+    "currentFeature": null,
+    "estimatedHours": 8,
+    "nextStories": ["DOCS-101", "DOCS-105", "DOCS-106", "DOCS-107", "DOCS-108"],
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": ["DOCS-101", "DOCS-105", "DOCS-106", "DOCS-107", "DOCS-108"],
+        "note": "Schema + visual improvements can run in parallel (no dependencies between them)"
+      },
+      {
+        "group": 2,
+        "stories": ["DOCS-102", "DOCS-103", "DOCS-109", "DOCS-110", "DOCS-123"],
+        "note": "Context loader, filtering, help panel placement, TryIt, admin UI (after group 1)"
+      },
+      {
+        "group": 3,
+        "stories": ["DOCS-104"],
+        "note": "Rich template vars (depends on context loader)"
+      },
+      {
+        "group": 4,
+        "stories": ["DOCS-111", "DOCS-112", "DOCS-113", "DOCS-114", "DOCS-115", "DOCS-120", "DOCS-121"],
+        "note": "All content authoring (after template vars ready) — fully parallel"
+      },
+      {
+        "group": 5,
+        "stories": ["DOCS-116", "DOCS-117", "DOCS-118", "DOCS-119"],
+        "note": "Integration docs (after content-core, same parallel batch)"
+      },
+      {
+        "group": 6,
+        "stories": ["DOCS-122"],
+        "note": "Copilot docs search skill (after core content exists)"
+      }
+    ]
+  }
+}

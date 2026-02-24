@@ -6,8 +6,9 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+
 import { recordingService } from '@/lib/services/recordingService';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -617,7 +618,6 @@ export function useActiveRecordings() {
       return [...result.recordings, ...joiningResult.recordings];
     },
     enabled: !!orgId,
-    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   return {
@@ -667,4 +667,55 @@ export function useRecordingsRequiringAttention() {
     isLoading,
     refetch,
   };
+}
+
+// =============================================================================
+// useBatchVideoUrls - Batch fetch signed video/thumbnail URLs
+// =============================================================================
+
+export function useBatchVideoUrls(recordings: Recording[]) {
+  // Split recordings: those with S3 keys (need signed URLs) vs those with direct URLs
+  const s3Ids = useMemo(
+    () =>
+      recordings
+        .filter((r) => r.status === 'ready' && r.recording_s3_key)
+        .map((r) => r.id),
+    [recordings]
+  );
+
+  // Recordings with a direct URL but no S3 key (e.g., MeetingBaaS URLs)
+  const directUrls = useMemo(
+    () => {
+      const result: Record<string, { video_url: string; thumbnail_url?: string }> = {};
+      for (const r of recordings) {
+        if (r.status === 'ready' && !r.recording_s3_key && r.recording_s3_url) {
+          result[r.id] = { video_url: r.recording_s3_url };
+        }
+      }
+      return result;
+    },
+    [recordings]
+  );
+
+  // Stable query key based on sorted IDs
+  const queryKey = useMemo(
+    () => [...recordingKeys.all, 'batch-urls', ...s3Ids.slice().sort()],
+    [s3Ids]
+  );
+
+  const query = useQuery<Record<string, { video_url: string; thumbnail_url?: string }>>({
+    queryKey,
+    queryFn: () => recordingService.getBatchSignedUrls(s3Ids),
+    enabled: s3Ids.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+  });
+
+  // Merge S3 signed URLs with direct URLs
+  const mergedData = useMemo(
+    () => ({ ...directUrls, ...(query.data || {}) }),
+    [directUrls, query.data]
+  );
+
+  return { ...query, data: mergedData };
 }

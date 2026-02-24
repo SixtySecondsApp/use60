@@ -1,0 +1,95 @@
+{
+  "project": {
+    "name": "Org-Admin Abilities Marketplace",
+    "branch": "feat/proactive-agent-v2",
+    "createdAt": "2026-02-16T10:00:00Z"
+  },
+  "features": [
+    {
+      "id": "org-marketplace",
+      "name": "Org-Admin Abilities Marketplace",
+      "status": "complete",
+      "priority": 1
+    }
+  ],
+  "stories": [
+    {
+      "id": "MKT-001",
+      "feature": "org-marketplace",
+      "title": "Extract shared AbilityMarketplace component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["MKT-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "New AbilityMarketplace component in src/components/agent/AbilityMarketplace.tsx",
+        "Accepts showDebugTabs prop (default false) controlling Run/Waves/History/Approvals tabs",
+        "Contains: header, HeartbeatStatusBar, LifecycleTimeline, bulk controls, status filters, ability cards grid, ActivityFeed",
+        "When showDebugTabs=true: also shows Tabs with Run/Waves/History/Approvals (existing behavior)",
+        "When showDebugTabs=false: hides the debug tabs entirely",
+        "AgentAbilitiesPage.tsx becomes a thin wrapper rendering <AbilityMarketplace showDebugTabs={true} />",
+        "No functional regression on /platform/agent-abilities"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/agent/AbilityMarketplace.tsx",
+        "src/pages/platform/AgentAbilitiesPage.tsx"
+      ]
+    },
+    {
+      "id": "MKT-002",
+      "feature": "org-marketplace",
+      "title": "Create /agent/marketplace route + page + sidebar nav",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["MKT-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["MKT-003"],
+      "acceptance": [
+        "New page at src/pages/agent/AgentMarketplacePage.tsx renders <AbilityMarketplace showDebugTabs={false} />",
+        "Route /agent/marketplace registered in App.tsx with OrgAdminRouteGuard",
+        "Route registered in routeConfig.ts with access: 'orgAdmin'",
+        "New top-level 'Agent' nav item in AppLayout.tsx sidebar visible to org admins (and platform admins)",
+        "Uses Bot icon from lucide-react",
+        "Nav item highlights when path starts with /agent"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/agent/AgentMarketplacePage.tsx",
+        "src/App.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/components/AppLayout.tsx"
+      ]
+    },
+    {
+      "id": "MKT-003",
+      "feature": "org-marketplace",
+      "title": "Add marketplace CTA in ProactiveAgentSettings",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["MKT-002"],
+      "acceptance": [
+        "Banner or card with 'Explore the Abilities Marketplace' CTA inside ProactiveAgentSettings",
+        "Visible when master toggle is enabled (inside the isMasterEnabled section)",
+        "Links to /agent/marketplace using react-router-dom Link or useNavigate",
+        "Uses indigo/purple CTA styling consistent with app design",
+        "Includes a brief description like 'Discover and configure all available AI abilities'"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/pages/settings/ProactiveAgentSettings.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 3,
+    "completedStories": 3,
+    "lastUpdated": "2026-02-16T11:00:00Z"
+  }
+}

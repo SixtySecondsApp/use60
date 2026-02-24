@@ -41,9 +41,30 @@
       "Bash(grep:*)",
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls:*)",
+      "Bash(npx vite build:*)",
+      "Bash(curl:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git stash:*)",
+      "Bash(npx supabase functions logs:*)",
+      "Bash(npx supabase functions deploy:*)",
+      "Bash(npx supabase migration repair:*)",
+      "Bash(npx supabase db execute:*)",
+      "Bash(npx supabase:*)",
+      "Bash(PGPASSWORD='Gi7JO1tz2NupAzHt' psql:*)",
+      "Bash(python3:*)",
+      "Bash(PGPASSWORD=\"9sq1tqhhh4zlbbml3vlyylialvy6yhkx\" /opt/homebrew/opt/postgresql@17/bin/psql:*)",
+      "Bash(echo:*)",
+      "Bash(PGPASSWORD=\"Gi7JO1tz2NupAzHt\" /opt/homebrew/opt/postgresql@17/bin/psql:*)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "ai-dev-hub",
+    "playwriter"
+  ]
 }

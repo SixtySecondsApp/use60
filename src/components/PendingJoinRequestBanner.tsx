@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
-import { joinRequestService } from '@/lib/services/joinRequestService';
+import { getUserJoinRequests } from '@/lib/services/joinRequestService';
 import { useAuth } from '@/lib/contexts/AuthContext';
 
 export function PendingJoinRequestBanner() {
@@ -10,7 +10,7 @@ export function PendingJoinRequestBanner() {
     queryKey: ['user-join-requests', user?.id],
     queryFn: () => {
       if (!user?.id) return [];
-      return joinRequestService.getUserJoinRequests(user.id);
+      return getUserJoinRequests(user.id);
     },
     enabled: !!user?.id,
   });

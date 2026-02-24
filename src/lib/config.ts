@@ -58,6 +58,14 @@ export const config = {
   supabaseUrl: getSupabaseUrl(),
 };
 
+// Staging environment detection (check for staging Supabase project ref)
+const STAGING_PROJECT_REF = 'caerqjzvuerejfrdtygb';
+export const isStaging = getSupabaseUrl()?.includes(STAGING_PROJECT_REF) ?? false;
+
+// Development environment detection (check for development Supabase project ref)
+const DEVELOPMENT_PROJECT_REF = 'wbgmnyekgqklggilgqag';
+export const isDevelopment = getSupabaseUrl()?.includes(DEVELOPMENT_PROJECT_REF) ?? false;
+
 // Helper to log configuration in development
 if (config.debug && isBrowser) {
   logger.log('🔧 Configuration:', {

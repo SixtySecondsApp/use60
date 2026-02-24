@@ -3,6 +3,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/use60Signing.ts'
 import { legacyCorsHeaders as corsHeaders } from '../_shared/corsHelper.ts'
 import { captureException } from '../_shared/sentryEdge.ts'
+import { syncToStandardTable } from '../_shared/standardTableSync.ts'
+import {
+  upsertContactIndex,
+  upsertCompanyIndex,
+  upsertDealIndex,
+  deleteFromIndex,
+} from '../_shared/upsertCrmIndex.ts'
 
 type HubSpotWebhookEvent = {
   eventId?: number | string
@@ -231,6 +238,8 @@ serve(async (req) => {
   let inserted = 0
   let deduped = 0
   let enqueued = 0
+  let syncedToStandard = 0
+  let syncedToIndex = 0
 
   for (const evt of events) {
     const eventId = evt.eventId != null ? String(evt.eventId) : crypto.randomUUID()
@@ -266,11 +275,13 @@ serve(async (req) => {
       let jobType: string | null = null
       let dedupeKey: string | null = null
       let jobPayload: Record<string, any> = {}
+      let entityType: 'contact' | 'company' | null = null
 
       if (lowerType.startsWith('contact.')) {
         jobType = 'sync_contact'
         jobPayload = { hubspot_contact_id: objectId, source: 'webhook', event_type: eventType, event_id: eventId }
         dedupeKey = `contact:${objectId}`
+        entityType = 'contact'
       } else if (lowerType.startsWith('deal.')) {
         jobType = 'sync_deal'
         jobPayload = { hubspot_deal_id: objectId, source: 'webhook', event_type: eventType, event_id: eventId }
@@ -279,6 +290,11 @@ serve(async (req) => {
         jobType = 'sync_task'
         jobPayload = { hubspot_task_id: objectId, source: 'webhook', event_type: eventType, event_id: eventId }
         dedupeKey = `task:${objectId}`
+      } else if (lowerType.startsWith('company.')) {
+        jobType = 'sync_company'
+        jobPayload = { hubspot_company_id: objectId, source: 'webhook', event_type: eventType, event_id: eventId }
+        dedupeKey = `company:${objectId}`
+        entityType = 'company'
       }
 
       if (jobType) {
@@ -303,6 +319,175 @@ serve(async (req) => {
           })
           .catch(() => {})
       }
+
+      // Sync to standard ops tables if this is a contact or company event
+      if (entityType && occurredAtIso) {
+        try {
+          const syncResult = await syncToStandardTable({
+            supabase,
+            orgId: integration.org_id,
+            crmSource: 'hubspot',
+            entityType,
+            crmRecordId: objectId,
+            properties: evt.properties || evt,
+            timestamp: occurredAtIso,
+          })
+
+          if (syncResult.success && syncResult.rowsUpserted > 0) {
+            syncedToStandard++
+          }
+        } catch (syncErr) {
+          // Log but don't fail the webhook - standard table sync is non-critical
+          console.error(`[hubspot-webhook] Standard table sync failed for ${entityType} ${objectId}:`, syncErr)
+        }
+      }
+
+      // Sync to CRM index for fast search/filter
+      // Non-blocking: don't await, use Promise to avoid failing the webhook
+      if (objectId) {
+        const indexProps = evt.properties || evt
+
+        // Handle deletion events
+        if (lowerType.endsWith('.deletion')) {
+          const deletionEntityType = lowerType.startsWith('contact.') ? 'contact'
+            : lowerType.startsWith('company.') ? 'company'
+            : lowerType.startsWith('deal.') ? 'deal'
+            : null
+
+          if (deletionEntityType) {
+            deleteFromIndex({
+              supabase,
+              orgId: integration.org_id,
+              crmSource: 'hubspot',
+              crmRecordId: objectId,
+              entityType: deletionEntityType,
+            }).catch((err) => {
+              console.error(`[hubspot-webhook] CRM index deletion failed for ${deletionEntityType} ${objectId}:`, err)
+            })
+          }
+        }
+        // Handle creation/update events
+        else if (lowerType.startsWith('contact.')) {
+          upsertContactIndex({
+            supabase,
+            orgId: integration.org_id,
+            crmSource: 'hubspot',
+            crmRecordId: objectId,
+            properties: indexProps,
+          })
+            .then(async (result) => {
+              if (result.success) {
+                syncedToIndex++
+
+                // If contact is materialized, update the full contacts table
+                if (result.isMaterialized && result.contactId) {
+                  try {
+                    // Find the materialized contact ID
+                    const { data: indexRecord } = await supabase
+                      .from('crm_contact_index')
+                      .select('materialized_contact_id, first_name, last_name, email, phone, company_name, job_title')
+                      .eq('id', result.contactId)
+                      .maybeSingle()
+
+                    if (indexRecord?.materialized_contact_id) {
+                      // Update the materialized contact with latest CRM data
+                      await supabase
+                        .from('contacts')
+                        .update({
+                          first_name: indexRecord.first_name || undefined,
+                          last_name: indexRecord.last_name || undefined,
+                          email: indexRecord.email || undefined,
+                          phone: indexRecord.phone || undefined,
+                          title: indexRecord.job_title || undefined,
+                          company: indexRecord.company_name || undefined,
+                          updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', indexRecord.materialized_contact_id)
+
+                      console.log(`[hubspot-webhook] Updated materialized contact ${indexRecord.materialized_contact_id}`)
+                    }
+                  } catch (materializeErr) {
+                    console.error(`[hubspot-webhook] Failed to update materialized contact for ${objectId}:`, materializeErr)
+                  }
+                }
+              }
+            })
+            .catch((err) => {
+              console.error(`[hubspot-webhook] CRM index upsert failed for contact ${objectId}:`, err)
+            })
+        } else if (lowerType.startsWith('company.')) {
+          upsertCompanyIndex({
+            supabase,
+            orgId: integration.org_id,
+            crmSource: 'hubspot',
+            crmRecordId: objectId,
+            properties: indexProps,
+          })
+            .then(async (result) => {
+              if (result.success) {
+                syncedToIndex++
+
+                // If company is materialized, update the full companies table
+                if (result.isMaterialized && result.companyId) {
+                  try {
+                    // Find the materialized company ID
+                    const { data: indexRecord } = await supabase
+                      .from('crm_company_index')
+                      .select('materialized_company_id, name, domain, industry, employee_count, city, state, country')
+                      .eq('id', result.companyId)
+                      .maybeSingle()
+
+                    if (indexRecord?.materialized_company_id) {
+                      // Map employee count to size enum
+                      let size = null
+                      if (indexRecord.employee_count) {
+                        const count = Number(indexRecord.employee_count)
+                        size = count <= 10 ? 'startup'
+                          : count <= 50 ? 'small'
+                          : count <= 200 ? 'medium'
+                          : count <= 1000 ? 'large'
+                          : 'enterprise'
+                      }
+
+                      // Update the materialized company with latest CRM data
+                      await supabase
+                        .from('companies')
+                        .update({
+                          name: indexRecord.name || undefined,
+                          domain: indexRecord.domain || undefined,
+                          industry: indexRecord.industry || undefined,
+                          size: size || undefined,
+                          updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', indexRecord.materialized_company_id)
+
+                      console.log(`[hubspot-webhook] Updated materialized company ${indexRecord.materialized_company_id}`)
+                    }
+                  } catch (materializeErr) {
+                    console.error(`[hubspot-webhook] Failed to update materialized company for ${objectId}:`, materializeErr)
+                  }
+                }
+              }
+            })
+            .catch((err) => {
+              console.error(`[hubspot-webhook] CRM index upsert failed for company ${objectId}:`, err)
+            })
+        } else if (lowerType.startsWith('deal.')) {
+          upsertDealIndex({
+            supabase,
+            orgId: integration.org_id,
+            crmSource: 'hubspot',
+            crmRecordId: objectId,
+            properties: indexProps,
+          })
+            .then((result) => {
+              if (result.success) syncedToIndex++
+            })
+            .catch((err) => {
+              console.error(`[hubspot-webhook] CRM index upsert failed for deal ${objectId}:`, err)
+            })
+        }
+      }
     }
   }
 
@@ -324,6 +509,8 @@ serve(async (req) => {
       inserted,
       deduped,
       enqueued,
+      synced_to_standard: syncedToStandard,
+      synced_to_index: syncedToIndex,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )

@@ -101,6 +101,14 @@ export function GoogleConfigModal({ open, onOpenChange }: GoogleConfigModalProps
         toast.error('Connection test failed. Please reconnect your Google account.');
       }
     } catch (error: any) {
+      // Log full error for debugging
+      console.error('[GoogleConfigModal] Test connection error:', error);
+      console.error('[GoogleConfigModal] Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+        context: error.context,
+      });
       toast.error(error.message || 'Failed to test connection');
       setTestResult({
         success: false,

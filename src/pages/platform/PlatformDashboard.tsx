@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
   Building2,
@@ -28,6 +28,7 @@ import {
   TrendingUp,
   DollarSign,
   ChevronRight,
+  ChevronDown,
   Layers,
   Globe,
   MessageSquare,
@@ -44,6 +45,14 @@ import {
   Eye,
   GitBranch,
   Bot,
+  Video,
+  Search,
+  X,
+  Cpu,
+  PhoneCall,
+  Mic,
+  LifeBuoy,
+  Coins,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -130,6 +139,15 @@ const platformSections: Record<string, PlatformSection[]> = {
       badge: 'New',
     },
     {
+      id: 'credit-menu',
+      title: 'Credit Menu',
+      description: 'Manage credit pricing for all platform actions — set Low/Medium/High tier costs',
+      icon: Coins,
+      href: '/platform/credit-menu',
+      color: 'text-[#37bd7e] bg-green-100 dark:bg-green-900/30',
+      badge: 'New',
+    },
+    {
       id: 'billing-analytics',
       title: 'Billing Analytics',
       description: 'RevenueCat-inspired subscription metrics (MRR, churn, retention, LTV)',
@@ -146,8 +164,16 @@ const platformSections: Record<string, PlatformSection[]> = {
       href: '/platform/users',
       color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/30',
     },
+    {
+      id: 'support-tickets',
+      title: 'Support Tickets',
+      description: 'View and manage customer support tickets',
+      icon: LifeBuoy,
+      href: '/platform/support-tickets',
+      color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30',
+    },
   ],
-  'CRM Configuration': [
+  'Pipeline & Automation': [
     {
       id: 'pipeline',
       title: 'Pipeline Settings',
@@ -183,6 +209,14 @@ const platformSections: Record<string, PlatformSection[]> = {
       color: 'text-pink-600 bg-pink-100 dark:bg-pink-900/30',
     },
     {
+      id: 'ai-models',
+      title: 'AI Model Config',
+      description: 'Granular per-feature AI model assignment (driver/planner)',
+      icon: Cpu,
+      href: '/platform/ai/models',
+      color: 'text-violet-600 bg-violet-100 dark:bg-violet-900/30',
+    },
+    {
       id: 'ai-prompts',
       title: 'AI Prompts',
       description: 'Customize prompt templates for analysis and generation',
@@ -209,12 +243,30 @@ const platformSections: Record<string, PlatformSection[]> = {
       badge: 'New',
     },
     {
-      id: 'agent-simulator',
-      title: 'Agent Simulator',
-      description: 'Simulate agent-driven notifications in Slack + in-app for your account',
-      icon: Bell,
-      href: '/platform/agent-simulator',
-      color: 'text-indigo-600 bg-indigo-100 dark:bg-indigo-900/30',
+      id: 'agent-abilities',
+      title: 'Agent Abilities',
+      description: 'Catalog of agent capabilities, tools, and skill execution',
+      icon: Sparkles,
+      href: '/platform/agent-abilities',
+      color: 'text-pink-600 bg-pink-100 dark:bg-pink-900/30',
+      badge: 'New',
+    },
+    {
+      id: 'agent-performance',
+      title: 'Agent Performance',
+      description: 'Observability dashboard for agent execution analytics',
+      icon: Activity,
+      href: '/platform/agent-performance',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
+      badge: 'New',
+    },
+    {
+      id: 'copilot-lab',
+      title: 'Copilot Lab',
+      description: 'Testing, discovery, and improvement hub for copilot',
+      icon: Brain,
+      href: '/platform/copilot-lab',
+      color: 'text-violet-600 bg-violet-100 dark:bg-violet-900/30',
       badge: 'New',
     },
     {
@@ -224,6 +276,24 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: Brain,
       href: '/platform/quickadd-simulator',
       color: 'text-violet-600 bg-violet-100 dark:bg-violet-900/30',
+      badge: 'New',
+    },
+    {
+      id: 'copilot-console',
+      title: 'Copilot Console',
+      description: 'Test, monitor, and analyze your AI copilot in one place',
+      icon: Bot,
+      href: '/platform/copilot-console',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
+      badge: 'New',
+    },
+    {
+      id: 'exa-abilities-demo',
+      title: 'Exa Prospecting Demo',
+      description: 'Guided 4-step showcase for account discovery, persona discovery, intent signals, and Websets strategy',
+      icon: Search,
+      href: '/demo/exa-abilities',
+      color: 'text-sky-600 bg-sky-100 dark:bg-sky-900/30',
       badge: 'New',
     },
     {
@@ -294,6 +364,14 @@ const platformSections: Record<string, PlatformSection[]> = {
       href: '/platform/integrations/notetaker-branding',
       color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
     },
+    {
+      id: 'notetaker-recording-limit',
+      title: 'MeetingBaaS Recording Limit',
+      description: 'Set the default monthly recording limit for all organizations',
+      icon: Video,
+      href: '/platform/integrations/notetaker-recording-limit',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
+    },
   ],
   'Email & Communications': [
     {
@@ -325,15 +403,6 @@ const platformSections: Record<string, PlatformSection[]> = {
     },
   ],
   'Development Tools': [
-    {
-      id: 'meeting-intelligence',
-      title: 'Meeting Intelligence Demo',
-      description: 'Test call type workflows, coaching, and pipeline automation',
-      icon: Brain,
-      href: '/platform/meeting-intelligence-demo',
-      color: 'text-violet-600 bg-violet-100 dark:bg-violet-900/30',
-      badge: 'New',
-    },
     {
       id: 'deal-truth-simulator',
       title: 'Deal Truth Simulator',
@@ -414,15 +483,6 @@ const platformSections: Record<string, PlatformSection[]> = {
       color: 'text-orange-600 bg-orange-100 dark:bg-orange-900/30',
     },
     {
-      id: 'intelligence-tests',
-      title: 'Intelligence Test Runner',
-      description: 'Run and visualize meeting intelligence unit tests with AI debugging',
-      icon: Brain,
-      href: '/platform/intelligence-tests',
-      color: 'text-pink-600 bg-pink-100 dark:bg-pink-900/30',
-      badge: 'New',
-    },
-    {
       id: 'onboarding-simulator',
       title: 'Onboarding Simulator',
       description: 'Simulate and visualize the free trial journey',
@@ -448,6 +508,62 @@ const platformSections: Record<string, PlatformSection[]> = {
       color: 'text-red-600 bg-red-100 dark:bg-red-900/30',
       badge: 'New',
     },
+    {
+      id: 'agent-teams',
+      title: 'Agent Teams',
+      description: 'Configure multi-agent team roles and coordination',
+      icon: Users,
+      href: '/platform/agent-teams',
+      color: 'text-blue-600 bg-blue-100 dark:bg-blue-900/30',
+      badge: 'New',
+    },
+    {
+      id: 'enrichment-demo',
+      title: 'Enrichment Comparison',
+      description: 'Compare enrichment providers side-by-side',
+      icon: Search,
+      href: '/platform/enrichment-demo',
+      color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30',
+      badge: 'New',
+    },
+    {
+      id: 'agent-research',
+      title: 'Agent Research Demo',
+      description: 'AI research agent with parallel web-grounded queries',
+      icon: Globe,
+      href: '/demo/agent-research',
+      color: 'text-teal-600 bg-teal-100 dark:bg-teal-900/30',
+      badge: 'New',
+    },
+  ],
+  'Feature Development': [
+    {
+      id: 'calls',
+      title: 'Calls (JustCall)',
+      description: 'Call recordings and transcripts via JustCall integration — feature in development',
+      icon: PhoneCall,
+      href: '/calls',
+      color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
+      badge: 'In Dev',
+    },
+    {
+      id: 'voice',
+      title: 'Voice Recorder',
+      description: 'Voice recording and transcription — feature in development',
+      icon: Mic,
+      href: '/voice',
+      color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
+      badge: 'In Dev',
+    },
+    {
+      id: 'content-topics',
+      title: 'Content Topics',
+      description: 'AI-powered content topic extraction and trend analysis from meetings',
+      icon: Layers,
+      href: '/insights/content-topics',
+      color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
+      badge: 'In Dev',
+    },
   ],
 };
 
@@ -466,10 +582,30 @@ export default function PlatformDashboard() {
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [customers, setCustomers] = useState<CustomerWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
+    // Load from localStorage, default all collapsed
+    const saved = localStorage.getItem('platform-dashboard-sections');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return Object.keys(platformSections).reduce((acc, key) => {
+      acc[key] = false;
+      return acc;
+    }, {} as Record<string, boolean>);
+  });
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const toggleSection = (sectionTitle: string) => {
+    setExpandedSections(prev => {
+      const updated = { ...prev, [sectionTitle]: !prev[sectionTitle] };
+      localStorage.setItem('platform-dashboard-sections', JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   async function loadData() {
     setIsLoading(true);
@@ -518,6 +654,22 @@ export default function PlatformDashboard() {
       bgColor: 'bg-amber-500/10',
     },
   ];
+
+  // Filter sections and items based on search query
+  const filteredSections = Object.entries(platformSections)
+    .map(([sectionTitle, items]) => {
+      if (!searchQuery) {
+        return [sectionTitle, items] as const;
+      }
+
+      const filteredItems = items.filter(item =>
+        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.description.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+      return [sectionTitle, filteredItems] as const;
+    })
+    .filter(([, items]) => items.length > 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
@@ -584,48 +736,118 @@ export default function PlatformDashboard() {
           ))}
         </div>
 
-            {/* Section Cards */}
-            <div className="space-y-8">
-          {Object.entries(platformSections).map(([sectionTitle, items], sectionIndex) => (
-            <motion.div
-              key={sectionTitle}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.2 + sectionIndex * 0.1 }}
-            >
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                {sectionTitle}
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {items.map((item) => (
-                  <Card
-                    key={item.id}
-                    className="cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-indigo-200 dark:hover:border-indigo-800 group"
-                    onClick={() => navigate(item.href)}
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className={cn('p-3 rounded-xl', item.color)}>
-                          <item.icon className="w-5 h-5" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {item.badge && (
-                            <Badge variant="outline" className="text-xs">
-                              {item.badge}
-                            </Badge>
-                          )}
-                          <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                        </div>
-                      </div>
-                      <CardTitle className="text-base mt-3">{item.title}</CardTitle>
-                      <CardDescription className="text-sm">{item.description}</CardDescription>
-                    </CardHeader>
-                  </Card>
-                ))}
-              </div>
-            </motion.div>
-          ))}
+        {/* Search Bar */}
+        <div className="mb-8">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search admin features..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-lg pl-10 pr-10 py-2.5 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Section Cards */}
+        <div className="space-y-6">
+          {filteredSections.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-600 dark:text-gray-400">No features match your search.</p>
             </div>
+          ) : (
+            filteredSections.map(([sectionTitle, items], sectionIndex) => {
+              const isExpanded = expandedSections[sectionTitle] ?? false;
+
+              return (
+                <motion.div
+                  key={sectionTitle}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.2 + sectionIndex * 0.1 }}
+                >
+                  {/* Section Header - Clickable */}
+                  <button
+                    onClick={() => toggleSection(sectionTitle)}
+                    className="w-full flex items-center justify-between mb-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
+                  >
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white text-left">
+                      {sectionTitle}
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {items.length} {items.length === 1 ? 'item' : 'items'}
+                      </span>
+                      <motion.div
+                        initial={false}
+                        animate={{ rotate: isExpanded ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ChevronDown className="w-5 h-5 text-gray-400 group-hover:text-indigo-600" />
+                      </motion.div>
+                    </div>
+                  </button>
+
+                  {/* Section Content - Collapsible */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden mb-6"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {items.map((item) => (
+                            <motion.div
+                              key={item.id}
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <Card
+                                className="cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-indigo-200 dark:hover:border-indigo-800 group"
+                                onClick={() => navigate(item.href)}
+                              >
+                                <CardHeader className="pb-3">
+                                  <div className="flex items-start justify-between">
+                                    <div className={cn('p-3 rounded-xl', item.color)}>
+                                      <item.icon className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {item.badge && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {item.badge}
+                                        </Badge>
+                                      )}
+                                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                    </div>
+                                  </div>
+                                  <CardTitle className="text-base mt-3">{item.title}</CardTitle>
+                                  <CardDescription className="text-sm">{item.description}</CardDescription>
+                                </CardHeader>
+                              </Card>
+                            </motion.div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })
+          )}
+        </div>
 
             {/* Recent Customers Preview */}
             {customers.length > 0 && (

@@ -1,0 +1,89 @@
+{
+  "feature": {
+    "id": "platform-admin-reorg",
+    "name": "Platform Admin — Add Agent Abilities, Remove Old Simulator + Proactive V2 Demo",
+    "status": "complete",
+    "prd": null,
+    "createdAt": "2026-02-14T22:00:00Z",
+    "completedAt": "2026-02-14T22:10:00Z",
+    "description": "Surface new agent pages (Agent Abilities, Agent Performance, Copilot Lab, Agent Teams, Enrichment Demo, Agent Research) on the platform dashboard. Remove deprecated Agent Simulator and Proactive V2 Demo — all old routes redirect to /platform/agent-abilities."
+  },
+
+  "stories": [
+    {
+      "id": "PAR-001",
+      "feature": "platform-admin-reorg",
+      "title": "Update platformSections config with new agent entries and remove old simulator",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["PAR-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "agent-simulator entry removed from 'AI & Intelligence' section",
+        "3 new entries added to 'AI & Intelligence': Agent Abilities, Agent Performance, Copilot Lab",
+        "3 new entries added to 'Development Tools': Agent Teams, Enrichment Comparison, Agent Research Demo",
+        "All new entries have correct hrefs, icons, descriptions, and 'New' badges"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 5,
+      "files": ["src/pages/platform/PlatformDashboard.tsx"],
+      "activeForm": "Updating platform dashboard sections config"
+    },
+    {
+      "id": "PAR-002",
+      "feature": "platform-admin-reorg",
+      "title": "Redirect old routes (agent-simulator, proactive-simulator, proactive-v2-demo) and clean up imports",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["PAR-001"], "files": [], "schema": [] },
+      "blocks": ["PAR-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "/platform/agent-simulator redirects to /platform/agent-abilities",
+        "/platform/proactive-simulator redirects to /platform/agent-abilities",
+        "/platform/proactive-v2-demo redirects to /platform/agent-abilities",
+        "ProactiveSimulator and ProactiveAgentV2Demo removed from lazyPages.tsx and App.tsx imports",
+        "No build errors"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": 3,
+      "files": ["src/App.tsx", "src/routes/lazyPages.tsx"],
+      "activeForm": "Redirecting old routes and cleaning up imports"
+    },
+    {
+      "id": "PAR-003",
+      "feature": "platform-admin-reorg",
+      "title": "Verify: build succeeds, no dangling imports",
+      "type": "test",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["PAR-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "vite build succeeds with zero errors (47.35s)",
+        "No dangling imports of ProactiveSimulator or ProactiveAgentV2Demo in App.tsx or lazyPages.tsx",
+        "All 6 new dashboard entries have valid route targets"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": 2,
+      "files": [],
+      "activeForm": "Verifying build and navigation"
+    }
+  ],
+
+  "execution": {
+    "totalStories": 3,
+    "completedStories": 3,
+    "currentFeature": "platform-admin-reorg",
+    "estimatedTotal": "~20 minutes",
+    "actualTotal": "~10 minutes",
+    "efficiency": "200%",
+    "parallelGroups": [],
+    "criticalPath": "PAR-001 → PAR-002 → PAR-003",
+    "notes": "Used 2-agent team (implementer + verifier) with Sonnet. Mid-flight plan update: user requested removing proactive-v2-demo too, all routes redirect to agent-abilities."
+  }
+}

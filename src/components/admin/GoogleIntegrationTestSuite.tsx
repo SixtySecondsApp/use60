@@ -603,7 +603,7 @@ export const GoogleIntegrationTestSuite: React.FC<GoogleIntegrationTestSuiteProp
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-br from-gray-900/80 to-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-800/50 shadow-xl">
+      <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900/80 dark:to-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 dark:border-gray-800/50 shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-gray-100 flex items-center gap-2">
@@ -722,7 +722,7 @@ export const GoogleIntegrationTestSuite: React.FC<GoogleIntegrationTestSuiteProp
 
       {/* Test Results */}
       {results.length > 0 && (
-        <div className="bg-gradient-to-br from-gray-900/80 to-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-800/50 shadow-xl">
+        <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-900/80 dark:to-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 dark:border-gray-800/50 shadow-xl">
           <h3 className="text-lg font-bold text-gray-100 mb-4 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-green-400" />
             Test Results

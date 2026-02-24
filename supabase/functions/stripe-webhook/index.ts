@@ -1,10 +1,10 @@
 // supabase/functions/stripe-webhook/index.ts
-// Stripe webhook handler for subscription events
+// Stripe webhook handler for subscription events and credit pack purchases
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/corsHelper.ts";
 import { captureException } from "../_shared/sentryEdge.ts";
 import {
   verifyWebhookSignature,
@@ -20,6 +20,20 @@ import {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+async function getOrgPlanSlug(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('organization_subscriptions')
+    .select('plan_id, subscription_plans!inner(slug)')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  // Handle the nested join result
+  const plans = (data as any)?.subscription_plans;
+  return plans?.slug ?? null;
+}
+
 interface WebhookResult {
   success: boolean;
   event_id: string;
@@ -29,6 +43,8 @@ interface WebhookResult {
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -133,6 +149,18 @@ async function processStripeEvent(
         await handleInvoiceFinalized(supabase, event.data.object);
         break;
 
+      case "charge.refunded":
+        await handleChargeRefunded(supabase, event.data.object);
+        break;
+
+      case "payment_intent.succeeded":
+        await handlePaymentIntentSucceeded(supabase, event.data.object);
+        break;
+
+      case "payment_intent.payment_failed":
+        await handlePaymentIntentFailed(supabase, event.data.object);
+        break;
+
       default:
         console.log(`Unhandled event type: ${eventType}`);
         return {
@@ -215,6 +243,93 @@ async function handleCheckoutCompleted(
   const metadata = extractMetadata(session);
   const orgId = metadata.org_id;
   const planId = metadata.plan_id;
+
+  // Handle credit pack purchase fulfillment (one-time payment, not subscription)
+  if ((session as any).mode === 'payment' && metadata.type === 'credit_pack_purchase') {
+    const packType = metadata.pack_type;
+    const credits = parseFloat(metadata.credits ?? '0');
+    const userId = metadata.user_id;
+    const sessionId = (session as any).id;
+
+    if (!orgId || !packType || !credits || isNaN(credits)) {
+      console.error('[Webhook] Invalid credit_pack_purchase metadata:', metadata);
+      // Don't throw — acknowledge webhook to prevent Stripe retries
+      return;
+    }
+
+    // Idempotency: check if we already processed this session
+    const { data: existingPack } = await supabase
+      .from('credit_packs')
+      .select('id')
+      .eq('payment_id', sessionId)
+      .maybeSingle();
+
+    if (existingPack) {
+      console.log(`[Webhook] Credit pack already processed for session ${sessionId}`);
+      return;
+    }
+
+    // Add credit pack via RPC (inserts into credit_packs + updates org_credit_balance)
+    const { data: newBalance, error: packError } = await supabase
+      .rpc('add_credits_pack', {
+        p_org_id: orgId,
+        p_pack_type: packType,
+        p_credits: credits,
+        p_source: 'manual',
+        p_payment_id: sessionId,
+        p_created_by: userId || null,
+      });
+
+    if (packError) {
+      console.error('[Webhook] Error adding credit pack:', packError);
+      throw packError;
+    } else {
+      console.log(`[Webhook] Added ${credits} credits (${packType} pack) to org ${orgId}. New balance: ${newBalance}`);
+    }
+
+    return;
+  }
+
+  // Legacy: handle old-style credit_purchase (plain credit_amount, no pack)
+  if ((session as any).mode === 'payment' && metadata.type === 'credit_purchase') {
+    const creditAmount = parseFloat(metadata.credit_amount ?? '0');
+    const userId = metadata.user_id;
+    const sessionId = (session as any).id;
+
+    if (!orgId || !creditAmount || isNaN(creditAmount)) {
+      console.error('[Webhook] Invalid credit purchase metadata:', metadata);
+      return;
+    }
+
+    const { data: existingTxn } = await supabase
+      .from('credit_transactions')
+      .select('id')
+      .eq('stripe_session_id', sessionId)
+      .maybeSingle();
+
+    if (existingTxn) {
+      console.log(`[Webhook] Legacy credit purchase already processed for session ${sessionId}`);
+      return;
+    }
+
+    const { data: newBalance, error: creditError } = await supabase
+      .rpc('add_credits_pack', {
+        p_org_id: orgId,
+        p_pack_type: 'custom',
+        p_credits: creditAmount,
+        p_source: 'manual',
+        p_payment_id: sessionId,
+        p_created_by: userId || null,
+      });
+
+    if (creditError) {
+      console.error('[Webhook] Error adding legacy credits:', creditError);
+    } else {
+      console.log(`[Webhook] Added ${creditAmount} legacy credits to org ${orgId}. New balance: ${newBalance}`);
+    }
+
+    return;
+  }
 
   if (!orgId) {
     console.warn("Checkout session missing org_id in metadata");
@@ -326,6 +441,24 @@ async function handleSubscriptionCreated(
   }
 
   await syncSubscriptionToDatabase(supabase, orgId, subscription);
+
+  // Grant subscription credits for Pro plan
+  const planSlug = metadata.plan_slug || await getOrgPlanSlug(supabase, orgId);
+  if (planSlug === 'pro') {
+    const periodEnd = getPeriodDates(subscription).periodEnd.toISOString();
+    const { data: newBalance, error: creditError } = await supabase.rpc('grant_subscription_credits', {
+      p_org_id: orgId,
+      p_amount: 250,
+      p_period_end: periodEnd,
+    });
+    if (creditError) {
+      console.error('[Webhook] Error granting subscription credits:', creditError);
+    } else if (newBalance === -1) {
+      console.error(`[Webhook] grant_subscription_credits returned -1: org_credit_balance row not found for org ${orgId}`);
+    } else {
+      console.log(`[Webhook] Granted 250 subscription credits to org ${orgId}, new balance: ${newBalance}`);
+    }
+  }
 }
 
 // ============================================================================
@@ -388,6 +521,35 @@ async function handleSubscriptionUpdated(
     .is('org_id', null);
 
   await syncSubscriptionToDatabase(supabase, orgId, subscription);
+
+  // Check if plan changed (upgrade/downgrade)
+  const updatedMetadata = extractMetadata(subscription);
+  const newPlanSlug = updatedMetadata.plan_slug || await getOrgPlanSlug(supabase, orgId);
+  // If upgrading to Pro, grant subscription credits
+  if (newPlanSlug === 'pro') {
+    const periodEnd = getPeriodDates(subscription).periodEnd.toISOString();
+    // Check if credits already exist (avoid double-grant)
+    const { data: balance } = await supabase
+      .from('org_credit_balance')
+      .select('subscription_credits_balance')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (!balance || balance.subscription_credits_balance === 0) {
+      const { data: newBalance, error: grantError } = await supabase.rpc('grant_subscription_credits', {
+        p_org_id: orgId,
+        p_amount: 250,
+        p_period_end: periodEnd,
+      });
+      if (grantError) {
+        console.error('[Webhook] Error granting upgrade credits:', grantError);
+      } else if (newBalance === -1) {
+        console.error(`[Webhook] grant_subscription_credits returned -1: org_credit_balance row not found for org ${orgId}`);
+      } else {
+        console.log(`[Webhook] Granted 250 credits on upgrade to Pro for org ${orgId}, new balance: ${newBalance}`);
+      }
+    }
+  }
 }
 
 // ============================================================================
@@ -424,6 +586,16 @@ async function handleSubscriptionDeleted(
   if (error) {
     console.error("Error marking subscription as canceled:", error);
     throw error;
+  }
+
+  // Expire subscription credits when subscription is deleted/cancelled
+  const { error: expireError } = await supabase.rpc('expire_subscription_credits', {
+    p_org_id: existingSub.org_id,
+  });
+  if (expireError) {
+    console.error('[Webhook] Error expiring subscription credits:', expireError);
+  } else {
+    console.log(`[Webhook] Expired subscription credits for org ${existingSub.org_id}`);
   }
 
   // Create notification for org admins
@@ -539,6 +711,49 @@ async function handleInvoicePaid(
       : undefined,
     subscription_id: existingSub.id,
   });
+
+  // Handle Pro subscription credit refresh on renewal
+  const billingReason = (invoice as any).billing_reason;
+  if (billingReason === 'subscription_cycle') {
+    // This is a renewal invoice, not the first payment
+    const renewalSubscriptionId = typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : (invoice.subscription as any)?.id;
+
+    if (renewalSubscriptionId) {
+      // Find org for this subscription with plan details
+      const { data: sub } = await supabase
+        .from('organization_subscriptions')
+        .select('org_id, plan_id, subscription_plans!inner(slug, features)')
+        .eq('stripe_subscription_id', renewalSubscriptionId)
+        .maybeSingle();
+
+      const planSlug = (sub as any)?.subscription_plans?.slug;
+      const bundledCredits = (sub as any)?.subscription_plans?.features?.bundled_credits;
+
+      if (sub && planSlug === 'pro' && bundledCredits > 0) {
+        // Expire old subscription credits first
+        await supabase.rpc('expire_subscription_credits', { p_org_id: sub.org_id });
+
+        // Grant fresh subscription credits
+        const periodEnd = (invoice as any).lines?.data?.[0]?.period?.end
+          ? new Date((invoice as any).lines.data[0].period.end * 1000).toISOString()
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        const { error: grantError } = await supabase.rpc('grant_subscription_credits', {
+          p_org_id: sub.org_id,
+          p_amount: bundledCredits,
+          p_period_end: periodEnd,
+        });
+
+        if (grantError) {
+          console.error('[Webhook] Error refreshing subscription credits on renewal:', grantError);
+        } else {
+          console.log(`[Webhook] Refreshed ${bundledCredits} subscription credits for org ${sub.org_id}`);
+        }
+      }
+    }
+  }
 }
 
 // ============================================================================
@@ -650,8 +865,205 @@ async function handleInvoiceFinalized(
 }
 
 // ============================================================================
+// CHARGE REFUNDED (credit purchase reversal)
+// ============================================================================
+async function handleChargeRefunded(
+  supabase: SupabaseClient,
+  charge: unknown
+): Promise<void> {
+  const chargeObj = charge as any;
+  const metadata = chargeObj?.metadata ?? {};
+
+  // Only handle credit purchase refunds
+  if (metadata.type !== 'credit_purchase') {
+    console.log('[Webhook] Charge refund is not a credit purchase, skipping credit reversal');
+    return;
+  }
+
+  const orgId = metadata.org_id;
+  if (!orgId) {
+    console.warn('[Webhook] Credit refund charge missing org_id in metadata');
+    return;
+  }
+
+  // Refund amount is in cents — convert to dollars
+  const refundAmount = (chargeObj.amount_refunded ?? 0) / 100;
+
+  if (refundAmount <= 0) {
+    console.warn('[Webhook] Refund amount is zero or negative, skipping');
+    return;
+  }
+
+  const { error: deductError } = await supabase.rpc('deduct_credits_fifo', {
+    p_org_id: orgId,
+    p_amount: refundAmount,
+    p_description: 'Refund — credit purchase reversed',
+    p_feature_key: null,
+    p_cost_event_id: null,
+  });
+
+  if (deductError) {
+    console.error('[Webhook] Error deducting credits on refund:', deductError);
+  } else {
+    console.log(`[Webhook] Deducted ${refundAmount} credits from org ${orgId} due to refund`);
+  }
+}
+
+// ============================================================================
+// PAYMENT INTENT SUCCEEDED — auto top-up fulfillment
+// ============================================================================
+async function handlePaymentIntentSucceeded(
+  supabase: SupabaseClient,
+  paymentIntent: unknown
+): Promise<void> {
+  const pi = paymentIntent as any;
+  const metadata = pi?.metadata ?? {};
+
+  if (metadata.type !== 'auto_top_up') {
+    // Not an auto top-up payment, nothing to do here
+    return;
+  }
+
+  const orgId = metadata.org_id;
+  const packType = metadata.pack_type;
+  const credits = parseFloat(metadata.credits ?? '0');
+  const paymentIntentId = pi.id;
+
+  if (!orgId || !packType || !credits || isNaN(credits)) {
+    console.error('[Webhook] auto_top_up PaymentIntent succeeded but missing metadata:', metadata);
+    return;
+  }
+
+  // Idempotency: check if we already processed this payment intent
+  const { data: existingPack } = await supabase
+    .from('credit_packs')
+    .select('id')
+    .eq('payment_id', paymentIntentId)
+    .maybeSingle();
+
+  if (existingPack) {
+    console.log(`[Webhook] Auto top-up already processed for PaymentIntent ${paymentIntentId}`);
+    return;
+  }
+
+  // Add credit pack via RPC
+  const { data: newBalance, error: packError } = await supabase
+    .rpc('add_credits_pack', {
+      p_org_id: orgId,
+      p_pack_type: packType,
+      p_credits: credits,
+      p_source: 'auto_top_up',
+      p_payment_id: paymentIntentId,
+      p_created_by: null,
+    });
+
+  if (packError) {
+    console.error('[Webhook] Error adding auto top-up credit pack:', packError);
+    throw packError;
+  }
+
+  // Log the successful auto top-up
+  const triggerBalance = parseFloat(metadata.trigger_balance ?? '0');
+  const { error: logError } = await supabase.from('auto_top_up_log').insert({
+    org_id: orgId,
+    trigger_balance: triggerBalance,
+    pack_type: packType,
+    credits_added: credits,
+    stripe_payment_intent_id: paymentIntentId,
+    status: 'success',
+  });
+
+  if (logError) {
+    console.error('[Webhook] Error inserting auto_top_up_log success record:', logError);
+    // Non-fatal: the credits were added; don't throw
+  }
+
+  console.log(`[Webhook] Auto top-up: added ${credits} credits (${packType}) to org ${orgId}. New balance: ${newBalance}`);
+}
+
+// ============================================================================
+// PAYMENT INTENT PAYMENT FAILED — auto top-up failure logging
+// ============================================================================
+async function handlePaymentIntentFailed(
+  supabase: SupabaseClient,
+  paymentIntent: unknown
+): Promise<void> {
+  const pi = paymentIntent as any;
+  const metadata = pi?.metadata ?? {};
+
+  if (metadata.type !== 'auto_top_up') {
+    return;
+  }
+
+  const orgId = metadata.org_id;
+  const packType = metadata.pack_type ?? 'starter';
+  const paymentIntentId = pi.id;
+  const triggerBalance = parseFloat(metadata.trigger_balance ?? '0');
+
+  if (!orgId) {
+    console.warn('[Webhook] auto_top_up PaymentIntent failed but missing org_id in metadata');
+    return;
+  }
+
+  // Extract error message from last payment error
+  const errorMessage = pi.last_payment_error?.message ?? 'Payment failed';
+
+  const { error: logError } = await supabase.from('auto_top_up_log').insert({
+    org_id: orgId,
+    trigger_balance: triggerBalance,
+    pack_type: packType,
+    credits_added: null,
+    stripe_payment_intent_id: paymentIntentId,
+    status: 'failed',
+    error_message: errorMessage,
+  });
+
+  if (logError) {
+    console.error('[Webhook] Error inserting auto_top_up_log failure record:', logError);
+  }
+
+  console.log(`[Webhook] Auto top-up failed for org ${orgId}: ${errorMessage}`);
+}
+
+// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Extract org_id from a Stripe event's data.object.metadata.
+ * Returns null if not found.
+ */
+function extractOrgIdFromEvent(event: Stripe.Event): string | null {
+  const obj = event.data.object as any;
+  return obj?.metadata?.org_id ?? null;
+}
+
+/**
+ * Log a billing event to billing_event_log for audit trail.
+ * Idempotent via provider + provider_event_id unique constraint.
+ */
+async function logBillingEvent(
+  supabase: SupabaseClient,
+  event: Stripe.Event,
+  orgId: string | null,
+): Promise<void> {
+  const { error } = await supabase.from('billing_event_log').upsert(
+    {
+      provider: 'stripe',
+      provider_event_id: event.id,
+      event_type: event.type,
+      org_id: orgId,
+      payload: event.data.object,
+      occurred_at: new Date().toISOString(),
+    },
+    { onConflict: 'provider,provider_event_id' },
+  );
+
+  if (error) {
+    console.error('Error logging billing event:', error);
+    throw error;
+  }
+}
 
 async function syncSubscriptionToDatabase(
   supabase: SupabaseClient,
@@ -705,7 +1117,7 @@ async function syncSubscriptionToDatabase(
     throw error;
   }
 
-  console.log(`Synced subscription for org ${orgId}: status=${status}, MRR=${recurringAmountCents / 100} ${interval}`);
+  console.log(`Synced subscription for org ${orgId}: status=${status}`);
 }
 
 interface BillingEventData {

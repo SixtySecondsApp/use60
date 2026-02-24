@@ -558,35 +558,45 @@ export function buildHelpMessage(): { blocks: unknown[]; text: string } {
     blocks: [
       {
         type: 'header',
-        text: { type: 'plain_text', text: '🎯 Sixty Commands', emoji: true },
+        text: { type: 'plain_text', text: 'Sixty — your AI sales copilot', emoji: true },
       },
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Available commands:*',
+          text: 'Just type what you need in plain English:\n' +
+            '>`/sixty prep me for my next meeting`\n' +
+            '>`/sixty what\'s happening with Acme?`\n' +
+            '>`/sixty which deals are at risk this week?`',
         },
       },
       {
+        type: 'divider',
+      },
+      {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: [
-            '`/sixty today` - Your day at a glance',
-            '`/sixty meeting-brief [next|today|name]` - Meeting prep',
-            '`/sixty contact <name|email>` - Look up a contact',
-            '`/sixty deal <name>` - Deal snapshot',
-            '`/sixty follow-up <person|company>` - Draft a follow-up',
-          ].join('\n'),
+          text: '*Shortcuts* (skip the AI, instant results):\n' +
+            '`today` — day at a glance\n' +
+            '`prep` — next meeting brief\n' +
+            '`deal <name>` — deal snapshot\n' +
+            '`contact <name>` — contact lookup\n' +
+            '`follow-up <who>` — draft a follow-up\n' +
+            '`risks` — at-risk deals\n' +
+            '`debrief` — post-meeting summary\n' +
+            '`task add <text>` — create a task\n' +
+            '`pipeline` — pipeline summary\n' +
+            '`standup` — team standup digest',
         },
       },
       {
         type: 'context',
         elements: [
-          { type: 'mrkdwn', text: 'Tip: You can also use `/60` as a shortcut!' },
+          { type: 'mrkdwn', text: 'Tip: `/60` works as a shortcut too!' },
         ],
       },
     ],
-    text: 'Sixty Commands - /sixty today, /sixty meeting-brief, /sixty contact, /sixty deal, /sixty follow-up',
+    text: 'Sixty — your AI sales copilot. Type what you need: /sixty prep me for my next meeting',
   };
 }

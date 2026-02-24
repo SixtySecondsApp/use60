@@ -1,0 +1,110 @@
+{
+  "feature": {
+    "id": "ability-test-panel",
+    "name": "Ability Test Panel in Marketplace Detail Sheet",
+    "status": "complete",
+    "prd": null,
+    "createdAt": "2026-02-15T00:00:00Z",
+    "completedAt": "2026-02-15T15:12:00Z",
+    "description": "Collapsible 'Test This Ability' section at the bottom of AbilityDetailSheet. Supports V1 (proactive-simulate dry-run) and orchestrator (agent-orchestrator in-app only) paths. Extracts V1ResultPreview into reusable component."
+  },
+  "stories": [
+    {
+      "id": "TEST-001",
+      "feature": "ability-test-panel",
+      "title": "AbilityTestPanel component + registry helper",
+      "type": "component",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["TEST-002", "TEST-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "getRequiredEntityType() returns 'meeting' for pre_meeting_90min/meeting_ended, 'deal' for deal_risk_scan/stale_deal_revival/proposal_generation, null otherwise",
+        "Mode selector toggles between 'sample' and 'specific' with Shuffle/Target icons",
+        "Meeting picker renders for meeting abilities, deal picker for deal abilities, no picker when null",
+        "Run Test button disabled when entity required but not selected in 'specific' mode"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 5,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts",
+        "src/components/agent/marketplace/AbilityTestPanel.tsx"
+      ],
+      "startedAt": "2026-02-15T15:05:00Z",
+      "completedAt": "2026-02-15T15:08:00Z"
+    },
+    {
+      "id": "TEST-002",
+      "feature": "ability-test-panel",
+      "title": "Wire execution + extract V1ResultPreview",
+      "type": "refactor+feature",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["TEST-001"], "files": [], "schema": [] },
+      "blocks": ["TEST-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "V1ResultPreview extracted to src/components/agent/V1ResultPreview.tsx — no logic changes, just move + export",
+        "AbilityRunPanel.tsx updated to import V1ResultPreview from new location — no behavior change",
+        "V1 abilities call proactive-simulate with dryRun: true, sendSlack: false, createInApp: false, simulationMode: (mode === 'sample')",
+        "Orchestrator abilities call agent-orchestrator with source: 'manual', channels: ['in-app'] and show warning badge before run",
+        "Reset button clears all result state"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": 4,
+      "files": [
+        "src/components/agent/V1ResultPreview.tsx",
+        "src/components/agent/AbilityRunPanel.tsx",
+        "src/components/agent/marketplace/AbilityTestPanel.tsx"
+      ],
+      "startedAt": "2026-02-15T15:08:00Z",
+      "completedAt": "2026-02-15T15:11:00Z"
+    },
+    {
+      "id": "TEST-003",
+      "feature": "ability-test-panel",
+      "title": "Integrate into AbilityDetailSheet",
+      "type": "integration",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["TEST-001", "TEST-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Collapsible section at bottom of AbilityDetailSheet with FlaskConical icon + 'Test This Ability' trigger",
+        "ChevronDown rotates on open/close with animation",
+        "Planned-status abilities show 'Coming soon' text instead of test panel",
+        "Test works for both V1 and orchestrator abilities regardless of enabled state",
+        "Results area capped at max-h-[400px] overflow-y-auto to prevent extreme scroll"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 2,
+      "files": [
+        "src/components/agent/marketplace/AbilityDetailSheet.tsx"
+      ],
+      "startedAt": "2026-02-15T15:11:00Z",
+      "completedAt": "2026-02-15T15:12:00Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 3,
+    "completedStories": 3,
+    "waves": [
+      { "wave": 1, "stories": ["TEST-001"], "label": "Foundation" },
+      { "wave": 2, "stories": ["TEST-002"], "label": "Extraction + Wiring" },
+      { "wave": 3, "stories": ["TEST-003"], "label": "Integration" }
+    ],
+    "lastUpdated": "2026-02-15T15:12:00Z"
+  },
+  "references": {
+    "AbilityRunPanel": "src/components/agent/AbilityRunPanel.tsx — V1 execution, meeting picker, now imports V1ResultPreview",
+    "V1ResultPreview": "src/components/agent/V1ResultPreview.tsx — extracted, reused in both AbilityRunPanel and AbilityTestPanel",
+    "useOrchestratorJob": "src/hooks/useOrchestratorJob.ts — hook(jobId) returns { stepResults, jobStatus, isRunning, reset }",
+    "LiveStepVisualizer": "src/components/agent/LiveStepVisualizer.tsx — props: { stepResults, jobStatus, eventType? }",
+    "LiveOutputPanel": "src/components/agent/LiveOutputPanel.tsx — props: { stepResults, jobStatus, jobId, eventType? }",
+    "proactiveSimulate": "supabase/functions/proactive-simulate/index.ts — supports dryRun, simulationMode, entityIds",
+    "collapsible": "src/components/ui/collapsible.tsx — Collapsible, CollapsibleTrigger, CollapsibleContent",
+    "abilityRegistry": "src/lib/agent/abilityRegistry.ts — 18 abilities + getRequiredEntityType() helper"
+  }
+}

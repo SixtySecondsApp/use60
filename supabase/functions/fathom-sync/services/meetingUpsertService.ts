@@ -5,7 +5,7 @@
  * for different database constraint configurations.
  */
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import {
   buildEmbedUrl,
   normalizeInviteesType,
@@ -83,10 +83,18 @@ export function prepareMeetingData(input: MeetingUpsertInput): {
 } {
   const { call, orgId, ownerUserId, ownerEmail, fathomUserId, thumbnailUrl, existingThumbnailStatus, summaryText, skipThumbnails, skipTranscriptFetch, markAsHistorical } = input
 
-  // Calculate duration in minutes from recording start/end times
-  const startTime = new Date(call.recording_start_time || call.scheduled_start_time)
-  const endTime = new Date(call.recording_end_time || call.scheduled_end_time)
-  const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60))
+  // Calculate duration — prefer Fathom's native duration field (seconds), fallback to time diff
+  let durationMinutes = 0
+  if (call.duration && typeof call.duration === 'number' && call.duration > 0) {
+    durationMinutes = Math.round(call.duration / 60)
+  } else {
+    const startTime = new Date(call.start_time || call.recording_start_time || call.scheduled_start_time)
+    const endTime = new Date(call.end_time || call.recording_end_time || call.scheduled_end_time)
+    const diff = endTime.getTime() - startTime.getTime()
+    if (!isNaN(diff) && diff > 0) {
+      durationMinutes = Math.round(diff / (1000 * 60))
+    }
+  }
 
   // Compute derived fields
   const embedUrl = buildEmbedUrl(call.share_url, call.recording_id)
@@ -113,8 +121,8 @@ export function prepareMeetingData(input: MeetingUpsertInput): {
     fathom_recording_id: recordingIdRaw ? String(recordingIdRaw) : null,
     fathom_user_id: fathomUserId,
     title: call.title || call.meeting_title,
-    meeting_start: call.recording_start_time || call.scheduled_start_time,
-    meeting_end: call.recording_end_time || call.scheduled_end_time,
+    meeting_start: call.start_time || call.recording_start_time || call.scheduled_start_time,
+    meeting_end: call.end_time || call.recording_end_time || call.scheduled_end_time,
     duration_minutes: durationMinutes,
     owner_email: ownerEmail || call.recorded_by?.email || call.host_email || null,
     team_name: call.recorded_by?.team || null,

@@ -123,7 +123,7 @@ Write to repo-root `prd.json`:
   "runSlug": "<runSlug>",
   "branchName": "feature/<runSlug>",
   "description": "<Brief description from PRD intro>",
-  "aiDevHubProjectId": "cae03d2d-74ac-49e6-9da2-aae2440e0c00",
+  "aiDevHubProjectId": null,
   "createdAt": "<ISO timestamp>",
   "userStories": [
     {
@@ -154,6 +154,32 @@ Write to repo-root `prd.json`:
 }
 ```
 
+### Step 3.5: Select Dev Hub Project
+
+1. Check if AI Dev Hub MCP tools are available (call `search_projects` with keyword from feature name or "use60")
+2. If MCP unavailable, log `⚠️ AI Dev Hub MCP unavailable — skipping Dev Hub sync.` and continue to Step 4
+3. Present discovered projects to user as numbered list using `AskUserQuestion`:
+   - `1. <Project Name> (id: <id>)`
+   - `2. <Project Name> (id: <id>)`
+   - `[Skip] No Dev Hub sync`
+4. Store selected project ID in `prd.json.aiDevHubProjectId` (or leave `null` if skipped)
+
+### Step 3.6: Create Dev Hub Tasks
+
+**Skip entirely if `aiDevHubProjectId` is `null`.**
+
+For each story in `prd.json.userStories`:
+1. Call `create_task` with:
+   - `projectId`: from `prd.json.aiDevHubProjectId`
+   - `title`: `[<runSlug>] <storyId>: <Story Title>`
+   - `description`: Story description + acceptance criteria formatted as checklist
+   - `type`: `"feature"`
+   - `status`: `"todo"`
+   - `priority`: mapped from story priority (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
+2. Store returned task ID in `prd.json.userStories[i].aiDevHubTaskId`
+3. If individual task creation fails, set `aiDevHubTaskId: null`, log warning, and continue (never block)
+4. Write updated `prd.json` back to disk after all tasks processed
+
 ### Step 4: Initialize progress.txt (if missing)
 
 If repo-root `progress.txt` doesn't exist, create it:
@@ -176,6 +202,7 @@ Started: <timestamp>
 
 📄 PRD: tasks/prd-<runSlug>.md
 📋 Task list: prd.json (<N> stories)
+🎫 Dev Hub: <N tasks created | skipped (no project selected) | unavailable>
 
 Stories created:
 - US-001: <title>
@@ -183,8 +210,8 @@ Stories created:
 - ...
 
 🚀 Next steps:
-1. Run /build-feature to create AI Dev Hub tasks
-2. Or run /continue-feature 10 to start implementing
+1. Run /60/run to start implementing stories
+2. Or run /continue-feature 10 for legacy loop execution
 ```
 
 ---

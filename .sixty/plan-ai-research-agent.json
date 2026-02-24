@@ -1,0 +1,345 @@
+{
+  "project": {
+    "name": "AI Research Agent Column for Ops",
+    "description": "Add AI-powered research agent column type to Ops with configurable depth levels (Low/Medium/High) orchestrating Perplexity, Exa, and Apify",
+    "createdAt": "2026-02-12T12:00:00Z",
+    "prdSource": "inline"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "realtime": "supabase-realtime"
+  },
+  "features": [
+    {
+      "id": "schema",
+      "name": "Database Schema",
+      "status": "pending",
+      "priority": 1,
+      "description": "Create agent_columns and agent_runs tables with proper indexing and RLS"
+    },
+    {
+      "id": "orchestrator",
+      "name": "Research Orchestrator",
+      "status": "pending",
+      "priority": 2,
+      "description": "Edge function that queues tasks, manages concurrency, and tracks execution"
+    },
+    {
+      "id": "router",
+      "name": "Research Router",
+      "status": "pending",
+      "priority": 3,
+      "description": "Core routing logic for Low/Medium/High depth execution strategies"
+    },
+    {
+      "id": "providers",
+      "name": "Provider Adapters",
+      "status": "pending",
+      "priority": 4,
+      "description": "Normalized adapters for Perplexity, Exa, and Apify APIs"
+    },
+    {
+      "id": "frontend",
+      "name": "Frontend UI",
+      "status": "pending",
+      "priority": 5,
+      "description": "Column type, configuration panel, cell rendering, and realtime updates"
+    }
+  ],
+  "stories": [
+    {
+      "id": "AGNT-001",
+      "feature": "schema",
+      "title": "Create agent_columns table migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AGNT-003", "AGNT-009"],
+      "parallelWith": ["AGNT-002"],
+      "acceptance": [
+        "agent_columns table with id, ops_table_id, workspace_id, name, prompt_template",
+        "output_format enum (free_text, single_value, yes_no, url, list)",
+        "research_depth enum (low, medium, high) with default medium",
+        "source_preferences jsonb field",
+        "RLS policies scoped to workspace"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/migrations/20260212300100_agent_columns.sql"]
+    },
+    {
+      "id": "AGNT-002",
+      "feature": "schema",
+      "title": "Create agent_runs table migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AGNT-003"],
+      "parallelWith": ["AGNT-001"],
+      "acceptance": [
+        "agent_runs table with id, agent_column_id, row_id, status",
+        "result_text and result_structured fields",
+        "sources jsonb array with url, title, provider",
+        "providers_used text array, confidence enum, token/credit costs",
+        "chain_log jsonb for High depth execution tracking",
+        "Indexes on (agent_column_id, status) and (agent_column_id, row_id)",
+        "RLS policies scoped to workspace"
+      ],
+      "estimatedMinutes": 25,
+      "files": ["supabase/migrations/20260212300101_agent_runs.sql"]
+    },
+    {
+      "id": "AGNT-003",
+      "feature": "orchestrator",
+      "title": "Implement research-orchestrator edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["AGNT-001", "AGNT-002"], "files": [], "schema": ["agent_columns", "agent_runs"] },
+      "blocks": ["AGNT-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "POST endpoint accepting agent_column_id, row_ids, depth_override",
+        "Validates agent column exists and user has workspace access",
+        "Calculates estimated credits and checks workspace balance",
+        "Inserts queued agent_run records for each row",
+        "Manages concurrency limit of 10 tasks per user",
+        "Returns run_id, total_tasks, estimated_credits immediately"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["supabase/functions/research-orchestrator/index.ts"]
+    },
+    {
+      "id": "AGNT-004",
+      "feature": "router",
+      "title": "Implement research-router core logic",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AGNT-003"], "files": [], "schema": [] },
+      "blocks": ["AGNT-009"],
+      "parallelWith": ["AGNT-005"],
+      "acceptance": [
+        "Classifies prompt using keyword heuristics",
+        "Low depth: single provider call + LLM extraction",
+        "Medium depth: two parallel provider calls + merged LLM extraction",
+        "High depth: sequential chain with cumulative context + synthesis",
+        "Updates agent_runs with result and triggers Realtime broadcast"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["supabase/functions/research-router/index.ts"]
+    },
+    {
+      "id": "AGNT-005",
+      "feature": "providers",
+      "title": "Create Perplexity API adapter",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AGNT-004"],
+      "parallelWith": ["AGNT-006", "AGNT-007"],
+      "acceptance": [
+        "perplexityAdapter() function returning ProviderResult",
+        "Uses sonar model for Low/Medium, sonar-pro for High",
+        "Sends hydrated prompt with concise answer instruction",
+        "Extracts answer and citations array",
+        "30-second timeout with AbortController",
+        "Normalizes to { raw_text, sources[], provider: 'perplexity' }"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/_shared/providers/perplexityAdapter.ts"]
+    },
+    {
+      "id": "AGNT-006",
+      "feature": "providers",
+      "title": "Create Exa API adapter",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AGNT-004"],
+      "parallelWith": ["AGNT-005", "AGNT-007"],
+      "acceptance": [
+        "exaAdapter() function returning ProviderResult",
+        "Uses type: neural search mode",
+        "Fetches page contents with contents parameter",
+        "Filters by date recency for time-sensitive queries",
+        "30-second timeout",
+        "Normalizes to { raw_text, sources[], provider: 'exa' }"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/_shared/providers/exaAdapter.ts"]
+    },
+    {
+      "id": "AGNT-007",
+      "feature": "providers",
+      "title": "Create Apify adapters (LinkedIn, Maps, SERP)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AGNT-004"],
+      "parallelWith": ["AGNT-005", "AGNT-006"],
+      "acceptance": [
+        "apifyLinkedInAdapter() for profile/company scraping",
+        "apifyMapsAdapter() for location/business data",
+        "apifySerpAdapter() for URL discovery",
+        "All run actors in synchronous mode with 60s timeout",
+        "Extract structured data and pass to LLM for extraction",
+        "Normalize to { raw_text, sources[], provider }"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["supabase/functions/_shared/providers/apifyAdapters.ts"]
+    },
+    {
+      "id": "AGNT-008",
+      "feature": "router",
+      "title": "Add LLM extraction logic to router",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AGNT-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Low/Medium prompt: concise extraction with confidence scoring",
+        "High prompt: cross-reference synthesis with contradiction flagging",
+        "Uses Claude Haiku for extraction",
+        "Returns result_text, confidence (high/medium/low), sources used"
+      ],
+      "estimatedMinutes": 25,
+      "files": ["supabase/functions/research-router/index.ts"]
+    },
+    {
+      "id": "AGNT-009",
+      "feature": "frontend",
+      "title": "Add AI Research Agent column type to Ops",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["AGNT-001"], "files": [], "schema": ["agent_columns"] },
+      "blocks": ["AGNT-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "Add 'AI Research Agent' to column type selector in AddColumnModal",
+        "Opens configuration panel when selected",
+        "Stores column in agent_columns table",
+        "Links to parent ops_table_id"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["src/components/ops/AddColumnModal.tsx"]
+    },
+    {
+      "id": "AGNT-010",
+      "feature": "frontend",
+      "title": "Build configuration panel for research columns",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["AGNT-009"], "files": [], "schema": [] },
+      "blocks": ["AGNT-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "Prompt template input with {{variable}} support",
+        "Variable insertion from existing column headers",
+        "Output format selector (free_text, single_value, yes_no, url, list)",
+        "Research depth toggle (Low/Medium/High) with descriptions and costs",
+        "Advanced: source preferences checkboxes",
+        "Save creates agent_column record"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["src/components/ops/AgentColumnConfigPanel.tsx"]
+    },
+    {
+      "id": "AGNT-011",
+      "feature": "frontend",
+      "title": "Implement cell renderer with state management",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["AGNT-010"], "files": [], "schema": [] },
+      "blocks": ["AGNT-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "Empty state shows 'Run' micro-button",
+        "Queued state shows 'Queued' badge",
+        "Researching state shows spinner (with step progress for High depth)",
+        "Complete state shows result text with confidence dot",
+        "Failed state shows error with retry button",
+        "Expandable view shows full answer, sources, providers, confidence"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["src/components/ops/AgentColumnCell.tsx"]
+    },
+    {
+      "id": "AGNT-012",
+      "feature": "frontend",
+      "title": "Add Realtime subscriptions for live updates",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["AGNT-011"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AGNT-013"],
+      "acceptance": [
+        "Subscribe to agent_runs changes filtered by agent_column_id",
+        "Update cell UI on status change (in_progress → complete/failed)",
+        "Show step progress for High depth via chain_log updates",
+        "Unsubscribe on unmount"
+      ],
+      "estimatedMinutes": 25,
+      "files": ["src/components/ops/OpsTableView.tsx"]
+    },
+    {
+      "id": "AGNT-013",
+      "feature": "frontend",
+      "title": "Add column header run controls",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["AGNT-011"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AGNT-012"],
+      "acceptance": [
+        "Run All button in column header",
+        "Run Selected button (if rows selected)",
+        "Stop button (cancels in-progress runs)",
+        "Re-run Failed button",
+        "Shows estimated credits before confirming"
+      ],
+      "estimatedMinutes": 25,
+      "files": ["src/components/ops/AgentColumnHeader.tsx"]
+    },
+    {
+      "id": "AGNT-014",
+      "feature": "orchestrator",
+      "title": "Add credit management and limits",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["AGNT-003"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Flat credit costs: Low=3, Medium=5, High=10 per cell",
+        "Check workspace credit balance before queueing",
+        "Deduct credits as each cell completes",
+        "Don't charge for failed cells",
+        "Return 402 with required/available credits if insufficient"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/research-orchestrator/index.ts"]
+    }
+  ],
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 0,
+    "currentFeature": "schema",
+    "lastUpdated": "2026-02-12T12:00:00Z"
+  }
+}

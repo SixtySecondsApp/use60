@@ -261,7 +261,7 @@ export function OrgBillingPage() {
             exit={{ opacity: 0, height: 0 }}
             className="mb-8"
           >
-            <div className="p-6 rounded-xl bg-slate-800/50 border border-slate-700/50">
+            <div className="p-6 rounded-xl bg-slate-800/50 border border-slate-700/50 overflow-visible">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold text-white">Choose a Plan</h2>
                 <BillingToggle
@@ -270,7 +270,7 @@ export function OrgBillingPage() {
                   yearlyDiscount={20}
                 />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
                 {displayPlans.map((plan, index) => (
                   <PricingCard
                     key={plan.id}

@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS "public"."personal_email_domains" (
 ALTER TABLE "public"."personal_email_domains" ENABLE ROW LEVEL SECURITY;
 
 -- RLS policy: Public can read (needed for client-side validation)
+-- Drop existing policies first if they exist
+DROP POLICY IF EXISTS "public_read_personal_email_domains" ON "public"."personal_email_domains";
+DROP POLICY IF EXISTS "admin_manage_personal_email_domains" ON "public"."personal_email_domains";
+
 CREATE POLICY "public_read_personal_email_domains"
   ON "public"."personal_email_domains"
   FOR SELECT

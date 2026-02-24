@@ -59,7 +59,7 @@ export interface OrgContextType {
   permissions: OrgPermissions;
 
   // Actions
-  switchOrg: (orgId: string) => void;
+  switchOrg: (orgId: string) => Promise<void>;
   refreshOrgs: () => Promise<void>;
   createOrg: (name: string) => Promise<Organization | null>;
   setSessionOrg: (orgId: string) => Promise<void>;
@@ -196,8 +196,36 @@ export function OrgProvider({ children }: OrgProviderProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user?.id, authLoading]);
 
+  // Set up realtime subscriptions to organization changes
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    const unsubscribe = storeActions.subscribeToOrgChanges(user.id);
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user?.id]);
+
+  // Check if active org is inactive and redirect to inactive page
+  useEffect(() => {
+    if (!activeOrg || !activeOrgId) return;
+
+    // Prevent redirect loop when already on inactive organization page
+    if (window.location.pathname.includes('/inactive-organization')) return;
+
+    // If org is inactive, redirect immediately
+    if (activeOrg.is_active === false) {
+      logger.log('[OrgContext] Active org is inactive, redirecting to inactive page');
+      window.location.href = '/inactive-organization';
+    }
+  }, [activeOrg, activeOrgId]);
+
   // Switch to a different organization
-  const switchOrg = useCallback((orgId: string) => {
+  const switchOrg = useCallback(async (orgId: string) => {
     logger.log('[OrgContext] Switching to org:', orgId);
 
     // Validate user has access to this org
@@ -206,12 +234,24 @@ export function OrgProvider({ children }: OrgProviderProps) {
       return;
     }
 
+    // Check if org is active before allowing switch
+    const org = organizations.find((o) => o.id === orgId);
+    if (org && org.is_active === false) {
+      logger.warn('[OrgContext] Attempting to switch to inactive org - redirecting to inactive page');
+      // Set as active org (needed for inactive page to display org data)
+      storeActions.setActiveOrg(orgId);
+      // Redirect to inactive page
+      window.location.href = '/inactive-organization';
+      return;
+    }
+
+    // Only switch if org is active
     storeActions.setActiveOrg(orgId);
 
     // Invalidate all org-scoped queries to refetch with new RLS context
     logger.log('[OrgContext] Invalidating all org queries for cache refresh');
     invalidateAllOrgQueries(queryClient);
-  }, [isOrgMember, queryClient, storeActions]);
+  }, [isOrgMember, organizations, queryClient, storeActions]);
 
   // Refresh organizations from server
   const refreshOrgs = useCallback(async () => {

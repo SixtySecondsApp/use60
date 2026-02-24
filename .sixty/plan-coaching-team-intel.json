@@ -1,0 +1,330 @@
+{
+  "feature": {
+    "id": "coaching-team-intel",
+    "name": "Phase 6: Coaching & Team Intelligence (PRD-19, PRD-20, PRD-21)",
+    "phase": 6,
+    "status": "complete",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#Phase-6",
+    "description": "The agent makes reps better and learns from the whole org. Enhanced weekly coaching digest with cross-deal patterns, competitive trends, and behavioural benchmarks. Org-wide learning engine for anonymised cross-rep intelligence. Pipeline forecast accuracy tracking with calibration profiles.",
+    "createdAt": "2026-02-22T23:00:00Z",
+    "dependencies": {
+      "completed": [
+        "PRD-01: Agent Configuration Engine",
+        "PRD-02: Fleet Orchestrator & Event Router",
+        "PRD-03: Auto CRM Update Agent",
+        "PRD-04: Deal Risk Scorer Agent",
+        "PRD-05: Re-engagement Trigger Agent",
+        "PRD-06: Enhanced Morning Briefing",
+        "PRD-07: End-of-Day Synthesis",
+        "PRD-08: Internal Meeting Prep",
+        "PRD-09: Sales Methodology Settings",
+        "PRD-10: Autonomy & Approval Policy Settings",
+        "PRD-11: CRM Field Mapping",
+        "PRD-12: Custom SOP Builder",
+        "PRD-13: Email Signal Processing",
+        "PRD-14: Contact Engagement Patterns",
+        "PRD-15: Ambient Signal Layer & Deal Temperature",
+        "PRD-16: Relationship Graph",
+        "PRD-17: Competitive Intelligence",
+        "PRD-18: Cross-Deal Patterns"
+      ],
+      "existingInfrastructure": [
+        "coaching-analysis edge function (per_meeting + weekly analysis_type, talk_ratio, question_quality, objection_handling, discovery_depth scoring)",
+        "coaching orchestrator adapters: coachingMicroFeedback, aggregateWeeklyMetrics, correlateWinLoss, generateCoachingDigest, deliverCoachingSlack",
+        "coaching_weekly event sequence in fleet orchestrator (aggregate → correlate → digest → deliver)",
+        "pipeline_patterns table (objection_cluster, stage_bottleneck, engagement_correlation, velocity_anomaly — from Phase 5)",
+        "competitive_mentions + competitor_profiles tables (auto_battlecard, win_rate, common_strengths/weaknesses — from Phase 5)",
+        "contact_graph + contact_company_history tables (relationship_strength, warm_intros — from Phase 5)",
+        "pipeline_snapshots table (weekly snapshots with target, coverage_ratio, forecast_accuracy_trailing)",
+        "pipeline math RPCs (calculate_pipeline_math, get_hot_deals)",
+        "agent-pipeline-patterns edge function (stage_bottleneck, velocity_anomaly, engagement_correlation detection)",
+        "agent-competitive-intel edge function (extract + aggregate modes, auto-battlecard generation)",
+        "agent-pipeline-snapshot edge function (weekly snapshot capture + forecast accuracy calculation)",
+        "proactive delivery layer (deliverToSlack, quiet hours, rate limiting)",
+        "agent_config_defaults seeded for all agent types with 3-layer config resolution",
+        "Slack interactive handlers for coaching (coaching.ts)",
+        "contact_engagement_patterns table (avg_response_time, best_email_day/hour, response_trend)",
+        "deal_signal_temperature table (temperature 0-100, trend, top_signals)"
+      ]
+    }
+  },
+
+  "stories": [
+    {
+      "id": "CTI-001",
+      "prd": "PRD-19",
+      "title": "Create coaching_skill_progression table for tracking rep improvement over time",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations", "profiles"] },
+      "blocks": ["CTI-003", "CTI-004"],
+      "parallelWith": ["CTI-002"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "coaching_skill_progression table: id, org_id, user_id, week_start (date), talk_ratio, question_quality_score, objection_handling_score, discovery_depth_score, overall_score, meetings_analysed (int), forecast_accuracy (numeric), competitive_win_rate (numeric), created_at",
+        "Unique constraint on (org_id, user_id, week_start)",
+        "RLS: users see own rows, org admins see all org rows",
+        "Index on (org_id, user_id, week_start DESC)"
+      ],
+      "files": [
+        "supabase/migrations/20260223100001_coaching_skill_progression.sql"
+      ]
+    },
+    {
+      "id": "CTI-002",
+      "prd": "PRD-20",
+      "title": "Create org_learning_insights table for anonymised team intelligence",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations"] },
+      "blocks": ["CTI-006", "CTI-007"],
+      "parallelWith": ["CTI-001"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "org_learning_insights table: id, org_id, insight_type (enum: winning_talk_track, objection_handling, optimal_cadence, competitive_positioning, stage_best_practice, discovery_pattern), title, description, supporting_data (jsonb), confidence (0-1), sample_size (int), created_at, expires_at, status (active/expired/superseded)",
+        "RLS: only org members can read, service role writes",
+        "Index on (org_id, insight_type, status, confidence DESC)",
+        "Auto-expire after 30 days"
+      ],
+      "files": [
+        "supabase/migrations/20260223100002_org_learning_insights.sql"
+      ]
+    },
+    {
+      "id": "CTI-003",
+      "prd": "PRD-19",
+      "title": "Upgrade coaching-analysis edge function with cross-deal patterns and competitive trends",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["CTI-001"], "files": ["supabase/functions/coaching-analysis/index.ts"], "schema": ["coaching_skill_progression", "pipeline_patterns", "competitive_mentions", "competitor_profiles"] },
+      "blocks": ["CTI-004", "CTI-005"],
+      "parallelWith": [],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "Weekly analysis mode now fetches active pipeline_patterns for the user's org and includes top 3 patterns (by severity/confidence) in the coaching digest prompt",
+        "Weekly analysis fetches competitor_profiles for the org and includes competitive trend summary (competitors appearing more frequently, win rate changes)",
+        "Weekly analysis fetches coaching_skill_progression history (last 8 weeks) and includes personal baseline comparison (improving/declining per metric)",
+        "After weekly analysis completes, upserts a coaching_skill_progression row for the current week",
+        "Coaching prompt generates specific, data-backed insights (not generic tips) — e.g. 'your Discovery calls that progress all include budget discussion — 2 current deals haven't touched budget'"
+      ],
+      "files": [
+        "supabase/functions/coaching-analysis/index.ts"
+      ]
+    },
+    {
+      "id": "CTI-004",
+      "prd": "PRD-19",
+      "title": "Build enhanced Slack Block Kit template for coaching digest with data sections",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["CTI-003"], "files": ["supabase/functions/_shared/orchestrator/adapters/coaching.ts", "supabase/functions/_shared/slackBlocks.ts"], "schema": [] },
+      "blocks": ["CTI-005"],
+      "parallelWith": [],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "generateCoachingDigestAdapter builds Slack blocks with sections: Weekly Wins (deals progressed, good moments), Coaching Insights (2-3 data-backed tips), Competitive Trends (new mentions, win rate changes), Pipeline Patterns (active patterns affecting this rep), Skill Progression (chart-like display of metric trends)",
+        "Each insight section has an expandable 'See evidence' button (Slack overflow menu or link)",
+        "Weekly wins celebration section at the top (positive reinforcement)",
+        "Delivery time configurable via agent config (coaching.digest_day, coaching.digest_hour)"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/coaching.ts",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ]
+    },
+    {
+      "id": "CTI-005",
+      "prd": "PRD-19",
+      "title": "Add coaching digest config keys and fleet route for configurable delivery",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["CTI-004"], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": [],
+      "parallelWith": ["CTI-006"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "agent_config_defaults seeded with coaching.digest_enabled (true), coaching.digest_day ('friday'), coaching.digest_hour (16), coaching.focus_areas ('auto'), coaching.detail_level ('standard')",
+        "Fleet event route for coaching_weekly cron updated to read delivery day/hour from config",
+        "User-overridable flag set for digest_enabled, digest_day, digest_hour",
+        "Coaching digest skipped for users with coaching.digest_enabled=false"
+      ],
+      "files": [
+        "supabase/migrations/20260223100003_coaching_digest_config.sql"
+      ]
+    },
+    {
+      "id": "CTI-006",
+      "prd": "PRD-20",
+      "title": "Build agent-org-learning edge function for cross-rep pattern analysis",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["CTI-002"], "files": [], "schema": ["org_learning_insights", "coaching_skill_progression", "competitive_mentions", "pipeline_patterns"] },
+      "blocks": ["CTI-007", "CTI-008"],
+      "parallelWith": ["CTI-004"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent-org-learning edge function with mode: 'analyse' (weekly batch) and mode: 'query' (on-demand for coaching digest)",
+        "Analyse mode: aggregates coaching_skill_progression across all org users to find winning talk tracks (deals closed-won have what meeting patterns), optimal cadence (meeting frequency vs close rate), objection handling (which approaches correlate with wins)",
+        "Minimum data threshold: requires 5+ reps with 10+ scored meetings OR 20+ closed deals to generate insights (prevents noise from small samples)",
+        "All individual data anonymised — insights reference 'top performers' not specific reps",
+        "Upserts org_learning_insights with confidence score based on sample_size and consistency"
+      ],
+      "files": [
+        "supabase/functions/agent-org-learning/index.ts"
+      ]
+    },
+    {
+      "id": "CTI-007",
+      "prd": "PRD-20",
+      "title": "Wire org learning insights into coaching digest and fleet routes",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["CTI-006"], "files": ["supabase/functions/_shared/orchestrator/adapters/coaching.ts"], "schema": ["org_learning_insights"] },
+      "blocks": [],
+      "parallelWith": ["CTI-009"],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "generateCoachingDigestAdapter queries org_learning_insights for active insights relevant to this rep's weak areas",
+        "Coaching digest includes 'Team Intelligence' section when org insights exist: e.g. 'When facing budget objections, your team's most effective approach is leading with ROI quantification'",
+        "Fleet event route added: cron.org_learning_weekly (Sunday 6am UTC) triggers agent-org-learning in batch mode",
+        "Org learning insights reference manager-only data in a separate section (team-level aggregate metrics) visible only to users with manager role"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/coaching.ts",
+        "supabase/migrations/20260223100004_org_learning_fleet_routes.sql"
+      ]
+    },
+    {
+      "id": "CTI-008",
+      "prd": "PRD-20",
+      "title": "Add org learning config keys and privacy controls",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["CTI-006"], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": [],
+      "parallelWith": ["CTI-010"],
+      "estimatedMinutes": 15,
+      "acceptance": [
+        "agent_config_defaults seeded with intelligence.org_learning.enabled (true), intelligence.org_learning.min_team_size (5), intelligence.org_learning.anonymise_individual_data (true, not overridable)",
+        "Org admin can disable org-wide learning for their org",
+        "anonymise_individual_data flag is NOT user-overridable (always true — enforced at platform level)",
+        "Config resolution respects these settings in agent-org-learning function"
+      ],
+      "files": [
+        "supabase/migrations/20260223100005_org_learning_config.sql"
+      ]
+    },
+    {
+      "id": "CTI-009",
+      "prd": "PRD-21",
+      "title": "Upgrade pipeline snapshot with forecast accuracy tracking and rep calibration",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["CTI-001"], "files": ["supabase/functions/agent-pipeline-snapshot/index.ts"], "schema": ["pipeline_snapshots", "coaching_skill_progression"] },
+      "blocks": ["CTI-010", "CTI-011"],
+      "parallelWith": ["CTI-007"],
+      "estimatedMinutes": 30,
+      "acceptance": [
+        "agent-pipeline-snapshot now calculates per-stage forecast accuracy: for each stage, compare last 4 weeks of predicted close amounts vs actual closes",
+        "Rep calibration profile computed: optimism_factor per stage (e.g. 'Proposal stage: rep is 20% optimistic on close dates')",
+        "Calibration data stored in pipeline_snapshots.metadata jsonb field (rep_calibration object)",
+        "After snapshot, upsert forecast_accuracy into coaching_skill_progression for the week",
+        "RPC get_rep_calibration(p_org_id, p_user_id) returns calibration profile from most recent snapshot"
+      ],
+      "files": [
+        "supabase/functions/agent-pipeline-snapshot/index.ts",
+        "supabase/migrations/20260223100006_forecast_calibration_rpc.sql"
+      ]
+    },
+    {
+      "id": "CTI-010",
+      "prd": "PRD-21",
+      "title": "Wire calibrated forecast into morning briefing and pipeline review prep",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["CTI-009"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CTI-008"],
+      "estimatedMinutes": 25,
+      "acceptance": [
+        "Morning briefing pipeline math section now shows both raw forecast and calibrated forecast side-by-side when calibration data exists (4+ weeks of snapshots)",
+        "Internal meeting prep for pipeline reviews includes calibrated forecast with per-stage adjustments",
+        "Calibration note: 'Raw forecast: £120k. Calibrated (based on your history): £96k — you tend to be 20% optimistic in Proposal stage'",
+        "Graceful degradation: if insufficient data (< 4 weeks), show raw forecast only with no calibration note"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/morningBriefing.ts",
+        "supabase/functions/_shared/orchestrator/adapters/internalMeetingPrep.ts"
+      ]
+    },
+    {
+      "id": "CTI-011",
+      "prd": "PRD-21",
+      "title": "Add forecast accuracy section to coaching digest and manager view data",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["CTI-009"], "files": ["supabase/functions/_shared/orchestrator/adapters/coaching.ts"], "schema": [] },
+      "blocks": ["CTI-012"],
+      "parallelWith": [],
+      "estimatedMinutes": 20,
+      "acceptance": [
+        "Coaching digest includes 'Forecast Accuracy' section: this week's accuracy vs 4-week average, per-stage calibration summary, specific deals where prediction was off",
+        "Manager view data: get_team_forecast_accuracy RPC returns aggregated forecast accuracy for all team members (for manager coaching use)",
+        "Coaching insight: when accuracy is declining, generate specific coaching tip (e.g. 'your close date predictions have been off by 15+ days for 3 consecutive weeks — consider adding buffer')"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/coaching.ts",
+        "supabase/migrations/20260223100007_team_forecast_accuracy_rpc.sql"
+      ]
+    },
+    {
+      "id": "CTI-012",
+      "prd": "PRD-19/20/21",
+      "title": "Seed fleet event routes and cron schedules for Phase 6 agents",
+      "type": "schema",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": ["CTI-011"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "estimatedMinutes": 15,
+      "acceptance": [
+        "Fleet event route: cron.coaching_digest_enhanced → enhanced coaching digest sequence (Friday 4pm user TZ, configurable)",
+        "Fleet event route: cron.org_learning_weekly → agent-org-learning batch (Sunday 6am UTC)",
+        "Fleet event route: cron.forecast_calibration → agent-pipeline-snapshot with calibration mode (Monday 5:30am UTC, after snapshot)",
+        "Sequence definition: coaching_digest_enhanced → aggregate_weekly_metrics → correlate_win_loss → fetch_pipeline_patterns → fetch_competitive_trends → fetch_org_learning → generate_enhanced_digest → deliver_coaching_slack",
+        "All routes have proper timeout_seconds (60s for analysis steps, 15s for delivery)"
+      ],
+      "files": [
+        "supabase/migrations/20260223100008_phase6_fleet_routes.sql"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 12,
+    "completedStories": 12,
+    "parallelGroups": [
+      { "group": 1, "stories": ["CTI-001", "CTI-002"], "description": "Schema foundations (parallel)" },
+      { "group": 2, "stories": ["CTI-003"], "description": "Upgrade coaching-analysis with Phase 5 data" },
+      { "group": 3, "stories": ["CTI-004", "CTI-006"], "description": "Slack blocks + org learning function (parallel)" },
+      { "group": 4, "stories": ["CTI-005", "CTI-007", "CTI-009"], "description": "Config + wiring + forecast (parallel)" },
+      { "group": 5, "stories": ["CTI-008", "CTI-010"], "description": "Privacy controls + briefing wiring (parallel)" },
+      { "group": 6, "stories": ["CTI-011"], "description": "Forecast accuracy in digest" },
+      { "group": 7, "stories": ["CTI-012"], "description": "Fleet routes and cron schedules" }
+    ],
+    "estimatedTotalMinutes": 270,
+    "estimatedHours": "4-5 hours (with parallel execution)"
+  }
+}

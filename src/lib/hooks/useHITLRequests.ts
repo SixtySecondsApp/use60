@@ -76,7 +76,6 @@ export function usePendingHITLRequests() {
       })) as HITLRequestWithDetails[];
     },
     enabled: !!activeOrg?.id,
-    refetchInterval: 30000, // Refetch every 30 seconds as backup to realtime
   });
 
   // Set up real-time subscription for HITL request changes

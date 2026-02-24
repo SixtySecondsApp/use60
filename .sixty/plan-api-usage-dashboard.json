@@ -1,0 +1,510 @@
+{
+  "project": {
+    "name": "Platform API Usage Dashboard",
+    "description": "Platform admin screen for tracking API usage across MeetingBaaS, Gladia, and Deepgram with cost monitoring, plan limit tracking, and Slack alerts",
+    "createdAt": "2026-01-25T15:45:00Z"
+  },
+
+  "features": [
+    {
+      "id": "api-usage",
+      "name": "API Usage Monitoring Dashboard",
+      "status": "pending",
+      "prd": null,
+      "description": "Track usage stats from MeetingBaaS, Gladia, and Deepgram APIs with plan limits displayed as progress bars and Slack alerts at 80% threshold",
+      "createdAt": "2026-01-25T15:45:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "USAGE-001",
+      "feature": "api-usage",
+      "title": "Create api_usage_snapshots table for storing usage data",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["USAGE-002", "USAGE-003", "USAGE-004", "USAGE-005"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "api_usage_snapshots table created with provider, metric_name, metric_value, plan_limit, period_start, period_end, fetched_at columns",
+        "Index on provider and fetched_at for efficient queries",
+        "No RLS needed (platform admin only via service role)"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/migrations/YYYYMMDD_create_api_usage_snapshots.sql"
+      ],
+
+      "implementationNotes": [
+        "Store raw usage data from each provider",
+        "plan_limit column stores the current plan's limit for comparison",
+        "period_start/end for billing period tracking",
+        "Use JSONB for metadata column to store provider-specific data"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "USAGE-002",
+      "feature": "api-usage",
+      "title": "Create fetch-meetingbaas-usage edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": ["USAGE-001"],
+        "files": ["supabase/functions/_shared/meetingbaas.ts"],
+        "schema": ["api_usage_snapshots"]
+      },
+      "blocks": ["USAGE-005", "USAGE-007"],
+      "parallelWith": ["USAGE-003", "USAGE-004"],
+
+      "acceptance": [
+        "Edge function fetches usage from MeetingBaaS API",
+        "Returns bots_deployed, recording_minutes, storage_used metrics",
+        "Stores snapshot in api_usage_snapshots table",
+        "Can be called manually or by cron"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/fetch-meetingbaas-usage/index.ts"
+      ],
+
+      "implementationNotes": [
+        "MeetingBaaS API: GET /v2/usage or /v2/billing endpoint (check docs)",
+        "Use existing MEETINGBAAS_API_KEY secret",
+        "Parse response for relevant metrics",
+        "Store plan limits from their API response"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "USAGE-003",
+      "feature": "api-usage",
+      "title": "Create fetch-gladia-usage edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": ["USAGE-001"],
+        "files": [],
+        "schema": ["api_usage_snapshots"]
+      },
+      "blocks": ["USAGE-005", "USAGE-007"],
+      "parallelWith": ["USAGE-002", "USAGE-004"],
+
+      "acceptance": [
+        "Edge function fetches usage from Gladia API",
+        "Returns transcription_minutes, api_calls metrics",
+        "Stores snapshot in api_usage_snapshots table",
+        "Can be called manually or by cron"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/fetch-gladia-usage/index.ts"
+      ],
+
+      "implementationNotes": [
+        "Gladia API: GET /v2/usage endpoint",
+        "Use existing GLADIA_API_KEY secret",
+        "Free tier: 10 hours/month - store as plan_limit",
+        "Track audio_duration in minutes"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "USAGE-004",
+      "feature": "api-usage",
+      "title": "Create fetch-deepgram-usage edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": ["USAGE-001"],
+        "files": [],
+        "schema": ["api_usage_snapshots"]
+      },
+      "blocks": ["USAGE-005", "USAGE-007"],
+      "parallelWith": ["USAGE-002", "USAGE-003"],
+
+      "acceptance": [
+        "Edge function fetches usage from Deepgram API",
+        "Returns transcription_minutes, api_calls, cost metrics",
+        "Stores snapshot in api_usage_snapshots table",
+        "Can be called manually or by cron"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/fetch-deepgram-usage/index.ts"
+      ],
+
+      "implementationNotes": [
+        "Deepgram API: GET /v1/projects/{project_id}/usage endpoint",
+        "Use existing DEEPGRAM_API_KEY secret",
+        "May need DEEPGRAM_PROJECT_ID secret",
+        "Track hours used vs plan limit"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "USAGE-005",
+      "feature": "api-usage",
+      "title": "Create api-usage-cron edge function for daily sync",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+
+      "dependencies": {
+        "stories": ["USAGE-002", "USAGE-003", "USAGE-004"],
+        "files": [],
+        "schema": ["api_usage_snapshots"]
+      },
+      "blocks": ["USAGE-006"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Edge function calls all three fetch functions",
+        "Scheduled to run daily at 9am UTC",
+        "Logs success/failure for each provider",
+        "Can be triggered manually for testing"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/api-usage-cron/index.ts"
+      ],
+
+      "implementationNotes": [
+        "Use pg_cron or Supabase cron extension",
+        "Call each fetch function via internal invoke",
+        "Handle partial failures gracefully",
+        "Add to supabase/config.toml for cron schedule"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "USAGE-006",
+      "feature": "api-usage",
+      "title": "Create api-usage-alerts edge function for Slack notifications",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+
+      "dependencies": {
+        "stories": ["USAGE-005"],
+        "files": ["supabase/functions/send-slack-notification/index.ts"],
+        "schema": ["api_usage_snapshots"]
+      },
+      "blocks": [],
+      "parallelWith": ["USAGE-007"],
+
+      "acceptance": [
+        "Checks usage vs plan_limit for all providers",
+        "Sends Slack alert when usage >= 80% of limit",
+        "Includes provider name, current usage, limit in message",
+        "Only alerts once per threshold crossing (stores last_alert_at)"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/api-usage-alerts/index.ts"
+      ],
+
+      "implementationNotes": [
+        "Reuse existing send-slack-notification function pattern",
+        "Add PLATFORM_ALERTS_SLACK_WEBHOOK secret or reuse existing",
+        "Calculate percentage: (metric_value / plan_limit) * 100",
+        "Alert thresholds: 80%, 90%, 100%"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "USAGE-007",
+      "feature": "api-usage",
+      "title": "Create apiUsageService for frontend data fetching",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+
+      "dependencies": {
+        "stories": ["USAGE-002", "USAGE-003", "USAGE-004"],
+        "files": [],
+        "schema": ["api_usage_snapshots"]
+      },
+      "blocks": ["USAGE-008"],
+      "parallelWith": ["USAGE-006"],
+
+      "acceptance": [
+        "Service fetches latest usage snapshots from database",
+        "Provides getLatestUsage() method",
+        "Provides refreshUsage() method that triggers edge functions",
+        "Returns typed UsageSnapshot objects"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/services/apiUsageService.ts",
+        "src/lib/types/apiUsage.ts"
+      ],
+
+      "implementationNotes": [
+        "Query api_usage_snapshots with service role for platform admins",
+        "Group by provider, get latest snapshot per provider",
+        "refreshUsage() calls a coordinator edge function",
+        "Add React Query hook for caching"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "USAGE-008",
+      "feature": "api-usage",
+      "title": "Create ApiUsageDashboard page component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+
+      "dependencies": {
+        "stories": ["USAGE-007"],
+        "files": [
+          "src/pages/platform/CostAnalysis.tsx",
+          "src/contexts/UserPermissionsContext.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["USAGE-009"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Page at /platform/api-usage accessible to platform admins only",
+        "Shows cards for MeetingBaaS, Gladia, Deepgram",
+        "Each card shows key metrics with progress bars vs limits",
+        "Visual warning when usage > 80% (yellow) or > 90% (red)",
+        "Shows last updated timestamp"
+      ],
+
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/platform/ApiUsageDashboard.tsx"
+      ],
+
+      "implementationNotes": [
+        "Follow CostAnalysis.tsx pattern for layout and styling",
+        "Use isPlatformAdmin from useUserPermissions for access control",
+        "Progress component from shadcn/ui for usage bars",
+        "Color coding: green < 80%, yellow 80-90%, red > 90%"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "USAGE-009",
+      "feature": "api-usage",
+      "title": "Add manual refresh button and route to navigation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+
+      "dependencies": {
+        "stories": ["USAGE-008"],
+        "files": ["src/App.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Refresh button triggers all usage fetch functions",
+        "Shows loading spinner during refresh",
+        "Toast notification on success/failure",
+        "Route added to App.tsx for /platform/api-usage",
+        "Link added to platform admin navigation"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/platform/ApiUsageDashboard.tsx",
+        "src/App.tsx",
+        "src/pages/platform/PlatformDashboard.tsx"
+      ],
+
+      "implementationNotes": [
+        "Add RefreshCw button similar to CostAnalysis page",
+        "Call apiUsageService.refreshUsage() on click",
+        "Add route: <Route path='api-usage' element={<ApiUsageDashboard />} />",
+        "Add link in platform dashboard or nav"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 9,
+    "completedStories": 0,
+    "currentFeature": "api-usage",
+    "lastUpdated": "2026-01-25T15:45:00Z",
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": ["USAGE-001"],
+        "description": "Database schema"
+      },
+      {
+        "group": 2,
+        "stories": ["USAGE-002", "USAGE-003", "USAGE-004"],
+        "description": "Provider fetch functions - can run in parallel"
+      },
+      {
+        "group": 3,
+        "stories": ["USAGE-005"],
+        "description": "Cron scheduler"
+      },
+      {
+        "group": 4,
+        "stories": ["USAGE-006", "USAGE-007"],
+        "description": "Alerts and frontend service - can run in parallel"
+      },
+      {
+        "group": 5,
+        "stories": ["USAGE-008"],
+        "description": "Dashboard UI"
+      },
+      {
+        "group": 6,
+        "stories": ["USAGE-009"],
+        "description": "Navigation and refresh"
+      }
+    ],
+    "estimatedTotalMinutes": 200,
+    "estimatedWithParallel": 130
+  },
+
+  "providerAPIs": {
+    "meetingbaas": {
+      "baseUrl": "https://api.meetingbaas.com",
+      "authHeader": "x-spoke-api-key",
+      "usageEndpoint": "Check /v2/usage or /v2/account/billing",
+      "existingSecret": "MEETINGBAAS_API_KEY",
+      "metrics": ["bots_deployed", "recording_minutes", "storage_gb"]
+    },
+    "gladia": {
+      "baseUrl": "https://api.gladia.io",
+      "authHeader": "x-gladia-key",
+      "usageEndpoint": "GET /v2/usage",
+      "existingSecret": "GLADIA_API_KEY",
+      "metrics": ["transcription_minutes", "api_calls"],
+      "freeTierLimit": "10 hours/month"
+    },
+    "deepgram": {
+      "baseUrl": "https://api.deepgram.com",
+      "authHeader": "Authorization: Token {key}",
+      "usageEndpoint": "GET /v1/projects/{project_id}/usage",
+      "existingSecret": "DEEPGRAM_API_KEY",
+      "newSecretNeeded": "DEEPGRAM_PROJECT_ID",
+      "metrics": ["transcription_hours", "api_requests", "cost_usd"]
+    }
+  },
+
+  "testing": {
+    "manual": [
+      {
+        "scenario": "View usage dashboard",
+        "steps": [
+          "Navigate to /platform/api-usage as platform admin",
+          "See cards for MeetingBaaS, Gladia, Deepgram",
+          "Each shows current usage with progress bar",
+          "Last updated timestamp visible"
+        ]
+      },
+      {
+        "scenario": "Manual refresh",
+        "steps": [
+          "Click Refresh button",
+          "See loading spinner",
+          "Data updates with new timestamp",
+          "Toast shows success"
+        ]
+      },
+      {
+        "scenario": "Usage alerts",
+        "steps": [
+          "When usage > 80%, card shows yellow warning",
+          "Slack notification sent",
+          "When usage > 90%, card shows red warning"
+        ]
+      },
+      {
+        "scenario": "Access control",
+        "steps": [
+          "Non-platform-admin cannot access /platform/api-usage",
+          "Redirects to dashboard or shows unauthorized"
+        ]
+      }
+    ],
+    "automated": [
+      "npm run build",
+      "npm run lint",
+      "npm run typecheck"
+    ]
+  },
+
+  "secrets": {
+    "existing": [
+      "MEETINGBAAS_API_KEY",
+      "GLADIA_API_KEY",
+      "DEEPGRAM_API_KEY"
+    ],
+    "mayNeed": [
+      "DEEPGRAM_PROJECT_ID",
+      "PLATFORM_ALERTS_SLACK_WEBHOOK"
+    ]
+  }
+}

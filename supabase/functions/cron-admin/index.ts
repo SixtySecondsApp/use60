@@ -347,8 +347,8 @@ serve(async (req) => {
                   to: notification.recipients,
                   subject: notification.subject,
                   text: notification.message,
-                  from: "alerts@sixtyseconds.ai",
-                  fromName: "Sixty Seconds",
+                  from: "noreply@use60.com",
+                  fromName: "Sixty",
                 });
 
                 if (!result.success) {

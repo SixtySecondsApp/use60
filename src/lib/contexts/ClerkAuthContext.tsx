@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 import { supabase, setClerkTokenGetter } from '../supabase/clientV2';
+import type { SignUpMetadata } from './AuthContext';
 
 // Types that match the existing AuthContext interface
 // We create simplified versions since Clerk user/session differ from Supabase
@@ -54,7 +55,7 @@ export interface ClerkAuthContextType {
 
   // Actions
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signUp: (email: string, password: string, metadata?: { full_name?: string }) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string, metadata?: SignUpMetadata) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
   updatePassword: (password: string) => Promise<{ error: AuthError | null }>;
@@ -362,7 +363,7 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children }
   const signUp = useCallback(async (
     email: string,
     password: string,
-    metadata?: { full_name?: string }
+    metadata?: SignUpMetadata
   ): Promise<{ error: AuthError | null }> => {
     if (!clerkSignUp) {
       return { error: { message: 'Sign up not available', status: 500 } };
@@ -371,11 +372,14 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children }
     try {
       logger.log('🔐 ClerkAuth: Attempting sign up for:', email.toLowerCase().trim());
 
-      // Parse full_name into first and last name
+      // Use first_name and last_name if provided directly, otherwise parse full_name
       let firstName: string | undefined;
       let lastName: string | undefined;
 
-      if (metadata?.full_name) {
+      if (metadata?.first_name || metadata?.last_name) {
+        firstName = metadata.first_name || undefined;
+        lastName = metadata.last_name || undefined;
+      } else if (metadata?.full_name) {
         const nameParts = metadata.full_name.trim().split(' ');
         firstName = nameParts[0];
         lastName = nameParts.slice(1).join(' ') || undefined;

@@ -1,0 +1,111 @@
+{
+  "project": {
+    "name": "Enrichment Column @Mention for Column References",
+    "description": "Allow enrichment prompts to reference other columns via @column_name syntax. When enrichment runs, @column_name placeholders are replaced with actual cell values per row, making prompts dynamic.",
+    "createdAt": "2026-02-04T00:00:00Z",
+    "branch": "feat/dynamic-tables",
+    "parentPlan": "plan-dynamic-tables.json"
+  },
+
+  "features": [
+    {
+      "id": "dt-mention-ui",
+      "name": "@Mention Dropdown in AddColumnModal",
+      "status": "complete",
+      "priority": 1,
+      "description": "Add @column_name autocomplete dropdown to the enrichment prompt textarea. Detect @ typing, show filtered column list, insert @key on selection. Keyboard navigation support."
+    },
+    {
+      "id": "dt-mention-wiring",
+      "name": "Wire Columns to Modal",
+      "status": "complete",
+      "priority": 2,
+      "description": "Pass existing columns from DynamicTableDetailPage to AddColumnModal so the dropdown knows what columns are available."
+    },
+    {
+      "id": "dt-mention-engine",
+      "name": "Enrichment Engine @Mention Resolution",
+      "status": "complete",
+      "priority": 3,
+      "description": "Resolve @column_key placeholders in enrichment prompts per row before sending to Claude. Replace with actual cell values from rowContext."
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "MENTION-001",
+      "feature": "dt-mention-wiring",
+      "title": "Pass existing columns from DynamicTableDetailPage to AddColumnModal",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["src/pages/DynamicTableDetailPage.tsx", "src/components/dynamic-tables/AddColumnModal.tsx"], "schema": [] },
+      "blocks": ["MENTION-002"],
+      "parallelWith": ["MENTION-003"],
+      "acceptance": [
+        "AddColumnModal accepts new prop: existingColumns: Array<{ key: string; label: string }>",
+        "DynamicTableDetailPage passes columns.map(c => ({ key: c.key, label: c.label })) to AddColumnModal",
+        "Prop is optional — modal works without it (no dropdown, just plain textarea)"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "src/components/dynamic-tables/AddColumnModal.tsx",
+        "src/pages/DynamicTableDetailPage.tsx"
+      ]
+    },
+    {
+      "id": "MENTION-002",
+      "feature": "dt-mention-ui",
+      "title": "Build @mention autocomplete dropdown in enrichment prompt textarea",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["MENTION-001"], "files": ["src/components/dynamic-tables/AddColumnModal.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Typing @ in the enrichment prompt textarea opens a floating dropdown listing available columns (filtered as user types after @)",
+        "Clicking a column option (or pressing Enter) inserts @column_key at the cursor position and closes dropdown",
+        "Keyboard navigation: arrow keys to navigate, Enter to select, Escape to dismiss",
+        "Dropdown only shows non-enrichment columns (exclude the column being created)",
+        "Enrichment templates updated to use @column_key syntax where appropriate (e.g. 'Find recent news about @company')"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/dynamic-tables/AddColumnModal.tsx"
+      ]
+    },
+    {
+      "id": "MENTION-003",
+      "feature": "dt-mention-engine",
+      "title": "Resolve @column_key references in enrichment prompts per row",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": ["supabase/functions/enrich-dynamic-table/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["MENTION-001"],
+      "acceptance": [
+        "Before building the prompt for each row, scan enrichmentPrompt for @([a-z][a-z0-9_]*) patterns",
+        "Replace each @column_key with rowContext[column_key] ?? 'N/A'",
+        "Original enrichmentPrompt stored unchanged in DB — only the per-row resolved prompt is sent to Claude",
+        "If no @mentions found, behavior is identical to current (no regression)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/enrich-dynamic-table/index.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 3,
+    "completedStories": 3,
+    "currentFeature": "dt-mention-wiring",
+    "lastUpdated": "2026-02-04T00:00:00Z",
+    "parallelGroups": [
+      { "group": 1, "stories": ["MENTION-001", "MENTION-003"], "description": "Props wiring + backend resolution (parallel — no dependency between them)" },
+      { "group": 2, "stories": ["MENTION-002"], "description": "@mention dropdown UI (depends on MENTION-001 for columns prop)" }
+    ]
+  }
+}

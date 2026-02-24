@@ -175,7 +175,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="
-        fixed inset-0 w-screen h-screen max-w-none max-h-none rounded-none p-0 m-0
+        fixed inset-0 w-screen h-screen max-w-none !max-h-none rounded-none p-0 m-0
         sm:fixed sm:left-[50%] sm:top-[50%] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:right-auto sm:bottom-auto sm:w-full sm:h-auto sm:max-w-2xl sm:max-h-[85vh] sm:rounded-xl sm:p-0 sm:m-0
         bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden flex flex-col
       ">

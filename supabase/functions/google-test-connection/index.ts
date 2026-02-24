@@ -19,6 +19,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
+import { authenticateRequest } from '../_shared/edgeAuth.ts';
 
 async function refreshAccessToken(refreshToken: string, supabase: any, userId: string): Promise<string> {
   const clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
@@ -65,24 +66,95 @@ interface ServiceTestResult {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
-  const preflightResponse = handleCorsPreflightRequest(req);
-  if (preflightResponse) {
-    return preflightResponse;
+  // Diagnostic endpoints
+  const url = new URL(req.url);
+
+  // Ping endpoint - ?ping=1
+  if (url.searchParams.get('ping') === '1') {
+    return new Response(JSON.stringify({
+      success: true,
+      message: 'Function is reachable',
+      timestamp: new Date().toISOString(),
+      version: '46',
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
   }
 
-  // POST only
-  if (req.method !== 'POST') {
-    return errorResponse('Method not allowed. Use POST.', req, 405);
-  }
+  // Debug mode - ?debug=1 returns detailed step info without trying full test
+  const debugMode = url.searchParams.get('debug') === '1';
+
+  // Track current step for error reporting
+  let currentStep = 'init';
 
   try {
+    console.log('[google-test-connection] === REQUEST START ===');
+    console.log('[google-test-connection] Method:', req.method);
+    console.log('[google-test-connection] URL:', req.url);
+
+    // Safely log headers
+    try {
+      console.log('[google-test-connection] Headers:', JSON.stringify(Object.fromEntries(req.headers.entries())));
+    } catch (headerError) {
+      console.log('[google-test-connection] Could not stringify headers');
+    }
+
+    // Handle CORS preflight
+    const preflightResponse = handleCorsPreflightRequest(req);
+    if (preflightResponse) {
+      console.log('[google-test-connection] Returning CORS preflight response');
+      return preflightResponse;
+    }
+
+    // POST only
+    if (req.method !== 'POST' && req.method !== 'OPTIONS') {
+      console.log('[google-test-connection] Method not allowed:', req.method);
+      return jsonResponse({
+        success: false,
+        error: 'Method not allowed',
+        debugInfo: 'method-check',
+        actualMethod: req.method,
+        url: req.url,
+        connected: false,
+        services: {
+          userinfo: { ok: false, message: 'Method not allowed' },
+          gmail: { ok: false, message: 'Method not allowed' },
+          calendar: { ok: false, message: 'Method not allowed' },
+          tasks: { ok: false, message: 'Method not allowed' },
+        },
+      }, req, 200);
+    }
+
+    console.log('[google-test-connection] Method check passed, proceeding to auth');
+
+    // Main logic block
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-    
+
+    console.log('[google-test-connection] Supabase URL:', supabaseUrl ? 'set' : 'NOT SET');
+    console.log('[google-test-connection] Service key:', supabaseServiceKey ? 'set' : 'NOT SET');
+
     if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Server configuration error');
+      console.error('[google-test-connection] Missing env vars');
+      return jsonResponse({
+        success: false,
+        error: 'Server configuration error',
+        debugInfo: 'missing-env',
+        hasUrl: !!supabaseUrl,
+        hasKey: !!supabaseServiceKey,
+        connected: false,
+        services: {
+          userinfo: { ok: false, message: 'Server configuration error' },
+          gmail: { ok: false, message: 'Server configuration error' },
+          calendar: { ok: false, message: 'Server configuration error' },
+          tasks: { ok: false, message: 'Server configuration error' },
+        },
+      }, req, 200);
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
@@ -92,32 +164,92 @@ serve(async (req) => {
       },
     });
 
-    // Get user from JWT - user authentication only (no service role)
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new Error('Authorization required');
-    }
+    currentStep = 'step-1-client-created';
+    console.log('[google-test-connection] Step 1: Supabase client created');
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
-    if (userError || !user) {
-      throw new Error('Invalid authentication token');
+    // Authenticate using shared helper (supports JWT fallback)
+    let userId: string;
+    let mode: string;
+    try {
+      currentStep = 'step-2-auth-start';
+      console.log('[google-test-connection] Step 2: Starting authentication');
+      const authResult = await authenticateRequest(req, supabase, supabaseServiceKey);
+      userId = authResult.userId;
+      mode = authResult.mode;
+      currentStep = 'step-3-auth-success';
+      console.log(`[google-test-connection] Step 3: Auth success: mode=${mode}, userId=${userId}`);
+    } catch (authError: any) {
+      console.error('[google-test-connection] Auth error at step:', currentStep);
+      console.error('[google-test-connection] Auth error name:', authError.name);
+      console.error('[google-test-connection] Auth error message:', authError.message);
+      console.error('[google-test-connection] Auth error stack:', authError.stack);
+      // Return 200 with error details so supabase.functions.invoke passes the data through
+      return jsonResponse({
+        success: false,
+        error: authError.message || 'Authentication failed',
+        debugInfo: 'auth-error',
+        currentStep,
+        authErrorName: authError.name,
+        authErrorMessage: authError.message,
+        authErrorStack: authError.stack?.substring(0, 500),
+        connected: false,
+        services: {
+          userinfo: { ok: false, message: 'Auth failed' },
+          gmail: { ok: false, message: 'Auth failed' },
+          calendar: { ok: false, message: 'Auth failed' },
+          tasks: { ok: false, message: 'Auth failed' },
+        },
+      }, req, 200);  // Return 200 so data is passed through
     }
 
     // Get user's Google integration
-    const { data: integration, error: integrationError } = await supabase
-      .from('google_integrations')
-      .select('access_token, refresh_token, expires_at, email, scopes, is_active')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .single();
+    currentStep = 'step-4-query-integration';
+    console.log('[google-test-connection] Step 4: Fetching integration for user:', userId);
+    let integration = null;
+    let integrationError = null;
+    try {
+      const result = await supabase
+        .from('google_integrations')
+        .select('access_token, refresh_token, expires_at, email, scopes, is_active')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle();
+      integration = result.data;
+      integrationError = result.error;
+      currentStep = 'step-5-query-complete';
+      console.log('[google-test-connection] Step 5: Integration query completed, found:', !!integration);
+    } catch (queryError: any) {
+      console.error('[google-test-connection] Integration query THREW at step:', currentStep);
+      console.error('[google-test-connection] Error:', queryError.message);
+      return jsonResponse({
+        success: false,
+        error: 'Database query failed',
+        debugInfo: 'integration-query-error',
+        currentStep,
+        queryError: queryError.message,
+        connected: false,
+        services: {
+          userinfo: { ok: false, message: 'Query failed' },
+          gmail: { ok: false, message: 'Query failed' },
+          calendar: { ok: false, message: 'Query failed' },
+          tasks: { ok: false, message: 'Query failed' },
+        },
+      }, req, 200);  // Return 200 so data is passed through
+    }
+
+    if (integrationError) {
+      console.error('[google-test-connection] Integration query error:', integrationError);
+    }
 
     if (integrationError || !integration) {
       return jsonResponse({
         success: false,
         connected: false,
         message: 'No Google integration found. Please connect your Google account.',
+        debugInfo: 'no-integration',
+        integrationError: integrationError?.message,
+        integrationErrorCode: integrationError?.code,
+        userId: userId,
         services: {
           userinfo: { ok: false, message: 'Not connected' },
           gmail: { ok: false, message: 'Not connected' },
@@ -128,19 +260,28 @@ serve(async (req) => {
     }
 
     // Check if token needs refresh
+    currentStep = 'step-6-check-token-expiry';
+    console.log('[google-test-connection] Step 6: Checking token expiry...');
     let accessToken = integration.access_token;
     const expiresAt = new Date(integration.expires_at);
     const now = new Date();
-    
+    console.log('[google-test-connection] Token expires at:', expiresAt.toISOString(), 'now:', now.toISOString());
+
     if (expiresAt <= now) {
+      currentStep = 'step-7-refresh-token';
+      console.log('[google-test-connection] Step 7: Token expired, attempting refresh...');
       try {
-        accessToken = await refreshAccessToken(integration.refresh_token, supabase, user.id);
+        accessToken = await refreshAccessToken(integration.refresh_token, supabase, userId);
+        console.log('[google-test-connection] Token refreshed successfully');
       } catch (refreshError: any) {
+        console.error('[google-test-connection] Token refresh failed:', refreshError.message);
         return jsonResponse({
           success: false,
           connected: true,
           message: 'Token refresh failed. Please reconnect your Google account.',
           error: refreshError.message,
+          debugInfo: 'token-refresh-failed',
+          currentStep,
           services: {
             userinfo: { ok: false, message: 'Token expired' },
             gmail: { ok: false, message: 'Token expired' },
@@ -149,13 +290,17 @@ serve(async (req) => {
           },
         }, req);
       }
+    } else {
+      console.log('[google-test-connection] Token still valid');
     }
 
     // Parse scopes to determine which services to test
+    console.log('[google-test-connection] Parsing scopes:', integration.scopes);
     const scopes = integration.scopes?.toLowerCase() || '';
     const hasGmailScope = scopes.includes('gmail') || scopes.includes('mail');
     const hasCalendarScope = scopes.includes('calendar');
     const hasTasksScope = scopes.includes('tasks');
+    console.log('[google-test-connection] Scopes detected - Gmail:', hasGmailScope, 'Calendar:', hasCalendarScope, 'Tasks:', hasTasksScope);
 
     // Test results
     const results: {
@@ -171,6 +316,8 @@ serve(async (req) => {
     };
 
     // Test 1: Google userinfo (always test this)
+    currentStep = 'step-8-test-userinfo';
+    console.log('[google-test-connection] Step 8: Testing Google userinfo API...');
     try {
       const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
         headers: { 'Authorization': `Bearer ${accessToken}` },
@@ -202,7 +349,9 @@ serve(async (req) => {
     }
 
     // Test 2: Gmail profile (if scope present)
+    currentStep = 'step-9-test-gmail';
     if (hasGmailScope) {
+      console.log('[google-test-connection] Step 9: Testing Gmail API...');
       try {
         const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
           headers: { 'Authorization': `Bearer ${accessToken}` },
@@ -235,7 +384,9 @@ serve(async (req) => {
     }
 
     // Test 3: Calendar list (if scope present)
+    currentStep = 'step-10-test-calendar';
     if (hasCalendarScope) {
+      console.log('[google-test-connection] Step 10: Testing Calendar API...');
       try {
         const calendarResponse = await fetch(
           'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1',
@@ -270,7 +421,9 @@ serve(async (req) => {
     }
 
     // Test 4: Tasks list (if scope present)
+    currentStep = 'step-11-test-tasks';
     if (hasTasksScope) {
+      console.log('[google-test-connection] Step 11: Testing Tasks API...');
       try {
         const tasksResponse = await fetch(
           'https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=1',
@@ -304,25 +457,34 @@ serve(async (req) => {
     }
 
     // Determine overall success
-    const allOk = results.userinfo.ok && 
+    currentStep = 'step-12-calculate-results';
+    console.log('[google-test-connection] Step 12: Calculating overall results...');
+    const allOk = results.userinfo.ok &&
       (!hasGmailScope || results.gmail.ok) &&
       (!hasCalendarScope || results.calendar.ok) &&
       (!hasTasksScope || results.tasks.ok);
 
-    // Log the test
-    await supabase
-      .from('google_service_logs')
-      .insert({
-        integration_id: null,
-        service: 'test-connection',
-        action: 'test',
-        status: allOk ? 'success' : 'partial',
-        request_data: { userId: user.id },
-        response_data: results,
-      }).catch(() => {
-        // Non-critical
-      });
+    // Log the test (non-critical, wrapped in try/catch)
+    currentStep = 'step-13-log-results';
+    console.log('[google-test-connection] Step 13: Logging results...');
+    try {
+      await supabase
+        .from('google_service_logs')
+        .insert({
+          integration_id: null,
+          service: 'test-connection',
+          action: 'test',
+          status: allOk ? 'success' : 'partial',
+          request_data: { userId: userId },
+          response_data: results,
+        });
+    } catch (logError) {
+      // Non-critical - continue even if logging fails
+      console.warn('[google-test-connection] Failed to log results:', logError);
+    }
 
+    currentStep = 'step-14-return-success';
+    console.log('[google-test-connection] Step 14: Returning success response');
     return jsonResponse({
       success: true,
       connected: true,
@@ -333,9 +495,62 @@ serve(async (req) => {
       testedAt: new Date().toISOString(),
     }, req);
 
-  } catch (error: any) {
-    console.error('[google-test-connection] Error:', error.message);
-    return errorResponse(error.message || 'Test connection failed', req, 400);
+  } catch (error: unknown) {
+    // Handle any type of thrown value (Error object, string, or other)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorName = error instanceof Error ? error.name : typeof error;
+    const errorStack = error instanceof Error ? error.stack?.substring(0, 500) : undefined;
+    const errorCode = (error as any)?.code;
+
+    console.error('[google-test-connection] OUTER CATCH at step:', currentStep);
+    console.error('[google-test-connection] OUTER CATCH - Message:', errorMessage);
+    console.error('[google-test-connection] OUTER CATCH - Name:', errorName);
+    console.error('[google-test-connection] OUTER CATCH - Stack:', errorStack);
+    console.error('[google-test-connection] OUTER CATCH - Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error || {}), 2));
+
+    // Try to return a proper JSON response with error details
+    // Return 200 so supabase.functions.invoke passes the data through
+    try {
+      return jsonResponse({
+        success: false,
+        error: errorMessage || 'Test connection failed',
+        errorName: errorName,
+        errorCode: errorCode,
+        errorStack: errorStack,
+        currentStep: currentStep,
+        debugInfo: 'outer-catch-block',
+        connected: false,
+        services: {
+          userinfo: { ok: false, message: 'Error occurred' },
+          gmail: { ok: false, message: 'Error occurred' },
+          calendar: { ok: false, message: 'Error occurred' },
+          tasks: { ok: false, message: 'Error occurred' },
+        },
+      }, req, 200);  // Return 200 so data is passed through
+    } catch (jsonError) {
+      // If even jsonResponse fails, return a minimal response
+      console.error('[google-test-connection] jsonResponse failed:', jsonError);
+      const corsHeaders = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Content-Type': 'application/json',
+      };
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: errorMessage || 'Unknown error',
+          debugInfo: 'fallback-response',
+          connected: false,
+          services: {
+            userinfo: { ok: false, message: 'Error' },
+            gmail: { ok: false, message: 'Error' },
+            calendar: { ok: false, message: 'Error' },
+            tasks: { ok: false, message: 'Error' },
+          },
+        }),
+        { status: 200, headers: corsHeaders }  // Return 200 so data is passed through
+      );
+    }
   }
 });
 

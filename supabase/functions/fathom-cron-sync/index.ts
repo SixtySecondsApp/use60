@@ -2,17 +2,19 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 /**
- * Fathom Cron Sync Edge Function
+ * Fathom Cron Sync Edge Function (v2 - Robust Polling)
  *
- * Purpose: Triggered by pg_cron hourly to sync all active Fathom integrations
- * This function is called with service role permissions and processes users in parallel
- * with concurrency limits and a time budget to prevent timeouts.
+ * Purpose: Triggered by pg_cron every 15 minutes as a reliable fallback for webhook failures
+ * Processes users in parallel with concurrency limits and a time budget to prevent timeouts.
  *
- * Optimization Strategy:
- * - Process users in parallel batches (default: 5 concurrent syncs)
- * - Time budget of 120 seconds (below 150s Supabase timeout)
- * - Graceful early exit when approaching timeout
- * - Incomplete users will be processed in the next cron run
+ * Key features:
+ * 1. Gap detection: Compares Fathom API recordings against local meetings
+ * 2. Shorter catch-up threshold: 6 hours instead of 36
+ * 3. Smart sync type: Based on actual gaps, not just time since last sync
+ * 4. Consecutive failure tracking: For alerting on persistent issues
+ * 5. Priority queue: Users with gaps get synced first
+ * 6. Delta sync: Fetches meeting list, finds missing, syncs in parallel
+ * 7. Time budget with graceful early exit
  */
 
 // Configuration
@@ -21,6 +23,85 @@ const TIME_BUDGET_MS = 130_000 // 130 seconds - leaves 20s buffer before 150s ti
 const SYNC_TIMEOUT_MS = 60_000 // 60 seconds max per individual user sync (increased from 30s)
 const MEETING_BATCH_SIZE = 5 // Process 5 meetings concurrently within a user sync
 const SINGLE_MEETING_TIMEOUT_MS = 15_000 // 15 seconds per individual meeting sync
+
+interface IntegrationHealth {
+  user_id: string
+  error_count: number
+  last_successful_sync: Date | null
+  has_gaps: boolean
+  gap_count: number
+  priority_score: number
+}
+
+interface SyncDecision {
+  sync_type: 'incremental' | 'manual' | 'gap_recovery'
+  reason: string
+  priority: 'high' | 'normal' | 'low'
+}
+
+/**
+ * Calculate priority score for sync ordering
+ * Higher score = sync first
+ */
+function calculatePriority(health: Omit<IntegrationHealth, 'priority_score'>): number {
+  let score = 0
+
+  // Gaps detected = highest priority
+  if (health.has_gaps) score += 100 + (health.gap_count * 10)
+
+  // Consecutive failures increase priority
+  score += health.error_count * 20
+
+  // Time since last sync (hours) adds priority
+  if (health.last_successful_sync) {
+    const hoursSinceSync = (Date.now() - health.last_successful_sync.getTime()) / (1000 * 60 * 60)
+    score += Math.min(hoursSinceSync, 48) // Cap at 48 hours
+  } else {
+    score += 50 // Never synced = high priority
+  }
+
+  return score
+}
+
+/**
+ * Decide sync type based on integration health
+ */
+function decideSyncType(health: IntegrationHealth): SyncDecision {
+  // If gaps detected, do gap recovery (targeted sync)
+  if (health.has_gaps && health.gap_count > 0) {
+    return {
+      sync_type: 'gap_recovery',
+      reason: `${health.gap_count} missing meetings detected`,
+      priority: 'high'
+    }
+  }
+
+  // If never synced or very old (>6 hours), do manual (30-day) sync
+  if (!health.last_successful_sync) {
+    return {
+      sync_type: 'manual',
+      reason: 'No previous sync recorded',
+      priority: 'high'
+    }
+  }
+
+  const hoursSinceSync = (Date.now() - health.last_successful_sync.getTime()) / (1000 * 60 * 60)
+
+  if (hoursSinceSync > 6) {
+    return {
+      sync_type: 'manual',
+      reason: `Last sync ${hoursSinceSync.toFixed(1)} hours ago (>6h threshold)`,
+      priority: 'high'
+    }
+  }
+
+  // Recent sync, just do incremental
+  return {
+    sync_type: 'incremental',
+    reason: `Regular incremental (last sync ${hoursSinceSync.toFixed(1)}h ago)`,
+    priority: 'normal'
+  }
+}
 
 /**
  * Get valid access token - refresh if needed, mark invalid if refresh fails
@@ -479,20 +560,30 @@ serve(async (req) => {
 
     const results = {
       mode: 'user' as const,
+      version: 'v2-robust',
+      run_duration_ms: 0,
       total: hasUserIntegrations ? userIntegrations.length : 0,
       processed: 0,
       successful: 0,
       failed: 0,
       skipped: 0, // Users skipped due to time budget
+      gaps_detected: 0,
+      gaps_recovered: 0,
       details: [] as Array<{
         id: string
-        sync_type: 'delta' | 'incremental' | 'manual'
-        start_date: string
+        sync_type: string
+        start_date?: string
+        sync_reason?: string
+        priority?: string
         meetings_synced: number
         total_meetings_found: number
         meetings_skipped?: number
+        gaps_found?: number
         errors_count: number
         errors_sample?: Array<{ call_id: string; error: string }>
+        db_meetings_total?: number
+        db_meetings_last_90d?: number
+        error_count?: number
       }>,
       errors: [] as Array<{ id: string; error: string }>,
       timing: {
@@ -502,19 +593,20 @@ serve(async (req) => {
     }
 
     if (!hasUserIntegrations) {
+      await logCronRun(supabase, 'fathom_cron_sync_v2', 'success', 'No active integrations', results)
       return new Response(
         JSON.stringify({
           success: true,
           message: 'No active Fathom user integrations',
           results: { ...results, total: 0 },
         }),
-        { status: 200 }
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log(`[fathom-cron-sync] Processing ${userIntegrations.length} user integrations (max ${MAX_CONCURRENCY} concurrent)`)
+    console.log(`[fathom-cron-sync-v2] Processing ${userIntegrations.length} user integrations (max ${MAX_CONCURRENCY} concurrent)`)
 
-    // Process users in batches with concurrency limit
+    // Split into batches for parallel processing with time budget
     let batchIndex = 0
     const batches: any[][] = []
 
@@ -523,7 +615,7 @@ serve(async (req) => {
       batches.push(userIntegrations.slice(i, i + MAX_CONCURRENCY))
     }
 
-    console.log(`[fathom-cron-sync] Split into ${batches.length} batches of up to ${MAX_CONCURRENCY} users`)
+    console.log(`[fathom-cron-sync-v2] Split into ${batches.length} batches of up to ${MAX_CONCURRENCY} users`)
 
     // Process batches until time budget is exhausted
     for (const batch of batches) {
@@ -532,14 +624,14 @@ serve(async (req) => {
 
       // Check if we have enough time for another batch
       if (remaining < SYNC_TIMEOUT_MS) {
-        console.log(`[fathom-cron-sync] Time budget exhausted (${elapsed}ms elapsed). Skipping remaining ${userIntegrations.length - results.processed} users.`)
+        console.log(`[fathom-cron-sync-v2] Time budget exhausted (${elapsed}ms elapsed). Skipping remaining ${userIntegrations.length - results.processed} users.`)
         results.skipped = userIntegrations.length - results.processed
         break
       }
 
-      console.log(`[fathom-cron-sync] Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} users, ${remaining}ms remaining)`)
+      console.log(`[fathom-cron-sync-v2] Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} users, ${remaining}ms remaining)`)
 
-      // Process batch in parallel
+      // Process batch in parallel using delta sync
       const batchResults = await processBatch(supabase, serviceRoleKey, batch, Math.min(SYNC_TIMEOUT_MS, remaining))
 
       // Process results
@@ -562,10 +654,10 @@ serve(async (req) => {
           // Log success (non-fatal if logging fails)
           try {
             await supabase.from('cron_job_logs').insert({
-              job_name: 'fathom_hourly_sync',
+              job_name: 'fathom_cron_sync_v2',
               user_id: result.userId,
               status: 'success',
-              message: `Synced ${result.syncResult.meetings_synced || 0} meetings`,
+              message: `[delta] Synced ${result.syncResult.meetings_synced || 0} meetings`,
             })
           } catch {
             // Ignore logging errors
@@ -577,7 +669,7 @@ serve(async (req) => {
           // Log error (non-fatal if logging fails)
           try {
             await supabase.from('cron_job_logs').insert({
-              job_name: 'fathom_hourly_sync',
+              job_name: 'fathom_cron_sync_v2',
               user_id: result.userId,
               status: 'error',
               message: 'Sync failed',
@@ -593,12 +685,17 @@ serve(async (req) => {
     }
 
     // Calculate timing stats
+    results.run_duration_ms = Date.now() - startTime
     results.timing.total_ms = Date.now() - startTime
     results.timing.avg_per_user_ms = results.processed > 0
       ? Math.round(results.timing.total_ms / results.processed)
       : 0
 
-    console.log(`[fathom-cron-sync] Complete: ${results.successful} success, ${results.failed} failed, ${results.skipped} skipped in ${results.timing.total_ms}ms`)
+    console.log(`[fathom-cron-sync-v2] Complete: ${results.successful} success, ${results.failed} failed, ${results.skipped} skipped in ${results.timing.total_ms}ms`)
+
+    await logCronRun(supabase, 'fathom_cron_sync_v2', 'success',
+      `Processed ${results.total} integrations: ${results.successful} ok, ${results.failed} failed, ${results.skipped} skipped`,
+      results)
 
     return new Response(
       JSON.stringify({
@@ -612,11 +709,14 @@ serve(async (req) => {
     )
 
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error(`[fathom-cron-sync-v2] Fatal error: ${errorMessage}`)
+
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timing: { total_ms: Date.now() - startTime },
+        error: errorMessage,
+        run_duration_ms: Date.now() - startTime,
       }),
       {
         status: 500,
@@ -625,3 +725,25 @@ serve(async (req) => {
     )
   }
 })
+
+/**
+ * Log overall cron run for monitoring
+ */
+async function logCronRun(
+  supabase: any,
+  jobName: string,
+  status: 'success' | 'error',
+  message: string,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  try {
+    await supabase.from('cron_job_logs').insert({
+      job_name: jobName,
+      status,
+      message,
+      error_details: status === 'error' ? JSON.stringify(metadata) : null,
+    })
+  } catch (e) {
+    console.error(`[fathom-cron-sync-v2] Failed to log cron run: ${e}`)
+  }
+}

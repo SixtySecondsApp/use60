@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import * as Sentry from '@sentry/react';
 import { isProfilingEnabled, logProfilingStatus } from '@/lib/sentry/profiling';
 import { AlertTriangle, ExternalLink, Activity, Bug, Settings, RefreshCw, CheckCircle, XCircle, Clock } from 'lucide-react';
@@ -153,6 +154,9 @@ export default function ErrorMonitoring() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Back Button */}
+      <BackToPlatform />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

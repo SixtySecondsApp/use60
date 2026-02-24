@@ -80,7 +80,7 @@ export function AvatarCell({ person, size = 'md', isDark = true, showName = fals
           <img
             src={person.avatar_url}
             alt={displayName}
-            className="w-full h-full rounded-full object-cover"
+            className="w-full h-full rounded-full object-cover aspect-square"
           />
         ) : (
           initials

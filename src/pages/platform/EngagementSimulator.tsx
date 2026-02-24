@@ -42,6 +42,7 @@ import {
   Send,
   ArrowRight,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -668,6 +669,9 @@ export default function EngagementSimulator() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950">
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+        {/* Back Button */}
+        <BackToPlatform />
+
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>

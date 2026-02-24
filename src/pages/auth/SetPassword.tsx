@@ -1,6 +1,15 @@
 /**
- * SetPassword Page
- * Allows waitlist users to set their password after magic link authentication
+ * SetPassword Page - Complete Account Creation
+ *
+ * This page allows waitlist users to complete their account setup by:
+ * 1. Validating their custom invitation token
+ * 2. Setting a password
+ * 3. Creating their account in Supabase Auth
+ * 4. Creating their profile
+ * 5. Updating their waitlist status to 'converted'
+ *
+ * The user account is NOT created until they set their password,
+ * ensuring they have control over when their account is activated.
  */
 
 import { useState, useEffect } from 'react';
@@ -8,155 +17,145 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { Lock, CheckCircle, Loader2, Mail } from 'lucide-react';
+import { Lock, CheckCircle, Loader2, Mail, AlertCircle } from 'lucide-react';
+
+interface TokenValidationResult {
+  valid: boolean;
+  email?: string;
+  waitlist_entry_id?: string;
+  error?: string;
+}
+
+interface NameValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+function validateName(name: string): NameValidationResult {
+  // Allow: letters (any language), spaces, hyphens, apostrophes
+  const validNameRegex = /^[\p{L}\s'-]+$/u;
+
+  if (!name || !name.trim()) {
+    return { valid: false, error: 'Name is required' };
+  }
+
+  if (name.trim().length < 2) {
+    return { valid: false, error: 'Name must be at least 2 characters' };
+  }
+
+  if (!validNameRegex.test(name.trim())) {
+    return { valid: false, error: 'Name can only contain letters, spaces, hyphens, and apostrophes' };
+  }
+
+  return { valid: true };
+}
 
 export default function SetPassword() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isValidatingToken, setIsValidatingToken] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [waitlistEntryId, setWaitlistEntryId] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  const [firstNameError, setFirstNameError] = useState<string | null>(null);
+  const [lastNameError, setLastNameError] = useState<string | null>(null);
 
   useEffect(() => {
-    checkSession();
+    validateToken();
   }, []);
 
-  const checkSession = async () => {
+  const validateToken = async () => {
     try {
-      // Get waitlist entry ID from URL or localStorage (URL params might be lost in redirects)
-      const entryId = searchParams.get('waitlist_entry') || localStorage.getItem('waitlist_entry_id');
-      if (entryId) {
-        setWaitlistEntryId(entryId);
-        localStorage.setItem('waitlist_entry_id', entryId);
-      }
+      const token = searchParams.get('token');
+      const entryId = searchParams.get('waitlist_entry');
 
-      console.log('[SetPassword] Checking session for waitlist entry:', entryId);
-      console.log('[SetPassword] URL:', {
-        pathname: window.location.pathname,
-        search: window.location.search,
-        hash: window.location.hash.substring(0, 100) + '...',
-      });
+      console.log('[SetPassword] Validating token:', { hasToken: !!token, entryId });
 
-      // Check for invite token in hash (from magic link)
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const tokenHash = new URLSearchParams(window.location.search).get('token_hash');
-      const type = hashParams.get('type') || new URLSearchParams(window.location.search).get('type');
-
-      console.log('[SetPassword] Token parameters:', {
-        hasTokenHash: !!tokenHash,
-        type,
-        hashAccessToken: !!hashParams.get('access_token'),
-        hashRefreshToken: !!hashParams.get('refresh_token'),
-      });
-
-      // If we have an invite token, verify it first to establish the session
-      if ((tokenHash || hashParams.get('access_token')) && type === 'invite') {
-        console.log('[SetPassword] Found invite token in URL, verifying OTP...');
-
-        // Try to verify the token if token_hash exists
-        if (tokenHash) {
-          const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: 'invite',
-          });
-
-          if (verifyError) {
-            console.error('[SetPassword] OTP verification failed:', verifyError);
-            toast.error('Your invitation link has expired or is invalid. Please request a new one.');
-            navigate('/auth/login');
-            return;
-          }
-
-          if (verifyData?.session?.user) {
-            console.log('[SetPassword] OTP verified, session established');
-            setUserEmail(verifyData.session.user.email || null);
-            setIsCheckingSession(false);
-            return;
-          }
-        }
-
-        // If no token_hash but we have access_token in hash, Supabase client should have processed it
-        // Wait a moment for it to establish the session
-        console.log('[SetPassword] Waiting for Supabase to process auth tokens...');
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Increased from 1000ms to 1500ms for stability
-      }
-
-      // If we have type=invite but no explicit tokens, Supabase may still be processing
-      // This handles the case where tokens weren't in expected locations
-      const hasExplicitTokens = !!tokenHash || !!hashParams.get('access_token');
-
-      // Also consider it an invite flow if we have a waitlist_entry param (from AuthCallback redirect)
-      const isInviteFlow = type === 'invite' || !!entryId;
-
-      if (isInviteFlow && !hasExplicitTokens) {
-        console.log('[SetPassword] Detected invite flow without explicit tokens, waiting for session...', { type, entryId });
-        // Give Supabase client time to process any pending auth state
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
-      // Check if user is authenticated - retry a few times as session might be establishing
-      let session = null;
-      let attempts = 0;
-      const maxAttempts = 5;
-
-      while (!session && attempts < maxAttempts) {
-        attempts++;
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
-
-        if (error) {
-          console.error('[SetPassword] Session check error (attempt ' + attempts + '):', error);
-          if (attempts >= maxAttempts) {
-            toast.error('Session error. Please try clicking the invitation link again.');
-            navigate('/auth/login');
-            return;
-          }
-          // Wait a bit before retrying
-          await new Promise(resolve => setTimeout(resolve, 500));
-          continue;
-        }
-
-        if (currentSession?.user) {
-          session = currentSession;
-          console.log('[SetPassword] Session found:', {
-            userId: session.user.id,
-            email: session.user.email,
-            emailConfirmed: !!session.user.email_confirmed_at,
-            invitedAt: session.user.invited_at
-          });
-          break;
-        }
-
-        // No session yet, wait and retry
-        console.log('[SetPassword] No session yet (attempt ' + attempts + '), waiting...');
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      if (!session?.user) {
-        // No session after retries - redirect to login
-        console.error('[SetPassword] No session found after ' + maxAttempts + ' attempts');
-        toast.error('Please click the invitation link in your email to continue.');
-        navigate('/auth/login');
+      if (!token) {
+        setTokenError('No invitation token provided. Please click the link in your email.');
+        setIsValidatingToken(false);
         return;
       }
 
-      // User is authenticated
-      setUserEmail(session.user.email || null);
+      if (!entryId) {
+        setTokenError('Missing waitlist entry information. Please click the link in your email.');
+        setIsValidatingToken(false);
+        return;
+      }
 
-      // Check if user already has a password set (if not passwordless)
-      // For passwordless users, we allow setting a password
-      setIsCheckingSession(false);
+      // Call the validate-waitlist-token edge function
+      const { data: validationResult, error: validationError } = await supabase.functions.invoke(
+        'validate-waitlist-token',
+        {
+          body: { token },
+        }
+      );
+
+      console.log('[SetPassword] Token validation result:', validationResult);
+
+      if (validationError) {
+        console.error('[SetPassword] Token validation error:', validationError);
+        setTokenError('Failed to validate your invitation. Please try again or contact support.');
+        setIsValidatingToken(false);
+        return;
+      }
+
+      if (!validationResult?.success) {
+        console.error('[SetPassword] Validation failed:', validationResult?.error);
+        setTokenError(validationResult?.error || 'Failed to validate your invitation.');
+        setIsValidatingToken(false);
+        return;
+      }
+
+      if (!validationResult.valid) {
+        console.error('[SetPassword] Invalid token:', validationResult?.error);
+        setTokenError(validationResult?.error || 'Your invitation link is invalid or has expired.');
+        setIsValidatingToken(false);
+        return;
+      }
+
+      // Token is valid!
+      const email = validationResult.email;
+      const waitlistEntryIdFromToken = validationResult.waitlist_entry_id;
+
+      console.log('[SetPassword] Token validated successfully:', { email, waitlistEntryIdFromToken });
+
+      setUserEmail(email || null);
+      setWaitlistEntryId(waitlistEntryIdFromToken || null);
+      setTokenError(null);
+      setIsValidatingToken(false);
     } catch (error: any) {
-      console.error('[SetPassword] Error checking session:', error);
-      toast.error('An error occurred. Please try again.');
-      navigate('/auth/login');
+      console.error('[SetPassword] Error validating token:', error);
+      setTokenError('An error occurred while validating your invitation. Please try again.');
+      setIsValidatingToken(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate first name
+    const firstNameValidation = validateName(firstName);
+    if (!firstNameValidation.valid) {
+      setFirstNameError(firstNameValidation.error || 'Invalid first name');
+      toast.error(firstNameValidation.error || 'Invalid first name');
+      return;
+    }
+    setFirstNameError(null);
+
+    // Validate last name
+    const lastNameValidation = validateName(lastName);
+    if (!lastNameValidation.valid) {
+      setLastNameError(lastNameValidation.error || 'Invalid last name');
+      toast.error(lastNameValidation.error || 'Invalid last name');
+      return;
+    }
+    setLastNameError(null);
 
     if (!password || password.length < 6) {
       toast.error('Password must be at least 6 characters long');
@@ -168,241 +167,257 @@ export default function SetPassword() {
       return;
     }
 
+    if (!userEmail) {
+      toast.error('Email not found. Please try again.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // Verify we still have a session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
-        console.error('[SetPassword] No session found when trying to update password');
-        toast.error('Session expired. Please click the magic link again.');
-        navigate('/auth/login');
-        return;
+      const token = searchParams.get('token');
+
+      // Clear any stale organization data from localStorage
+      // This prevents old org IDs from interfering with new signup
+      try {
+        localStorage.removeItem('org-store');
+        console.log('[SetPassword] Cleared stale org-store from localStorage');
+      } catch (err) {
+        console.error('[SetPassword] Failed to clear localStorage:', err);
       }
 
-      console.log('[SetPassword] Session found, updating password for user:', session.user.email);
+      console.log('[SetPassword] Creating account for:', userEmail);
 
-      // Update the user's password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: password
+      // 1. Create Supabase Auth user
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: userEmail,
+        password: password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+        },
       });
 
-      console.log('[SetPassword] Password update response:', {
-        hasError: !!updateError,
-        errorMessage: updateError?.message,
-        errorStatus: (updateError as any)?.status
-      });
-
-      if (updateError) {
-        console.error('Password update error:', updateError);
-        console.error('Error details:', {
-          message: updateError.message,
-          status: (updateError as any)?.status,
-          statusCode: (updateError as any)?.statusCode,
-          fullError: updateError
-        });
-
-        // Show the error to user for debugging
-        const errorMsg = updateError.message || 'Failed to set password. Please try again.';
-        toast.error(errorMsg);
+      if (signUpError) {
+        console.error('[SetPassword] Sign up error:', signUpError);
+        // Provide a clearer message for "already registered" errors
+        if (signUpError.message?.toLowerCase().includes('already registered') ||
+            signUpError.message?.toLowerCase().includes('already exists')) {
+          toast.error('This email already has an account. If you were recently deleted and re-invited, please contact support or ask the admin to re-delete your account.');
+        } else {
+          toast.error(signUpError.message || 'Failed to create account');
+        }
         setIsLoading(false);
         return;
       }
 
-      // Password update successful - verify user is authenticated
-      console.log('[SetPassword] Password updated successfully, verifying user authentication...');
+      if (!signUpData.user) {
+        console.error('[SetPassword] No user returned from signup');
+        toast.error('Failed to create account');
+        setIsLoading(false);
+        return;
+      }
 
-      const { data: { user: authenticatedUser }, error: userCheckError } = await supabase.auth.getUser();
-      if (userCheckError || !authenticatedUser) {
-        console.error('[SetPassword] User not authenticated after password update:', userCheckError);
-        // Try to refresh session and check again
-        const { error: refreshError } = await supabase.auth.refreshSession();
-        if (refreshError) {
-          console.error('[SetPassword] Error refreshing session:', refreshError);
-          toast.error('Session error after password setup. Please log in again.');
-          navigate('/auth/login');
-          return;
+      // Supabase anti-enumeration: signUp with an existing email returns a "fake" user
+      // with an empty identities array instead of an error. Detect this case.
+      if (signUpData.user.identities && signUpData.user.identities.length === 0) {
+        console.error('[SetPassword] User already exists (empty identities returned)');
+        toast.error('This email already has an account. Please contact support if you were recently re-invited.');
+        setIsLoading(false);
+        return;
+      }
+
+      const userId = signUpData.user.id;
+      console.log('[SetPassword] User created in Supabase Auth:', userId);
+
+      // 2. Store first_name/last_name in auth metadata
+      // The profile was auto-created by database trigger with id and email
+      try {
+        const { error: metadataError } = await supabase.auth.updateUser({
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+          },
+        });
+        if (metadataError) {
+          console.warn('[SetPassword] Error storing auth metadata:', metadataError);
+        } else {
+          console.log('[SetPassword] ✓ Stored first/last name in auth metadata');
         }
+      } catch (metadataError) {
+        console.warn('[SetPassword] Exception storing auth metadata:', metadataError);
+      }
 
-        // Check again after refresh
-        const { data: { user: refreshedUser }, error: refreshCheckError } = await supabase.auth.getUser();
-        if (refreshCheckError || !refreshedUser) {
-          console.error('[SetPassword] Still not authenticated after refresh:', refreshCheckError);
-          toast.error('Session error after password setup. Please log in again.');
-          navigate('/auth/login');
-          return;
+      // 3. Update waitlist entry to 'converted' and link user
+      if (waitlistEntryId) {
+        const { error: waitlistError } = await supabase
+          .from('meetings_waitlist')
+          .update({
+            user_id: userId,
+            status: 'converted',
+            converted_at: new Date().toISOString(),
+            invitation_accepted_at: new Date().toISOString(),
+          })
+          .eq('id', waitlistEntryId);
+
+        if (waitlistError) {
+          console.error('[SetPassword] Error updating waitlist:', waitlistError);
+        } else {
+          console.log('[SetPassword] Waitlist entry updated to converted');
         }
       }
 
-      console.log('[SetPassword] User authenticated after password update');
+      // 4. Mark token as used
+      if (token) {
+        try {
+          await supabase
+            .from('waitlist_magic_tokens')
+            .update({ used_at: new Date().toISOString() })
+            .eq('token', token);
 
-      // Ensure waitlist entry is linked to this user
-      // Use waitlistEntryId from state or localStorage as fallback
-      const entryIdToLink = waitlistEntryId || localStorage.getItem('waitlist_entry_id');
-      if (entryIdToLink) {
-        // Wait a moment for any triggers to run (trigger should auto-link by email)
-        await new Promise(resolve => setTimeout(resolve, 1000));
+          console.log('[SetPassword] Token marked as used');
+        } catch (error) {
+          console.error('[SetPassword] Error marking token as used:', error);
+        }
+      }
 
-        // Check if waitlist entry is linked and get full entry data
-        const { data: entry, error: entryError } = await supabase
-          .from('meetings_waitlist')
-          .select('user_id, status, email, full_name, company_name')
-          .eq('id', entryIdToLink)
-          .single();
+      // 5. Sign in the user
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: userEmail,
+        password: password,
+      });
 
-        if (entry) {
-          if (!entry.user_id || entry.user_id !== authenticatedUser.id) {
-            // Manually link if not already linked (trigger should handle this, but safety check)
-            console.log(`Linking waitlist entry ${entryIdToLink} to user ${authenticatedUser.id}`);
-            const { error: linkError } = await supabase
-              .from('meetings_waitlist')
-              .update({
-                user_id: authenticatedUser.id,
-                status: 'converted',
-                converted_at: new Date().toISOString(),
-                invitation_accepted_at: new Date().toISOString()
-              })
-              .eq('id', entryIdToLink);
+      if (signInError) {
+        console.error('[SetPassword] Sign in error:', signInError);
+        toast.success('Account created successfully! Please log in.');
+        navigate('/auth/login', { replace: true });
+        return;
+      }
 
-            if (linkError) {
-              console.error('Error linking waitlist entry:', linkError);
-              // Don't fail the password setup if linking fails - user can still proceed
-            } else {
-              console.log('Successfully linked waitlist entry to user and tracked invitation acceptance');
+      console.log('[SetPassword] User signed in successfully');
+
+      // Sync profile with first/last name NOW while we're authenticated
+      // This ensures profile is complete before redirect
+      // Retry logic in case of transient failures
+      let profileSyncSuccess = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`[SetPassword] Syncing profile (attempt ${attempt}/3)...`);
+          const { data, error: updateError } = await supabase
+            .from('profiles')
+            .update({
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+            })
+            .eq('id', userId)
+            .select();
+
+          if (updateError) {
+            console.warn(`[SetPassword] Profile sync attempt ${attempt} failed:`, updateError);
+            if (attempt < 3) {
+              // Wait before retry
+              await new Promise(r => setTimeout(r, 500 * attempt));
+              continue;
             }
           } else {
-            console.log('Waitlist entry already linked to user');
-            // Update invitation acceptance timestamp if not already set
-            await supabase
-              .from('meetings_waitlist')
-              .update({
-                invitation_accepted_at: new Date().toISOString(),
-                status: 'converted',
-                converted_at: new Date().toISOString()
-              })
-              .eq('id', entryIdToLink)
-              .is('invitation_accepted_at', null);
+            console.log('[SetPassword] ✓ Profile synced successfully', {
+              updated: data,
+              first_name: firstName,
+              last_name: lastName,
+            });
+            profileSyncSuccess = true;
+            break;
           }
-
-          // Update user profile with waitlist entry data if available
-          if (entry.email && (entry.full_name || entry.company_name)) {
-            try {
-              const profileUpdates: any = {};
-
-              // Parse full_name into first_name and last_name if available
-              if (entry.full_name) {
-                const nameParts = entry.full_name.trim().split(' ');
-                if (nameParts.length > 0) {
-                  profileUpdates.first_name = nameParts[0];
-                  if (nameParts.length > 1) {
-                    profileUpdates.last_name = nameParts.slice(1).join(' ');
-                  }
-                }
-              }
-
-              // Note: company_name is stored in waitlist entry, not in profiles directly
-              // We could store it elsewhere if needed, but for now we'll just use name
-
-              if (Object.keys(profileUpdates).length > 0) {
-                const { error: profileError } = await supabase
-                  .from('profiles')
-                  .update(profileUpdates)
-                  .eq('id', authenticatedUser.id);
-
-                if (profileError) {
-                  console.error('Error updating profile with waitlist data:', profileError);
-                  // Non-critical - continue
-                } else {
-                  console.log('Updated profile with waitlist entry data');
-                }
-              }
-            } catch (profileUpdateError) {
-              console.error('Error updating profile:', profileUpdateError);
-              // Non-critical - continue
-            }
+        } catch (syncErr) {
+          console.warn(`[SetPassword] Profile sync exception attempt ${attempt}:`, syncErr);
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 500 * attempt));
           }
-
-          // Ensure waitlist onboarding progress record exists
-          try {
-            const { error: progressError } = await supabase
-              .from('waitlist_onboarding_progress')
-              .upsert({
-                user_id: authenticatedUser.id,
-                waitlist_entry_id: entryIdToLink,
-                account_created_at: new Date().toISOString()
-              }, {
-                onConflict: 'user_id'
-              });
-
-            if (progressError) {
-              console.error('Error creating onboarding progress:', progressError);
-              // Non-critical - continue
-            }
-          } catch (progressError) {
-            console.error('Error creating onboarding progress:', progressError);
-            // Non-critical - continue
-          }
-        } else if (entryError) {
-          console.error('Error fetching waitlist entry:', entryError);
-          // Non-critical - user can still proceed even if we can't link
-        }
-
-        // Clear localStorage after successful linking
-        localStorage.removeItem('waitlist_entry_id');
-      } else {
-        // Try to find waitlist entry by email (fallback)
-        console.log('No waitlist entry ID found, attempting to link by email:', authenticatedUser.email);
-        try {
-          const { data: entryByEmail } = await supabase
-            .from('meetings_waitlist')
-            .select('id, user_id, status, email')
-            .eq('email', authenticatedUser.email)
-            .eq('status', 'released')
-            .is('user_id', null)
-            .order('created_at', { ascending: true })
-            .limit(1)
-            .maybeSingle();
-
-          if (entryByEmail && !entryByEmail.user_id) {
-            // Link this entry
-            await supabase
-              .from('meetings_waitlist')
-              .update({
-                user_id: authenticatedUser.id,
-                status: 'converted',
-                converted_at: new Date().toISOString()
-              })
-              .eq('id', entryByEmail.id);
-
-            console.log('Linked waitlist entry by email match');
-          }
-        } catch (emailLinkError) {
-          console.error('Error linking by email:', emailLinkError);
-          // Non-critical
         }
       }
 
-      toast.success('Password set successfully! Welcome to Early Access.');
-      
-      // Redirect to dashboard after a brief delay
+      if (!profileSyncSuccess) {
+        console.error('[SetPassword] ⚠ Failed to sync profile after 3 client attempts');
+
+        // Try edge function as last resort (uses service role to bypass RLS)
+        try {
+          console.log('[SetPassword] Attempting profile sync via edge function...');
+          const { data: edgeResponse, error: edgeFunctionError } = await supabase.functions.invoke(
+            'sync-profile-names',
+            {
+              body: {
+                userId,
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
+              },
+            }
+          );
+
+          if (edgeFunctionError) {
+            console.error('[SetPassword] Edge function error:', edgeFunctionError);
+          } else if (edgeResponse?.success) {
+            console.log('[SetPassword] ✓ Profile synced via edge function');
+            profileSyncSuccess = true;
+            toast.success('Account created successfully! Welcome to Early Access.');
+          } else {
+            console.error('[SetPassword] Edge function returned failure:', edgeResponse);
+          }
+        } catch (edgeErr) {
+          console.error('[SetPassword] Exception calling edge function:', edgeErr);
+        }
+      } else {
+        toast.success('Account created successfully! Welcome to Early Access.');
+      }
+
+      if (!profileSyncSuccess) {
+        console.warn('[SetPassword] Profile names may sync on first login');
+        toast.warning('Account created. Profile setup will complete on first login.');
+      }
+
       setTimeout(() => {
-        navigate('/dashboard', { replace: true });
-      }, 1500);
+        navigate('/onboarding', { replace: true });
+      }, 1000);
     } catch (error: any) {
-      console.error('Password setup error:', error);
+      console.error('[SetPassword] Error during account creation:', error);
       toast.error('An unexpected error occurred. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
 
-  if (isCheckingSession) {
+  if (isValidatingToken) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
         <div className="text-center">
           <Loader2 className="w-8 h-8 text-[#37bd7e] animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Verifying your access...</p>
+          <p className="text-gray-400">Verifying your invitation...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (tokenError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md relative z-10"
+        >
+          <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-2xl p-8 shadow-2xl">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-red-900/20 rounded-full mb-4">
+                <AlertCircle className="w-8 h-8 text-red-400" />
+              </div>
+              <h1 className="text-2xl font-bold text-white mb-2">Invitation Invalid</h1>
+              <p className="text-gray-400 mb-6">{tokenError}</p>
+              <button
+                onClick={() => navigate('/auth/login', { replace: true })}
+                className="w-full bg-[#37bd7e] hover:bg-[#2da76c] text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200"
+              >
+                Go to Login
+              </button>
+            </div>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -410,26 +425,86 @@ export default function SetPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(74,74,117,0.25),transparent)] pointer-events-none" />
-      
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md relative z-10"
       >
         <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-2xl p-8 shadow-2xl">
-          {/* Welcome Header */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-[#37bd7e]/20 rounded-full mb-4">
               <CheckCircle className="w-8 h-8 text-[#37bd7e]" />
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">Welcome to Early Access!</h1>
+            <h1 className="text-3xl font-bold text-white mb-2">Complete Your Account</h1>
             <p className="text-gray-400">
-              {userEmail ? `Signed in as ${userEmail}` : 'Set your password to get started'}
+              {userEmail ? `Signing up as ${userEmail}` : 'Set your password to get started'}
             </p>
           </div>
 
-          {/* Password Setup Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="firstName" className="block text-sm font-medium text-gray-300 mb-2">
+                First Name
+              </label>
+              <input
+                id="firstName"
+                type="text"
+                value={firstName}
+                onChange={(e) => {
+                  setFirstName(e.target.value);
+                  if (e.target.value.trim()) {
+                    const validation = validateName(e.target.value);
+                    setFirstNameError(validation.valid ? null : validation.error || null);
+                  } else {
+                    setFirstNameError(null);
+                  }
+                }}
+                placeholder="Enter your first name"
+                className={`w-full px-4 py-3 bg-gray-800/50 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent ${
+                  firstNameError
+                    ? 'border-red-500 focus:ring-red-500'
+                    : 'border-gray-700 focus:ring-[#37bd7e]'
+                }`}
+                required
+                disabled={isLoading}
+              />
+              {firstNameError && (
+                <p className="text-red-400 text-sm mt-1">{firstNameError}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="lastName" className="block text-sm font-medium text-gray-300 mb-2">
+                Last Name
+              </label>
+              <input
+                id="lastName"
+                type="text"
+                value={lastName}
+                onChange={(e) => {
+                  setLastName(e.target.value);
+                  if (e.target.value.trim()) {
+                    const validation = validateName(e.target.value);
+                    setLastNameError(validation.valid ? null : validation.error || null);
+                  } else {
+                    setLastNameError(null);
+                  }
+                }}
+                placeholder="Enter your last name"
+                className={`w-full px-4 py-3 bg-gray-800/50 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent ${
+                  lastNameError
+                    ? 'border-red-500 focus:ring-red-500'
+                    : 'border-gray-700 focus:ring-[#37bd7e]'
+                }`}
+                required
+                disabled={isLoading}
+              />
+              {lastNameError && (
+                <p className="text-red-400 text-sm mt-1">{lastNameError}</p>
+              )}
+            </div>
+
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
                 Set Your Password
@@ -472,13 +547,13 @@ export default function SetPassword() {
 
             <button
               type="submit"
-              disabled={isLoading || !password || !confirmPassword}
+              disabled={isLoading || !firstName || !lastName || !password || !confirmPassword}
               className="w-full bg-[#37bd7e] hover:bg-[#2da76c] disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Setting up your account...
+                  Creating your account...
                 </>
               ) : (
                 'Complete Setup & Go to Dashboard'
@@ -486,13 +561,12 @@ export default function SetPassword() {
             </button>
           </form>
 
-          {/* Info Message */}
           <div className="mt-6 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
             <div className="flex items-start gap-3">
               <Mail className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-gray-400">
-                <p className="font-medium text-gray-300 mb-1">Your account is ready!</p>
-                <p>Once you set your password, you'll have full access to the dashboard and all Early Access features.</p>
+                <p className="font-medium text-gray-300 mb-1">Your account will be created</p>
+                <p>Once you set your password, your account will be fully activated and you'll have access to the dashboard.</p>
               </div>
             </div>
           </div>

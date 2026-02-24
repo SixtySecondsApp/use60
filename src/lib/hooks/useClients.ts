@@ -83,6 +83,14 @@ export interface MRRSummary {
   active_rate: number;
 }
 
+export interface MRRTrends {
+  mrrTrend: number | null;        // % change in total MRR month-over-month
+  clientTrend: number | null;     // % change in active clients month-over-month
+  churnTrend: number | null;      // % change in churn rate month-over-month
+  avgTrend: number | null;        // % change in avg MRR per client month-over-month
+  previousMRRSummary: MRRSummary | null;  // Previous month's summary for comparison
+}
+
 export interface MRRByOwner {
   owner_id: string;
   owner_name: string;
@@ -132,16 +140,16 @@ export function useClients(ownerId?: string) {
             query = query.eq('owner_id', ownerId);
           }
           
-          const result = await query.order('created_at', { ascending: false });
-          
+          const result = await query.order('created_at', { ascending: false }).limit(500);
+
           serviceClientsData = result.data;
           serviceError = result.error;
-          
+
           if (serviceError) {
             logger.error('❌ Service key basic query failed:', serviceError);
             throw serviceError;
           }
-          
+
           logger.log(`✅ Service key query successful: ${serviceClientsData?.length || 0} clients found`);
         } catch (relationshipError) {
           logger.error('❌ Service client query failed:', relationshipError);
@@ -208,11 +216,11 @@ export function useClients(ownerId?: string) {
             query = query.eq('owner_id', ownerId);
           }
           
-          const result = await query.order('created_at', { ascending: false });
-          
+          const result = await query.order('created_at', { ascending: false }).limit(500);
+
           clientsData = result.data;
           supabaseError = result.error;
-          
+
           if (supabaseError) {
             // Check if clients table doesn't exist
             if (supabaseError.message?.includes('relation "clients" does not exist')) {
@@ -240,11 +248,11 @@ export function useClients(ownerId?: string) {
               query = query.eq('owner_id', ownerId);
             }
             
-            const result = await query.order('created_at', { ascending: false });
-            
+            const result = await query.order('created_at', { ascending: false }).limit(500);
+
             clientsData = result.data;
             const serviceError = result.error;
-              
+
             if (serviceError) {
               // Check if clients table doesn't exist
               if (serviceError.message?.includes('relation "clients" does not exist')) {
@@ -542,18 +550,18 @@ export function useAggregatedClients(ownerId?: string) {
         // Fetch clients
         let clientsQuery = supabase.from('clients').select('*');
         if (ownerId) clientsQuery = clientsQuery.eq('owner_id', ownerId);
-        const { data: clients } = await clientsQuery;
-        
+        const { data: clients } = await clientsQuery.limit(1000);
+
         // Fetch deals
         let dealsQuery = supabase.from('deals').select('*').eq('status', 'won');
         if (ownerId) dealsQuery = dealsQuery.eq('owner_id', ownerId);
-        const { data: deals } = await dealsQuery;
-        
+        const { data: deals } = await dealsQuery.limit(5000);
+
         // Fetch activities
         let activitiesQuery = supabase.from('activities').select('*').eq('type', 'sale').eq('status', 'completed');
         if (ownerId) activitiesQuery = activitiesQuery.eq('user_id', ownerId);
-        const { data: activities } = await activitiesQuery;
-        
+        const { data: activities } = await activitiesQuery.limit(10000);
+
         clientsData = clients || [];
         dealsData = deals || [];
         activitiesData = activities || [];
@@ -561,15 +569,15 @@ export function useAggregatedClients(ownerId?: string) {
         // Use service key
         let clientsQuery = supabaseAdmin.from('clients').select('*');
         if (ownerId) clientsQuery = clientsQuery.eq('owner_id', ownerId);
-        const { data: clients } = await clientsQuery;
-        
+        const { data: clients } = await clientsQuery.limit(1000);
+
         let dealsQuery = supabaseAdmin.from('deals').select('*').eq('status', 'won');
         if (ownerId) dealsQuery = dealsQuery.eq('owner_id', ownerId);
-        const { data: deals } = await dealsQuery;
-        
+        const { data: deals } = await dealsQuery.limit(5000);
+
         let activitiesQuery = supabaseAdmin.from('activities').select('*').eq('type', 'sale').eq('status', 'completed');
         if (ownerId) activitiesQuery = activitiesQuery.eq('user_id', ownerId);
-        const { data: activities } = await activitiesQuery;
+        const { data: activities } = await activitiesQuery.limit(10000);
         
         clientsData = clients || [];
         dealsData = deals || [];
@@ -726,12 +734,86 @@ export function useAggregatedClients(ownerId?: string) {
   };
 }
 
+// Helper function to calculate MRR summary for a specific date range
+// Filters clients by subscription_start_date to include only those active during the period
+async function calculateMRRSummaryForPeriod(
+  clients: any[],
+  periodStart: Date,
+  periodEnd: Date,
+  orgMemberIds: string[]
+): Promise<MRRSummary> {
+  // Filter clients that belong to organization members and were active during the period
+  const periodClients = clients.filter(client => {
+    const isMemberOfOrg = orgMemberIds.includes(client.owner_id);
+    if (!isMemberOfOrg) return false;
+
+    // Include client if it was active during this period
+    // (subscription_start_date is before or during period AND no churn OR churn after period start)
+    const subscriptionStart = client.subscription_start_date ? new Date(client.subscription_start_date) : null;
+    const churnDate = client.churn_date ? new Date(client.churn_date) : null;
+
+    if (!subscriptionStart) return false; // Skip clients without subscription date
+
+    const wasActiveInPeriod = subscriptionStart <= periodEnd && (!churnDate || churnDate >= periodStart);
+    return wasActiveInPeriod;
+  });
+
+  const totalClients = periodClients.length;
+  const activeClients = periodClients.filter(c => c.status !== 'churned') || [];
+  const churnedClients = periodClients.filter(c => c.status === 'churned') || [];
+  const pausedClients = periodClients.filter(c => c.status === 'paused') || [];
+
+  const activeMRRAmounts = activeClients.map(client => {
+    const mrrAmount = parseFloat(client.subscription_amount?.toString() || '0');
+    return mrrAmount;
+  }).filter(amount => amount > 0);
+
+  const totalMRR = activeMRRAmounts.reduce((sum, amount) => sum + amount, 0);
+  const avgMRR = activeMRRAmounts.length > 0 ? totalMRR / activeMRRAmounts.length : 0;
+  const minMRR = activeMRRAmounts.length > 0 ? Math.min(...activeMRRAmounts) : 0;
+  const maxMRR = activeMRRAmounts.length > 0 ? Math.max(...activeMRRAmounts) : 0;
+
+  return {
+    total_clients: totalClients,
+    active_clients: activeClients.length,
+    churned_clients: churnedClients.length,
+    paused_clients: pausedClients.length,
+    total_mrr: totalMRR,
+    avg_mrr: avgMRR,
+    min_mrr: minMRR,
+    max_mrr: maxMRR,
+    churn_rate: totalClients > 0 ? (churnedClients.length / totalClients * 100) : 0,
+    active_rate: totalClients > 0 ? (activeClients.length / totalClients * 100) : 0
+  };
+}
+
 // Hook for MRR calculations
 export function useMRR(ownerId?: string) {
   const [mrrSummary, setMRRSummary] = useState<MRRSummary | null>(null);
+  const [mrrTrends, setMRRTrends] = useState<MRRTrends | null>(null);
   const [mrrByOwner, setMRRByOwner] = useState<MRRByOwner[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Helper function to get organization member IDs
+  const getOrgMemberIds = useCallback(async (organizationId: string): Promise<string[]> => {
+    try {
+      const { data: memberships, error } = await supabaseAdmin
+        .from('organization_memberships')
+        .select('user_id')
+        .eq('org_id', organizationId);
+
+      if (error) {
+        logger.warn('Error fetching org members:', error);
+        return [];
+      }
+
+      return memberships?.map(m => m.user_id) || [];
+    } catch (err) {
+      logger.error('Exception fetching org members:', err);
+      return [];
+    }
+  }, []);
 
   const fetchMRRSummary = useCallback(async () => {
     try {
@@ -746,12 +828,12 @@ export function useMRR(ownerId?: string) {
         let clientsQuery = supabaseAdmin
           .from('clients')
           .select('*');
-        
+
         if (ownerId) {
           clientsQuery = clientsQuery.eq('owner_id', ownerId);
         }
-        
-        const { data: clientsWithDeals, error: clientsError } = await clientsQuery;
+
+        const { data: clientsWithDeals, error: clientsError } = await clientsQuery.limit(1000);
         
         if (clientsError) {
           logger.error('❌ Error fetching clients with deals for MRR calculation:', clientsError);
@@ -828,12 +910,12 @@ export function useMRR(ownerId?: string) {
       let clientsQuery = supabaseAdmin
         .from('clients')
         .select('*');
-      
+
       if (ownerId) {
         clientsQuery = clientsQuery.eq('owner_id', ownerId);
       }
-      
-      const { data: clientsData, error: clientsError } = await clientsQuery;
+
+      const { data: clientsData, error: clientsError } = await clientsQuery.limit(1000);
       
       if (clientsError) {
         logger.error('❌ Error fetching clients for MRR:', clientsError);
@@ -901,8 +983,9 @@ export function useMRR(ownerId?: string) {
               last_name,
               full_name
             )
-          `);
-        
+          `)
+          .limit(1000);
+
         if (error) {
           logger.error('❌ Error fetching clients with profiles for MRR by owner:', error);
           // If clients table doesn't exist, return empty array
@@ -984,8 +1067,9 @@ export function useMRR(ownerId?: string) {
             last_name,
             full_name
           )
-        `);
-      
+        `)
+        .limit(1000);
+
       if (error) {
         logger.error('❌ Error fetching clients for MRR by owner:', error);
         throw error;
@@ -1051,12 +1135,115 @@ export function useMRR(ownerId?: string) {
     }
   }, []);
 
+  const fetchMRRTrends = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      if (!ownerId) {
+        logger.log('⚠️ No ownerId provided for trends calculation');
+        setMRRTrends(null);
+        return;
+      }
+
+      logger.log('📊 Fetching MRR trends for user:', ownerId);
+
+      // Get current date for calculations
+      const now = new Date();
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+      // Previous month dates
+      const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+      // Fetch clients for this specific user
+      const { data: allClients, error: clientsError } = await supabaseAdmin
+        .from('clients')
+        .select('*')
+        .eq('owner_id', ownerId)
+        .limit(1000);
+
+      if (clientsError) {
+        if (clientsError.message.includes('relation "clients" does not exist')) {
+          logger.log('📋 Clients table does not exist yet - returning null trends');
+          setMRRTrends(null);
+          return;
+        }
+        throw clientsError;
+      }
+
+      const clients = allClients || [];
+      logger.log('📊 Total clients for user:', clients.length);
+
+      // Calculate current month MRR
+      const currentMRR = await calculateMRRSummaryForPeriod(
+        clients,
+        currentMonthStart,
+        currentMonthEnd,
+        [ownerId]
+      );
+
+      // Calculate previous month MRR
+      const previousMRR = await calculateMRRSummaryForPeriod(
+        clients,
+        previousMonthStart,
+        previousMonthEnd,
+        [ownerId]
+      );
+
+      logger.log('📊 Current month MRR:', currentMRR);
+      logger.log('📊 Previous month MRR:', previousMRR);
+
+      // Calculate trends only if we have data
+      let trends: MRRTrends = {
+        mrrTrend: null,
+        clientTrend: null,
+        churnTrend: null,
+        avgTrend: null,
+        previousMRRSummary: previousMRR
+      };
+
+      // Only calculate trends if previous month had active clients
+      if (previousMRR.active_clients > 0 && previousMRR.total_mrr > 0) {
+        // MRR trend: % change in total MRR (only for active clients)
+        trends.mrrTrend = ((currentMRR.total_mrr - previousMRR.total_mrr) / previousMRR.total_mrr) * 100;
+
+        // Client trend: % change in active clients
+        trends.clientTrend = ((currentMRR.active_clients - previousMRR.active_clients) / previousMRR.active_clients) * 100;
+
+        // Churn trend: % change in churn rate (negative = improvement)
+        trends.churnTrend = previousMRR.churn_rate > 0
+          ? ((currentMRR.churn_rate - previousMRR.churn_rate) / previousMRR.churn_rate) * 100
+          : null;
+
+        // Average value trend: % change in avg MRR per client
+        trends.avgTrend = ((currentMRR.avg_mrr - previousMRR.avg_mrr) / previousMRR.avg_mrr) * 100;
+
+        logger.log('✅ MRR Trends calculated:', trends);
+      } else {
+        logger.log('⚠️ Insufficient historical data for trends - previous month has no active clients');
+      }
+
+      setMRRTrends(trends);
+    } catch (err: any) {
+      const sanitizedMessage = sanitizeErrorMessage(err);
+      logger.error('Error fetching MRR trends - sanitized message:', sanitizedMessage);
+      setError(sanitizedMessage);
+      setMRRTrends(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [ownerId]);
+
   return {
     mrrSummary,
+    mrrTrends,
     mrrByOwner,
     isLoading,
     error,
     fetchMRRSummary,
+    fetchMRRTrends,
     fetchMRRByOwner
   };
 }

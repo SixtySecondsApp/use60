@@ -72,7 +72,10 @@ export interface SlackChannel {
   is_member: boolean;
 }
 
-export type SlackFeature = 'meeting_debrief' | 'daily_digest' | 'meeting_prep' | 'deal_rooms';
+export type SlackFeature = 'meeting_debrief' | 'daily_digest' | 'meeting_prep' | 'deal_rooms'
+  | 'agent_alert_engineering' | 'agent_alert_legal' | 'agent_alert_security'
+  | 'agent_alert_pricing' | 'agent_alert_product' | 'agent_alert_competitive'
+  | 'agent_alert_deal_risk' | 'agent_alert_default';
 
 // Query keys
 const QUERY_KEYS = {
@@ -203,6 +206,33 @@ export function useUpdateNotificationSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.notificationSettings(orgId || '') });
+    },
+  });
+}
+
+/**
+ * Hook to join the Slack bot to a public channel
+ */
+export function useJoinSlackChannel() {
+  const { activeOrgId } = useOrg();
+  const orgId = activeOrgId;
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ channelId }: { channelId: string }) => {
+      if (!orgId) throw new Error('No org selected');
+
+      const { data, error } = await supabase.functions.invoke('slack-join-channel', {
+        body: { orgId, channelId },
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Failed to join channel');
+
+      return data as { success: true; channel: { id: string; name: string } };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.channels(orgId || '') });
     },
   });
 }

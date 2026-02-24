@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { GripVertical, Trash2, ChevronDown, ChevronUp, AlertCircle, Info, MessageSquare } from 'lucide-react';
+import { GripVertical, Trash2, ChevronDown, ChevronUp, AlertCircle, Info, MessageSquare, Zap, Layers, Timer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/tooltip';
 import { SkillSelector, SkillInfo } from './SkillSelector';
 import { HITLStepConfig } from './HITLStepConfig';
-import { createDefaultHITLConfig, type SequenceStep as SequenceStepType, type HITLConfig } from '@/lib/hooks/useAgentSequences';
+import { createDefaultHITLConfig, type SequenceStep as SequenceStepType, type HITLConfig, type StepExecutionMode } from '@/lib/hooks/useAgentSequences';
 
 // =============================================================================
 // Types
@@ -242,6 +242,27 @@ export function SequenceStep({
             Step {index + 1}
           </Badge>
 
+          {/* Parallel Indicator */}
+          {step.execution_mode === 'parallel' && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="shrink-0 bg-blue-100 text-blue-700 border-blue-300">
+                    <Zap className="h-3 w-3 mr-1" />
+                    Parallel
+                    {step.parallel_group && <span className="ml-1 opacity-70">({step.parallel_group})</span>}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">
+                    Runs in parallel with other steps
+                    {step.parallel_group && ` in group "${step.parallel_group}"`}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
           {/* HITL Indicator */}
           {(step.hitl_before?.enabled || step.hitl_after?.enabled) && (
             <TooltipProvider>
@@ -357,6 +378,110 @@ export function SequenceStep({
                 placeholder="e.g., contact, deal, result"
                 className="font-mono"
               />
+            </div>
+
+            {/* Execution Mode (Parallel/Sequential) */}
+            <div className="space-y-3 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-medium">Execution Mode</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-xs">
+                        Sequential steps run one at a time. Parallel steps with the same
+                        group run concurrently for faster execution.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Execution Mode Select */}
+                <div className="space-y-2">
+                  <Label className="text-sm">Mode</Label>
+                  <Select
+                    value={step.execution_mode || 'sequential'}
+                    onValueChange={(v) => onChange({ ...step, execution_mode: v as StepExecutionMode })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sequential">
+                        <div className="flex items-center gap-2">
+                          <Layers className="h-3.5 w-3.5 text-gray-500" />
+                          Sequential
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="parallel">
+                        <div className="flex items-center gap-2">
+                          <Zap className="h-3.5 w-3.5 text-blue-500" />
+                          Parallel
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Parallel Group (only shown when parallel) */}
+                {step.execution_mode === 'parallel' && (
+                  <div className="space-y-2">
+                    <Label className="text-sm">Parallel Group</Label>
+                    <Input
+                      value={step.parallel_group || ''}
+                      onChange={(e) => onChange({ ...step, parallel_group: e.target.value || undefined })}
+                      placeholder="e.g., research-phase"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Condition (optional) */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">Condition (optional)</Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="text-xs">
+                          Skip this step if condition evaluates to false. Use variables like{' '}
+                          <code className="bg-muted px-1 rounded">${'{'}previous.success{'}'}</code>
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Input
+                  value={step.condition || ''}
+                  onChange={(e) => onChange({ ...step, condition: e.target.value || undefined })}
+                  placeholder="e.g., ${research.has_email}"
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              {/* Timeout (optional) */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Timer className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Label className="text-sm">Timeout (ms)</Label>
+                </div>
+                <Input
+                  type="number"
+                  value={step.timeout_ms || ''}
+                  onChange={(e) => onChange({ ...step, timeout_ms: e.target.value ? parseInt(e.target.value) : undefined })}
+                  placeholder="30000 (default)"
+                  className="font-mono text-sm"
+                />
+              </div>
             </div>
 
             {/* On Failure */}

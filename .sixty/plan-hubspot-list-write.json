@@ -1,0 +1,204 @@
+{
+  "project": {
+    "name": "HubSpot List Write Operations",
+    "description": "Enable writing to HubSpot lists from OpsTable: push rows to lists (new or existing), auto-mirror row deletes to lists, and 'Save as HubSpot List' toolbar action.",
+    "createdAt": "2026-02-06T18:00:00Z",
+    "branch": "feat/querybar-advanced",
+    "consultedAt": "2026-02-06T18:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "hubspot-list-write",
+      "name": "HubSpot List Write Operations",
+      "status": "pending",
+      "priority": 0,
+      "description": "Three capabilities: (1) Push rows to HubSpot list when pushing contacts, (2) Mirror row deletes to HubSpot list for bidirectional tables, (3) Save current table as a new HubSpot list from the toolbar."
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "HL-001",
+      "feature": "hubspot-list-write",
+      "title": "Fix push-to-hubspot import pin and complete list assignment stub",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["supabase/functions/push-to-hubspot/index.ts"], "schema": [] },
+      "blocks": ["HL-002", "HL-003"],
+      "parallelWith": ["HL-004"],
+      "acceptance": [
+        "Pin @supabase/supabase-js@2 to @2.43.4 in push-to-hubspot",
+        "Accept config.createNewList (boolean) and config.newListName (string) params",
+        "If config.createNewList: POST /crm/v3/lists to create MANUAL list, capture list_id",
+        "After batch upsert/create: collect HubSpot contact IDs from response results[].id",
+        "PUT /crm/v3/lists/{listId}/memberships/add with collected contact IDs",
+        "Return list_id and list_contacts_added in response"
+      ],
+      "files": [
+        "supabase/functions/push-to-hubspot/index.ts"
+      ]
+    },
+    {
+      "id": "HL-002",
+      "feature": "hubspot-list-write",
+      "title": "Extend HubSpotPushModal with list selection and creation UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["HL-001"], "files": ["src/components/ops/HubSpotPushModal.tsx"], "schema": [] },
+      "blocks": ["HL-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Add listAction state: 'none' | 'existing' | 'new' with radio buttons",
+        "If 'existing': dropdown of HubSpot lists (passed as hubspotLists prop)",
+        "If 'new': text input for list name",
+        "Pass listId or createNewList/newListName in onPush config",
+        "Fetching lists shows loading spinner, empty state if no lists"
+      ],
+      "files": [
+        "src/components/ops/HubSpotPushModal.tsx"
+      ]
+    },
+    {
+      "id": "HL-003",
+      "feature": "hubspot-list-write",
+      "title": "Wire list fetch and pass to push modal in OpsDetailPage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["HL-002"], "files": ["src/pages/OpsDetailPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Fetch HubSpot lists when push modal opens (via hubspot-admin get_lists)",
+        "Store in hubspotLists state, pass to HubSpotPushModal",
+        "Update push toast to show list info when list_id is in response",
+        "Handle list fetch errors gracefully (show empty list with error message)"
+      ],
+      "files": [
+        "src/pages/OpsDetailPage.tsx"
+      ]
+    },
+    {
+      "id": "HL-004",
+      "feature": "hubspot-list-write",
+      "title": "Create hubspot-list-ops edge function for list CRUD",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["HL-005", "HL-006"],
+      "parallelWith": ["HL-001"],
+      "acceptance": [
+        "New edge function: hubspot-list-ops with actions: create_list_from_table, add_to_list, remove_from_list",
+        "create_list_from_table: gets source_ids from rows, creates MANUAL list, adds members, optionally links list_id",
+        "add_to_list: PUT /crm/v3/lists/{listId}/memberships/add with contact IDs array",
+        "remove_from_list: PUT /crm/v3/lists/{listId}/memberships/remove with contact IDs array",
+        "Auth: validates JWT, checks org membership via table ownership"
+      ],
+      "files": [
+        "supabase/functions/hubspot-list-ops/index.ts"
+      ]
+    },
+    {
+      "id": "HL-005",
+      "feature": "hubspot-list-write",
+      "title": "Create SaveAsHubSpotListModal and wire toolbar action",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["HL-004"], "files": ["src/pages/OpsDetailPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["HL-006"],
+      "acceptance": [
+        "Create SaveAsHubSpotListModal with: list name input, all-rows vs selected-rows radio, link-list checkbox",
+        "Toolbar button 'Save as HubSpot List' (List icon, orange) for HubSpot-sourced tables",
+        "Mutation calls hubspot-list-ops create_list_from_table action",
+        "Success toast shows list name and count of contacts added",
+        "If link-list checked: updates table source_query.list_id"
+      ],
+      "files": [
+        "src/components/ops/SaveAsHubSpotListModal.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ]
+    },
+    {
+      "id": "HL-006",
+      "feature": "hubspot-list-write",
+      "title": "Auto-mirror row deletes to HubSpot list for bidirectional tables",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["HL-004"], "files": ["src/pages/OpsDetailPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["HL-005"],
+      "acceptance": [
+        "Capture source_id values from rows before deleteRowsMutation fires",
+        "On delete success: if bidirectional + list_id, fire-and-forget remove_from_list",
+        "Toast shows 'Removed X contacts from HubSpot list'",
+        "Non-bidirectional tables: no HubSpot API call on delete",
+        "Pull-only tables: no HubSpot API call on delete"
+      ],
+      "files": [
+        "src/pages/OpsDetailPage.tsx"
+      ]
+    }
+  ],
+
+  "phases": {
+    "phase1": {
+      "name": "Backend Foundation",
+      "stories": ["HL-001", "HL-004"],
+      "description": "Fix push-to-hubspot edge function and create new hubspot-list-ops edge function. These run in parallel.",
+      "status": "pending"
+    },
+    "phase2": {
+      "name": "Push Modal Enhancement",
+      "stories": ["HL-002", "HL-003"],
+      "description": "Extend HubSpotPushModal with list UI and wire list fetching in OpsDetailPage.",
+      "status": "pending"
+    },
+    "phase3": {
+      "name": "Toolbar + Auto-Mirror",
+      "stories": ["HL-005", "HL-006"],
+      "description": "Save as HubSpot List toolbar action and auto-mirror row deletes. These run in parallel.",
+      "status": "pending"
+    }
+  },
+
+  "architectureDecisions": [
+    {
+      "decision": "Separate hubspot-list-ops edge function rather than extending push-to-hubspot",
+      "rationale": "push-to-hubspot handles contact creation/update. List operations (create list, add/remove members) are distinct concerns. Keeping them separate follows single responsibility and allows Save-as-List to work independently."
+    },
+    {
+      "decision": "Row-add auto-mirror is out of scope",
+      "rationale": "addRowMutation creates blank rows with no data. A blank row can't be pushed to HubSpot (no email/properties). Users fill data first then push, which is covered by the existing push flow."
+    },
+    {
+      "decision": "Pre-capture source_ids before delete mutation",
+      "rationale": "deleteRowsMutation deletes rows from the database. We need the HubSpot contact IDs (source_id) before deletion to call remove_from_list. Capture from the existing rows array using the rowIds being deleted."
+    },
+    {
+      "decision": "HubSpot list creation uses MANUAL processingType",
+      "rationale": "Only MANUAL lists support add/remove members via API. DYNAMIC lists are rule-based and managed by HubSpot."
+    }
+  ],
+
+  "risks": [
+    {
+      "severity": "low",
+      "area": "api-limits",
+      "issue": "HubSpot memberships/add has a limit of contacts per call",
+      "mitigation": "Batch contact IDs in chunks if needed. HubSpot generally supports up to 500 records per memberships/add call."
+    },
+    {
+      "severity": "low",
+      "area": "edge-case",
+      "issue": "Existing table may have source_query.list_id pointing to a DYNAMIC list",
+      "mitigation": "The remove_from_list call will fail gracefully with a HubSpot error. We catch and log it without blocking the row delete."
+    }
+  ]
+}

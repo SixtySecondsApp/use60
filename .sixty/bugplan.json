@@ -1,0 +1,166 @@
+{
+  "feature": "onboarding-enrichment",
+  "issue": "invalid-jwt-finish",
+  "createdAt": "2026-02-06T00:00:00Z",
+  "reportedSymptom": "Invalid JWT when trying to create / finish the enrichment of the onboarding",
+  "rootCause": {
+    "id": "BUG-001",
+    "summary": "JWT token expires during 5-minute polling without refresh logic",
+    "file": "src/lib/stores/onboardingV2Store.ts",
+    "line": 1243,
+    "confidence": 0.95
+  },
+  "bugs": [
+    {
+      "id": "BUG-001",
+      "title": "Add JWT refresh in polling loop",
+      "severity": "critical",
+      "priority": "P0",
+      "status": "pending",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "1243",
+      "description": "getSession() returns stale cached token from localStorage. During 5-minute polling, JWT can expire but is never refreshed, causing edge function calls to fail with 'Invalid JWT'",
+      "approach": [
+        "Replace getSession() with refreshSession() before each poll",
+        "Add token expiry logging for debugging",
+        "Improve error message to guide user to refresh page"
+      ],
+      "estimatedMinutes": 15,
+      "dependencies": [],
+      "blocks": [],
+      "testCases": [
+        "Polling with near-expired JWT triggers refresh",
+        "Polling continues successfully after refresh",
+        "Error message guides user on session expiry"
+      ]
+    },
+    {
+      "id": "BUG-002",
+      "title": "Fix pollEnrichmentStatus data.success check",
+      "severity": "critical",
+      "priority": "P0",
+      "status": "pending",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "1256",
+      "description": "Code destructures data without checking data.success first. When edge function returns {success: false, error: '...'}, destructuring fails with undefined values",
+      "approach": [
+        "Add data.success check before destructuring",
+        "Throw error with proper message if data.success is false",
+        "Log edge function errors for debugging"
+      ],
+      "estimatedMinutes": 5,
+      "dependencies": [],
+      "blocks": [],
+      "testCases": [
+        "Edge function error response handled correctly",
+        "data.success false throws with proper error message",
+        "Polling stops on application errors"
+      ]
+    },
+    {
+      "id": "BUG-003",
+      "title": "Replace localStorage JWT read with getSession()",
+      "severity": "high",
+      "priority": "P1",
+      "status": "pending",
+      "file": "src/lib/supabase/clientV2.ts",
+      "lines": "218",
+      "description": "Custom fetch wrapper reads JWT directly from localStorage, bypassing Supabase's session management. Can use stale tokens that haven't been refreshed",
+      "approach": [
+        "Remove manual localStorage.getItem() calls",
+        "Use supabase.auth.getSession() instead",
+        "Let Supabase SDK handle token storage abstraction"
+      ],
+      "estimatedMinutes": 10,
+      "dependencies": ["BUG-001"],
+      "blocks": [],
+      "testCases": [
+        "Edge function calls use current session token",
+        "Token refresh is reflected in subsequent calls",
+        "No stale token from localStorage used"
+      ]
+    },
+    {
+      "id": "BUG-004",
+      "title": "Improve edge function error messages",
+      "severity": "high",
+      "priority": "P1",
+      "status": "pending",
+      "file": "supabase/functions/deep-enrich-organization/index.ts",
+      "lines": "167",
+      "description": "Generic 'Invalid authentication token' error loses userError details. User doesn't know if token expired, malformed, or network issue",
+      "approach": [
+        "Include userError.message in thrown error",
+        "Add error context (name, code) for debugging",
+        "Log full error details to console"
+      ],
+      "estimatedMinutes": 10,
+      "dependencies": [],
+      "blocks": [],
+      "testCases": [
+        "Auth error includes original error message",
+        "Error distinguishes expired vs malformed JWT",
+        "Console logs have full error context"
+      ]
+    },
+    {
+      "id": "BUG-005",
+      "title": "Use proper HTTP status codes",
+      "severity": "high",
+      "priority": "P1",
+      "status": "pending",
+      "file": "supabase/functions/deep-enrich-organization/index.ts",
+      "lines": "207",
+      "description": "Edge function returns HTTP 200 for all errors, preventing proper error detection by Supabase SDK",
+      "approach": [
+        "Return 401 for authentication errors",
+        "Return 500 for server errors",
+        "Update frontend to handle both SDK error and data.error"
+      ],
+      "estimatedMinutes": 10,
+      "dependencies": [],
+      "blocks": [],
+      "testCases": [
+        "Auth errors return HTTP 401",
+        "Server errors return HTTP 500",
+        "SDK populates error field correctly"
+      ]
+    },
+    {
+      "id": "BUG-006",
+      "title": "Add user-friendly error categorization",
+      "severity": "medium",
+      "priority": "P2",
+      "status": "pending",
+      "file": "src/lib/stores/onboardingV2Store.ts",
+      "lines": "1305-1314",
+      "description": "Generic error messages don't guide user. No distinction between auth errors (refresh page), network errors (retry), or server errors (contact support)",
+      "approach": [
+        "Categorize errors by type (auth, network, validation, server)",
+        "Provide actionable guidance for each category",
+        "Show specific message based on error content"
+      ],
+      "estimatedMinutes": 20,
+      "dependencies": ["BUG-004", "BUG-005"],
+      "blocks": [],
+      "testCases": [
+        "Auth errors show 'please refresh page' message",
+        "Network errors show 'check connection' message",
+        "Server errors show 'contact support' message"
+      ]
+    }
+  ],
+  "testPlan": {
+    "manual": [
+      "Start enrichment with JWT near expiry (simulate by setting expires_at)",
+      "Verify token refreshes automatically during polling",
+      "Confirm no 'Invalid JWT' error appears",
+      "Test error messages are helpful when issues occur"
+    ],
+    "automated": [
+      "Unit test for token refresh in polling",
+      "Unit test for data.success check",
+      "Integration test for full enrichment flow with near-expired token"
+    ]
+  }
+}

@@ -1,12 +1,11 @@
-// @ts-nocheck
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useUser } from '@/lib/hooks/useUser'; // To ensure user is logged in
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 
-// Cast supabase client to bypass type issues
-const db = supabase as any;
+// Cast supabase client to bypass type issues with dynamic filter chaining
+const db = supabase as unknown as typeof supabase;
 
 // Define the structure of an activity from the 'activities' table
 export interface OriginalActivity {
@@ -147,7 +146,7 @@ export function useOriginalActivities(filters?: OriginalActivityFilters) {
   }, [fetchActivities, userData?.id]); 
 
   // Function to update an activity in the 'activities' table
-  const updateActivity = async (id: string, updates: Partial<Omit<OriginalActivity, 'profiles'>>) => {
+  const updateActivity = async (id: string, updates: Partial<OriginalActivity>) => {
     // Ensure user is logged in or has permission (basic check)
     if (!userData?.id) {
         logger.error('User not logged in, cannot update activity.');

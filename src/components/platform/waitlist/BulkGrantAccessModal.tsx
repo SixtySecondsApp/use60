@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import DOMPurify from 'dompurify';
 import { X, Send, ChevronDown, Eye, AlertCircle, CheckCircle } from 'lucide-react';
 import type { WaitlistEntry } from '@/lib/types/waitlist';
 import type { BulkGrantAccessResult } from '@/lib/services/waitlistAdminService';
@@ -221,7 +222,7 @@ export function BulkGrantAccessModal({
                   </span>
                   <div
                     className="mt-1 max-h-64 overflow-y-auto text-xs bg-white dark:bg-gray-900 rounded p-3 border border-gray-200 dark:border-gray-600"
-                    dangerouslySetInnerHTML={{ __html: preview.body }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.body) }}
                   />
                 </div>
               </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useCallback } from 'react';
 import { Building2, Users, TrendingUp, DollarSign } from 'lucide-react';
 import { EnhancedStatCard } from '@/components/ui/enhanced-stat-card';
-import { useMRR, MRRSummary } from '@/lib/hooks/useClients';
+import { useMRR, MRRSummary, MRRTrends } from '@/lib/hooks/useClients';
 import { useUser } from '@/lib/hooks/useUser';
 import { safeParseFinancial } from '@/lib/utils/financialValidation';
 
@@ -12,14 +12,15 @@ interface SubscriptionStatsProps {
 
 const SubscriptionStatsComponent = ({ className, onClick }: SubscriptionStatsProps) => {
   const { userData } = useUser();
-  const { mrrSummary, isLoading, error, fetchMRRSummary } = useMRR(userData?.id);
+  const { mrrSummary, mrrTrends, isLoading, error, fetchMRRSummary, fetchMRRTrends } = useMRR(userData?.id);
 
   // Memoize fetch function to prevent unnecessary re-renders
   const fetchData = useCallback(() => {
     if (userData?.id) {
       fetchMRRSummary();
+      fetchMRRTrends(); // Fetch personal user trends
     }
-  }, [userData?.id, fetchMRRSummary]);
+  }, [userData?.id, fetchMRRSummary, fetchMRRTrends]);
 
   useEffect(() => {
     fetchData();
@@ -56,13 +57,13 @@ const SubscriptionStatsComponent = ({ className, onClick }: SubscriptionStatsPro
     };
   }, [mrrSummary, defaultMRR]);
 
-  // Memoize trend calculations
+  // Use fetched trends or return null if no historical data
   const trends = useMemo(() => ({
-    mrrTrend: 12, // +12% month over month
-    clientTrend: 8,  // +8% new clients
-    churnTrend: -15, // -15% churn rate (improvement)
-    avgTrend: 5     // +5% average value
-  }), []);
+    mrrTrend: mrrTrends?.mrrTrend ?? undefined,
+    clientTrend: mrrTrends?.clientTrend ?? undefined,
+    churnTrend: mrrTrends?.churnTrend ?? undefined,
+    avgTrend: mrrTrends?.avgTrend ?? undefined
+  }), [mrrTrends]);
 
   // Memoize currency formatter
   const formatCurrency = useCallback((value: number) => {
@@ -101,41 +102,41 @@ const SubscriptionStatsComponent = ({ className, onClick }: SubscriptionStatsPro
         title="Total MRR"
         primaryValue={formatCurrency(stats.total_mrr)}
         trendPercentage={trends.mrrTrend}
-        periodContext="vs last month"
+        periodContext={trends.mrrTrend !== undefined ? "vs last month" : undefined}
         icon={DollarSign}
         color="emerald"
         onClick={() => onClick?.('Total MRR')}
       />
-      
+
       <EnhancedStatCard
         title="Active Clients"
         primaryValue={stats.active_clients}
         secondaryValue={`${stats.total_clients} total clients`}
         percentageValue={stats.active_rate}
         trendPercentage={trends.clientTrend}
-        periodContext="vs last month"
+        periodContext={trends.clientTrend !== undefined ? "vs last month" : undefined}
         icon={Users}
         color="blue"
         onClick={() => onClick?.('Active Clients')}
       />
-      
+
       <EnhancedStatCard
         title="Avg Client Value"
         primaryValue={formatCurrency(stats.avg_mrr)}
         secondaryValue={`Range: ${formatCurrency(stats.min_mrr)} - ${formatCurrency(stats.max_mrr)}`}
         trendPercentage={trends.avgTrend}
-        periodContext="vs last month"
+        periodContext={trends.avgTrend !== undefined ? "vs last month" : undefined}
         icon={TrendingUp}
         color="violet"
         onClick={() => onClick?.('Avg Client Value')}
       />
-      
+
       <EnhancedStatCard
         title="Monthly Churn"
         primaryValue={`${stats.churn_rate.toFixed(1)}%`}
         secondaryValue={`${stats.churned_clients} churned clients`}
         trendPercentage={trends.churnTrend}
-        periodContext="vs last month"
+        periodContext={trends.churnTrend !== undefined ? "vs last month" : undefined}
         icon={Building2}
         color="orange"
         variant="no-show"

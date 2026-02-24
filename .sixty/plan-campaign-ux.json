@@ -1,0 +1,302 @@
+{
+  "project": {
+    "name": "Campaign Workflow UX Improvements",
+    "description": "5 UX improvements to the campaign workflow: stepped questions, progress with metrics, rich completion, ICP defaults, recipe cards",
+    "createdAt": "2026-02-13T00:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "campaign-ux",
+      "name": "Campaign Workflow UX Improvements",
+      "status": "complete",
+      "prd": null,
+      "consultReport": ".sixty/consult/campaign-ux-improvements.md",
+      "createdAt": "2026-02-13T00:00:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "STEP-001",
+      "feature": "campaign-ux",
+      "title": "Conversational stepped question flow",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/components/copilot/responses/CampaignWorkflowResponse.tsx"],
+        "schema": []
+      },
+      "blocks": ["PROG-001", "COMP-001", "ICP-002"],
+      "parallelWith": ["ICP-001", "REC-001"],
+      "acceptance": [
+        "Questions appear one at a time with animation",
+        "Selecting a chip auto-advances to next question",
+        "Answered questions show as collapsed chips at top",
+        "Clicking a collapsed chip re-opens that question for editing",
+        "Progress indicator shows answered/total count",
+        "Submit button appears after all questions answered"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 25,
+      "files": [
+        "src/components/copilot/responses/CampaignWorkflowResponse.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-13T01:00:00Z",
+      "completedAt": "2026-02-13T01:25:00Z"
+    },
+    {
+      "id": "ICP-001",
+      "feature": "campaign-ux",
+      "title": "Create useActiveICP hook",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/hooks/useICPProfilesCRUD.ts"],
+        "schema": []
+      },
+      "blocks": ["ICP-002"],
+      "parallelWith": ["STEP-001", "REC-001"],
+      "acceptance": [
+        "Hook returns { activeICP, icpDefaults } from ICP profiles",
+        "Maps employee_ranges to question options correctly",
+        "Builds target_audience string from ICP criteria",
+        "Returns null gracefully when no ICPs exist"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 10,
+      "files": [
+        "src/lib/hooks/useActiveICP.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-13T01:00:00Z",
+      "completedAt": "2026-02-13T01:10:00Z"
+    },
+    {
+      "id": "REC-001",
+      "feature": "campaign-ux",
+      "title": "Create CampaignRecipeCards component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["REC-002"],
+      "parallelWith": ["STEP-001", "ICP-001"],
+      "acceptance": [
+        "4 recipe cards render in 2x2 grid",
+        "Each card shows Lucide icon, title, short description",
+        "Clicking card fires onSelectRecipe callback with prompt",
+        "Responsive: stacks to 1 column on small screens"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 10,
+      "files": [
+        "src/components/copilot/CampaignRecipeCards.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-13T01:00:00Z",
+      "completedAt": "2026-02-13T01:10:00Z"
+    },
+    {
+      "id": "PROG-001",
+      "feature": "campaign-ux",
+      "title": "Enhanced pipeline progress with metrics and timer",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["STEP-001"],
+        "files": ["src/components/copilot/responses/CampaignWorkflowResponse.tsx"],
+        "schema": []
+      },
+      "blocks": ["COMP-001"],
+      "parallelWith": ["REC-002"],
+      "acceptance": [
+        "Overall progress bar at top of Phase 2",
+        "Elapsed timer counts up in MM:SS format",
+        "Running step shows sub-progress bar when numeric progress available",
+        "Completed steps show summary metrics inline"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 15,
+      "files": [
+        "src/components/copilot/responses/CampaignWorkflowResponse.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-13T01:25:00Z",
+      "completedAt": "2026-02-13T01:40:00Z"
+    },
+    {
+      "id": "REC-002",
+      "feature": "campaign-ux",
+      "title": "Wire recipe cards into CopilotEmpty",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["REC-001"],
+        "files": ["src/components/copilot/CopilotEmpty.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["PROG-001"],
+      "acceptance": [
+        "Recipe cards section appears in copilot welcome state",
+        "Clicking a recipe triggers campaign flow via sendMessage",
+        "Section hidden when no search integrations configured",
+        "Existing welcome content untouched"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 10,
+      "files": [
+        "src/components/copilot/CopilotEmpty.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-13T01:10:00Z",
+      "completedAt": "2026-02-13T01:20:00Z"
+    },
+    {
+      "id": "COMP-001",
+      "feature": "campaign-ux",
+      "title": "Rich completion card with metric tiles and email preview",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["PROG-001"],
+        "files": ["src/components/copilot/responses/CampaignWorkflowResponse.tsx"],
+        "schema": []
+      },
+      "blocks": ["ICP-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "4 metric tiles render in responsive grid",
+        "Collapsible email preview section with chevron toggle",
+        "Both action buttons render (Open Ops Table + View in Instantly)",
+        "Elapsed time shown in footer",
+        "Graceful fallback when email preview or Instantly URL unavailable"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 15,
+      "files": [
+        "src/components/copilot/responses/CampaignWorkflowResponse.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-13T01:40:00Z",
+      "completedAt": "2026-02-13T01:55:00Z"
+    },
+    {
+      "id": "ICP-002",
+      "feature": "campaign-ux",
+      "title": "Wire ICP defaults into campaign flow",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["ICP-001", "COMP-001"],
+        "files": [
+          "src/components/copilot/responses/CampaignWorkflowResponse.tsx",
+          "src/lib/utils/prospectingDetector.ts"
+        ],
+        "schema": []
+      },
+      "blocks": ["DEMO-001"],
+      "parallelWith": [],
+      "acceptance": [
+        "ICP banner appears when active ICP exists",
+        "Use this ICP pre-fills answers and collapses them as chips",
+        "User can override pre-filled answers by clicking chips",
+        "Ignore dismisses banner and shows full question flow",
+        "No banner when no ICP configured"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 15,
+      "files": [
+        "src/components/copilot/responses/CampaignWorkflowResponse.tsx",
+        "src/lib/utils/prospectingDetector.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-13T01:55:00Z",
+      "completedAt": "2026-02-13T02:10:00Z"
+    },
+    {
+      "id": "DEMO-001",
+      "feature": "campaign-ux",
+      "title": "Update demo page with all 5 improvements",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["STEP-001", "PROG-001", "COMP-001", "ICP-002", "REC-001"],
+        "files": ["src/pages/demo/CampaignWorkflowDemo.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "All 5 improvements visible on demo page",
+        "Each section independently testable with mock data",
+        "No real API calls needed"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 15,
+      "files": [
+        "src/pages/demo/CampaignWorkflowDemo.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-13T02:10:00Z",
+      "completedAt": "2026-02-13T02:25:00Z"
+    }
+  ],
+
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 8,
+    "currentFeature": "campaign-ux",
+    "lastUpdated": "2026-02-13T02:25:00Z",
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": ["STEP-001", "ICP-001", "REC-001"],
+        "reason": "No file overlap — all different files"
+      },
+      {
+        "group": 2,
+        "stories": ["PROG-001", "REC-002"],
+        "reason": "No file overlap — different files, depends on Group 1"
+      },
+      {
+        "group": 3,
+        "stories": ["COMP-001"],
+        "reason": "Sequential — same file as PROG-001"
+      },
+      {
+        "group": 4,
+        "stories": ["ICP-002"],
+        "reason": "Sequential — depends on ICP-001 + COMP-001"
+      },
+      {
+        "group": 5,
+        "stories": ["DEMO-001"],
+        "reason": "Final — depends on all above"
+      }
+    ]
+  }
+}

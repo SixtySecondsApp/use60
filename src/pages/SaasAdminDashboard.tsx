@@ -28,6 +28,7 @@ import {
   getAdminDashboardStats,
   getCustomers,
   getSubscriptionPlans,
+  deleteOrganization,
 } from '@/lib/services/saasAdminService';
 import type {
   AdminDashboardStats,
@@ -113,6 +114,17 @@ export function SaasAdminDashboard() {
       toast.error('Failed to load admin data');
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleDeleteOrganization(orgId: string) {
+    try {
+      const result = await deleteOrganization(orgId);
+      toast.success(`Organization deleted successfully. ${result.affectedUsers} user${result.affectedUsers !== 1 ? 's' : ''} unassigned.`);
+      await loadData();
+    } catch (error: any) {
+      toast.error('Failed to delete organization: ' + (error.message || 'Unknown error'));
+      throw error; // Re-throw so CustomerList dialog knows it failed
     }
   }
 
@@ -212,6 +224,7 @@ export function SaasAdminDashboard() {
                 plans={plans}
                 isLoading={isLoading}
                 onRefresh={loadData}
+                onDelete={handleDeleteOrganization}
               />
             </motion.div>
           )}

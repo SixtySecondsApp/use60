@@ -20,7 +20,9 @@ import {
   UserCheck,
   Trash2,
   PlusCircle,
-  Key
+  Key,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useUsers } from '@/lib/hooks/useUsers';
 import { cn } from '@/lib/utils';
@@ -53,6 +55,10 @@ export default function Users() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStage, setSelectedStage] = useState('all');
+  const [filterInternal, setFilterInternal] = useState<'all' | 'internal' | 'external'>('all');
+  const [filterAdmin, setFilterAdmin] = useState<'all' | 'admin' | 'non-admin'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
   const [editingUser, setEditingUser] = useState<EditingUserState | null>(null);
   const [modalTargets, setModalTargets] = useState<Target[]>([]);
   const { users, updateUser, impersonateUser, deleteUser, inviteUser } = useUsers();
@@ -60,7 +66,7 @@ export default function Users() {
   const navigate = useNavigate();
 
   const filteredUsers = useMemo(() => {
-    return users.filter(user => {
+    let result = users.filter(user => {
       const matchesSearch =
         user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -68,9 +74,29 @@ export default function Users() {
 
       const matchesStage = selectedStage === 'all' || user.stage === selectedStage;
 
-      return matchesSearch && matchesStage;
+      const matchesInternal =
+        filterInternal === 'all' ||
+        (filterInternal === 'internal' && user.is_internal) ||
+        (filterInternal === 'external' && !user.is_internal);
+
+      const matchesAdmin =
+        filterAdmin === 'all' ||
+        (filterAdmin === 'admin' && user.is_admin) ||
+        (filterAdmin === 'non-admin' && !user.is_admin);
+
+      return matchesSearch && matchesStage && matchesInternal && matchesAdmin;
     });
-  }, [users, searchQuery, selectedStage]);
+
+    return result;
+  }, [users, searchQuery, selectedStage, filterInternal, filterAdmin]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredUsers.slice(startIndex, endIndex);
+  }, [filteredUsers, currentPage]);
 
   useEffect(() => {
     // Type guard to check if we have a user with targets
@@ -84,12 +110,17 @@ export default function Users() {
       }
     } else {
       // Reset targets if not editing targets or if it's a new user
-      // But only if we are transitioning out of a target editing state? 
+      // But only if we are transitioning out of a target editing state?
       // Actually simpler: just verify logical consistency.
       // The original code reset to [] if editingTargets was truthy but targets wasn't an array.
       // Here we can just default.
     }
   }, [editingUser]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedStage, filterInternal, filterAdmin]);
 
   const handleModalTargetChange = (index: number, field: string, value: string) => {
     setModalTargets(currentTargets => {
@@ -417,7 +448,7 @@ export default function Users() {
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
                         <select
                           className="bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2.5 text-gray-900 dark:text-gray-100 text-sm"
                           value={selectedStage}
@@ -427,6 +458,26 @@ export default function Users() {
                           {USER_STAGES.map(stage => (
                             <option key={stage} value={stage}>{stage}</option>
                           ))}
+                        </select>
+
+                        <select
+                          className="bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2.5 text-gray-900 dark:text-gray-100 text-sm"
+                          value={filterInternal}
+                          onChange={(e) => setFilterInternal(e.target.value as 'all' | 'internal' | 'external')}
+                        >
+                          <option value="all">All Users</option>
+                          <option value="internal">Internal Only</option>
+                          <option value="external">External Only</option>
+                        </select>
+
+                        <select
+                          className="bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2.5 text-gray-900 dark:text-gray-100 text-sm"
+                          value={filterAdmin}
+                          onChange={(e) => setFilterAdmin(e.target.value as 'all' | 'admin' | 'non-admin')}
+                        >
+                          <option value="all">All Roles</option>
+                          <option value="admin">Admins Only</option>
+                          <option value="non-admin">Non-Admins Only</option>
                         </select>
                       </div>
                     </motion.div>
@@ -441,6 +492,7 @@ export default function Users() {
                     <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
                       <th className="text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider px-4 sm:px-6 py-3 whitespace-nowrap">User</th>
                       <th className="text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider px-4 sm:px-6 py-3 whitespace-nowrap">Stage</th>
+                      <th className="text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider px-4 sm:px-6 py-3 whitespace-nowrap">Joined</th>
                       <th className="text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider px-4 sm:px-6 py-3 whitespace-nowrap">Targets</th>
                       <th className="text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider px-4 sm:px-6 py-3 whitespace-nowrap">Internal</th>
                       <th className="text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider px-4 sm:px-6 py-3 whitespace-nowrap">Admin</th>
@@ -448,7 +500,7 @@ export default function Users() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                    {filteredUsers.map((user) => (
+                    {paginatedUsers.map((user) => (
                       <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                         <td className="px-4 sm:px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -483,6 +535,11 @@ export default function Users() {
                               <option key={stage} value={stage}>{stage}</option>
                             ))}
                           </select>
+                        </td>
+                        <td className="px-4 sm:px-6 py-4">
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            {format(parseISO(user.created_at), 'MMM d, yyyy')}
+                          </span>
                         </td>
                         <td className="px-4 sm:px-6 py-4">
                           <button
@@ -549,25 +606,37 @@ export default function Users() {
                               <AlertDialogTrigger asChild>
                                 <button
                                   className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
+                                  title="Delete user account"
                                 >
                                   <Trash2 className="w-4 h-4 text-red-500" />
                                 </button>
                               </AlertDialogTrigger>
                               <AlertDialogContent className="bg-gray-900/95 backdrop-blur-xl border border-gray-800/50">
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete User</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete {user.first_name} {user.last_name}? This action cannot be undone.
-                                    All their activities and targets will also be deleted.
+                                  <AlertDialogTitle className="text-red-400">Permanently Delete User</AlertDialogTitle>
+                                  <AlertDialogDescription className="space-y-3 text-gray-300">
+                                    <p>
+                                      You are about to permanently delete <span className="font-semibold text-white">{user.first_name} {user.last_name}</span> ({user.email}).
+                                    </p>
+                                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-2">
+                                      <p className="text-sm font-medium text-red-400">⚠️ This action will:</p>
+                                      <ul className="text-sm space-y-1 ml-2 text-gray-300">
+                                        <li>• Permanently remove the user's authentication access</li>
+                                        <li>• Allow this email to be used for a new account signup</li>
+                                        <li>• Delete all user data from the system</li>
+                                        <li>• Remove associated activities, tasks, and targets</li>
+                                      </ul>
+                                      <p className="text-xs text-red-300 mt-2">This action <span className="font-semibold">cannot be undone</span>.</p>
+                                    </div>
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel className="bg-gray-800/50 text-gray-300 hover:bg-gray-800">Cancel</AlertDialogCancel>
                                   <AlertDialogAction
                                     onClick={() => deleteUser(user.id)}
-                                    className="bg-red-500 hover:bg-red-600"
+                                    className="bg-red-600 hover:bg-red-700"
                                   >
-                                    Delete
+                                    Yes, Delete User
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -578,6 +647,47 @@ export default function Users() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="px-4 sm:px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Showing {filteredUsers.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredUsers.length)} of {filteredUsers.length} users
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700/50 bg-white dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </button>
+                  <div className="flex items-center gap-1 px-3 py-2">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={cn(
+                          "w-8 h-8 rounded-lg text-sm font-medium transition-colors",
+                          currentPage === page
+                            ? "bg-[#37bd7e] text-white"
+                            : "bg-white dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        )}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700/50 bg-white dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </>

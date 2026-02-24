@@ -120,7 +120,7 @@ export default function Signup() {
     }
 
     if (!validateCompanyDomain(formData.companyDomain)) {
-      toast.error('Please enter a valid company domain (e.g., acme.com)');
+      toast.error('Please enter a valid company domain (e.g., mycompany.com)');
       return;
     }
 
@@ -316,7 +316,7 @@ export default function Signup() {
                   value={formData.companyDomain}
                   onChange={(e) => setFormData({ ...formData, companyDomain: e.target.value })}
                   className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
-                  placeholder="acme.com"
+                  placeholder="mycompany.com"
                   disabled={isLoading}
                 />
               </div>

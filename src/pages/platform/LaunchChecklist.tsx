@@ -29,6 +29,7 @@ import {
   User,
   MessageSquare,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -307,6 +308,7 @@ export default function LaunchChecklist() {
       {/* Header */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-4">
+          <BackToPlatform />
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button

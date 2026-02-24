@@ -2,7 +2,12 @@
  * Sentry Error Monitoring Configuration
  *
  * Provides centralized error monitoring and performance tracking.
- * Only initializes in production or when explicitly enabled.
+ * Only initializes in production environment (VITE_ENVIRONMENT=production).
+ *
+ * Environment Configuration:
+ * - Production: Sentry enabled with full monitoring
+ * - Staging: Sentry disabled (no data sent)
+ * - Development: Sentry disabled (no data sent)
  *
  * Features:
  * - Silent error reporting (no user-facing dialogs)
@@ -16,12 +21,12 @@ import * as Sentry from '@sentry/react';
 import {
   httpClientIntegration,
   extraErrorDataIntegration,
-  feedbackIntegration,
 } from '@sentry/react';
 
 // Get Sentry DSN from environment
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN;
-const IS_PRODUCTION = import.meta.env.PROD;
+const ENVIRONMENT = (import.meta.env.VITE_ENVIRONMENT || 'development').toLowerCase();
+const IS_PRODUCTION = ENVIRONMENT === 'production';
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '2.1.5';
 
 // Rate limiting to prevent error flooding
@@ -83,7 +88,7 @@ export function initSentry() {
     release: `sixty-sales-dashboard@${APP_VERSION}`,
 
     // Environment tagging
-    environment: IS_PRODUCTION ? 'production' : 'development',
+    environment: ENVIRONMENT,
 
     // Performance monitoring - sample 10% in production, 100% in dev
     tracesSampleRate: IS_PRODUCTION ? 0.1 : 1.0,
@@ -131,10 +136,6 @@ export function initSentry() {
         depth: 6, // Deep object inspection
       }),
 
-      // Feedback integration (disabled by default, available for admin use)
-      feedbackIntegration({
-        autoInject: false, // No automatic UI injection
-      }),
     ],
 
     // Filter out noisy errors
@@ -189,8 +190,8 @@ export function initSentry() {
       return event;
     },
 
-    // Don't send in development unless explicitly enabled
-    enabled: IS_PRODUCTION || import.meta.env.VITE_SENTRY_ENABLED === 'true',
+    // Only send in production (not staging or development)
+    enabled: IS_PRODUCTION,
 
     // Max breadcrumbs to keep
     maxBreadcrumbs: 50,
@@ -203,7 +204,7 @@ export function initSentry() {
   });
 
   console.log('[Sentry] Initialized successfully', {
-    environment: IS_PRODUCTION ? 'production' : 'development',
+    environment: ENVIRONMENT,
     release: `sixty-sales-dashboard@${APP_VERSION}`,
   });
 }

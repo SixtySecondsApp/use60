@@ -2,7 +2,11 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
-import { Loader2 } from 'lucide-react';
+import { useOrganizationContext } from '@/lib/hooks/useOrganizationContext';
+import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase/clientV2';
+import { logger } from '@/lib/utils/logger';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -19,6 +23,9 @@ const publicRoutes = [
   '/auth/sso-callback',
   '/auth/verify-email',
   '/auth/set-password', // Waitlist invite password setup - auth handled internally
+  '/auth/pending-approval', // Join request pending approval - auth handled internally
+  '/auth/request-rejected', // Join request rejected - auth handled internally
+  '/auth/accept-join-request', // Join request acceptance - handled in the page
   '/debug-auth',
   '/auth/google/callback',
   '/oauth/fathom/callback',
@@ -64,11 +71,21 @@ const isOnboardingExemptRoute = (pathname: string): boolean => {
 export function ProtectedRoute({ children, redirectTo = '/auth/login' }: ProtectedRouteProps) {
   const { isAuthenticated, loading, user } = useAuth();
   const { needsOnboarding, loading: onboardingLoading } = useOnboardingProgress();
+  const { activeOrgId } = useOrganizationContext();
+  const isResettingOnboarding = useOnboardingV2Store((s) => s.isResettingOnboarding);
   const navigate = useNavigate();
   const location = useLocation();
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [isCheckingEmail, setIsCheckingEmail] = useState(true);
+  const [profileStatus, setProfileStatus] = useState<string | null>(null);
+  const [isCheckingProfileStatus, setIsCheckingProfileStatus] = useState(true);
+  const [hasOrgMembership, setHasOrgMembership] = useState<boolean | null>(null);
+  const [isCheckingOrgMembership, setIsCheckingOrgMembership] = useState(true);
+  const [hasPendingRequest, setHasPendingRequest] = useState<boolean | null>(null);
+  const [isCheckingPendingRequest, setIsCheckingPendingRequest] = useState(true);
+  const [isOrgActive, setIsOrgActive] = useState<boolean | null>(null);
+  const [isCheckingOrgActive, setIsCheckingOrgActive] = useState(true);
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const isPublicRoute = publicRoutes.includes(location.pathname) || isPublicWaitlistRoute(location.pathname);
@@ -100,7 +117,7 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
   const isPasswordRecovery = isResetPasswordPath && hasRecoveryTokens;
   const isOAuthCallback = location.pathname.includes('/oauth/') || location.pathname.includes('/callback');
   const isAuthRequiredRoute = authRequiredRoutes.some(route =>
-    location.pathname === route || location.pathname.startsWith(route + '/')
+    location.pathname === route || location.pathname.startsWith(`${route  }/`)
   );
   const isOnboardingExempt = isOnboardingExemptRoute(location.pathname);
 
@@ -132,6 +149,203 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
     setIsCheckingEmail(false);
   }, [loading, isPublicRoute, user]);
 
+  // Check profile status for join request approval flow
+  useEffect(() => {
+    // Skip check for public routes
+    if (isPublicRoute || !isAuthenticated || !user) {
+      setIsCheckingProfileStatus(false);
+      return;
+    }
+
+    // Wait for auth to complete loading
+    if (loading) {
+      return;
+    }
+
+    const checkProfileStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('profile_status')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!error && data) {
+          const status = data.profile_status || 'active';
+          setProfileStatus(status);
+        }
+      } catch (err) {
+        // Silently fail - not critical
+      } finally {
+        setIsCheckingProfileStatus(false);
+      }
+    };
+
+    checkProfileStatus();
+  }, [isAuthenticated, user, loading, isPublicRoute]);
+
+  // Check if user has organization membership
+  // Users with no org membership must complete onboarding to get assigned to an org
+  useEffect(() => {
+    // Skip check for public routes
+    if (isPublicRoute || !isAuthenticated || !user) {
+      setIsCheckingOrgMembership(false);
+      return;
+    }
+
+    // Wait for auth to complete loading
+    if (loading) {
+      return;
+    }
+
+    const checkOrgMembership = async () => {
+      try {
+        // Try query with member_status first (ORGREM-016)
+        // If migration hasn't been applied, fall back to basic query
+        let hasActiveMembership = false;
+
+        // Try with member_status column
+        const { data: dataWithStatus, error: errorWithStatus } = await supabase
+          .from('organization_memberships')
+          .select('org_id', { count: 'exact' })
+          .eq('user_id', user.id)
+          .eq('member_status', 'active'); // Only check for active memberships
+
+        if (!errorWithStatus && dataWithStatus) {
+          hasActiveMembership = dataWithStatus.length > 0;
+        } else if (errorWithStatus) {
+          // Column doesn't exist (42703 or 400 Bad Request) - check all memberships (assume all are active)
+          const { data: basicData, error: basicError } = await supabase
+            .from('organization_memberships')
+            .select('org_id', { count: 'exact' })
+            .eq('user_id', user.id);
+
+          if (!basicError && basicData) {
+            hasActiveMembership = basicData.length > 0;
+          } else if (basicError) {
+            // Silently fail - use default
+          }
+        }
+
+        setHasOrgMembership(hasActiveMembership);
+      } catch (err) {
+        // Silently fail
+      } finally {
+        setIsCheckingOrgMembership(false);
+      }
+    };
+
+    checkOrgMembership();
+  }, [isAuthenticated, user, loading, isPublicRoute]);
+
+  // Check if user has a pending join or rejoin request
+  // This is important for users waiting for approval after requesting to join or rejoin
+  useEffect(() => {
+    if (isPublicRoute || !isAuthenticated || !user) {
+      setIsCheckingPendingRequest(false);
+      return;
+    }
+
+    if (loading) {
+      return;
+    }
+
+    const checkPendingRequest = async () => {
+      try {
+        // Check organization_join_requests
+        const { data: joinRequest } = await supabase
+          .from('organization_join_requests')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (joinRequest) {
+          setHasPendingRequest(true);
+          setIsCheckingPendingRequest(false);
+          return;
+        }
+
+        // Check rejoin_requests
+        const { data: rejoinRequest } = await supabase
+          .from('rejoin_requests')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (rejoinRequest) {
+          setHasPendingRequest(true);
+          setIsCheckingPendingRequest(false);
+          return;
+        }
+
+        setHasPendingRequest(false);
+      } catch (err) {
+        setHasPendingRequest(false);
+      } finally {
+        setIsCheckingPendingRequest(false);
+      }
+    };
+
+    checkPendingRequest();
+  }, [isAuthenticated, user, loading, isPublicRoute]);
+
+  // Force re-check of pending request when user cancels from pending-approval page
+  // This ensures hasPendingRequest state is updated after the database deletion
+  useEffect(() => {
+    const fromCancelRequest = location.state?.fromCancelRequest;
+    if (fromCancelRequest && isAuthenticated && user) {
+      // Clear the stale hasPendingRequest state immediately
+      setHasPendingRequest(false);
+      setIsCheckingPendingRequest(false);
+    }
+  }, [location.state, isAuthenticated, user]);
+
+  // Check if active organization is inactive
+  // IMPORTANT: Only check once per org to prevent spam/load issues
+  // Store the last checked org ID to avoid redundant checks
+  const lastCheckedOrgRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const checkOrgActiveStatus = async () => {
+      if (!activeOrgId || !user?.id || !isAuthenticated || loading || isPublicRoute) {
+        setIsOrgActive(null);
+        setIsCheckingOrgActive(false);
+        return;
+      }
+
+      // Skip if we already checked this org ID recently
+      if (lastCheckedOrgRef.current === activeOrgId) {
+        setIsCheckingOrgActive(false);
+        return;
+      }
+
+      try {
+        setIsCheckingOrgActive(true);
+        const { data: org, error } = await supabase
+          .from('organizations')
+          .select('is_active, name')
+          .eq('id', activeOrgId)
+          .single();
+
+        if (error) throw error;
+
+        logger.log('[ProtectedRoute] Organization active status:', org?.is_active);
+        setIsOrgActive(org?.is_active ?? true);
+        lastCheckedOrgRef.current = activeOrgId; // Mark this org as checked
+      } catch (error) {
+        logger.error('[ProtectedRoute] Error checking org status:', error);
+        setIsOrgActive(true); // Fail open to avoid blocking users
+        lastCheckedOrgRef.current = activeOrgId; // Still mark as checked to avoid spam
+      } finally {
+        setIsCheckingOrgActive(false);
+      }
+    };
+
+    checkOrgActiveStatus();
+  }, [activeOrgId, user?.id, isAuthenticated, loading, isPublicRoute]);
+
   useEffect(() => {
     // Clean up timeout on unmount
     return () => {
@@ -142,13 +356,91 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
   }, []);
 
   useEffect(() => {
-    // Don't redirect while loading auth, onboarding status, or email verification
-    if (loading || onboardingLoading || isCheckingEmail) return;
+    // Skip all redirect logic while onboarding is resetting to prevent auth cascade
+    if (isResettingOnboarding) {
+      return;
+    }
+
+    // Don't redirect while loading auth, onboarding status, email verification, profile status, org membership, pending requests, or org active status
+    if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest || isCheckingOrgActive) return;
+
+    // Check profile status for join request approval flow
+    // CRITICAL: Check memberships BEFORE checking profile_status
+    // If user has ANY active membership, allow dashboard access even if profile_status is pending
+    // Only redirect to pending approval if profile_status is pending AND no memberships exist
+    if (isAuthenticated && profileStatus === 'pending_approval' && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute) {
+      // If user has active membership, they were approved - allow access and don't redirect
+      if (hasOrgMembership === true) {
+        // Don't redirect - user was approved and membership was created
+        // Profile status will be updated by the approval flow
+      } else if (hasOrgMembership === false) {
+        // User is truly pending approval with no memberships - redirect to pending page
+        navigate('/auth/pending-approval', { replace: true });
+        return;
+      }
+      // If hasOrgMembership is null (still checking), don't redirect yet
+      return;
+    }
+
+    // If user's request was rejected, show error screen
+    if (isAuthenticated && profileStatus === 'rejected' && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute) {
+      navigate('/auth/request-rejected', { replace: true });
+      return;
+    }
+
+    // Check if organization is inactive (including deactivated orgs where activeOrgId points to a deactivated org)
+    // This ensures users with deactivated activeOrgId are redirected to the inactive org page
+    // instead of seeing blank pages or errors in the app
+    if (isAuthenticated && isOrgActive === false && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute) {
+      if (location.pathname !== '/inactive-organization') {
+        logger.log('[ProtectedRoute] Organization is inactive, redirecting to inactive-organization page');
+        navigate('/inactive-organization', { replace: true });
+        return;
+      }
+      // User is on inactive-organization page, allow it
+      return;
+    }
+
+    // CRITICAL: If user has a pending join/rejoin request AND no active membership, they must stay on pending-approval page
+    // Only block if we've finished checking both org membership AND pending requests
+    // EXCEPTION: Skip if user already has org membership (approved but stale join request remains)
+    // EXCEPTION: Skip this check if user just canceled their request (fromCancelRequest flag)
+    const fromCancelRequest = location.state?.fromCancelRequest;
+    if (isAuthenticated && emailVerified && !isCheckingOrgMembership && !isCheckingPendingRequest && hasPendingRequest === true && hasOrgMembership === false && !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute && !fromCancelRequest) {
+      // Only allow pending-approval page, block everything else including onboarding
+      if (location.pathname !== '/auth/pending-approval') {
+        navigate('/auth/pending-approval', { replace: true });
+        return;
+      }
+      // User is on pending-approval page, allow it
+      return;
+    }
 
     // CRITICAL: If user is authenticated and on a protected route, NEVER redirect them away
     // This preserves the current page on refresh
     const isProtectedRoute = !isPublicRoute && !isPasswordRecovery && !isOAuthCallback && !isVerifyEmailRoute;
     if (isAuthenticated && emailVerified && isProtectedRoute) {
+      // CRITICAL: If user has NO organization membership, check for pending requests first
+      // This ensures users waiting for approval stay on the pending page instead of being sent to onboarding
+      if (hasOrgMembership === false && !isOnboardingExempt) {
+        // Check if user has a pending join or rejoin request
+        if (hasPendingRequest === true) {
+          navigate('/auth/pending-approval', { replace: true });
+          return;
+        }
+
+        // No pending request - send to onboarding
+        navigate('/onboarding', { replace: true });
+        return;
+      }
+
+      // If org membership check is still in progress AND this is a dashboard access attempt,
+      // show loading state instead of allowing access
+      if (isCheckingOrgMembership && (location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/'))) {
+        // Block access to dashboard while checking membership
+        return;
+      }
+
       // User is authenticated and on a protected route - allow them to stay
       // Only redirect if they need onboarding and this route is not exempt
       if (needsOnboarding && !isOnboardingExempt) {
@@ -208,10 +500,10 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       });
       return;
     }
-  }, [isAuthenticated, loading, onboardingLoading, isCheckingEmail, emailVerified, needsOnboarding, isPublicRoute, isVerifyEmailRoute, isPasswordRecovery, hasRecoveryTokens, isDevModeBypass, isAuthRequiredRoute, isOnboardingExempt, navigate, redirectTo, location, isRedirecting, user?.email]);
+  }, [isResettingOnboarding, isAuthenticated, loading, onboardingLoading, isCheckingEmail, isCheckingProfileStatus, isCheckingOrgMembership, isCheckingPendingRequest, isCheckingOrgActive, isOrgActive, profileStatus, hasOrgMembership, hasPendingRequest, emailVerified, needsOnboarding, isPublicRoute, isVerifyEmailRoute, isPasswordRecovery, hasRecoveryTokens, isDevModeBypass, isAuthRequiredRoute, isOnboardingExempt, navigate, redirectTo, location, isRedirecting, user?.email, activeOrgId]);
 
-  // Show loading spinner while checking authentication, onboarding status, email verification, or during redirect delay
-  if (loading || onboardingLoading || isCheckingEmail || isRedirecting) {
+  // Show loading spinner while checking authentication, onboarding status, email verification, profile status, org membership, pending requests, org active status, or during redirect delay
+  if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest || isCheckingOrgActive || isRedirecting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(74,74,117,0.25),transparent)] pointer-events-none" />

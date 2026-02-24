@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Play,
-  Calendar,
   RefreshCw,
   ArrowLeft,
   Users,
@@ -15,15 +14,10 @@ import {
   Mail,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { VSLComparisonCards, VSLTrendChart, VSLRetentionGraph } from '@/components/vsl-analytics';
 import {
   useVSLAnalytics,
@@ -35,10 +29,8 @@ import {
   formatLandingPageName,
 } from '@/lib/hooks/useLandingPageAnalytics';
 
-type DateRangePreset = '7d' | '30d' | '90d' | 'thisMonth' | 'lastMonth';
-
 export function VSLAnalytics() {
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('30d');
+  const dateFilter = useDateRangeFilter();
 
   const {
     loading,
@@ -46,16 +38,11 @@ export function VSLAnalytics() {
     data,
     isAdmin,
     userLoading,
-    dateRange,
     variants,
     comparison,
     hasData,
     refresh,
-    setLast7Days,
-    setLast30Days,
-    setLast90Days,
-    setThisMonth,
-    setLastMonth,
+    updateDateRange,
   } = useVSLAnalytics();
 
   // Landing page analytics for video vs non-video comparison
@@ -65,34 +52,79 @@ export function VSLAnalytics() {
     refresh: refreshLanding,
   } = useLandingPageAnalytics();
 
-  const handlePresetChange = (value: DateRangePreset) => {
-    setDatePreset(value);
-    switch (value) {
-      case '7d':
-        setLast7Days();
-        break;
-      case '30d':
-        setLast30Days();
-        break;
-      case '90d':
-        setLast90Days();
-        break;
-      case 'thisMonth':
-        setThisMonth();
-        break;
-      case 'lastMonth':
-        setLastMonth();
-        break;
+  // Sync date filter state with the VSL analytics hook
+  useEffect(() => {
+    if (dateFilter.dateRange?.start && dateFilter.dateRange?.end) {
+      updateDateRange({
+        startDate: dateFilter.dateRange.start,
+        endDate: dateFilter.dateRange.end,
+      });
     }
-  };
+  }, [dateFilter.dateRange]);
 
   // Show loading state while checking user permissions
   if (userLoading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="w-8 h-8 text-brand-violet animate-spin" />
-          <p className="text-gray-400">Loading...</p>
+      <div className="min-h-screen bg-gray-950 text-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Header skeleton */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Skeleton className="h-5 w-5 rounded" />
+                <Skeleton className="h-8 w-64 rounded" />
+              </div>
+              <Skeleton className="h-4 w-80 rounded mt-1" />
+            </div>
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-9 w-36 rounded" />
+              <Skeleton className="h-9 w-9 rounded" />
+            </div>
+          </div>
+          {/* Summary stats skeleton — 4 columns */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-gray-800/30 rounded-lg p-4 flex items-center gap-4">
+                <Skeleton className="h-11 w-11 rounded-lg flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3.5 w-24 rounded" />
+                  <Skeleton className="h-7 w-20 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* VSLComparisonCards skeleton */}
+          <div className="mb-8">
+            <Skeleton className="h-6 w-44 rounded mb-4" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-gray-800/30 border border-gray-700/50 rounded-lg p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-5 w-28 rounded" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <div className="space-y-2">
+                    {[1, 2, 3, 4].map((j) => (
+                      <div key={j} className="flex justify-between">
+                        <Skeleton className="h-4 w-28 rounded" />
+                        <Skeleton className="h-4 w-16 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* VSLTrendChart skeleton */}
+          <div className="mb-8">
+            <Skeleton className="h-6 w-36 rounded mb-4" />
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
+          {/* VSLRetentionGraph skeleton */}
+          <div className="mb-8">
+            <Skeleton className="h-6 w-40 rounded mb-4" />
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
         </div>
       </div>
     );
@@ -121,6 +153,7 @@ export function VSLAnalytics() {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <BackToPlatform />
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
@@ -143,19 +176,10 @@ export function VSLAnalytics() {
 
           <div className="flex items-center gap-3">
             {/* Date Range Selector */}
-            <Select value={datePreset} onValueChange={handlePresetChange}>
-              <SelectTrigger className="w-[160px] bg-gray-800 border-gray-700 text-white">
-                <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-gray-800 border-gray-700">
-                <SelectItem value="7d">Last 7 Days</SelectItem>
-                <SelectItem value="30d">Last 30 Days</SelectItem>
-                <SelectItem value="90d">Last 90 Days</SelectItem>
-                <SelectItem value="thisMonth">This Month</SelectItem>
-                <SelectItem value="lastMonth">Last Month</SelectItem>
-              </SelectContent>
-            </Select>
+            <DateRangeFilter
+              {...dateFilter}
+              variant="dark"
+            />
 
             {/* Refresh Button */}
             <Button
@@ -168,28 +192,6 @@ export function VSLAnalytics() {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
-        </div>
-
-        {/* Date Range Display */}
-        <div className="mb-6">
-          <p className="text-gray-500 text-sm">
-            Showing data from{' '}
-            <span className="text-gray-300">
-              {format(dateRange.startDate, 'MMM d, yyyy')}
-            </span>{' '}
-            to{' '}
-            <span className="text-gray-300">
-              {format(dateRange.endDate, 'MMM d, yyyy')}
-            </span>
-            {data?.fetchedAt && (
-              <span className="ml-2">
-                · Last updated{' '}
-                <span className="text-gray-300">
-                  {format(new Date(data.fetchedAt), 'h:mm a')}
-                </span>
-              </span>
-            )}
-          </p>
         </div>
 
         {/* Error State */}
@@ -294,8 +296,25 @@ export function VSLAnalytics() {
           </h2>
 
           {landingLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="w-6 h-6 text-brand-violet animate-spin" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {[1, 2].map((i) => (
+                <div key={i} className="bg-gray-800/30 rounded-lg p-5 border border-gray-700/50 space-y-3">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Skeleton className="h-9 w-9 rounded-lg" />
+                    <Skeleton className="h-5 w-36 rounded" />
+                  </div>
+                  {[1, 2, 3].map((j) => (
+                    <div key={j} className="bg-gray-900/50 rounded-lg p-3 space-y-2">
+                      <Skeleton className="h-4 w-full rounded" />
+                      <div className="grid grid-cols-3 gap-2">
+                        <Skeleton className="h-8 rounded" />
+                        <Skeleton className="h-8 rounded" />
+                        <Skeleton className="h-8 rounded" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           ) : Object.keys(landingStats.byLandingPage).length === 0 ? (
             <div className="bg-gray-800/30 rounded-lg p-6 text-center">

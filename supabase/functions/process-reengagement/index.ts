@@ -25,6 +25,7 @@ import {
   type ReengagementContext,
 } from "../_shared/engagement/reengagement.ts";
 import type { UserSegment } from "../_shared/engagement/types.ts";
+import { writeToCommandCentre } from "../_shared/commandCentre/writeAdapter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -220,8 +221,8 @@ async function sendViaEmail(
     to: candidate.email,
     subject: emailContent.subject,
     html: emailContent.bodyHtml,
-    from: "notifications@sixtyseconds.ai",
-    fromName: "60",
+    from: "noreply@use60.com",
+    fromName: "Sixty",
   });
 
   if (!result.success) {
@@ -336,6 +337,36 @@ async function processUser(
         has_content_trigger: triggers.length > 0,
       },
     });
+
+    // Dual-write to Command Centre: log the re-engagement outreach as an item
+    try {
+      const firstName = candidate.full_name.split(" ")[0];
+      const topTrigger = primaryTrigger?.trigger_type?.replace(/_/g, " ") || "inactivity";
+
+      await writeToCommandCentre({
+        org_id: candidate.org_id,
+        user_id: candidate.user_id,
+        source_agent: "reengagement",
+        item_type: "outreach",
+        title: `Re-engaged: ${firstName} (${candidate.segment}, ${candidate.days_inactive}d inactive)`,
+        summary: `Signal: ${topTrigger}. Sent via ${channel} using "${REENGAGEMENT_TYPES[reengagementType].name}".`,
+        context: {
+          reengagement_type: reengagementType,
+          channel,
+          segment: candidate.segment,
+          days_inactive: candidate.days_inactive,
+          overall_engagement_score: candidate.overall_engagement_score,
+          trigger_type: primaryTrigger?.trigger_type || null,
+          trigger_entity_type: primaryTrigger?.entity_type || null,
+          trigger_entity_id: primaryTrigger?.entity_id || null,
+          content_triggers_count: triggers.length,
+        },
+        urgency: candidate.segment === "churned" || candidate.segment === "dormant" ? "high" : "normal",
+      });
+    } catch (ccErr) {
+      // CC failure must not break the agent's primary flow
+      console.error("[process-reengagement] CC write failed for user", candidate.user_id, String(ccErr));
+    }
 
     return {
       user_id: candidate.user_id,

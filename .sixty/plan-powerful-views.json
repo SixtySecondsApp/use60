@@ -1,0 +1,655 @@
+{
+  "feature": {
+    "id": "powerful-views",
+    "name": "Powerful Views — Airtable-Level Config + AI Intelligence",
+    "description": "Transform the view system from a simple name+formatting dialog into a full Airtable-class view configuration panel with column visibility, multi-sort, grouping, summary rows, and row-level formatting — plus an AI intelligence layer that suggests smart views, builds views from natural language, and offers template libraries.",
+    "status": "pending",
+    "createdAt": "2026-02-06T00:00:00Z",
+    "previousWork": "plan-dt-views.json (complete) — established SavedView model, ViewSelector tabs, ConditionalFormattingEditor, system view auto-generation"
+  },
+
+  "stories": [
+    {
+      "id": "PV-001",
+      "title": "Replace SaveViewDialog with full ViewConfigPanel slide-over",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+
+      "description": "Replace the tiny SaveViewDialog modal (name + formatting only) with a rich slide-over panel that acts as the single source of truth for view configuration. The panel slides in from the right, shows the table behind it for live preview, and has collapsible sections: Name, Filters, Sort, Columns, Formatting, Summary. Each section shows a compact summary when collapsed (e.g. '3 filters', '2 sorts'). A live row count badge updates as filters change ('23 of 347 rows'). The panel is used for both creating new views and editing existing ones.",
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/ops/SaveViewDialog.tsx",
+          "src/pages/OpsDetailPage.tsx",
+          "src/components/ops/ConditionalFormattingEditor.tsx",
+          "src/components/ops/ActiveFilterBar.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["PV-002", "PV-003", "PV-004", "PV-005", "PV-006"],
+
+      "acceptance": [
+        "New ViewConfigPanel component renders as a right slide-over (not modal)",
+        "Collapsible sections: Name, Filters, Sort, Columns, Formatting",
+        "Each section shows collapsed summary (e.g. '3 filters active')",
+        "Live row count badge: 'Showing X of Y rows'",
+        "Works for both 'New View' and 'Edit View' flows",
+        "Preserves existing filter/sort state when opening for edit",
+        "Save button creates or updates view via existing mutations",
+        "Cancel reverts to previous view state",
+        "Filters section reuses existing ColumnFilterPopover inline",
+        "Dark theme consistent with existing ops UI (gray-900/800/700)"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "src/components/ops/ViewConfigPanel.tsx",
+        "src/components/ops/SaveViewDialog.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Use framer-motion AnimatePresence for slide-in/out. The panel should be ~400px wide. Reuse FilterCondition[] state for filters section, sort state for sort section. The existing SaveViewDialog can be kept as a thin wrapper or removed entirely. The panel's filter changes should update the main table in real-time (call setFilterConditions/setSortState) so users see live preview. On cancel, restore the previous state snapshot. Row count comes from tableData?.total which already reflects active filters."
+    },
+
+    {
+      "id": "PV-002",
+      "title": "Column visibility & reorder in ViewConfigPanel",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Add a 'Columns' section to ViewConfigPanel with a sortable list of all columns. Each row shows: drag handle, column icon, column label, eye toggle. Drag to reorder, click eye to show/hide. Hidden columns are grayed out and sorted to the bottom. The column order is persisted to SavedView.column_config (which already exists as a JSONB field but is always saved as null today). When a view has column_config, OpsTable already respects it via the columnOrder prop.",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/components/ops/ViewConfigPanel.tsx",
+          "src/components/ops/OpsTable.tsx",
+          "src/pages/OpsDetailPage.tsx",
+          "src/lib/services/opsTableService.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Columns section shows all table columns with drag handles and eye toggles",
+        "Drag-to-reorder updates column order in real-time",
+        "Eye toggle hides/shows columns — hidden columns gray out and move to bottom",
+        "column_config saved to view as array of visible column keys in display order",
+        "OpsTable correctly hides columns not in column_config",
+        "'Show all' and 'Hide all' quick actions at section top",
+        "Column type icon shown next to each column label",
+        "Uses @dnd-kit/sortable (already in project) for drag reorder"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/components/ops/ViewConfigPanel.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "column_config field already exists on SavedView and is passed as columnOrder to OpsTable. OpsTable already has column reorder logic via @dnd-kit (lines 286-313 in OpsTable.tsx). The createViewMutation currently hardcodes columnConfig: null — change to pass the panel's column order. For hidden columns, filter them out of the column_config array. OpsTable.tsx lines 286-295 already handles columnOrder to filter and sort visible columns."
+    },
+
+    {
+      "id": "PV-003",
+      "title": "Multi-sort support with ordered sort chips",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Upgrade sort from single-key to multi-key. Change the sort_config schema from a single object to an array of {key, dir} objects. In the ViewConfigPanel Sort section, show ordered sort chips with drag reorder. Each chip has column picker + asc/desc toggle + remove button. Add sort button at bottom. Client-side multi-key comparator for the table data. Backward-compatible: normalize single object to array on read.",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/components/ops/ViewConfigPanel.tsx",
+          "src/pages/OpsDetailPage.tsx",
+          "src/lib/services/opsTableService.ts",
+          "src/components/ops/OpsTable.tsx"
+        ],
+        "schema": ["dynamic_table_views"]
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "sort_config supports both legacy single object and new array format",
+        "Normalization function: if sort_config is single object, wrap in array",
+        "Sort section in ViewConfigPanel shows ordered list of sort rules",
+        "Each rule: column dropdown + asc/desc toggle + drag handle + remove",
+        "'Add sort' button adds new empty rule",
+        "Client-side multi-key comparator sorts table data correctly",
+        "Primary sort first, then secondary for ties, etc.",
+        "Column header click still works for quick single-sort (replaces all)",
+        "Existing views with single sort_config continue to work"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/components/ops/ViewConfigPanel.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "The sort state in OpsDetailPage (line 136) needs to change from `{ key: string; dir: 'asc' | 'desc' } | null` to `Array<{ key: string; dir: 'asc' | 'desc' }>`. Add a normalizeSortConfig() function that handles both formats. The client-side sort in opsTableService.getTableData (lines 531-544) already does single-column sort — extend to multi-key. Use localeCompare for text, parseFloat for numbers, direct compare for dates. No migration needed — JSONB field accepts both formats."
+    },
+
+    {
+      "id": "PV-004",
+      "title": "Row grouping with collapsible sections",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+
+      "description": "Add row grouping to views. New group_config field on SavedView: { column_key, collapsed_by_default, sort_groups_by }. In OpsTable, group rows by the specified column value, render collapsible group headers showing group name + row count. Collapsed groups hide their rows. Group headers can show aggregate stats (sum, avg for number columns). The 'Grouping' section in ViewConfigPanel has a column picker dropdown + collapse toggle.",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/components/ops/ViewConfigPanel.tsx",
+          "src/components/ops/OpsTable.tsx",
+          "src/pages/OpsDetailPage.tsx",
+          "src/lib/services/opsTableService.ts"
+        ],
+        "schema": ["dynamic_table_views"]
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "New group_config field on SavedView interface (JSONB, nullable)",
+        "ViewConfigPanel 'Group by' section with column dropdown + collapse default toggle",
+        "OpsTable renders group headers with: group value, row count badge, collapse toggle",
+        "Collapsed groups hide rows with smooth animation",
+        "Group headers sticky within scroll container",
+        "Number columns show sum in group header",
+        "'No value' group for rows where grouped column is empty",
+        "Groups sorted alphabetically by default, with option for count-based sort",
+        "Remove grouping option (set to null)"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "src/components/ops/ViewConfigPanel.tsx",
+        "src/components/ops/OpsTable.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Group client-side after fetch: rows.reduce() into Map<string, OpsTableRow[]> keyed by cell value for the group column. Render group header rows interleaved with data rows in the virtual list. Use a Set<string> for collapsed group IDs. For aggregates, sum/avg number cells within each group. The group_config is a new JSONB field — add to SavedView interface and createView/updateView service methods. Add to dynamic_table_views via ALTER TABLE ADD COLUMN (migration). The virtual scroll in OpsTable needs to account for group header rows in the item count."
+    },
+
+    {
+      "id": "PV-005",
+      "title": "Summary / aggregate row",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+
+      "description": "Add a sticky summary row at the bottom of OpsTable that shows per-column aggregates. Each column can independently show: Count, Sum, Average, Min, Max, Filled %, Unique Count, or None. The aggregate type is stored per-column in summary_config on the view. Summary row is visually distinct (darker background, bold text). Clicking the summary cell cycles through available aggregate types for that column.",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/components/ops/ViewConfigPanel.tsx",
+          "src/components/ops/OpsTable.tsx",
+          "src/pages/OpsDetailPage.tsx",
+          "src/lib/services/opsTableService.ts"
+        ],
+        "schema": ["dynamic_table_views"]
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "New summary_config field on SavedView: Record<string, AggregateType>",
+        "AggregateType union: 'count' | 'sum' | 'average' | 'min' | 'max' | 'filled_percent' | 'unique_count' | 'none'",
+        "Sticky summary row at bottom of table (doesn't scroll with data)",
+        "Each cell shows computed aggregate value with label prefix (e.g. 'Avg: 42.3')",
+        "Click summary cell to cycle aggregate type for that column",
+        "ViewConfigPanel 'Summary' section with per-column aggregate type pickers",
+        "Number columns default to Sum, text columns to Filled %, others to Count",
+        "Summary computation is client-side on currently visible (filtered) rows",
+        "Visually distinct: bg-gray-800/80, slightly smaller text, top border"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/components/ops/ViewConfigPanel.tsx",
+        "src/components/ops/OpsTable.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Compute aggregates with a useMemo over filtered rows. For 'filled_percent': count non-null non-empty cells / total rows × 100. For 'unique_count': new Set(values).size. Summary row renders outside the virtual scroll container as a sticky bottom element. summary_config is a new JSONB field on dynamic_table_views — add via migration alongside group_config. Type-aware defaults: number→sum, email/url/phone→filled_percent, text→count, dropdown/tags→unique_count."
+    },
+
+    {
+      "id": "PV-006",
+      "title": "Row-level formatting scope in UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Surface the existing row-level formatting support in the ConditionalFormattingEditor. Each formatting rule already has a scope field ('cell' | 'row') and evaluateRowFormatting() already works in OpsTable. Just need to add a toggle to the editor UI: 'Apply to: Cell only / Entire row'. When scope is 'row', the matched style applies to all cells in that row. This is a small UI addition — the backend logic already exists.",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/components/ops/ConditionalFormattingEditor.tsx",
+          "src/lib/utils/conditionalFormatting.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Each formatting rule in the editor shows a scope toggle: 'Cell' or 'Entire row'",
+        "Default scope is 'cell' (backward compatible)",
+        "When 'Entire row' is selected, the formatting rule has scope: 'row'",
+        "OpsTable already handles scope: 'row' via evaluateRowFormatting() — verify it works",
+        "Style presets apply identically regardless of scope",
+        "Toggle styled as segmented control (pill buttons)"
+      ],
+
+      "estimatedMinutes": 10,
+
+      "files": [
+        "src/components/ops/ConditionalFormattingEditor.tsx"
+      ],
+
+      "technicalNotes": "evaluateRowFormatting() at conditionalFormatting.ts already filters rules by scope === 'row' and evaluates them. OpsTable.tsx lines 490-492 already call evaluateRowFormatting() and apply the result. The only missing piece is the UI toggle in ConditionalFormattingEditor. Add a two-option segmented control below each rule's style picker."
+    },
+
+    {
+      "id": "PV-007",
+      "title": "Quick filter bar with inline chips",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+
+      "description": "Add a quick-filter bar above the table (below ViewSelector, above column headers) that shows clickable filter chips for high-value columns. Clicking a chip opens an inline value picker (dropdown of unique values for that column). Selected values become active filter chips with X to remove. This supplements the ViewConfigPanel filters with a faster, Notion-style inline filtering experience. Also add 'Filter by this value' to cell right-click context menu.",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/components/ops/ActiveFilterBar.tsx",
+          "src/pages/OpsDetailPage.tsx",
+          "src/components/ops/OpsTable.tsx",
+          "src/lib/services/opsTableService.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Quick filter bar shows chips for dropdown, status, tags, and boolean columns",
+        "Clicking a chip opens a dropdown with unique values for that column",
+        "Selecting a value creates an 'equals' filter condition",
+        "Multiple values for same column creates OR filter (contains logic)",
+        "Active filters show as filled chips with X to remove",
+        "ActiveFilterBar still shows all active conditions (including from ViewConfigPanel)",
+        "Right-click cell → 'Filter by this value' adds an equals filter",
+        "Chips disappear when all values are selected (no filter active)"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "src/components/ops/QuickFilterBar.tsx",
+        "src/components/ops/ActiveFilterBar.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Use opsTableService.getColumnUniqueValues() (already exists) to populate the value dropdowns. For performance, cache unique values per column in a useMemo. The quick filter bar identifies filterable columns by type: dropdown, status, tags, boolean, and any column with < 20 unique values. Merge quick filter conditions with ViewConfigPanel conditions into the single filterConditions state."
+    },
+
+    {
+      "id": "PV-008",
+      "title": "Database migration for group_config and summary_config",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+
+      "description": "Add two new JSONB columns to dynamic_table_views table: group_config and summary_config. Both nullable, no default. This is a non-breaking change — existing views have null for both fields. Also update the SavedView interface and service methods to read/write these fields.",
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/lib/services/opsTableService.ts"
+        ],
+        "schema": ["dynamic_table_views"]
+      },
+      "blocks": ["PV-004", "PV-005"],
+
+      "acceptance": [
+        "New migration adds group_config JSONB and summary_config JSONB columns",
+        "Both columns are nullable with no default",
+        "SavedView interface updated with group_config and summary_config fields",
+        "createView method accepts group_config and summary_config params",
+        "updateView method accepts group_config and summary_config params",
+        "getViews returns group_config and summary_config",
+        "VIEW_COLUMNS constant updated to include new fields",
+        "Existing views unaffected (null values)"
+      ],
+
+      "estimatedMinutes": 10,
+
+      "files": [
+        "supabase/migrations/20260207100000_view_group_summary_config.sql",
+        "src/lib/services/opsTableService.ts"
+      ],
+
+      "technicalNotes": "Simple ALTER TABLE ADD COLUMN migration. Update VIEW_COLUMNS constant at opsTableService.ts line 167 to include group_config, summary_config. Add to SavedView interface at line 109. Update createView (line 735) and updateView (line 768) to include these fields in the insert/update payloads. No RLS changes needed — same policies apply."
+    },
+
+    {
+      "id": "PV-009",
+      "title": "Smart view suggestions powered by AI analysis",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "After table data loads, analyze columns and value distributions to suggest 3-5 intelligent views. Suggestions appear as a dismissable banner below the ViewSelector ('AI suggests: Stale Leads | High Value Pipeline | Missing Emails'). Each suggestion is a one-click view creation with pre-configured filters, sort, and formatting. Uses the existing ops-table-ai-query edge function with a new 'suggest_views' tool that returns structured view configs. Suggestions are cached per table to avoid repeated API calls.",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/pages/OpsDetailPage.tsx",
+          "supabase/functions/ops-table-ai-query/index.ts",
+          "src/lib/services/opsTableService.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "New 'suggest_views' tool added to ops-table-ai-query edge function",
+        "Tool analyzes column types + sample values + value distributions",
+        "Returns 3-5 suggested views with name, filters, sort, formatting, and rationale",
+        "Suggestion banner appears below ViewSelector after data loads",
+        "Each suggestion is a clickable chip that creates the view instantly",
+        "Dismiss button hides suggestions (stored in localStorage per table)",
+        "Suggestions cached in React Query with 10min stale time",
+        "No suggestion shown if table has < 5 rows",
+        "Suggestions are contextually smart: detect date columns for 'Recent', status for 'Pipeline', email for 'Outreach Ready', score for 'Top Performers'"
+      ],
+
+      "estimatedMinutes": 25,
+
+      "files": [
+        "src/components/ops/SmartViewSuggestions.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "Add a new tool 'suggest_views' to the edge function that returns an array of view configs. The system prompt already has column metadata and sample values — extend it with value distribution stats (unique count, null rate, min/max for numbers). Frontend: new SmartViewSuggestions component that calls supabase.functions.invoke('ops-table-ai-query', { body: { tableId, query: '__suggest_views__' } }). Cache result in React Query. Each suggestion includes: name, filter_config, sort_config, formatting_rules, description."
+    },
+
+    {
+      "id": "PV-010",
+      "title": "Natural language view builder in ViewConfigPanel",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "Add a natural language input at the top of ViewConfigPanel: 'Describe your view...' text area. User types something like 'Show me California leads with deal size over $10k, sorted by score, hide the email column'. The AI parses this into filter/sort/column/formatting config and auto-fills all sections of the panel. Uses existing ops-table-ai-query edge function's create_view tool. The NL input is optional — users can always configure manually.",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/components/ops/ViewConfigPanel.tsx",
+          "supabase/functions/ops-table-ai-query/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Text area at top of ViewConfigPanel with 'Describe your ideal view...' placeholder",
+        "Submit button with sparkles icon (AI indicator)",
+        "AI parses description into: filters, sort, column visibility, formatting, name",
+        "All ViewConfigPanel sections auto-populate from AI response",
+        "User can then manually adjust any section before saving",
+        "Loading state with 'Configuring view...' spinner",
+        "Error handling: toast if AI fails, allow manual config as fallback",
+        "Enhances existing create_view tool to also return column_config and formatting_rules",
+        "Works with conversational follow-ups: 'also hide phone column'"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/components/ops/ViewConfigPanel.tsx",
+        "supabase/functions/ops-table-ai-query/index.ts"
+      ],
+
+      "technicalNotes": "Extend the create_view tool in the edge function to accept a richer output: { view_name, filter_conditions, sort_config, hidden_columns, formatting_rules }. The hidden_columns field is an array of column keys to exclude from column_config. In the ViewConfigPanel, call supabase.functions.invoke('ops-table-ai-query', { body: { tableId, query: userDescription } }) and map the response into panel state. Use the existing conversational context (OI-026) for follow-ups."
+    },
+
+    {
+      "id": "PV-011",
+      "title": "View templates library",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "Create a template library panel accessible from the ViewConfigPanel and the 'New View' button. Templates are organized by use case: Pipeline Review, Email Outreach Ready, Data Quality Audit, ICP Fit Analysis, HubSpot Sync Status, Recently Updated, Engagement Scoring. Each template defines filter/sort/column/formatting patterns that adapt to the table's actual columns via fuzzy matching (e.g., 'email' column type maps to email-related templates).",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/components/ops/ViewConfigPanel.tsx",
+          "src/lib/utils/systemViewGenerator.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Template library accessible via button in ViewConfigPanel header",
+        "Templates displayed as cards with icon, name, description, and preview badge showing what config it sets",
+        "At least 8 templates covering common sales ops use cases",
+        "Templates adapt to actual columns: fuzzy match column types and names",
+        "Clicking a template auto-fills ViewConfigPanel sections",
+        "Templates that can't map to current columns are shown grayed out with tooltip explaining why",
+        "User can modify template config before saving",
+        "Template categories: Segmentation, Outreach, Data Quality, Analytics, Sync Status"
+      ],
+
+      "estimatedMinutes": 20,
+
+      "files": [
+        "src/components/ops/ViewTemplateLibrary.tsx",
+        "src/lib/utils/viewTemplates.ts",
+        "src/components/ops/ViewConfigPanel.tsx"
+      ],
+
+      "technicalNotes": "Templates are client-side definitions — no database needed. Each template is a function that takes OpsTableColumn[] and returns a partial ViewConfig or null (if columns don't match). Use column_type matching first, then key/label fuzzy matching. Example: 'Email Outreach Ready' template looks for email-type column, creates filter is_not_empty on email, sorts by score column if exists. Extend the existing systemViewGenerator.ts pattern with richer template configs."
+    },
+
+    {
+      "id": "PV-012",
+      "title": "Auto-formatting by data type (smart formatting)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+
+      "description": "Add a one-click 'Smart Format' button in the Formatting section of ViewConfigPanel. When clicked, automatically generates sensible conditional formatting rules based on column types and value distributions: color-code status/dropdown columns, highlight empty required fields red, shade high/low values in number columns (heat map style), bold person-type columns. Users can then modify or remove individual rules.",
+
+      "dependencies": {
+        "stories": ["PV-001", "PV-006"],
+        "files": [
+          "src/components/ops/ViewConfigPanel.tsx",
+          "src/components/ops/ConditionalFormattingEditor.tsx",
+          "src/lib/utils/conditionalFormatting.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "One-click 'Smart Format' button with sparkles icon in Formatting section",
+        "Generates rules for: status/dropdown columns (color per value), empty email/phone (red), number columns (gradient from red to green based on value range), person columns (bold)",
+        "For dropdown columns with color config, uses the dropdown's own colors",
+        "For number columns: detects min/max from data, creates 3 rules (low=red, mid=yellow, high=green)",
+        "For empty required-looking fields: 'is_empty' → red background",
+        "Generated rules appear in the ConditionalFormattingEditor for editing",
+        "Button labeled 'Auto-format' when no rules exist, 'Re-format' when rules already exist",
+        "Confirm dialog before replacing existing rules"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "src/lib/utils/autoFormatting.ts",
+        "src/components/ops/ViewConfigPanel.tsx",
+        "src/components/ops/ConditionalFormattingEditor.tsx"
+      ],
+
+      "technicalNotes": "Create a generateAutoFormatRules(columns, rows) function that analyzes columns and sample data. For dropdowns: one rule per unique value → assign colors from a palette. For numbers: compute percentiles → 3 rules using greater_than/less_than with STYLE_PRESETS red/yellow/green. For empty emails: is_empty → red preset. For person columns: is_not_empty → bold. Return FormattingRule[]. This is all client-side — no edge function needed."
+    },
+
+    {
+      "id": "PV-013",
+      "title": "Edit existing view from ViewSelector context menu",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "Add 'Edit view' option to the ViewSelector context menu (alongside Rename, Duplicate, Delete). Clicking it opens the ViewConfigPanel pre-populated with the view's existing config. Changes are saved via updateView mutation. This completes the edit flow — currently you can only create views with full config, not edit an existing view's filters/sort/columns after creation.",
+
+      "dependencies": {
+        "stories": ["PV-001"],
+        "files": [
+          "src/components/ops/ViewSelector.tsx",
+          "src/pages/OpsDetailPage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "'Edit view' option appears in ViewSelector context menu (above Rename)",
+        "Not shown for system views (they are read-only)",
+        "Opens ViewConfigPanel in edit mode with all sections pre-filled",
+        "Save updates the existing view (not create new)",
+        "Cancel closes panel and reverts any live-preview changes",
+        "Panel title shows 'Edit View: {name}' in edit mode vs 'New View' in create mode",
+        "All sections editable: filters, sort, columns, formatting, grouping, summary"
+      ],
+
+      "estimatedMinutes": 10,
+
+      "files": [
+        "src/components/ops/ViewSelector.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "ViewSelector already has a context menu with rename/duplicate/delete. Add 'Edit' option that calls a new onEditView(viewId) prop. In OpsDetailPage, this opens the ViewConfigPanel in edit mode (pass existingView prop). The panel's Save action calls updateViewMutation instead of createViewMutation. The updateView service method (opsTableService.ts line 768) already supports updating filterConfig, sortConfig, columnConfig, and formattingRules."
+    },
+
+    {
+      "id": "PV-014",
+      "title": "Deploy updated edge function to staging",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+
+      "description": "Deploy the updated ops-table-ai-query edge function (with suggest_views tool and enhanced create_view tool) to the staging Supabase project. Run the view config migration on staging. Smoke test: verify smart suggestions load, NL view builder works, and all existing AI query functionality still works.",
+
+      "dependencies": {
+        "stories": ["PV-008", "PV-009", "PV-010"],
+        "files": [
+          "supabase/functions/ops-table-ai-query/index.ts",
+          "supabase/migrations/20260207100000_view_group_summary_config.sql"
+        ],
+        "schema": ["dynamic_table_views"]
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Migration applied to staging project (caerqjzvuerejfrdtygb)",
+        "ops-table-ai-query deployed with --no-verify-jwt",
+        "Smart view suggestions return valid configs for existing tables",
+        "NL view builder correctly parses 'show me X sorted by Y' queries",
+        "Existing AI query operations (filter, delete, update, etc.) still work",
+        "No regressions in existing view CRUD operations"
+      ],
+
+      "estimatedMinutes": 10,
+
+      "files": [],
+
+      "technicalNotes": "Deploy command: npx supabase functions deploy ops-table-ai-query --project-ref caerqjzvuerejfrdtygb --no-verify-jwt. Apply migration: npx supabase db push --project-ref caerqjzvuerejfrdtygb. Pin esm.sh imports to @2.43.4 if not already."
+    }
+  ],
+
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Foundation",
+      "description": "Database schema changes and core ViewConfigPanel component that all other features plug into",
+      "stories": ["PV-008", "PV-001"],
+      "estimatedMinutes": 40
+    },
+    {
+      "id": "phase-2",
+      "name": "Manual Configuration Power",
+      "description": "Column visibility, multi-sort, row-level formatting, and view editing — the Airtable-level config features",
+      "stories": ["PV-002", "PV-003", "PV-006", "PV-013"],
+      "parallel": [["PV-002", "PV-003", "PV-006", "PV-013"]],
+      "estimatedMinutes": 65
+    },
+    {
+      "id": "phase-3",
+      "name": "Advanced Display",
+      "description": "Row grouping, summary rows, and quick filter bar — advanced table display features",
+      "stories": ["PV-004", "PV-005", "PV-007"],
+      "parallel": [["PV-004", "PV-005", "PV-007"]],
+      "estimatedMinutes": 70
+    },
+    {
+      "id": "phase-4",
+      "name": "AI Intelligence Layer",
+      "description": "Smart suggestions, natural language builder, templates, and auto-formatting — the intelligence features",
+      "stories": ["PV-009", "PV-010", "PV-011", "PV-012"],
+      "parallel": [["PV-009", "PV-010"], ["PV-011", "PV-012"]],
+      "estimatedMinutes": 80
+    },
+    {
+      "id": "phase-5",
+      "name": "Deploy & Verify",
+      "description": "Deploy to staging, run migration, smoke test all features",
+      "stories": ["PV-014"],
+      "estimatedMinutes": 10
+    }
+  ],
+
+  "summary": {
+    "totalStories": 14,
+    "totalEstimatedMinutes": 265,
+    "storyTypes": {
+      "frontend": 11,
+      "backend": 1,
+      "schema": 1,
+      "deploy": 1
+    },
+    "parallelOpportunities": [
+      { "group": ["PV-002", "PV-003", "PV-006", "PV-013"], "reason": "All plug into ViewConfigPanel independently", "timeSaved": "35min" },
+      { "group": ["PV-004", "PV-005", "PV-007"], "reason": "Independent OpsTable display features", "timeSaved": "40min" },
+      { "group": ["PV-009", "PV-010"], "reason": "Different AI integration points", "timeSaved": "20min" },
+      { "group": ["PV-011", "PV-012"], "reason": "Independent template/auto-format utilities", "timeSaved": "15min" }
+    ],
+    "criticalPath": "PV-008 → PV-001 → PV-004/PV-005 (schema → panel → grouping/summary)",
+    "mvpStories": ["PV-008", "PV-001", "PV-002", "PV-003", "PV-006", "PV-013"],
+    "mvpEstimatedMinutes": 105,
+    "mvpDelivers": "Full ViewConfigPanel with column visibility, multi-sort, row formatting, and view editing"
+  }
+}

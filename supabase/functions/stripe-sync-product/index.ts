@@ -2,14 +2,10 @@
 // Syncs product data from Stripe back to the database
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 import { getStripeClient } from "../_shared/stripe.ts";
 import { captureException } from "../_shared/sentryEdge.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/corsHelper.ts";
 
 interface SyncProductRequest {
   plan_id: string;
@@ -18,7 +14,7 @@ interface SyncProductRequest {
 serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: getCorsHeaders(req) });
   }
 
   try {
@@ -144,7 +140,7 @@ serve(async (req: Request) => {
         monthly_amount: monthlyPrice?.unit_amount || null,
         yearly_amount: yearlyPrice?.unit_amount || null,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Error syncing Stripe product:", error);
@@ -160,7 +156,7 @@ serve(async (req: Request) => {
       JSON.stringify({ error: message }),
       {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       }
     );
   }

@@ -15,7 +15,8 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { logAICostEvent, checkCreditBalance, extractAnthropicUsage } from '../_shared/costTracking.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -144,7 +145,7 @@ async function extractStructuredSummary(
   companyName: string,
   dealStage: string,
   attendees: string[]
-): Promise<{ summary: StructuredSummary; tokensUsed: number }> {
+): Promise<{ summary: StructuredSummary; tokensUsed: number; inputTokens: number; outputTokens: number }> {
   if (!anthropicApiKey) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
@@ -190,7 +191,9 @@ async function extractStructuredSummary(
 
   const result = await response.json();
   const content = result.content[0]?.text;
-  const tokensUsed = (result.usage?.input_tokens || 0) + (result.usage?.output_tokens || 0);
+  const inputTokens = result.usage?.input_tokens || 0;
+  const outputTokens = result.usage?.output_tokens || 0;
+  const tokensUsed = inputTokens + outputTokens;
 
   // Parse JSON response
   let summary: StructuredSummary;
@@ -211,7 +214,7 @@ async function extractStructuredSummary(
     throw new Error('Failed to parse AI response as JSON');
   }
 
-  return { summary, tokensUsed };
+  return { summary, tokensUsed, inputTokens, outputTokens };
 }
 
 /**
@@ -640,9 +643,9 @@ async function findDealForMeeting(
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const { meetingId, forceReprocess = false }: RequestBody = await req.json();
@@ -695,12 +698,21 @@ serve(async (req) => {
       );
     }
 
+    // Credit balance check before AI call
+    const balanceCheck = await checkCreditBalance(supabase, meeting.org_id);
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Extract attendee names
     const attendees = meeting.meeting_attendees?.map((a: any) => a.name || a.email) || [];
 
     // Extract structured summary using Claude
     const startTime = Date.now();
-    const { summary, tokensUsed } = await extractStructuredSummary(
+    const { summary, tokensUsed, inputTokens, outputTokens } = await extractStructuredSummary(
       meeting.transcript_text,
       meeting.title,
       meeting.company_name,
@@ -708,6 +720,18 @@ serve(async (req) => {
       attendees
     );
     const processingTimeMs = Date.now() - startTime;
+
+    // Log AI cost event
+    await logAICostEvent(
+      supabase,
+      meeting.owner_user_id,
+      meeting.org_id,
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      inputTokens,
+      outputTokens,
+      'meeting_summary',
+    );
 
     // Save to database
     await saveStructuredSummary(

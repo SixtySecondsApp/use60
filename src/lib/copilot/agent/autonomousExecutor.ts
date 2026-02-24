@@ -1,0 +1,762 @@
+/**
+ * Autonomous Executor
+ *
+ * Enables Claude to autonomously decide which skills to use via native tool use.
+ * Skills are exposed as tools that Claude can discover and invoke based on user intent.
+ *
+ * Flow:
+ * 1. Load all active skills and convert to tool definitions
+ * 2. Send user message to Claude with tools available
+ * 3. Claude decides which tool(s) to call (or asks clarifying questions)
+ * 4. Execute the tools, return results to Claude
+ * 5. Claude continues until task is complete
+ */
+
+import Anthropic from '@anthropic-ai/sdk';
+import { supabase } from '../../supabase/clientV2';
+import type { SkillFrontmatterV2 } from '../../types/skills';
+import { cleanUnresolvedVariables, hasUnresolvedVariables } from '../../utils/templateUtils';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+export interface SkillToolDefinition {
+  name: string;
+  description: string;
+  input_schema: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+  // Internal metadata (not sent to Claude)
+  _skillId: string;
+  _skillKey: string;
+  _category: string;
+  _isSequence: boolean;
+}
+
+export interface ExecutorConfig {
+  organizationId: string;
+  userId: string;
+  /** Optional organization context to inject */
+  orgContext?: Record<string, unknown>;
+  /** Model to use (default: claude-haiku-4-5) */
+  model?: string;
+  /** Maximum tool use iterations (default: 10) */
+  maxIterations?: number;
+  /** System prompt additions */
+  systemPromptAdditions?: string;
+  /** ICP profile context (for ICP/persona-related requests) */
+  icpProfile?: {
+    id: string;
+    name: string;
+    profile_type?: 'icp' | 'persona';
+    parent_icp_id?: string | null;
+    criteria?: Record<string, unknown>;
+  };
+  /** Parent ICP profile (when icpProfile is a persona) */
+  parentIcpProfile?: {
+    id: string;
+    name: string;
+    criteria?: Record<string, unknown>;
+  };
+}
+
+export interface ExecutorMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  toolCalls?: ToolCallInfo[];
+  toolResults?: ToolResultInfo[];
+}
+
+export interface ToolCallInfo {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
+export interface ToolResultInfo {
+  toolUseId: string;
+  result: unknown;
+  isError: boolean;
+}
+
+export interface ExecutorResult {
+  success: boolean;
+  response: string;
+  messages: ExecutorMessage[];
+  toolsUsed: string[];
+  iterations: number;
+  error?: string;
+}
+
+// =============================================================================
+// Skill to Tool Conversion
+// =============================================================================
+
+/**
+ * Convert a skill's frontmatter to a Claude tool definition
+ */
+function skillToTool(skill: {
+  skill_key: string;
+  category: string;
+  frontmatter: SkillFrontmatterV2;
+  content: string;
+}): SkillToolDefinition {
+  const fm = skill.frontmatter;
+
+  // Build input schema from skill's inputs definition
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+
+  // Add inputs from frontmatter
+  if (fm.inputs && Array.isArray(fm.inputs)) {
+    for (const input of fm.inputs) {
+      properties[input.name] = {
+        type: input.type || 'string',
+        description: input.description || `Input: ${input.name}`,
+      };
+      if (input.required) {
+        required.push(input.name);
+      }
+    }
+  }
+
+  // Add required_context as optional inputs
+  if (fm.required_context && Array.isArray(fm.required_context)) {
+    for (const ctx of fm.required_context) {
+      if (!properties[ctx]) {
+        properties[ctx] = {
+          type: 'string',
+          description: `Context: ${ctx}`,
+        };
+      }
+    }
+  }
+
+  // If no inputs defined, add a generic "query" input
+  if (Object.keys(properties).length === 0) {
+    properties['query'] = {
+      type: 'string',
+      description: 'The query or request for this skill',
+    };
+  }
+
+  // Build description from frontmatter
+  let description = fm.description || `Execute the ${fm.name || skill.skill_key} skill`;
+
+  // Add trigger examples to help Claude understand when to use this tool
+  if (fm.triggers && fm.triggers.length > 0) {
+    const triggerExamples = fm.triggers
+      .slice(0, 3)
+      .map((t) => (typeof t === 'string' ? t : t.pattern))
+      .join(', ');
+    description += ` Use when user mentions: ${triggerExamples}.`;
+  }
+
+  // Add output info if available
+  if (fm.outputs && fm.outputs.length > 0) {
+    const outputNames = fm.outputs.map((o) => o.name).join(', ');
+    description += ` Returns: ${outputNames}.`;
+  }
+
+  return {
+    name: skill.skill_key.replace(/[^a-zA-Z0-9_-]/g, '_'),
+    description: description.slice(0, 1024), // Claude limit
+    input_schema: {
+      type: 'object',
+      properties,
+      required: required.length > 0 ? required : undefined,
+    },
+    _skillId: skill.skill_key, // Uses skill_key (RPC doesn't return UUID id)
+    _skillKey: skill.skill_key,
+    _category: skill.category,
+    _isSequence: skill.category === 'agent-sequence',
+  };
+}
+
+// =============================================================================
+// Autonomous Executor Class
+// =============================================================================
+
+export class AutonomousExecutor {
+  private config: Required<ExecutorConfig>;
+  private anthropic: Anthropic;
+  private tools: SkillToolDefinition[] = [];
+  private skillContentCache: Map<string, string> = new Map();
+
+  constructor(config: ExecutorConfig) {
+    this.config = {
+      organizationId: config.organizationId,
+      userId: config.userId,
+      orgContext: config.orgContext || {},
+      model: config.model || 'claude-haiku-4-5',
+      maxIterations: config.maxIterations || 10,
+      systemPromptAdditions: config.systemPromptAdditions || '',
+      icpProfile: config.icpProfile,
+      parentIcpProfile: config.parentIcpProfile,
+    };
+
+    this.anthropic = new Anthropic();
+  }
+
+  /** Whether the org has Apify connected */
+  private apifyConnected = false;
+
+  /**
+   * Initialize by loading all available skills as tools.
+   * Only loads Tier 1 (metadata/frontmatter) — content_template is lazy-loaded
+   * on first execution to reduce startup token cost.
+   */
+  async initialize(): Promise<void> {
+    // Load from organization_skills via RPC (compiled, org-specific skills)
+    const { data: skills, error } = await supabase
+      .rpc('get_organization_skills_for_agent', {
+        p_org_id: this.config.organizationId,
+      }) as { data: Array<{ skill_key: string; category: string; frontmatter: Record<string, unknown>; content: string; is_enabled: boolean }> | null; error: { message: string } | null };
+
+    if (error) {
+      console.error('[AutonomousExecutor.initialize] Error loading skills:', error);
+      throw new Error(`Failed to load skills: ${error.message}`);
+    }
+
+    // Filter out HITL skills and convert to tool definitions
+    const activeSkills = (skills || []).filter(
+      (s) => s.category !== 'hitl'
+    );
+
+    this.tools = activeSkills.map((skill) =>
+      skillToTool({
+        skill_key: skill.skill_key,
+        category: skill.category,
+        frontmatter: skill.frontmatter as SkillFrontmatterV2,
+        content: '', // Content used only during execution, not in tool definition
+      })
+    );
+
+    // Pre-cache content from the RPC response (already compiled for this org).
+    // The RPC uses COALESCE(compiled_content, content_template) so if compiled_content
+    // is NULL, raw platform_skills content_template with ${variable} placeholders may
+    // leak through. Clean any remaining placeholders as a safety net.
+    this.skillContentCache.clear();
+    for (const skill of activeSkills) {
+      if (skill.content) {
+        const content = hasUnresolvedVariables(skill.content)
+          ? cleanUnresolvedVariables(skill.content, '')
+          : skill.content;
+        this.skillContentCache.set(skill.skill_key, content);
+      }
+    }
+
+    // Load reference documents from skill_documents and append to cached content.
+    // The RPC doesn't return platform_skills.id (UUID), so look up UUIDs first.
+    await this.loadReferenceDocuments(activeSkills.map((s) => s.skill_key));
+
+    // Check if org has Apify connected
+    await this.checkApifyConnection();
+
+    console.log(`[AutonomousExecutor] Initialized with ${this.tools.length} tools from organization_skills${this.apifyConnected ? ' (Apify connected)' : ''}`);
+  }
+
+  /**
+   * Check if the organization has an active Apify integration.
+   * When connected, Apify skills (actor browse, run trigger, results query)
+   * are available via the standard skill/sequence execution path.
+   */
+  private async checkApifyConnection(): Promise<void> {
+    try {
+      const { data, error } = await supabase
+        .from('integration_credentials')
+        .select('id')
+        .eq('organization_id', this.config.organizationId)
+        .eq('provider', 'apify')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      this.apifyConnected = !error && !!data;
+    } catch {
+      this.apifyConnected = false;
+    }
+  }
+
+  /**
+   * Load reference documents from skill_documents and append to cached skill content.
+   * Resolves platform_skills UUIDs from skill_keys, then batch-fetches reference docs.
+   */
+  private async loadReferenceDocuments(skillKeys: string[]): Promise<void> {
+    if (skillKeys.length === 0) return;
+
+    try {
+      // Look up platform_skills UUIDs for the skill keys
+      const { data: platformSkills, error: psError } = await supabase
+        .from('platform_skills')
+        .select('id, skill_key')
+        .in('skill_key', skillKeys)
+        .eq('is_active', true);
+
+      if (psError || !platformSkills?.length) return;
+
+      const skillIds = platformSkills.map((ps) => ps.id);
+
+      // Batch-fetch all reference documents for these skills
+      const { data: refs, error: refsError } = await supabase
+        .from('skill_documents')
+        .select('skill_id, title, content')
+        .in('skill_id', skillIds)
+        .eq('doc_type', 'reference');
+
+      if (refsError || !refs?.length) return;
+
+      // Group refs by skill_id (UUID)
+      const refsBySkillId = new Map<string, Array<{ title: string; content: string }>>();
+      for (const ref of refs) {
+        if (!refsBySkillId.has(ref.skill_id)) {
+          refsBySkillId.set(ref.skill_id, []);
+        }
+        refsBySkillId.get(ref.skill_id)!.push({ title: ref.title, content: ref.content });
+      }
+
+      // Build UUID -> skill_key lookup
+      const uuidToKey = new Map<string, string>();
+      for (const ps of platformSkills) {
+        uuidToKey.set(ps.id, ps.skill_key);
+      }
+
+      // Append reference docs to cached skill content
+      for (const [skillId, skillRefs] of refsBySkillId) {
+        const skillKey = uuidToKey.get(skillId);
+        if (!skillKey) continue;
+
+        const existing = this.skillContentCache.get(skillKey);
+        if (!existing) continue;
+
+        let refSection = '\n\n---\n## Reference Documents\n';
+        for (const ref of skillRefs) {
+          refSection += `\n### ${ref.title}\n${ref.content}\n`;
+        }
+        this.skillContentCache.set(skillKey, existing + refSection);
+      }
+    } catch (err) {
+      // Non-fatal: skills still work without reference docs
+      console.warn('[AutonomousExecutor] Failed to load reference documents:', err);
+    }
+  }
+
+  /**
+   * Execute a user request autonomously
+   * Claude will decide which skills to use
+   */
+  async execute(userMessage: string): Promise<ExecutorResult> {
+    if (this.tools.length === 0) {
+      await this.initialize();
+    }
+
+    const messages: ExecutorMessage[] = [];
+    const toolsUsed: string[] = [];
+    let iterations = 0;
+
+    // Build system prompt
+    const systemPrompt = this.buildSystemPrompt();
+
+    // Build Claude tools array (without internal metadata)
+    const claudeTools: Anthropic.Tool[] = this.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.input_schema as Anthropic.Tool.InputSchema,
+    }));
+
+    // Initial message history for Claude
+    let claudeMessages: Anthropic.MessageParam[] = [
+      { role: 'user', content: userMessage },
+    ];
+
+    messages.push({ role: 'user', content: userMessage });
+
+    try {
+      // Agentic loop - let Claude decide what to do
+      while (iterations < this.config.maxIterations) {
+        iterations++;
+
+        // Call Claude
+        const response = await this.anthropic.messages.create({
+          model: this.config.model,
+          max_tokens: 4096,
+          system: systemPrompt,
+          tools: claudeTools,
+          messages: claudeMessages,
+        });
+
+        // Check stop reason
+        if (response.stop_reason === 'end_turn') {
+          // Claude is done - extract text response
+          const textContent = response.content.find((c) => c.type === 'text');
+          const finalResponse = textContent?.type === 'text' ? textContent.text : '';
+
+          messages.push({ role: 'assistant', content: finalResponse });
+
+          return {
+            success: true,
+            response: finalResponse,
+            messages,
+            toolsUsed: [...new Set(toolsUsed)],
+            iterations,
+          };
+        }
+
+        if (response.stop_reason === 'tool_use') {
+          // Claude wants to use tools
+          const toolUseBlocks = response.content.filter(
+            (c) => c.type === 'tool_use'
+          ) as Anthropic.ToolUseBlock[];
+
+          const textBlock = response.content.find((c) => c.type === 'text');
+          const assistantText = textBlock?.type === 'text' ? textBlock.text : '';
+
+          const toolCalls: ToolCallInfo[] = [];
+          const toolResults: ToolResultInfo[] = [];
+
+          // Execute each tool call
+          for (const toolUse of toolUseBlocks) {
+            toolCalls.push({
+              id: toolUse.id,
+              name: toolUse.name,
+              input: toolUse.input as Record<string, unknown>,
+            });
+
+            toolsUsed.push(toolUse.name);
+
+            try {
+              const result = await this.executeTool(
+                toolUse.name,
+                toolUse.input as Record<string, unknown>
+              );
+
+              toolResults.push({
+                toolUseId: toolUse.id,
+                result,
+                isError: false,
+              });
+            } catch (toolError) {
+              const errorMsg =
+                toolError instanceof Error ? toolError.message : String(toolError);
+
+              toolResults.push({
+                toolUseId: toolUse.id,
+                result: { error: errorMsg },
+                isError: true,
+              });
+            }
+          }
+
+          messages.push({
+            role: 'assistant',
+            content: assistantText,
+            toolCalls,
+          });
+
+          // Add assistant message with tool use to Claude messages
+          claudeMessages.push({
+            role: 'assistant',
+            content: response.content,
+          });
+
+          // Add tool results to Claude messages
+          claudeMessages.push({
+            role: 'user',
+            content: toolResults.map((tr) => ({
+              type: 'tool_result' as const,
+              tool_use_id: tr.toolUseId,
+              content: JSON.stringify(tr.result),
+              is_error: tr.isError,
+            })),
+          });
+
+          messages.push({
+            role: 'user',
+            content: '[Tool results returned]',
+            toolResults,
+          });
+
+          // Continue the loop for Claude to process results
+          continue;
+        }
+
+        // Unexpected stop reason
+        console.warn(
+          `[AutonomousExecutor] Unexpected stop reason: ${response.stop_reason}`
+        );
+        break;
+      }
+
+      // Max iterations reached
+      return {
+        success: false,
+        response: 'Maximum iterations reached without completing the task.',
+        messages,
+        toolsUsed: [...new Set(toolsUsed)],
+        iterations,
+        error: 'max_iterations_reached',
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('[AutonomousExecutor.execute] Error:', error);
+
+      return {
+        success: false,
+        response: `An error occurred: ${errorMsg}`,
+        messages,
+        toolsUsed: [...new Set(toolsUsed)],
+        iterations,
+        error: errorMsg,
+      };
+    }
+  }
+
+  /**
+   * Execute a skill tool
+   */
+  private async executeTool(
+    toolName: string,
+    input: Record<string, unknown>
+  ): Promise<unknown> {
+    // Find the tool definition
+    const tool = this.tools.find((t) => t.name === toolName);
+    if (!tool) {
+      throw new Error(`Unknown tool: ${toolName}`);
+    }
+
+    // Tier 2: Load skill content (normally pre-cached from initialize RPC response)
+    let skillContent = this.skillContentCache.get(tool._skillKey);
+    if (!skillContent) {
+      // Fallback: re-fetch from organization_skills via the same RPC (compiled, org-specific).
+      // Avoids direct table query that might miss the JOIN with platform_skills for category.
+      const { data: rpcSkills, error: rpcError } = await supabase
+        .rpc('get_organization_skills_for_agent', {
+          p_org_id: this.config.organizationId,
+        }) as { data: Array<{ skill_key: string; content: string }> | null; error: { message: string } | null };
+
+      const matched = (rpcSkills || []).find((s) => s.skill_key === tool._skillKey);
+      if (rpcError || !matched?.content) {
+        throw new Error(`Failed to load content for skill: ${tool._skillKey}`);
+      }
+
+      // Clean any unresolved ${variable} placeholders (safety net for COALESCE fallback)
+      skillContent = hasUnresolvedVariables(matched.content)
+        ? cleanUnresolvedVariables(matched.content, '')
+        : matched.content;
+      this.skillContentCache.set(tool._skillKey, skillContent);
+    }
+
+    // Build context for skill execution
+    const context: Record<string, unknown> = {
+      ...this.config.orgContext,
+      ...input,
+      user_id: this.config.userId,
+      organization_id: this.config.organizationId,
+    };
+
+    // Add ICP profile context for ICP/persona-related skills
+    if (this.config.icpProfile) {
+      context.icp_profile_id = this.config.icpProfile.id;
+      context.icp_profile_name = this.config.icpProfile.name;
+      context.profile_type = this.config.icpProfile.profile_type || 'icp';
+      context.criteria = this.config.icpProfile.criteria;
+
+      // If this is a persona with a parent ICP, include parent criteria
+      if (this.config.icpProfile.profile_type === 'persona' && this.config.parentIcpProfile) {
+        context.parent_icp_id = this.config.parentIcpProfile.id;
+        context.parent_icp_name = this.config.parentIcpProfile.name;
+        context.parent_criteria = this.config.parentIcpProfile.criteria;
+      }
+    }
+
+    // Execute skill via Claude (skill content as system prompt)
+    const response = await this.anthropic.messages.create({
+      model: this.config.model,
+      max_tokens: 4096,
+      system: `You are executing a skill. Follow the instructions precisely.
+
+${skillContent}
+
+Respond with a JSON object containing the result. If the skill defines outputs, include those fields.`,
+      messages: [
+        {
+          role: 'user',
+          content: `Execute this skill with the following context:\n\n${JSON.stringify(context, null, 2)}`,
+        },
+      ],
+    });
+
+    // Extract response
+    const textContent = response.content.find((c) => c.type === 'text');
+    const responseText = textContent?.type === 'text' ? textContent.text : '';
+
+    // Try to parse as JSON
+    try {
+      // Find JSON in response (might be wrapped in markdown code blocks)
+      const jsonMatch = responseText.match(/```json\n?([\s\S]*?)\n?```/) ||
+        responseText.match(/\{[\s\S]*\}/);
+
+      if (jsonMatch) {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        return JSON.parse(jsonStr);
+      }
+    } catch {
+      // If not JSON, return as text
+    }
+
+    return { result: responseText };
+  }
+
+  /**
+   * Build ICP profile context section for system prompt
+   */
+  private buildIcpProfileContext(): string {
+    if (!this.config.icpProfile) return '';
+
+    const profile = this.config.icpProfile;
+    const isPersona = profile.profile_type === 'persona';
+    const profileTypeLabel = isPersona ? 'Buyer Persona' : 'Company ICP';
+
+    let context = `\n\n## ${profileTypeLabel} Context\n\n`;
+    context += `Working with ${profileTypeLabel}: **${profile.name}**\n`;
+
+    // If persona with parent ICP, add parent information
+    if (isPersona && this.config.parentIcpProfile) {
+      const parent = this.config.parentIcpProfile;
+      const parentCriteria = parent.criteria as any;
+
+      context += `\nThis buyer persona belongs to Company ICP: **${parent.name}**\n`;
+
+      // Extract key firmographic details from parent
+      const details: string[] = [];
+      if (parentCriteria?.industries?.length) {
+        details.push(`targeting ${parentCriteria.industries.join(', ')} industries`);
+      }
+      if (parentCriteria?.employee_ranges?.length) {
+        const range = parentCriteria.employee_ranges[0];
+        details.push(`companies with ${range.min}-${range.max} employees`);
+      }
+      if (parentCriteria?.revenue_range) {
+        details.push(`revenue $${parentCriteria.revenue_range.min}M-$${parentCriteria.revenue_range.max}M`);
+      }
+      if (parentCriteria?.location_countries?.length) {
+        details.push(`in ${parentCriteria.location_countries.join(', ')}`);
+      }
+
+      if (details.length > 0) {
+        context += details.join(', ') + '.\n';
+      }
+
+      context += `\n**Search Strategy**: For persona searches, first filter companies using parent ICP firmographic criteria, then search for contacts matching persona demographic criteria within those companies.\n`;
+    }
+
+    return context;
+  }
+
+  /**
+   * Build the system prompt for the autonomous executor
+   */
+  private buildSystemPrompt(): string {
+    const toolCategories = new Map<string, string[]>();
+    for (const tool of this.tools) {
+      const category = tool._category;
+      if (!toolCategories.has(category)) {
+        toolCategories.set(category, []);
+      }
+      toolCategories.get(category)!.push(tool.name);
+    }
+
+    const categoryList = Array.from(toolCategories.entries())
+      .map(([cat, tools]) => `- **${cat}**: ${tools.join(', ')}`)
+      .join('\n');
+
+    let prompt = `You are an AI assistant for a sales intelligence platform called Sixty.
+
+You have access to various skills (tools) that help users with sales tasks. Your job is to:
+1. Understand what the user wants to accomplish
+2. Decide which skill(s) to use to help them
+3. Execute those skills with appropriate inputs
+4. Synthesize the results into a helpful response
+
+## Available Skill Categories
+
+${categoryList}
+
+## Guidelines
+
+- **Sequences First**: If a task involves multiple steps (e.g., "full deal review"), look for a sequence skill (category: agent-sequence) that orchestrates the workflow.
+- **Ask if Unclear**: If you need more information to execute a skill properly, ask the user before proceeding.
+- **Chain Skills**: You can call multiple skills in sequence if needed to accomplish a complex task.
+- **Explain Your Actions**: Briefly tell the user what you're doing when you use a skill.
+- **Handle Errors Gracefully**: If a skill fails, explain what happened and suggest alternatives.
+
+## Organization Context
+
+The user belongs to organization: ${this.config.organizationId}
+${Object.keys(this.config.orgContext).length > 0 ? `\nAvailable context: ${Object.keys(this.config.orgContext).join(', ')}` : ''}
+${this.buildIcpProfileContext()}
+${this.apifyConnected ? `
+## Apify Web Scraping (Connected)
+
+This organization has Apify connected. Apify skills are available:
+- **apify-actor-browse**: Search the Apify marketplace for scrapers
+- **apify-run-trigger**: Configure and start actor runs
+- **apify-results-query**: Query mapped results from completed runs
+- **seq-apify-scrape-flow**: End-to-end scraping workflow
+
+When the user asks about scraping, web data extraction, or Apify, use these skills.
+` : `
+## Apify Web Scraping (Not Connected)
+
+If a user asks about Apify or web scraping, tell them: "Connect Apify in Settings > Integrations first."
+`}
+`;
+
+    if (this.config.systemPromptAdditions) {
+      prompt += `\n\n${this.config.systemPromptAdditions}`;
+    }
+
+    return prompt;
+  }
+
+  /**
+   * Get list of available tools (for UI display)
+   */
+  getAvailableTools(): Array<{
+    name: string;
+    description: string;
+    category: string;
+    isSequence: boolean;
+  }> {
+    return this.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      category: t._category,
+      isSequence: t._isSequence,
+    }));
+  }
+
+  /**
+   * Reload skills (call after skill changes)
+   */
+  async reload(): Promise<void> {
+    this.tools = [];
+    this.skillContentCache.clear();
+    await this.initialize();
+  }
+}
+
+// =============================================================================
+// Factory Function
+// =============================================================================
+
+/**
+ * Create an autonomous executor instance
+ */
+export function createAutonomousExecutor(
+  config: ExecutorConfig
+): AutonomousExecutor {
+  return new AutonomousExecutor(config);
+}

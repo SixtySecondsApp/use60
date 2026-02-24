@@ -1,0 +1,174 @@
+{
+  "feature": "ability-audit-cleanup",
+  "name": "Ability Registry Audit & Cleanup",
+  "createdAt": "2026-02-14T21:45:00Z",
+  "consultReport": ".sixty/consult/ability-audit-cleanup.md",
+  "stories": [
+    {
+      "id": "ACLEAN-001",
+      "feature": "ability-audit-cleanup",
+      "title": "Remove 5 duplicate/sub-step abilities from registry",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["ACLEAN-003"],
+      "parallelWith": ["ACLEAN-002"],
+      "acceptance": [
+        "Remove post-call-summary from ABILITY_REGISTRY (duplicate of Post-Meeting Follow-up)",
+        "Remove pre-meeting-nudge from ABILITY_REGISTRY (duplicate of Pre-Meeting Briefing)",
+        "Remove call-type-classification, coaching-micro-feedback, detect-intents (sub-steps, not standalone)",
+        "SEQUENCE_STEPS and SKILL_DISPLAY_NAMES remain unchanged (they map orchestrator steps, not UI abilities)",
+        "No console errors when navigating Agent Abilities page"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "ACLEAN-002",
+      "feature": "ability-audit-cleanup",
+      "title": "Merge Morning Brief + Daily Focus Planner into single Daily Briefing ability",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["ACLEAN-003"],
+      "parallelWith": ["ACLEAN-001"],
+      "acceptance": [
+        "Single 'Daily Briefing' ability replaces both morning-brief and sales-assistant-digest",
+        "Uses daily-focus-planner skillKey (richer output)",
+        "Stage: pre-meeting, triggerType: cron, backendType: v1-simulate",
+        "Default channels: ['in-app']",
+        "Agent Abilities page shows merged ability correctly"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "ACLEAN-003",
+      "feature": "ability-audit-cleanup",
+      "title": "Update ProactiveAgentV2Demo scenarios for cleaned registry",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["ACLEAN-001", "ACLEAN-002"], "files": [], "schema": [] },
+      "blocks": ["ACLEAN-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "ProactiveAgentV2Demo page loads without errors",
+        "Demo scenarios reference only abilities that exist in cleaned registry",
+        "No broken imports or missing ability references"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ]
+    },
+    {
+      "id": "ACLEAN-004",
+      "feature": "ability-audit-cleanup",
+      "title": "Add Deal Stage Change Alert ability",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["ACLEAN-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ACLEAN-005", "ACLEAN-006"],
+      "acceptance": [
+        "New ability 'deal-stage-change' in ABILITY_REGISTRY",
+        "Stage: pipeline, triggerType: event, backendType: v1-simulate",
+        "skillKey: deal-next-best-actions (closest existing skill)",
+        "Description covers: deal progression/regression notification, context, suggested next actions",
+        "Appears in Pipeline stage on Agent Abilities page",
+        "Default channels: ['slack', 'in-app']"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "ACLEAN-005",
+      "feature": "ability-audit-cleanup",
+      "title": "Add Win/Loss Post-Mortem ability",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["ACLEAN-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ACLEAN-004", "ACLEAN-006"],
+      "acceptance": [
+        "New ability 'win-loss-postmortem' in ABILITY_REGISTRY",
+        "Stage: coaching, triggerType: event, backendType: v1-simulate",
+        "skillKey: coaching-analysis (closest existing skill)",
+        "Description covers: deal won/lost analysis, meeting patterns, learnings, Slack notification",
+        "Appears in Coaching stage on Agent Abilities page",
+        "Default channels: ['slack']"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "ACLEAN-006",
+      "feature": "ability-audit-cleanup",
+      "title": "Add Account Intelligence Digest ability",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["ACLEAN-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ACLEAN-004", "ACLEAN-005"],
+      "acceptance": [
+        "New ability 'account-intel-digest' in ABILITY_REGISTRY",
+        "Stage: pre-meeting, triggerType: cron, backendType: v1-simulate",
+        "skillKey: company-research (closest existing skill)",
+        "Description covers: weekly account monitoring for news, funding, leadership changes, competitor mentions",
+        "Appears in Pre-Meeting stage on Agent Abilities page",
+        "Default channels: ['slack', 'in-app']"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    },
+    {
+      "id": "ACLEAN-007",
+      "feature": "ability-audit-cleanup",
+      "title": "Verify Agent Abilities page renders correctly with final 18-ability registry",
+      "type": "test",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["ACLEAN-003", "ACLEAN-004", "ACLEAN-005", "ACLEAN-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "All 5 lifecycle stages show correct ability counts",
+        "Pre-Meeting: 3 (Pre-Meeting Briefing, Daily Briefing, Account Intel Digest)",
+        "Post-Meeting: 1 (Post-Meeting Follow-up)",
+        "Pipeline: 4 (Calendar Scheduling, Stale Deal Revival, Stale Deal Alert, Deal Stage Change Alert)",
+        "Outreach: 6 (Email Classification, Email Send-as-Rep, HITL Follow-up Email, Email Reply Received, Proposal Generation, Campaign Monitoring)",
+        "Coaching: 4 (Weekly Coaching Digest, Coaching Analysis, Win/Loss Post-Mortem, 60 Smart Suggestion)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/pages/platform/AgentAbilitiesPage.tsx",
+        "src/lib/agent/abilityRegistry.ts"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 0,
+    "estimatedMinutes": 55,
+    "parallelGroups": [
+      { "stories": ["ACLEAN-001", "ACLEAN-002"], "reason": "Independent registry edits" },
+      { "stories": ["ACLEAN-004", "ACLEAN-005", "ACLEAN-006"], "reason": "Independent new ability additions" }
+    ]
+  }
+}

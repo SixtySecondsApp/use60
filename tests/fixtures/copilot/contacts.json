@@ -1,0 +1,125 @@
+{
+  "description": "Contact fixtures for Copilot E2E tests",
+  "version": "1.0.0",
+
+  "primaryContact": {
+    "id": "contact-001",
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john.doe@acmecorp.com",
+    "phone": "+1 (555) 123-4567",
+    "company": "Acme Corporation",
+    "position": "VP of Sales",
+    "linkedin_url": "https://linkedin.com/in/johndoe",
+    "last_contacted": "2026-01-22",
+    "relationship_score": 85,
+    "notes": "Key decision maker. Prefers morning calls.",
+    "tags": ["decision-maker", "enterprise", "priority-high"]
+  },
+
+  "secondaryContact": {
+    "id": "contact-002",
+    "first_name": "Mike",
+    "last_name": "Chen",
+    "email": "mike@techstart.io",
+    "phone": "+1 (555) 987-6543",
+    "company": "TechStart Inc",
+    "position": "CTO",
+    "linkedin_url": "https://linkedin.com/in/mikechen",
+    "last_contacted": "2026-01-10",
+    "relationship_score": 65,
+    "notes": "Technical buyer. Focus on integration capabilities."
+  },
+
+  "newContact": {
+    "id": "contact-003",
+    "first_name": "Lisa",
+    "last_name": "Wang",
+    "email": "lisa.wang@dataflow.com",
+    "phone": "+1 (555) 456-7890",
+    "company": "DataFlow Inc",
+    "position": "Director of Operations",
+    "last_contacted": "2026-01-20",
+    "relationship_score": 90
+  },
+
+  "coldContact": {
+    "id": "contact-004",
+    "first_name": "Alex",
+    "last_name": "Rodriguez",
+    "email": "alex@newco.com",
+    "company": "NewCo",
+    "position": "Founder",
+    "last_contacted": "2026-01-15",
+    "relationship_score": 50,
+    "needs_followup": true
+  },
+
+  "contactsList": [
+    {
+      "id": "contact-001",
+      "first_name": "John",
+      "last_name": "Doe",
+      "email": "john.doe@acmecorp.com",
+      "company": "Acme Corporation",
+      "position": "VP of Sales"
+    },
+    {
+      "id": "contact-002",
+      "first_name": "Mike",
+      "last_name": "Chen",
+      "email": "mike@techstart.io",
+      "company": "TechStart Inc",
+      "position": "CTO"
+    },
+    {
+      "id": "contact-003",
+      "first_name": "Lisa",
+      "last_name": "Wang",
+      "email": "lisa.wang@dataflow.com",
+      "company": "DataFlow Inc",
+      "position": "Director of Operations"
+    }
+  ],
+
+  "ambiguousNames": {
+    "description": "For testing entity disambiguation",
+    "query": "John",
+    "matches": [
+      {
+        "id": "contact-001",
+        "first_name": "John",
+        "last_name": "Doe",
+        "email": "john.doe@acmecorp.com",
+        "company": "Acme Corporation"
+      },
+      {
+        "id": "contact-005",
+        "first_name": "John",
+        "last_name": "Smith",
+        "email": "john.smith@enterprise.co",
+        "company": "Enterprise Co"
+      },
+      {
+        "id": "contact-006",
+        "first_name": "Johnny",
+        "last_name": "Walker",
+        "email": "jwalker@startup.io",
+        "company": "Startup.io"
+      }
+    ]
+  },
+
+  "contactNeedingAttention": {
+    "id": "contact-007",
+    "first_name": "Sarah",
+    "last_name": "Johnson",
+    "email": "sarah.johnson@acmecorp.com",
+    "company": "Acme Corporation",
+    "position": "CFO",
+    "days_since_contact": 14,
+    "has_open_deal": true,
+    "deal_value": 75000,
+    "attention_reason": "No contact for 2 weeks on active deal"
+  }
+}

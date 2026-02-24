@@ -5,7 +5,7 @@
  * Provides navigation to dashboard and suggested next steps.
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Check,
@@ -17,9 +17,14 @@ import {
   Video,
   Loader2,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useOnboardingV2Store, SKILLS, SkillId } from '@/lib/stores/onboardingV2Store';
+import { useOnboardingV2Store, SKILLS } from '@/lib/stores/onboardingV2Store';
+import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
+import { useInvalidateUserProfile } from '@/lib/hooks/useUserProfile';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrgStore } from '@/lib/stores/orgStore';
+import { factProfileService } from '@/lib/services/factProfileService';
 import { supabase } from '@/lib/supabase/clientV2';
+import { toast } from 'sonner';
 
 interface NextStepItem {
   icon: typeof FileText;
@@ -35,9 +40,13 @@ const nextSteps: NextStepItem[] = [
 ];
 
 export function CompletionStep() {
-  const navigate = useNavigate();
-  const { enrichment, skillConfigs, setStep } = useOnboardingV2Store();
+  const { enrichment, skillConfigs, setStep, organizationId } = useOnboardingV2Store();
+  const { completeStep } = useOnboardingProgress();
+  const { user } = useAuth();
+  const { setActiveOrg } = useOrgStore();
+  const invalidateProfile = useInvalidateUserProfile();
   const [isNavigating, setIsNavigating] = useState(false);
+  const orgProfileCreatedRef = useRef(false);
 
   // Determine which skills have been configured (have non-empty data)
   const configuredSkillIds = SKILLS.filter((skill) => {
@@ -51,6 +60,45 @@ export function CompletionStep() {
     });
   }).map((s) => s.id);
 
+  /**
+   * Auto-create the org's fact profile seeded with onboarding enrichment data.
+   * Awaited before navigation to prevent the request being killed by page change.
+   * Failures are non-fatal — user can set up the profile later in Settings.
+   */
+  const ensureOrgProfile = async () => {
+    // Guard: only run once per mount, and only if we have the required IDs
+    if (orgProfileCreatedRef.current) return;
+    if (!user?.id || !organizationId) return;
+    orgProfileCreatedRef.current = true;
+
+    try {
+      // Check if org profile already exists (defensive)
+      const existing = await factProfileService.getOrgProfile(organizationId);
+      if (existing) return;
+
+      // Create fact profile seeded with enrichment data
+      const profile = await factProfileService.createProfile({
+        organization_id: organizationId,
+        created_by: user.id,
+        company_name: enrichment?.company_name || 'My Company',
+        company_domain: enrichment?.domain ?? null,
+        profile_type: 'client_org',
+        is_org_profile: true,
+      });
+
+      // Fire background research (don't await)
+      supabase.functions.invoke('research-fact-profile', {
+        body: { action: 'research', profileId: profile.id },
+      }).catch((err) => {
+        console.error('[CompletionStep] Background research failed:', err);
+      });
+    } catch (err) {
+      // Non-blocking: log and move on
+      console.error('[CompletionStep] Failed to create org fact profile:', err);
+      toast.error('Could not create company profile. You can set it up later in Settings.');
+    }
+  };
+
   const handleEditSettings = () => {
     setStep('skills_config');
   };
@@ -60,25 +108,45 @@ export function CompletionStep() {
     setIsNavigating(true);
 
     try {
-      // Mark V1 onboarding as complete in the database
-      // This ensures ProtectedRoute allows navigation to dashboard
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await supabase
-          .from('user_onboarding_progress')
-          .upsert({
-            user_id: session.user.id,
-            onboarding_step: 'complete',
-            onboarding_completed_at: new Date().toISOString(),
-          }, {
-            onConflict: 'user_id',
-          });
+      // Mark onboarding as complete using the proper hook
+      // This ensures needsOnboarding state updates before navigation
+      await completeStep('complete');
 
-        // Wait for the real-time subscription to propagate the change
-        await new Promise(resolve => setTimeout(resolve, 200));
+      // Set the active org to the one from onboarding (prevents picking wrong/waitlist org)
+      if (organizationId) {
+        setActiveOrg(organizationId);
       }
 
-      navigate('/dashboard', { replace: true });
+      // Grant 10 welcome credits to new org (non-blocking)
+      if (organizationId) {
+        try {
+          await supabase.functions.invoke('grant-welcome-credits', {
+            body: { org_id: organizationId },
+          });
+          localStorage.setItem(`sixty_welcome_credits_${organizationId}`, 'pending');
+        } catch (err) {
+          console.error('[CompletionStep] Failed to grant welcome credits:', err);
+          // Non-fatal — do not block navigation
+        }
+
+        // Start 14-day free trial (non-blocking, idempotent)
+        supabase.functions.invoke('start-free-trial', {
+          body: { org_id: organizationId },
+        }).catch((err) => {
+          console.error('[CompletionStep] Failed to start free trial:', err);
+        });
+      }
+
+      // Create org fact profile — await so the request isn't killed by navigation
+      await ensureOrgProfile();
+
+      // Invalidate profile cache so dashboard fetches fresh data
+      if (user?.id) {
+        invalidateProfile();
+      }
+
+      // Navigate to dashboard with full page refresh to clear React Query cache
+      window.location.href = '/dashboard';
     } catch (error) {
       console.error('Error completing onboarding:', error);
       // Fall back to direct navigation even if completion save fails
@@ -109,11 +177,11 @@ export function CompletionStep() {
         {/* Title */}
         <h2 className="text-2xl font-bold mb-3 text-white">Your Sales Assistant is Ready</h2>
         <p className="mb-8 leading-relaxed text-gray-400">
-          We've trained your AI on{' '}
+          We&apos;ve trained your AI on{' '}
           <span className="font-semibold text-white">
             {enrichment?.company_name || 'your company'}
           </span>
-          's way of selling. It now knows your qualification criteria, objection handling, and
+          &apos;s way of selling. It now knows your qualification criteria, objection handling, and
           brand voice.
         </p>
 
@@ -173,15 +241,52 @@ export function CompletionStep() {
 
       {/* What's Next */}
       <div className="mt-6 rounded-2xl border border-gray-800 bg-gray-900 p-6 text-left shadow-xl">
-        <h3 className="font-bold mb-4 text-white">What's next?</h3>
+        <h3 className="font-bold mb-4 text-white">What&apos;s next?</h3>
         <div className="space-y-3">
           {nextSteps.map((item, i) => {
             const Icon = item.icon;
+            const handleNavigation = async () => {
+              if (isNavigating) return;
+              setIsNavigating(true);
+              try {
+                await completeStep('complete');
+                // Set the active org to the one from onboarding
+                if (organizationId) {
+                  setActiveOrg(organizationId);
+                }
+                // Grant 10 welcome credits to new org (non-blocking)
+                if (organizationId) {
+                  try {
+                    await supabase.functions.invoke('grant-welcome-credits', {
+                      body: { org_id: organizationId },
+                    });
+                    localStorage.setItem(`sixty_welcome_credits_${organizationId}`, 'pending');
+                  } catch (err) {
+                    console.error('[CompletionStep] Failed to grant welcome credits:', err);
+                  }
+
+                  // Start 14-day free trial (non-blocking, idempotent)
+                  supabase.functions.invoke('start-free-trial', {
+                    body: { org_id: organizationId },
+                  }).catch((err) => {
+                    console.error('[CompletionStep] Failed to start free trial:', err);
+                  });
+                }
+                // Create org fact profile — await before navigating
+                await ensureOrgProfile();
+                // Use full page load to clear React Query cache
+                window.location.href = item.route;
+              } finally {
+                setIsNavigating(false);
+              }
+            };
+
             return (
               <button
                 key={i}
-                onClick={() => navigate(item.route)}
-                className="w-full flex items-center gap-3 p-2 rounded-lg transition-colors cursor-pointer text-gray-400 hover:bg-gray-800 hover:text-white"
+                onClick={handleNavigation}
+                disabled={isNavigating}
+                className="w-full flex items-center gap-3 p-2 rounded-lg transition-colors cursor-pointer text-gray-400 hover:bg-gray-800 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-gray-800">
                   <Icon className="w-4 h-4 text-gray-400" />

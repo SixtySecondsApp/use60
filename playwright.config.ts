@@ -3,6 +3,7 @@
 // See tests/fixtures/playwriter-setup.ts for the new setup
 
 import dotenv from 'dotenv';
+import { devices } from '@playwright/test';
 
 // Load test environment variables
 dotenv.config({ path: '.env.test' });
@@ -51,6 +52,21 @@ export default {
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+
+    // Enrichment tests require longer timeouts for full flow testing
+    {
+      name: 'enrichment-tests',
+      testMatch: '**/onboarding-v2-enrichment.spec.ts',
+      timeout: 360000, // 6 minutes - allows for full enrichment process (up to 5 min) + buffer
+      use: {
+        ...devices['Desktop Chrome'],
+        trace: 'on', // Always capture trace for debugging
+        video: 'on', // Always record video for enrichment tests
+        screenshot: 'on', // Capture screenshots for visual debugging
+        actionTimeout: 30000, // 30s for individual actions
+        navigationTimeout: 60000, // 60s for navigation
+      },
     },
 
     // Disable other browsers for now to speed up testing

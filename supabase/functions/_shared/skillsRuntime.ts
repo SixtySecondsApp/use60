@@ -526,7 +526,7 @@ function getFallbackOutput(skillKey: string, context: SkillContext): any {
 
   if (skillKey.includes('followup') || skillKey.includes('email')) {
     return {
-      draft: 'Thank you for your time. I wanted to follow up on our conversation...',
+      draft: 'Following up on our conversation. Key next steps:',
     };
   }
 

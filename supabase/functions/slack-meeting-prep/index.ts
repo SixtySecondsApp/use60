@@ -4,7 +4,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { buildMeetingPrepMessage, type MeetingPrepData } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole, verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
 import {
@@ -14,6 +14,8 @@ import {
   shouldSendNotification,
   recordNotificationSent,
   deliverToInApp,
+  loadProactiveContext,
+  type ProactiveContext,
 } from '../_shared/proactive/index.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -61,6 +63,18 @@ interface CalendarEvent {
   org_id: string;
 }
 
+/**
+ * Extract email addresses from the JSONB attendees array.
+ * calendar_events stores attendees as [{email, responseStatus, ...}]
+ * but the rest of the code expects a flat string[] of emails.
+ */
+function extractAttendeeEmails(attendees: Array<{ email?: string }> | null): string[] {
+  if (!attendees || !Array.isArray(attendees)) return [];
+  return attendees
+    .map((a) => a.email)
+    .filter((e): e is string => !!e);
+}
+
 interface Contact {
   id: string;
   full_name?: string;
@@ -103,7 +117,7 @@ async function getUpcomingMeetings(
 
   let query = supabase
     .from('calendar_events')
-    .select('id, title, start_time, user_id, attendee_emails, meeting_url, org_id')
+    .select('id, title, start_time, user_id, attendees, meeting_url, org_id')
     .gte('start_time', windowStart.toISOString())
     .lte('start_time', windowEnd.toISOString());
 
@@ -118,7 +132,11 @@ async function getUpcomingMeetings(
     return [];
   }
 
-  return data || [];
+  // Convert attendees JSONB array to flat email list
+  return (data || []).map((row: any) => ({
+    ...row,
+    attendee_emails: extractAttendeeEmails(row.attendees),
+  }));
 }
 
 /**
@@ -422,7 +440,7 @@ async function getRecentActivities(
 }
 
 /**
- * Generate talking points with AI (enhanced with risk signals and objections)
+ * Generate talking points with AI (enhanced with risk signals, objections, and proactive context)
  */
 async function generateTalkingPoints(
   meetingTitle: string,
@@ -431,7 +449,8 @@ async function generateTalkingPoints(
   lastMeetingNotes: string | null,
   attendees: string[],
   riskSignals: Array<{ type: string; severity: string; description: string }> = [],
-  previousObjections: Array<{ objection: string; resolution?: string; resolved: boolean }> = []
+  previousObjections: Array<{ objection: string; resolution?: string; resolved: boolean }> = [],
+  proactiveCtx?: ProactiveContext | null
 ): Promise<string[]> {
   if (!anthropicApiKey) {
     return [
@@ -454,6 +473,20 @@ async function generateTalkingPoints(
         }).join('\n')}`
       : '';
 
+    // Build personalized system prompt
+    const userName = proactiveCtx
+      ? `${proactiveCtx.user.firstName}${proactiveCtx.user.lastName ? ' ' + proactiveCtx.user.lastName : ''}`
+      : 'the sales rep';
+    const userTitle = proactiveCtx?.user.title || '';
+    const orgName = proactiveCtx?.org.name || '';
+
+    const systemPrompt = proactiveCtx
+      ? `You are a sales preparation assistant helping ${userName}${userTitle ? ` (${userTitle}` : ''}${orgName ? ` at ${orgName}` : ''}${userTitle ? ')' : ''} prepare for an upcoming meeting.
+Generate 3-4 specific, actionable talking points. Write in second person ("You should...", "Ask about...").
+Consider deal risks, previous objections, and the user's role when crafting recommendations.
+Return ONLY valid JSON.`
+      : 'You are a sales preparation assistant. Generate 3-4 specific, actionable talking points for an upcoming meeting. Consider any deal risks and previous objections when crafting your recommendations. Return ONLY valid JSON.';
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -465,12 +498,13 @@ async function generateTalkingPoints(
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 512,
         temperature: 0.5,
-        system: 'You are a sales preparation assistant. Generate 3-4 specific, actionable talking points for an upcoming meeting. Consider any deal risks and previous objections when crafting your recommendations. Return ONLY valid JSON.',
+        system: systemPrompt,
         messages: [{
           role: 'user',
           content: `Generate meeting prep talking points:
 
 MEETING: ${meetingTitle}
+${proactiveCtx ? `YOUR ROLE: ${userName}${userTitle ? `, ${userTitle}` : ''}${orgName ? ` at ${orgName}` : ''}` : ''}
 COMPANY: ${company?.name || 'Unknown'}
 ${company?.industry ? `Industry: ${company.industry}` : ''}
 ${deal ? `DEAL: ${deal.title} - Stage: ${deal.stage} - Value: $${deal.value?.toLocaleString()}` : ''}
@@ -498,14 +532,12 @@ Return JSON: { "talkingPoints": ["point1", "point2", "point3", "point4"] }`
     return parsed.talkingPoints || [];
   } catch (error) {
     console.error('Error generating talking points:', error);
-    // Provide more contextual fallback based on available data
     const fallbackPoints = [
       'Review any previous discussions and follow up on open items',
       'Understand their current priorities and challenges',
       'Identify next steps to move the conversation forward',
     ];
 
-    // Add risk-specific fallback if risks exist
     if (riskSignals.some(r => r.severity === 'high' || r.severity === 'critical')) {
       fallbackPoints.unshift('Address any timeline or budget concerns directly');
     }
@@ -574,11 +606,13 @@ async function getUserProfile(
 ): Promise<{ fullName: string; email: string } | null> {
   const { data } = await supabase
     .from('profiles')
-    .select('full_name, email')
+    .select('first_name, last_name, email')
     .eq('id', userId)
     .single();
 
-  return data ? { fullName: data.full_name || data.email || 'User', email: data.email || '' } : null;
+  if (!data) return null;
+  const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ') || data.email || 'User';
+  return { fullName, email: data.email || '' };
 }
 
 /**
@@ -709,6 +743,14 @@ async function processMeetingPrep(
       recentActivities = await getRecentActivities(supabase, company.name, event.user_id);
     }
 
+    // Load proactive context for personalized talking points
+    let proactiveCtx: ProactiveContext | null = null;
+    try {
+      proactiveCtx = await loadProactiveContext(supabase, event.org_id, event.user_id);
+    } catch (e) {
+      console.warn('[slack-meeting-prep] Failed to load proactive context:', (e as any)?.message);
+    }
+
     // ==========================================
     // ENHANCED DATA: Meeting History, Risks, Objections, Templates
     // ==========================================
@@ -745,7 +787,7 @@ async function processMeetingPrep(
 
     // ==========================================
 
-    // Generate talking points with enhanced context
+    // Generate talking points with enhanced context + proactive personalization
     const talkingPoints = await generateTalkingPoints(
       event.title,
       company,
@@ -753,7 +795,8 @@ async function processMeetingPrep(
       lastMeetingData?.notes || null,
       contacts.map(c => c.full_name || `${c.first_name} ${c.last_name}`.trim() || c.email || 'Unknown'),
       riskSignals,
-      previousObjections
+      previousObjections,
+      proactiveCtx
     );
 
     // Calculate days in pipeline
@@ -866,9 +909,9 @@ async function processMeetingPrep(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -911,11 +954,14 @@ serve(async (req) => {
       // Process specific calendar event
       const { data } = await supabase
         .from('calendar_events')
-        .select('id, title, start_time, user_id, attendee_emails, meeting_url, org_id')
+        .select('id, title, start_time, user_id, attendees, meeting_url, org_id')
         .eq('id', targetEventId)
         .single();
 
-      meetings = data ? [data] : [];
+      meetings = data ? [{
+        ...data,
+        attendee_emails: extractAttendeeEmails((data as any).attendees),
+      }] : [];
     } else if (targetMeetingId && isTest) {
       // Test mode: Look up meeting from meetings table and create a virtual calendar event
       // This allows testing with meetings that don't have corresponding calendar events

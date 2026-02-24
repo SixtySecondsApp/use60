@@ -401,6 +401,13 @@ STRUCTURE ADAPTATION:
 - Tailor all content to the specific client, company, and their stated goals
 - Do NOT copy generic content - every section should be customized
 
+PRICING / INVESTMENT TABLE:
+- If the Goals & Objectives mention pricing, budgets, costs, or investment amounts, include a Pricing or Investment section
+- Format pricing as an HTML table with columns: Item/Description, Quantity (if applicable), Unit Rate, Amount
+- Include a subtotal row, optional tax row (if mentioned), and a total row
+- Use clear number formatting with currency symbols
+- If no specific pricing is mentioned, omit the pricing section entirely rather than guessing
+
 BEGIN YOUR RESPONSE WITH <!DOCTYPE html> - NO OTHER TEXT BEFORE IT.`;
 
 export const HTML_PROPOSAL_VARIABLES: PromptVariable[] = [

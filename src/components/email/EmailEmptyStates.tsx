@@ -47,9 +47,9 @@ export function EmptyState({ icon, title, description, action, secondaryAction }
           initial={{ scale: 0.8 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.1 }}
-          className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-gray-800/50 to-gray-900/50 border border-gray-700/50 mb-6"
+          className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800/50 dark:to-gray-900/50 border border-gray-300 dark:border-gray-700/50 mb-6"
         >
-          <div className="text-gray-400">
+          <div className="text-gray-600 dark:text-gray-400">
             {icon}
           </div>
         </motion.div>

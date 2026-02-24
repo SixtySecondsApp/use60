@@ -66,7 +66,8 @@ export function useGoogleServiceStatus() {
   return useQuery({
     queryKey: GOOGLE_QUERY_KEYS.services,
     queryFn: googleApi.getServiceStatus,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 30 * 1000, // 30 seconds — ensures calendar status refreshes promptly after connecting
+    refetchOnWindowFocus: true,
     retry: 1,
   });
 }

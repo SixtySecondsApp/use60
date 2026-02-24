@@ -1,0 +1,484 @@
+{
+  "feature": "prospecting-icp-builder",
+  "title": "Prospecting & ICP Builder",
+  "description": "Full-featured prospecting page with ICP profile management, multi-provider test searches (Apollo + AI Ark), preview-then-import workflow, AI-powered ICP generation and scoring, and client approval workflows. Multi-tenant infrastructure from day one, internal-only access initially.",
+  "createdAt": "2026-02-11T11:20:00Z",
+  "completedAt": "2026-02-11T18:00:00Z",
+  "consultReport": ".sixty/consult/prospecting-icp-builder.md",
+  "branch": "feature/prospecting-icp-builder",
+  "accessModel": "multi-tenant-internal-only",
+  "status": "complete",
+  "execution": {
+    "completedStories": 18,
+    "totalStories": 18
+  },
+  "stories": [
+    {
+      "id": "PROSPECT-001",
+      "title": "Create icp_profiles table migration with RLS policies",
+      "type": "schema",
+      "phase": 1,
+      "estimate": "25min",
+      "status": "complete",
+      "dependencies": [],
+      "acceptance_criteria": [
+        "icp_profiles table created with: id, organization_id, created_by, name, description, criteria (JSONB), target_provider (apollo|ai_ark|both), status (draft|testing|approved|active|archived), visibility (team_only|shared|client_visible), is_active, last_tested_at, last_test_result_count, created_at, updated_at",
+        "UNIQUE constraint on (organization_id, name)",
+        "RLS policies: org members can SELECT where visibility != 'team_only' OR user has team role; team members can INSERT/UPDATE/DELETE",
+        "Indexes on organization_id, created_by, status",
+        "updated_at trigger"
+      ],
+      "files": [
+        "supabase/migrations/20260211300000_icp_profiles_schema.sql"
+      ]
+    },
+    {
+      "id": "PROSPECT-002",
+      "title": "Create icp_search_history table migration",
+      "type": "schema",
+      "phase": 1,
+      "estimate": "15min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-001"],
+      "acceptance_criteria": [
+        "icp_search_history table: id, icp_profile_id (FK), organization_id, searched_by, provider (apollo|ai_ark), search_params (JSONB), result_count, credits_consumed, duration_ms, created_at",
+        "RLS: org members can SELECT their org's history; team members can INSERT",
+        "Index on icp_profile_id, organization_id"
+      ],
+      "files": [
+        "supabase/migrations/20260211300000_icp_profiles_schema.sql"
+      ]
+    },
+    {
+      "id": "PROSPECT-003",
+      "title": "Add /prospecting route, nav entry, and page shell",
+      "type": "frontend",
+      "phase": 1,
+      "estimate": "20min",
+      "status": "complete",
+      "dependencies": [],
+      "parallel_with": ["PROSPECT-001", "PROSPECT-002"],
+      "acceptance_criteria": [
+        "Lazy-loaded ProspectingPage in lazyPages.tsx",
+        "Route at /prospecting wrapped in InternalRouteGuard + AppLayout",
+        "Nav entry in routeConfig.ts with Target or Crosshair icon from lucide-react",
+        "Page shell with header, three-column layout placeholder",
+        "Empty state when no ICP profiles exist"
+      ],
+      "files": [
+        "src/pages/ProspectingPage.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx",
+        "src/lib/routes/routeConfig.ts"
+      ]
+    },
+    {
+      "id": "PROSPECT-004",
+      "title": "Build ICP Profile service and React Query hooks",
+      "type": "service",
+      "phase": 2,
+      "estimate": "30min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-001"],
+      "acceptance_criteria": [
+        "icpProfileService.ts with: createProfile, getProfile, listProfiles, updateProfile, deleteProfile, duplicateProfile",
+        "All queries scoped to activeOrgId via useOrg()",
+        "useICPProfilesCRUD hook with React Query: useQuery for list/get, useMutation for create/update/delete",
+        "Optimistic updates on delete",
+        "Toast feedback on all mutations",
+        "TypeScript interfaces: ICPProfile, ICPCriteria, ICPSearchFilters"
+      ],
+      "files": [
+        "src/lib/services/icpProfileService.ts",
+        "src/lib/hooks/useICPProfilesCRUD.ts",
+        "src/lib/types/prospecting.ts"
+      ]
+    },
+    {
+      "id": "PROSPECT-005",
+      "title": "Build ICP Profile Builder form",
+      "type": "frontend",
+      "phase": 2,
+      "estimate": "45min",
+      "status": "complete",
+      "notes": "Filter sections (Firmographic, Persona, Geography) built inline in ICPProfileForm.tsx rather than as separate component files — cleaner since they share form state directly",
+      "dependencies": ["PROSPECT-004"],
+      "acceptance_criteria": [
+        "Dialog-based form for create/edit ICP profiles",
+        "Sections: Basic Info (name, description, target provider), Firmographics (industry multi-select, employee range slider, funding stages, revenue range), Persona (seniority levels, departments, title keywords with AND/OR logic), Geography (countries, regions, cities), Technographics (technology keywords), Custom Keywords",
+        "Reuse filter patterns from ApolloFilterEditor where possible",
+        "Form validation: name required, at least one filter criteria",
+        "Edit mode pre-fills from existing profile",
+        "Save as draft or save and test"
+      ],
+      "files": [
+        "src/components/prospecting/ICPProfileForm.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-006",
+      "title": "Build ICP Profile List/Grid with management actions",
+      "type": "frontend",
+      "phase": 2,
+      "estimate": "30min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-004"],
+      "parallel_with": ["PROSPECT-005"],
+      "acceptance_criteria": [
+        "Card grid showing ICP profiles for the org",
+        "Each card: name, description, status badge, filter summary (e.g. '3 industries, VP+ seniority, 51-500 employees'), last tested date, result count from last test, target provider icon",
+        "Actions: Edit, Duplicate, Archive, Delete (with confirmation)",
+        "Status filter tabs: All, Draft, Testing, Approved, Active, Archived",
+        "Search/filter by name",
+        "Empty state with CTA to create first profile",
+        "Skeleton loading state"
+      ],
+      "files": [
+        "src/components/prospecting/ICPProfileGrid.tsx",
+        "src/components/prospecting/ICPProfileCard.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-007",
+      "title": "Create prospecting-search edge function with credit tracking",
+      "type": "backend",
+      "phase": 3,
+      "estimate": "40min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-002"],
+      "acceptance_criteria": [
+        "New edge function: supabase/functions/prospecting-search/index.ts",
+        "Accepts: icp_profile_id, provider (apollo|ai_ark), search_params, preview (bool), page, per_page",
+        "Auth: JWT validation, org membership check",
+        "Credit check: calls checkCreditBalance() before API calls",
+        "Credit deduction: calls deduct_credits() after successful response with feature_key: 'prospecting_search'",
+        "Delegates to apollo-search or ai-ark-search internally (server-to-server fetch)",
+        "Logs search to icp_search_history table",
+        "Updates icp_profiles.last_tested_at and last_test_result_count",
+        "Uses getCorsHeaders(req) from corsHelper.ts",
+        "Returns normalized results + credits_consumed + total_results"
+      ],
+      "files": [
+        "supabase/functions/prospecting-search/index.ts"
+      ]
+    },
+    {
+      "id": "PROSPECT-008",
+      "title": "Build provider selector and credit estimator UI",
+      "type": "frontend",
+      "phase": 3,
+      "estimate": "25min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-007"],
+      "acceptance_criteria": [
+        "Provider toggle: Apollo, AI Ark, or Both (side-by-side comparison)",
+        "Credit estimator showing estimated cost before search: Apollo ~1 credit/page, AI Ark ~2.5 credits (company) or ~12.5 credits (people)",
+        "Current balance display (from cached data, no probe calls)",
+        "Warning if balance is low",
+        "Integration status indicators (configured vs not configured per provider)",
+        "Link to Settings > Integrations if provider not configured"
+      ],
+      "files": [
+        "src/components/prospecting/ProviderSelector.tsx",
+        "src/components/prospecting/CreditEstimator.tsx",
+        "src/lib/hooks/useProspectingSearch.ts"
+      ]
+    },
+    {
+      "id": "PROSPECT-009",
+      "title": "Build search results preview table",
+      "type": "frontend",
+      "phase": 3,
+      "estimate": "35min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-008"],
+      "acceptance_criteria": [
+        "Preview table showing search results in read-only mode",
+        "Columns vary by provider: Name, Title, Company, Email, Phone, LinkedIn, Location, Seniority, Department",
+        "Row selection with checkboxes for selective import",
+        "Pagination controls (consistent 1-based for both providers)",
+        "Result count header: 'Showing 25 of 1,234 results'",
+        "Loading skeleton while search runs",
+        "Empty state: 'No results found. Try broadening your search criteria.'",
+        "Side-by-side view when both providers selected (two tables, same filters)"
+      ],
+      "files": [
+        "src/components/prospecting/SearchResultsPreview.tsx",
+        "src/components/prospecting/ResultsTable.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-010",
+      "title": "Build search history and comparison view",
+      "type": "frontend",
+      "phase": 3,
+      "estimate": "25min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-007"],
+      "parallel_with": ["PROSPECT-009"],
+      "acceptance_criteria": [
+        "Sheet panel (right side, !top-16 !h-[calc(100vh-4rem)]) showing search history for selected ICP profile",
+        "Each entry: date, provider, result count, credits consumed, duration",
+        "Click to reload those results",
+        "Compare mode: select two searches, show diff (new contacts found, contacts dropped, overlap count)",
+        "Delete old search history entries"
+      ],
+      "files": [
+        "src/components/prospecting/SearchHistoryPanel.tsx",
+        "src/components/prospecting/SearchComparisonView.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-011",
+      "title": "Build 'Import to New Ops Table' flow",
+      "type": "frontend",
+      "phase": 4,
+      "estimate": "30min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-009"],
+      "acceptance_criteria": [
+        "Button on preview table: 'Import to Ops Table'",
+        "Dialog: table name (auto-suggested from ICP profile name + date), confirm selected rows or all",
+        "Calls copilot-dynamic-table with source_type: 'prospecting', passes search results",
+        "Progress indicator during import",
+        "Success: toast with link to new Ops table",
+        "Error: retry button, handles DUPLICATE_TABLE_NAME gracefully",
+        "Tracks import in icp_search_history"
+      ],
+      "files": [
+        "src/components/prospecting/ImportToOpsDialog.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-012",
+      "title": "Build 'Add to Existing Ops Table' flow",
+      "type": "frontend",
+      "phase": 4,
+      "estimate": "30min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-009"],
+      "parallel_with": ["PROSPECT-011"],
+      "acceptance_criteria": [
+        "Button on preview table: 'Add to Existing Table'",
+        "Dialog: select from org's existing Ops tables, column mapping preview, dedup options (skip existing emails, merge, overwrite)",
+        "Uses import-from-ops-table pattern but with search results as source",
+        "Shows how many new vs duplicate rows",
+        "Progress indicator + success/error handling"
+      ],
+      "files": [
+        "src/components/prospecting/AddToExistingTableDialog.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-013",
+      "title": "Add ICP-to-search auto-fill and one-click test",
+      "type": "frontend",
+      "phase": 4,
+      "estimate": "20min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-005", "PROSPECT-008"],
+      "acceptance_criteria": [
+        "Clicking an ICP profile card populates all search filters automatically",
+        "One-click 'Test This ICP' button on each profile card",
+        "Converts ICP criteria JSONB to provider-specific search params (Apollo format vs AI Ark format)",
+        "Provider auto-selected based on profile's target_provider field",
+        "Visual indicator on profile card showing it's currently loaded in search"
+      ],
+      "files": [
+        "src/lib/utils/icpToSearchParams.ts",
+        "src/components/prospecting/ICPProfileCard.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-014",
+      "title": "AI ICP Generator — generate profiles from org context",
+      "type": "frontend",
+      "phase": 5,
+      "estimate": "30min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-005"],
+      "acceptance_criteria": [
+        "Button: 'Generate with AI' in profile builder",
+        "Calls existing generate-icp-profiles edge function",
+        "Presents AI-generated profiles as suggestions (cards with name, description, rationale, filter preview)",
+        "User can: accept as-is (saves to icp_profiles), edit then save, or dismiss",
+        "Multiple profiles generated (typically 3-5 personas)",
+        "Loading state with 'Analyzing your organization context...' message",
+        "Works even if org context is minimal (falls back to industry-generic profiles)"
+      ],
+      "files": [
+        "src/components/prospecting/AIProfileGenerator.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-015",
+      "title": "AI Search Refinement suggestions",
+      "type": "frontend",
+      "phase": 5,
+      "estimate": "30min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-009"],
+      "acceptance_criteria": [
+        "After a search completes, show 'Refinement Suggestions' panel",
+        "AI analyzes results distribution and suggests filter changes: 'Add VP seniority — 60% of top results are VP+', 'Narrow to 51-200 employees — highest match density', 'Try adding SaaS keyword — missing from current filters'",
+        "Each suggestion is clickable: applies the filter change and shows estimated impact",
+        "Uses a lightweight AI call (Haiku) to analyze result patterns",
+        "Can dismiss suggestions"
+      ],
+      "files": [
+        "src/components/prospecting/RefinementSuggestions.tsx",
+        "supabase/functions/prospecting-refine/index.ts"
+      ]
+    },
+    {
+      "id": "PROSPECT-016",
+      "title": "ICP Scoring on search results",
+      "type": "frontend",
+      "phase": 5,
+      "estimate": "25min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-009", "PROSPECT-004"],
+      "acceptance_criteria": [
+        "Each search result row shows an ICP fit score (0-100%)",
+        "Score calculated client-side by comparing result fields against ICP criteria weights",
+        "Visual: color-coded badge (green 80%+, yellow 50-79%, red <50%)",
+        "Sortable by fit score",
+        "Tooltip showing which criteria matched and which didn't",
+        "Aggregate stats: 'Average fit: 72%, High fit (80%+): 34 contacts'"
+      ],
+      "files": [
+        "src/lib/utils/icpScoring.ts",
+        "src/components/prospecting/ICPFitBadge.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-017",
+      "title": "Client assignment and status tracking on ICP profiles",
+      "type": "frontend",
+      "phase": 6,
+      "estimate": "25min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-006"],
+      "acceptance_criteria": [
+        "ICP profiles can be assigned to a 'client contact' (from contacts table)",
+        "Status workflow: Draft → Testing → Pending Approval → Approved → Active → Archived",
+        "Status transitions via dropdown on profile card",
+        "Filter profiles by assigned client",
+        "Activity log on each profile showing status changes with timestamps and who changed",
+        "Dashboard summary: X profiles by status across all clients"
+      ],
+      "files": [
+        "src/components/prospecting/ClientAssignment.tsx",
+        "src/components/prospecting/StatusWorkflow.tsx",
+        "src/components/prospecting/ProspectingDashboard.tsx"
+      ]
+    },
+    {
+      "id": "PROSPECT-018",
+      "title": "ICP approval workflow with notifications",
+      "type": "frontend",
+      "phase": 6,
+      "estimate": "25min",
+      "status": "complete",
+      "dependencies": ["PROSPECT-017"],
+      "acceptance_criteria": [
+        "When profile status set to 'Pending Approval', notification created for assigned client contact",
+        "Approval view: client sees profile summary, sample search results, and approve/reject buttons",
+        "Reject includes feedback text field",
+        "Approval updates status to 'Approved' with timestamp",
+        "Rejection returns to 'Testing' with feedback visible to team",
+        "Uses existing activity/notification patterns in the codebase"
+      ],
+      "files": [
+        "src/components/prospecting/ApprovalView.tsx",
+        "src/components/prospecting/ApprovalFeedback.tsx"
+      ]
+    }
+  ],
+  "parallel_opportunities": [
+    {
+      "group": ["PROSPECT-001", "PROSPECT-002", "PROSPECT-003"],
+      "reason": "Schema and frontend shell have no dependencies on each other",
+      "time_saved": "20min"
+    },
+    {
+      "group": ["PROSPECT-005", "PROSPECT-006"],
+      "reason": "Profile form and profile grid are independent UI components, both depend only on service layer",
+      "time_saved": "30min"
+    },
+    {
+      "group": ["PROSPECT-009", "PROSPECT-010"],
+      "reason": "Results table and search history are independent views of search data",
+      "time_saved": "25min"
+    },
+    {
+      "group": ["PROSPECT-011", "PROSPECT-012"],
+      "reason": "New table import and existing table import are independent flows",
+      "time_saved": "30min"
+    }
+  ],
+  "total_estimate": {
+    "optimistic": "6 hours",
+    "realistic": "8 hours",
+    "pessimistic": "12 hours",
+    "with_parallel": "6-8 hours"
+  },
+  "critical_path": [
+    "PROSPECT-001 → PROSPECT-004 → PROSPECT-005 → PROSPECT-013",
+    "PROSPECT-001 → PROSPECT-002 → PROSPECT-007 → PROSPECT-008 → PROSPECT-009 → PROSPECT-011"
+  ],
+  "new_files": [
+    "supabase/migrations/20260211300000_icp_profiles_schema.sql",
+    "supabase/functions/prospecting-search/index.ts",
+    "supabase/functions/prospecting-refine/index.ts",
+    "src/pages/ProspectingPage.tsx",
+    "src/lib/services/icpProfileService.ts",
+    "src/lib/hooks/useICPProfilesCRUD.ts",
+    "src/lib/hooks/useProspectingSearch.ts",
+    "src/lib/types/prospecting.ts",
+    "src/lib/utils/icpToSearchParams.ts",
+    "src/lib/utils/icpScoring.ts",
+    "src/components/prospecting/ICPProfileForm.tsx",
+    "src/components/prospecting/ICPProfileGrid.tsx",
+    "src/components/prospecting/ICPProfileCard.tsx",
+    "src/components/prospecting/ProviderSelector.tsx",
+    "src/components/prospecting/CreditEstimator.tsx",
+    "src/components/prospecting/SearchResultsPreview.tsx",
+    "src/components/prospecting/ResultsTable.tsx",
+    "src/components/prospecting/SearchHistoryPanel.tsx",
+    "src/components/prospecting/SearchComparisonView.tsx",
+    "src/components/prospecting/ImportToOpsDialog.tsx",
+    "src/components/prospecting/AddToExistingTableDialog.tsx",
+    "src/components/prospecting/AIProfileGenerator.tsx",
+    "src/components/prospecting/RefinementSuggestions.tsx",
+    "src/components/prospecting/ICPFitBadge.tsx",
+    "src/components/prospecting/ClientAssignment.tsx",
+    "src/components/prospecting/StatusWorkflow.tsx",
+    "src/components/prospecting/ProspectingDashboard.tsx",
+    "src/components/prospecting/ApprovalView.tsx",
+    "src/components/prospecting/ApprovalFeedback.tsx"
+  ],
+  "modified_files": [
+    "src/routes/lazyPages.tsx",
+    "src/App.tsx",
+    "src/lib/routes/routeConfig.ts"
+  ],
+  "risk_mitigations": [
+    {
+      "risk": "No credit tracking in search functions",
+      "mitigation": "PROSPECT-007 wraps search calls with credit check/deduct, never calling apollo-search or ai-ark-search directly from frontend"
+    },
+    {
+      "risk": "No transaction safety in table creation",
+      "mitigation": "PROSPECT-011 handles DUPLICATE_TABLE_NAME errors gracefully with retry option"
+    },
+    {
+      "risk": "Auth token in request body",
+      "mitigation": "All new code uses supabase.functions.invoke() exclusively, never raw fetch with _auth_token"
+    },
+    {
+      "risk": "Multi-tenant data isolation",
+      "mitigation": "PROSPECT-001 includes visibility column + RLS policies from day one. InternalRouteGuard restricts page access initially."
+    }
+  ]
+}

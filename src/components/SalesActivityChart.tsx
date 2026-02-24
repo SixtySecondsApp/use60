@@ -24,7 +24,11 @@ interface SalesActivityChartProps {
 const SalesActivityChart = ({ selectedMonth }: SalesActivityChartProps) => {
   const [timeframe, setTimeframe] = useState('daily');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const { activities } = useDashboardActivities(selectedMonth, true);
+  const monthDateRange = useMemo(() => ({
+    start: startOfMonth(selectedMonth),
+    end: endOfMonth(selectedMonth),
+  }), [selectedMonth]);
+  const { activities } = useDashboardActivities(monthDateRange, true);
   const { userData } = useUser();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';

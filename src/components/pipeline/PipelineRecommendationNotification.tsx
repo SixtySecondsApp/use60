@@ -97,6 +97,7 @@ export const PipelineRecommendationNotification: React.FC = () => {
 
       setRecommendations(data || []);
     } catch (error) {
+      console.error('Error fetching recommendations:', error);
     } finally {
       setLoading(false);
     }

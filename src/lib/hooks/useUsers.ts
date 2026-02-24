@@ -123,25 +123,28 @@ export function useUsers() {
       });
 
       // Transform data to match expected User interface
-      const usersData = (profiles || []).map((profile) => {
-        const email = profile.email || `user_${profile.id.slice(0, 8)}@private.local`;
-        return {
-          id: profile.id,
-          email,
-          first_name: profile.first_name || null,
-          last_name: profile.last_name || null,
-          stage: profile.stage || 'Trainee', // Use actual stage from profile
-          avatar_url: profile.avatar_url,
-          is_admin: profile.is_admin || false,
-          is_internal: internalEmails.has(email.toLowerCase()),
-          created_at: profile.created_at || profile.updated_at || new Date().toISOString(),
-          last_sign_in_at: null,
-          targets: targetsMap.get(profile.id) || [],
-          full_name: profile.first_name && profile.last_name
-            ? `${profile.first_name} ${profile.last_name}`
-            : null
-        };
-      });
+      // Filter out deleted users (those with email like deleted_*@deleted.local)
+      const usersData = (profiles || [])
+        .filter(profile => !profile.email?.startsWith('deleted_'))
+        .map((profile) => {
+          const email = profile.email || `user_${profile.id.slice(0, 8)}@private.local`;
+          return {
+            id: profile.id,
+            email,
+            first_name: profile.first_name || null,
+            last_name: profile.last_name || null,
+            stage: profile.stage || 'Trainee', // Use actual stage from profile
+            avatar_url: profile.avatar_url,
+            is_admin: profile.is_admin || false,
+            is_internal: internalEmails.has(email.toLowerCase()),
+            created_at: profile.created_at || profile.updated_at || new Date().toISOString(),
+            last_sign_in_at: null,
+            targets: targetsMap.get(profile.id) || [],
+            full_name: profile.first_name && profile.last_name
+              ? `${profile.first_name} ${profile.last_name}`
+              : null
+          };
+        });
 
       setUsers(usersData);
     } catch (error: any) {
@@ -320,44 +323,44 @@ export function useUsers() {
         }
 
         if (data?.error) {
+          // Check if it's an auth deletion failure vs profile deletion failure
+          if (data.code === 'AUTH_DELETION_FAILED') {
+            throw new Error(`Failed to revoke user access: ${data.error}. User cannot be deleted.`);
+          }
           throw new Error(data.error);
         }
 
-        toast.success('User deleted successfully');
+        toast.success('User deleted successfully and access revoked');
         await fetchUsers();
         return;
       } catch (edgeFunctionError: any) {
-        // If edge function fails (not deployed, network error, etc.), fallback to direct deletion
-        logger.warn('Edge function deletion failed, attempting direct deletion:', edgeFunctionError);
+        // If edge function fails (not deployed, network error, etc.), analyze the error
+        logger.warn('Edge function deletion failed:', edgeFunctionError);
 
         // Check if it's a permission/authorization error - don't fallback in that case
         if (edgeFunctionError?.status === 401 || edgeFunctionError?.status === 403) {
           throw new Error('Unauthorized: Admin access required to delete users');
         }
 
-        // Fallback: Direct deletion from profiles table
-        // Note: This won't delete from auth.users, but will remove the profile
-        const targetUser = users.find(u => u.id === targetUserId);
-        if (targetUser?.email) {
-          // Deactivate in internal_users if exists
-          await supabase
-            .from('internal_users')
-            .update({ is_active: false, updated_at: new Date().toISOString() })
-            .eq('email', targetUser.email.toLowerCase());
+        // Check if it's an auth deletion failure - this is critical and should not fallback
+        if (edgeFunctionError?.message?.includes('Failed to revoke user access') ||
+            edgeFunctionError?.message?.includes('AUTH_DELETION_FAILED')) {
+          throw new Error(`${edgeFunctionError.message} Please contact support if this persists.`);
         }
 
-        // Delete from profiles
-        const { error: deleteError } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', targetUserId);
+        // Only fallback to direct deletion if the edge function itself didn't deploy/respond
+        // (network error, function not found, etc.)
+        const isDeploymentError = edgeFunctionError?.message?.includes('not found') ||
+                                  edgeFunctionError?.status === 502 ||
+                                  edgeFunctionError?.status === 503;
 
-        if (deleteError) {
-          throw deleteError;
+        if (!isDeploymentError) {
+          // Not a deployment error - re-throw the original error
+          throw edgeFunctionError;
         }
 
-        toast.success('User deleted successfully');
-        await fetchUsers();
+        logger.warn('Edge function not available, but this is a critical operation - not falling back');
+        throw new Error('User deletion requires the delete-user edge function to be deployed. Please contact support.');
       }
     } catch (error: any) {
       logger.error('Delete error:', error);
@@ -450,11 +453,9 @@ export function useUsers() {
     }
   };
 
-  const inviteUser = async (email: string, firstName?: string, lastName?: string) => {
+  const resendInvitation = async (invitationId: string) => {
     try {
-      // Trim and normalize names
-      const trimmedFirstName = firstName?.trim() || undefined;
-      const trimmedLastName = lastName?.trim() || undefined;
+      logger.log('Resending invitation email for invitation:', invitationId);
 
       // Get current session for auth token
       const { data: { session } } = await supabase.auth.getSession();
@@ -462,23 +463,21 @@ export function useUsers() {
         throw new Error('Not authenticated');
       }
 
-      // Call app API (same origin) to avoid browser->Supabase Edge CORS issues
-      const response = await fetch('/api/admin/invite-user', {
+      // Call resend API endpoint
+      const response = await fetch('/api/admin/resend-invitation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          email: email.toLowerCase().trim(),
-          first_name: trimmedFirstName,
-          last_name: trimmedLastName,
+          invitationId,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to invite user (${response.status})`);
+        throw new Error(errorData.error || `Failed to resend invitation (${response.status})`);
       }
 
       const data = await response.json();
@@ -486,26 +485,135 @@ export function useUsers() {
         throw new Error(data.error);
       }
 
-      // Send welcome email via edge function (frontend can authenticate successfully)
-      if (data.emailParams) {
-        try {
-          const emailResult = await supabase.functions.invoke('encharge-send-email', {
-            body: data.emailParams,
+      // Check if email was sent successfully
+      if (data.emailSent) {
+        toast.success(`Invitation resent successfully to ${data.email}. ${data.remainingAttempts} attempts remaining.`);
+      } else {
+        // Email failed again
+        logger.error('Email delivery failed on resend:', data.emailError);
+        if (data.remainingAttempts > 0) {
+          toast.error(`Failed to resend email: ${data.emailError}. ${data.remainingAttempts} attempts remaining.`, {
+            duration: 10000,
+            action: {
+              label: 'Retry',
+              onClick: () => resendInvitation(invitationId)
+            }
           });
-
-          if (emailResult.error) {
-            logger.error('Failed to send welcome email:', emailResult.error);
-            toast.warning(`User created, but failed to send welcome email to ${email}`);
-            return;
-          }
-        } catch (emailError) {
-          logger.error('Failed to send welcome email:', emailError);
-          toast.warning(`User created, but failed to send welcome email to ${email}`);
-          return;
+        } else {
+          toast.error('Failed to resend email. Maximum attempts reached. Please create a new invitation.');
         }
       }
 
-      toast.success(`Invitation sent to ${email}`);
+      // Refresh user list to show updated status
+      await fetchUsers();
+    } catch (error: any) {
+      logger.error('Resend email error:', error);
+      toast.error('Failed to resend invitation: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  const inviteUser = async (email: string, firstName?: string, lastName?: string) => {
+    try {
+      // Trim and normalize names
+      const trimmedFirstName = firstName?.trim() || undefined;
+      const trimmedLastName = lastName?.trim() || undefined;
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Get current session for auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Not authenticated');
+      }
+
+      // 1. Create auth user using admin API
+      const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+        email: normalizedEmail,
+        email_confirm: true,
+        user_metadata: {
+          first_name: trimmedFirstName,
+          last_name: trimmedLastName,
+          full_name: trimmedFirstName && trimmedLastName ? `${trimmedFirstName} ${trimmedLastName}` : null,
+          invited_by_admin: true,
+        },
+      });
+
+      if (createError || !newUser?.user?.id) {
+        throw new Error(createError?.message || 'Failed to create user');
+      }
+
+      const newUserId = newUser.user.id;
+      logger.log('User created:', newUserId, normalizedEmail);
+
+      // 2. Ensure profile exists
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: newUserId,
+          email: normalizedEmail,
+          first_name: trimmedFirstName || null,
+          last_name: trimmedLastName || null,
+        }, {
+          onConflict: 'id',
+          ignoreDuplicates: false
+        });
+
+      if (profileError) {
+        logger.warn('Failed to create profile (non-blocking):', profileError);
+      }
+
+      // 3. Generate waitlist-style token via edge function (same as waitlist flow)
+      const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
+      const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-waitlist-token', {
+        body: {
+          email: normalizedEmail,
+          user_id: newUserId, // Pass user_id instead of waitlist_entry_id
+        },
+        headers: edgeFunctionSecret
+          ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+          : {},
+      });
+
+      if (tokenError || !tokenData?.success || !tokenData?.token) {
+        logger.error('Failed to generate token:', tokenError || tokenData?.error);
+        throw new Error(tokenData?.error || 'Failed to generate invitation token');
+      }
+
+      // 4. Build invitation URL (same pattern as waitlist)
+      const origin = window.location.origin;
+      const invitationUrl = `${origin}/auth/set-password?token=${tokenData.token}`;
+
+      // 5. Send welcome email using the same template as waitlist invites
+      const displayName = trimmedFirstName || normalizedEmail.split('@')[0];
+
+      const { data: emailResult, error: emailError } = await supabase.functions.invoke('encharge-send-email', {
+        body: {
+          template_type: 'waitlist_invite',
+          to_email: normalizedEmail,
+          to_name: displayName,
+          variables: {
+            recipient_name: displayName,
+            action_url: invitationUrl,
+            company_name: '',
+            expiry_time: '7 days',
+          },
+        },
+        headers: edgeFunctionSecret
+          ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+          : {},
+      });
+
+      if (emailError || !emailResult?.success) {
+        logger.error('Email sending failed:', emailError || emailResult?.error);
+        toast.warning(
+          `User created, but email failed to send to ${normalizedEmail}. They can use the password reset flow.`,
+          { duration: 8000 }
+        );
+      } else {
+        toast.success(`Welcome to early access email sent to ${normalizedEmail}`);
+      }
+
+      // Refresh user list
+      await fetchUsers();
     } catch (error: any) {
       logger.error('Invite error:', error);
       toast.error('Failed to invite user: ' + error.message);
@@ -520,5 +628,6 @@ export function useUsers() {
     deleteUser,
     impersonateUser,
     inviteUser,
+    resendInvitation,
   };
 }

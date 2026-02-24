@@ -1,0 +1,397 @@
+{
+  "project": {
+    "name": "Meeting Recorder Settings Split",
+    "description": "Split consolidated meeting recorder settings from /settings/meeting-sync into dedicated integration pages following the existing pattern",
+    "createdAt": "2026-01-24T21:24:00Z"
+  },
+
+  "features": [
+    {
+      "id": "meeting-split",
+      "name": "Split Meeting Recorders into Dedicated Pages",
+      "status": "pending",
+      "prd": null,
+      "description": "Transform meeting recorder settings from a consolidated page into dedicated integration pages that follow the existing integration pattern, appearing in navigation only when connected",
+      "createdAt": "2026-01-24T21:24:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "MEET-001",
+      "feature": "meeting-split",
+      "title": "Create Fathom Integration Settings Page",
+      "type": "feature",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/integrations/FathomSettings.tsx",
+          "src/components/settings/FathomSelfMapping.tsx",
+          "src/components/settings/FathomUserMapping.tsx",
+          "src/components/SettingsPageWrapper.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["MEET-004", "MEET-005"],
+      "parallelWith": ["MEET-002", "MEET-003"],
+
+      "acceptance": [
+        "New page at /settings/integrations/fathom",
+        "Uses SettingsPageWrapper with title 'Fathom' and appropriate description",
+        "Renders existing <FathomSettings /> component",
+        "Includes FathomSelfMapping and FathomUserMapping (admin only) sections when connected",
+        "Page accessible via direct URL"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/settings/integrations/FathomIntegrationPage.tsx",
+        "src/App.tsx"
+      ],
+
+      "implementationNotes": [
+        "Extract Fathom-specific content from MeetingSyncPage.tsx",
+        "Reuse existing FathomSettings component as-is",
+        "Follow pattern from SlackSettings and other integration pages",
+        "Keep auto-log settings (date range) with Fathom page since it's Fathom-specific"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MEET-002",
+      "feature": "meeting-split",
+      "title": "Create Fireflies Integration Settings Page",
+      "type": "feature",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/integrations/FirefliesSettings.tsx",
+          "src/components/SettingsPageWrapper.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["MEET-004", "MEET-005"],
+      "parallelWith": ["MEET-001", "MEET-003"],
+
+      "acceptance": [
+        "New page at /settings/integrations/fireflies",
+        "Uses SettingsPageWrapper with title 'Fireflies' and appropriate description",
+        "Renders existing <FirefliesSettings /> component",
+        "Page accessible via direct URL"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/settings/integrations/FirefliesIntegrationPage.tsx",
+        "src/App.tsx"
+      ],
+
+      "implementationNotes": [
+        "Simpler than Fathom - no user mapping sections needed",
+        "Reuse existing FirefliesSettings component as-is",
+        "Follow same pattern as FathomIntegrationPage"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MEET-003",
+      "feature": "meeting-split",
+      "title": "Create 60 Notetaker Integration Settings Page",
+      "type": "feature",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/integrations/NotetakerConfigModal.tsx",
+          "src/lib/hooks/useNotetakerIntegration.ts",
+          "src/components/SettingsPageWrapper.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["MEET-004", "MEET-005"],
+      "parallelWith": ["MEET-001", "MEET-002"],
+
+      "acceptance": [
+        "New page at /settings/integrations/60-notetaker",
+        "Uses SettingsPageWrapper with title '60 Notetaker' and appropriate description",
+        "New NotetakerSettings.tsx component extracted from modal",
+        "Shows org-level toggle (admin only) + user-level settings",
+        "Includes calendar selection and auto-record preferences",
+        "Page accessible via direct URL"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/settings/integrations/NotetakerIntegrationPage.tsx",
+        "src/components/integrations/NotetakerSettings.tsx",
+        "src/App.tsx"
+      ],
+
+      "implementationNotes": [
+        "Extract settings UI from NotetakerConfigModal.tsx into standalone component",
+        "Modal will still exist for quick enable/disable from other contexts",
+        "useNotetakerIntegration hook already exists and returns all needed state",
+        "Connection status: isOrgEnabled && isUserEnabled && googleConnected"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MEET-004",
+      "feature": "meeting-split",
+      "title": "Add Meeting Recorder Connect Cards to Integrations Page",
+      "type": "feature",
+      "status": "pending",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": ["MEET-001", "MEET-002", "MEET-003"],
+        "files": [
+          "src/pages/Integrations.tsx",
+          "src/components/integrations/IntegrationCard.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["MEET-005"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Fathom card shows connect button when not connected, 'Connected' badge when active",
+        "Fireflies card shows connect button when not connected, 'Connected' badge when active",
+        "60 Notetaker card shows setup button when not enabled, 'Active' badge when enabled",
+        "Clicking connected card navigates to dedicated settings page",
+        "Cards visually match existing integration cards pattern"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/Integrations.tsx"
+      ],
+
+      "implementationNotes": [
+        "Use useFathomIntegration, useFirefliesIntegration, useNotetakerIntegration hooks",
+        "Cards already exist - just need to ensure click navigates to new pages",
+        "Connect actions should trigger same flows as current page (OAuth for Fathom, API key modal for Fireflies)",
+        "60 Notetaker already has NotetakerConfigModal integration"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MEET-005",
+      "feature": "meeting-split",
+      "title": "Update Settings Navigation for Conditional Integration Links",
+      "type": "feature",
+      "status": "pending",
+      "priority": 3,
+
+      "dependencies": {
+        "stories": ["MEET-001", "MEET-002", "MEET-003", "MEET-004"],
+        "files": [
+          "src/pages/Settings.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["MEET-006"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Add Fathom section with path /settings/integrations/fathom (Video icon)",
+        "Add Fireflies section with path /settings/integrations/fireflies (Video icon)",
+        "Add 60 Notetaker section with path /settings/integrations/60-notetaker (Video icon)",
+        "Fathom link appears only when showFathomSettings is true (already exists)",
+        "Fireflies link appears only when connected (add useFirefliesIntegration check)",
+        "Notetaker link appears only when isConnected (add useNotetakerIntegration check)",
+        "Remove meeting-sync from sections array entirely",
+        "Update integrationSections filter to include new section IDs"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/Settings.tsx"
+      ],
+
+      "implementationNotes": [
+        "Pattern already established - see existing Slack/JustCall/HubSpot/Bullhorn conditionals",
+        "Import useFirefliesIntegration and useNotetakerIntegration hooks",
+        "Notetaker isConnected = isOrgEnabled && isUserEnabled && googleConnected (from hook)",
+        "Use Video icon from lucide-react for all three"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MEET-006",
+      "feature": "meeting-split",
+      "title": "Remove Meeting Sync Page and Route",
+      "type": "cleanup",
+      "status": "pending",
+      "priority": 4,
+
+      "dependencies": {
+        "stories": ["MEET-001", "MEET-002", "MEET-003", "MEET-004", "MEET-005"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "/settings/meeting-sync route removed from App.tsx",
+        "MeetingSyncPage.tsx deleted",
+        "No dead links in navigation",
+        "No console errors from missing imports",
+        "Build passes with no errors"
+      ],
+
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+
+      "files": [
+        "src/App.tsx",
+        "src/pages/settings/MeetingSyncPage.tsx"
+      ],
+
+      "implementationNotes": [
+        "Remove route from App.tsx",
+        "Delete src/pages/settings/MeetingSyncPage.tsx",
+        "meeting-sync already removed from Settings.tsx in MEET-005",
+        "Run npm run build to verify no broken imports"
+      ],
+
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 0,
+    "currentFeature": "meeting-split",
+    "lastUpdated": "2026-01-24T21:24:00Z",
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": ["MEET-001", "MEET-002", "MEET-003"],
+        "description": "Create dedicated pages - can run in parallel"
+      },
+      {
+        "group": 2,
+        "stories": ["MEET-004"],
+        "description": "Update Integrations page cards"
+      },
+      {
+        "group": 3,
+        "stories": ["MEET-005"],
+        "description": "Update Settings navigation"
+      },
+      {
+        "group": 4,
+        "stories": ["MEET-006"],
+        "description": "Remove old page"
+      }
+    ],
+    "estimatedTotalMinutes": 110,
+    "estimatedWithParallel": 75
+  },
+
+  "testing": {
+    "manual": [
+      {
+        "scenario": "Fresh user (no connections)",
+        "steps": [
+          "Visit /settings/integrations → see connect cards for all 3 recorders",
+          "Settings nav should NOT show Fathom/Fireflies/Notetaker links",
+          "Direct URL to /settings/integrations/fathom should work but show 'not connected' state"
+        ]
+      },
+      {
+        "scenario": "Connect Fathom",
+        "steps": [
+          "Click connect on integrations page → OAuth flow",
+          "After connect, Fathom link appears in settings nav",
+          "Navigate to /settings/integrations/fathom → full settings UI",
+          "All existing functionality works (sync, mapping, disconnect)"
+        ]
+      },
+      {
+        "scenario": "Connect Fireflies",
+        "steps": [
+          "Click connect on integrations page → API key modal",
+          "After connect, Fireflies link appears in settings nav",
+          "Navigate to /settings/integrations/fireflies → full settings UI"
+        ]
+      },
+      {
+        "scenario": "Enable 60 Notetaker",
+        "steps": [
+          "Enable org + user toggles",
+          "60 Notetaker link appears in settings nav",
+          "Navigate to /settings/integrations/60-notetaker → full settings UI",
+          "Settings page shows calendar selection, auto-record options"
+        ]
+      },
+      {
+        "scenario": "Disconnect",
+        "steps": [
+          "Disconnect any integration → link disappears from nav",
+          "Card on integrations page reverts to 'Connect' state"
+        ]
+      }
+    ],
+    "automated": [
+      "npm run build",
+      "npm run lint",
+      "npm run typecheck"
+    ]
+  },
+
+  "criticalFiles": {
+    "toDecompose": {
+      "src/pages/settings/MeetingSyncPage.tsx": "Current consolidated page to decompose (250 lines)"
+    },
+    "toModify": {
+      "src/pages/Settings.tsx": "Main settings page with navigation (~360 lines)",
+      "src/pages/Integrations.tsx": "Integration cards page - ensure click navigates to new pages",
+      "src/App.tsx": "Add routes for new pages, remove old route"
+    },
+    "toReuse": {
+      "src/components/integrations/FathomSettings.tsx": "Fathom UI component (1220 lines) - reuse as-is",
+      "src/components/integrations/FirefliesSettings.tsx": "Fireflies UI component (535 lines) - reuse as-is",
+      "src/components/SettingsPageWrapper.tsx": "Standard wrapper for settings pages"
+    },
+    "toExtractFrom": {
+      "src/components/integrations/NotetakerConfigModal.tsx": "Notetaker modal (455 lines) - extract settings into standalone component"
+    },
+    "hooks": {
+      "src/lib/hooks/useFathomIntegration.ts": "Fathom connection/sync hook",
+      "src/lib/hooks/useFirefliesIntegration.ts": "Fireflies connection hook",
+      "src/lib/hooks/useNotetakerIntegration.ts": "Notetaker connection hook - returns isConnected, isOrgEnabled, isUserEnabled"
+    }
+  }
+}

@@ -1,0 +1,280 @@
+{
+  "project": {
+    "name": "Platform Admin AI Usage & Model Configuration",
+    "description": "Platform admin screen for comprehensive AI usage tracking across all features, organizations, and users. Includes live model sync from providers, global feature→model configuration with fallbacks, org-level overrides, and org settings page for usage visibility.",
+    "createdAt": "2026-02-05T10:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "ai-admin",
+      "name": "AI Usage Admin Dashboard",
+      "status": "pending",
+      "description": "Super admin dashboard for AI usage tracking, model configuration, and cost monitoring across the platform"
+    },
+    {
+      "id": "org-usage",
+      "name": "Organization Usage Settings",
+      "status": "pending",
+      "description": "Settings page for organizations to view their AI usage and optionally override model defaults"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "AIADMIN-001",
+      "feature": "ai-admin",
+      "title": "Create ai_models table for synced provider models",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["AIADMIN-002", "AIADMIN-003", "AIADMIN-004", "AIADMIN-005"],
+      "acceptance": [
+        "ai_models table with provider, model_id, display_name, input_cost, output_cost, context_window, is_available, last_synced_at",
+        "Supports providers: anthropic, google, openrouter, kimi",
+        "Index on provider and is_available for efficient lookups"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/migrations/20260205900001_ai_models_table.sql"]
+    },
+    {
+      "id": "AIADMIN-002",
+      "feature": "ai-admin",
+      "title": "Create ai_feature_config table for feature→model mapping",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["AIADMIN-001"], "files": [], "schema": ["ai_models"] },
+      "blocks": ["AIADMIN-006", "AIADMIN-007"],
+      "acceptance": [
+        "ai_feature_config table with feature_key, primary_model_id, fallback_model_id, is_enabled",
+        "Foreign keys to ai_models table",
+        "Seed with all current features mapped to their models"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/migrations/20260205900002_ai_feature_config_table.sql"]
+    },
+    {
+      "id": "AIADMIN-003",
+      "feature": "ai-admin",
+      "title": "Create org_ai_config table for org-level overrides",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["AIADMIN-001"], "files": [], "schema": ["ai_models"] },
+      "blocks": ["AIADMIN-007", "AIADMIN-010"],
+      "parallelWith": ["AIADMIN-002"],
+      "acceptance": [
+        "org_ai_config table with org_id, feature_key, model_id (nullable for using default)",
+        "Unique constraint on org_id + feature_key",
+        "RLS: org admins can read/write their own config"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/migrations/20260205900003_org_ai_config_table.sql"]
+    },
+    {
+      "id": "AIADMIN-004",
+      "feature": "ai-admin",
+      "title": "Extend ai_cost_events with feature_key column",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["AIADMIN-001"], "files": [], "schema": [] },
+      "blocks": ["AIADMIN-007"],
+      "parallelWith": ["AIADMIN-002", "AIADMIN-003"],
+      "acceptance": [
+        "Add feature_key column to ai_cost_events (standardized feature identifier)",
+        "Add index on feature_key for aggregation queries",
+        "Migrate existing 'feature' column values to feature_key"
+      ],
+      "estimatedMinutes": 10,
+      "files": ["supabase/migrations/20260205900004_extend_ai_cost_events.sql"]
+    },
+    {
+      "id": "AIADMIN-005",
+      "feature": "ai-admin",
+      "title": "Create sync-ai-models edge function for provider model sync",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AIADMIN-001"], "files": [], "schema": ["ai_models"] },
+      "blocks": ["AIADMIN-006"],
+      "acceptance": [
+        "Edge function fetches available models from Anthropic, Google, OpenRouter, Kimi APIs",
+        "Updates ai_models table with current models and pricing",
+        "Can be called manually or by cron (daily)",
+        "Handles API errors gracefully per provider"
+      ],
+      "estimatedMinutes": 45,
+      "files": ["supabase/functions/sync-ai-models/index.ts"]
+    },
+    {
+      "id": "AIADMIN-006",
+      "feature": "ai-admin",
+      "title": "Create aiModelService for frontend model and config management",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["AIADMIN-002", "AIADMIN-005"], "files": [], "schema": ["ai_models", "ai_feature_config"] },
+      "blocks": ["AIADMIN-008"],
+      "acceptance": [
+        "Service provides getAvailableModels(), getFeatureConfigs(), updateFeatureConfig()",
+        "React Query hooks for caching and real-time updates",
+        "Type definitions for all model and config types"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["src/lib/services/aiModelService.ts", "src/lib/types/aiModels.ts"]
+    },
+    {
+      "id": "AIADMIN-007",
+      "feature": "ai-admin",
+      "title": "Create aiUsageService for aggregated usage stats",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["AIADMIN-002", "AIADMIN-003", "AIADMIN-004"], "files": ["src/lib/services/costAnalysisService.ts"], "schema": [] },
+      "blocks": ["AIADMIN-008"],
+      "parallelWith": ["AIADMIN-006"],
+      "acceptance": [
+        "Service provides usage aggregation by feature, org, user, model, time period",
+        "Extends existing costAnalysisService patterns",
+        "React Query hooks with proper caching"
+      ],
+      "estimatedMinutes": 35,
+      "files": ["src/lib/services/aiUsageService.ts"]
+    },
+    {
+      "id": "AIADMIN-008",
+      "feature": "ai-admin",
+      "title": "Create AIUsageAdmin page component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["AIADMIN-006", "AIADMIN-007"], "files": ["src/pages/platform/CostAnalysis.tsx"], "schema": [] },
+      "blocks": ["AIADMIN-009"],
+      "acceptance": [
+        "Page at /platform/ai-usage accessible to super admins only",
+        "Tabs: Overview, By Feature, By Organization, By User, Model Config",
+        "Shows usage charts, cost breakdowns, model configuration UI",
+        "Sync Models button to trigger manual provider sync"
+      ],
+      "estimatedMinutes": 60,
+      "files": ["src/pages/platform/AIUsageAdmin.tsx"]
+    },
+    {
+      "id": "AIADMIN-009",
+      "feature": "ai-admin",
+      "title": "Add route and navigation for AI Usage Admin",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["AIADMIN-008"], "files": ["src/App.tsx"], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "Route added to App.tsx for /platform/ai-usage",
+        "Link added to platform dashboard navigation",
+        "Super admin access control enforced"
+      ],
+      "estimatedMinutes": 10,
+      "files": ["src/App.tsx", "src/pages/platform/PlatformDashboard.tsx"]
+    },
+    {
+      "id": "AIADMIN-010",
+      "feature": "org-usage",
+      "title": "Create OrgAIUsage settings component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["AIADMIN-003", "AIADMIN-007"], "files": [], "schema": [] },
+      "blocks": ["AIADMIN-011"],
+      "parallelWith": ["AIADMIN-008"],
+      "acceptance": [
+        "Component shows org's AI usage by feature with charts",
+        "Only shows features the org has actually used",
+        "Org admins can override model selection per feature",
+        "Shows cost breakdown and trends"
+      ],
+      "estimatedMinutes": 45,
+      "files": ["src/components/settings/OrgAIUsage.tsx"]
+    },
+    {
+      "id": "AIADMIN-011",
+      "feature": "org-usage",
+      "title": "Add AI Usage tab to org settings page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["AIADMIN-010"], "files": [], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "New 'AI Usage' tab in organization settings",
+        "Shows OrgAIUsage component",
+        "Org admin access control"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["src/pages/settings/OrganizationSettings.tsx"]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 11,
+    "completedStories": 0,
+    "currentFeature": "ai-admin",
+    "lastUpdated": "2026-02-05T10:00:00Z",
+    "parallelGroups": [
+      { "group": 1, "stories": ["AIADMIN-001"], "description": "Base ai_models table" },
+      { "group": 2, "stories": ["AIADMIN-002", "AIADMIN-003", "AIADMIN-004"], "description": "Config and events schema - can run in parallel" },
+      { "group": 3, "stories": ["AIADMIN-005"], "description": "Model sync edge function" },
+      { "group": 4, "stories": ["AIADMIN-006", "AIADMIN-007"], "description": "Frontend services - can run in parallel" },
+      { "group": 5, "stories": ["AIADMIN-008", "AIADMIN-010"], "description": "UI components - can run in parallel" },
+      { "group": 6, "stories": ["AIADMIN-009", "AIADMIN-011"], "description": "Navigation and integration" }
+    ],
+    "estimatedTotalMinutes": 300,
+    "estimatedWithParallel": 180
+  },
+
+  "providers": {
+    "anthropic": {
+      "modelsEndpoint": "https://api.anthropic.com/v1/models",
+      "authHeader": "x-api-key",
+      "existingSecret": "ANTHROPIC_API_KEY"
+    },
+    "google": {
+      "modelsEndpoint": "https://generativelanguage.googleapis.com/v1beta/models",
+      "authHeader": "x-goog-api-key",
+      "existingSecret": "GEMINI_API_KEY"
+    },
+    "openrouter": {
+      "modelsEndpoint": "https://openrouter.ai/api/v1/models",
+      "authHeader": "Authorization: Bearer",
+      "existingSecret": "OPENROUTER_API_KEY"
+    },
+    "kimi": {
+      "modelsEndpoint": "https://api.moonshot.cn/v1/models",
+      "authHeader": "Authorization: Bearer",
+      "newSecretNeeded": "KIMI_API_KEY"
+    }
+  },
+
+  "featuresList": [
+    { "key": "copilot_chat", "name": "Copilot Chat", "category": "Copilot" },
+    { "key": "copilot_autonomous", "name": "Autonomous Skills", "category": "Copilot" },
+    { "key": "entity_resolution", "name": "Entity Resolution", "category": "Copilot" },
+    { "key": "enrich_crm_record", "name": "CRM Record Enrichment", "category": "Enrichment" },
+    { "key": "enrich_organization", "name": "Organization Enrichment", "category": "Enrichment" },
+    { "key": "deep_enrich_organization", "name": "Deep Organization Profile", "category": "Enrichment" },
+    { "key": "enrich_dynamic_table", "name": "Dynamic Table Enrichment", "category": "Enrichment" },
+    { "key": "extract_action_items", "name": "Action Item Extraction", "category": "Meetings" },
+    { "key": "analyze_action_item", "name": "Action Item Analysis", "category": "Meetings" },
+    { "key": "condense_meeting_summary", "name": "Meeting Summary", "category": "Meetings" },
+    { "key": "meeting_scorecard", "name": "Meeting Scorecard", "category": "Meetings" },
+    { "key": "categorize_email", "name": "Email Categorization", "category": "Content" },
+    { "key": "analyze_email", "name": "Email Analysis", "category": "Content" },
+    { "key": "analyze_writing_style", "name": "Writing Style Analysis", "category": "Content" },
+    { "key": "generate_marketing_content", "name": "Marketing Content", "category": "Content" },
+    { "key": "generate_proposal", "name": "Proposal Generation", "category": "Documents" },
+    { "key": "skill_builder", "name": "Skill Builder", "category": "Skills" },
+    { "key": "suggest_next_actions", "name": "Next Actions Suggestion", "category": "Intelligence" }
+  ]
+}

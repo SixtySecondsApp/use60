@@ -58,7 +58,8 @@ export const MeetingListResponse: React.FC<MeetingListResponseProps> = ({ data, 
     return (
       <div
         key={meeting.id}
-        className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 hover:bg-gray-800/70 transition-colors"
+        className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 hover:bg-gray-800/70 transition-colors cursor-pointer"
+        onClick={() => onActionClick?.('open_meeting', { meetingId: meeting.id })}
       >
         <div className="flex items-start gap-3">
           {/* Time indicator */}
@@ -106,7 +107,10 @@ export const MeetingListResponse: React.FC<MeetingListResponseProps> = ({ data, 
             <div className="mt-2 flex items-center gap-3 text-sm">
               {meeting.meetingUrl && (
                 <button
-                  onClick={() => onActionClick?.('open_meeting_url', { url: meeting.meetingUrl })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onActionClick?.('open_external_url', { url: meeting.meetingUrl });
+                  }}
                   className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
                 >
                   <Video className="w-4 h-4" />

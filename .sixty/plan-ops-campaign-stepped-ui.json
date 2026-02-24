@@ -1,0 +1,177 @@
+{
+  "feature": {
+    "id": "ops-campaign-stepped-ui",
+    "name": "Ops Query Bar — Campaign Intent Stepped UI",
+    "description": "When a user types a campaign/outreach intent query in the OpsDetailPage query bar (e.g. 'Create an outreach sequence to invite them all to the Harbour Hotel'), show the new CampaignWorkflowResponse with stepped questions instead of the old WorkflowProgressStepper. Adapt questions for existing-table context (skip search questions) and add skip_search support to the backend orchestrator.",
+    "status": "pending",
+    "createdAt": "2026-02-13T00:00:00Z"
+  },
+
+  "stories": [
+    {
+      "id": "CAMP-001",
+      "title": "Broaden campaign keywords and add table-context question detector",
+      "type": "utility",
+      "status": "pending",
+      "priority": 1,
+
+      "description": "Broaden CAMPAIGN_KEYWORDS in prospectingDetector.ts so queries like 'Create an outreach sequence...' match isCampaignPrompt(). Add detectTableCampaignMissingInfo() that returns only campaign-relevant questions (goal, enrichment, email steps) — filtering out search-related ones (target audience, company size, result count).",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/utils/prospectingDetector.ts"],
+        "schema": []
+      },
+      "blocks": ["CAMP-004"],
+
+      "acceptance": [
+        "'Create an outreach sequence to invite them all' returns true from isCampaignPrompt()",
+        "'outreach sequence', 'create outreach', 'invite them', 'email them', 'message them all', 'send them' all match",
+        "detectTableCampaignMissingInfo() returns only campaign_goal, enrichment_scope, email_steps questions",
+        "detectTableCampaignMissingInfo() does NOT return target_audience, search_type, company_size, result_count",
+        "Existing isCampaignPrompt() and detectCampaignMissingInfo() still work unchanged for copilot"
+      ],
+
+      "estimatedMinutes": 10,
+
+      "files": [
+        "src/lib/utils/prospectingDetector.ts"
+      ],
+
+      "technicalNotes": "Add keywords to CAMPAIGN_KEYWORDS array at line 159. New function is a thin wrapper: calls detectCampaignMissingInfo() then filters out keys in ['target_audience', 'search_type', 'company_size', 'result_count']."
+    },
+    {
+      "id": "CAMP-002",
+      "title": "Add targetTableId and onDismiss props to CampaignWorkflowResponse",
+      "type": "component",
+      "status": "pending",
+      "priority": 1,
+
+      "description": "Extend CampaignWorkflowResponse to accept an optional targetTableId prop (for existing table campaigns) and onDismiss callback (for closing from Ops page). When targetTableId is set, pass skip_search: true and target_table_id to the orchestrator config.",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/components/copilot/responses/CampaignWorkflowResponse.tsx"],
+        "schema": []
+      },
+      "blocks": ["CAMP-004"],
+
+      "acceptance": [
+        "CampaignWorkflowResponseProps includes optional targetTableId?: string",
+        "CampaignWorkflowResponseProps includes optional onDismiss?: () => void",
+        "When targetTableId set, orchestrator config includes { target_table_id, skip_search: true }",
+        "Phase 1 header shows dismiss X button when onDismiss is provided",
+        "Existing copilot usage (no targetTableId) works unchanged"
+      ],
+
+      "estimatedMinutes": 10,
+
+      "files": [
+        "src/components/copilot/responses/CampaignWorkflowResponse.tsx"
+      ],
+
+      "technicalNotes": "In handleSubmit() (line 76), spread targetTableId into config: ...(targetTableId ? { target_table_id: targetTableId, skip_search: true } : {}). Add X button next to header title in Phase 1 JSX."
+    },
+    {
+      "id": "CAMP-003",
+      "title": "Add skip_search to WorkflowConfig type",
+      "type": "type",
+      "status": "pending",
+      "priority": 1,
+
+      "description": "Add skip_search?: boolean to the WorkflowConfig interface in useWorkflowOrchestrator.ts. This is a passthrough field — it's included in the request body to the backend orchestrator.",
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/hooks/useWorkflowOrchestrator.ts"],
+        "schema": []
+      },
+      "blocks": ["CAMP-004"],
+
+      "acceptance": [
+        "WorkflowConfig interface includes skip_search?: boolean",
+        "Config is already passed through to backend body — no other changes needed"
+      ],
+
+      "estimatedMinutes": 2,
+
+      "files": [
+        "src/lib/hooks/useWorkflowOrchestrator.ts"
+      ]
+    },
+    {
+      "id": "CAMP-004",
+      "title": "Add campaign routing and CampaignWorkflowResponse to OpsDetailPage",
+      "type": "integration",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "In OpsDetailPage.tsx, check isCampaignPrompt() BEFORE isWorkflowPrompt() in handleQuerySubmit. When matched, generate table-context questions and render CampaignWorkflowResponse inline instead of WorkflowProgressStepper.",
+
+      "dependencies": {
+        "stories": ["CAMP-001", "CAMP-002", "CAMP-003"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "Campaign queries show CampaignWorkflowResponse with stepped questions (one at a time, animated)",
+        "Only campaign-relevant questions shown (goal, enrichment, email steps, campaign name)",
+        "Non-campaign workflow queries still show WorkflowProgressStepper as before",
+        "Dismiss button clears campaign UI and returns to normal query bar",
+        "After campaign completes, table data refreshes"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "src/pages/OpsDetailPage.tsx"
+      ],
+
+      "technicalNotes": "Import isCampaignPrompt, detectTableCampaignMissingInfo, generateCampaignName from prospectingDetector. Import CampaignWorkflowResponse. Add campaignWorkflowData state. In handleQuerySubmit before isWorkflowPrompt check, add isCampaignPrompt check that sets state. Render CampaignWorkflowResponse before WorkflowProgressStepper section (~line 2767) with targetTableId={tableId}."
+    },
+    {
+      "id": "CAMP-005",
+      "title": "Backend: skip search step when skip_search is true",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+
+      "description": "In ops-workflow-orchestrator edge function, add skip_search to WorkflowConfig. When skip_search is true and target_table_id exists, skip the Apollo search step and use existing table contacts for email generation and campaign creation.",
+
+      "dependencies": {
+        "stories": ["CAMP-003"],
+        "files": ["supabase/functions/ops-workflow-orchestrator/index.ts"],
+        "schema": []
+      },
+      "blocks": [],
+
+      "acceptance": [
+        "WorkflowConfig includes skip_search?: boolean",
+        "When skip_search=true + target_table_id set: search step emits instant complete with 'Using existing contacts'",
+        "Email generation and campaign creation steps use the target_table_id",
+        "Normal flow (skip_search=false) still runs Apollo search as before",
+        "Edge function deploys successfully to staging"
+      ],
+
+      "estimatedMinutes": 15,
+
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts"
+      ],
+
+      "technicalNotes": "Add skip_search to WorkflowConfig at line 39. At line ~980, wrap search step in conditional: if skip_search && target_table_id, emit instant step_complete and set tableId = target_table_id. Otherwise run existing executeSearch(). Deploy: npx supabase functions deploy ops-workflow-orchestrator --project-ref caerqjzvuerejfrdtygb --no-verify-jwt"
+    }
+  ],
+
+  "execution": {
+    "totalStories": 5,
+    "completedStories": 0,
+    "parallelGroups": [
+      ["CAMP-001", "CAMP-002", "CAMP-003"],
+      ["CAMP-004", "CAMP-005"]
+    ],
+    "estimatedMinutes": 52
+  }
+}

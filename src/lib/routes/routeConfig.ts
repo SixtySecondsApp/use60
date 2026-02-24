@@ -31,6 +31,14 @@ import {
   HeartPulse,
   Bot,
   Inbox,
+  ExternalLink,
+  Table2,
+  BookOpen,
+  Crosshair,
+  FileSearch,
+  Brain,
+  Send,
+  LifeBuoy,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -69,6 +77,8 @@ export interface RouteConfig {
   badge?: string;
   /** Display group for visual grouping in sidebar (1-5) */
   displayGroup?: number;
+  /** Whether this is an external link (opens in new tab) */
+  isExternal?: boolean;
 }
 
 // =====================================================
@@ -112,17 +122,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'any',
     label: 'Intelligence',
     icon: Sparkles,
-    showInNav: true,
+    showInNav: false, // V1 — replaced by Meeting Analytics (now /meeting-analytics as "Intelligence")
     navSection: 'main',
     order: 3,
     displayGroup: 1,
   },
   {
     path: '/insights/content-topics',
-    access: 'internal', // Hidden from external users - feature not ready
+    access: 'internal',
     label: 'Content Topics',
     icon: Layers,
-    showInNav: true,
+    showInNav: false, // Moved to Platform Admin "Feature Development"
     navSection: 'main',
     order: 1,
     displayGroup: 3,
@@ -132,9 +142,19 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'any',
     label: 'Team Analytics',
     icon: BarChart3,
-    showInNav: true,
+    showInNav: false,
     navSection: 'main',
     order: 4,
+    displayGroup: 1,
+  },
+  {
+    path: '/meeting-analytics',
+    access: 'any',
+    label: 'Intelligence',
+    icon: Sparkles,
+    showInNav: true,
+    navSection: 'main',
+    order: 5,
     displayGroup: 1,
   },
 
@@ -144,7 +164,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Leads',
     icon: Inbox,
-    showInNav: true,
+    showInNav: false, // Phase 2: accessible from Ops standard tables
     navSection: 'main',
     order: 2,
     displayGroup: 3,
@@ -154,7 +174,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'CRM',
     icon: Building2,
-    showInNav: true,
+    showInNav: false, // Replaced by Ops
     navSection: 'main',
     order: 3,
     displayGroup: 3,
@@ -164,7 +184,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Pipeline',
     icon: Kanban,
-    showInNav: true,
+    showInNav: false, // Phase 2: accessible from Ops standard tables
     navSection: 'main',
     order: 4,
     displayGroup: 3,
@@ -174,7 +194,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Calls',
     icon: PhoneCall,
-    showInNav: true,
+    showInNav: false, // Moved to Platform Admin "Feature Development"
     navSection: 'main',
     order: 1,
     displayGroup: 4,
@@ -184,18 +204,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Voice',
     icon: Mic,
-    showInNav: true,
+    showInNav: false, // Moved to Platform Admin "Feature Development"
     navSection: 'main',
     order: 1,
     displayGroup: 5,
-    badge: 'New',
   },
   {
     path: '/activity',
     access: 'internal',
     label: 'Activity',
     icon: Activity,
-    showInNav: true,
+    showInNav: false, // Phase 2: embedded in Dashboard as tab
     navSection: 'main',
     order: 5,
     displayGroup: 3,
@@ -205,7 +224,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Insights',
     icon: BarChart3,
-    showInNav: true,
+    showInNav: false, // Phase 2: embedded in Dashboard as tab
     navSection: 'main',
     order: 6,
     displayGroup: 3,
@@ -217,7 +236,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Tasks',
     icon: CheckSquare,
-    showInNav: true,
+    showInNav: false, // Replaced by Command Centre
     navSection: 'tools',
     order: 1,
     displayGroup: 2,
@@ -227,11 +246,31 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Projects',
     icon: Layers,
-    showInNav: true,
+    showInNav: false, // Replaced by Command Centre
     navSection: 'tools',
     order: 2,
     displayGroup: 2,
+  },
+  {
+    path: '/ops',
+    access: 'internal',
+    label: 'Ops',
+    icon: Table2,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3,
+    displayGroup: 4, // Phase 2: same group as other tools to remove separator lines
     badge: 'New',
+  },
+  {
+    path: '/profiles',
+    access: 'internal',
+    label: 'Profiles',
+    icon: Building2,
+    showInNav: false, // Phase 2: accessible via direct URL
+    navSection: 'tools',
+    order: 4,
+    displayGroup: 2,
   },
   // Calendar and Email routes removed from navigation - users should use Google Calendar/Gmail directly
   // Routes still exist but redirect to Google services in App.tsx
@@ -240,7 +279,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Workflows',
     icon: Workflow,
-    showInNav: true,
+    showInNav: false, // Hidden from nav — full code deletion deferred
     navSection: 'tools',
     order: 2,
     displayGroup: 5,
@@ -251,8 +290,8 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     label: 'Integrations',
     icon: Plug,
     showInNav: true,
-    navSection: 'tools',
-    order: 5,
+    navSection: 'main',
+    order: 6,
     displayGroup: 1,
   },
   {
@@ -266,6 +305,27 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     displayGroup: 4,
   },
   {
+    path: '/command-centre',
+    access: 'internal',
+    label: 'Command Centre',
+    icon: Crosshair,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3,
+    displayGroup: 4,
+    badge: 'New',
+  },
+  {
+    path: '/action-centre',
+    access: 'internal',
+    label: 'Action Centre',
+    icon: Inbox,
+    showInNav: false, // Deprecated — replaced by Command Centre
+    navSection: 'tools',
+    order: 3.1,
+    displayGroup: 4,
+  },
+  {
     path: '/email-actions',
     access: 'internal',
     label: 'Email Actions',
@@ -273,6 +333,44 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: false, // Accessible via notifications, not in nav
     navSection: 'tools',
     order: 7,
+  },
+  {
+    path: '/docs',
+    access: 'any',
+    label: 'Help & Docs',
+    icon: BookOpen,
+    showInNav: false, // Hardcoded in AppLayout sidebar footer (below Settings)
+    navSection: 'settings',
+    order: 5,
+  },
+  {
+    path: '/support',
+    access: 'any',
+    label: 'Support',
+    icon: LifeBuoy,
+    showInNav: false, // Hardcoded in AppLayout sidebar footer (below Settings)
+    navSection: 'settings',
+    order: 6,
+  },
+  {
+    path: '/demo/agent-research',
+    access: 'internal',
+    label: 'AI Research Demo',
+    icon: Brain,
+    showInNav: false,
+    navSection: 'tools',
+    order: 7,
+    badge: 'Demo',
+  },
+  {
+    path: '/demo/campaign-workflow',
+    access: 'internal',
+    label: 'Campaign Workflow Demo',
+    icon: Send,
+    showInNav: false,
+    navSection: 'tools',
+    order: 8,
+    badge: 'Demo',
   },
 
   // ========== Settings Section (Tier 1: All Users) ==========
@@ -314,6 +412,32 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
   // ========== Org Admin Routes ==========
   // Org/team management is now accessed via the main Settings page (role-gated cards).
   // We keep legacy redirects for /team/* paths elsewhere.
+  {
+    path: '/settings/autonomy',
+    access: 'orgAdmin',
+    label: 'Autonomy & Approvals',
+    showInNav: false,
+    navSection: 'settings',
+    order: 86,
+  },
+  {
+    path: '/settings/methodology',
+    access: 'orgAdmin',
+    label: 'Sales Methodology',
+    showInNav: false,
+    navSection: 'settings',
+    order: 85,
+  },
+  {
+    path: '/agent/marketplace',
+    access: 'orgAdmin',
+    label: 'Agent Marketplace',
+    icon: Bot,
+    showInNav: false, // Phase 2: accessible via AI Copilot page
+    navSection: 'tools',
+    order: 1.5,
+    displayGroup: 4,
+  },
 
   // ========== Platform Admin Section (Tier 3: Platform Admins Only) ==========
   {
@@ -450,6 +574,15 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: false,
     navSection: 'platform',
     order: 24,
+  },
+  {
+    path: '/platform/support-tickets',
+    access: 'platformAdmin',
+    label: 'Support Tickets',
+    icon: LifeBuoy,
+    showInNav: true,
+    navSection: 'platform',
+    order: 14,
   },
   // Meetings Waitlist (now embedded in Platform Settings)
   {
@@ -603,6 +736,53 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: false,
     navSection: 'platform',
     order: 54,
+  },
+  // Content Management
+  {
+    path: '/platform/docs-admin',
+    access: 'platformAdmin',
+    label: 'Documentation CMS',
+    icon: BookOpen,
+    showInNav: false,
+    navSection: 'platform',
+    order: 55,
+  },
+  // CRM Field Mapping (Org Admin)
+  {
+    path: '/settings/crm-field-mapping',
+    access: 'orgAdmin',
+    label: 'CRM Field Mapping',
+    showInNav: false,
+    navSection: 'settings',
+    order: 87,
+  },
+  // Custom SOPs / Playbooks (Org Admin)
+  {
+    path: '/settings/custom-sops',
+    access: 'orgAdmin',
+    label: 'Custom Playbooks (SOPs)',
+    icon: Workflow,
+    showInNav: false,
+    navSection: 'settings',
+    order: 88,
+  },
+  // Signal Intelligence (Org Admin)
+  {
+    path: '/settings/signal-intelligence',
+    access: 'orgAdmin',
+    label: 'Signal Intelligence',
+    showInNav: false,
+    navSection: 'settings',
+    order: 89,
+  },
+  // Knowledge & Memory (Org Admin)
+  {
+    path: '/settings/knowledge-memory',
+    access: 'orgAdmin',
+    label: 'Knowledge & Memory',
+    showInNav: false,
+    navSection: 'settings',
+    order: 90,
   },
   // Slack Settings (Org Admin)
   {
@@ -778,7 +958,7 @@ export const LEGACY_ROUTE_REDIRECTS: Record<string, string> = {
   '/admin/savvycal-settings': '/platform/integrations/savvycal',
   '/admin/booking-sources': '/platform/integrations/booking',
   '/admin/internal-domains': '/platform/integrations/domains',
-  '/admin/branding': '/team/branding',
+  '/admin/branding': '/settings',
   // SaaS Admin routes -> Platform
   '/saas-admin': '/platform',
   '/saas-admin/customers': '/platform/customers',
@@ -790,12 +970,12 @@ export const LEGACY_ROUTE_REDIRECTS: Record<string, string> = {
   // Legacy team routes -> settings
   '/team': '/settings',
   '/team/team': '/settings/team-members',
-  '/team/branding': '/settings/branding',
+  '/team/branding': '/settings',
   '/team/billing': '/settings/billing',
   // Legacy org routes -> settings
   '/org': '/settings',
   '/org/team': '/settings/team-members',
-  '/org/branding': '/settings/branding',
+  '/org/branding': '/settings',
   '/org/billing': '/settings/billing',
 };
 

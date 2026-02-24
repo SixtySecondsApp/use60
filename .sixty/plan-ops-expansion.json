@@ -1,0 +1,912 @@
+{
+  "project": {
+    "name": "Ops Expansion — Intelligent Operating Layer",
+    "description": "Transform Ops from enrichment tables into a full intelligent operating layer: CRM sync (HubSpot), formula columns, integration columns (Reoon, Apify), action columns, cross-op imports, simple rule builder, and enhanced views",
+    "createdAt": "2026-02-04T22:00:00Z",
+    "branch": "feat/dynamic-tables",
+    "prd": ".sixty/consult/ops-expansion.md",
+    "consultedAt": "2026-02-04T22:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "ops-stabilize",
+      "name": "Stabilize Core for Scale",
+      "status": "pending",
+      "priority": 0,
+      "description": "Fix P0 scaling issues: enrichment batch limits, server-side filtering, missing indexes. Must ship before any expansion work."
+    },
+    {
+      "id": "ops-column-types",
+      "name": "New Column Types",
+      "status": "pending",
+      "priority": 1,
+      "description": "Dropdown/tags, phone, checkbox, and formula columns with simple expression evaluation (IF/CONCAT/math/@column refs)"
+    },
+    {
+      "id": "ops-integrations",
+      "name": "Integration Columns",
+      "status": "pending",
+      "priority": 2,
+      "description": "Per-row integration execution: Reoon email verification, Apify actor runner. Each with status tracking and rate limiting."
+    },
+    {
+      "id": "ops-actions",
+      "name": "Action Columns & CRM Push",
+      "status": "pending",
+      "priority": 3,
+      "description": "Action button column type, HubSpot push with field mapping, duplicate detection, list assignment, per-row CRM status tracking"
+    },
+    {
+      "id": "ops-hubspot-pull",
+      "name": "HubSpot Pull (Import Source)",
+      "status": "pending",
+      "priority": 4,
+      "description": "Import from HubSpot as data source — connect, select list/filter, map fields, import with source tracking, incremental sync"
+    },
+    {
+      "id": "ops-cross-op",
+      "name": "Cross-Op Import",
+      "status": "pending",
+      "priority": 5,
+      "description": "Import from another Op as data source — select table, apply filters, select columns, deep copy with source tracking"
+    },
+    {
+      "id": "ops-rules",
+      "name": "Simple Rule Builder",
+      "status": "pending",
+      "priority": 6,
+      "description": "IF [column] [operator] [value] THEN [action] — triggers on row update, enrichment complete, new row. Circuit breakers and audit log."
+    },
+    {
+      "id": "ops-views",
+      "name": "Views Enhancement",
+      "status": "pending",
+      "priority": 7,
+      "description": "Conditional formatting rules and column reordering per view"
+    }
+  ],
+
+  "stories": [
+
+    {
+      "id": "OPS-001",
+      "feature": "ops-stabilize",
+      "title": "Add batch limits and checkpointing to enrichment edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["supabase/functions/enrich-dynamic-table/index.ts"], "schema": ["enrichment_jobs"] },
+      "blocks": ["OPS-003"],
+      "parallelWith": ["OPS-002"],
+      "acceptance": [
+        "Enrichment processes max 50 rows per invocation",
+        "Add `last_processed_row_index` column to enrichment_jobs for resume",
+        "If >50 rows remain, return partial result with resume token",
+        "Frontend auto-chains batch requests until job complete",
+        "Add 30-second timeout per row with graceful failure"
+      ],
+      "files": [
+        "supabase/functions/enrich-dynamic-table/index.ts",
+        "supabase/migrations/20260205000000_enrichment_batch_limits.sql",
+        "src/lib/hooks/useEnrichment.ts"
+      ]
+    },
+    {
+      "id": "OPS-002",
+      "feature": "ops-stabilize",
+      "title": "Move filtering and sorting to server-side Postgres queries",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": ["src/lib/services/opsTableService.ts", "src/pages/OpsDetailPage.tsx"], "schema": ["dynamic_table_cells"] },
+      "blocks": [],
+      "parallelWith": ["OPS-001"],
+      "acceptance": [
+        "getTableData() accepts FilterCondition[] and SortConfig params",
+        "Filters translated to SQL WHERE clauses on dynamic_table_cells",
+        "Sort translated to ORDER BY on cell values with column_id join",
+        "Add composite index on (table_id, row_index) for pagination",
+        "Add index on (row_id, column_id) for cell lookups (already exists as unique constraint)",
+        "Remove client-side applyFilters() from OpsDetailPage useMemo",
+        "Pagination works correctly with server-side filters"
+      ],
+      "files": [
+        "src/lib/services/opsTableService.ts",
+        "src/pages/OpsDetailPage.tsx",
+        "supabase/migrations/20260205000001_server_side_filtering.sql",
+        "src/lib/utils/opsTableFilters.ts"
+      ]
+    },
+    {
+      "id": "OPS-003",
+      "feature": "ops-stabilize",
+      "title": "Add rate limiting and concurrency control to enrichment",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["OPS-001"], "files": ["supabase/functions/enrich-dynamic-table/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Add configurable concurrency limit (default 5 parallel API calls via p-limit pattern)",
+        "Add exponential backoff on 429 responses (2s, 4s, 8s, max 3 retries)",
+        "Parse Retry-After header when available",
+        "Add rate_limit_hit_count to enrichment_jobs for observability",
+        "Log rate limit events to enrichment_job_results"
+      ],
+      "files": [
+        "supabase/functions/enrich-dynamic-table/index.ts",
+        "supabase/functions/_shared/rateLimiter.ts"
+      ]
+    },
+
+    {
+      "id": "OPS-004",
+      "feature": "ops-column-types",
+      "title": "Add dropdown and tags column types",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": ["src/components/ops/AddColumnModal.tsx", "src/components/ops/OpsTableCell.tsx"], "schema": ["dynamic_table_columns"] },
+      "blocks": [],
+      "parallelWith": ["OPS-005", "OPS-006"],
+      "acceptance": [
+        "Migration: add 'dropdown', 'tags' to column_type CHECK constraint",
+        "Migration: add dropdown_options JSONB column to dynamic_table_columns",
+        "AddColumnModal: dropdown/tags type with options editor (add/remove/reorder options)",
+        "OpsTableCell: dropdown renders as select with defined options",
+        "OpsTableCell: tags renders as multi-select chips with color coding",
+        "ColumnHeaderMenu: edit dropdown options for existing columns",
+        "Bulk paste into dropdown/tags validates against options"
+      ],
+      "files": [
+        "supabase/migrations/20260205100000_dropdown_tags_columns.sql",
+        "src/lib/services/opsTableService.ts",
+        "src/components/ops/AddColumnModal.tsx",
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/DropdownOptionsEditor.tsx",
+        "src/components/ops/ColumnHeaderMenu.tsx"
+      ]
+    },
+    {
+      "id": "OPS-005",
+      "feature": "ops-column-types",
+      "title": "Add phone and checkbox column types",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": ["src/components/ops/AddColumnModal.tsx", "src/components/ops/OpsTableCell.tsx"], "schema": ["dynamic_table_columns"] },
+      "blocks": [],
+      "parallelWith": ["OPS-004", "OPS-006"],
+      "acceptance": [
+        "Migration: add 'phone', 'checkbox' to column_type CHECK constraint",
+        "OpsTableCell: phone renders with phone icon, formatted display (libphonenumber-js or similar)",
+        "OpsTableCell: checkbox renders as toggle/checkbox, click toggles value",
+        "AddColumnModal: phone and checkbox in type picker with appropriate icons",
+        "Phone column stores raw number, displays formatted"
+      ],
+      "files": [
+        "supabase/migrations/20260205100001_phone_checkbox_columns.sql",
+        "src/lib/services/opsTableService.ts",
+        "src/components/ops/AddColumnModal.tsx",
+        "src/components/ops/OpsTableCell.tsx"
+      ]
+    },
+    {
+      "id": "OPS-006",
+      "feature": "ops-column-types",
+      "title": "Formula columns — schema, edge function evaluator, and @column refs",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": [], "files": ["supabase/functions/enrich-dynamic-table/index.ts"], "schema": ["dynamic_table_columns", "dynamic_table_cells"] },
+      "blocks": ["OPS-007"],
+      "parallelWith": ["OPS-004", "OPS-005"],
+      "acceptance": [
+        "Migration: add 'formula' to column_type CHECK, add formula_expression TEXT to dynamic_table_columns",
+        "Edge function: evaluate-formula/index.ts using expr-eval library (no eval())",
+        "Supports: IF(condition, true_val, false_val), CONCAT(@col1, ' ', @col2), @price * @quantity, @revenue / @headcount",
+        "Reuse resolveColumnMentions() pattern from enrich-dynamic-table for @column_key replacement",
+        "Store results in dynamic_table_cells with source='formula', status='complete'",
+        "Handle errors gracefully: division by zero → 'ERR', missing ref → 'N/A'",
+        "Add formula_expression to OpsTableColumn TypeScript type"
+      ],
+      "files": [
+        "supabase/migrations/20260205100002_formula_columns.sql",
+        "supabase/functions/evaluate-formula/index.ts",
+        "src/lib/services/opsTableService.ts"
+      ]
+    },
+    {
+      "id": "OPS-007",
+      "feature": "ops-column-types",
+      "title": "Formula columns — UI builder with @mention and auto-recalc trigger",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["OPS-006"], "files": ["src/components/ops/AddColumnModal.tsx", "src/components/ops/OpsTableCell.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "AddColumnModal: formula type shows expression input with @mention autocomplete (reuse enrichment pattern)",
+        "Template buttons: SUM, IF, CONCAT with pre-filled expressions",
+        "OpsTableCell: formula cells read-only with 'fx' icon, blue-tinted text",
+        "Column header menu: 'Recalculate' action to re-run formula for all rows",
+        "On cell edit: if any formula column references the edited column, show 'Formulas outdated' banner with 'Recalculate' button",
+        "Formula preview: show expression with column labels on hover"
+      ],
+      "files": [
+        "src/components/ops/AddColumnModal.tsx",
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/ColumnHeaderMenu.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/hooks/useFormulaRecalc.ts"
+      ]
+    },
+
+    {
+      "id": "OPS-008",
+      "feature": "ops-integrations",
+      "title": "Integration column type schema and shared execution infrastructure",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": [], "files": ["src/lib/services/opsTableService.ts"], "schema": ["dynamic_table_columns", "dynamic_table_cells"] },
+      "blocks": ["OPS-009", "OPS-010", "OPS-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration: add 'integration' to column_type CHECK constraint",
+        "Migration: add integration_type TEXT, integration_config JSONB to dynamic_table_columns",
+        "Integration types: 'reoon_email_verify', 'apify_actor', 'apollo_enrich' (extensible)",
+        "Shared integration execution tracking: cells store status + integration_metadata JSONB",
+        "OpsTableCell: integration cells show status badges (pending/running/complete/failed)",
+        "IntegrationStatusPopover: click cell to see details, error message, retry button",
+        "ColumnHeaderMenu: 'Run integration' and 'Retry failed' actions"
+      ],
+      "files": [
+        "supabase/migrations/20260205200000_integration_columns.sql",
+        "src/lib/services/opsTableService.ts",
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/IntegrationStatusPopover.tsx",
+        "src/components/ops/ColumnHeaderMenu.tsx"
+      ]
+    },
+    {
+      "id": "OPS-009",
+      "feature": "ops-integrations",
+      "title": "Reoon email verification integration column",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["OPS-008"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["OPS-010"],
+      "acceptance": [
+        "Edge function: run-reoon-verification/index.ts — batch verify emails via Reoon API",
+        "Input: takes email column as source (configurable in integration_config)",
+        "Output: verified/invalid/risky/catch-all/unknown status per row",
+        "Rate limiting: max 100 requests/minute, exponential backoff on 429",
+        "AddColumnModal: Reoon type shows email column selector + API key check",
+        "OpsTableCell: verification status with color-coded badges (green=valid, red=invalid, yellow=risky)",
+        "Bulk action: 'Verify selected' in BulkActionsBar",
+        "Credentials: stored in integration_credentials table (org-scoped)"
+      ],
+      "files": [
+        "supabase/functions/run-reoon-verification/index.ts",
+        "src/components/ops/AddColumnModal.tsx",
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/BulkActionsBar.tsx",
+        "src/lib/hooks/useReoonVerification.ts"
+      ]
+    },
+    {
+      "id": "OPS-010",
+      "feature": "ops-integrations",
+      "title": "Apify actor runner integration column",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["OPS-008"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["OPS-009"],
+      "acceptance": [
+        "Edge function: run-apify-actor/index.ts — trigger actor per row",
+        "Webhook handler: apify-webhook/index.ts — receive actor completion events",
+        "Input: configurable actor ID + input template mapping columns to actor inputs",
+        "Output: actor result stored in cell value, full result in integration_metadata",
+        "AddColumnModal: Apify type shows actor ID input, input mapping UI (@column references)",
+        "Rate limiting: respect Apify plan limits, queue excess requests",
+        "OpsTableCell: show actor run status + truncated result preview",
+        "Credentials: Apify API key in integration_credentials"
+      ],
+      "files": [
+        "supabase/functions/run-apify-actor/index.ts",
+        "supabase/functions/apify-webhook/index.ts",
+        "src/components/ops/AddColumnModal.tsx",
+        "src/components/ops/ApifyInputMapper.tsx",
+        "src/components/ops/OpsTableCell.tsx",
+        "src/lib/hooks/useApifyIntegration.ts"
+      ]
+    },
+    {
+      "id": "OPS-011",
+      "feature": "ops-integrations",
+      "title": "Integration bulk retry and progress tracking UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["OPS-008"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["OPS-009", "OPS-010"],
+      "acceptance": [
+        "BulkActionsBar: 'Retry Failed' button for selected rows with failed integrations",
+        "Integration progress bar (like EnrichmentProgressBar) showing running/complete/failed counts",
+        "Column header: show integration summary (e.g., '142/200 verified, 12 failed')",
+        "Auto-poll integration status every 3s while any cells are 'pending' or 'running'",
+        "Toast notification when integration completes: 'Reoon: 142 verified, 12 invalid, 3 failed'"
+      ],
+      "files": [
+        "src/components/ops/BulkActionsBar.tsx",
+        "src/components/ops/IntegrationProgressBar.tsx",
+        "src/components/ops/ColumnHeaderMenu.tsx",
+        "src/lib/hooks/useIntegrationStatus.ts"
+      ]
+    },
+
+    {
+      "id": "OPS-012",
+      "feature": "ops-actions",
+      "title": "Action button column type schema and renderer",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": [], "files": ["src/components/ops/OpsTableCell.tsx"], "schema": ["dynamic_table_columns"] },
+      "blocks": ["OPS-013", "OPS-014", "OPS-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration: add 'action' to column_type CHECK constraint",
+        "Migration: add action_type TEXT, action_config JSONB to dynamic_table_columns",
+        "Action types: 'push_to_crm', 'start_sequence', 're_enrich' (extensible)",
+        "OpsTableCell: action cells render as compact buttons with icon + label",
+        "Per-row execution tracking via cell status (pending/running/complete/failed)",
+        "AddColumnModal: action type selector with config UI per action type",
+        "Click button → execute action for that row, show spinner, then status"
+      ],
+      "files": [
+        "supabase/migrations/20260205300000_action_columns.sql",
+        "src/lib/services/opsTableService.ts",
+        "src/components/ops/AddColumnModal.tsx",
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/ActionButtonConfig.tsx",
+        "src/lib/hooks/useActionExecution.ts"
+      ]
+    },
+    {
+      "id": "OPS-013",
+      "feature": "ops-actions",
+      "title": "HubSpot push — field mapping modal with duplicate detection",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["OPS-012"], "files": [], "schema": [] },
+      "blocks": ["OPS-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "HubSpotPushModal: map Ops columns → HubSpot contact properties",
+        "Auto-map common fields (email→email, company→company, title→jobtitle)",
+        "Fetch HubSpot custom properties via existing hubspot API client",
+        "Duplicate detection config: match by email, update-if-exists / skip / create-new",
+        "List assignment dropdown: fetch HubSpot lists, assign contacts to list",
+        "Preview: show first 5 mapped records, count of new vs update vs skip",
+        "Confirmation dialog before executing push"
+      ],
+      "files": [
+        "src/components/ops/HubSpotPushModal.tsx",
+        "src/components/ops/HubSpotFieldMapper.tsx",
+        "src/lib/hooks/useHubSpotProperties.ts",
+        "src/lib/hooks/useHubSpotLists.ts"
+      ]
+    },
+    {
+      "id": "OPS-014",
+      "feature": "ops-actions",
+      "title": "HubSpot push — edge function with batch upsert and status tracking",
+      "type": "backend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["OPS-013"], "files": ["supabase/functions/_shared/hubspot.ts"], "schema": [] },
+      "blocks": ["OPS-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function: push-to-hubspot/index.ts",
+        "Use HubSpot Batch API: POST /crm/v3/objects/contacts/batch/upsert (100 records/batch)",
+        "Duplicate detection via email match (HubSpot's native idProperty='email')",
+        "After upsert: add contacts to HubSpot list via POST /crm/v3/lists/{id}/memberships/add",
+        "Store HubSpot contact ID in cell integration_metadata per row",
+        "Return: { pushed: N, updated: N, skipped: N, failed: N, errors: [] }",
+        "Rate limiting: 120ms between requests (HubSpot 100/10s limit), retry on 429",
+        "Uses existing hubspot.ts shared client with retry logic"
+      ],
+      "files": [
+        "supabase/functions/push-to-hubspot/index.ts",
+        "supabase/functions/_shared/hubspot.ts"
+      ]
+    },
+    {
+      "id": "OPS-015",
+      "feature": "ops-actions",
+      "title": "Per-row CRM status column — auto-generated with push tracking",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["OPS-014"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Auto-create 'CRM Status' column when first HubSpot push executes on a table",
+        "Status values: 'Not in CRM' (gray), 'Pushed' (green), 'Already exists' (blue), 'Updated' (blue), 'Failed' (red)",
+        "Column is read-only, system-managed (is_system=true flag)",
+        "Click status badge → popover showing HubSpot contact URL, push timestamp, error details",
+        "BulkActionsBar: 'Push to HubSpot' button (opens HubSpotPushModal for selected rows)",
+        "Re-push failed rows: select failed → 'Retry Push' action"
+      ],
+      "files": [
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/CRMStatusPopover.tsx",
+        "src/components/ops/BulkActionsBar.tsx",
+        "src/lib/services/opsTableService.ts"
+      ]
+    },
+    {
+      "id": "OPS-016",
+      "feature": "ops-actions",
+      "title": "Re-enrich action — re-run AI and integration columns for stale rows",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["OPS-012"], "files": ["src/lib/hooks/useEnrichment.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["OPS-013"],
+      "acceptance": [
+        "Action button: 'Re-enrich' per row clears enrichment + integration cells and re-queues",
+        "BulkActionsBar: 'Re-enrich Selected' clears and re-queues for all selected rows",
+        "Confirmation dialog: 'Re-enrich 47 rows? This overwrites existing enrichment values.'",
+        "Re-run sequence: enrichment columns first, then integration columns that depend on them",
+        "ColumnHeaderMenu: 'Re-enrich column' to re-run a specific column for all rows"
+      ],
+      "files": [
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/BulkActionsBar.tsx",
+        "src/lib/hooks/useEnrichment.ts",
+        "src/components/ops/ColumnHeaderMenu.tsx"
+      ]
+    },
+
+    {
+      "id": "OPS-017",
+      "feature": "ops-hubspot-pull",
+      "title": "HubSpot pull — connection check and list/filter browser",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": { "stories": [], "files": ["src/lib/hooks/useHubSpotIntegration.ts"], "schema": [] },
+      "blocks": ["OPS-018"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration: add 'hubspot' to dynamic_tables.source_type CHECK constraint",
+        "CreateOpsTableWizard or OpsPage: 'Import from HubSpot' source option",
+        "HubSpotListSelector: browse HubSpot lists (GET /crm/v3/lists)",
+        "Also support filter-based import: object type (contacts/companies) + property filters",
+        "Show count of matching records before import ('~247 contacts match')",
+        "Require active HubSpot connection — show 'Connect HubSpot' button if not connected",
+        "Reuse existing useHubSpotIntegration hook for connection status"
+      ],
+      "files": [
+        "supabase/migrations/20260205400000_hubspot_source_type.sql",
+        "src/components/ops/HubSpotImportWizard.tsx",
+        "src/components/ops/HubSpotListSelector.tsx",
+        "src/components/ops/HubSpotFilterBuilder.tsx",
+        "src/pages/OpsPage.tsx"
+      ]
+    },
+    {
+      "id": "OPS-018",
+      "feature": "ops-hubspot-pull",
+      "title": "HubSpot pull — field mapping and column auto-creation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 18,
+      "dependencies": { "stories": ["OPS-017"], "files": [], "schema": [] },
+      "blocks": ["OPS-019"],
+      "parallelWith": [],
+      "acceptance": [
+        "HubSpotFieldMapper: select which HubSpot properties to import as columns",
+        "Auto-map to appropriate column types: email→email, phone→phone, jobtitle→text, etc.",
+        "Allow renaming columns and overriding types",
+        "Fetch HubSpot property definitions via GET /crm/v3/properties/{objectType}",
+        "Preview first 5 records with mapped columns before import",
+        "Reuse CSVColumnMappingStep patterns for mapping UI"
+      ],
+      "files": [
+        "src/components/ops/HubSpotFieldMapper.tsx",
+        "src/components/ops/HubSpotImportWizard.tsx"
+      ]
+    },
+    {
+      "id": "OPS-019",
+      "feature": "ops-hubspot-pull",
+      "title": "HubSpot pull — batch import edge function with source tracking",
+      "type": "backend",
+      "status": "pending",
+      "priority": 19,
+      "dependencies": { "stories": ["OPS-018"], "files": ["supabase/functions/_shared/hubspot.ts"], "schema": ["dynamic_table_rows"] },
+      "blocks": ["OPS-020"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function: import-from-hubspot/index.ts",
+        "Fetch contacts/companies via HubSpot Search API with pagination (100/page)",
+        "Create table with auto-generated columns from field mapping",
+        "Insert rows: source_id=hubspot_contact_id, source_data=full HubSpot object JSONB",
+        "Rate limiting: 120ms between requests via shared hubspot.ts client",
+        "Return: { table_id, rows_imported, columns_created }",
+        "Handle API pagination correctly (after cursor, max 10,000 results)"
+      ],
+      "files": [
+        "supabase/functions/import-from-hubspot/index.ts",
+        "supabase/functions/_shared/hubspot.ts"
+      ]
+    },
+    {
+      "id": "OPS-020",
+      "feature": "ops-hubspot-pull",
+      "title": "HubSpot pull — incremental sync button with diff tracking",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 20,
+      "dependencies": { "stories": ["OPS-019"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "OpsDetailPage: 'Sync from HubSpot' button for hubspot-sourced tables",
+        "Edge function: sync-hubspot-ops-table/index.ts — fetch updated contacts since last sync",
+        "Use HubSpot lastmodifieddate filter for delta sync",
+        "Upsert rows: match by source_id, update cells if changed",
+        "Show sync summary: 'Synced: 5 new, 12 updated, 0 removed'",
+        "Store last_synced_at in dynamic_tables.source_query JSONB",
+        "Show last sync time in table header: 'Last synced 2h ago'"
+      ],
+      "files": [
+        "supabase/functions/sync-hubspot-ops-table/index.ts",
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/hooks/useHubSpotSync.ts"
+      ]
+    },
+
+    {
+      "id": "OPS-021",
+      "feature": "ops-cross-op",
+      "title": "Cross-op import — source table selector and filter builder",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 21,
+      "dependencies": { "stories": [], "files": ["src/lib/services/opsTableService.ts"], "schema": ["dynamic_tables"] },
+      "blocks": ["OPS-022"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration: add 'ops_table' to dynamic_tables.source_type CHECK",
+        "OpsPage: 'Import from Op' source option in create flow",
+        "OpsTableSelector: browse org's Ops tables (name, row count, source type, updated at)",
+        "CrossOpFilterBuilder: build filters on source table's columns (reuse existing filter operators)",
+        "Column selector: choose which columns to import (checkbox list)",
+        "Preview: 'Importing 142 rows (8 columns) from Lead Research Op'",
+        "Prevent self-reference (cannot import from same table)"
+      ],
+      "files": [
+        "supabase/migrations/20260205500000_cross_op_source.sql",
+        "src/components/ops/CrossOpImportWizard.tsx",
+        "src/components/ops/OpsTableSelector.tsx",
+        "src/components/ops/CrossOpFilterBuilder.tsx",
+        "src/pages/OpsPage.tsx"
+      ]
+    },
+    {
+      "id": "OPS-022",
+      "feature": "ops-cross-op",
+      "title": "Cross-op import — deep copy edge function with source tracking",
+      "type": "backend",
+      "status": "pending",
+      "priority": 22,
+      "dependencies": { "stories": ["OPS-021"], "files": [], "schema": ["dynamic_table_rows", "dynamic_table_cells"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function: import-from-ops-table/index.ts",
+        "Apply filter conditions to source table rows (server-side)",
+        "Deep copy rows with new UUIDs — not live references",
+        "Map source column IDs to destination column IDs based on key matching",
+        "Store source_ops_table_id and source_row_id in rows.source_data for audit",
+        "Handle column type mismatches gracefully (skip incompatible columns)",
+        "Return: { table_id, rows_imported, columns_matched, columns_skipped }"
+      ],
+      "files": [
+        "supabase/functions/import-from-ops-table/index.ts"
+      ]
+    },
+
+    {
+      "id": "OPS-023",
+      "feature": "ops-rules",
+      "title": "Automation rules — schema and evaluation engine",
+      "type": "backend",
+      "status": "pending",
+      "priority": 23,
+      "dependencies": { "stories": [], "files": [], "schema": ["dynamic_tables", "dynamic_table_columns", "dynamic_table_cells"] },
+      "blocks": ["OPS-024", "OPS-025"],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration: create ops_rules table (id, table_id, name, trigger_type, condition JSONB, action_type, action_config JSONB, is_enabled, created_by, created_at)",
+        "Migration: create ops_rule_executions table (id, rule_id, row_id, status, result JSONB, error, executed_at)",
+        "Trigger types: 'cell_updated', 'enrichment_complete', 'row_created'",
+        "Condition format: { column_key, operator, value } (reuse FilterCondition type)",
+        "Action types: 'update_cell', 'run_enrichment', 'push_to_hubspot', 'add_tag', 'notify'",
+        "Edge function: evaluate-ops-rule/index.ts — evaluates condition against row, executes action",
+        "Circuit breaker: disable rule after 10 consecutive failures, log to ops_rule_executions",
+        "Max 10 executions/rule/minute rate limit",
+        "RLS: org-scoped, creator can manage"
+      ],
+      "files": [
+        "supabase/migrations/20260205600000_ops_rules.sql",
+        "supabase/functions/evaluate-ops-rule/index.ts"
+      ]
+    },
+    {
+      "id": "OPS-024",
+      "feature": "ops-rules",
+      "title": "Automation rules — trigger hooks wired into enrichment and cell updates",
+      "type": "backend",
+      "status": "pending",
+      "priority": 24,
+      "dependencies": { "stories": ["OPS-023"], "files": ["supabase/functions/enrich-dynamic-table/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["OPS-025"],
+      "acceptance": [
+        "After enrichment job completes: query ops_rules WHERE trigger_type='enrichment_complete' AND table_id matches",
+        "After cell update (via opsTableService): query ops_rules WHERE trigger_type='cell_updated' AND column matches",
+        "After row insert: query ops_rules WHERE trigger_type='row_created' AND table_id matches",
+        "For matching rules: evaluate condition, if true invoke evaluate-ops-rule edge function",
+        "Database trigger on dynamic_table_cells INSERT/UPDATE → invoke webhook (via pg_net) to evaluate-ops-rule",
+        "Debounce: don't re-trigger rule for same row within 60 seconds"
+      ],
+      "files": [
+        "supabase/migrations/20260205600001_ops_rule_triggers.sql",
+        "supabase/functions/enrich-dynamic-table/index.ts",
+        "src/lib/services/opsTableService.ts"
+      ]
+    },
+    {
+      "id": "OPS-025",
+      "feature": "ops-rules",
+      "title": "Automation rules — UI builder and execution log",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 25,
+      "dependencies": { "stories": ["OPS-023"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["OPS-024"],
+      "acceptance": [
+        "OpsDetailPage: 'Rules' tab in table header (alongside existing tabs)",
+        "RuleBuilder: visual form — trigger dropdown → condition builder → action picker",
+        "Condition builder: column dropdown, operator dropdown, value input (reuse ColumnFilterPopover pattern)",
+        "Action picker: select action type, configure action params (column to update, value, HubSpot list, etc.)",
+        "RuleList: show active rules with enable/disable toggles, edit, delete",
+        "Execution log: last 50 executions per rule showing row, status, timestamp, result/error",
+        "Rule status indicators: active (green), disabled (gray), circuit-broken (red with 'X failures')"
+      ],
+      "files": [
+        "src/components/ops/RuleBuilder.tsx",
+        "src/components/ops/RuleList.tsx",
+        "src/components/ops/RuleExecutionLog.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/lib/hooks/useOpsRules.ts"
+      ]
+    },
+
+    {
+      "id": "OPS-026",
+      "feature": "ops-views",
+      "title": "Conditional formatting — rule builder and cell style application",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 26,
+      "dependencies": { "stories": [], "files": ["src/components/ops/OpsTableCell.tsx", "src/components/ops/SaveViewDialog.tsx"], "schema": ["dynamic_table_views"] },
+      "blocks": [],
+      "parallelWith": ["OPS-027"],
+      "acceptance": [
+        "Migration: add formatting_rules JSONB to dynamic_table_views (or store in view's filter_config)",
+        "ConditionalFormattingEditor: IF [column] [operator] [value] THEN [style]",
+        "Available styles: background color (red/yellow/green/blue), bold text, text color, strikethrough",
+        "OpsTableCell: apply formatting rules from active view to matching cells",
+        "Common presets: 'Score >= 7 → green bg', 'Status = Failed → red bg', 'Email empty → yellow bg'",
+        "SaveViewDialog: include formatting rules in view config",
+        "Multiple rules per view, evaluated in order (first match wins)"
+      ],
+      "files": [
+        "supabase/migrations/20260205700000_conditional_formatting.sql",
+        "src/components/ops/ConditionalFormattingEditor.tsx",
+        "src/components/ops/OpsTableCell.tsx",
+        "src/components/ops/SaveViewDialog.tsx",
+        "src/lib/utils/conditionalFormatting.ts"
+      ]
+    },
+    {
+      "id": "OPS-027",
+      "feature": "ops-views",
+      "title": "Column reordering — drag-drop per view with persistence",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 27,
+      "dependencies": { "stories": [], "files": ["src/components/ops/OpsTable.tsx", "src/components/ops/SaveViewDialog.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["OPS-026"],
+      "acceptance": [
+        "OpsTable header: drag-drop column reordering (use @dnd-kit/sortable or similar)",
+        "Reorder saved to view's column_config as ordered array of column keys",
+        "Default view preserves column.position ordering",
+        "User views can have independent column orders",
+        "Visual feedback during drag: ghost column, insertion marker",
+        "SaveViewDialog: save column order when saving view"
+      ],
+      "files": [
+        "src/components/ops/OpsTable.tsx",
+        "src/components/ops/SaveViewDialog.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ]
+    }
+  ],
+
+  "phases": {
+    "phase0": {
+      "name": "Stabilize Core",
+      "stories": ["OPS-001", "OPS-002", "OPS-003"],
+      "description": "Fix P0 scaling issues before building new features. OPS-001 and OPS-002 run in parallel, OPS-003 depends on OPS-001.",
+      "status": "pending"
+    },
+    "phase1": {
+      "name": "New Column Types",
+      "stories": ["OPS-004", "OPS-005", "OPS-006", "OPS-007"],
+      "description": "Dropdown/tags, phone, checkbox (all parallel), then formula columns (OPS-006 → OPS-007 sequential).",
+      "status": "pending"
+    },
+    "phase2": {
+      "name": "Integration Columns",
+      "stories": ["OPS-008", "OPS-009", "OPS-010", "OPS-011"],
+      "description": "Shared integration infrastructure first (OPS-008), then Reoon and Apify in parallel, with shared progress UI.",
+      "status": "pending"
+    },
+    "phase3": {
+      "name": "Action Columns & CRM Push",
+      "stories": ["OPS-012", "OPS-013", "OPS-014", "OPS-015", "OPS-016"],
+      "description": "Action column type → HubSpot push flow (mapping → edge function → status) → re-enrich action.",
+      "status": "pending"
+    },
+    "phase4": {
+      "name": "HubSpot Pull",
+      "stories": ["OPS-017", "OPS-018", "OPS-019", "OPS-020"],
+      "description": "Sequential: connection/list browser → field mapping → import edge function → incremental sync.",
+      "status": "pending"
+    },
+    "phase5": {
+      "name": "Cross-Op Import",
+      "stories": ["OPS-021", "OPS-022"],
+      "description": "Table selector + filter builder → deep copy edge function.",
+      "status": "pending"
+    },
+    "phase6": {
+      "name": "Simple Rule Builder",
+      "stories": ["OPS-023", "OPS-024", "OPS-025"],
+      "description": "Schema + engine → trigger hooks and UI builder in parallel.",
+      "status": "pending"
+    },
+    "phase7": {
+      "name": "Views Enhancement",
+      "stories": ["OPS-026", "OPS-027"],
+      "description": "Conditional formatting and column reordering — both independent, can run in parallel.",
+      "status": "pending"
+    }
+  },
+
+  "parallel": {
+    "enabled": true,
+    "maxConcurrent": 4,
+    "groups": [
+      ["OPS-001", "OPS-002"],
+      ["OPS-004", "OPS-005", "OPS-006"],
+      ["OPS-009", "OPS-010", "OPS-011"],
+      ["OPS-013", "OPS-016"],
+      ["OPS-024", "OPS-025"],
+      ["OPS-026", "OPS-027"]
+    ]
+  },
+
+  "mvp": {
+    "stories": ["OPS-001", "OPS-002", "OPS-003", "OPS-004", "OPS-005", "OPS-006", "OPS-007", "OPS-012", "OPS-013", "OPS-014", "OPS-015", "OPS-021", "OPS-022"],
+    "description": "Stabilize + column types + HubSpot push + cross-op import. Covers the core loop: get data in (cross-op), work with it (formulas, dropdowns), push it out (HubSpot).",
+    "featuresCovered": ["ops-stabilize", "ops-column-types", "ops-actions", "ops-cross-op"]
+  },
+
+  "risks": [
+    {
+      "severity": "high",
+      "area": "performance",
+      "issue": "Edge function 150s timeout limits enrichment to ~75 rows at 2s/row",
+      "mitigation": "OPS-001: batch limits + checkpointing",
+      "story": "OPS-001"
+    },
+    {
+      "severity": "high",
+      "area": "performance",
+      "issue": "Client-side filtering breaks at 500+ rows with 20+ columns",
+      "mitigation": "OPS-002: server-side Postgres filtering",
+      "story": "OPS-002"
+    },
+    {
+      "severity": "high",
+      "area": "integrations",
+      "issue": "No rate limiting — external APIs will ban at scale",
+      "mitigation": "OPS-003: exponential backoff + concurrency control",
+      "story": "OPS-003"
+    },
+    {
+      "severity": "medium",
+      "area": "database",
+      "issue": "EAV model: 10k rows × 20 cols = 200k cells, needs indexing strategy",
+      "mitigation": "Composite index (table_id, row_index) in OPS-002"
+    },
+    {
+      "severity": "medium",
+      "area": "security",
+      "issue": "CRM push writes to external systems — needs HITL confirmation",
+      "mitigation": "OPS-013: preview modal with confirmation before push"
+    },
+    {
+      "severity": "medium",
+      "area": "automation",
+      "issue": "Rule triggers could cause infinite loops (rule A → update → rule B → update → rule A)",
+      "mitigation": "OPS-023: circuit breaker + 60s debounce per row per rule"
+    },
+    {
+      "severity": "low",
+      "area": "data-integrity",
+      "issue": "Cross-op imports are deep copies — source changes not reflected",
+      "mitigation": "By design (deep copy is safer). Live sync deferred to future phase."
+    }
+  ],
+
+  "architectureDecisions": [
+    {
+      "decision": "Formula evaluation via edge function (not client-side)",
+      "rationale": "Matches enrichment pattern, enables caching, server-side consistency. Uses expr-eval library (not eval()) for security."
+    },
+    {
+      "decision": "Integration columns share schema pattern (integration_type + integration_config JSONB)",
+      "rationale": "Extensible without schema changes per integration. New integrations only need edge function + UI config."
+    },
+    {
+      "decision": "CRM push uses HITL preview → confirm pattern",
+      "rationale": "Matches existing copilot HITL pattern. Prevents accidental data corruption in external CRM."
+    },
+    {
+      "decision": "Cross-op import is deep copy, not live reference",
+      "rationale": "Avoids cascade delete issues, no cross-table foreign keys, simpler data model. Source tracking via source_data JSONB."
+    },
+    {
+      "decision": "Automation rules use webhook-based triggers (not pure DB triggers)",
+      "rationale": "DB triggers can't call external APIs. Webhook via pg_net enables HubSpot push, email, etc. as rule actions."
+    },
+    {
+      "decision": "Column type CHECK constraint (not Postgres ENUM)",
+      "rationale": "Existing pattern. CHECK constraints can be modified without type migration. Easier to add new types."
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 # Copilot Process Map & Safety Architecture
 
-**Version:** 1.0
-**Last Updated:** 2026-01-01
+**Version:** 1.1
+**Last Updated:** 2026-01-23
 **Status:** Production
 
 ---
@@ -32,8 +32,8 @@ The 60 Copilot is an autonomous sales agent that processes user requests through
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  LAYER 2: ORCHESTRATOR                                                       │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │ Context     │→ │ Skill       │→ │ Claude API  │→ │ Tool        │        │
-│  │ Building    │  │ Resolution  │  │ Call        │  │ Execution   │        │
+│  │ Context     │→ │ Skill/Seq   │→ │ Gemini 3     │→ │ Tool        │        │
+│  │ Building    │  │ Resolution  │  │ Flash Call   │  │ Execution   │        │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘        │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
@@ -121,19 +121,19 @@ sequenceDiagram
     Ctx-->>O: Enriched context
 ```
 
-### Phase 3: Claude API Interaction
+### Phase 3: Gemini API Interaction
 
 ```mermaid
 sequenceDiagram
     participant O as Orchestrator
-    participant C as Claude API
+    participant G as Gemini API
     participant TH as Tool Handler
     participant A as Action Executor
 
-    Note over O,C: Step 3.1: Initial Claude Call
-    O->>C: Send message + tools + context
-    C->>C: Process with Sonnet 4
-    C-->>O: Response (may include tool_use)
+    Note over O,G: Step 3.1: Initial Gemini Call
+    O->>G: Send message + tools + context
+    G->>G: Process with Gemini 3 Flash (function calling)
+    G-->>O: Response (may include function calls)
 
     loop Tool Execution Loop (max 10 iterations)
         Note over O,TH: Step 3.2: Tool Detection
@@ -145,9 +145,9 @@ sequenceDiagram
             A->>A: Run action
             A-->>TH: Tool results
 
-            Note over O,C: Step 3.4: Continue Conversation
-            O->>C: Send tool_results
-            C-->>O: Next response
+            Note over O,G: Step 3.4: Continue Conversation
+            O->>G: Send function results
+            G-->>O: Next response
         else No tool_use
             Note over O: Step 3.5: Final Response
             O->>O: Extract final content
@@ -454,11 +454,23 @@ Actions that modify data require explicit confirmation:
 | Action | Requires Confirmation | Gate Type |
 |--------|----------------------|-----------|
 | `update_crm` | Yes | `ctx.confirm === true` |
-| `create_task` | No | Auto-creates (reversible) |
+| `create_task` | Yes | `ctx.confirm === true` (returns preview + needs_confirmation otherwise) |
 | `send_notification` | Yes (for external) | `ctx.confirm === true` |
 | `invoke_skill` | No | Read-only skill fetch |
 | `get_*` actions | No | Read-only |
 | `enrich_*` actions | No | Enrichment only |
+
+---
+
+## Deterministic workflow routing (skill-first)
+
+For certain high-frequency UX flows, Copilot intentionally skips the LLM and runs a deterministic workflow to ensure consistent tool-calling and a consistent structured UI:
+
+- **Meetings list (“search meetings”, “meetings today/tomorrow”)** → `execute_action(get_meetings_for_period)` → `meeting_list` structured response
+- **Next meeting prep** → `execute_action(run_sequence)` with `seq-next-meeting-command-center` (simulation) → `next_meeting_command_center` structured response
+- **Post-meeting follow-up pack** → `execute_action(run_sequence)` with `seq-post-meeting-followup-pack` (simulation) → `post_meeting_followup_pack` structured response
+
+These flows still emit **tool execution telemetry** (`tool_executions`) so the UI can show a real “what happened” trail and a progress stepper.
 
 ### Confirmation Flow
 

@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/corsHelper.ts";
 import { getAuthContext } from "../_shared/edgeAuth.ts";
+import { logFlatRateCostEvent, checkCreditBalance } from "../_shared/costTracking.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -10,9 +11,10 @@ const APOLLO_API_KEY = Deno.env.get("APOLLO_API_KEY") ?? "";
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
+
+  const cors = getCorsHeaders(req);
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -20,14 +22,15 @@ serve(async (req) => {
     });
 
     // SECURITY (fail-closed): require service role, CRON_SECRET, or a valid user session.
+    let authCtx: Awaited<ReturnType<typeof getAuthContext>>;
     try {
-      await getAuthContext(req, supabase, SUPABASE_SERVICE_ROLE_KEY, {
+      authCtx = await getAuthContext(req, supabase, SUPABASE_SERVICE_ROLE_KEY, {
         cronSecret: Deno.env.get("CRON_SECRET") ?? undefined,
       });
     } catch (_authError) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 401, headers: { ...cors, "Content-Type": "application/json" } },
       );
     }
 
@@ -36,7 +39,7 @@ serve(async (req) => {
     if (!company_id) {
       return new Response(
         JSON.stringify({ error: "company_id is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
@@ -50,16 +53,41 @@ serve(async (req) => {
     if (fetchError || !company) {
       return new Response(
         JSON.stringify({ error: "Company not found", details: fetchError?.message }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
     if (!company.domain) {
       return new Response(
         JSON.stringify({ error: "Company has no domain to enrich" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
+
+    // Resolve org for credit tracking
+    const userId = authCtx.userId;
+    let orgId: string | null = null;
+    if (userId) {
+      const { data: membership } = await supabase
+        .from("organization_memberships")
+        .select("org_id")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+      orgId = membership?.org_id ?? null;
+    }
+
+    // Check credit balance before calling enrichment APIs
+    if (orgId) {
+      const creditCheck = await checkCreditBalance(supabase, orgId);
+      if (!creditCheck.allowed) {
+        return new Response(
+          JSON.stringify({ error: "Insufficient credits", message: creditCheck.message }),
+          { status: 402, headers: { ...cors, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Try Perplexity first
     let enrichmentData: Record<string, unknown> = {};
     
@@ -107,13 +135,13 @@ serve(async (req) => {
     // Try Apollo as backup if Perplexity didn't provide enough data
     if ((!enrichmentData.description || !enrichmentData.industry) && APOLLO_API_KEY) {
       try {
-        const apolloResponse = await fetch("https://api.apollo.io/v1/organizations/enrich", {
+        const apolloResponse = await fetch("https://api.apollo.io/api/v1/organizations/enrich", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "x-api-key": APOLLO_API_KEY,
           },
           body: JSON.stringify({
-            api_key: APOLLO_API_KEY,
             domain: company.domain,
           }),
         });
@@ -161,23 +189,29 @@ serve(async (req) => {
       if (updateError) {
         return new Response(
           JSON.stringify({ error: "Failed to update company", details: updateError.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
         );
       }
+      // Log flat-rate cost event for enrichment
+      if (userId && orgId) {
+        const provider = PERPLEXITY_API_KEY ? 'perplexity' : 'apollo';
+        logFlatRateCostEvent(supabase, userId, orgId, provider, 'enrich', 0.5, 'research_enrichment').catch(() => {});
+      }
+
       return new Response(
         JSON.stringify({ success: true, company_id, enriched_fields: Object.keys(updateData) }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
       );
     }
 
     return new Response(
       JSON.stringify({ success: false, message: "No enrichment data available" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
     );
   } catch (error) {
     return new Response(
       JSON.stringify({ error: "Internal server error", details: error instanceof Error ? error.message : String(error) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
     );
   }
 });

@@ -1,22 +1,20 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
-import MeetingsList from '@/components/meetings/MeetingsList'
+import UnifiedMeetingsList from '@/components/meetings/UnifiedMeetingsList'
 import { MeetingDetail } from '@/pages/MeetingDetail'
-import RecordingsList from '@/components/recordings/RecordingsList'
 import { RecordingDetail } from '@/pages/RecordingDetail'
 import { RecordingSettings } from '@/pages/RecordingSettings'
 
 const MeetingsPage: React.FC = () => {
   return (
     <Routes>
-      {/* Main meetings list (Fathom + Voice recordings) */}
-      <Route index element={<MeetingsList />} />
+      {/* Unified meetings list (Fathom + Fireflies + Voice + 60 Notetaker) */}
+      <Route index element={<UnifiedMeetingsList />} />
 
-      {/* Individual meeting detail */}
+      {/* Individual meeting detail (Fathom/Fireflies/Voice) */}
       <Route path=":id" element={<MeetingDetail />} />
 
-      {/* MeetingBaaS Recordings - integrated recorder */}
-      <Route path="recordings" element={<RecordingsList />} />
+      {/* 60 Notetaker recording detail & settings */}
       <Route path="recordings/settings" element={<RecordingSettings />} />
       <Route path="recordings/:id" element={<RecordingDetail />} />
     </Routes>

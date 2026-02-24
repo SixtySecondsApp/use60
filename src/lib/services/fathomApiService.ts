@@ -188,17 +188,17 @@ export class FathomAPIService {
       throw new Error('No integration found to refresh');
     }
 
-    const response = await fetch('https://fathom.video/external/v1/oauth2/token', {
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fathom-oauth-token`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
       },
-      body: new URLSearchParams({
+      body: JSON.stringify({
         grant_type: 'refresh_token',
         refresh_token: integration.refresh_token,
-        client_id: import.meta.env.VITE_FATHOM_CLIENT_ID || '',
-        client_secret: import.meta.env.VITE_FATHOM_CLIENT_SECRET || '',
-      }).toString(),
+      }),
     });
 
     if (!response.ok) {

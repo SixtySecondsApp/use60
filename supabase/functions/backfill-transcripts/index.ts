@@ -7,7 +7,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { fetchTranscriptFromFathom } from '../_shared/fathomTranscript.ts'
 
 const BATCH_SIZE = 20
@@ -21,9 +21,9 @@ interface BackfillResult {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const supabaseClient = createClient(
@@ -39,10 +39,12 @@ serve(async (req) => {
 
     let limit = BATCH_SIZE
     let requestedOrgId: string | null = null
+    let refetchExisting = false  // When true, re-fetches transcripts that lack [HH:MM:SS] timestamps
     try {
       const body = await req.json()
       limit = Math.min(body.limit || BATCH_SIZE, 50)
       requestedOrgId = body.org_id || null
+      refetchExisting = body.refetch_existing === true
     } catch {}
 
     const adminClient = createClient(
@@ -123,14 +125,25 @@ serve(async (req) => {
     console.log(`[backfill] Token end: ...${accessToken.substring(accessToken.length - 20)}`)
     console.log(`[backfill] Token has whitespace: ${accessToken !== accessToken.trim()}`)
 
-    const { data: meetings, error: queryError } = await adminClient
+    // Build query: either missing transcripts or existing ones needing timestamp re-fetch
+    let meetingsQuery = adminClient
       .from('meetings')
-      .select('id, fathom_recording_id, owner_user_id, org_id')
+      .select('id, fathom_recording_id, owner_user_id, org_id, transcript_text')
       .eq('org_id', orgId)
-      .is('transcript_text', null)
       .not('fathom_recording_id', 'is', null)
       .order('meeting_start', { ascending: false })
       .limit(limit)
+
+    if (refetchExisting) {
+      // Re-fetch all Fathom transcripts (to get timestamps in new format)
+      meetingsQuery = meetingsQuery.not('transcript_text', 'is', null)
+      console.log(`[backfill] Refetch mode: re-fetching existing transcripts with timestamps`)
+    } else {
+      // Default: only missing transcripts
+      meetingsQuery = meetingsQuery.is('transcript_text', null)
+    }
+
+    const { data: meetings, error: queryError } = await meetingsQuery
 
     if (queryError) {
       return new Response(JSON.stringify({ error: 'Failed to query meetings', details: queryError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })

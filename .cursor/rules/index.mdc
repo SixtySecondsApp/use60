@@ -8,6 +8,18 @@ alwaysApply: true
 
 Sales intelligence platform that helps teams prepare for meetings and act on insights afterwards. Features AI meeting transcription, automated follow-ups, deal pipeline tracking, and workflow automation.
 
+## Product Vision: Proactive AI Sales Teammate
+
+> **Full PRD**: `docs/PRD_PROACTIVE_AI_TEAMMATE.md`
+
+Transform the AI Copilot into a **proactive sales teammate** — a dedicated team member who:
+- **Knows your company** — Products, competitors, pain points, brand voice (from onboarding)
+- **Acts proactively** — Daily pipeline analysis, pre-meeting prep, task reminders via Slack
+- **Uses HITL** — Preview → Confirm pattern for emails, tasks, Slack posts
+- **Has superpowers** — Skills & sequences for meeting prep, deal rescue, follow-ups
+
+**Execution Plan**: `.sixty/plan-copilot-lab-specialized.json`
+
 ## URLs & Ports
 
 | Environment | URL | Port |

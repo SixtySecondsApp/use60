@@ -7,6 +7,15 @@
 // ============================================================================
 
 import type { ToolCall } from '../copilot/toolTypes';
+import type { EntityDisambiguationData } from './responses/EntityDisambiguationResponse';
+import type { ProspectingClarificationData } from './responses/ProspectingClarificationResponse';
+import type { ClarifyingQuestion } from '@/lib/utils/prospectingDetector';
+
+export interface CampaignWorkflowData {
+  original_prompt: string;
+  questions: ClarifyingQuestion[];
+  suggested_campaign_name: string;
+}
 
 export interface CopilotMessage {
   id: string;
@@ -16,6 +25,10 @@ export interface CopilotMessage {
   recommendations?: Recommendation[];
   toolCall?: ToolCall;
   structuredResponse?: CopilotResponse; // New structured response format
+  entityDisambiguation?: EntityDisambiguationData; // Interactive contact selection for disambiguation
+  preflightQuestions?: ProspectingClarificationData; // Prospecting clarification before workflow
+  campaignWorkflow?: CampaignWorkflowData; // Campaign workflow clarification
+  isError?: boolean; // UX-001: Flag to indicate this message is an error response
 }
 
 export interface Recommendation {
@@ -83,6 +96,17 @@ export interface CopilotAPIRequest {
   context: CopilotContext;
 }
 
+export interface ToolExecutionDetail {
+  toolName: string;
+  args: any;
+  result: any;
+  latencyMs: number;
+  success: boolean;
+  error?: string;
+  capability?: string;
+  provider?: string;
+}
+
 export interface CopilotAPIResponse {
   response: {
     type: 'text' | 'recommendations' | 'action_required';
@@ -92,6 +116,7 @@ export interface CopilotAPIResponse {
   };
   conversationId: string;
   timestamp: string;
+  tool_executions?: ToolExecutionDetail[];
 }
 
 export type CopilotResponsePayload = CopilotAPIResponse;
@@ -137,7 +162,23 @@ export type CopilotResponseType =
   | 'activity_creation'
   | 'task_creation'
   | 'proposal_selection'
-  | 'action_summary';
+  | 'action_summary'
+  | 'pipeline_focus_tasks'
+  | 'deal_rescue_pack'
+  | 'next_meeting_command_center'
+  | 'post_meeting_followup_pack'
+  | 'deal_map_builder'
+  | 'daily_focus_plan'
+  | 'followup_zero_inbox'
+  | 'deal_slippage_guardrails'
+  | 'daily_brief'
+  | 'dynamic_table'
+  | 'pipeline_outreach'
+  | 'deal_intelligence'
+  | 'unified_task_list'
+  | 'task_deliverable'
+  | 'meeting_intelligence'
+  | 'meeting_context';
 
 export interface CopilotResponse {
   type: CopilotResponseType;
@@ -213,7 +254,252 @@ export type ResponseData =
   | MeetingCountResponseData
   | MeetingBriefingResponseData
   | MeetingListResponseData
-  | TimeBreakdownResponseData;
+  | TimeBreakdownResponseData
+  | PipelineFocusTasksResponseData
+  | DealRescuePackResponseData
+  | NextMeetingCommandCenterResponseData
+  | PostMeetingFollowUpPackResponseData
+  | DealMapBuilderResponseData
+  | DailyFocusPlanResponseData
+  | FollowupZeroInboxResponseData
+  | DealSlippageGuardrailsResponseData
+  | DailyBriefResponseData
+  | MeetingIntelligenceResponseData
+  | MeetingContextResponseData;
+
+// ============================================================================
+// Demo-grade sequence panels (Top 3 workflows)
+// ============================================================================
+
+export interface PipelineFocusTasksResponse extends CopilotResponse {
+  type: 'pipeline_focus_tasks';
+  data: PipelineFocusTasksResponseData;
+}
+
+export interface PipelineFocusTasksResponseData {
+  sequenceKey: string;
+  isSimulation: boolean;
+  executionId?: string;
+  deal: any | null;
+  taskPreview: any | null;
+}
+
+export interface DealRescuePackResponse extends CopilotResponse {
+  type: 'deal_rescue_pack';
+  data: DealRescuePackResponseData;
+}
+
+export interface DealRescuePackResponseData {
+  sequenceKey: string;
+  isSimulation: boolean;
+  executionId?: string;
+  deal: any | null;
+  plan: any | null;
+  taskPreview: any | null;
+}
+
+export interface NextMeetingCommandCenterResponse extends CopilotResponse {
+  type: 'next_meeting_command_center';
+  data: NextMeetingCommandCenterResponseData;
+}
+
+export interface NextMeetingCommandCenterResponseData {
+  sequenceKey: string;
+  isSimulation: boolean;
+  executionId?: string;
+  meeting: any | null;
+  brief: any | null;
+  prepTaskPreview: any | null;
+}
+
+export interface PostMeetingFollowUpPackResponse extends CopilotResponse {
+  type: 'post_meeting_followup_pack';
+  data: PostMeetingFollowUpPackResponseData;
+}
+
+export interface PostMeetingFollowUpPackResponseData {
+  sequenceKey: string;
+  isSimulation: boolean;
+  executionId?: string;
+  meeting: any | null;
+  contact: any | null;
+  digest: any | null;
+  pack: any | null;
+  emailPreview: any | null;
+  slackPreview: any | null;
+  taskPreview: any | null;
+}
+
+export interface DealMapBuilderResponse extends CopilotResponse {
+  type: 'deal_map_builder';
+  data: DealMapBuilderResponseData;
+}
+
+export interface DealMapBuilderResponseData {
+  sequenceKey: string;
+  isSimulation: boolean;
+  executionId?: string;
+  deal: any | null;
+  openTasks: any | null;
+  plan: any | null;
+  taskPreview: any | null;
+}
+
+export interface DailyFocusPlanResponse extends CopilotResponse {
+  type: 'daily_focus_plan';
+  data: DailyFocusPlanResponseData;
+}
+
+export interface DailyFocusPlanResponseData {
+  sequenceKey: string;
+  isSimulation: boolean;
+  executionId?: string;
+  pipelineDeals: any | null;
+  contactsNeedingAttention: any | null;
+  openTasks: any | null;
+  plan: any | null;
+  taskPreview: any | null;
+}
+
+export interface FollowupZeroInboxResponse extends CopilotResponse {
+  type: 'followup_zero_inbox';
+  data: FollowupZeroInboxResponseData;
+}
+
+export interface FollowupZeroInboxResponseData {
+  sequenceKey: string;
+  isSimulation: boolean;
+  executionId?: string;
+  emailThreads: any | null;
+  triage: any | null;
+  replyDrafts: any | null;
+  emailPreview: any | null;
+  taskPreview: any | null;
+}
+
+export interface DealSlippageGuardrailsResponse extends CopilotResponse {
+  type: 'deal_slippage_guardrails';
+  data: DealSlippageGuardrailsResponseData;
+}
+
+export interface DealSlippageGuardrailsResponseData {
+  sequenceKey: string;
+  isSimulation: boolean;
+  executionId?: string;
+  atRiskDeals: any | null;
+  diagnosis: any | null;
+  taskPreview: any | null;
+  slackPreview: any | null;
+}
+
+// Daily Brief Response (Catch Me Up workflow)
+export interface DailyBriefResponse extends CopilotResponse {
+  type: 'daily_brief';
+  data: DailyBriefResponseData;
+}
+
+export interface DailyBriefResponseData {
+  sequenceKey: string;
+  isSimulation: boolean;
+  executionId?: string;
+  greeting: string;
+  timeOfDay: 'morning' | 'afternoon' | 'evening';
+  schedule: DailyBriefMeeting[];
+  priorityDeals: DailyBriefDeal[];
+  contactsNeedingAttention: DailyBriefContact[];
+  tasks: DailyBriefTask[];
+  tomorrowPreview?: DailyBriefMeeting[];
+  summary: string;
+}
+
+export interface DailyBriefMeeting {
+  id: string;
+  title: string;
+  startTime: string;
+  endTime?: string;
+  attendees?: string[];
+  linkedDealId?: string;
+  linkedDealName?: string;
+  meetingUrl?: string;
+}
+
+export interface DailyBriefDeal {
+  id: string;
+  name: string;
+  value?: number;
+  stage?: string;
+  daysStale?: number;
+  closeDate?: string;
+  healthStatus?: 'healthy' | 'at_risk' | 'stale';
+  company?: string;
+  contactName?: string;
+  contactEmail?: string;
+}
+
+export interface DailyBriefContact {
+  id: string;
+  name: string;
+  email?: string;
+  company?: string;
+  lastContactDate?: string;
+  daysSinceContact?: number;
+  healthStatus?: 'healthy' | 'at_risk' | 'critical' | 'ghost' | 'unknown';
+  riskLevel?: 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+  riskFactors?: string[];
+  reason?: string;
+}
+
+export interface DailyBriefTask {
+  id: string;
+  title: string;
+  dueDate?: string;
+  priority?: 'high' | 'medium' | 'low';
+  status?: string;
+  linkedDealId?: string;
+  linkedContactId?: string;
+}
+
+// Pipeline Outreach Response (batch email drafts from pipeline health review)
+export interface PipelineOutreachResponse extends CopilotResponse {
+  type: 'pipeline_outreach';
+  data: PipelineOutreachResponseData;
+}
+
+export interface PipelineOutreachResponseData {
+  pipeline_summary: PipelineOutreachSummary;
+  email_drafts: PipelineEmailDraft[];
+}
+
+export interface PipelineOutreachSummary {
+  stale_count: number;
+  total_deals: number;
+  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  health_score?: number;
+  zero_interaction_count?: number;
+}
+
+export interface PipelineEmailMeetingContext {
+  meetingId: string;
+  meetingTitle: string;
+  meetingDate: string;
+  meetingSummary?: string | null;
+  pendingActionItems: Array<{ id: string; title: string }>;
+}
+
+export interface PipelineEmailDraft {
+  contactId?: string;
+  contactName: string;
+  company?: string;
+  to?: string;
+  subject: string;
+  body: string;
+  urgency: 'high' | 'medium' | 'low';
+  strategyNotes?: string;
+  lastInteraction?: string;
+  daysSinceContact?: number;
+  dealId?: string;
+  meetingContext?: PipelineEmailMeetingContext;
+}
 
 // Pipeline Response
 export interface PipelineResponse extends CopilotResponse {
@@ -2070,4 +2356,75 @@ export interface ActionMetrics {
   activitiesCreated: number;
 }
 
+// ============================================================================
+// Meeting Intelligence Response
+// ============================================================================
+
+export interface MeetingIntelligenceSource {
+  transcriptId: string;
+  transcriptTitle: string;
+  text: string;
+  similarity: number;
+  date?: string;
+  sentiment?: string;
+  positiveScore?: number;
+}
+
+export interface MeetingIntelligenceStructuredMeeting {
+  title: string;
+  id: string;
+  date: string;
+  sentiment?: string;
+  positiveScore?: number;
+  agreements?: string[];
+  decisions?: string[];
+  milestones?: string[];
+  objections?: Array<{ title: string; description: string }>;
+  questions?: string[];
+  actionItems?: Array<{ text: string; assignee?: string; priority?: string }>;
+  summary?: string;
+  talkTime?: {
+    speakers: Array<{ name: string; percentage: number }>;
+    totalWords: number;
+    talkRatio: string;
+    isBalanced: boolean;
+  };
+}
+
+export interface MeetingIntelligenceSuggestedAction {
+  type: 'create_task' | 'create_task_from_meeting' | 'draft_email' | 'draft_email_from_meeting' | 'update_deal' | 'post_slack';
+  label: string;
+  data: Record<string, unknown>;
+}
+
+export interface MeetingIntelligenceResponseData {
+  queryType: 'semantic' | 'aggregate' | 'structured' | 'cross_meeting';
+  answer: string;
+  sources: MeetingIntelligenceSource[];
+  structuredData?: MeetingIntelligenceStructuredMeeting[];
+  metadata: {
+    segmentsSearched: number;
+    meetingsAnalyzed: number;
+    totalMeetings: number;
+    isAggregateQuestion: boolean;
+    specificMeeting: string | null;
+    searchTimeMs?: number;
+  };
+  suggestedActions?: MeetingIntelligenceSuggestedAction[];
+  /** Raw aggregation data from meeting_analytics_dashboard/talk_time/sentiment_trends */
+  aggregationData?: Record<string, unknown>;
+}
+
+// ============================================================================
+// Meeting Context Response
+// ============================================================================
+
+export interface MeetingContextResponseData {
+  answer: string;
+  sources: MeetingIntelligenceSource[];
+  metadata: {
+    meetingsAnalyzed: number;
+    totalMeetings: number;
+  };
+}
 

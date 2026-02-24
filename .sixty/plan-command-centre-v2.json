@@ -1,0 +1,321 @@
+{
+  "project": {
+    "name": "Command Centre V2 — 3-Column Layout Upgrade",
+    "description": "Transform the Command Centre from a 2-column task reviewer (sidebar + detail panel) into a 3-column workspace with a writing canvas in the center and a context panel on the right. Ports V2 demo design into production components.",
+    "createdAt": "2026-02-16T18:00:00Z",
+    "designRef": "src/pages/platform/CommandCentreV2Demo.tsx"
+  },
+
+  "features": [
+    {
+      "id": "store",
+      "name": "Store Update",
+      "status": "complete",
+      "priority": 1,
+      "description": "Add contextOpen state to commandCentreStore with localStorage persistence"
+    },
+    {
+      "id": "new-components",
+      "name": "New Components (Canvas, Slash, Context)",
+      "status": "complete",
+      "priority": 2,
+      "description": "Create WritingCanvas, SlashCommandDropdown, ContextPanel, and TaskDetailHeader"
+    },
+    {
+      "id": "refactor-existing",
+      "name": "Refactor Existing Components",
+      "status": "complete",
+      "priority": 3,
+      "description": "Update SidebarTaskItem, TaskSidebar, AIReasoningFooter, and keyboard nav"
+    },
+    {
+      "id": "page-rebuild",
+      "name": "Page Rebuild — 3-Column Layout",
+      "status": "complete",
+      "priority": 4,
+      "description": "Rebuild CommandCentre.tsx with 3-column layout wiring all new components"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "CCV2-001",
+      "feature": "store",
+      "title": "Add contextOpen state to commandCentreStore",
+      "type": "data",
+      "status": "complete",
+      "priority": 1,
+
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["CCV2-008"],
+
+      "acceptance": [
+        "contextOpen: boolean added (default true)",
+        "toggleContextPanel() and setContextOpen(collapsed: boolean) actions added",
+        "contextOpen persisted alongside sidebarCollapsed in localStorage partialize"
+      ],
+
+      "estimatedMinutes": 5,
+      "files": [
+        "src/lib/stores/commandCentreStore.ts"
+      ]
+    },
+
+    {
+      "id": "CCV2-002",
+      "feature": "new-components",
+      "title": "Create SlashCommandDropdown component",
+      "type": "ui",
+      "status": "complete",
+      "priority": 2,
+
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["CCV2-003"],
+
+      "acceptance": [
+        "6 commands: /email, /proposal, /research, /follow-up, /call-prep, /summarize",
+        "Keyboard nav: ArrowUp/Down to select, Enter to pick, Escape to close",
+        "Filters by typed text after /",
+        "Props: onSelect, onClose, filter: string"
+      ],
+
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/command-centre/SlashCommandDropdown.tsx"
+      ]
+    },
+
+    {
+      "id": "CCV2-003",
+      "feature": "new-components",
+      "title": "Create WritingCanvas component",
+      "type": "ui",
+      "status": "complete",
+      "priority": 3,
+
+      "dependencies": { "stories": ["CCV2-002"], "files": [] },
+      "blocks": ["CCV2-008"],
+
+      "acceptance": [
+        "Toolbar with Bold/Italic/Link/List/AtSign/Paperclip/Image buttons (non-functional)",
+        "'Do this' AI button: sets isAIDoing state, shows working overlay",
+        "Content area: markdown renderer (line-by-line parser for headings, tables, blockquotes, lists, bold/italic)",
+        "Bottom input: textarea with / detection showing SlashCommandDropdown",
+        "Empty state: 'No content yet' + 'Do this for me' button",
+        "Reads task.deliverable_data for email_draft body, others as markdown"
+      ],
+
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/command-centre/WritingCanvas.tsx"
+      ]
+    },
+
+    {
+      "id": "CCV2-004",
+      "feature": "new-components",
+      "title": "Create ContextPanel component",
+      "type": "ui",
+      "status": "complete",
+      "priority": 4,
+
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["CCV2-008"],
+
+      "acceptance": [
+        "4 tabs: Meeting | Contact | Activity | Related",
+        "Meeting tab: recording placeholder, title/date/duration, AI summary, key moments, attendees",
+        "Contact tab: avatar (initials), name/email/phone/linkedin, relationship health bar, notes, active deal card",
+        "Activity tab: timeline with AI/user icons, timestamps, AI notes from comments",
+        "Related tab: cards for related deals/tasks/meetings with type-colored icons",
+        "Auto-select first available tab on task change"
+      ],
+
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/command-centre/ContextPanel.tsx"
+      ]
+    },
+
+    {
+      "id": "CCV2-005",
+      "feature": "new-components",
+      "title": "Extract TaskDetailHeader from TaskDetailPanel",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 5,
+
+      "dependencies": { "stories": [], "files": ["src/components/command-centre/TaskDetailPanel.tsx"] },
+      "blocks": ["CCV2-008"],
+
+      "acceptance": [
+        "Header extracted into standalone TaskDetailHeader component",
+        "Context panel toggle button (PanelRight/PanelRightClose icon) calling toggleContextPanel()",
+        "Subtask display: progress bar + pill chips (completed = emerald, pending = slate)",
+        "Action buttons: contextual per task type/status (Approve & Send, Approve Update, Accept, Let AI Draft, Dismiss)",
+        "Props: task, onApprove, onDismiss, contextOpen, onToggleContext"
+      ],
+
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/command-centre/TaskDetailHeader.tsx",
+        "src/components/command-centre/TaskDetailPanel.tsx"
+      ]
+    },
+
+    {
+      "id": "CCV2-006",
+      "feature": "refactor-existing",
+      "title": "Update SidebarTaskItem with child count badge",
+      "type": "ui",
+      "status": "complete",
+      "priority": 6,
+
+      "dependencies": { "stories": [], "files": [] },
+      "blocks": ["CCV2-007"],
+
+      "acceptance": [
+        "Add childCount?: number prop",
+        "Render child task count badge (LayoutList icon + 'N sub-tasks') when childCount > 0",
+        "Font sizes match V2 demo (13px title, 11px meta, 10px badges) — already correct"
+      ],
+
+      "estimatedMinutes": 8,
+      "files": [
+        "src/components/command-centre/SidebarTaskItem.tsx"
+      ]
+    },
+
+    {
+      "id": "CCV2-007",
+      "feature": "refactor-existing",
+      "title": "Update TaskSidebar with parent/child filtering and child counts",
+      "type": "ui",
+      "status": "complete",
+      "priority": 7,
+
+      "dependencies": { "stories": ["CCV2-006"], "files": [] },
+      "blocks": ["CCV2-008"],
+
+      "acceptance": [
+        "Compute childCounts map from tasks (count tasks with parent_task_id)",
+        "Filter out child tasks from sidebar list (only show parent tasks)",
+        "Pass childCount to SidebarTaskItem",
+        "Sidebar width changed from 340px to 320px"
+      ],
+
+      "estimatedMinutes": 12,
+      "files": [
+        "src/components/command-centre/TaskSidebar.tsx"
+      ]
+    },
+
+    {
+      "id": "CCV2-008",
+      "feature": "page-rebuild",
+      "title": "Rebuild CommandCentre page with 3-column layout",
+      "type": "ui",
+      "status": "complete",
+      "priority": 8,
+
+      "dependencies": {
+        "stories": ["CCV2-001", "CCV2-003", "CCV2-004", "CCV2-005", "CCV2-007"],
+        "files": []
+      },
+      "blocks": ["CCV2-009", "CCV2-010"],
+
+      "acceptance": [
+        "Layout: flex h-[calc(100vh-4rem)] with 3 columns",
+        "Left: TaskSidebar (320px, collapsible with AnimatePresence)",
+        "Collapsed sidebar: 48px rail with toggle + count badges",
+        "Center: flex-1 flex flex-col → TaskDetailHeader + WritingCanvas",
+        "Right: ContextPanel (320px, collapsible with AnimatePresence)",
+        "Read contextOpen from store, pass toggle to TaskDetailHeader",
+        "Empty state when no task selected (inbox icon + keyboard hints)"
+      ],
+
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/CommandCentre.tsx"
+      ]
+    },
+
+    {
+      "id": "CCV2-009",
+      "feature": "refactor-existing",
+      "title": "Update keyboard navigation with [/]/j/k shortcuts",
+      "type": "enhancement",
+      "status": "complete",
+      "priority": 9,
+
+      "dependencies": { "stories": ["CCV2-008"], "files": [] },
+      "blocks": [],
+
+      "acceptance": [
+        "[ key toggles sidebar",
+        "] key toggles context panel",
+        "j/k as aliases for ArrowDown/ArrowUp",
+        "All shortcuts ignored when focus is in input/textarea/contentEditable"
+      ],
+
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/command-centre/useKeyboardNav.ts"
+      ]
+    },
+
+    {
+      "id": "CCV2-010",
+      "feature": "refactor-existing",
+      "title": "Update AIReasoningFooter to fixed bottom bar",
+      "type": "ui",
+      "status": "complete",
+      "priority": 10,
+
+      "dependencies": { "stories": ["CCV2-008"], "files": [] },
+      "blocks": [],
+
+      "acceptance": [
+        "Fixed position at bottom of viewport",
+        "Style: violet-50 bg, backdrop-blur, Brain icon, truncated reasoning text",
+        "Max-width container centered",
+        "Renders above all 3 columns"
+      ],
+
+      "estimatedMinutes": 8,
+      "files": [
+        "src/components/command-centre/AIReasoningFooter.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 10,
+    "currentFeature": "store",
+    "estimatedTotalMinutes": 143,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "description": "Independent foundations (can run in parallel)",
+        "stories": ["CCV2-001", "CCV2-002", "CCV2-004", "CCV2-006"]
+      },
+      {
+        "group": 2,
+        "description": "Components that depend on group 1",
+        "stories": ["CCV2-003", "CCV2-005", "CCV2-007"]
+      },
+      {
+        "group": 3,
+        "description": "Page rebuild (depends on all new components)",
+        "stories": ["CCV2-008"]
+      },
+      {
+        "group": 4,
+        "description": "Final polish (depends on page rebuild)",
+        "stories": ["CCV2-009", "CCV2-010"]
+      }
+    ],
+    "lastUpdated": "2026-02-16T18:00:00Z"
+  }
+}

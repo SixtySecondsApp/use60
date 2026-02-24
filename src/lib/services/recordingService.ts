@@ -80,6 +80,60 @@ class RecordingService {
   // ===========================================================================
 
   /**
+   * Get a fresh access token, refreshing if needed
+   * Uses a more aggressive refresh strategy to avoid stale token issues
+   */
+  private async getFreshAccessToken(): Promise<string | null> {
+    // First try to get current session
+    const { data: sessionData } = await supabase.auth.getSession();
+
+    if (sessionData?.session?.access_token) {
+      // Check if token is expired or about to expire (within 2 minutes buffer)
+      // Using 2 minutes instead of 60 seconds to be more conservative
+      const expiresAt = sessionData.session.expires_at;
+      const now = Math.floor(Date.now() / 1000);
+
+      console.log('[RecordingService] Token check - expires_at:', expiresAt, 'now:', now, 'remaining:', expiresAt ? expiresAt - now : 'N/A', 'seconds');
+
+      if (expiresAt && expiresAt > now + 120) {
+        // Token is still valid with comfortable buffer
+        return sessionData.session.access_token;
+      }
+
+      console.warn('[RecordingService] Token expiring soon (within 120s), proactively refreshing');
+    }
+
+    // Token is expired, expiring soon, or missing - try to refresh
+    logger.info('[RecordingService] Token expired or missing, attempting refresh');
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+
+    if (refreshError) {
+      logger.error('[RecordingService] Token refresh failed:', refreshError);
+      return null;
+    }
+
+    // Verify the refreshed token is actually valid
+    if (!refreshData?.session?.access_token || !refreshData.session.expires_at) {
+      logger.error('[RecordingService] Refresh returned invalid session data');
+      return null;
+    }
+
+    const newExpiresAt = refreshData.session.expires_at;
+    const now = Math.floor(Date.now() / 1000);
+
+    if (newExpiresAt <= now) {
+      logger.error('[RecordingService] Refreshed token is already expired', {
+        expiresAt: newExpiresAt,
+        now,
+      });
+      return null;
+    }
+
+    logger.info('[RecordingService] Token refreshed successfully, expires in', newExpiresAt - now, 'seconds');
+    return refreshData.session.access_token;
+  }
+
+  /**
    * Start a manual recording by deploying a bot to the meeting
    */
   async startRecording(
@@ -93,17 +147,23 @@ class RecordingService {
         return { success: false, error: "This meeting URL isn't supported" };
       }
 
-      // Call the deploy-recording-bot edge function
-      // This handles quota checking, recording creation, and bot deployment
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
+      // Get fresh access token (with auto-refresh if needed)
+      const accessToken = await this.getFreshAccessToken();
 
       if (!accessToken) {
-        return { success: false, error: 'Not authenticated' };
+        return { success: false, error: 'Session expired. Please log in again.' };
       }
 
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
-      const response = await fetch(`${supabaseUrl}/functions/v1/deploy-recording-bot`, {
+
+      // Debug: log token info (first/last chars only for security)
+      const tokenPreview = accessToken.length > 20
+        ? `${accessToken.substring(0, 10)}...${accessToken.substring(accessToken.length - 10)}`
+        : '[short token]';
+      console.log('[RecordingService] Using token:', tokenPreview, 'length:', accessToken.length);
+
+      // Make the request
+      let response = await fetch(`${supabaseUrl}/functions/v1/deploy-recording-bot`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -115,6 +175,75 @@ class RecordingService {
           calendar_event_id: params.calendarEventId,
         }),
       });
+
+      // Handle 401 with automatic retry after token refresh
+      if (response.status === 401) {
+        // Log the error details from the response
+        try {
+          const errorBody = await response.clone().json();
+          console.error('[RecordingService] 401 error details:', JSON.stringify(errorBody, null, 2));
+        } catch (e) {
+          console.error('[RecordingService] Could not parse 401 error body');
+        }
+        console.warn('[RecordingService] Got 401, attempting token refresh and retry');
+
+        // Force a fresh session refresh
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+
+        if (refreshError || !refreshData?.session?.access_token) {
+          logger.error('[RecordingService] Token refresh failed on 401 retry:', refreshError);
+          return { success: false, error: 'Session expired. Please log in again.' };
+        }
+
+        // Verify the refreshed token is actually new and valid
+        const newExpiresAt = refreshData.session.expires_at;
+        const now = Math.floor(Date.now() / 1000);
+
+        if (!newExpiresAt || newExpiresAt <= now) {
+          logger.error('[RecordingService] Refreshed token appears invalid or expired', {
+            expiresAt: newExpiresAt,
+            now,
+          });
+          return { success: false, error: 'Session expired. Please log in again.' };
+        }
+
+        // Log the new token preview for comparison
+        const newTokenPreview = refreshData.session.access_token.length > 20
+          ? `${refreshData.session.access_token.substring(0, 10)}...${refreshData.session.access_token.substring(refreshData.session.access_token.length - 10)}`
+          : '[short token]';
+        console.log('[RecordingService] Token refreshed, retrying request. New token:', newTokenPreview);
+
+        // Longer delay to ensure token propagation across Supabase services
+        // 500ms gives more buffer for distributed system sync
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Retry with fresh token
+        response = await fetch(`${supabaseUrl}/functions/v1/deploy-recording-bot`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${refreshData.session.access_token}`,
+          },
+          body: JSON.stringify({
+            meeting_url: params.meetingUrl,
+            meeting_title: params.meetingTitle,
+            calendar_event_id: params.calendarEventId,
+          }),
+        });
+
+        // If retry also fails with 401, don't auto-sign-out - just return an error
+        // The user can manually refresh the page or sign out if needed
+        if (response.status === 401) {
+          // Log second 401 error details too
+          try {
+            const errorBody2 = await response.clone().json();
+            console.error('[RecordingService] Retry ALSO failed with 401. Error details:', JSON.stringify(errorBody2, null, 2));
+          } catch (e) {
+            console.error('[RecordingService] Retry also failed with 401 (could not parse error body)');
+          }
+          return { success: false, error: 'Authentication failed. Please refresh the page and try again.' };
+        }
+      }
 
       const result = await response.json();
 
@@ -148,32 +277,73 @@ class RecordingService {
    */
   async stopRecording(recordingId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { data: recording, error: fetchError } = await supabase
-        .from('recordings')
-        .select('id, bot_id, status')
-        .eq('id', recordingId)
-        .single();
+      // Get fresh access token (with auto-refresh if needed)
+      const accessToken = await this.getFreshAccessToken();
 
-      if (fetchError || !recording) {
-        return { success: false, error: 'Recording not found' };
+      if (!accessToken) {
+        return { success: false, error: 'Session expired. Please log in again.' };
       }
 
-      if (recording.status !== 'recording' && recording.status !== 'bot_joining') {
-        return { success: false, error: 'Recording is not active' };
+      // Call the stop-recording-bot edge function
+      // This handles removing the bot from MeetingBaaS and updating all relevant records
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      let response = await fetch(`${supabaseUrl}/functions/v1/stop-recording-bot`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          recording_id: recordingId,
+        }),
+      });
+
+      // Handle 401 with automatic retry after token refresh
+      if (response.status === 401) {
+        logger.warn('[RecordingService] Got 401 on stopRecording, attempting token refresh and retry');
+
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+
+        if (refreshError || !refreshData?.session?.access_token) {
+          return { success: false, error: 'Session expired. Please log in again.' };
+        }
+
+        // Verify the refreshed token is valid
+        const newExpiresAt = refreshData.session.expires_at;
+        const now = Math.floor(Date.now() / 1000);
+
+        if (!newExpiresAt || newExpiresAt <= now) {
+          return { success: false, error: 'Session expired. Please log in again.' };
+        }
+
+        // Longer delay to ensure token propagation
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        response = await fetch(`${supabaseUrl}/functions/v1/stop-recording-bot`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${refreshData.session.access_token}`,
+          },
+          body: JSON.stringify({
+            recording_id: recordingId,
+          }),
+        });
+
+        // If retry also fails with 401, return error without auto-sign-out
+        if (response.status === 401) {
+          return { success: false, error: 'Authentication failed. Please refresh the page and try again.' };
+        }
       }
 
-      // TODO: Call edge function to stop the bot
-      // For now, just update status
-      const { error: updateError } = await supabase
-        .from('recordings')
-        .update({
-          status: 'processing',
-          meeting_end_time: new Date().toISOString(),
-        })
-        .eq('id', recordingId);
+      const result = await response.json();
 
-      if (updateError) {
-        return { success: false, error: 'Failed to stop recording' };
+      if (!response.ok || !result.success) {
+        logger.error('[RecordingService] Stop bot failed:', result);
+        return {
+          success: false,
+          error: result.error || 'Failed to stop recording',
+        };
       }
 
       return { success: true };
@@ -305,15 +475,15 @@ class RecordingService {
     recordingId: string
   ): Promise<{ success: boolean; url?: string; expires_at?: string; error?: string }> {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
+      // Get fresh access token (with auto-refresh if needed)
+      const accessToken = await this.getFreshAccessToken();
 
       if (!accessToken) {
-        return { success: false, error: 'Not authenticated' };
+        return { success: false, error: 'Session expired. Please log in again.' };
       }
 
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
-      const response = await fetch(
+      let response = await fetch(
         `${supabaseUrl}/functions/v1/get-recording-url?recording_id=${recordingId}`,
         {
           method: 'GET',
@@ -322,6 +492,43 @@ class RecordingService {
           },
         }
       );
+
+      // Handle 401 with automatic retry after token refresh
+      if (response.status === 401) {
+        logger.warn('[RecordingService] Got 401 on getRecordingUrl, attempting token refresh and retry');
+
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+
+        if (refreshError || !refreshData?.session?.access_token) {
+          return { success: false, error: 'Session expired. Please log in again.' };
+        }
+
+        // Verify the refreshed token is valid
+        const newExpiresAt = refreshData.session.expires_at;
+        const now = Math.floor(Date.now() / 1000);
+
+        if (!newExpiresAt || newExpiresAt <= now) {
+          return { success: false, error: 'Session expired. Please log in again.' };
+        }
+
+        // Longer delay to ensure token propagation
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        response = await fetch(
+          `${supabaseUrl}/functions/v1/get-recording-url?recording_id=${recordingId}`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${refreshData.session.access_token}`,
+            },
+          }
+        );
+
+        // If retry also fails with 401, return error without auto-sign-out
+        if (response.status === 401) {
+          return { success: false, error: 'Authentication failed. Please refresh the page and try again.' };
+        }
+      }
 
       const result = await response.json();
 
@@ -344,6 +551,51 @@ class RecordingService {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
+    }
+  }
+
+  /**
+   * Get fresh signed URLs for multiple recordings in a single batch call.
+   * Returns video URLs and thumbnail URLs (if available) for each recording.
+   */
+  async getBatchSignedUrls(
+    recordingIds: string[]
+  ): Promise<Record<string, { video_url: string; thumbnail_url?: string }>> {
+    if (recordingIds.length === 0) return {};
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        logger.error('[RecordingService] getBatchSignedUrls: Not authenticated');
+        return {};
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/get-batch-signed-urls`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ recording_ids: recordingIds }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.urls) {
+        logger.error('[RecordingService] getBatchSignedUrls failed:', result);
+        return {};
+      }
+
+      return result.urls;
+    } catch (error) {
+      logger.error('[RecordingService] getBatchSignedUrls error:', error);
+      return {};
     }
   }
 
@@ -629,6 +881,121 @@ class RecordingService {
     }
 
     return matches;
+  }
+
+  /**
+   * Retry processing for a recording stuck in "processing" status.
+   * Directly invokes the process-recording edge function.
+   */
+  async retryProcessing(recordingId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      const response = await fetch(`${supabaseUrl}/functions/v1/process-recording`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ recording_id: recordingId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: result.error || 'Processing failed' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.error('[RecordingService] retryProcessing error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  }
+
+  /**
+   * Poll all stuck bots to check their status via MeetingBaaS API.
+   * Triggers processing for any bots that have completed but whose webhooks were missed.
+   */
+  async pollAllStuckBots(): Promise<{ success: boolean; summary?: Record<string, number>; error?: string }> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      const response = await fetch(`${supabaseUrl}/functions/v1/poll-stuck-bots`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ stale_minutes: 0 }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: result.error || 'Poll failed' };
+      }
+
+      return {
+        success: true,
+        summary: result.summary,
+      };
+    } catch (error) {
+      logger.error('[RecordingService] pollAllStuckBots error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  }
+
+  /**
+   * Poll a stuck bot to check its current status via MeetingBaaS API.
+   * Triggers processing if the bot has completed but webhook was missed.
+   */
+  async pollStuckBot(botId: string): Promise<{ success: boolean; action?: string; error?: string }> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      const response = await fetch(`${supabaseUrl}/functions/v1/poll-stuck-bots`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ bot_id: botId, stale_minutes: 0 }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: result.error || 'Poll failed' };
+      }
+
+      const firstResult = result.results?.[0];
+      return {
+        success: true,
+        action: firstResult?.action || 'no_change',
+      };
+    } catch (error) {
+      logger.error('[RecordingService] pollStuckBot error:', error);
+      return { success: false, error: 'Network error' };
+    }
   }
 }
 

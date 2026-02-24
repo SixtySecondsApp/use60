@@ -347,7 +347,7 @@ export function EditActivityForm({ activity, onSave, onCancel }: EditActivityFor
         </DialogTitle>
       </DialogHeader>
 
-      <div className="space-y-3 py-3 max-h-[70vh] overflow-y-auto">
+      <div className="space-y-3 py-3 max-h-[70vh] overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-700/60">
         {/* Contact Selection Section */}
         {formData.type !== 'outbound' && (
           <div className="space-y-2">
@@ -460,11 +460,9 @@ export function EditActivityForm({ activity, onSave, onCancel }: EditActivityFor
               const StatusIcon = status.icon;
               const isSelected = formData.status === status.value;
               return (
-                <motion.button
+                <button
                   key={status.value}
                   type="button"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
                   onClick={() => setFormData(prevData => ({ ...prevData, status: status.value as any }))}
                   className={cn(
                     "p-2 rounded-lg border transition-all flex items-center gap-1.5 text-sm",
@@ -475,7 +473,7 @@ export function EditActivityForm({ activity, onSave, onCancel }: EditActivityFor
                 >
                   <StatusIcon className="w-3.5 h-3.5" />
                   <span className="text-xs font-medium">{status.label}</span>
-                </motion.button>
+                </button>
               );
             })}
           </div>
@@ -652,11 +650,9 @@ export function EditActivityForm({ activity, onSave, onCancel }: EditActivityFor
                     const TypeIcon = type.icon;
                     const isSelected = formData.outboundType === type.value;
                     return (
-                      <motion.button
+                      <button
                         key={type.value}
                         type="button"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
                         onClick={() => setFormData(prev => ({ ...prev, outboundType: type.value as any }))}
                         className={cn(
                           "p-3 rounded-lg border transition-all flex flex-col items-center gap-1.5",
@@ -667,7 +663,7 @@ export function EditActivityForm({ activity, onSave, onCancel }: EditActivityFor
                       >
                         <TypeIcon className="w-4 h-4" />
                         <span className="text-xs font-medium">{type.label}</span>
-                      </motion.button>
+                      </button>
                     );
                   })}
                 </div>
@@ -711,15 +707,14 @@ export function EditActivityForm({ activity, onSave, onCancel }: EditActivityFor
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Rescheduled Meeting Checkbox */}
-                <motion.div 
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <div
                   className={`p-4 rounded-xl border transition-all cursor-pointer ${
                     formData.isRebooking 
                       ? 'bg-orange-500/10 border-orange-500/30 ring-1 ring-orange-500/20' 
                       : 'bg-gray-800/30 border-gray-700/50 hover:border-orange-500/40'
                   }`}
                   onClick={() => handleCheckboxChange('isRebooking', !formData.isRebooking)}
+                  role="button"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`relative w-5 h-5 rounded border-2 transition-all ${
@@ -748,18 +743,17 @@ export function EditActivityForm({ activity, onSave, onCancel }: EditActivityFor
                       </div>
                     </div>
                   </div>
-                </motion.div>
+                </div>
 
                 {/* Self-Generated Meeting Checkbox */}
-                <motion.div 
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <div
                   className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                    formData.isSelfGenerated 
+                    formData.isSelfGenerated
                       ? 'bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20' 
                       : 'bg-gray-800/30 border-gray-700/50 hover:border-emerald-500/40'
                   }`}
                   onClick={() => handleCheckboxChange('isSelfGenerated', !formData.isSelfGenerated)}
+                  role="button"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`relative w-5 h-5 rounded border-2 transition-all ${
@@ -788,7 +782,7 @@ export function EditActivityForm({ activity, onSave, onCancel }: EditActivityFor
                       </div>
                     </div>
                   </div>
-                </motion.div>
+                </div>
               </div>
 
               {(formData.isRebooking || formData.isSelfGenerated) && (

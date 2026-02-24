@@ -8,6 +8,7 @@ import logger from '../utils/logger';
 // Otherwise, use landing package's own env vars
 
 // Get environment variables
+// Support both VITE_ prefixed (development) and non-prefixed (Vercel) variable names
 let supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
 let supabasePublishableKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY;
 

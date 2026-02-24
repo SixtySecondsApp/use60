@@ -14,6 +14,7 @@
  * }
  */
 
+import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
 import type { Database } from '@/lib/database.types';
@@ -86,28 +87,72 @@ export function useUserProfile(email: string | null | undefined) {
     enabled: !!email,
     staleTime: 10 * 60 * 1000, // 10 minutes - profile rarely changes
     gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache longer
-    refetchOnWindowFocus: false, // Don't refetch on tab switch
-    refetchOnMount: false, // Use cached data if available
+    refetchOnWindowFocus: 'stale', // Refetch if data is stale when user returns to app
+    refetchOnMount: 'stale', // Refetch on mount if data is stale
     refetchOnReconnect: false, // Don't refetch on network reconnect
     retry: 1, // Only retry once for profile
   });
 }
 
 /**
- * Hook to get a user profile by ID with React Query caching.
+ * Hook to get a user profile by ID with React Query caching and real-time updates.
  *
  * @param userId - User ID to fetch profile for
  * @returns Query result with profile data
  */
 export function useUserProfileById(userId: string | null | undefined) {
+  const queryClient = useQueryClient();
+
+  // Set up real-time subscription to profile changes
+  useEffect(() => {
+    if (!userId) return;
+
+    try {
+      // Subscribe to profile updates via Postgres Changes
+      const channel = supabase
+        .channel(`profile_changes_${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'profiles',
+            filter: `id=eq.${userId}`,
+          },
+          () => {
+            logger.log('[useUserProfileById] Profile updated via Realtime, invalidating cache');
+            // Invalidate the specific profile query to trigger a refetch
+            queryClient.invalidateQueries({
+              queryKey: [...USER_PROFILE_QUERY_KEY, 'by-id', userId],
+            });
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            logger.log(`[useUserProfileById] Real-time subscription active for user ${userId}`);
+          } else if (status === 'CLOSED') {
+            logger.log(`[useUserProfileById] Real-time subscription closed for user ${userId}`);
+          }
+        });
+
+      // Cleanup subscription on unmount
+      return () => {
+        channel.unsubscribe();
+      };
+    } catch (error) {
+      logger.error('[useUserProfileById] Failed to set up real-time subscription:', error);
+      // Gracefully handle subscription failures - fallback to polling via refetchOnWindowFocus
+    }
+  }, [userId, queryClient]);
+
   return useQuery({
     queryKey: [...USER_PROFILE_QUERY_KEY, 'by-id', userId] as const,
     queryFn: () => fetchUserProfileById(userId!),
     enabled: !!userId,
     staleTime: 10 * 60 * 1000, // 10 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnWindowFocus: 'stale', // Refetch if data is stale when user returns to app
+    refetchOnMount: 'stale', // Refetch on mount if data is stale (ensures fresh profile on dashboard load after onboarding)
     refetchOnReconnect: false,
     retry: 1,
   });

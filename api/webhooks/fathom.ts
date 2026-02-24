@@ -58,20 +58,28 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // Support environment routing: ?env=staging routes to staging Supabase
+    const envParam = (req.query?.env as string | undefined)?.toLowerCase();
+    const isStaging = envParam === 'staging';
+
+    const supabaseUrl = isStaging
+      ? process.env.STAGING_SUPABASE_URL
+      : process.env.SUPABASE_URL;
+    const supabaseServiceKey = isStaging
+      ? process.env.STAGING_SUPABASE_SERVICE_ROLE_KEY
+      : process.env.SUPABASE_SERVICE_ROLE_KEY;
     const proxySecret = process.env.FATHOM_WEBHOOK_PROXY_SECRET;
     const webhookSecret = process.env.FATHOM_WEBHOOK_SECRET;
     const orgId = (req.query?.org_id as string | undefined) || (req.query?.orgId as string | undefined);
 
     if (!supabaseUrl) {
-      console.error('[fathom-webhook-proxy] Missing SUPABASE_URL');
-      throw new Error('Webhook endpoint not configured');
+      console.error(`[fathom-webhook-proxy] Missing ${isStaging ? 'STAGING_' : ''}SUPABASE_URL`);
+      throw new Error(`Webhook endpoint not configured for ${isStaging ? 'staging' : 'production'}`);
     }
 
     if (!supabaseServiceKey) {
-      console.error('[fathom-webhook-proxy] Missing SUPABASE_SERVICE_ROLE_KEY');
-      throw new Error('Webhook endpoint not configured');
+      console.error(`[fathom-webhook-proxy] Missing ${isStaging ? 'STAGING_' : ''}SUPABASE_SERVICE_ROLE_KEY`);
+      throw new Error(`Webhook endpoint not configured for ${isStaging ? 'staging' : 'production'}`);
     }
 
     if (!proxySecret) {
@@ -125,7 +133,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
     // Proxy to Supabase Edge Function
     const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fathom-webhook${orgId ? `?org_id=${encodeURIComponent(orgId)}` : ''}`;
 
-    console.log(`[fathom-webhook-proxy] Forwarding webhook to ${edgeFunctionUrl}`);
+    console.log(`[fathom-webhook-proxy] Forwarding webhook to ${isStaging ? 'STAGING' : 'PRODUCTION'}: ${edgeFunctionUrl}`);
 
     const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
@@ -158,6 +166,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       success: true,
       ...responseData,
       proxiedBy: 'use60-webhook-proxy',
+      environment: isStaging ? 'staging' : 'production',
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

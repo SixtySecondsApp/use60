@@ -1,12 +1,13 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
-import { useEffect, Suspense } from 'react';
+import { useEffect, Suspense, lazy } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { createApiMonitor } from '@/lib/utils/apiUtils';
 import { API_BASE_URL } from '@/lib/config';
 import PerformanceMonitor from '@/lib/utils/performanceMonitor';
 import { AppLayout } from '@/components/AppLayout';
+import { ScrollToTop } from '@/components/ScrollToTop';
 import { AuthProvider } from '@/lib/contexts/AuthContext';
 import { OrgProvider } from '@/lib/contexts/OrgContext';
 import { UserPermissionsProvider } from '@/contexts/UserPermissionsContext';
@@ -20,6 +21,7 @@ import { RouteDebug } from '@/components/RouteDebug';
 import { DefaultRoute } from '@/components/DefaultRoute';
 import { RecoveryTokenDetector } from '@/components/RecoveryTokenDetector';
 import { RouteLoader, ExternalRedirect } from '@/components/routing';
+
 import { usePerformanceOptimization } from '@/lib/hooks/usePerformanceOptimization';
 import { IntelligentPreloader } from '@/components/LazyComponents';
 import { webVitalsOptimizer } from '@/lib/utils/webVitals';
@@ -39,6 +41,10 @@ import Login from '@/pages/auth/login';
 import AuthCallback from '@/pages/auth/AuthCallback';
 import AcceptInvitation from '@/pages/auth/AcceptInvitation';
 import InviteSignup from '@/pages/auth/InviteSignup';
+import PendingApprovalPage from '@/pages/auth/PendingApprovalPage';
+import RequestRejectedPage from '@/pages/auth/RequestRejectedPage';
+import InactiveOrganizationScreen from '@/pages/InactiveOrganizationScreen';
+import RemovedUserStep from '@/pages/onboarding/v2/RemovedUserStep';
 import TestGoogleTasks from '@/pages/TestGoogleTasks';
 import MeetingThumbnail from '@/pages/MeetingThumbnail';
 import BrowserlessTest from '@/pages/BrowserlessTest';
@@ -60,40 +66,49 @@ const FathomCallbackWrapper = () => <FathomCallback />;
 // ============================================================
 import {
   // Platform Admin
-  MeetingsWaitlist, WaitlistSlackSettings, OnboardingSimulator, TrialTimelineSimulator, PricingControl, CostAnalysis, LaunchChecklist,
-  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, Users, PipelineSettings,
+  MeetingsWaitlist, WaitlistSlackSettings, OnboardingSimulator, TrialTimelineSimulator, PricingControl, CostAnalysis, AIUsageAdmin, ApiUsageDashboard, LaunchChecklist,
+  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, SkillsQAPage, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, CopilotLabPage, AgentPerformanceDashboard, CopilotConsolePage, OrchestratorDashboard, Users, PipelineSettings,
   AuditLogs, SmartTasksAdmin, PipelineAutomationAdmin, EmailTemplates, FunctionTesting,
   AIProviderSettings, GoogleIntegrationTestsLegacy, GoogleIntegrationTests, SettingsSavvyCal,
   SettingsBookingSources, HealthRules, EmailCategorizationSettings, AdminModelSettings,
-  AdminPromptSettings, InternalDomainsSettings, SlackDemo, MeetingIntelligenceDemo,
-  MeetingIntelligenceDemoSimple, TasksDemo, ProcessMaps, IntelligenceTestRunner, VSLAnalyticsTests,
+  AdminPromptSettings, InternalDomainsSettings, SlackDemo,
+  TasksDemo, ProcessMaps, VSLAnalyticsTests,
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
-  QuickAddSimulator, ProactiveSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, EmailActionCenter,
+  QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, CommandCentreWowDemo, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
-  CRM, ElegantCRM, PipelinePage, FormDisplay, CompaniesTable, CompanyProfile,
+  PipelinePage, FormDisplay, CompaniesTable, CompanyProfile,
   ContactsTable, ContactRecord, DealRecord, LeadsInbox, Clients,
-  DealHealthDashboard, RelationshipHealth, HealthMonitoring,
+  HealthMonitoring,
   // Features
-  MeetingsPage, MeetingIntelligence, MeetingSentimentAnalytics, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
-  TasksPage, ProjectsHub, GoogleTasksSettings, Events, ActivityLog,
-  ActivityProcessingPage, Workflows, FreepikFlow, Copilot,
+  MeetingsPage, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
+  Events, ActivityLog,
+  ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage,
+  OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
+  ProductProfileViewPage, ProductProfileEditPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
-  APIKeysPage, EmailSyncPage, TaskSyncPage, MeetingSyncPage, TeamMembersPage,
+  APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, JustCallSettings, HubSpotSettings, BullhornSettings, OrgBranding, OrgBilling,
+  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
+  CreditPurchaseSuccess, CreditsSettingsPage, BillingSettingsPage, SalesGoalsPage,
+  GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage, MeetingSettingsPage,
+  OrgBilling,
   // Insights
-  Insights, Heatmap, SalesFunnel, TeamAnalytics, ContentTopics,
+  Insights, Heatmap, SalesFunnel, TeamAnalytics, ContentTopics, MeetingAnalyticsPage,
   // Misc
-  Integrations, GoogleCallback, Roadmap, Releases, ApiTesting, TestFallback,
+  Integrations, PublicFactProfile, GoogleCallback, Roadmap, Releases, ApiTesting, TestFallback,
   // Debug
   DebugAuth, AuthDebug, DebugPermissions, DebugMeetings, TestNotifications,
 } from '@/routes/lazyPages';
+
+// Agent Marketplace (org admin accessible)
+const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
+const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -109,6 +124,15 @@ if (typeof window !== 'undefined') {
   } else {
     console.error('[App] Failed to set Supabase client on window!');
   }
+}
+
+function RedirectFactProfile() {
+  const { id } = useParams();
+  return <Navigate to={`/profiles/${id}`} replace />;
+}
+function RedirectFactProfileEdit() {
+  const { id } = useParams();
+  return <Navigate to={`/profiles/${id}/edit`} replace />;
 }
 
 function App() {
@@ -226,6 +250,9 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
         {/* Public meeting sharing - allows anyone with link to view meeting analysis */}
         <Route path="/share/meeting/:token" element={<PublicMeetingShare />} />
 
+        {/* Public fact profile sharing - allows anyone with link to view/approve */}
+        <Route path="/share/fact-profile/:token" element={<Suspense fallback={<RouteLoader />}><PublicFactProfile /></Suspense>} />
+
         {/* Drue Landing Page - public access */}
         <Route path="/landing-drue" element={<DrueLanding />} />
 
@@ -277,6 +304,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
         <Route path="/auth/forgot-password" element={<ForgotPassword />} />
         <Route path="/auth/reset-password/*" element={<ResetPassword />} />
         <Route path="/auth/set-password" element={<SetPassword />} />
+        <Route path="/auth/pending-approval" element={<PendingApprovalPage />} />
+        <Route path="/auth/request-rejected" element={<RequestRejectedPage />} />
         <Route path="/update-password" element={<UpdatePassword />} />
 
         {/* OAuth callback routes - must be public for external redirects */}
@@ -286,26 +315,39 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
         {/* Organization invitation acceptance (can be accessed logged in or out) */}
         <Route path="/invite/:token" element={<AcceptInvitation />} />
 
+        {/* Commitment Detection Demo */}
+        <Route path="/cde-demo" element={<CommitmentDetectionDemo />} />
+
         {/* ========== PROTECTED ROUTES (Auth Required) ========== */}
         <Route path="/*" element={
           <ProtectedRoute>
+            <ScrollToTop />
             <RouteDebug />
             <Suspense fallback={<RouteLoader />}>
               <Routes>
                 <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/onboarding/removed-user" element={<RemovedUserStep />} />
+                <Route path="/inactive-organization" element={<InactiveOrganizationScreen />} />
                 <Route path="/debug-auth" element={<DebugAuth />} />
                 <Route path="/debug/auth" element={<AuthDebug />} />
                 <Route path="/debug-permissions" element={<DebugPermissions />} />
                 {/* Home route - redirects unauthenticated to /learnmore, authenticated to dashboard */}
                 <Route path="/" element={<DefaultRoute />} />
                 {/* Dashboard alias for backwards compatibility */}
-                <Route path="/dashboard" element={<InternalRouteGuard><AppLayout><Dashboard /></AppLayout></InternalRouteGuard>} />
+                <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
                 {/* Internal-only routes - CRM and tools */}
-                <Route path="/copilot" element={<InternalRouteGuard><AppLayout><Copilot /></AppLayout></InternalRouteGuard>} />
+                {/* Copilot with URL-based conversation routing */}
+                <Route path="/copilot" element={<InternalRouteGuard><AppLayout><CopilotPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/copilot/:conversationId" element={<InternalRouteGuard><AppLayout><CopilotPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/action-centre" element={<Navigate to="/command-centre" replace />} />
+                <Route path="/command-centre" element={<InternalRouteGuard><AppLayout><CommandCentre /></AppLayout></InternalRouteGuard>} />
+                <Route path="/command-centre-demo" element={<InternalRouteGuard><AppLayout><CommandCentreDemo /></AppLayout></InternalRouteGuard>} />
+                <Route path="/command-centre-v2" element={<InternalRouteGuard><AppLayout><CommandCentreV2Demo /></AppLayout></InternalRouteGuard>} />
+                <Route path="/command-centre-wow" element={<InternalRouteGuard><AppLayout><CommandCentreWowDemo /></AppLayout></InternalRouteGuard>} />
                 <Route path="/activity" element={<InternalRouteGuard><AppLayout><ActivityLog /></AppLayout></InternalRouteGuard>} />
                 <Route path="/insights" element={<AppLayout><Insights /></AppLayout>} />
-                <Route path="/crm" element={<InternalRouteGuard><AppLayout><ElegantCRM /></AppLayout></InternalRouteGuard>} />
-                <Route path="/crm/elegant" element={<Navigate to="/crm" replace />} />
+                <Route path="/crm" element={<Navigate to="/ops" replace />} />
+                <Route path="/crm/elegant" element={<Navigate to="/ops" replace />} />
                 {/* Legacy /admin routes - redirect to /platform (replaced by 3-tier architecture) */}
                 <Route path="/admin" element={<Navigate to="/platform" replace />} />
                 <Route path="/admin/users" element={<Navigate to="/platform/users" replace />} />
@@ -322,7 +364,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/admin/savvycal-settings" element={<Navigate to="/platform/integrations/savvycal" replace />} />
                 <Route path="/admin/booking-sources" element={<Navigate to="/platform/integrations/booking-sources" replace />} />
                 <Route path="/admin/health-rules" element={<Navigate to="/platform/crm/health-rules" replace />} />
-                <Route path="/admin/branding" element={<Navigate to="/team/branding" replace />} />
+                <Route path="/admin/branding" element={<Navigate to="/settings" replace />} />
                 <Route path="/admin/internal-domains" element={<Navigate to="/platform/integrations/domains" replace />} />
                 <Route path="/admin/*" element={<Navigate to="/platform" replace />} /> {/* Catch-all for any remaining /admin routes */}
 
@@ -334,7 +376,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                     Keep /team/* paths as legacy redirects for existing links. */}
                 <Route path="/team" element={<Navigate to="/settings" replace />} />
                 <Route path="/team/team" element={<Navigate to="/settings/team-members" replace />} />
-                <Route path="/team/branding" element={<Navigate to="/settings/branding" replace />} />
+                <Route path="/team/branding" element={<Navigate to="/settings" replace />} />
                 <Route path="/team/billing" element={<Navigate to="/settings/billing" replace />} />
                 <Route path="/team/billing/success" element={<Navigate to="/settings/billing" replace />} />
                 <Route path="/team/billing/cancel" element={<Navigate to="/settings/billing" replace />} />
@@ -342,7 +384,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Legacy /org routes redirect to /team */}
                 <Route path="/org" element={<Navigate to="/settings" replace />} />
                 <Route path="/org/team" element={<Navigate to="/settings/team-members" replace />} />
-                <Route path="/org/branding" element={<Navigate to="/settings/branding" replace />} />
+                <Route path="/org/branding" element={<Navigate to="/settings" replace />} />
                 <Route path="/org/billing" element={<Navigate to="/settings/billing" replace />} />
                 <Route path="/org/billing/success" element={<Navigate to="/settings/billing" replace />} />
                 <Route path="/org/billing/cancel" element={<Navigate to="/settings/billing" replace />} />
@@ -360,6 +402,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/plans" element={<Navigate to="/platform/pricing" replace />} />
                 <Route path="/platform/pricing" element={<PlatformAdminRouteGuard><AppLayout><PricingControl /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/cost-analysis" element={<PlatformAdminRouteGuard><AppLayout><CostAnalysis /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/ai-usage" element={<PlatformAdminRouteGuard><AppLayout><AIUsageAdmin /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/60-notetaker-build" element={<PlatformAdminRouteGuard><AppLayout><ApiUsageDashboard /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/users" element={<PlatformAdminRouteGuard><AppLayout><Users /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - CRM Configuration */}
                 <Route path="/platform/crm/pipeline" element={<PlatformAdminRouteGuard><AppLayout><PipelineSettings /></AppLayout></PlatformAdminRouteGuard>} />
@@ -373,6 +417,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/waitlist-slack-settings" element={<PlatformAdminRouteGuard><AppLayout><WaitlistSlackSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - AI Configuration */}
                 <Route path="/platform/ai/settings" element={<PlatformAdminRouteGuard><AppLayout><AIProviderSettings /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/ai/models" element={<PlatformAdminRouteGuard><AppLayout><AIModelAdmin /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/credit-menu" element={<PlatformAdminRouteGuard><AppLayout><CreditMenuAdmin /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/ai/prompts" element={<PlatformAdminRouteGuard><AppLayout><AdminPromptSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Skills Admin - category-based routing */}
                 <Route path="/platform/skills" element={<PlatformAdminRouteGuard><AppLayout><SkillsAdmin /></AppLayout></PlatformAdminRouteGuard>} />
@@ -381,12 +427,37 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/skills/:category/new" element={<PlatformAdminRouteGuard><AppLayout><PlatformSkillEditPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/skills/:category/:skillKey" element={<PlatformAdminRouteGuard><AppLayout><PlatformSkillViewPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/skills/:category/:skillKey/edit" element={<PlatformAdminRouteGuard><AppLayout><PlatformSkillEditPage /></AppLayout></PlatformAdminRouteGuard>} />
+                {/* Skills QA Testing - Validate skills/sequences against real org data */}
+                <Route path="/platform/skills-qa" element={<PlatformAdminRouteGuard><AppLayout><SkillsQAPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Agent Sequences - Multi-step skill chains */}
                 <Route path="/platform/agent-sequences" element={<PlatformAdminRouteGuard><AppLayout><AgentSequencesPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-sequences/new" element={<PlatformAdminRouteGuard><AgentSequenceBuilderPage /></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-sequences/:sequenceKey" element={<PlatformAdminRouteGuard><AgentSequenceBuilderPage /></PlatformAdminRouteGuard>} />
+                {/* Unified Copilot Console - Test, monitor, and analyze */}
+                <Route path="/platform/copilot-console" element={<PlatformAdminRouteGuard><AppLayout><CopilotConsolePage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Copilot Test Page - Quality testing for AI assistant */}
                 <Route path="/platform/copilot-tests" element={<PlatformAdminRouteGuard><AppLayout><CopilotTestPage /></AppLayout></PlatformAdminRouteGuard>} />
+                {/* Copilot Lab - Testing, discovery, and improvement hub */}
+                <Route path="/platform/copilot-lab" element={<PlatformAdminRouteGuard><AppLayout><CopilotLabPage /></AppLayout></PlatformAdminRouteGuard>} />
+                {/* Agent Performance Dashboard - Observability and analytics */}
+                <Route path="/platform/agent-performance" element={<PlatformAdminRouteGuard><AppLayout><AgentPerformanceDashboard /></AppLayout></PlatformAdminRouteGuard>} />
+
+                <Route path="/platform/orchestrator-dashboard" element={<PlatformAdminRouteGuard><AppLayout><OrchestratorDashboard /></AppLayout></PlatformAdminRouteGuard>} />
+
+                <Route path="/platform/agent-teams" element={<PlatformAdminRouteGuard><AppLayout><AgentTeamSettings /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/multi-agent-demo" element={<PlatformAdminRouteGuard><AppLayout><MultiAgentDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/agent-teams-live" element={<PlatformAdminRouteGuard><AppLayout><AgentTeamsLiveDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/agent-abilities" element={<PlatformAdminRouteGuard><AppLayout><AgentAbilitiesPage /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/credit-system-demo" element={<PlatformAdminRouteGuard><AppLayout><CreditSystemDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/enrichment-demo" element={<PlatformAdminRouteGuard><AppLayout><EnrichmentComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/research-comparison" element={<PlatformAdminRouteGuard><AppLayout><ResearchComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/exa-abilities" element={<PlatformAdminRouteGuard><AppLayout><ExaAbilitiesDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/email-sequence-test" element={<PlatformAdminRouteGuard><AppLayout><EmailSequenceTest /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/agent-research" element={<PlatformAdminRouteGuard><AppLayout><AgentResearchDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/campaign-workflow" element={<PlatformAdminRouteGuard><AppLayout><CampaignWorkflowDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/ops-webhook" element={<PlatformAdminRouteGuard><AppLayout><OpsWebhookDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                {/* Documentation CMS Admin */}
+                <Route path="/platform/docs-admin" element={<PlatformAdminRouteGuard><AppLayout><DocsAdminPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Shareable skill detail page - accessible to org members */}
                 <Route path="/skills/:skillKey" element={<AppLayout><SkillDetailPage /></AppLayout>} />
                 <Route path="/platform/features" element={<PlatformAdminRouteGuard><AppLayout><SaasAdminDashboard /></AppLayout></PlatformAdminRouteGuard>} />
@@ -403,6 +474,10 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/integrations/roadmap" element={<PlatformAdminRouteGuard><AppLayout><IntegrationRoadmap /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* MeetingBaaS Bot Branding */}
                 <Route path="/platform/integrations/notetaker-branding" element={<PlatformAdminRouteGuard><AppLayout><NotetakerBranding /></AppLayout></PlatformAdminRouteGuard>} />
+                {/* MeetingBaaS Video Quality */}
+                <Route path="/platform/integrations/notetaker-video-quality" element={<PlatformAdminRouteGuard><AppLayout><NotetakerVideoQuality /></AppLayout></PlatformAdminRouteGuard>} />
+                {/* MeetingBaaS Recording Limit */}
+                <Route path="/platform/integrations/notetaker-recording-limit" element={<PlatformAdminRouteGuard><AppLayout><NotetakerRecordingLimit /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Integration Testing Dashboard - Main page */}
                 <Route path="/platform/integrations" element={<PlatformAdminRouteGuard><AppLayout><IntegrationsDashboard /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - Security & Audit */}
@@ -425,24 +500,23 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/meta-ads" element={<PlatformAdminRouteGuard><AppLayout><MetaAdsAnalytics /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/error-monitoring" element={<PlatformAdminRouteGuard><AppLayout><ErrorMonitoring /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/sentry-bridge" element={<PlatformAdminRouteGuard><AppLayout><SentryBridge /></AppLayout></PlatformAdminRouteGuard>} />
-                <Route path="/platform/agent-simulator" element={<PlatformAdminRouteGuard><AppLayout><ProactiveSimulator /></AppLayout></PlatformAdminRouteGuard>} />
-                <Route path="/platform/proactive-simulator" element={<Navigate to="/platform/agent-simulator" replace />} />
+                <Route path="/platform/agent-simulator" element={<Navigate to="/platform/agent-abilities" replace />} />
+                <Route path="/platform/proactive-simulator" element={<Navigate to="/platform/agent-abilities" replace />} />
+                <Route path="/platform/proactive-v2-demo" element={<Navigate to="/platform/agent-abilities" replace />} />
                 <Route path="/platform/deal-truth-simulator" element={<PlatformAdminRouteGuard><AppLayout><DealTruthSimulator /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/slack-demo" element={<PlatformAdminRouteGuard><AppLayout><SlackDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Cron Jobs Admin - Monitor and manage scheduled jobs */}
                 <Route path="/platform/cron-jobs" element={<PlatformAdminRouteGuard><AppLayout><CronJobsAdmin /></AppLayout></PlatformAdminRouteGuard>} />
-                {/* Meeting Intelligence full demo (internal-only) */}
-                <Route path="/platform/meeting-intelligence-demo" element={<InternalRouteGuard><AppLayout><MeetingIntelligenceDemo /></AppLayout></InternalRouteGuard>} />
-                {/* Lightweight import test page (internal-only) */}
-                <Route path="/platform/meeting-intelligence-demo-simple" element={<InternalRouteGuard><AppLayout><MeetingIntelligenceDemoSimple /></AppLayout></InternalRouteGuard>} />
+                {/* Meeting Intelligence demos removed — V1 Intelligence deleted */}
                 {/* Tasks demo (internal-only): validate AI extraction + task creation */}
                 <Route path="/platform/tasks-demo" element={<InternalRouteGuard><AppLayout><TasksDemo /></AppLayout></InternalRouteGuard>} />
                 {/* Process Maps - AI-generated process visualization */}
                 <Route path="/platform/process-maps" element={<InternalRouteGuard><AppLayout><ProcessMaps /></AppLayout></InternalRouteGuard>} />
-                {/* Intelligence Test Runner (internal-only): run and visualize unit tests */}
-                <Route path="/platform/intelligence-tests" element={<InternalRouteGuard><AppLayout><IntelligenceTestRunner /></AppLayout></InternalRouteGuard>} />
+                {/* Intelligence Test Runner removed — V1 Intelligence deleted */}
                 {/* VSL Analytics Tests (internal-only): test video analytics tracking */}
                 <Route path="/platform/vsl-analytics-tests" element={<InternalRouteGuard><AppLayout><VSLAnalyticsTests /></AppLayout></InternalRouteGuard>} />
+                {/* Support Tickets - Platform Admin queue across all orgs */}
+                <Route path="/platform/support-tickets" element={<PlatformAdminRouteGuard><AppLayout><SupportTicketsPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Dashboard - MUST be last (catch-all for /platform) */}
                 <Route path="/platform" element={<PlatformAdminRouteGuard><AppLayout><PlatformDashboard /></AppLayout></PlatformAdminRouteGuard>} />
 
@@ -456,10 +530,27 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/email-actions/:id" element={<AppLayout><EmailActionCenter /></AppLayout>} />
                 {/* Internal-only: Pipeline, Tasks */}
                 <Route path="/pipeline" element={<InternalRouteGuard><AppLayout><PipelinePage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/tasks" element={<InternalRouteGuard><AppLayout><TasksPage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/crm/tasks" element={<InternalRouteGuard><AppLayout><TasksPage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/projects" element={<InternalRouteGuard><AppLayout><ProjectsHub /></AppLayout></InternalRouteGuard>} />
-                <Route path="/tasks/settings" element={<InternalRouteGuard><AppLayout><GoogleTasksSettings /></AppLayout></InternalRouteGuard>} />
+                <Route path="/tasks" element={<Navigate to="/command-centre" replace />} />
+                <Route path="/crm/tasks" element={<Navigate to="/command-centre" replace />} />
+                <Route path="/projects" element={<Navigate to="/command-centre" replace />} />
+                <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
+                {/* Unified profiles routes */}
+                <Route path="/profiles" element={<InternalRouteGuard><AppLayout><ProfilesPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/:id" element={<InternalRouteGuard><AppLayout><FactProfileViewPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/:id/edit" element={<InternalRouteGuard><AppLayout><FactProfileEditPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/products/:id" element={<InternalRouteGuard><AppLayout><ProductProfileViewPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/products/:id/edit" element={<InternalRouteGuard><AppLayout><ProductProfileEditPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/:id/products/:productId" element={<InternalRouteGuard><AppLayout><ProductProfileViewPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/profiles/:id/products/:productId/edit" element={<InternalRouteGuard><AppLayout><ProductProfileEditPage /></AppLayout></InternalRouteGuard>} />
+                {/* Redirects from old URLs */}
+                <Route path="/fact-profiles" element={<Navigate to="/profiles?tab=companies" replace />} />
+                <Route path="/fact-profiles/:id" element={<RedirectFactProfile />} />
+                <Route path="/fact-profiles/:id/edit" element={<RedirectFactProfileEdit />} />
+                <Route path="/docs" element={<AppLayout><DocsPage /></AppLayout>} />
+                <Route path="/support" element={<AppLayout><SupportCentrePage /></AppLayout>} />
+                <Route path="/tasks/settings" element={<Navigate to="/settings/task-sync" replace />} />
                 <Route path="/calendar" element={<ExternalRedirect url="https://calendar.google.com" />} />
                 <Route path="/events" element={<InternalRouteGuard><AppLayout><Events /></AppLayout></InternalRouteGuard>} />
                 <Route path="/leads" element={<InternalRouteGuard><AppLayout><LeadsInbox /></AppLayout></InternalRouteGuard>} />
@@ -468,9 +559,9 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/form/:formId" element={<Suspense fallback={<IntelligentPreloader />}><FormDisplay /></Suspense>} />
                 <Route path="/form-test/:formId" element={<Suspense fallback={<IntelligentPreloader />}><FormDisplay /></Suspense>} />
 
-                {/* Redirect to CRM with appropriate tab */}
-                <Route path="/contacts" element={<Navigate to="/crm?tab=contacts" replace />} />
-                <Route path="/companies" element={<Navigate to="/crm?tab=companies" replace />} />
+                {/* Redirect to Ops (CRM replaced) */}
+                <Route path="/contacts" element={<Navigate to="/ops" replace />} />
+                <Route path="/companies" element={<Navigate to="/ops" replace />} />
 
                 {/* Legacy routes for backward compatibility */}
                 <Route path="/heatmap" element={<Navigate to="/insights" replace />} />
@@ -478,8 +569,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/activity-processing" element={<Navigate to="/activity" replace />} />
                 {/* Legacy redirects */}
                 <Route path="/api-testing" element={<Navigate to="/platform/dev/api-testing" replace />} />
-                <Route path="/crm/companies" element={<Navigate to="/crm" replace />} />
-                <Route path="/crm/contacts" element={<Navigate to="/crm?tab=contacts" replace />} />
+                <Route path="/crm/companies" element={<Navigate to="/ops" replace />} />
+                <Route path="/crm/contacts" element={<Navigate to="/ops" replace />} />
 
                 {/* Legacy redirects for 3-tier migration (keep for 3-6 months) */}
                 <Route path="/saas-admin" element={<Navigate to="/platform" replace />} />
@@ -491,13 +582,14 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/crm/contacts/:id" element={<InternalRouteGuard><AppLayout><ContactRecord /></AppLayout></InternalRouteGuard>} />
                 <Route path="/crm/deals/:id" element={<InternalRouteGuard><AppLayout><DealRecord /></AppLayout></InternalRouteGuard>} />
                 <Route path="/crm/health" element={<InternalRouteGuard><AppLayout><HealthMonitoring /></AppLayout></InternalRouteGuard>} />
-                <Route path="/crm/relationship-health" element={<Navigate to="/crm/health?tab=relationships" replace />} />
+                <Route path="/crm/relationship-health" element={<Navigate to="/crm/pipeline?risk=high,critical" replace />} />
+                <Route path="/crm/deal-health" element={<Navigate to="/crm/pipeline?health=critical,warning" replace />} />
 
                 {/* Other internal-only routes */}
                 <Route path="/payments" element={<Navigate to="/clients" replace />} />
                 <Route path="/clients" element={<InternalRouteGuard><AppLayout><Clients /></AppLayout></InternalRouteGuard>} />
                 <Route path="/subscriptions" element={<Navigate to="/clients" replace />} />
-                <Route path="/profile" element={<AppLayout><Profile /></AppLayout>} />
+                <Route path="/profile" element={<Navigate to="/settings/account" replace />} />
                 <Route path="/preferences" element={<Navigate to="/settings" replace />} />
                 <Route path="/settings" element={<AppLayout><SettingsPage /></AppLayout>} />
                 <Route path="/settings/account" element={<AppLayout><AccountSettings /></AppLayout>} />
@@ -505,24 +597,60 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/proposals" element={<Navigate to="/settings/follow-ups" replace />} />
                 <Route path="/settings/ai-personalization" element={<AppLayout><AIPersonalizationPage /></AppLayout>} />
                 <Route path="/settings/ai-intelligence" element={<AppLayout><AIIntelligencePage /></AppLayout>} />
+                <Route path="/settings/autonomy" element={<OrgAdminRouteGuard><AppLayout><AutonomySettingsPage /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/methodology" element={<OrgAdminRouteGuard><AppLayout><SalesMethodologySettings /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/crm-field-mapping" element={<OrgAdminRouteGuard><AppLayout><CRMFieldMappingSettings /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/custom-sops" element={<OrgAdminRouteGuard><AppLayout><CustomSOPBuilderPage /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/signal-intelligence" element={<OrgAdminRouteGuard><AppLayout><SignalIntelligenceSettings /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/knowledge-memory" element={<OrgAdminRouteGuard><AppLayout><KnowledgeMemorySettings /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/sales-coaching" element={<AppLayout><SalesCoachingPage /></AppLayout>} />
                 <Route path="/settings/api-keys" element={<AppLayout><APIKeysPage /></AppLayout>} />
                 <Route path="/settings/email-sync" element={<AppLayout><EmailSyncPage /></AppLayout>} />
                 <Route path="/settings/task-sync" element={<AppLayout><TaskSyncPage /></AppLayout>} />
-                <Route path="/settings/meeting-sync" element={<AppLayout><MeetingSyncPage /></AppLayout>} />
-                <Route path="/settings/team-members" element={<OrgAdminRouteGuard><AppLayout><TeamMembersPage /></AppLayout></OrgAdminRouteGuard>} />
-                <Route path="/settings/organization" element={<OrgAdminRouteGuard><AppLayout><OrganizationSettingsPage /></AppLayout></OrgAdminRouteGuard>} />
-                <Route path="/settings/branding" element={<OrgAdminRouteGuard><AppLayout><OrgBranding /></AppLayout></OrgAdminRouteGuard>} />
-                <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><OrgBilling /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/organization-management" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
+                {/* Legacy routes for backwards compatibility */}
+                <Route path="/settings/team-members" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
+                <Route path="/settings/organization" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
+                <Route path="/settings/branding" element={<Navigate to="/settings" replace />} />
+                {/* Agent Marketplace - org admins */}
+                <Route path="/agent/marketplace" element={
+                  <OrgAdminRouteGuard>
+                    <AppLayout>
+                      <AgentMarketplacePage />
+                    </AppLayout>
+                  </OrgAdminRouteGuard>
+                } />
+                <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><BillingSettingsPage /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/settings/credits" element={<AppLayout><CreditsSettingsPage /></AppLayout>} />
+                <Route path="/settings/credits/success" element={<AppLayout><CreditPurchaseSuccess /></AppLayout>} />
+                <Route path="/settings/goals" element={<AppLayout><SalesGoalsPage /></AppLayout>} />
                 {/* Slack Settings - visible only when Slack is connected (enforced inside page) */}
                 <Route path="/settings/integrations/slack" element={<AppLayout><SlackSettings /></AppLayout>} />
                 {/* JustCall Settings - visible only when JustCall is connected (enforced inside page) */}
                 <Route path="/settings/integrations/justcall" element={<AppLayout><JustCallSettings /></AppLayout>} />
                 {/* HubSpot Settings - visible only when HubSpot is connected (enforced inside page) */}
                 <Route path="/settings/integrations/hubspot" element={<AppLayout><HubSpotSettings /></AppLayout>} />
+                {/* Attio Settings - visible only when Attio is connected (enforced inside page) */}
+                <Route path="/settings/integrations/attio" element={<AppLayout><AttioSettings /></AppLayout>} />
                 {/* Bullhorn Settings - visible only when Bullhorn is connected (enforced inside page) */}
                 <Route path="/settings/integrations/bullhorn" element={<AppLayout><BullhornSettings /></AppLayout>} />
+                {/* Instantly Settings */}
+                <Route path="/settings/integrations/instantly" element={<AppLayout><InstantlySettings /></AppLayout>} />
+                {/* Smart Listening Settings */}
+                <Route path="/settings/smart-listening" element={<AppLayout><SmartListeningSettings /></AppLayout>} />
+                {/* Proactive Agent Settings - admin only */}
+                <Route path="/settings/proactive-agent" element={<AppLayout><ProactiveAgentSettings /></AppLayout>} />
+                <Route path="/settings/demo" element={<InternalRouteGuard><AppLayout><DemoExperiencePage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/bullhorn" element={<Navigate to="/settings/integrations/bullhorn" replace />} />
+                {/* Google Workspace Settings - visible only when Google is connected (enforced inside page) */}
+                <Route path="/settings/integrations/google-workspace" element={<AppLayout><GoogleWorkspaceIntegrationPage /></AppLayout>} />
+                {/* Meeting Settings - unified tab page for Fathom, Fireflies, and 60 Notetaker */}
+                <Route path="/settings/meeting-settings" element={<AppLayout><MeetingSettingsPage /></AppLayout>} />
+                {/* Legacy redirects to unified Meeting Settings page */}
+                <Route path="/settings/integrations/fathom" element={<Navigate to="/settings/meeting-settings?tab=fathom" replace />} />
+                <Route path="/settings/integrations/fireflies" element={<Navigate to="/settings/meeting-settings?tab=fireflies" replace />} />
+                <Route path="/settings/integrations/60-notetaker" element={<Navigate to="/settings/meeting-settings" replace />} />
+                <Route path="/meetings/recordings/settings" element={<Navigate to="/settings/meeting-settings" replace />} />
                 <Route path="/settings/ai" element={<AppLayout><AISettings /></AppLayout>} />
                 <Route path="/settings/extraction-rules" element={<Navigate to="/settings/task-sync" replace />} />
                 <Route path="/settings/task-sync" element={<AppLayout><TaskSyncSettings /></AppLayout>} />
@@ -531,14 +659,14 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/follow-ups" element={<AppLayout><FollowUpSettings /></AppLayout>} />
                 <Route path="/settings/proposal-workflows" element={<Navigate to="/settings/follow-ups" replace />} />
                 <Route path="/settings/coaching" element={<AppLayout><CoachingPreferences /></AppLayout>} />
+                <Route path="/meeting-analytics/:transcriptId" element={<AppLayout><MeetingAnalyticsPage /></AppLayout>} />
+                <Route path="/meeting-analytics" element={<AppLayout><MeetingAnalyticsPage /></AppLayout>} />
                 <Route path="/insights/team" element={<AppLayout><TeamAnalytics /></AppLayout>} />
                 <Route path="/insights/content-topics" element={<AppLayout><ContentTopics /></AppLayout>} />
                 <Route path="/roadmap" element={<AppLayout><Roadmap /></AppLayout>} />
                 <Route path="/roadmap/ticket/:ticketId" element={<AppLayout><Roadmap /></AppLayout>} />
                 <Route path="/releases" element={<AppLayout><Releases /></AppLayout>} />
                 <Route path="/meetings/*" element={<AppLayout><MeetingsPage /></AppLayout>} />
-                <Route path="/meetings/intelligence" element={<AppLayout><MeetingIntelligence /></AppLayout>} />
-                <Route path="/meetings/sentiment" element={<AppLayout><MeetingSentimentAnalytics /></AppLayout>} />
                 {/* Meeting detail and recordings are handled by nested routing in /meetings/* (src/pages/MeetingsPage.tsx) */}
                 {/* Recordings are now at /meetings/recordings/* - integrated into meetings */}
                 <Route path="/calls" element={<AppLayout><Calls /></AppLayout>} />

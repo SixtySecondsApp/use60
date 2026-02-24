@@ -1,9 +1,12 @@
+-- Ensure citext extension exists
+CREATE EXTENSION IF NOT EXISTS citext;
+
 -- Create organization_join_requests table
 CREATE TABLE "public"."organization_join_requests" (
   "id" uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   "org_id" uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   "user_id" uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  "email" citext NOT NULL,
+  "email" text NOT NULL,
   "status" text DEFAULT 'pending' NOT NULL,
   "requested_at" timestamptz DEFAULT now() NOT NULL,
   "actioned_by" uuid REFERENCES auth.users(id),
@@ -14,15 +17,14 @@ CREATE TABLE "public"."organization_join_requests" (
   "updated_at" timestamptz DEFAULT now(),
 
   CONSTRAINT "organization_join_requests_status_check"
-    CHECK (status = ANY (ARRAY['pending', 'approved', 'rejected'])),
-
-  -- One pending request per user per org
-  CONSTRAINT "organization_join_requests_unique_pending"
-    UNIQUE (org_id, user_id, status)
-    WHERE (status = 'pending')
+    CHECK (status = ANY (ARRAY['pending', 'approved', 'rejected']))
 );
 
 -- Indexes for performance
+CREATE UNIQUE INDEX idx_join_requests_unique_pending
+  ON organization_join_requests(org_id, user_id)
+  WHERE status = 'pending';
+
 CREATE INDEX idx_join_requests_org_pending
   ON organization_join_requests(org_id, status)
   WHERE status = 'pending';

@@ -13,6 +13,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -111,6 +112,25 @@ serve(async (req) => {
       )
     }
 
+    // Get org for credit check
+    const { data: membership } = await supabaseClient
+      .from('organization_memberships')
+      .select('org_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle()
+    const orgId = membership?.org_id ?? null
+
+    if (orgId) {
+      const balanceCheck = await checkCreditBalance(supabaseClient, orgId)
+      if (!balanceCheck.allowed) {
+        return new Response(
+          JSON.stringify({ error: 'Insufficient credits. Please top up to continue.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     // Fetch existing tasks for this meeting (for deduplication)
     const { data: existingTasks } = await supabaseClient
       .from('tasks')
@@ -125,6 +145,15 @@ serve(async (req) => {
       existingTaskList,
       maxActions
     )
+
+    // Log AI cost event
+    if (orgId) {
+      const model = Deno.env.get('CLAUDE_MODEL') || 'claude-haiku-4-5-20251001'
+      await logAICostEvent(
+        supabaseClient, user.id, orgId, 'anthropic', model,
+        0, 0, 'task_execution'
+      )
+    }
 
     if (!newActions || newActions.length === 0) {
       return new Response(

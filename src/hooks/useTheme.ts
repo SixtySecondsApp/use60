@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { supabase } from '@/lib/supabase/clientV2'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
@@ -33,7 +34,7 @@ function getAppliedTheme(): ResolvedTheme {
  * Gets the stored theme preference from localStorage
  */
 function getStoredTheme(): ThemeMode {
-  if (typeof window === 'undefined') return 'system'
+  if (typeof window === 'undefined') return 'dark'
 
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -44,7 +45,62 @@ function getStoredTheme(): ThemeMode {
     // localStorage not available
   }
 
-  return 'system'
+  // Default to dark theme for new users
+  return 'dark'
+}
+
+/**
+ * Saves theme preference to the user_settings.preferences JSONB column
+ */
+async function saveThemeToProfile(mode: ThemeMode) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data: existing } = await supabase
+      .from('user_settings')
+      .select('id, preferences')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    const prefs = (existing?.preferences || {}) as Record<string, unknown>
+    const nextPrefs = { ...prefs, theme: mode }
+
+    const payload = { user_id: user.id, preferences: nextPrefs }
+
+    if (existing) {
+      await supabase.from('user_settings').update(payload).eq('id', existing.id)
+    } else {
+      await supabase.from('user_settings').insert(payload)
+    }
+  } catch {
+    // Silently fail - localStorage is the fallback
+  }
+}
+
+/**
+ * Loads theme preference from the user_settings.preferences JSONB column
+ */
+async function loadThemeFromProfile(): Promise<ThemeMode | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('preferences')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    const prefs = (settings?.preferences || {}) as Record<string, unknown>
+    const theme = prefs.theme
+    if (theme === 'light' || theme === 'dark' || theme === 'system') {
+      return theme
+    }
+  } catch {
+    // Silently fail
+  }
+  return null
 }
 
 /**
@@ -101,6 +157,7 @@ export function useTheme() {
     const stored = getStoredTheme()
     return resolveTheme(stored)
   })
+  const profileLoaded = useRef(false)
 
   // Set theme mode
   const setThemeMode = (mode: ThemeMode) => {
@@ -116,17 +173,43 @@ export function useTheme() {
     setResolvedTheme(resolved)
     applyTheme(resolved)
 
+    // Persist to user profile in database
+    saveThemeToProfile(mode)
+
     // Dispatch custom event so other components using useTheme can sync
     window.dispatchEvent(new CustomEvent('theme-changed', { detail: { mode, resolved } }))
   }
 
-  // Initialize theme on mount
+  // Initialize theme on mount - load from localStorage first, then sync from profile
   useEffect(() => {
     const stored = getStoredTheme()
     const resolved = resolveTheme(stored)
     setThemeModeState(stored)
     setResolvedTheme(resolved)
     applyTheme(resolved)
+
+    // Load from profile (database) and apply if different from localStorage
+    if (!profileLoaded.current) {
+      profileLoaded.current = true
+      loadThemeFromProfile().then((profileTheme) => {
+        if (profileTheme && profileTheme !== stored) {
+          // Profile has a saved preference - use it and update localStorage
+          try {
+            localStorage.setItem(STORAGE_KEY, profileTheme)
+          } catch {
+            // localStorage not available
+          }
+          const profileResolved = resolveTheme(profileTheme)
+          setThemeModeState(profileTheme)
+          setResolvedTheme(profileResolved)
+          applyTheme(profileResolved)
+          window.dispatchEvent(new CustomEvent('theme-changed', { detail: { mode: profileTheme, resolved: profileResolved } }))
+        } else if (!profileTheme && stored !== 'dark') {
+          // No profile preference yet but user has a localStorage preference - seed it
+          saveThemeToProfile(stored)
+        }
+      })
+    }
   }, [])
 
   // Listen for theme changes from other components

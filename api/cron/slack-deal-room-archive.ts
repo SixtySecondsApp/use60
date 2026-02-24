@@ -50,7 +50,7 @@ export default async function handler(req: any, res: any) {
     }
  
     const data = await response.json() as Record<string, unknown>;
- 
+
     return res.status(200).json({
       success: true,
       ...(typeof data === 'object' && data !== null ? data : {}),

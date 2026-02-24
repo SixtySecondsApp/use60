@@ -1,5 +1,3 @@
-/// <reference types="https://deno.land/x/types/index.d.ts" />
-
 // Deno global type declarations for Supabase Edge Functions
 // These declarations allow TypeScript to recognize Deno globals and modules
 // even though the IDE doesn't have Deno runtime types installed.

@@ -11,7 +11,8 @@ export type SkillCategory =
   | 'enrichment'
   | 'workflows'
   | 'data-access'
-  | 'output-format';
+  | 'output-format'
+  | 'agent-sequence';
 
 export interface SkillDoc {
   skill_key: string;
@@ -43,9 +44,55 @@ export type ExecuteActionName =
   | 'enrich_company'
   | 'invoke_skill'
   | 'run_skill'
+  | 'run_sequence'
   | 'create_task'
   | 'list_tasks'
-  | 'create_activity';
+  | 'create_activity'
+  | 'search_leads_create_table'
+  | 'enrich_table_column'
+  // Ops table CRUD
+  | 'list_ops_tables'
+  | 'get_ops_table'
+  | 'create_ops_table'
+  | 'delete_ops_table'
+  // Ops column/row
+  | 'add_ops_column'
+  | 'get_ops_table_data'
+  | 'add_ops_rows'
+  | 'update_ops_cell'
+  // Ops AI features
+  | 'ai_query_ops_table'
+  | 'ai_transform_ops_column'
+  | 'get_enrichment_status'
+  // Ops rules
+  | 'create_ops_rule'
+  | 'list_ops_rules'
+  // Ops integration sync
+  | 'sync_ops_hubspot'
+  | 'sync_ops_attio'
+  | 'push_ops_to_instantly'
+  // Ops insights
+  | 'get_ops_insights'
+  // Meeting intelligence
+  | 'meeting_intelligence_query'
+  | 'search_meeting_context'
+  // Meeting analytics aggregation
+  | 'meeting_analytics_dashboard'
+  | 'meeting_analytics_talk_time'
+  | 'meeting_analytics_sentiment_trends'
+  | 'meeting_analytics_insights'
+  // Sales targets / goals
+  | 'get_targets'
+  | 'upsert_target';
+
+/**
+ * Parameters for run_sequence action - executes a multi-step agent sequence
+ */
+export interface RunSequenceParams {
+  sequence_key: string;
+  sequence_context?: Record<string, unknown>;
+  is_simulation?: boolean;
+}
 
 /**
  * Parameters for invoke_skill action - enables skill composition
@@ -111,6 +158,167 @@ export interface CreateActivityParams {
   company_id?: string;
 }
 
+/**
+ * Parameters for list_ops_tables action
+ */
+export interface ListOpsTablesParams {
+  limit?: number;
+  source_type?: string;
+}
+
+/**
+ * Parameters for get_ops_table action
+ */
+export interface GetOpsTableParams {
+  table_id: string;
+}
+
+/**
+ * Parameters for create_ops_table action
+ */
+export interface CreateOpsTableParams {
+  name: string;
+  description?: string;
+  columns?: Array<{
+    name: string;
+    column_type: string;
+    config?: Record<string, unknown>;
+  }>;
+}
+
+/**
+ * Parameters for delete_ops_table action
+ */
+export interface DeleteOpsTableParams {
+  table_id: string;
+}
+
+/**
+ * Parameters for add_ops_column action
+ */
+export interface AddOpsColumnParams {
+  table_id: string;
+  name: string;
+  column_type: string;
+  config?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for get_ops_table_data action
+ */
+export interface GetOpsTableDataParams {
+  table_id: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Parameters for add_ops_rows action
+ */
+export interface AddOpsRowsParams {
+  table_id: string;
+  rows: Array<Record<string, unknown>>;
+}
+
+/**
+ * Parameters for update_ops_cell action
+ */
+export interface UpdateOpsCellParams {
+  row_id: string;
+  column_id: string;
+  value: unknown;
+}
+
+/**
+ * Parameters for ai_query_ops_table action
+ */
+export interface AiQueryOpsTableParams {
+  table_id: string;
+  query: string;
+}
+
+/**
+ * Parameters for ai_transform_ops_column action
+ */
+export interface AiTransformOpsColumnParams {
+  table_id: string;
+  column_id: string;
+  prompt: string;
+  row_ids?: string[];
+}
+
+/**
+ * Parameters for get_enrichment_status action
+ */
+export interface GetEnrichmentStatusParams {
+  table_id: string;
+  column_id?: string;
+}
+
+/**
+ * Parameters for create_ops_rule action
+ */
+export interface CreateOpsRuleParams {
+  table_id: string;
+  name: string;
+  trigger_type: string;
+  condition: Record<string, unknown>;
+  action_type: string;
+  action_config: Record<string, unknown>;
+}
+
+/**
+ * Parameters for list_ops_rules action
+ */
+export interface ListOpsRulesParams {
+  table_id: string;
+}
+
+/**
+ * Parameters for sync_ops_hubspot action
+ */
+export interface SyncOpsHubspotParams {
+  table_id: string;
+  list_id?: string;
+  field_mapping?: Record<string, string>;
+}
+
+/**
+ * Parameters for sync_ops_attio action
+ */
+export interface SyncOpsAttioParams {
+  table_id: string;
+  list_id?: string;
+  field_mapping?: Record<string, string>;
+}
+
+/**
+ * Parameters for push_ops_to_instantly action
+ */
+export interface PushOpsToInstantlyParams {
+  table_id: string;
+  campaign_id?: string;
+  row_ids?: string[];
+}
+
+/**
+ * Parameters for get_ops_insights action
+ */
+export interface GetOpsInsightsParams {
+  table_id: string;
+  insight_type?: string;
+}
+
+/**
+ * Parameters for upsert_target action
+ */
+export interface UpsertTargetParams {
+  /** Which KPI to update */
+  field: 'revenue_target' | 'outbound_target' | 'meetings_target' | 'proposal_target';
+  /** New goal value (must be >= 0) */
+  value: number;
+}
+
 export interface ExecuteActionRequest {
   action: ExecuteActionName;
   params: Record<string, unknown>;
@@ -135,6 +343,7 @@ export interface AdapterContext {
 export interface MeetingAdapter {
   source: string;
   listMeetings(params: {
+    meeting_id?: string;
     contactEmail?: string;
     contactId?: string;
     limit?: number;
@@ -163,10 +372,10 @@ export interface MeetingAdapter {
     timezone?: string;
   }): Promise<ActionResult>;
   /**
-   * Get list of meetings for a specific period (today/tomorrow)
+   * Get list of meetings for a specific period
    */
   getMeetingsForPeriod(params: {
-    period: 'today' | 'tomorrow';
+    period: string; // today, tomorrow, monday-sunday, this_week, next_week
     timezone?: string;
     weekStartsOn?: 0 | 1;
     includeContext?: boolean;

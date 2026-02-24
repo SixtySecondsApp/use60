@@ -91,6 +91,32 @@ export function useUpdateFathomUserMapping() {
 }
 
 /**
+ * Hook to delete a Fathom user mapping (admin only)
+ */
+export function useDeleteFathomUserMapping() {
+  const { activeOrgId } = useOrg();
+  const orgId = activeOrgId;
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (mappingId: string) => {
+      if (!orgId) throw new Error('No org selected');
+
+      const { error } = await (supabase
+        .from('fathom_user_mappings') as any)
+        .delete()
+        .eq('id', mappingId)
+        .eq('org_id', orgId); // Security: ensure they can only delete from their org
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.userMappings(orgId || '') });
+    },
+  });
+}
+
+/**
  * Hook to allow a user to map ONLY themselves to a Fathom email in this org.
  * This is used by the Fathom Settings page "Personal Fathom" section.
  */

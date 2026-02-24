@@ -14,7 +14,7 @@
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { fetchTranscriptFromFathom, fetchSummaryFromFathom } from '../_shared/fathomTranscript.ts'
 import { analyzeTranscriptWithClaude, deduplicateActionItems, type TranscriptAnalysis } from '../fathom-sync/aiAnalysis.ts'
 
@@ -255,9 +255,9 @@ async function queueForAIIndex(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const adminClient = createClient(
@@ -647,10 +647,20 @@ serve(async (req) => {
             const summaryData = await fetchSummaryFromFathom(accessToken, meeting.fathom_recording_id)
 
             if (summaryData?.summary) {
+              // Fathom returns { summary: { template_name, markdown_formatted } } or { summary: "string" }
+              let summaryValue: string
+              if (typeof summaryData.summary === 'string') {
+                summaryValue = summaryData.summary
+              } else if (summaryData.summary.markdown_formatted) {
+                summaryValue = JSON.stringify(summaryData.summary)
+              } else {
+                summaryValue = String(summaryData.summary)
+              }
+
               await adminClient
                 .from('meetings')
                 .update({
-                  summary: summaryData.summary,
+                  summary: summaryValue,
                   summary_status: 'complete',
                   sentiment_score: summaryData.sentiment_score,
                   coach_summary: summaryData.coach_summary,

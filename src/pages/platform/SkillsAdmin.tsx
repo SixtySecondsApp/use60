@@ -27,6 +27,7 @@ import {
   GitBranch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -45,8 +46,12 @@ import {
   type SkillCategory,
 } from '@/lib/hooks/usePlatformSkills';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrg } from '@/lib/contexts/OrgContext';
+import { useOrgCapabilities } from '@/lib/hooks/useOrgCapabilities';
+import { evaluateReadiness, getCapabilityLabel, getProviderLabel, type ReadinessCheck } from '@/lib/utils/skillReadiness';
 import { toast } from 'sonner';
 import { buildSkillResponseFormatExport, writeJsonToClipboard } from '@/lib/utils/responseFormatExport';
+import { AlertCircle, CheckCircle2, XCircle, Shield } from 'lucide-react';
 
 const CATEGORY_ICONS: Record<SkillCategory, React.ElementType> = {
   'sales-ai': Sparkles,
@@ -64,6 +69,7 @@ const DEFAULT_CATEGORY: SkillCategory = 'sales-ai';
 
 export default function SkillsAdmin() {
   const { user } = useAuth();
+  const { activeOrgId } = useOrg();
   const { category: urlCategory } = useParams<{ category?: string }>();
   const navigate = useNavigate();
 
@@ -89,9 +95,21 @@ export default function SkillsAdmin() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<PlatformSkill | null>(null);
+  const [showAudit, setShowAudit] = useState(false);
 
   const { data: skills, isLoading, refetch } = usePlatformSkills(selectedCategory);
+  const { data: capabilities = [] } = useOrgCapabilities(activeOrgId);
   const operations = usePlatformSkillOperations(user?.id || '');
+
+  // Evaluate readiness for all skills
+  const readinessChecks = useMemo(() => {
+    if (!skills || capabilities.length === 0) return new Map<string, ReadinessCheck>();
+    const checks = new Map<string, ReadinessCheck>();
+    for (const skill of skills) {
+      checks.set(skill.id, evaluateReadiness(skill, capabilities));
+    }
+    return checks;
+  }, [skills, capabilities]);
 
   // Filter skills by search query
   const filteredSkills = useMemo(() => {
@@ -124,6 +142,29 @@ export default function SkillsAdmin() {
     }
   };
 
+  const handleBulkDeactivateNotReady = async () => {
+    if (!skills || readinessChecks.size === 0) return;
+    
+    const notReady = skills.filter((skill) => {
+      const check = readinessChecks.get(skill.id);
+      return check && !check.isReady && skill.is_active;
+    });
+
+    if (notReady.length === 0) {
+      toast.info('All skills are ready for production');
+      return;
+    }
+
+    try {
+      await Promise.all(
+        notReady.map((skill) => operations.toggle(skill.id, false))
+      );
+      toast.success(`Deactivated ${notReady.length} non-ready skill${notReady.length > 1 ? 's' : ''}`);
+    } catch (error) {
+      toast.error('Failed to deactivate some skills');
+    }
+  };
+
   const handleCopyCategoryResponseFormats = async () => {
     try {
       const all = (skills || []).map((s) => buildSkillResponseFormatExport(s));
@@ -141,6 +182,7 @@ export default function SkillsAdmin() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950">
+      <BackToPlatform />
       {/* Header */}
       <div className="border-b border-gray-200 dark:border-gray-700/50 px-6 py-6">
         <div className="max-w-7xl mx-auto">
@@ -159,6 +201,24 @@ export default function SkillsAdmin() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowAudit(!showAudit)}
+                className="gap-2"
+              >
+                <Shield className="w-4 h-4" />
+                {showAudit ? 'Hide' : 'Show'} Audit
+              </Button>
+              {showAudit && (
+                <Button
+                  variant="outline"
+                  onClick={handleBulkDeactivateNotReady}
+                  className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Deactivate Not Ready
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={handleCopyCategoryResponseFormats}
@@ -183,7 +243,7 @@ export default function SkillsAdmin() {
                 </Button>
               </Link>
               <Link to={`/platform/skills/${selectedCategory}/new`}>
-                <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700">
+                <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white">
                   <Plus className="w-4 h-4" />
                   New Skill
                 </Button>
@@ -233,6 +293,36 @@ export default function SkillsAdmin() {
         </div>
       </div>
 
+      {/* Audit Panel */}
+      {showAudit && capabilities.length > 0 && (
+        <div className="max-w-7xl mx-auto px-6 py-4 border-b border-gray-200 dark:border-gray-700/50">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                  Production Readiness Audit
+                </h3>
+                <div className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                  <p>
+                    Available capabilities:{' '}
+                    {capabilities
+                      .filter((c) => c.available)
+                      .map((c) => `${getCapabilityLabel(c.capability)} (${getProviderLabel(c.provider)})`)
+                      .join(', ') || 'None'}
+                  </p>
+                  {skills && readinessChecks.size > 0 && (
+                    <p>
+                      Ready: {Array.from(readinessChecks.values()).filter((c) => c.isReady).length} / {skills.length} skills
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Skills Grid */}
       <div className="max-w-7xl mx-auto px-6 py-6">
         {isLoading ? (
@@ -266,17 +356,23 @@ export default function SkillsAdmin() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredSkills.map((skill, index) => (
-              <SkillCard
-                key={skill.id}
-                skill={skill}
-                category={selectedCategory}
-                index={index}
-                onDelete={() => setConfirmDelete(skill)}
-                onToggleActive={() => handleToggleActive(skill)}
-                isProcessing={operations.isProcessing}
-              />
-            ))}
+            {filteredSkills.map((skill, index) => {
+              const readiness = readinessChecks.get(skill.id);
+              const readinessProps = readiness ? { readiness } : {};
+              return (
+                <SkillCard
+                  key={skill.id}
+                  skill={skill}
+                  category={selectedCategory}
+                  index={index}
+                  {...readinessProps}
+                  showAudit={showAudit}
+                  onDelete={() => setConfirmDelete(skill)}
+                  onToggleActive={() => handleToggleActive(skill)}
+                  isProcessing={operations.isProcessing}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -323,6 +419,8 @@ interface SkillCardProps {
   skill: PlatformSkill;
   category: SkillCategory;
   index: number;
+  readiness?: ReadinessCheck;
+  showAudit?: boolean;
   onDelete: () => void;
   onToggleActive: () => void;
   isProcessing: boolean;
@@ -332,11 +430,15 @@ function SkillCard({
   skill,
   category,
   index,
+  readiness,
+  showAudit = false,
   onDelete,
   onToggleActive,
   isProcessing,
 }: SkillCardProps) {
   const CategoryIcon = CATEGORY_ICONS[skill.category];
+  const isReady = readiness?.isReady ?? true;
+  const score = readiness?.score ?? 100;
 
   return (
     <motion.div
@@ -348,13 +450,14 @@ function SkillCard({
         'border border-gray-200 dark:border-gray-700/50',
         'rounded-xl p-6 shadow-sm dark:shadow-none',
         'hover:border-gray-300 dark:hover:border-gray-600/50',
-        'transition-colors'
+        'transition-colors',
+        showAudit && !isReady && 'border-red-200 dark:border-red-800/50'
       )}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate">
               {skill.frontmatter.name}
             </h3>
@@ -369,6 +472,29 @@ function SkillCard({
             >
               {skill.is_active ? 'Active' : 'Inactive'}
             </Badge>
+            {showAudit && readiness && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  'text-xs shrink-0',
+                  isReady
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800'
+                )}
+              >
+                {isReady ? (
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Ready ({score}%)
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <XCircle className="w-3 h-3" />
+                    Not Ready ({score}%)
+                  </span>
+                )}
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 font-mono">
             {skill.skill_key}
@@ -380,6 +506,48 @@ function SkillCard({
       <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2 mb-4">
         {skill.frontmatter.description}
       </p>
+
+      {/* Readiness Issues */}
+      {showAudit && readiness && readiness.issues.length > 0 && (
+        <div className="mb-4 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+          <div className="text-xs font-medium text-amber-900 dark:text-amber-100 mb-1 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            Issues ({readiness.issues.filter((i) => i.severity === 'error').length} errors,{' '}
+            {readiness.issues.filter((i) => i.severity === 'warning').length} warnings)
+          </div>
+          <ul className="text-xs text-amber-800 dark:text-amber-200 space-y-0.5">
+            {readiness.issues.slice(0, 3).map((issue, idx) => (
+              <li key={idx} className="flex items-start gap-1">
+                <span className={issue.severity === 'error' ? 'text-red-600' : 'text-amber-600'}>
+                  {issue.severity === 'error' ? '●' : '○'}
+                </span>
+                <span>{issue.message}</span>
+              </li>
+            ))}
+            {readiness.issues.length > 3 && (
+              <li className="text-amber-600 dark:text-amber-400">
+                +{readiness.issues.length - 3} more
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      {/* Missing Capabilities */}
+      {showAudit && readiness && readiness.missingCapabilities.length > 0 && (
+        <div className="mb-4 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="text-xs font-medium text-red-900 dark:text-red-100 mb-1">
+            Missing Capabilities
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {readiness.missingCapabilities.map((cap) => (
+              <Badge key={cap} variant="outline" className="text-xs bg-red-100 text-red-700 border-red-300">
+                {getCapabilityLabel(cap)}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metadata */}
       <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mb-4">

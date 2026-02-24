@@ -1,7 +1,5 @@
-/// <reference path="../deno.d.ts" />
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import { captureException } from '../_shared/sentryEdge.ts'
 import { matchOrCreateCompany } from '../_shared/companyMatching.ts'
 import { selectPrimaryContact, determineMeetingCompany } from '../_shared/primaryContactSelection.ts'
@@ -707,6 +705,47 @@ serve(async (req) => {
       }
     }
 
+    // Check for stale sync state and auto-reset before starting new sync
+    // Edge functions can timeout (60s limit) leaving sync_status stuck at 'syncing'
+    const STALE_SYNC_THRESHOLD_MS = 10 * 60 * 1000 // 10 minutes
+    if (integrationScope === 'org' && orgId) {
+      const { data: currentState } = await supabase
+        .from('fathom_org_sync_state')
+        .select('sync_status, last_sync_started_at')
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (currentState?.sync_status === 'syncing' && currentState.last_sync_started_at) {
+        const staleDuration = Date.now() - new Date(currentState.last_sync_started_at).getTime()
+        if (staleDuration > STALE_SYNC_THRESHOLD_MS) {
+          console.warn(`⚠️  Resetting stale org sync state (stuck for ${Math.round(staleDuration / 60000)}min)`)
+        } else {
+          console.log(`⏳ Sync already in progress for org (started ${Math.round(staleDuration / 1000)}s ago), skipping`)
+          return new Response(
+            JSON.stringify({ success: false, error: 'Sync already in progress', retry_after_seconds: Math.ceil((STALE_SYNC_THRESHOLD_MS - staleDuration) / 1000) }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+    } else if (userId) {
+      const { data: currentState } = await supabase
+        .from('fathom_sync_state')
+        .select('sync_status, last_sync_started_at')
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (currentState?.sync_status === 'syncing' && currentState.last_sync_started_at) {
+        const staleDuration = Date.now() - new Date(currentState.last_sync_started_at).getTime()
+        if (staleDuration > STALE_SYNC_THRESHOLD_MS) {
+          console.warn(`⚠️  Resetting stale user sync state (stuck for ${Math.round(staleDuration / 60000)}min)`)
+        } else {
+          console.log(`⏳ Sync already in progress for user (started ${Math.round(staleDuration / 1000)}s ago), skipping`)
+          return new Response(
+            JSON.stringify({ success: false, error: 'Sync already in progress', retry_after_seconds: Math.ceil((STALE_SYNC_THRESHOLD_MS - staleDuration) / 1000) }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+    }
+
     // Update sync state to 'syncing'
     if (integrationScope === 'org') {
       await supabase
@@ -729,6 +768,7 @@ serve(async (req) => {
     }
 
     let meetingsSynced = 0
+    let meetingsSkipped = 0
     let totalMeetingsFound = 0
     const errors: Array<{ call_id: string; error: string }> = []
     let bulkSyncFastMode = false // Track if fast mode was used for bulk sync
@@ -748,7 +788,8 @@ serve(async (req) => {
           webhook_payload,
           skip_thumbnails ?? false, // skipThumbnails
           false, // markAsHistorical
-          false // skipTranscriptFetch - process transcripts immediately for webhooks
+          false, // skipTranscriptFetch - process transcripts immediately for webhooks
+          true // isWebhookSync - always process webhooks
         )
 
         if (result.success) {
@@ -769,7 +810,8 @@ serve(async (req) => {
           call_id,
           skip_thumbnails ?? false, // skipThumbnails
           false, // markAsHistorical
-          false // skipTranscriptFetch - process transcripts immediately
+          false, // skipTranscriptFetch - process transcripts immediately
+          true // isWebhookSync - always process webhooks
         )
 
         if (result.success) {
@@ -786,19 +828,48 @@ serve(async (req) => {
       let apiStartDate = start_date
       let apiEndDate = end_date
       let syncLimit = limit
-      
+
       // For onboarding syncs, set specific behaviors
       const isOnboardingFast = sync_type === 'onboarding_fast'
       const isOnboardingBackground = sync_type === 'onboarding_background'
       const markAsHistorical = isOnboardingFast || isOnboardingBackground || body.is_onboarding
+
+      // Determine if we should allow re-syncing existing meetings
+      // - Incremental: false (only fetch new meetings, skip existing)
+      // - Date-range syncs: true (user explicitly requested that period, may want updates)
+      const allowResync = sync_type !== 'incremental'
+      console.log(`🔄 Sync mode: ${sync_type}, allowResync: ${allowResync}`)
 
       // Default date ranges based on sync type
       if (!apiStartDate) {
         const now = new Date()
         switch (sync_type) {
           case 'incremental':
-            // Last 24 hours for incremental sync
-            apiStartDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+            // SMART INCREMENTAL: Fetch only meetings newer than our most recent synced meeting
+            // This avoids fetching and processing meetings we already have
+            if (orgId) {
+              const { data: mostRecentMeeting } = await supabase
+                .from('meetings')
+                .select('meeting_start, title')
+                .eq('org_id', orgId)
+                .order('meeting_start', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+              if (mostRecentMeeting) {
+                // Start from the most recent meeting we have (add 1 second to avoid duplicate)
+                const mostRecentDate = new Date(mostRecentMeeting.meeting_start)
+                apiStartDate = new Date(mostRecentDate.getTime() + 1000).toISOString()
+                console.log(`📅 Incremental sync: fetching meetings after ${apiStartDate} (most recent: ${mostRecentMeeting.title})`)
+              } else {
+                // No meetings yet - fall back to last 24 hours
+                apiStartDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+                console.log(`📅 Incremental sync: no existing meetings, fetching last 24 hours`)
+              }
+            } else {
+              // No org context - fall back to last 24 hours
+              apiStartDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+            }
             apiEndDate = now.toISOString()
             break
           case 'all_time':
@@ -855,14 +926,29 @@ serve(async (req) => {
       // Fast mode is auto-enabled when:
       // - Processing more than 10 meetings AND
       // - Not a limited/onboarding sync (which should be quick by design)
+      // - OR elapsed time approaches edge function timeout (safety guard)
       const BULK_THRESHOLD = 10
       let useFastMode = false
       let fastModeSkipThumbnails = skip_thumbnails ?? false
       let fastModeSkipTranscripts = false
 
       // Track how many meetings have been fully processed (with thumbnails + transcripts)
-      const FULL_PROCESSING_LIMIT = 9
+      // For limited syncs, process ALL meetings fully (user explicitly chose a small batch)
+      // For open-ended syncs, cap at 9 to leave room for background processing
+      const FULL_PROCESSING_LIMIT = isLimitedSync ? 999 : 9
       let meetingsFullyProcessed = 0
+
+      // Elapsed time guard: switch to fast mode when approaching edge function timeout
+      // Supabase edge functions timeout at ~60s CPU (150s wall clock)
+      // For limited syncs (explicit limit or small count), we can use a higher threshold
+      // since we know the total scope and can afford to use more of the wall clock time
+      const syncStartTime = Date.now()
+      // Elapsed time guard threshold:
+      // - Limited syncs get more headroom (90s) since scope is bounded
+      // - Open-ended syncs switch to fast mode earlier (40s) to avoid timeout
+      // Note: Edge function wall clock timeout is ~150s, so we need buffer
+      const TIMEOUT_SAFETY_MS = isLimitedSync ? 90_000 : 40_000
+      console.log(`📊 Sync config: isLimitedSync=${isLimitedSync}, syncLimit=${syncLimit}, limit=${limit}, apiLimit=${apiLimit}, TIMEOUT_SAFETY_MS=${TIMEOUT_SAFETY_MS}ms, FULL_PROCESSING_LIMIT=${FULL_PROCESSING_LIMIT}`)
 
       while (hasMore && pageCount < maxPages) {
         pageCount++
@@ -874,13 +960,20 @@ serve(async (req) => {
         }, supabase)
 
         let calls = response.items
+
+        // Enforce limit on items if API returned more than requested
+        if (isLimitedSync && apiLimit && calls.length > apiLimit) {
+          console.log(`📊 API returned ${calls.length} items but limit is ${apiLimit}, truncating`)
+          calls = calls.slice(0, apiLimit)
+        }
+
         totalMeetingsFound += calls.length
 
         // Sort by newest first (recording_start_time or created_at descending)
         // This ensures the most recent meetings get priority processing
         calls = calls.sort((a: any, b: any) => {
-          const dateA = new Date(a.recording_start_time || a.created_at || 0).getTime()
-          const dateB = new Date(b.recording_start_time || b.created_at || 0).getTime()
+          const dateA = new Date(a.start_time || a.recording_start_time || a.created_at || 0).getTime()
+          const dateB = new Date(b.start_time || b.recording_start_time || b.created_at || 0).getTime()
           return dateB - dateA // Descending (newest first)
         })
 
@@ -898,10 +991,20 @@ serve(async (req) => {
             // Pass markAsHistorical flag for onboarding syncs
             if (!effectiveUserIdForOwnership) throw new Error('Cannot resolve user context for sync')
 
+            // Elapsed time guard: auto-switch to fast mode when approaching timeout
+            const elapsedMs = Date.now() - syncStartTime
+            console.log(`⏱️  Meeting ${meetingsFullyProcessed + 1}: elapsed=${Math.round(elapsedMs / 1000)}s, useFastMode=${useFastMode}, threshold=${TIMEOUT_SAFETY_MS / 1000}s`)
+            if (!useFastMode && elapsedMs > TIMEOUT_SAFETY_MS) {
+              useFastMode = true
+              bulkSyncFastMode = true
+              console.log(`⏱️  TIMEOUT GUARD: Elapsed ${Math.round(elapsedMs / 1000)}s > ${TIMEOUT_SAFETY_MS / 1000}s, switching to fast mode for remaining meetings`)
+            }
+
             // Determine if this meeting should be fully processed
             // First 9 meetings get full processing (thumbnails + transcripts)
             // After that, use fast mode for bulk syncs
-            const shouldProcessFully = meetingsFullyProcessed < FULL_PROCESSING_LIMIT
+            // Also skip full processing if we're running low on time
+            const shouldProcessFully = meetingsFullyProcessed < FULL_PROCESSING_LIMIT && !useFastMode
             const skipThumbsForThis = shouldProcessFully ? false : (useFastMode ? true : fastModeSkipThumbnails)
             const skipTranscriptsForThis = shouldProcessFully ? false : (useFastMode ? true : fastModeSkipTranscripts)
 
@@ -917,16 +1020,27 @@ serve(async (req) => {
               call,
               skipThumbsForThis,
               markAsHistorical,
-              skipTranscriptsForThis
+              skipTranscriptsForThis,
+              allowResync // Allow re-sync for date-range syncs, skip for incremental
             )
 
             if (result.success) {
-              meetingsSynced++
-              if (shouldProcessFully) {
-                meetingsFullyProcessed++
+              // Check if it was actually synced or just skipped
+              if (result.error && result.error.includes('already synced')) {
+                meetingsSkipped++
+              } else {
+                meetingsSynced++
+                if (shouldProcessFully) {
+                  meetingsFullyProcessed++
+                }
               }
             } else {
-              errors.push({ call_id: String(call.recording_id || call.id), error: result.error || 'Unknown error' })
+              // Only add to errors if it's a real error (not just missing recording_id)
+              if (!result.error || !result.error.includes('Missing recording_id')) {
+                errors.push({ call_id: String(call.recording_id || call.id), error: result.error || 'Unknown error' })
+              } else {
+                meetingsSkipped++
+              }
             }
           } catch (error) {
             errors.push({
@@ -971,7 +1085,8 @@ serve(async (req) => {
                 call,
                 fastModeSkipThumbnails,
                 markAsHistorical,
-                fastModeSkipTranscripts
+                fastModeSkipTranscripts,
+                allowResync // Use same allowResync logic for fallback retries
               )
               if (result.success) meetingsSynced++
             } catch (error) {
@@ -1127,32 +1242,41 @@ serve(async (req) => {
       }
     }
 
-    // BULK SYNC: Trigger background transcript processing if fast mode was used
+    // BULK SYNC: Trigger repeated background transcript processing if fast mode was used.
+    // The retry processor runs jobs in parallel (concurrency=5) and each invocation
+    // processes one batch. We trigger it multiple times with staggered delays so the
+    // queue drains progressively instead of sitting idle after a single fire-and-forget.
     if (bulkSyncFastMode && meetingsSynced > 0) {
-      console.log(`📋 Triggering background transcript processor for ${meetingsSynced} queued meetings`)
-      try {
-        // Fire-and-forget: Don't await to avoid blocking the sync response
-        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-transcript-retry`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            batch_size: 10, // Process 10 meetings at a time
-          }),
-        }).then(response => {
-          if (response.ok) {
-            console.log(`✅ Background transcript processor triggered successfully`)
-          } else {
-            console.warn(`⚠️  Background transcript processor returned status ${response.status}`)
-          }
-        }).catch(err => {
-          console.error(`⚠️  Failed to trigger background transcript processor:`, err)
-        })
-      } catch (triggerError) {
-        // Non-fatal - cron job will pick up the queue anyway
-        console.error(`⚠️  Error triggering background transcript processor:`, triggerError)
+      const retryUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-transcript-retry`
+      const retryHeaders = {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        'Content-Type': 'application/json',
+      }
+      const retryBody = JSON.stringify({ batch_size: 50, concurrency: 5 })
+
+      // Calculate how many rounds we need (each round processes up to 50 jobs)
+      const rounds = Math.min(Math.ceil(meetingsSynced / 50), 6) // Cap at 6 rounds
+      console.log(`📋 Scheduling ${rounds} background transcript processor rounds for ${meetingsSynced} queued meetings`)
+
+      // Fire first round immediately, then stagger subsequent rounds
+      // Each round waits for jobs whose next_retry_at has passed, so spacing
+      // them 60s apart gives Fathom time to process recordings.
+      for (let round = 0; round < rounds; round++) {
+        const delayMs = round * 60_000 // 0s, 60s, 120s, 180s, ...
+        setTimeout(() => {
+          fetch(retryUrl, { method: 'POST', headers: retryHeaders, body: retryBody })
+            .then(response => {
+              if (response.ok) {
+                console.log(`✅ Background transcript processor round ${round + 1}/${rounds} triggered successfully`)
+              } else {
+                console.warn(`⚠️  Background transcript processor round ${round + 1} returned status ${response.status}`)
+              }
+            })
+            .catch(err => {
+              console.error(`⚠️  Failed to trigger background transcript processor round ${round + 1}:`, err)
+            })
+        }, delayMs)
       }
     }
 
@@ -1161,6 +1285,7 @@ serve(async (req) => {
         success: true,
         sync_type,
         meetings_synced: meetingsSynced,
+        meetings_skipped: meetingsSkipped,
         total_meetings_found: totalMeetingsFound,
         errors: errors.length > 0 ? errors : undefined,
         // Fast mode indicator - transcripts will be processed in background
@@ -1210,6 +1335,7 @@ serve(async (req) => {
           .update({
             sync_status: 'error',
             last_sync_error: message,
+            last_sync_completed_at: new Date().toISOString(),
           })
           .eq('user_id', syncStateUserId)
       }
@@ -1382,10 +1508,38 @@ async function syncSingleCall(
   call: any, // Directly receive the call object from bulk API
   skipThumbnails: boolean = false,
   markAsHistorical: boolean = false, // Mark as historical import (doesn't count toward new meeting limit)
-  skipTranscriptFetch: boolean = false // Skip transcript/summary fetch for bulk syncs
+  skipTranscriptFetch: boolean = false, // Skip transcript/summary fetch for bulk syncs
+  allowResync: boolean = false // Flag to allow re-syncing existing meetings (for date-range syncs or webhooks)
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Call object already contains all necessary data from bulk API
+
+    // EARLY EXIT: Skip meetings without valid recording ID
+    const recordingIdRaw = call?.recording_id ?? call?.id ?? call?.recordingId ?? null
+    if (!recordingIdRaw) {
+      console.warn(`⚠️  Skipping meeting without recording ID: ${call.title || 'Unknown'}`)
+      return { success: false, error: 'Missing recording_id - cannot uniquely identify meeting' }
+    }
+
+    // EARLY EXIT: Skip already-synced meetings (unless allowResync is true)
+    // allowResync is true for:
+    // - Webhook syncs (always get latest data)
+    // - Date-range syncs (user explicitly requested that period, may want updates)
+    // allowResync is false for:
+    // - Incremental syncs (only new meetings, skip existing)
+    if (!allowResync && orgId) {
+      const { data: existingMeeting } = await supabase
+        .from('meetings')
+        .select('id, fathom_recording_id, last_synced_at')
+        .eq('org_id', orgId)
+        .eq('fathom_recording_id', String(recordingIdRaw))
+        .maybeSingle()
+
+      if (existingMeeting) {
+        console.log(`⏭️  Skipping already-synced meeting: ${call.title || recordingIdRaw} (last synced: ${existingMeeting.last_synced_at})`)
+        return { success: true, error: 'Meeting already synced' }
+      }
+    }
 
     // Use the owner resolution service to resolve meeting owner
     const ownerResult = await resolveMeetingOwner(
@@ -1399,24 +1553,34 @@ async function syncSingleCall(
     const ownerResolved = ownerResult.ownerResolved
     const ownerEmailCandidate = ownerResult.ownerEmail
 
-    // Calculate duration in minutes from recording start/end times
-    const startTime = new Date(call.recording_start_time || call.scheduled_start_time)
-    const endTime = new Date(call.recording_end_time || call.scheduled_end_time)
-    const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60))
+    // Calculate duration — prefer Fathom's native duration field (seconds), fallback to time diff
+    let durationMinutes = 0
+    if (call.duration && typeof call.duration === 'number' && call.duration > 0) {
+      durationMinutes = Math.round(call.duration / 60)
+    } else {
+      const startTime = new Date(call.start_time || call.recording_start_time || call.scheduled_start_time)
+      const endTime = new Date(call.end_time || call.recording_end_time || call.scheduled_end_time)
+      const diff = endTime.getTime() - startTime.getTime()
+      if (!isNaN(diff) && diff > 0) {
+        durationMinutes = Math.round(diff / (1000 * 60))
+      }
+    }
 
     // Compute derived fields prior to DB write
     const embedUrl = buildEmbedUrl(call.share_url, call.recording_id)
 
-    // Check for existing meeting with valid thumbnail (to preserve it during re-sync)
+    // Check for existing meeting to preserve completed processing statuses during re-sync
     const recordingIdForLookup = call?.recording_id ?? call?.id ?? call?.recordingId ?? null
     let existingThumbnailUrl: string | null = null
     let existingThumbnailStatus: string | null = null
+    let existingTranscriptStatus: string | null = null
+    let existingSummaryStatus: string | null = null
 
     if (recordingIdForLookup) {
       try {
         const lookupQuery = orgId
-          ? supabase.from('meetings').select('thumbnail_url, thumbnail_status').eq('org_id', orgId).eq('fathom_recording_id', String(recordingIdForLookup)).maybeSingle()
-          : supabase.from('meetings').select('thumbnail_url, thumbnail_status').eq('fathom_recording_id', String(recordingIdForLookup)).maybeSingle()
+          ? supabase.from('meetings').select('thumbnail_url, thumbnail_status, transcript_status, summary_status').eq('org_id', orgId).eq('fathom_recording_id', String(recordingIdForLookup)).maybeSingle()
+          : supabase.from('meetings').select('thumbnail_url, thumbnail_status, transcript_status, summary_status').eq('fathom_recording_id', String(recordingIdForLookup)).maybeSingle()
 
         const { data: existingMeeting } = await lookupQuery
 
@@ -1424,6 +1588,12 @@ async function syncSingleCall(
           existingThumbnailUrl = existingMeeting.thumbnail_url
           existingThumbnailStatus = existingMeeting.thumbnail_status
           console.log(`🖼️  Preserving existing thumbnail for recording ${recordingIdForLookup}: ${existingThumbnailUrl.substring(0, 60)}...`)
+        }
+        if (existingMeeting?.transcript_status === 'complete') {
+          existingTranscriptStatus = 'complete'
+        }
+        if (existingMeeting?.summary_status === 'complete') {
+          existingSummaryStatus = 'complete'
         }
       } catch (lookupErr) {
         // Non-fatal - continue with normal thumbnail generation
@@ -1458,9 +1628,8 @@ async function syncSingleCall(
       thumbnailUrl = `https://dummyimage.com/640x360/1a1a1a/10b981&text=${encodeURIComponent(firstLetter)}`
       console.log(`📝 Using placeholder thumbnail for meeting ${call.recording_id}`)
     }
-    // Resolve a stable recording identifier (used for DB uniqueness / upserts).
-    // Fathom payloads can vary; prefer recording_id, otherwise fall back to id.
-    const recordingIdRaw = call?.recording_id ?? call?.id ?? call?.recordingId ?? null
+    // NOTE: recordingIdRaw already resolved at top of function (line ~1435)
+    // Using the same value for DB uniqueness / upserts.
 
     // Use summary from bulk API response only (don't fetch separately)
     // Summary and transcript should be fetched on-demand via separate endpoint
@@ -1476,13 +1645,18 @@ async function syncSingleCall(
         ? 'pending'  // Queued for background thumbnail generation
         : (thumbnailUrl && !thumbnailUrl.includes('dummyimage.com') ? 'complete' : 'pending')
 
-    const initialTranscriptStatus = skipTranscriptFetch
-      ? 'pending'  // Queued for background transcript fetch
-      : 'processing'  // Will be updated after transcript fetch
+    // Preserve existing 'complete' status during re-sync to avoid losing processed transcripts
+    const initialTranscriptStatus = existingTranscriptStatus === 'complete'
+      ? 'complete'  // Preserve existing complete status
+      : skipTranscriptFetch
+        ? 'pending'  // Queued for background transcript fetch
+        : 'processing'  // Will be updated after transcript fetch
 
-    const initialSummaryStatus = skipTranscriptFetch
-      ? 'pending'  // Queued for background summary generation
-      : (summaryText ? 'complete' : 'processing')  // Will be updated after AI analysis
+    const initialSummaryStatus = existingSummaryStatus === 'complete'
+      ? 'complete'  // Preserve existing complete status
+      : skipTranscriptFetch
+        ? 'pending'  // Queued for background summary generation
+        : (summaryText ? 'complete' : 'processing')  // Will be updated after AI analysis
 
     // Map to meetings table schema using actual Fathom API fields
     const meetingData: Record<string, any> = {
@@ -1491,8 +1665,8 @@ async function syncSingleCall(
       fathom_recording_id: recordingIdRaw ? String(recordingIdRaw) : null, // Use recording_id as unique identifier
       fathom_user_id: integration.fathom_user_id,
       title: call.title || call.meeting_title,
-      meeting_start: call.recording_start_time || call.scheduled_start_time,
-      meeting_end: call.recording_end_time || call.scheduled_end_time,
+      meeting_start: call.start_time || call.recording_start_time || call.scheduled_start_time,
+      meeting_end: call.end_time || call.recording_end_time || call.scheduled_end_time,
       duration_minutes: durationMinutes,
       owner_email: ownerEmailCandidate || call.recorded_by?.email || call.host_email || null,
       team_name: call.recorded_by?.team || null,
@@ -1537,8 +1711,9 @@ async function syncSingleCall(
     const { meeting, error: meetingError } = await upsertMeeting(supabase, meetingData, orgId)
 
     if (meetingError) {
-      // Error message is already parsed by upsertMeeting for better user feedback
-      throw new Error(`Failed to upsert meeting: ${meetingError.message}`)
+      // Return error instead of throwing - prevents single meeting failure from killing entire sync
+      console.error(`❌ Failed to upsert meeting ${recordingIdRaw}: ${meetingError.message}`)
+      return { success: false, error: `Failed to upsert meeting: ${meetingError.message}` }
     }
 
     // Seed default call types for org on first sync (if org exists and has no call types)
@@ -1624,7 +1799,10 @@ async function syncSingleCall(
     // TRANSCRIPT/SUMMARY FETCHING
     // For bulk syncs (skipTranscriptFetch=true), skip immediate fetching to avoid timeout.
     // The meeting will be processed by the background fathom-transcript-retry job.
-    if (skipTranscriptFetch) {
+    // Skip entirely if meeting already has complete transcript (preserve during re-sync)
+    if (existingTranscriptStatus === 'complete' && skipTranscriptFetch) {
+      console.log(`✅ Meeting ${meeting.id} already has complete transcript - skipping re-processing`)
+    } else if (skipTranscriptFetch) {
       console.log(`⏭️  Skipping transcript fetch for meeting ${meeting.id} (bulk sync mode) - will process in background`)
 
       // Queue for background processing
@@ -1725,14 +1903,28 @@ async function syncSingleCall(
       }
     }
 
-    // Process participants (use calendar_invitees from actual API)
+    // Process participants: prefer calendar_invitees, fallback to participants
+    // calendar_invitees has is_external flag from Fathom's calendar integration
+    // participants has who actually joined the call (always available)
     // IMPORTANT: Separate handling for internal vs external participants to avoid duplication
     // - Internal users: Create meeting_attendees entry only (no contact creation)
     // - External users: Create/update contacts + meeting_contacts junction (no meeting_attendees)
     const externalContactIds: string[] = []
 
-    if (call.calendar_invitees && call.calendar_invitees.length > 0) {
-      for (const invitee of call.calendar_invitees) {
+    // Determine which participant list to use
+    const inviteeList = (call.calendar_invitees && call.calendar_invitees.length > 0)
+      ? call.calendar_invitees
+      : (call.participants && call.participants.length > 0)
+        ? call.participants.map((p: any) => ({
+            ...p,
+            // participants don't have is_external — infer: non-host = external
+            is_external: p.is_external ?? !p.is_host,
+          }))
+        : [];
+
+    if (inviteeList.length > 0) {
+      console.log(`[fathom-sync] Processing ${inviteeList.length} participants (source: ${call.calendar_invitees?.length ? 'calendar_invitees' : 'participants'})`)
+      for (const invitee of inviteeList) {
         // Handle internal participants (team members) - store in meeting_attendees only
         if (!invitee.is_external) {
           // Check if already exists to avoid duplicates
@@ -1759,6 +1951,29 @@ async function syncSingleCall(
           continue // Skip to next participant
         }
 
+        // Handle external participants without email — still store in meeting_attendees
+        if (invitee.is_external && !invitee.email) {
+          const { data: existingNameAttendee } = await supabase
+            .from('meeting_attendees')
+            .select('id')
+            .eq('meeting_id', meeting.id)
+            .eq('name', invitee.name)
+            .maybeSingle()
+
+          if (!existingNameAttendee) {
+            await supabase
+              .from('meeting_attendees')
+              .insert({
+                meeting_id: meeting.id,
+                name: invitee.name,
+                email: null,
+                is_external: true,
+                role: 'attendee',
+              })
+          }
+          continue
+        }
+
         // Handle external participants (customers/prospects) - create contacts + meeting_contacts
         if (invitee.email && invitee.is_external) {
           // 1. Match or create company from email domain
@@ -1774,7 +1989,7 @@ async function syncSingleCall(
             .single()
 
           // Get the meeting date for last_interaction_at
-          const meetingDate = call.recording_start_time || call.scheduled_start_time
+          const meetingDate = call.start_time || call.recording_start_time || call.scheduled_start_time
 
           if (existingContact) {
             // Build update object - always update last_interaction_at if meeting is newer
@@ -1971,7 +2186,7 @@ async function syncSingleCall(
 
     // Log successful meeting sync
     const meetingTitle = call.title || call.meeting_title || 'Meeting'
-    const meetingDate = call.recording_start_time || call.scheduled_start_time
+    const meetingDate = call.start_time || call.recording_start_time || call.scheduled_start_time
     const formattedDate = meetingDate ? new Date(meetingDate).toLocaleDateString() : ''
     await logSyncOperation(supabase, {
       orgId,

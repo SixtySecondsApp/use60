@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { analyzeTranscriptWithClaude, deduplicateActionItems } from '../fathom-sync/aiAnalysis.ts'
+import { logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -58,12 +59,24 @@ serve(async (req) => {
       )
     }
 
-    // Initialize Supabase client with RLS using the caller's token
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    )
+    // Detect if caller is using the service role key (e.g., from orchestrator)
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const token = authHeader.replace('Bearer ', '')
+    const isServiceRole = !!serviceRoleKey && token === serviceRoleKey
+
+    // Use service-role client when called from orchestrator (bypasses RLS properly)
+    // Otherwise use anon-key client with user auth (respects RLS)
+    const supabaseClient = isServiceRole
+      ? createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          serviceRoleKey,
+          { auth: { autoRefreshToken: false, persistSession: false } }
+        )
+      : createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+          { global: { headers: { Authorization: authHeader } } }
+        )
 
     // Load meeting with minimal fields we need (including owner_user_id for extraction rules)
     const { data: meeting, error: meetingErr } = await supabaseClient
@@ -100,6 +113,25 @@ serve(async (req) => {
       )
     }
 
+    // Get org for credit check
+    const { data: membership } = await supabaseClient
+      .from('organization_memberships')
+      .select('org_id')
+      .eq('user_id', meeting.owner_user_id || '')
+      .limit(1)
+      .maybeSingle()
+    const orgId = membership?.org_id ?? null
+
+    if (orgId) {
+      const balanceCheck = await checkCreditBalance(supabaseClient, orgId)
+      if (!balanceCheck.allowed) {
+        return new Response(
+          JSON.stringify({ error: 'Insufficient credits. Please top up to continue.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     // Analyze transcript for action items using existing analyzer (with extraction rules - Phase 6.3)
     // Use service role client for extraction rules lookup (bypasses RLS)
     const supabaseService = createClient(
@@ -124,6 +156,15 @@ serve(async (req) => {
       supabaseService,
       meeting2?.owner_user_id || meeting.owner_user_id
     )
+
+    // Log AI cost event for transcript analysis
+    const ownerUserId = meeting2?.owner_user_id || meeting.owner_user_id
+    if (ownerUserId && orgId) {
+      await logAICostEvent(
+        supabaseService, ownerUserId, orgId, 'anthropic', 'claude-haiku-4-5-20251001',
+        0, 0, 'task_execution'
+      )
+    }
 
     // Optional: also consider any existing Fathom action items to deduplicate
     // We don't have Fathom payload here, so dedupe against DB by title and timestamp

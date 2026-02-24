@@ -64,6 +64,8 @@ export interface AICostEvent {
   input_tokens: number;
   output_tokens: number;
   estimated_cost: number;
+  provider_cost_usd: number | null; // Actual provider cost in USD (null for historical rows)
+  credits_charged: number | null;   // Credits deducted from user's balance (null for historical rows)
   metadata: Record<string, unknown> | null;
   created_at: string;
 }
@@ -79,6 +81,9 @@ export interface ModelUsageBreakdown {
   output_tokens: number;
   estimated_cost: number;
   call_count: number;
+  total_provider_cost_usd: number | null; // Sum of provider_cost_usd; null if all rows are historical
+  total_credits_charged: number | null;   // Sum of credits_charged; null if all rows are historical
+  has_estimated_rows: boolean;            // True if any rows in this group have NULL provider_cost_usd
 }
 
 export interface OrganizationCostAnalysis {
@@ -121,10 +126,18 @@ export interface CostAnalysisSummary {
   average_margin_percent: number;
   average_cost_per_meeting: number;
   average_cost_per_user: number;
-  
+
+  // Credit-based margin fields (from provider_cost_usd / credits_charged columns)
+  total_provider_cost_usd: number;   // Sum of provider_cost_usd (actual cost reported by APIs)
+  total_credits_charged: number;     // Sum of credits deducted from users
+  credits_revenue_gbp: number;       // total_credits_charged * £0.396 (Insight pack rate)
+  provider_cost_gbp: number;         // total_provider_cost_usd converted to GBP at ~0.79
+  credits_margin_pct: number | null; // ((credits_revenue - provider_cost_gbp) / credits_revenue) * 100
+  has_estimated_rows: boolean;       // True if any rows are historical (provider_cost_usd IS NULL)
+
   // Model breakdown
   model_breakdown: ModelUsageBreakdown[];
-  
+
   // Tier breakdown
   tier_breakdown: TierCostAnalysis[];
 }

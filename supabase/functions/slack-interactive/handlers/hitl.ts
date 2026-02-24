@@ -2,6 +2,9 @@
  * HITL (Human-in-the-Loop) Slack Interactive Handlers
  *
  * Handles button clicks and interactions for sequence HITL requests.
+ * SS-001: Also syncs Slack interactions to Action Centre status.
+ *
+ * @see docs/project-requirements/PRD_ACTION_CENTRE.md
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
@@ -93,6 +96,56 @@ async function getUserId(
   return data?.id || null;
 }
 
+/**
+ * SS-001: Sync Slack HITL interaction to Action Centre status.
+ * Finds matching Action Centre item by slack_message_ts and updates status.
+ */
+async function syncToActionCentre(
+  supabase: ReturnType<typeof createClient>,
+  slackChannelId: string | undefined,
+  slackMessageTs: string | undefined,
+  status: 'approved' | 'dismissed',
+  slackUserId: string
+): Promise<void> {
+  if (!slackChannelId || !slackMessageTs) {
+    return;
+  }
+
+  try {
+    // Find matching Action Centre item
+    const { data: item } = await supabase
+      .from('action_centre_items')
+      .select('id, status')
+      .eq('slack_channel_id', slackChannelId)
+      .eq('slack_message_ts', slackMessageTs)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (!item) {
+      console.log('[HITL] No matching Action Centre item found for Slack message');
+      return;
+    }
+
+    // Update status
+    const updateData = status === 'approved'
+      ? { status: 'approved', approved_at: new Date().toISOString() }
+      : { status: 'dismissed', dismissed_at: new Date().toISOString() };
+
+    const { error } = await supabase
+      .from('action_centre_items')
+      .update(updateData)
+      .eq('id', item.id);
+
+    if (error) {
+      console.error('[HITL] Failed to sync to Action Centre:', error);
+    } else {
+      console.log(`[HITL] Synced to Action Centre: item ${item.id} -> ${status}`);
+    }
+  } catch (err) {
+    console.error('[HITL] Error syncing to Action Centre:', err);
+  }
+}
+
 // =============================================================================
 // Handler Functions
 // =============================================================================
@@ -128,6 +181,15 @@ export async function handleHITLApprove(
     if (!data?.success) {
       throw new Error(data?.error || 'Failed to submit response');
     }
+
+    // SS-001: Sync to Action Centre
+    await syncToActionCentre(
+      supabase,
+      payload.channel?.id,
+      payload.message?.ts,
+      'approved',
+      payload.user.id
+    );
 
     // Return updated message
     return {
@@ -179,6 +241,15 @@ export async function handleHITLReject(
     if (!data?.success) {
       throw new Error(data?.error || 'Failed to submit response');
     }
+
+    // SS-001: Sync to Action Centre
+    await syncToActionCentre(
+      supabase,
+      payload.channel?.id,
+      payload.message?.ts,
+      'dismissed',
+      payload.user.id
+    );
 
     // Return updated message
     return {

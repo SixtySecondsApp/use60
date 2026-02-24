@@ -1,6 +1,28 @@
+---
+requires-profile: true
+---
+
 # /build-feature — Generate a PRD, create prd.json, and sync to AI Dev Hub
 
 I want to build: $ARGUMENTS
+
+---
+
+## STEP 0: Select Model Profile
+
+Before proceeding, ask the user to select which model profile to use:
+- **Economy** — Fastest, lowest cost
+- **Balanced** — Good balance of speed & accuracy
+- **Thorough** — Most accurate, highest cost
+
+Use the `AskUserQuestion` tool with these options.
+
+**Note**: Based on selection, appropriate models will be assigned:
+- Economy: Fast iteration, familiar patterns
+- Balanced: Regular PRD development
+- Thorough: Complex features, strategic decisions
+
+---
 
 Act as an expert product consultant helping define a feature. Ask me meaningful questions, one by one, until you have enough information to create a complete PRD. Then execute the full workflow.
 
@@ -17,6 +39,27 @@ Act as an expert product consultant helping define a feature. Ask me meaningful 
 
 ---
 
+## HOOKS (Claude-level configuration)
+
+This command is hook-aware. Hooks are configured at the Claude settings level (not in a repo file).
+
+**Preflight behavior:**
+- At command start, check if hook configuration is available.
+- If hooks are unavailable or fail to load, log a warning and continue.
+- Hook failures are **never blocking** — the command always proceeds.
+
+**Build hook events emitted:**
+| Event | Payload | When |
+|-------|---------|------|
+| `build.onStart` | `{ timestamp }` | Command begins |
+| `build.onQuestionsComplete` | `{ runSlug, storyCount }` | After questions answered |
+| `build.onPrdCreated` | `{ runSlug, prdPath, storyCount }` | After PRD + prd.json written |
+| `build.onDevHubSynced` | `{ runSlug, createdTaskCount }` | After AI Dev Hub tasks created |
+| `build.onComplete` | `{ runSlug, storyCount }` | Command finishes successfully |
+| `build.onFailed` | `{ error }` | Command fails |
+
+---
+
 ## Questions to consider asking (pick the most relevant)
 
 - What problem does this feature solve?
@@ -30,6 +73,12 @@ Act as an expert product consultant helping define a feature. Ask me meaningful 
 ---
 
 ## EXECUTION (after questions answered)
+
+### Step 0: Hook preflight
+
+1. Emit `build.onStart` event with timestamp.
+2. If hook system is unavailable, log: `⚠️ Hooks unavailable — continuing without hook events.`
+3. Continue to Step 1 regardless of hook status.
 
 ### Step 1: Archive previous run (if exists)
 
@@ -104,7 +153,7 @@ Write to repo-root `prd.json`:
   "runSlug": "<runSlug>",
   "branchName": "feature/<runSlug>",
   "description": "<Brief description>",
-  "aiDevHubProjectId": "cae03d2d-74ac-49e6-9da2-aae2440e0c00",
+  "aiDevHubProjectId": null,
   "createdAt": "<ISO timestamp>",
   "userStories": [
     {
@@ -140,21 +189,42 @@ Started: <timestamp>
 ---
 ```
 
-### Step 6: Create AI Dev Hub tasks
+### Step 6: Select Dev Hub Project + Create Tasks
+
+#### Step 6a: Select Dev Hub Project
+
+If `prd.json.aiDevHubProjectId` is `null`:
+1. Check if AI Dev Hub MCP tools are available (call `search_projects` with keyword from feature name or "use60")
+2. If MCP unavailable, log `⚠️ AI Dev Hub MCP unavailable — skipping Dev Hub sync.` and continue to Step 7
+3. Present discovered projects to user as numbered list using `AskUserQuestion`:
+   - `1. <Project Name> (id: <id>)`
+   - `2. <Project Name> (id: <id>)`
+   - `[Skip] No Dev Hub sync`
+4. Store selected project ID in `prd.json.aiDevHubProjectId` (or leave `null` if skipped)
+
+#### Step 6b: Create Tasks
+
+**Skip entirely if `aiDevHubProjectId` is `null`.**
 
 For each story in `prd.json.userStories`:
 
 1. Call AI Dev Hub MCP to create a task:
-   - Project ID: `cae03d2d-74ac-49e6-9da2-aae2440e0c00`
-   - Title: `[<runSlug>] US-XXX: <Story Title>`
-   - Description: Story description + acceptance criteria
-   - Status: `todo`
+   - Project ID: from `prd.json.aiDevHubProjectId`
+   - Title: `[<runSlug>] <storyId>: <Story Title>`
+   - Description: Story description + acceptance criteria formatted as checklist
+   - Type: `"feature"`
+   - Status: `"todo"`
+   - Priority: mapped from story priority (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
 
 2. Store the returned `taskId` into `prd.json.userStories[i].aiDevHubTaskId`
 
-3. Write updated `prd.json` back to disk.
+3. If individual task creation fails, set `aiDevHubTaskId: null`, log warning, and continue (never block)
+
+4. Write updated `prd.json` back to disk after all tasks processed.
 
 ### Step 7: Output summary
+
+Emit `build.onComplete` event with `{ runSlug, storyCount }`.
 
 Print:
 ```
@@ -162,10 +232,13 @@ Print:
 
 📄 PRD: tasks/prd-<runSlug>.md
 📋 Task list: prd.json (<N> stories)
-🎫 AI Dev Hub: <N> tasks created in project "Use60 - go live"
+🎫 Dev Hub: <N tasks created in "<project name>" | skipped (no project selected) | unavailable>
+🔗 Hooks: <executed | unavailable>
 
 🚀 Next: Run `/continue-feature 10` to start implementing stories.
 ```
+
+If any step failed, emit `build.onFailed` event with `{ error }` instead.
 
 ---
 

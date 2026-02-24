@@ -1,0 +1,395 @@
+{
+  "project": {
+    "name": "Instantly Column Integration",
+    "template": null,
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind"
+    },
+    "createdAt": "2026-02-07T00:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "instantly-column-type",
+      "name": "Instantly Column Type & Wizard",
+      "status": "pending",
+      "description": "Add 'instantly' as a first-class column type with inline onboarding wizard (API key → campaign → field mapping → sequence mode)"
+    },
+    {
+      "id": "instantly-cell-rendering",
+      "name": "Cell Rendering & Actions",
+      "status": "pending",
+      "description": "Render Instantly column subtypes in OpsTableCell, handle push actions, engagement display"
+    },
+    {
+      "id": "instantly-sequence-authoring",
+      "name": "Sequence Authoring from Columns",
+      "status": "pending",
+      "description": "Author email sequence steps from table columns, auto-scaffold step columns"
+    },
+    {
+      "id": "instantly-summary-row",
+      "name": "Summary Row & Analytics",
+      "status": "pending",
+      "description": "Aggregate campaign analytics in a pinned summary row at table bottom"
+    },
+    {
+      "id": "instantly-cleanup",
+      "name": "Remove Top-Bar UI",
+      "status": "pending",
+      "description": "Remove all Instantly buttons, state, queries, and modals from OpsDetailPage top bar"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "INSCOL-001",
+      "feature": "instantly-column-type",
+      "title": "Add 'instantly' column type to AddColumnModal and opsTableService",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/components/ops/AddColumnModal.tsx", "src/lib/services/opsTableService.ts"],
+        "schema": []
+      },
+      "blocks": ["INSCOL-002", "INSCOL-003", "INSCOL-004", "INSCOL-005", "INSCOL-006", "INSCOL-007", "INSCOL-008", "INSCOL-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "Add 'instantly' to column_type union in opsTableService.ts",
+        "Add InstantlyColumnConfig interface with subtypes to opsTableService.ts",
+        "Add { value: 'instantly', label: 'Instantly Campaign' } to AddColumnModal column type list",
+        "When 'instantly' selected, render InstantlyColumnWizard component (stub for now)",
+        "Column created with column_type='instantly' and integration_config containing subtype"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/AddColumnModal.tsx",
+        "src/lib/services/opsTableService.ts",
+        "src/lib/types/instantly.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSCOL-002",
+      "feature": "instantly-column-type",
+      "title": "Build InstantlyColumnWizard — Step 1: Connection check + inline API key entry",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["INSCOL-001"],
+        "files": ["src/lib/hooks/useInstantlySync.ts"],
+        "schema": ["instantly_org_integrations"]
+      },
+      "blocks": ["INSCOL-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "New InstantlyColumnWizard.tsx component with multi-step wizard UI",
+        "Step 1 checks instantly_org_integrations via instantly-admin 'status' action",
+        "If not connected: show API key input with masked field + Connect button",
+        "On connect: call instantly-admin 'connect', validate key, show success/error",
+        "If already connected: auto-advance to Step 2",
+        "Loading states and error handling with toast feedback"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/InstantlyColumnWizard.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSCOL-003",
+      "feature": "instantly-column-type",
+      "title": "Build InstantlyColumnWizard — Step 2: Campaign selection or creation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["INSCOL-002"],
+        "files": ["src/components/ops/InstantlyColumnWizard.tsx"],
+        "schema": []
+      },
+      "blocks": ["INSCOL-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Campaign list fetched via instantly-admin 'list_campaigns' with search input",
+        "Each campaign shows name + status badge (Active/Draft/Paused/Completed)",
+        "Select existing campaign OR click 'Create New Campaign'",
+        "Create flow: campaign name input → call instantly-admin 'create_campaign' → select new campaign",
+        "Selected campaign stored in wizard state, advance to Step 3"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/InstantlyColumnWizard.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSCOL-004",
+      "feature": "instantly-column-type",
+      "title": "Build InstantlyColumnWizard — Step 3: Sequence mode + field mapping",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["INSCOL-003"],
+        "files": ["src/components/ops/InstantlyColumnWizard.tsx"],
+        "schema": []
+      },
+      "blocks": ["INSCOL-005", "INSCOL-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Three sequence mode cards: 'Use Existing', 'Map Variables', 'Author Steps'",
+        "Use Existing: no extra config, just shows campaign sequence info",
+        "Map Variables: dropdowns per custom_variable → source column picker",
+        "Author Steps: step count input, per-step subject+body column pickers, 'Auto-create columns' option",
+        "Field mapping section: auto-detect email/first_name/last_name/company_name columns, user adjustable",
+        "On complete: call instantly-admin 'link_campaign' with config, create column with integration_config"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/InstantlyColumnWizard.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSCOL-005",
+      "feature": "instantly-cell-rendering",
+      "title": "Render Instantly campaign_config column in OpsTableCell",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["INSCOL-004"],
+        "files": ["src/components/ops/OpsTableCell.tsx"],
+        "schema": []
+      },
+      "blocks": ["INSCOL-008"],
+      "parallelWith": ["INSCOL-006"],
+      "acceptance": [
+        "campaign_config subtype renders campaign name + status badge (Active/Paused/Draft)",
+        "Hover shows field mapping summary tooltip",
+        "Click opens EditInstantlySettingsModal for reconfiguration",
+        "Visual style consistent with Apollo/HubSpot property columns"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/OpsTableCell.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSCOL-006",
+      "feature": "instantly-cell-rendering",
+      "title": "Render Instantly push_action and engagement columns in OpsTableCell",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["INSCOL-004"],
+        "files": ["src/components/ops/OpsTableCell.tsx", "src/lib/hooks/useActionExecution.ts"],
+        "schema": []
+      },
+      "blocks": ["INSCOL-008"],
+      "parallelWith": ["INSCOL-005"],
+      "acceptance": [
+        "push_action subtype renders as button: 'Push' with Send icon, loading spinner during push",
+        "On click: call useInstantlyPush for single row with campaign_config field mapping",
+        "engagement_status renders as colored badge (Interested=green, Not Interested=red, etc.)",
+        "email_status renders as badge (Sent, Opened, Replied, Bounced)",
+        "reply_count and open_count render as plain numbers",
+        "last_contacted renders as relative date (e.g., '2 hours ago')",
+        "useActionExecution updated to handle 'push_to_instantly' action type"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/OpsTableCell.tsx",
+        "src/lib/hooks/useActionExecution.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSCOL-007",
+      "feature": "instantly-sequence-authoring",
+      "title": "Build sequence step column scaffolding and push-to-sequence flow",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["INSCOL-004"],
+        "files": ["src/lib/services/opsTableService.ts", "src/lib/hooks/useInstantlyPush.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "When 'Author Steps' mode selected in wizard with auto-scaffold, create columns: 'Step N Subject' (text) + 'Step N Body' (text) for each step",
+        "sequence_step subtype renders as editable text cell (same as regular text)",
+        "Push flow reads sequence_step columns, constructs sequences array for campaign creation/update",
+        "Extend push-to-instantly or create new edge function action to push sequence content",
+        "Preview: show first row's sequence steps before pushing"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/InstantlyColumnWizard.tsx",
+        "src/lib/services/opsTableService.ts",
+        "src/lib/hooks/useInstantlyPush.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSCOL-008",
+      "feature": "instantly-cell-rendering",
+      "title": "Add Instantly column header menu items and EditInstantlySettingsModal",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["INSCOL-005", "INSCOL-006"],
+        "files": ["src/components/ops/ColumnHeaderMenu.tsx"],
+        "schema": []
+      },
+      "blocks": ["INSCOL-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "ColumnHeaderMenu shows 'Edit Campaign Settings' for campaign_config columns",
+        "ColumnHeaderMenu shows 'Sync Engagement' for campaign_config columns → triggers useInstantlySync",
+        "ColumnHeaderMenu shows 'View Analytics' for campaign_config columns → opens InstantlyAnalyticsPanel",
+        "ColumnHeaderMenu shows 'View Sync History' for campaign_config columns → opens InstantlySyncHistory",
+        "EditInstantlySettingsModal allows changing: campaign, field mapping, sequence mode",
+        "Follows EditApolloSettingsModal pattern (modal with save/cancel)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/ColumnHeaderMenu.tsx",
+        "src/components/ops/EditInstantlySettingsModal.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSCOL-009",
+      "feature": "instantly-summary-row",
+      "title": "Add campaign analytics summary row to OpsTable",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["INSCOL-001"],
+        "files": ["src/components/ops/OpsTable.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["INSCOL-008"],
+      "acceptance": [
+        "Pinned row at bottom of table when table has an Instantly campaign_config column",
+        "Fetches aggregate stats via instantly-admin 'campaign_analytics' action",
+        "Campaign config cell shows campaign name + status",
+        "Engagement cells show totals (e.g., '23 replies', '156 opens')",
+        "Status cells show percentages (e.g., '45% Interested', '82% Opened')",
+        "Row styled distinctly (border-top, slightly different background)",
+        "Clickable to open full InstantlyAnalyticsPanel"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/OpsTable.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INSCOL-010",
+      "feature": "instantly-cleanup",
+      "title": "Remove Instantly top-bar UI from OpsDetailPage",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": {
+        "stories": ["INSCOL-008"],
+        "files": ["src/pages/OpsDetailPage.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Remove Instantly button group from top bar (lines ~1961-2021)",
+        "Remove state variables: showInstantlyPicker, showInstantlyPush, showInstantlySyncHistory, showInstantlyAnalytics",
+        "Remove Instantly queries: instantlyIntegration, instantlyCampaignLinks, activeInstantlyLink, isInstantlyConnected",
+        "Remove modal/sheet renderers at bottom of file (InstantlyCampaignPickerModal, InstantlyPushModal, InstantlySyncHistory, InstantlyAnalyticsPanel)",
+        "Remove related imports (Zap, Send icons, modal components, hooks, types)",
+        "Verify no runtime errors after removal"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 0,
+    "currentFeature": null,
+    "lastUpdated": "2026-02-07T00:00:00Z",
+    "parallelGroups": [
+      {
+        "stories": ["INSCOL-005", "INSCOL-006"],
+        "reason": "Independent cell renderers, no file overlap"
+      },
+      {
+        "stories": ["INSCOL-008", "INSCOL-009"],
+        "reason": "Column header menu and summary row are independent"
+      }
+    ],
+    "estimatedTotal": "3.5-4.5 hours",
+    "mvp": {
+      "stories": ["INSCOL-001", "INSCOL-002", "INSCOL-003", "INSCOL-004", "INSCOL-005", "INSCOL-006", "INSCOL-010"],
+      "estimate": "2.5-3 hours",
+      "delivers": "Full column-based Instantly with push + engagement, no sequence authoring or summary row"
+    }
+  }
+}

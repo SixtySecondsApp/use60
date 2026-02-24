@@ -1,0 +1,183 @@
+{
+  "feature": {
+    "id": "credit-menu-catalog",
+    "name": "Credit Menu Admin — Catalog Picker Redesign",
+    "status": "complete",
+    "description": "Replace blank AddActionDialog form with a 2-step catalog picker UI. Admins select from 29 predefined platform actions with pre-filled pricing, filtered by category and search. Also fixes CATEGORIES constant to match DB CHECK constraint.",
+    "scope": "Single file: src/pages/platform/CreditMenuAdmin.tsx",
+    "createdAt": "2026-02-21T00:00:00Z"
+  },
+
+  "stories": [
+    {
+      "id": "CMCAT-001",
+      "feature": "credit-menu-catalog",
+      "title": "Fix CATEGORIES constant to match DB CHECK constraint",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/platform/CreditMenuAdmin.tsx"],
+        "schema": []
+      },
+      "blocks": ["CMCAT-003"],
+      "parallelWith": ["CMCAT-002"],
+
+      "acceptance": [
+        "CATEGORIES const uses ['ai_actions', 'agents', 'integrations', 'enrichment', 'storage'] — not the old values",
+        "CreditCategory type derived from the const with 'as const'",
+        "EMPTY_FORM.category updated from 'general' to 'ai_actions'",
+        "No TypeScript errors"
+      ],
+
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/platform/CreditMenuAdmin.tsx"
+      ],
+
+      "designRef": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "CMCAT-002",
+      "feature": "credit-menu-catalog",
+      "title": "Add PLATFORM_FEATURE_CATALOG constant with 30 platform actions",
+      "type": "data",
+      "status": "complete",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/pages/platform/CreditMenuAdmin.tsx"],
+        "schema": []
+      },
+      "blocks": ["CMCAT-003"],
+      "parallelWith": ["CMCAT-001"],
+
+      "acceptance": [
+        "PLATFORM_FEATURE_CATALOG const defined above AddActionDialog with all 29 entries",
+        "17 already-seeded entries included (copilot_chat, meeting_summary, research_enrichment, content_generation, crm_update, task_execution, daily_briefing, deal_risk_score, reengagement_trigger, stale_deal_alert, weekly_coaching_digest, apollo_search, apollo_enrichment, email_send, ai_ark_company, ai_ark_people, exa_enrichment, call_recording_storage)",
+        "12 new entries included with is_new flag where specified (pre_meeting_brief, transcript_search, deal_proposal, sequence_step_execution, coaching_analysis, deal_intelligence, lead_qualification, competitor_intel, notetaker_bot, slack_notification, deal_rescue_plan, hubspot_sync)",
+        "Each entry has: action_id, display_name, description, category, unit, cost_low, cost_medium, cost_high, free_with_sub, is_flat_rate, is_new?",
+        "Typed as Array<NewCreditMenuEntry & { description: string; is_new?: boolean }>"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/platform/CreditMenuAdmin.tsx"
+      ],
+
+      "designRef": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "CMCAT-003",
+      "feature": "credit-menu-catalog",
+      "title": "Redesign AddActionDialog as 2-step catalog picker + pricing form",
+      "type": "ui",
+      "status": "complete",
+      "priority": 3,
+
+      "dependencies": {
+        "stories": ["CMCAT-001", "CMCAT-002"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["CMCAT-004"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "AddActionDialog accepts existingActionIds: string[] prop",
+        "Step 1 (catalog): sm:max-w-2xl dialog, search input, category filter tabs (All | AI Actions | Agents | Integrations | Enrichment | Storage), 2-column card grid",
+        "Each catalog card shows: feature name, description (2-line truncate), category badge, New/Free w/Sub badges where applicable",
+        "Cards for already-added actions are grayed out with 'Added' badge and non-clickable",
+        "Custom action card at bottom with dashed border + Pencil icon — opens step 2 with blank fields",
+        "Clicking a non-added card pre-fills form and advances to step 2",
+        "Step 2 (form): Back button, selected feature name in title, all fields pre-filled and editable",
+        "free_with_sub toggle shows 'FREE' placeholder in price inputs when on",
+        "Create Draft button calls adminCreditMenuService.create(form) as before",
+        "Lucide icons only — no emoji"
+      ],
+
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/platform/CreditMenuAdmin.tsx"
+      ],
+
+      "designRef": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "CMCAT-004",
+      "feature": "credit-menu-catalog",
+      "title": "Wire existingActionIds into dialog and update empty state copy",
+      "type": "integration",
+      "status": "complete",
+      "priority": 4,
+
+      "dependencies": {
+        "stories": ["CMCAT-003"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "const existingActionIds = entries.map(e => e.action_id) derived in CreditMenuAdmin",
+        "existingActionIds passed to <AddActionDialog existingActionIds={existingActionIds} />",
+        "Empty state description updated to: 'No credit menu entries yet. Add actions from the platform catalog to start pricing them.'",
+        "No TypeScript errors, no lint errors"
+      ],
+
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+
+      "files": [
+        "src/pages/platform/CreditMenuAdmin.tsx"
+      ],
+
+      "designRef": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 4,
+    "parallelGroups": [
+      ["CMCAT-001", "CMCAT-002"],
+      ["CMCAT-003"],
+      ["CMCAT-004"]
+    ],
+    "lastUpdated": "2026-02-21T14:00:00Z",
+    "completedAt": "2026-02-21T14:00:00Z"
+  },
+
+  "verification": [
+    "Open /platform/credit-menu as platform admin",
+    "Click 'Add Action' → dialog shows catalog picker, not blank form",
+    "Already-seeded 17 actions appear grayed out with 'Added' badge",
+    "New 12 actions appear as clickable cards, 4 with 'New' badge",
+    "Clicking a card → step 2 shows pre-filled pricing form with editable fields",
+    "'Custom action' card → step 2 shows blank form",
+    "'Create Draft' → entry appears in table with Draft status",
+    "Category filter tabs correctly filter the grid",
+    "CATEGORIES const uses ai_actions, agents, etc. (no more ai, email, etc.)"
+  ]
+}

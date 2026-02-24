@@ -8,6 +8,8 @@ import type {
   MeetingAdapter,
   NotificationAdapter,
 } from './types.ts';
+import { enqueueWriteback, mapFieldsToHubSpot, mapFieldsToAttio, type CrmSource } from '../enqueueWriteback.ts';
+import { upsertContactIndex, upsertCompanyIndex } from '../upsertCrmIndex.ts';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -19,11 +21,77 @@ function fail(error: string, source: string, extra?: Partial<ActionResult>): Act
   return { success: false, data: null, error, source, ...extra };
 }
 
+function formatAdapterError(e: unknown): string {
+  // Deno/Supabase errors are often plain objects (PostgREST) not Error instances.
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'string') return e;
+  if (e && typeof e === 'object') {
+    const anyErr = e as Record<string, unknown>;
+    const message =
+      (typeof anyErr.message === 'string' && anyErr.message) ||
+      (typeof anyErr.error === 'string' && anyErr.error) ||
+      (typeof anyErr.details === 'string' && anyErr.details) ||
+      (typeof anyErr.hint === 'string' && anyErr.hint);
+    if (message) return message;
+    try {
+      return JSON.stringify(anyErr);
+    } catch {
+      return '[unknown error object]';
+    }
+  }
+  return String(e);
+}
+
 export function createDbMeetingAdapter(client: SupabaseClient, userId: string): MeetingAdapter {
   return {
     source: 'db_meetings',
     async listMeetings(params) {
       try {
+        const meetingId =
+          (params as any)?.meeting_id ? String((params as any).meeting_id).trim() : null;
+
+        // Fast path: fetch a specific meeting by id (used by sequences/skills)
+        if (meetingId) {
+          const { data: meeting, error: meetingError } = await client
+            .from('meetings')
+            .select(
+              'id,title,meeting_start,meeting_end,duration_minutes,summary,transcript_text,share_url,company_id,primary_contact_id'
+            )
+            .eq('owner_user_id', userId)
+            .eq('id', meetingId)
+            .maybeSingle();
+
+          if (meetingError) throw meetingError;
+
+          if (!meeting) {
+            return ok(
+              {
+                meetings: [],
+                matchedOn: 'meeting_id',
+                note: `No meeting found for meeting_id: ${meetingId}`,
+              },
+              this.source
+            );
+          }
+
+          const { data: attendees, error: attendeesError } = await client
+            .from('meeting_attendees')
+            .select('name,email')
+            .eq('meeting_id', meetingId)
+            .order('created_at', { ascending: true })
+            .limit(50);
+
+          if (attendeesError) throw attendeesError;
+
+          return ok(
+            {
+              meetings: [{ ...meeting, attendees: attendees || [] }],
+              matchedOn: 'meeting_id',
+            },
+            this.source
+          );
+        }
+
         const limit = Math.min(Math.max(Number(params.limit ?? 5) || 5, 1), 20);
 
         let contactEmail: string | null = params.contactEmail ? String(params.contactEmail).trim().toLowerCase() : null;
@@ -122,7 +190,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
         if (meetingsError) throw meetingsError;
         return ok({ meetings: meetings || [], matchedOn: 'recent' }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -240,7 +308,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           this.source
         );
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -287,7 +355,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           note: 'Total is from calendar events. Recorded meetings may overlap with calendar events.',
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -296,30 +364,54 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
       try {
         const includeContext = params.includeContext ?? true;
         const now = new Date();
+        const nowIso = now.toISOString();
 
-        // Get next upcoming calendar event
+        // Find the next meeting that is either upcoming or currently in progress.
+        // Include meetings where end_time > now (still happening) even if start_time < now.
+        // Use attendees_count > 1 to exclude solo calendar blocks, but fall back to
+        // a broader query if that yields nothing (attendees_count may be NULL/0 for some events).
         const { data: events, error: eventsError } = await client
           .from('calendar_events')
           .select(`
             id, external_id, title, description, start_time, end_time, location, meeting_url,
-            attendees, attendees_count, status, is_recurring, organizer_email
+            attendees, attendees_count, status, organizer_email
           `)
           .eq('user_id', userId)
           .neq('status', 'cancelled')
-          .gte('start_time', now.toISOString())
+          .or(`start_time.gte.${nowIso},end_time.gt.${nowIso}`)
+          .gt('attendees_count', 1)
           .order('start_time', { ascending: true })
-          .limit(1);
+          .limit(5);
+
+        // Fallback: if strict attendees_count filter returns nothing, retry without it.
+        // This catches events where attendees_count is NULL or not synced properly.
+        let finalEvents = events;
+        if ((!events || events.length === 0) && !eventsError) {
+          const { data: fallback, error: fallbackError } = await client
+            .from('calendar_events')
+            .select(`
+              id, external_id, title, description, start_time, end_time, location, meeting_url,
+              attendees, attendees_count, status, organizer_email
+            `)
+            .eq('user_id', userId)
+            .neq('status', 'cancelled')
+            .or(`start_time.gte.${nowIso},end_time.gt.${nowIso}`)
+            .order('start_time', { ascending: true })
+            .limit(5);
+          if (fallbackError) throw fallbackError;
+          finalEvents = fallback;
+        }
 
         if (eventsError) throw eventsError;
 
-        if (!events || events.length === 0) {
+        if (!finalEvents || finalEvents.length === 0) {
           return ok({
             found: false,
-            message: 'No upcoming meetings found',
+            message: 'No upcoming meetings with attendees found',
           }, this.source);
         }
 
-        const event = events[0];
+        const event = finalEvents[0];
         const startTime = new Date(event.start_time);
         const endTime = new Date(event.end_time);
         const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
@@ -358,7 +450,6 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           attendees,
           attendeesCount: event.attendees_count || attendees.length,
           status: event.status,
-          isRecurring: event.is_recurring,
         };
 
         // If context not requested, return basic meeting info
@@ -500,7 +591,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           context,
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -520,7 +611,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           .from('calendar_events')
           .select(`
             id, external_id, title, description, start_time, end_time, location, meeting_url,
-            attendees, attendees_count, status, is_recurring, organizer_email
+            attendees, attendees_count, status, organizer_email
           `)
           .eq('user_id', userId)
           .neq('status', 'cancelled')
@@ -622,7 +713,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           meetings,
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -738,7 +829,7 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
           })),
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -955,6 +1046,39 @@ function calculateDateRangeWithTimezone(
       };
     }
 
+    // Day of week support - finds the NEXT occurrence of that day
+    case 'monday':
+    case 'tuesday':
+    case 'wednesday':
+    case 'thursday':
+    case 'friday':
+    case 'saturday':
+    case 'sunday': {
+      const dayMap: Record<string, number> = {
+        sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+        thursday: 4, friday: 5, saturday: 6,
+      };
+      const targetDay = dayMap[period];
+      const currentDayOfWeek = new Date(Date.UTC(localYear, localMonth, localDay)).getUTCDay();
+      
+      // Calculate days until target day (0 = today if it's that day, otherwise next occurrence)
+      let daysUntil = targetDay - currentDayOfWeek;
+      if (daysUntil < 0) {
+        daysUntil += 7; // Next week
+      }
+      
+      const targetStart = new Date(localMidnight);
+      targetStart.setUTCDate(targetStart.getUTCDate() + daysUntil);
+      
+      const targetEnd = new Date(targetStart);
+      targetEnd.setUTCHours(23, 59, 59, 999);
+      
+      return {
+        startDate: localToUtc(targetStart),
+        endDate: localToUtc(targetEnd),
+      };
+    }
+
     default:
       // Default to today
       return {
@@ -983,7 +1107,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
 
         return ok({ contacts: data || [] }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1041,7 +1165,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
 
         return ok({ deals }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1062,6 +1186,9 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
         const id = String(params.id);
         const updates = params.updates || {};
 
+        let result: any;
+        let entityRecord: any;
+
         switch (params.entity) {
           case 'deal': {
             const { data, error } = await client
@@ -1069,10 +1196,12 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
               .update(updates)
               .eq('id', id)
               .eq('owner_id', userId)
-              .select()
+              .select('*, organization_id')
               .maybeSingle();
             if (error) throw error;
-            return ok({ deal: data }, source);
+            entityRecord = data;
+            result = ok({ deal: data }, source);
+            break;
           }
           case 'contact': {
             const { data, error } = await client
@@ -1080,10 +1209,12 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
               .update(updates)
               .eq('id', id)
               .eq('owner_id', userId)
-              .select()
+              .select('*, organization_id')
               .maybeSingle();
             if (error) throw error;
-            return ok({ contact: data }, source);
+            entityRecord = data;
+            result = ok({ contact: data }, source);
+            break;
           }
           case 'task': {
             const { data, error } = await client
@@ -1094,6 +1225,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
               .select()
               .maybeSingle();
             if (error) throw error;
+            // Tasks don't sync to external CRM
             return ok({ task: data }, source);
           }
           case 'activity': {
@@ -1105,13 +1237,118 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
               .select()
               .maybeSingle();
             if (error) throw error;
+            // Activities don't sync to external CRM yet
             return ok({ activity: data }, source);
           }
           default:
             return fail(`Unsupported entity: ${String(params.entity)}`, source);
         }
+
+        // Enqueue write-back for deals and contacts if orgId is available
+        if (entityRecord && ctx.orgId && (params.entity === 'deal' || params.entity === 'contact')) {
+          try {
+            // Determine CRM source (check for active integrations)
+            const { data: hubspotIntegration } = await client
+              .from('hubspot_org_integrations')
+              .select('org_id')
+              .eq('org_id', ctx.orgId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            const { data: attioIntegration } = await client
+              .from('attio_org_integrations')
+              .select('org_id')
+              .eq('org_id', ctx.orgId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            let crmSource: CrmSource | null = null;
+            if (hubspotIntegration) {
+              crmSource = 'hubspot';
+            } else if (attioIntegration) {
+              crmSource = 'attio';
+            }
+
+            if (crmSource) {
+              // Get the external CRM record ID if it exists
+              const crmRecordId = entityRecord.crm_id || entityRecord.external_id || null;
+
+              // Map field names based on CRM source
+              const mappedPayload = crmSource === 'hubspot'
+                ? mapFieldsToHubSpot(params.entity as any, updates)
+                : mapFieldsToAttio(params.entity as any, updates);
+
+              // Enqueue the write-back operation
+              await enqueueWriteback({
+                supabase: client,
+                orgId: ctx.orgId,
+                crmSource,
+                entityType: params.entity as any,
+                operation: crmRecordId ? 'update' : 'create',
+                crmRecordId: crmRecordId || undefined,
+                payload: mappedPayload,
+                triggeredBy: 'copilot',
+                triggeredByUserId: userId,
+                priority: 3, // Higher priority for copilot-triggered updates
+              });
+
+              console.log(`[dbAdapter] Enqueued ${params.entity} write-back to ${crmSource}`);
+
+              // Also update the CRM index immediately for fast search
+              try {
+                if (params.entity === 'contact' && entityRecord) {
+                  await upsertContactIndex({
+                    supabase: client,
+                    orgId: ctx.orgId,
+                    crmSource,
+                    crmRecordId: crmRecordId || `local_${entityRecord.id}`,
+                    properties: {
+                      first_name: entityRecord.first_name,
+                      last_name: entityRecord.last_name,
+                      email: entityRecord.email,
+                      phone: entityRecord.phone,
+                      company_name: entityRecord.company,
+                      job_title: entityRecord.job_title,
+                      updated_at: new Date().toISOString(),
+                      ...updates,
+                    },
+                  });
+                  console.log(`[dbAdapter] Updated CRM contact index for ${entityRecord.id}`);
+                } else if (params.entity === 'company' && entityRecord) {
+                  await upsertCompanyIndex({
+                    supabase: client,
+                    orgId: ctx.orgId,
+                    crmSource,
+                    crmRecordId: crmRecordId || `local_${entityRecord.id}`,
+                    properties: {
+                      name: entityRecord.name,
+                      domain: entityRecord.domain,
+                      industry: entityRecord.industry,
+                      employee_count: entityRecord.employee_count,
+                      annual_revenue: entityRecord.annual_revenue,
+                      city: entityRecord.city,
+                      state: entityRecord.state,
+                      country: entityRecord.country,
+                      updated_at: new Date().toISOString(),
+                      ...updates,
+                    },
+                  });
+                  console.log(`[dbAdapter] Updated CRM company index for ${entityRecord.id}`);
+                }
+              } catch (indexErr) {
+                // Log but don't fail the main operation
+                console.error('[dbAdapter] Failed to update CRM index:', indexErr);
+              }
+            }
+          } catch (writebackErr) {
+            // Log but don't fail the main operation
+            console.error('[dbAdapter] Failed to enqueue write-back:', writebackErr);
+          }
+        }
+
+        return result;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, source);
       }
     },
@@ -1199,7 +1436,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           by_stage: Object.values(byStage),
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1238,10 +1475,10 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
         }
 
         const selectFields = includeHealth
-          ? `id,name,company,value,stage_id,status,expected_close_date,probability,created_at,updated_at,
+          ? `id,name,company,contact_name,contact_email,value,stage_id,status,expected_close_date,probability,created_at,updated_at,
              deal_stages(name),
              deal_health_scores(health_status,risk_level,days_since_last_activity,days_in_current_stage,overall_health_score)`
-          : `id,name,company,value,stage_id,status,expected_close_date,probability,created_at,updated_at,
+          : `id,name,company,contact_name,contact_email,value,stage_id,status,expected_close_date,probability,created_at,updated_at,
              deal_stages(name)`;
 
         let q = client
@@ -1279,6 +1516,8 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
             id: deal.id,
             name: deal.name,
             company: deal.company,
+            contact_name: deal.contact_name || null,
+            contact_email: deal.contact_email || null,
             value: deal.value,
             stage_name: stageData?.name || 'Unknown',
             status: deal.status,
@@ -1320,7 +1559,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           deals: deals.slice(0, limit),
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1433,7 +1672,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           by_month: Object.values(byMonth),
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1510,14 +1749,85 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           return daysB - daysA;
         });
 
+        // ---- Enrich with last meeting context per contact ----
+        const limitedContacts = contactList.slice(0, limit);
+        const contactIds = limitedContacts.map((c: any) => c.id).filter(Boolean);
+
+        if (contactIds.length > 0) {
+          // Fetch last meeting where contact is primary
+          const { data: primaryMeetings } = await client
+            .from('meetings')
+            .select('id, title, summary, meeting_start, primary_contact_id, meeting_action_items(id, title, completed)')
+            .in('primary_contact_id', contactIds)
+            .eq('owner_user_id', userId)
+            .order('meeting_start', { ascending: false });
+
+          // Build contactId -> most recent meeting map from primary meetings
+          const meetingMap: Record<string, any> = {};
+          for (const m of (primaryMeetings || [])) {
+            if (m.primary_contact_id && !meetingMap[m.primary_contact_id]) {
+              meetingMap[m.primary_contact_id] = m;
+            }
+          }
+
+          // Also check meeting_contacts junction for non-primary attendees
+          const missingIds = contactIds.filter((id: string) => !meetingMap[id]);
+          if (missingIds.length > 0) {
+            const { data: junctionRows } = await client
+              .from('meeting_contacts')
+              .select('contact_id, meeting_id')
+              .in('contact_id', missingIds);
+
+            if (junctionRows && junctionRows.length > 0) {
+              const meetingIds = [...new Set(junctionRows.map((r: any) => r.meeting_id))];
+              const { data: junctionMeetings } = await client
+                .from('meetings')
+                .select('id, title, summary, meeting_start, meeting_action_items(id, title, completed)')
+                .in('id', meetingIds)
+                .eq('owner_user_id', userId)
+                .order('meeting_start', { ascending: false });
+
+              // Map junction meetings by meeting ID for lookup
+              const junctionMeetingMap: Record<string, any> = {};
+              for (const m of (junctionMeetings || [])) {
+                junctionMeetingMap[m.id] = m;
+              }
+
+              // For each missing contact, find their most recent meeting
+              for (const row of junctionRows) {
+                if (!meetingMap[row.contact_id] && junctionMeetingMap[row.meeting_id]) {
+                  meetingMap[row.contact_id] = junctionMeetingMap[row.meeting_id];
+                }
+              }
+            }
+          }
+
+          // Merge meeting context into contacts
+          for (const contact of limitedContacts) {
+            const meeting = meetingMap[contact.id];
+            if (meeting) {
+              const pendingItems = (Array.isArray(meeting.meeting_action_items) ? meeting.meeting_action_items : [])
+                .filter((item: any) => !item.completed)
+                .map((item: any) => ({ id: item.id, title: item.title }));
+              contact.last_meeting = {
+                id: meeting.id,
+                title: meeting.title,
+                summary: meeting.summary ? meeting.summary.slice(0, 500) : null,
+                date: meeting.meeting_start,
+                pending_action_items: pendingItems,
+              };
+            }
+          }
+        }
+
         return ok({
           filter,
           days_threshold: daysSinceContact,
-          count: contactList.slice(0, limit).length,
-          contacts: contactList.slice(0, limit),
+          count: limitedContacts.length,
+          contacts: limitedContacts,
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1659,7 +1969,7 @@ export function createDbCrmAdapter(client: SupabaseClient, userId: string): CRMA
           overall_health: overallHealth,
         }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1699,7 +2009,7 @@ export function createDbEmailAdapter(client: SupabaseClient, userId: string): Em
 
         return ok({ emails: data || [] }, this.source);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -1906,7 +2216,7 @@ Return ONLY valid JSON with these fields (use null for unknown, never omit requi
           this.source
         );
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },
@@ -2074,7 +2384,7 @@ Return ONLY valid JSON with these fields (use null for unknown, never omit requi
           this.source
         );
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatAdapterError(e);
         return fail(msg, this.source);
       }
     },

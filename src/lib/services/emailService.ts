@@ -16,7 +16,7 @@ class EmailService {
     });
     
     this.fromEmail = 'workflows@sixtyseconds.ai';
-    this.fromName = 'Sixty Seconds Workflows';
+    this.fromName = '60';
   }
 
   /**
@@ -128,7 +128,7 @@ class EmailService {
     content: string;
     footerText?: string;
   }): string {
-    const { title, content, footerText = 'Sent by Sixty Seconds Workflows' } = params;
+    const { title, content, footerText = 'Sent by 60' } = params;
     
     return `
 <!DOCTYPE html>
@@ -204,7 +204,7 @@ class EmailService {
 <body>
     <div class="container">
         <div class="header">
-            <h1>Sixty Seconds</h1>
+            <h1>60</h1>
         </div>
         <div class="content">
             <h2>${title}</h2>

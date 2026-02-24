@@ -38,6 +38,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useActivities, Activity } from '@/lib/hooks/useActivities';
 import { useUser } from '@/lib/hooks/useUser'; // Import useUser hook
+import { useAuthUser } from '@/lib/hooks/useAuthUser';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import {
@@ -48,7 +49,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { IdentifierType } from '../components/IdentifierField';
 import { EditActivityForm } from './EditActivityForm';
 import { useActivityFilters } from '@/lib/hooks/useActivityFilters';
@@ -56,8 +57,7 @@ import { ActivityUploadModal } from './admin/ActivityUploadModal'; // Import the
 import { VisuallyHidden } from '@/components/calendar/ScreenReaderAnnouncements';
 import { exportActivitiesToCSV, getExportSummary } from '@/lib/utils/csvExport';
 import { calculateLTVValue, formatActivityAmount } from '@/lib/utils/calculations';
-import { DateFilter, DateRangePreset, DateRange } from '@/components/ui/date-filter';
-import { SubscriptionStats } from './SubscriptionStats';
+import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import { Badge } from './Pipeline/Badge';
 import logger from '@/lib/utils/logger';
 import { useDeals } from '@/lib/hooks/useDeals';
@@ -79,8 +79,10 @@ interface StatCardProps {
 }
 
 export function SalesTable() {
+  const { data: authUser, isLoading: isAuthLoading } = useAuthUser();
+
   // Removed unused sorting state
-  // const [sorting, setSorting] = useState<SortingState>([]); 
+  // const [sorting, setSorting] = useState<SortingState>([]);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   // Activities will be fetched for the selected date range
   // (hook call moved below after currentDateRange is computed)
@@ -97,17 +99,12 @@ export function SalesTable() {
   const [bulkEditData, setBulkEditData] = useState<Partial<Activity>>({});
   const [isSelectModeActive, setIsSelectModeActive] = useState(false);
   
-  // State for date filtering
-  const [selectedRangeType, setSelectedRangeType] = useState<DateRangePreset>('thisMonth');
-  const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null);
+  // Date filter hook — replaces selectedRangeType + customDateRange + selectedMonth
+  const dateFilter = useDateRangeFilter('month');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false); // State for upload modal
   const [showFilters, setShowFilters] = useState(false); // State for filters panel
-  const [showSubscriptionStats, setShowSubscriptionStats] = useState(false); // State for subscription cards visibility
   const hasLoggedInitialSync = useRef(false);
   const hasSyncedFromFilters = useRef(false);
-
-  // Month-by-month toggle state (mirrors dashboard behavior)
-  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
 
   // Add Deal modal state
   const [addDealForActivity, setAddDealForActivity] = useState<Activity | null>(null);
@@ -164,137 +161,33 @@ export function SalesTable() {
     const fr = filters.dateRange;
     if (!fr) return;
 
-    const now = new Date();
-    const filterStart = new Date(fr.start);
-    const filterEnd = new Date(fr.end);
-
     if (!hasLoggedInitialSync.current) {
       hasLoggedInitialSync.current = true;
       logger.log('[SalesTable] Initial sync with filter date range:', {
-        start: format(filterStart, 'yyyy-MM-dd'),
-        end: format(filterEnd, 'yyyy-MM-dd')
+        start: format(new Date(fr.start), 'yyyy-MM-dd'),
+        end: format(new Date(fr.end), 'yyyy-MM-dd')
       });
     }
 
-    if (
-      startOfDay(filterStart).getTime() === startOfDay(now).getTime() &&
-      endOfDay(filterEnd).getTime() === endOfDay(now).getTime()
-    ) {
-      setSelectedRangeType('today');
-      setCustomDateRange(null);
-      setSelectedMonth(new Date());
-    } else if (
-      startOfWeek(filterStart).getTime() === startOfWeek(now).getTime() &&
-      endOfWeek(filterEnd).getTime() === endOfWeek(now).getTime()
-    ) {
-      setSelectedRangeType('thisWeek');
-      setCustomDateRange(null);
-      setSelectedMonth(new Date());
-    } else if (
-      startOfMonth(filterStart).getTime() === startOfMonth(now).getTime() &&
-      endOfMonth(filterEnd).getTime() === endOfMonth(now).getTime()
-    ) {
-      setSelectedRangeType('thisMonth');
-      setCustomDateRange(null);
-      setSelectedMonth(new Date());
-    } else {
-      setSelectedRangeType('custom');
-      setCustomDateRange({ start: filterStart, end: filterEnd });
-
-      const monthStart = startOfMonth(filterStart);
-      const monthEnd = endOfMonth(filterStart);
-      if (
-        monthStart.getTime() === startOfDay(filterStart).getTime() &&
-        monthEnd.getTime() === endOfDay(filterEnd).getTime()
-      ) {
-        setSelectedMonth(new Date(filterStart));
-      }
-    }
-
+    // Set custom range from global filter
+    dateFilter.handleCalendarSelect(new Date(fr.start));
+    dateFilter.handleCalendarSelect(new Date(fr.end));
     hasSyncedFromFilters.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.dateRange]);
 
-  // Handlers for month navigation
-  const handlePreviousMonth = () => {
-    setSelectedMonth(prev => {
-      const newMonth = subMonths(prev, 1);
-      // Apply as a custom range covering that calendar month
-      const start = startOfMonth(newMonth);
-      const end = endOfMonth(newMonth);
-      setSelectedRangeType('custom');
-      setCustomDateRange({ start, end });
-      return newMonth;
-    });
-  };
-
-  const handleNextMonth = () => {
-    setSelectedMonth(prev => {
-      const candidate = new Date(prev);
-      const next = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 1);
-      const now = new Date();
-      const maxMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      if (next > maxMonth) {
-        return prev; // Do not go beyond current month
-      }
-      const start = startOfMonth(next);
-      const end = endOfMonth(next);
-      setSelectedRangeType('custom');
-      setCustomDateRange({ start, end });
-      return next;
-    });
-  };
-
-  // Calculate the current and previous date ranges based on the selected type
+  // Calculate the current and previous date ranges based on the date filter
   const { currentDateRange, previousDateRange } = useMemo(() => {
-    // Use custom range if available and preset is 'custom'
-    if (selectedRangeType === 'custom' && customDateRange) {
-      return {
-        currentDateRange: customDateRange,
-        previousDateRange: {
-          start: new Date(customDateRange.start.getTime() - (customDateRange.end.getTime() - customDateRange.start.getTime())),
-          end: new Date(customDateRange.start.getTime() - 1)
-        }
-      };
-    }
-
-    const now = new Date();
-    let currentStart, currentEnd, previousStart, previousEnd;
-
-    switch (selectedRangeType) {
-      case 'today':
-        currentStart = startOfDay(now);
-        currentEnd = endOfDay(now);
-        const yesterday = subDays(now, 1);
-        previousStart = startOfDay(yesterday);
-        previousEnd = endOfDay(yesterday);
-        break;
-      case 'thisWeek':
-        currentStart = startOfWeek(now, { weekStartsOn: 0 });
-        currentEnd = endOfWeek(now, { weekStartsOn: 0 });
-        const lastWeek = subWeeks(now, 1);
-        previousStart = startOfWeek(lastWeek, { weekStartsOn: 0 });
-        previousEnd = endOfWeek(lastWeek, { weekStartsOn: 0 });
-        break;
-      case 'last30Days':
-        currentStart = startOfDay(subDays(now, 29));
-        currentEnd = endOfDay(now);
-        previousStart = startOfDay(subDays(now, 59)); // 30 days before the current start
-        previousEnd = endOfDay(subDays(now, 30)); // Day before the current start
-        break;
-      case 'thisMonth': // Default case
-      default:
-        currentStart = startOfMonth(now);
-        currentEnd = endOfMonth(now);
-        const lastMonth = subMonths(now, 1);
-        previousStart = startOfMonth(lastMonth);
-        previousEnd = endOfMonth(lastMonth);
-        break;
-    }
+    const current = dateFilter.dateRange ?? { start: startOfMonth(new Date()), end: endOfMonth(new Date()) };
+    const duration = current.end.getTime() - current.start.getTime();
     return {
-      currentDateRange: { start: currentStart, end: currentEnd },
-      previousDateRange: { start: previousStart, end: previousEnd }
+      currentDateRange: current,
+      previousDateRange: {
+        start: new Date(current.start.getTime() - duration - 1),
+        end: new Date(current.start.getTime() - 1),
+      },
     };
-  }, [selectedRangeType, customDateRange]);
+  }, [dateFilter.dateRange]);
 
   // Now that currentDateRange is available, fetch activities server-side for that range
   const { activities, removeActivity, updateActivity } = useActivities(currentDateRange);
@@ -1231,72 +1124,48 @@ export function SalesTable() {
     const trendIcon = trendPercentage > 0 ? '↗' : trendPercentage < 0 ? '↘' : '→';
 
     return (
-      <div 
-        className={`bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-4 border border-gray-200 dark:border-gray-800/50 cursor-pointer hover:border-${color}-500/50 transition-all duration-300 relative min-h-[120px] flex flex-col`}
+      <div
+        className={`bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-4 border border-gray-200/50 dark:border-gray-700/30 shadow-sm cursor-pointer hover:border-${color}-500/50 transition-all duration-300 flex flex-col gap-3`}
         onClick={() => {
-          // When clicking a stat card, filter by its corresponding type
           const typeMap: Record<string, Activity['type'] | undefined> = {
             'Total Revenue': 'sale',
             'Meeting Conversion': 'meeting',
             'Proposal Win Rate': 'proposal',
-            'No-Show Rate': undefined, // Show all to see no-shows across types
+            'No-Show Rate': undefined,
             'Won Deals': 'sale',
             'Average Deal Value': 'sale',
           };
-          
           const newType = typeMap[title];
           if (newType === filters.type) {
-            // Toggle off if already filtered
             handleFilterByType(undefined);
           } else {
             handleFilterByType(newType);
           }
         }}
       >
-        {/* Trend indicator in top-right */}
-        <div className="absolute top-3 right-3 flex flex-col items-end">
-          <div className={`flex items-center gap-1 text-xs font-medium ${trendColor}`}>
-            <span>{trendIcon}</span>
-            <span>{trendText}</span>
+        {/* Top row: icon + trend */}
+        <div className="flex items-center justify-between">
+          <div className={`p-2 rounded-xl bg-${color}-500/10 border border-${color}-500/20`}>
+            <Icon className={`w-4 h-4 text-${color}-500`} />
           </div>
-          <div className="text-[10px] text-gray-500 mt-0.5">
-            {period}
+          <div className="flex items-center gap-1.5">
+            <span className={`text-xs font-semibold ${trendColor}`}>{trendIcon} {trendText}</span>
+            <span className="text-[10px] text-gray-400">{period}</span>
           </div>
         </div>
 
-        {/* Main content */}
-        <div className="flex items-start gap-3 pr-16 flex-1">
-          <div className={`p-2.5 rounded-xl bg-${color}-500/10 border border-${color}-500/20`}>
-            <Icon className={`w-5 h-5 text-${color}-500`} />
-          </div>
-          
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">{title}</p>
-            
-            {/* Primary metric */}
-            <div className="space-y-1">
-              {amount && (
-                <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{amount}</div>
-              )}
-              {percentage && (
-                <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{percentage}</div>
-              )}
-              {!amount && !percentage && (
-                <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{value}</div>
-              )}
-            </div>
-            
-            {/* Spacer to push context info to bottom */}
-            <div className="flex-1"></div>
-            
-            {/* Contextual information */}
-            {contextInfo && (
-              <div className="text-xs text-gray-600 dark:text-gray-500 mt-2">
-                {contextInfo}
-              </div>
-            )}
-          </div>
+        {/* Title */}
+        <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider leading-tight">{title}</p>
+
+        {/* Value */}
+        <div className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight leading-none">
+          {amount || percentage || value}
         </div>
+
+        {/* Context */}
+        {contextInfo && (
+          <p className="text-xs text-gray-500 dark:text-gray-500 leading-snug mt-auto">{contextInfo}</p>
+        )}
       </div>
     );
   };
@@ -1331,40 +1200,44 @@ export function SalesTable() {
     }
   };
 
+  // Auth loading guard — prevent empty-state flash when embedded in lazy-loaded tabs
+  if (isAuthLoading || !authUser) {
+    return (
+      <div className="flex items-center justify-center py-20 text-gray-400 dark:text-gray-500">
+        <RefreshCw className="h-5 w-5 animate-spin mr-2" />
+        <span className="text-sm">Loading activities...</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 p-4 sm:p-6 lg:p-8">
+    <div className="text-gray-900 dark:text-gray-100 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:gap-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {isTypeFiltered ? `${filters.type?.charAt(0).toUpperCase() ?? ''}${filters.type?.slice(1) ?? ''} Activities` : 'Activity Log'}
-                  </h1>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <div className="flex items-center gap-4 mb-2">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600/10 dark:bg-emerald-500/20 border border-emerald-600/20 dark:border-emerald-500/30 flex items-center justify-center">
+                <BarChartIcon className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                  {isTypeFiltered ? `${filters.type?.charAt(0).toUpperCase() ?? ''}${filters.type?.slice(1) ?? ''} Activities` : 'Activity Log'}
+                </h1>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     {isTypeFiltered ? `Showing ${filters.type || ''} activities for the selected period` : 'Track and manage your sales activities'}
                   </p>
                 </div>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl px-4 py-2.5 shadow-sm">
               {isTypeFiltered && (
                 <Button variant="secondary" onClick={resetFilters} size="sm">
                   Show All Types
                 </Button>
               )}
-              
-              {/* Subscription Stats Toggle */}
-              <Button
-                onClick={() => setShowSubscriptionStats(!showSubscriptionStats)}
-                variant="tertiary"
-                size="sm"
-              >
-                <BarChartIcon className="w-4 h-4 mr-2" />
-                {showSubscriptionStats ? 'Hide' : 'Show'} Subscription Stats
-              </Button>
-              
+
               {/* Select Mode Toggle */}
               <motion.div
                 whileHover={{ scale: 1.02 }}
@@ -1401,30 +1274,6 @@ export function SalesTable() {
                 <Download className="w-4 h-4 mr-2" />
                 Export CSV ({filteredActivities.length})
               </Button>
-
-              {/* Month-by-month toggle */}
-              <div className="flex items-center gap-2 bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800/50 rounded-md px-2 py-1.5">
-                <button
-                  type="button"
-                  onClick={handlePreviousMonth}
-                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  aria-label="Previous month"
-                >
-                  <ChevronLeft className="w-4 h-4 text-gray-500" />
-                </button>
-                <div className="text-xs font-medium text-gray-700 dark:text-gray-300 min-w-[90px] text-center">
-                  {format(selectedMonth, 'MMM yyyy')}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleNextMonth}
-                  disabled={new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1) > new Date(new Date().getFullYear(), new Date().getMonth(), 1)}
-                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Next month"
-                >
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
 
               {/* Bulk Actions - Only show when select mode is active and activities are selected */}
               <AnimatePresence>
@@ -1485,15 +1334,7 @@ export function SalesTable() {
               </AnimatePresence>
               
               {/* Main Date Filter */}
-              <DateFilter
-                value={selectedRangeType}
-                customRange={customDateRange}
-                onPresetChange={setSelectedRangeType}
-                onCustomRangeChange={setCustomDateRange}
-                label="Activity Date"
-                compact={true}
-                className="min-w-[160px]"
-              />
+              <DateRangeFilter {...dateFilter} />
             </div>
           </div>
 
@@ -1535,7 +1376,7 @@ export function SalesTable() {
                   exit={{ height: 0, opacity: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="bg-white dark:bg-gray-900/50 backdrop-blur-xl rounded-xl p-6 border border-gray-200 dark:border-gray-800/50 space-y-6">
+                  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm space-y-6">
                     
                     {/* Search */}
                     <div className="space-y-2">
@@ -1726,7 +1567,7 @@ export function SalesTable() {
               icon={PoundSterling}
               color="emerald"
               contextInfo={`From ${metricsFilteredActivities.filter(a => a.type === 'sale').length} completed sales`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
             <StatCard
               key="meetingConversion"
@@ -1737,7 +1578,7 @@ export function SalesTable() {
               icon={Users}
               color="cyan"
               contextInfo={`${metricsFilteredActivities.filter(a => a.type === 'proposal').length} proposals from ${metricsFilteredActivities.filter(a => a.type === 'meeting').length} meetings`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
             <StatCard
               key="proposalWinRate"
@@ -1748,7 +1589,7 @@ export function SalesTable() {
               icon={FileText}
               color="blue"
               contextInfo={`${metricsFilteredActivities.filter(a => a.type === 'sale').length} wins from ${metricsFilteredActivities.filter(a => a.type === 'proposal').length} proposals`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
             <StatCard
               key="noShowRate"
@@ -1759,7 +1600,7 @@ export function SalesTable() {
               icon={XCircle}
               color="red"
               contextInfo={`${currentStats.noShowCount} no-shows from ${currentStats.totalScheduledCount} scheduled`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
             <StatCard
               key="avgdeal"
@@ -1770,26 +1611,11 @@ export function SalesTable() {
               icon={TrendingUp}
               color="amber"
               contextInfo={`Average from ${currentStats.activeDeals} won deals`}
-              period={selectedRangeType === 'today' ? 'vs yesterday' : selectedRangeType === 'thisWeek' ? 'vs last week' : selectedRangeType === 'last30Days' ? 'vs prev 30 days' : 'vs last month'}
+              period="vs prev period"
             />
           </div>
 
-          {/* Subscription Management Stats - Conditionally Rendered */}
-          {showSubscriptionStats && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Subscription Management
-                </h3>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Revenue Overview
-                </div>
-              </div>
-              <SubscriptionStats className="w-full" />
-            </div>
-          )}
-
-          <div className="bg-white dark:bg-transparent backdrop-blur-xl dark:backdrop-blur-0 rounded-lg border border-gray-200 dark:border-transparent overflow-hidden w-full">
+          <div className="bg-white/80 dark:bg-gray-900/20 backdrop-blur-xl rounded-xl border border-gray-200/50 dark:border-gray-700/30 shadow-sm overflow-hidden w-full">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, Calendar, Play, Trash2, Copy, Zap, ExternalLink, ChevronDown, ChevronUp, AlertTriangle, Clock } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, X, RefreshCw, Calendar, Play, Trash2, Copy, Zap, ExternalLink, ChevronDown, ChevronUp, AlertTriangle, Clock, BrainCircuit } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -43,12 +43,34 @@ export function FathomSettings() {
   const [deleteSyncedMeetings, setDeleteSyncedMeetings] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showWebhookGuide, setShowWebhookGuide] = useState(true);
+  const [webhookDismissed, setWebhookDismissed] = useState(false);
+
+  // Load webhook dismiss state from integration record
+  React.useEffect(() => {
+    if (integration && (integration as any).webhook_setup_dismissed) {
+      setWebhookDismissed(true);
+    } else {
+      setWebhookDismissed(false);
+    }
+  }, [integration]);
+
+  const dismissWebhookBanner = async () => {
+    setWebhookDismissed(true);
+    if (integration) {
+      const supabaseAny = supabase as any;
+      await supabaseAny
+        .from('fathom_integrations')
+        .update({ webhook_setup_dismissed: true })
+        .eq('id', integration.id);
+    }
+  };
   const [reprocessing, setReprocessing] = useState(false);
   const [reprocessResult, setReprocessResult] = useState<any>(null);
   const [showReprocessModal, setShowReprocessModal] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<{ current: number; total: number; currentMeeting: string } | null>(null);
   const [expandedMeetings, setExpandedMeetings] = useState<Set<string>>(new Set());
   const [retryingMeetingId, setRetryingMeetingId] = useState<string | null>(null);
+  const [runningAiAnalysis, setRunningAiAnalysis] = useState(false);
 
   const copyWebhookUrl = async () => {
     try {
@@ -60,29 +82,34 @@ export function FathomSettings() {
   };
 
   const handleSync = async () => {
-    setSyncing(true);
-    try {
-      await triggerSync({
-        sync_type: syncType,
-        start_date: dateRange.start,
-        end_date: dateRange.end,
-      });
-      setShowSyncModal(false);
-      // Show success message
-    } catch (err) {
-    } finally {
-      setSyncing(false);
-    }
+    // Close modal immediately and run sync in background
+    // The realtime subscription on fathom_sync_state will update the UI
+    setShowSyncModal(false);
+    toast.info('Sync started', { description: 'Your meetings are syncing in the background. You can continue working.' });
+    triggerSync({
+      sync_type: syncType,
+      start_date: dateRange.start,
+      end_date: dateRange.end,
+    }).then((result) => {
+      if (result?.upgrade_required) {
+        toast.warning('Upgrade required', { description: result.limit_warning || 'Free tier limit reached.' });
+      } else if (result?.meetings_synced !== undefined) {
+        toast.success('Sync complete', { description: `${result.meetings_synced} meeting${result.meetings_synced === 1 ? '' : 's'} synced.` });
+      }
+    }).catch(() => {
+      toast.error('Sync failed', { description: 'Check the Fathom settings page for details.' });
+    });
   };
 
-  const handleQuickSync = async () => {
-    setSyncing(true);
-    try {
-      await triggerSync({ sync_type: 'manual' });
-    } catch (err) {
-    } finally {
-      setSyncing(false);
-    }
+  const handleSyncNewMeetings = async () => {
+    toast.info('Syncing new meetings...', { description: 'Running in the background.' });
+    triggerSync({ sync_type: 'incremental' }).then((result) => {
+      if (result?.meetings_synced !== undefined) {
+        toast.success('Sync complete', { description: `${result.meetings_synced} new meeting${result.meetings_synced === 1 ? '' : 's'} synced.` });
+      }
+    }).catch(() => {
+      toast.error('Sync failed', { description: 'Check the Fathom settings page for details.' });
+    });
   };
 
   const handleTestSync = async () => {
@@ -254,6 +281,40 @@ export function FathomSettings() {
     } finally {
       setReprocessing(false);
       setProcessingProgress(null);
+    }
+  };
+
+  const handleRunAiAnalysis = async () => {
+    setRunningAiAnalysis(true);
+    toast.info('AI Analysis started', { description: 'Analyzing meetings without coaching insights. This runs in the background.' });
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        throw new Error('Not authenticated');
+      }
+
+      const { data, error } = await supabase.functions.invoke('reprocess-meetings-ai', {
+        body: { user_id: session.user.id, force: false },
+      });
+
+      if (error) throw error;
+
+      const processed = data?.meetings_processed ?? 0;
+      const actionItems = data?.action_items_created ?? 0;
+      if (processed === 0) {
+        toast.success('All meetings already have AI analysis');
+      } else {
+        toast.success('AI Analysis complete', {
+          description: `${processed} meeting${processed === 1 ? '' : 's'} analyzed, ${actionItems} action item${actionItems === 1 ? '' : 's'} found.`,
+        });
+      }
+    } catch (err) {
+      toast.error('AI Analysis failed', {
+        description: err instanceof Error ? err.message : 'Check logs for details.',
+      });
+    } finally {
+      setRunningAiAnalysis(false);
     }
   };
 
@@ -456,24 +517,36 @@ export function FathomSettings() {
               </div>
 
               {/* Instant Sync Webhook Setup */}
+              {!webhookDismissed && (
               <div className="rounded-lg border-2 border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Zap className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                       <h4 className="font-semibold text-gray-900 dark:text-white">Enable Instant Meeting Sync</h4>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowWebhookGuide(!showWebhookGuide)}
-                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                    >
-                      {showWebhookGuide ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowWebhookGuide(!showWebhookGuide)}
+                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                      >
+                        {showWebhookGuide ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={dismissWebhookBanner}
+                        className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                        title="Dismiss"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
 
                   <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -528,6 +601,7 @@ export function FathomSettings() {
                     </div>
                   )}
                 </div>
+              )}
 
               {/* Sync Status */}
               {syncState && (
@@ -601,7 +675,7 @@ export function FathomSettings() {
                 </Button>
 
                 <Button
-                  onClick={handleQuickSync}
+                  onClick={handleSyncNewMeetings}
                   disabled={isSyncing || syncing}
                   className="gap-2"
                   size="sm"
@@ -611,7 +685,7 @@ export function FathomSettings() {
                   ) : (
                     <RefreshCw className="h-4 w-4" />
                   )}
-                  Quick Sync
+                  Sync New Meetings
                 </Button>
 
                 <Button
@@ -638,6 +712,21 @@ export function FathomSettings() {
                     <RefreshCw className="h-4 w-4" />
                   )}
                   {reprocessing ? 'Checking...' : 'Reprocess Pending'}
+                </Button>
+
+                <Button
+                  onClick={handleRunAiAnalysis}
+                  disabled={runningAiAnalysis}
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                >
+                  {runningAiAnalysis ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <BrainCircuit className="h-4 w-4" />
+                  )}
+                  {runningAiAnalysis ? 'Analyzing...' : 'Run AI Analysis'}
                 </Button>
               </div>
             </div>
@@ -803,12 +892,10 @@ export function FathomSettings() {
             <Button
               variant="outline"
               onClick={() => setShowSyncModal(false)}
-              disabled={syncing}
             >
               Cancel
             </Button>
-            <Button onClick={handleSync} disabled={syncing} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
-              {syncing && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button onClick={handleSync} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
               Start Sync
             </Button>
           </DialogFooter>

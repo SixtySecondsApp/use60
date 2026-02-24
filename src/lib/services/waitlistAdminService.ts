@@ -68,10 +68,10 @@ export async function grantAccess(
     // 1. Get entry details
     const { data: entry, error: fetchError } = await (supabase
       .from('meetings_waitlist' as any)
-      .select('id, email, full_name, status')
+      .select('id, email, full_name, status, company_name')
       .eq('id', entryId)
       .single() as any) as {
-      data: { id: string; email: string; full_name: string | null; status: string } | null;
+      data: { id: string; email: string; full_name: string | null; status: string; company_name: string | null } | null;
       error: any
     };
 
@@ -79,77 +79,65 @@ export async function grantAccess(
       return { success: false, error: 'Entry not found' };
     }
 
-    // 2. Generate magic link via Edge Function
-    // Always use production domain for redirectTo since Supabase is configured with that domain
-    // Magic links will redirect user to production where they can complete signup
-    const redirectTo = `https://app.use60.com/auth/callback?waitlist_entry=${entryId}`;
-    let magicLink: string;
+    // 2. Generate custom waitlist token (not a Supabase magic link)
+    // This token will be used in a custom signup flow where the account is only created
+    // after the user sets their password, not upon link click
+    let invitationUrl: string;
 
     try {
-      const { data: linkData, error: linkError } = await supabase.functions.invoke('generate-magic-link', {
+      const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
+      const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-waitlist-token', {
         body: {
           email: entry.email,
-          redirectTo,
-          data: {
-            waitlist_entry_id: entryId,
-            source: 'waitlist_invitation',
-          },
+          waitlist_entry_id: entryId,
         },
+        headers: edgeFunctionSecret
+          ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+          : {},
       });
 
-      if (linkError) {
-        console.error('Failed to generate magic link:', linkError);
-
-        // Check if it's a "user already exists" error
-        if (linkError?.status === 409 || linkData?.userExists) {
-          return {
-            success: false,
-            error: `Failed: ${entry.email} is already registered. They can log in at https://app.use60.com/auth/login`
-          };
-        }
-
-        return { success: false, error: linkError.message || 'Failed to generate magic link' };
+      if (tokenError) {
+        console.error('Failed to generate waitlist token:', tokenError);
+        return { success: false, error: tokenError.message || 'Failed to generate invitation token' };
       }
 
-      if (!linkData?.success) {
-        console.error('Magic link generation failed:', linkData?.error);
-
-        // Check if it's a "user already exists" error
-        if (linkData?.userExists) {
-          return {
-            success: false,
-            error: `Failed: ${entry.email} is already registered. They can log in at https://app.use60.com/auth/login`
-          };
-        }
-
-        return { success: false, error: linkData?.error || 'Failed to generate magic link' };
+      if (!tokenData?.success) {
+        console.error('Token generation failed:', tokenData?.error);
+        return { success: false, error: tokenData?.error || 'Failed to generate invitation token' };
       }
 
-      magicLink = linkData.magicLink;
-
-      if (!magicLink) {
-        return { success: false, error: 'Failed to generate magic link URL' };
+      if (!tokenData?.token) {
+        return { success: false, error: 'Failed to generate invitation token' };
       }
-    } catch (linkGenError: any) {
-      console.error('Error generating magic link:', linkGenError);
-      return { success: false, error: linkGenError.message || 'Failed to generate magic link' };
+
+      // Build the custom invitation URL with token and waitlist_entry params
+      // Use current environment (localhost, staging, or production)
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.use60.com';
+      invitationUrl = `${origin}/auth/set-password?token=${tokenData.token}&waitlist_entry=${entryId}`;
+    } catch (tokenGenError: any) {
+      console.error('Error generating waitlist token:', tokenGenError);
+      return { success: false, error: tokenGenError.message || 'Failed to generate invitation token' };
     }
 
     // 3. Send email via encharge-send-email
     const firstName = entry.full_name?.split(' ')[0] || entry.email.split('@')[0];
     try {
+      const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
       const emailResponse = await supabase.functions.invoke('encharge-send-email', {
         body: {
           template_type: 'waitlist_invite',
           to_email: entry.email,
           to_name: firstName,
           variables: {
-            first_name: firstName,
-            invitation_link: magicLink,
-            action_url: magicLink,
-            magic_link: magicLink
+            recipient_name: firstName,
+            action_url: invitationUrl,
+            company_name: entry.company_name || '',
+            expiry_time: '7 days',
           },
         },
+        headers: edgeFunctionSecret
+          ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+          : {},
       });
 
       if (emailResponse.error) {
@@ -161,12 +149,18 @@ export async function grantAccess(
         return { success: false, error: emailResponse.data?.error || 'Email sending failed' };
       }
 
-      // 4. Update status to 'released' if currently pending
-      if (entry.status === 'pending') {
+      // 4. Update status to 'released' (works for pending, converted, or any re-invitation)
+      if (entry.status !== 'released') {
         try {
           await supabase
             .from('meetings_waitlist')
-            .update({ status: 'released', granted_access_at: new Date().toISOString(), granted_by: adminUserId })
+            .update({
+              status: 'released',
+              granted_access_at: new Date().toISOString(),
+              granted_by: adminUserId,
+              // Clear converted fields so user can re-signup cleanly
+              ...(entry.status === 'converted' ? { user_id: null, converted_at: null, invitation_accepted_at: null } : {}),
+            })
             .eq('id', entryId);
         } catch (updateError) {
           console.warn('Failed to update status, but email was sent:', updateError);
@@ -261,48 +255,51 @@ export async function bulkGrantAccess(
     if (entries && entries.length > 0) {
       for (const entry of entries) {
         try {
-          // Generate magic link via Edge Function (uses Admin API, doesn't send email)
-          // IMPORTANT: This uses window.location.origin, so magic links will redirect to wherever
-          // the admin panel is running (localhost for local dev, production for prod).
-          // For local testing, ensure you're generating links while running on localhost!
-          const redirectTo = `${window.location.origin}/auth/callback?waitlist_entry=${entry.id}`;
-          const { data: linkData, error: linkError } = await supabase.functions.invoke('generate-magic-link', {
+          // Generate custom waitlist token (not a Supabase magic link)
+          const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
+          const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-waitlist-token', {
             body: {
               email: entry.email,
-              redirectTo,
-              data: {
-                waitlist_entry_id: entry.id,
-                source: 'waitlist_invite',
-              },
+              waitlist_entry_id: entry.id,
             },
+            headers: edgeFunctionSecret
+              ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+              : {},
           });
 
-          if (linkError) {
+          if (tokenError) {
             // If function doesn't exist, log and skip this entry
-            if (linkError.message?.includes('Failed to send a request') || linkError.message?.includes('fetch')) {
-              console.error('Edge Function not deployed. Please deploy generate-magic-link function.');
+            if (tokenError.message?.includes('Failed to send a request') || tokenError.message?.includes('fetch')) {
+              console.error('Edge Function not deployed. Please deploy generate-waitlist-token function.');
               continue;
             }
-            console.error(`Failed to generate magic link for ${entry.email}:`, linkError);
+            console.error(`Failed to generate token for ${entry.email}:`, tokenError);
             continue;
           }
 
-          if (!linkData?.success) {
-            console.error(`Magic link generation failed for ${entry.email}:`, linkData?.error);
+          if (!tokenData?.success) {
+            console.error(`Token generation failed for ${entry.email}:`, tokenData?.error);
             continue;
           }
 
-          const magicLink = linkData.magicLink;
+          if (!tokenData?.token) {
+            continue;
+          }
 
-          if (magicLink) {
+          // Build the custom invitation URL
+          // Use current environment (localhost, staging, or production)
+          const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.use60.com';
+          const invitationUrl = `${origin}/auth/set-password?token=${tokenData.token}&waitlist_entry=${entry.id}`;
+
+          if (invitationUrl) {
             magicLinks.push({
               entryId: entry.id,
               email: entry.email,
-              magicLink,
+              magicLink: invitationUrl,
             });
           }
-        } catch (linkError) {
-          console.error(`Error generating magic link for ${entry.email}:`, linkError);
+        } catch (tokenError) {
+          console.error(`Error generating token for ${entry.email}:`, tokenError);
         }
       }
 
@@ -325,24 +322,29 @@ export async function bulkGrantAccess(
           }
 
           // Send emails via encharge-send-email using our custom template
+          const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
           const emailPromises = magicLinks.map(async (link) => {
             const entry = entries.find((e: any) => e.id === link.entryId);
             if (!entry) return;
 
             const firstName = entry.full_name?.split(' ')[0] || entry.email.split('@')[0];
-            
+
             return supabase.functions.invoke('encharge-send-email', {
               body: {
-                template_type: 'waitlist_welcome',
+                template_type: 'waitlist_invite',
                 to_email: entry.email,
                 to_name: firstName,
                 variables: {
-                  magic_link_url: link.magicLink,
-                  user_name: firstName,
+                  recipient_name: firstName,
+                  action_url: link.magicLink,
                   user_email: entry.email,
-                  full_name: entry.full_name || entry.email,
+                  company_name: entry.company_name || '',
+                  expiry_time: '7 days',
                 },
               },
+              headers: edgeFunctionSecret
+                ? { 'Authorization': `Bearer ${edgeFunctionSecret}` }
+                : {},
             });
           });
 

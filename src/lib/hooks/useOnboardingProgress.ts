@@ -2,7 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 
+// V1 steps (deprecated): welcome, org_setup, team_invite, fathom_connect, sync
+// V2 steps (current): website_input, manual_enrichment, enrichment_loading, enrichment_result, skills_config, complete
+// Note: Migration 20260121000011 transitions all incomplete V1 records to complete status
 export type OnboardingStep = 'welcome' | 'org_setup' | 'team_invite' | 'fathom_connect' | 'sync' | 'complete';
+
+const V1_STEPS = ['welcome', 'org_setup', 'team_invite', 'fathom_connect', 'sync'] as const;
+
+/**
+ * Detects if a step is from V1 onboarding
+ * Used to identify legacy onboarding records that should be treated as complete
+ */
+function isV1Step(step: string): step is typeof V1_STEPS[number] {
+  return V1_STEPS.includes(step as any);
+}
 
 export interface OnboardingProgress {
   id: string;
@@ -45,7 +58,7 @@ export function useOnboardingProgress(): UseOnboardingProgressReturn {
 
   // Fetch onboarding progress
   useEffect(() => {
-    if (!user) {
+    if (!user?.id) {
       setLoading(false);
       return;
     }
@@ -427,13 +440,22 @@ export function useOnboardingProgress(): UseOnboardingProgressReturn {
     }
   }, [user]);
 
+  // Determine if user needs onboarding
+  // Note: V1 records are marked as complete by migration 20260121000011,
+  // but if one slips through, we still treat it as complete
   const needsOnboarding =
     progress !== null &&
     !progress.skipped_onboarding &&
     !progress.onboarding_completed_at &&
-    progress.onboarding_step !== 'complete';
+    progress.onboarding_step !== 'complete' &&
+    !isV1Step(progress.onboarding_step); // Don't require onboarding for legacy V1 records
 
-  const currentStep: OnboardingStep = progress?.onboarding_step || 'welcome';
+  // Determine current step
+  // If we encounter a V1 step (shouldn't happen due to migration, but defensive coding),
+  // treat it as complete by not returning it as current step
+  const currentStep: OnboardingStep = (progress?.onboarding_step && !isV1Step(progress.onboarding_step))
+    ? progress.onboarding_step
+    : 'complete';
 
   return {
     progress,

@@ -67,6 +67,8 @@ function IntegrationLogo({
     setErrored(false);
   }, [logoUrl]);
 
+  const showFallback = !logoUrl || errored;
+
   return (
     <div
       className={cn(
@@ -74,22 +76,12 @@ function IntegrationLogo({
         containerClassName
       )}
     >
-      {/* Fallback stays mounted to prevent flicker */}
-      <div
-        className={cn(
-          'absolute inset-0 flex items-center justify-center transition-opacity duration-150',
-          loaded && !errored ? 'opacity-0' : 'opacity-100'
-        )}
-      >
-        {fallbackIcon}
-      </div>
-
       {logoUrl && !errored && (
         <img
           src={logoUrl}
           alt={`${name} logo`}
           className={cn(
-            'absolute inset-0 m-auto w-8 h-8 object-contain transition-opacity duration-150',
+            'w-8 h-8 object-contain transition-opacity duration-150',
             loaded ? 'opacity-100' : 'opacity-0'
           )}
           decoding="async"
@@ -100,6 +92,11 @@ function IntegrationLogo({
             setLoaded(false);
           }}
         />
+      )}
+      {showFallback && fallbackIcon && (
+        <div className="w-6 h-6 text-gray-400 dark:text-gray-500">
+          {fallbackIcon}
+        </div>
       )}
     </div>
   );

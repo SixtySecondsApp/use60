@@ -6,7 +6,7 @@
  * Org admins can enable/disable the feature for the entire organization.
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
@@ -21,6 +21,14 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
   Calendar,
   Settings,
   Video,
@@ -28,7 +36,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Building2,
+  Save,
+  Loader2,
 } from 'lucide-react';
+import { useCalendarList } from '@/lib/hooks/useGoogleIntegration';
 import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { cn } from '@/lib/utils';
@@ -61,6 +72,32 @@ export function NotetakerConfigModal({ open, onOpenChange }: NotetakerConfigModa
     isEnablingOrg,
     isDisablingOrg,
   } = useNotetakerIntegration();
+
+  // Calendar selection
+  const { data: calendarsData, isLoading: calendarsLoading } = useCalendarList(googleConnected);
+  const [selectedCalendarId, setSelectedCalendarId] = useState<string>('primary');
+  const [isSavingCalendar, setIsSavingCalendar] = useState(false);
+
+  // Initialize selected calendar from user settings
+  useEffect(() => {
+    if (userSettings?.selected_calendar_id) {
+      setSelectedCalendarId(userSettings.selected_calendar_id);
+    } else if (calendarsData?.calendars?.length) {
+      const primaryCalendar = calendarsData.calendars.find((c: { primary?: boolean }) => c.primary);
+      if (primaryCalendar) {
+        setSelectedCalendarId(primaryCalendar.id);
+      }
+    }
+  }, [userSettings, calendarsData]);
+
+  const handleSaveCalendarSelection = async () => {
+    setIsSavingCalendar(true);
+    try {
+      await updateSettings({ selected_calendar_id: selectedCalendarId });
+    } finally {
+      setIsSavingCalendar(false);
+    }
+  };
 
   const isAdmin = permissions.isAdmin;
 
@@ -271,6 +308,80 @@ export function NotetakerConfigModal({ open, onOpenChange }: NotetakerConfigModa
                         onCheckedChange={handleToggleAutoInternal}
                         disabled={isUpdating}
                       />
+                    </div>
+
+                    {/* Calendar Selection */}
+                    <Separator className="my-4" />
+                    <div className="space-y-3">
+                      <div className="space-y-0.5">
+                        <Label className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-emerald-600" />
+                          Calendar to Watch
+                        </Label>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Only meetings from this calendar will be recorded
+                        </p>
+                      </div>
+                      {calendarsLoading ? (
+                        <Skeleton className="h-10 w-full" />
+                      ) : calendarsData?.calendars && calendarsData.calendars.length > 0 ? (
+                        <Select
+                          value={selectedCalendarId}
+                          onValueChange={setSelectedCalendarId}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a calendar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {calendarsData.calendars.map((calendar: { id: string; summary: string; backgroundColor?: string; primary?: boolean }) => (
+                              <SelectItem key={calendar.id} value={calendar.id}>
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ backgroundColor: calendar.backgroundColor || '#4285f4' }}
+                                  />
+                                  {calendar.summary}
+                                  {calendar.primary && (
+                                    <span className="text-xs text-gray-500 ml-1">(Primary)</span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Select
+                          value={selectedCalendarId}
+                          onValueChange={setSelectedCalendarId}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a calendar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="primary">
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                                Primary Calendar
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {selectedCalendarId !== userSettings.selected_calendar_id && (
+                        <Button
+                          size="sm"
+                          onClick={handleSaveCalendarSelection}
+                          disabled={isSavingCalendar}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          {isSavingCalendar ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Save className="mr-2 h-4 w-4" />
+                          )}
+                          Save Calendar Selection
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </>

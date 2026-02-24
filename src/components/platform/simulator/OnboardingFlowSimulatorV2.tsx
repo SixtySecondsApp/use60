@@ -41,6 +41,7 @@ import {
   Loader,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useOnboardingV2Store, type SkillConfigs, PERSONAL_EMAIL_DOMAINS } from '@/lib/stores/onboardingV2Store';
@@ -145,8 +146,9 @@ const generateMockSkillData = (companyName: string, domain: string): Record<Skil
 });
 
 const DEFAULT_DOMAIN = 'acme.com';
-// Fallback UUID for simulator - will use real org ID when available
-const FALLBACK_ORG_ID = '00000000-0000-0000-0000-000000000000';
+// Dedicated test org ID for simulator - ensures consistent testing
+// This org is created in the database via SQL script and is always available
+const SIMULATOR_TEST_ORG_ID = '00000000-0000-0000-0000-000000000001';
 
 // Test output generators for each skill type
 const generateTestOutput = (
@@ -238,7 +240,17 @@ const loadingTasks = [
   { label: 'Building profile', threshold: 100 },
 ];
 
-export function OnboardingFlowSimulatorV2() {
+interface OnboardingFlowSimulatorV2Props {
+  /** Force Real API Mode on (used for V3 Agent Teams simulator) */
+  forceRealApiMode?: boolean;
+  /** Version label for display (V2 or V3) */
+  versionLabel?: 'V2' | 'V3';
+}
+
+export function OnboardingFlowSimulatorV2({
+  forceRealApiMode = false,
+  versionLabel = 'V2'
+}: OnboardingFlowSimulatorV2Props = {}) {
   // Get user's actual org ID for Real API mode
   const activeOrgId = useActiveOrgId();
 
@@ -254,7 +266,7 @@ export function OnboardingFlowSimulatorV2() {
     generateMockSkillData('Acme', DEFAULT_DOMAIN)
   );
   const [enrichmentData, setEnrichmentData] = useState(() => generateMockEnrichment(DEFAULT_DOMAIN));
-  const [useRealApi, setUseRealApi] = useState(false);
+  const [useRealApi, setUseRealApi] = useState(forceRealApiMode);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [usedFallback, setUsedFallback] = useState(false);
 
@@ -289,6 +301,7 @@ export function OnboardingFlowSimulatorV2() {
     isEnrichmentLoading,
     enrichmentError,
     reset: resetStore,
+    setOrganizationId,
   } = useOnboardingV2Store();
 
   const activeSkill = SKILLS[currentSkillIndex];
@@ -305,9 +318,12 @@ export function OnboardingFlowSimulatorV2() {
       setDomain(emailDomain);
       setEnrichmentSource('website');
       if (useRealApi) {
-        const orgId = activeOrgId || FALLBACK_ORG_ID;
+        const orgId = activeOrgId || SIMULATOR_TEST_ORG_ID;
         // Reset store to clear any previous enrichment data
         resetStore();
+        // CRITICAL: Set organizationId in store before startEnrichment
+        // Otherwise pollEnrichmentStatus will stop immediately (checks state.organizationId)
+        setOrganizationId(orgId);
         setCurrentStep('loading');
         // Always force re-enrichment in simulator (it's a testing tool)
         await startEnrichment(orgId, emailDomain, true);
@@ -327,9 +343,12 @@ export function OnboardingFlowSimulatorV2() {
     setDomain(cleanDomain);
     setEnrichmentSource('website');
     if (useRealApi) {
-      const orgId = activeOrgId || FALLBACK_ORG_ID;
+      const orgId = activeOrgId || SIMULATOR_TEST_ORG_ID;
       // Reset store to clear any previous enrichment data
       resetStore();
+      // CRITICAL: Set organizationId in store before startEnrichment
+      // Otherwise pollEnrichmentStatus will stop immediately (checks state.organizationId)
+      setOrganizationId(orgId);
       setCurrentStep('loading');
       // Always force re-enrichment in simulator (it's a testing tool)
       await startEnrichment(orgId, cleanDomain, true);
@@ -419,6 +438,13 @@ export function OnboardingFlowSimulatorV2() {
     }
   }, [useRealApi, enrichmentError, domain]);
 
+  // Sync forceRealApiMode prop to useRealApi state (for when user switches tabs)
+  useEffect(() => {
+    if (forceRealApiMode && !useRealApi) {
+      setUseRealApi(true);
+    }
+  }, [forceRealApiMode, useRealApi]);
+
   const resetFormState = () => {
     setDomain(DEFAULT_DOMAIN);
     setLoadingProgress(0);
@@ -463,6 +489,7 @@ export function OnboardingFlowSimulatorV2() {
       const statusProgress: Record<string, number> = {
         pending: 10,
         scraping: 40,
+        researching: 60,
         analyzing: 70,
         completed: 100,
         failed: 0,
@@ -548,10 +575,12 @@ export function OnboardingFlowSimulatorV2() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Play className="w-5 h-5 text-violet-500" />
-            Skills-Based Onboarding V2
+            {versionLabel === 'V3' ? 'Agent Teams Onboarding V3' : 'Skills-Based Onboarding V2'}
           </CardTitle>
           <CardDescription>
-            Experience the AI-powered skills configuration onboarding flow with all 3 paths
+            {versionLabel === 'V3'
+              ? 'Experience enhanced enrichment with parallel AI agents for 89% data completeness'
+              : 'Experience the AI-powered skills configuration onboarding flow with all 3 paths'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -559,10 +588,13 @@ export function OnboardingFlowSimulatorV2() {
             <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500/20 to-violet-600/20 flex items-center justify-center mx-auto mb-6">
               <Sparkles className="w-10 h-10 text-violet-500" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Start V2 Simulation</h3>
+            <h3 className="text-lg font-semibold mb-2">
+              {versionLabel === 'V3' ? 'Start V3 Simulation' : 'Start V2 Simulation'}
+            </h3>
             <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
-              Test how the onboarding flow adapts based on email type.
-              Corporate emails go directly to enrichment. Personal emails require additional steps.
+              {versionLabel === 'V3'
+                ? 'Test the enhanced enrichment with parallel AI agents. Corporate emails go directly to deep enrichment with multi-source research.'
+                : 'Test how the onboarding flow adapts based on email type. Corporate emails go directly to enrichment. Personal emails require additional steps.'}
             </p>
 
             {/* Email Type Selector */}
@@ -650,14 +682,22 @@ export function OnboardingFlowSimulatorV2() {
                   <span className="text-sm font-medium">
                     {useRealApi ? 'Real API Mode' : 'Mock Mode'}
                   </span>
+                  {forceRealApiMode && (
+                    <Badge className="text-xs bg-blue-500/10 text-blue-500 border-blue-500/20">
+                      Required for V3
+                    </Badge>
+                  )}
                 </div>
                 <Switch
                   checked={useRealApi}
                   onCheckedChange={setUseRealApi}
+                  disabled={forceRealApiMode}
                 />
               </div>
               <p className="text-xs text-muted-foreground mt-2 text-left">
-                {useRealApi
+                {forceRealApiMode
+                  ? 'V3 Agent Teams requires real API calls to test enhanced enrichment with 89% data completeness.'
+                  : useRealApi
                   ? 'Calls the actual AI enrichment API. Takes ~30 seconds but shows real data.'
                   : 'Uses mock data for instant preview. Great for testing the UI flow.'}
               </p>
@@ -1078,10 +1118,17 @@ export function OnboardingFlowSimulatorV2() {
                   </div>
                   {usedFallback && (
                     <div className="px-6 py-2 bg-amber-500/10 border-b border-amber-500/20">
-                      <p className="text-xs text-amber-500 flex items-center gap-1.5">
-                        <span>⚠️</span>
-                        <span>Enrichment API unavailable. Showing mock data to preview the experience.</span>
-                      </p>
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-amber-500 flex items-center gap-1.5">
+                          <span>⚠️</span>
+                          <span>Enrichment API unavailable. Showing mock data to preview the experience.</span>
+                        </p>
+                        {enrichmentError && (
+                          <p className="text-[11px] text-amber-400/90 font-mono break-words">
+                            Error: {enrichmentError}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
 

@@ -12,7 +12,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import {
   createSuccessResponse,
   createErrorResponse
@@ -48,15 +48,14 @@ interface CalendarEvent {
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
 
   try {
     // Get authorization header
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return createErrorResponse('Missing authorization header', 401, corsHeaders)
+      return createErrorResponse('Missing authorization header', 401)
     }
 
     // Create Supabase client with user context
@@ -77,7 +76,7 @@ serve(async (req) => {
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      return createErrorResponse('Unauthorized', 401, corsHeaders)
+      return createErrorResponse('Unauthorized', 401)
     }
 
     // Parse request body
@@ -86,15 +85,15 @@ serve(async (req) => {
 
     // Validate inputs
     if (!query || query.trim().length === 0) {
-      return createErrorResponse('Search query is required', 400, corsHeaders)
+      return createErrorResponse('Search query is required', 400)
     }
 
     if (limit < 1 || limit > 100) {
-      return createErrorResponse('Limit must be between 1 and 100', 400, corsHeaders)
+      return createErrorResponse('Limit must be between 1 and 100', 400)
     }
 
     if (offset < 0) {
-      return createErrorResponse('Offset must be non-negative', 400, corsHeaders)
+      return createErrorResponse('Offset must be non-negative', 400)
     }
 
     // Use the database function for full-text search
@@ -114,8 +113,7 @@ serve(async (req) => {
       console.error('Search error:', searchError)
       return createErrorResponse(
         `Search failed: ${searchError.message}`,
-        500,
-        corsHeaders
+        500
       )
     }
 
@@ -156,15 +154,13 @@ serve(async (req) => {
           searchTerm: query,
           filters,
         },
-      },
-      corsHeaders
+      }
     )
   } catch (error) {
     console.error('Unexpected error:', error)
     return createErrorResponse(
       error instanceof Error ? error.message : 'Unknown error occurred',
-      500,
-      corsHeaders
+      500
     )
   }
 })

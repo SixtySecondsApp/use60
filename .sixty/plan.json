@@ -1,0 +1,198 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind"
+    }
+  },
+  "feature": "ui-polish",
+  "consultReport": ".sixty/consult/ui-polish.md",
+  "createdAt": "2026-02-23",
+  "stories": [
+    {
+      "id": "UI-001",
+      "feature": "ui-polish",
+      "title": "Fix Sentiment and TalkTime charts plotting null values at top of chart",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "acceptance": [
+        "Sentiment chart does not render data points at the top of the chart",
+        "TalkTime chart does not render data points at the top of the chart",
+        "Both charts show gaps where data is null (no line drawn through null points at top)",
+        "Non-null data points still connect smoothly",
+        "Volume chart behaviour unchanged"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/components/insights/TeamTrendsChart.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-002", "UI-003", "UI-004", "UI-005"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "UI-002",
+      "feature": "ui-polish",
+      "title": "Fix transcript attendee sidebar speaker color mismatch",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "acceptance": [
+        "Speaker avatar color in attendees sidebar matches the same speaker's avatar color in the transcript",
+        "Speaker name text color matches avatar background color",
+        "Attendees sidebar uses speaker-name-based slot lookup (not array index)"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/MeetingDetail.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-003", "UI-004", "UI-005"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "UI-003",
+      "feature": "ui-polish",
+      "title": "Credits navbar: show 'N credits' label and add pulsating green dot",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "acceptance": [
+        "Credits button shows '342 credits' not '342 cr'",
+        "Green status dot next to credits pulsates (like notification dot) using animate-pulse in green",
+        "Pulse is subtle — not distracting"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/components/credits/CreditWidget.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-004", "UI-005"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "UI-004",
+      "feature": "ui-polish",
+      "title": "Dashboard Activity tab: add entry animation matching Team Performance",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "Switching to Activity tab triggers fade-in + slide-up animation (opacity 0→1, y 20→0)",
+        "Animation matches the motion.div pattern used in TeamKPIGrid",
+        "Content width/scaling is consistent with Overview tab"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/Dashboard.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-005"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "UI-005",
+      "feature": "ui-polish",
+      "title": "Meetings tab: add consistent spacing to match app standard padding",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "acceptance": [
+        "Meetings list content has px-4 sm:px-6 lg:px-8 horizontal padding",
+        "Vertical padding matches app standard (py-6 sm:py-8)",
+        "Content is no longer flush to screen edges",
+        "Pattern matches MeetingAnalyticsPage and Dashboard padding"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "src/components/meetings/UnifiedMeetingsList.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004"],
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+    {
+      "id": "UI-006",
+      "feature": "ui-polish",
+      "title": "Fix Most Popular badge clipped by CreditPurchaseModal card border",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "Most Popular badge renders fully above the card's border (not overlapping/clipped by it)",
+        "Badge is visually floating above the top edge of the popular card",
+        "Other pack cards are unaffected"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "src/components/credits/CreditPurchaseModal.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004", "UI-005", "UI-007"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "UI-007",
+      "feature": "ui-polish",
+      "title": "Replace 'cr' abbreviation with 'credits' throughout credit UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "All visible 'cr' abbreviations replaced with 'credits' (e.g. '342 cr' → '342 credits')",
+        "Per-unit rates updated (e.g. 'cr/mo' → 'credits/mo', 'cr/day' → 'credits/day')",
+        "No regressions in credit display logic"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/credits/UsageBreakdownChart.tsx",
+        "src/components/credits/TransactionLog.tsx",
+        "src/components/credits/StorageUsageCard.tsx",
+        "src/components/credits/LowBalanceBanner.tsx",
+        "src/components/credits/CreditEstimator.tsx",
+        "src/components/credits/CreditMigrationModal.tsx",
+        "src/components/credits/PackInventory.tsx",
+        "src/components/credits/ARBudgetSettings.tsx",
+        "src/components/credits/CreditMenuTable.tsx",
+        "src/components/credits/CreditWidgetDropdown.tsx",
+        "src/components/credits/SimpleModelTierSelector.tsx",
+        "src/pages/settings/CreditsSettingsPage.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004", "UI-005", "UI-006"],
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 0,
+    "currentFeature": "ui-polish",
+    "lastUpdated": "2026-02-23"
+  }
+}

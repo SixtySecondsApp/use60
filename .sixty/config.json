@@ -1,0 +1,66 @@
+{
+  "project": {
+    "name": "Copilot Excellence Phase 2",
+    "description": "Improve Copilot from 7.5/10 to 9/10 - Claude Cowork level quality",
+    "createdAt": "2026-01-24T14:00:00Z"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "ai": "google-gemini"
+  },
+  "phases": {
+    "phase1": {
+      "name": "Copilot Excellence Upgrade",
+      "status": "complete",
+      "score": "5.5 → 7.5",
+      "stories": 27,
+      "completedAt": "2026-01-24T13:00:00Z"
+    },
+    "phase2": {
+      "name": "Copilot Improvement",
+      "status": "pending",
+      "targetScore": "7.5 → 9.0",
+      "stories": 17,
+      "features": [
+        "action-contract",
+        "integration",
+        "reliability",
+        "testing",
+        "excellence"
+      ]
+    }
+  },
+  "qualityGates": {
+    "lint": { "enabled": true, "changedOnly": true },
+    "test": { "enabled": true, "changedOnly": true },
+    "typecheck": { "enabled": true, "finalOnly": true },
+    "build": { "enabled": true, "featureComplete": true }
+  },
+  "parallel": {
+    "enabled": true,
+    "maxConcurrent": 4,
+    "groups": [
+      ["ACT-001", "ACT-002", "ACT-003", "ACT-004"],
+      ["INT-002", "INT-003"],
+      ["REL-001", "REL-003"],
+      ["TEST-002", "TEST-003"]
+    ]
+  },
+  "notifications": {
+    "slack": {
+      "enabled": false,
+      "webhook": "${SLACK_WEBHOOK_URL}"
+    }
+  },
+  "targetMetrics": {
+    "actionContract": { "current": 6, "target": 10 },
+    "uiIntegration": { "current": 5, "target": 9 },
+    "reliability": { "current": 5, "target": 8 },
+    "testing": { "current": 4, "target": 8 },
+    "excellence": { "current": 7, "target": 9 },
+    "overall": { "current": 7.5, "target": 9.0 }
+  }
+}

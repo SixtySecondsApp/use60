@@ -1,0 +1,329 @@
+{
+  "feature": "exa-ops-websets-integration",
+  "title": "Exa Websets as a Core Ops Capability",
+  "description": "Integrate Exa Search and Exa Websets deeply into ops workflows with preview-first UX, copilot actions, dynamic table materialization, webhook/event handling, and monitor-based continuous refresh.",
+  "consultReport": ".sixty/consult/exa-ops-websets-integration.md",
+  "createdAt": "2026-02-11T23:30:00Z",
+  "stories": [
+    {
+      "id": "EXA-OPS-001",
+      "title": "Create shared Exa Websets client module",
+      "type": "backend",
+      "description": "Add `exaWebsets.ts` with preview/create/get/list-items/wait-until-idle helpers and typed request/response models.",
+      "files": [
+        "supabase/functions/_shared/exaWebsets.ts"
+      ],
+      "acceptance_criteria": [
+        "Module supports preview, create, get, list items, and polling until idle",
+        "All requests use EXA_API_KEY from server-side env only",
+        "Errors are normalized with retry-safe metadata",
+        "No frontend exposure of secrets"
+      ],
+      "estimate": "45min",
+      "dependencies": []
+    },
+    {
+      "id": "EXA-OPS-002",
+      "title": "Add unified research provider dispatcher",
+      "type": "backend",
+      "description": "Create `researchProviders.ts` to route gemini/exa_search/exa_websets/agent_team flows with a common result contract.",
+      "files": [
+        "supabase/functions/_shared/researchProviders.ts",
+        "supabase/functions/_shared/exaSearch.ts",
+        "supabase/functions/_shared/geminiSearch.ts"
+      ],
+      "acceptance_criteria": [
+        "Single dispatch API covers all supported research providers",
+        "Provider output shape is normalized for downstream consumers",
+        "Fallback behavior is explicit and testable"
+      ],
+      "estimate": "40min",
+      "dependencies": [
+        "EXA-OPS-001"
+      ]
+    },
+    {
+      "id": "EXA-OPS-003",
+      "title": "Create Webset run and event persistence schema",
+      "type": "database",
+      "description": "Add migration for `exa_webset_runs` and `exa_webset_events`, indexes, and org-scoped access policy support.",
+      "files": [
+        "supabase/migrations/20260211xxxxxx_exa_websets_ops_schema.sql"
+      ],
+      "acceptance_criteria": [
+        "Runs table stores org, user, webset id, status, source table mapping, and metadata",
+        "Events table stores webhook payloads with dedupe keys",
+        "Indexes support polling by org and recent activity",
+        "RLS or equivalent access pattern is defined"
+      ],
+      "estimate": "35min",
+      "dependencies": []
+    },
+    {
+      "id": "EXA-OPS-004",
+      "title": "Add ops-webset preview edge function",
+      "type": "backend",
+      "description": "Implement authenticated preview endpoint that calls Exa preview API and returns criteria/enrichment decomposition for user confirmation.",
+      "files": [
+        "supabase/functions/ops-webset-preview/index.ts"
+      ],
+      "acceptance_criteria": [
+        "Uses allowlist CORS helper and auth validation patterns",
+        "Returns preview payload and confidence metadata",
+        "Supports optional count and entity type overrides"
+      ],
+      "estimate": "35min",
+      "dependencies": [
+        "EXA-OPS-001"
+      ]
+    },
+    {
+      "id": "EXA-OPS-005",
+      "title": "Add ops-webset create/status edge functions",
+      "type": "backend",
+      "description": "Implement create and status endpoints that launch Websets, persist runs, and expose progress for copilot/UI polling.",
+      "files": [
+        "supabase/functions/ops-webset-create/index.ts",
+        "supabase/functions/ops-webset-status/index.ts"
+      ],
+      "acceptance_criteria": [
+        "Create endpoint writes run row and returns run_id + webset_id",
+        "Status endpoint returns Exa state + local run materialization state",
+        "Handles timeout and transient failures gracefully"
+      ],
+      "estimate": "55min",
+      "dependencies": [
+        "EXA-OPS-001",
+        "EXA-OPS-003"
+      ]
+    },
+    {
+      "id": "EXA-OPS-006",
+      "title": "Materialize Webset items into ops tables",
+      "type": "backend",
+      "description": "Implement materialization service/function to map Webset items and enrichment results into dynamic table rows/cells idempotently.",
+      "files": [
+        "supabase/functions/ops-webset-materialize/index.ts",
+        "supabase/functions/_shared/copilot_adapters/dbAdapters.ts"
+      ],
+      "acceptance_criteria": [
+        "Can append or upsert by canonical key (e.g. domain/url)",
+        "Partial progress persists safely across retries",
+        "Field mapping supports company + person entities"
+      ],
+      "estimate": "60min",
+      "dependencies": [
+        "EXA-OPS-003",
+        "EXA-OPS-005"
+      ]
+    },
+    {
+      "id": "EXA-OPS-007",
+      "title": "Add Exa webhook receiver with signature verification",
+      "type": "backend",
+      "description": "Create webhook endpoint for Webset events; verify Exa-Signature HMAC, persist events, and update run states.",
+      "files": [
+        "supabase/functions/exa-websets-webhook/index.ts"
+      ],
+      "acceptance_criteria": [
+        "Rejects invalid signatures and stale timestamps",
+        "Stores raw event payload and dedupe id",
+        "Updates related run state and triggers materialization hooks"
+      ],
+      "estimate": "50min",
+      "dependencies": [
+        "EXA-OPS-003"
+      ]
+    },
+    {
+      "id": "EXA-OPS-008",
+      "title": "Extend execute_action for Websets ops flow",
+      "type": "backend",
+      "description": "Add new actions in copilot adapters for preview/create/status/materialize and monitor creation.",
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/types.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/_shared/agentDefinitions.ts",
+        "supabase/functions/_shared/agentClassifier.ts"
+      ],
+      "acceptance_criteria": [
+        "Actions: preview_ops_webset, create_ops_webset, get_ops_webset_status, materialize_ops_webset_to_table, create_ops_webset_monitor",
+        "Actions use org-scoped auth and return structured-safe payloads",
+        "Agent classifier can route Webset intents reliably"
+      ],
+      "estimate": "55min",
+      "dependencies": [
+        "EXA-OPS-004",
+        "EXA-OPS-005"
+      ]
+    },
+    {
+      "id": "EXA-OPS-009",
+      "title": "Add structured responses for Webset lifecycle",
+      "type": "backend",
+      "description": "Detect and emit structured response payloads for preview, live status, and completion result states.",
+      "files": [
+        "supabase/functions/_shared/structuredResponseDetector.ts"
+      ],
+      "acceptance_criteria": [
+        "New response types: ops_webset_preview, ops_webset_status, ops_webset_results",
+        "Actions include open table/run details callbacks",
+        "Fallback to plain summary when schema mismatch occurs"
+      ],
+      "estimate": "35min",
+      "dependencies": [
+        "EXA-OPS-008"
+      ]
+    },
+    {
+      "id": "EXA-OPS-010",
+      "title": "Add frontend Webset response components and routing",
+      "type": "frontend",
+      "description": "Render new structured Webset responses in copilot UI and wire quick actions through AssistantShell handlers.",
+      "files": [
+        "src/components/copilot/CopilotResponse.tsx",
+        "src/components/copilot/responses/OpsWebsetStatusResponse.tsx",
+        "src/components/assistant/AssistantShell.tsx"
+      ],
+      "acceptance_criteria": [
+        "Preview cards show criteria and enrichment breakdown",
+        "Status component shows phase, counts, and partial row ingestion",
+        "Completion state offers open-table and schedule-monitor actions"
+      ],
+      "estimate": "50min",
+      "dependencies": [
+        "EXA-OPS-009"
+      ]
+    },
+    {
+      "id": "EXA-OPS-011",
+      "title": "Expand research provider setting to include Websets",
+      "type": "frontend",
+      "description": "Update provider type/settings UI and storage handling for `exa_websets`.",
+      "files": [
+        "src/lib/hooks/useResearchProvider.ts",
+        "src/pages/demo/ResearchComparison.tsx"
+      ],
+      "acceptance_criteria": [
+        "Provider enum supports exa_websets",
+        "Provider update flow validates and persists correctly",
+        "User can set provider from comparison UI or settings"
+      ],
+      "estimate": "25min",
+      "dependencies": [
+        "EXA-OPS-002"
+      ]
+    },
+    {
+      "id": "EXA-OPS-012",
+      "title": "Introduce Websets-first ops skills and sequence updates",
+      "type": "skill",
+      "description": "Add/upgrade skills so copilot naturally uses preview-first Webset workflows for prospect list generation and enrichment.",
+      "files": [
+        "skills/atomic/ops-webset-builder/SKILL.md",
+        "skills/atomic/ops-enrichment-manager/SKILL.md",
+        "skills/sequences/seq-ops-prospect-pipeline/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "New skill includes explicit preview -> confirm -> create -> monitor flow",
+        "Sequence maps to new execute_action names and status checks",
+        "Skill descriptions optimized for routing confidence"
+      ],
+      "estimate": "40min",
+      "dependencies": [
+        "EXA-OPS-008"
+      ]
+    },
+    {
+      "id": "EXA-OPS-013",
+      "title": "Add monitor management for recurring refresh",
+      "type": "backend",
+      "description": "Implement create/list/update monitor support and attach monitor metadata to ops table source mapping.",
+      "files": [
+        "supabase/functions/ops-webset-monitor/index.ts",
+        "supabase/functions/_shared/exaWebsets.ts"
+      ],
+      "acceptance_criteria": [
+        "Can create schedule with cron + timezone",
+        "Run linkage is persisted for source table",
+        "Refresh behavior (append/upsert) is configurable"
+      ],
+      "estimate": "45min",
+      "dependencies": [
+        "EXA-OPS-005"
+      ]
+    },
+    {
+      "id": "EXA-OPS-014",
+      "title": "Hardening, limits, and observability",
+      "type": "platform",
+      "description": "Add rate limiting, retry with backoff, cost/usage telemetry, and dashboards/logging hooks for Webset operations.",
+      "files": [
+        "supabase/functions/_shared/exaWebsets.ts",
+        "supabase/functions/ops-webset-create/index.ts",
+        "supabase/functions/ops-webset-status/index.ts"
+      ],
+      "acceptance_criteria": [
+        "429 and transient 5xx errors retry with bounded backoff",
+        "Per-org concurrency guard prevents runaway bursts",
+        "Run records include timing and approximate usage metadata"
+      ],
+      "estimate": "40min",
+      "dependencies": [
+        "EXA-OPS-005",
+        "EXA-OPS-006"
+      ]
+    }
+  ],
+  "parallel_opportunities": [
+    {
+      "group": [
+        "EXA-OPS-003",
+        "EXA-OPS-004"
+      ],
+      "reason": "Schema setup and preview endpoint are largely independent foundation tasks.",
+      "time_saved": "30min"
+    },
+    {
+      "group": [
+        "EXA-OPS-007",
+        "EXA-OPS-008"
+      ],
+      "reason": "Webhook verification and copilot action contract can progress in parallel once shared models exist.",
+      "time_saved": "35min"
+    },
+    {
+      "group": [
+        "EXA-OPS-010",
+        "EXA-OPS-011",
+        "EXA-OPS-012"
+      ],
+      "reason": "Frontend rendering, provider controls, and skills can be developed concurrently after backend action definitions stabilize.",
+      "time_saved": "45min"
+    }
+  ],
+  "mvp_suggestion": {
+    "stories": [
+      "EXA-OPS-001",
+      "EXA-OPS-003",
+      "EXA-OPS-004",
+      "EXA-OPS-005",
+      "EXA-OPS-006",
+      "EXA-OPS-008",
+      "EXA-OPS-009",
+      "EXA-OPS-010"
+    ],
+    "estimate": "6-8 hours",
+    "delivers": "Preview-first Websets flow in ops/copilot with table materialization and progress UI.",
+    "deferred": [
+      "Webhook real-time path",
+      "Monitor scheduling",
+      "Advanced telemetry and hardening"
+    ]
+  },
+  "total_estimate": {
+    "sequential": "11-14 hours",
+    "with_parallelism": "8-10 hours",
+    "stories": 14
+  }
+}

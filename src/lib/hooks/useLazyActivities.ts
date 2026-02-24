@@ -43,7 +43,7 @@ async function fetchLimitedActivities(config: LazyActivitiesConfig) {
   let query = (supabase as any)
     .from('activities')
     .select(`
-      *,
+      id, user_id, type, date, amount, quantity, client_name, details, deal_id, created_at,
       deals (
         id,
         name,
@@ -105,10 +105,9 @@ export function useLazyActivities(config: LazyActivitiesConfig = { enabled: fals
     queryFn: () => fetchLimitedActivities(effectiveConfig),
     enabled: effectiveConfig.enabled && !!userId,
     staleTime: 5 * 60 * 1000, // 5 minutes - prevent excessive refetching
-    cacheTime: 10 * 60 * 1000, // 10 minutes - keep data in cache longer
+    gcTime: 10 * 60 * 1000, // 10 minutes - keep data in cache longer
     refetchOnWindowFocus: false, // Don't refetch on window focus to prevent flicker
     refetchOnMount: false, // Don't refetch on mount if we have cached data
-    keepPreviousData: true, // Keep showing old data while fetching new data
     placeholderData: previousData => previousData, // Use previous data as placeholder during transitions
   });
 
@@ -119,59 +118,45 @@ export function useLazyActivities(config: LazyActivitiesConfig = { enabled: fals
 }
 
 // Hook specifically for dashboard metrics with progressive loading
-export function useDashboardActivities(currentMonth: Date, enabled: boolean = true) {
-  const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-  const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999);
-
-  // Remove logging to prevent re-renders
-
+// Accepts an explicit date range instead of reconstructing month boundaries
+export function useDashboardActivities(dateRange: { start: Date; end: Date }, enabled: boolean = true) {
   return useLazyActivities({
     enabled,
-    dateRange: { start: startOfMonth, end: endOfMonth },
-    // Removed limit to ensure all activities are fetched for accurate metrics
-    // The dashboard needs all activities to calculate totals correctly
-  });
-}
-
-// Hook for previous month data (loads after current month)
-export function usePreviousMonthActivities(currentMonth: Date, enabled: boolean = false) {
-  const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
-  const startOfPrevMonth = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), 1);
-  const endOfPrevMonth = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0, 23, 59, 59, 999);
-
-  return useLazyActivities({
-    enabled,
-    dateRange: { start: startOfPrevMonth, end: endOfPrevMonth },
-    // Removed limit to ensure all activities are fetched for accurate comparisons
+    dateRange,
+    // No limit — dashboard needs all activities to calculate totals correctly
   });
 }
 
 // Hook for progressive dashboard loading with comparisons
-export function useProgressiveDashboardData(currentMonth: Date, enabled: boolean = true) {
-  // Load current month first
-  const currentMonthResult = useDashboardActivities(currentMonth, enabled);
-  
-  // Load previous month data after current month loads (for comparisons)
-  const shouldLoadPrevious = Boolean(enabled && !currentMonthResult.isLoading && currentMonthResult.data);
-  const previousMonthResult = usePreviousMonthActivities(currentMonth, shouldLoadPrevious);
+export function useProgressiveDashboardData(
+  dateRange: { start: Date; end: Date },
+  previousDateRange: { start: Date; end: Date },
+  enabled: boolean = true
+) {
+  // Load current period first
+  const currentResult = useDashboardActivities(dateRange, enabled);
+
+  // Load previous period data after current loads (for comparisons)
+  const shouldLoadPrevious = Boolean(enabled && !currentResult.isLoading && currentResult.data);
+  const previousResult = useDashboardActivities(previousDateRange, shouldLoadPrevious);
 
   return {
-    // Current month data
+    // Current period data
     currentMonth: {
-      activities: currentMonthResult.activities,
-      isLoading: currentMonthResult.isLoading,
-      error: currentMonthResult.error,
+      activities: currentResult.activities,
+      isLoading: currentResult.isLoading,
+      error: currentResult.error,
     },
-    // Previous month data
+    // Previous period data
     previousMonth: {
-      activities: previousMonthResult.activities,
-      isLoading: previousMonthResult.isLoading,
-      error: previousMonthResult.error,
+      activities: previousResult.activities,
+      isLoading: previousResult.isLoading,
+      error: previousResult.error,
     },
     // Overall loading state
-    isInitialLoad: currentMonthResult.isLoading,
-    isLoadingComparisons: previousMonthResult.isLoading,
-    hasComparisons: previousMonthResult.data && previousMonthResult.data.length > 0,
+    isInitialLoad: currentResult.isLoading,
+    isLoadingComparisons: previousResult.isLoading,
+    hasComparisons: previousResult.data !== undefined && previousResult.data !== null,
   };
 }
 

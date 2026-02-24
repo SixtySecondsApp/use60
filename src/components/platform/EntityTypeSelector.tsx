@@ -5,7 +5,7 @@
  * Supports: Contact, Deal, Email, Activity
  */
 
-import { User, Briefcase, Mail, Calendar } from 'lucide-react';
+import { User, Briefcase, Mail, Calendar, Video } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type EntityType, ENTITY_TYPE_CONFIG } from '@/lib/utils/entityTestTypes';
 
@@ -20,9 +20,10 @@ const ICON_MAP: Record<EntityType, React.ElementType> = {
   deal: Briefcase,
   email: Mail,
   activity: Calendar,
+  meeting: Video,
 };
 
-const ENTITY_ORDER: EntityType[] = ['contact', 'deal', 'email', 'activity'];
+const ENTITY_ORDER: EntityType[] = ['contact', 'deal', 'email', 'activity', 'meeting'];
 
 export function EntityTypeSelector({
   type,

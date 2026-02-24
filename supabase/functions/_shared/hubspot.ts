@@ -87,8 +87,15 @@ export class HubSpotClient {
         const text = await resp.text()
         let json: any = null
         try {
-          json = text ? JSON.parse(text) : null
-        } catch {
+          const trimmed = text.trim()
+          json = trimmed ? JSON.parse(trimmed) : null
+        } catch (parseError: any) {
+          console.error('[HubSpotClient] JSON parse error:', {
+            error: parseError.message,
+            responseText: text.substring(0, 500), // First 500 chars
+            status: resp.status,
+            url: url.toString(),
+          })
           json = text ? { message: text } : null
         }
 

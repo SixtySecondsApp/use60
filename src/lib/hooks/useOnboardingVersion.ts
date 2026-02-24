@@ -5,14 +5,14 @@
  * Reads from and writes to the app_settings table.
  *
  * Key: 'onboarding_version'
- * Values: 'v1' (legacy) | 'v2' (skills-based)
+ * Values: 'v1' (legacy) | 'v2' (skills-based) | 'v3' (enhanced enrichment + agent teams)
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 
-export type OnboardingVersion = 'v1' | 'v2';
+export type OnboardingVersion = 'v1' | 'v2' | 'v3';
 
 interface UseOnboardingVersionResult {
   version: OnboardingVersion;
@@ -23,7 +23,7 @@ interface UseOnboardingVersionResult {
 }
 
 const SETTING_KEY = 'onboarding_version';
-const DEFAULT_VERSION: OnboardingVersion = 'v1';
+const DEFAULT_VERSION: OnboardingVersion = 'v3';
 
 export function useOnboardingVersion(): UseOnboardingVersionResult {
   const [version, setVersion] = useState<OnboardingVersion>(DEFAULT_VERSION);
@@ -47,7 +47,7 @@ export function useOnboardingVersion(): UseOnboardingVersionResult {
 
       if (data?.value) {
         const parsedValue = data.value as OnboardingVersion;
-        if (parsedValue === 'v1' || parsedValue === 'v2') {
+        if (parsedValue === 'v1' || parsedValue === 'v2' || parsedValue === 'v3') {
           setVersion(parsedValue);
         } else {
           // Invalid value in database, use default
@@ -126,20 +126,32 @@ export function useOnboardingVersionReadOnly(): {
   useEffect(() => {
     async function fetchVersion() {
       try {
-        const { data, error } = await supabase
+        // Add a timeout to prevent infinite loading
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 5000)
+        );
+
+        const fetchPromise = supabase
           .from('app_settings')
           .select('value')
           .eq('key', SETTING_KEY)
           .maybeSingle();
 
+        const { data, error } = await Promise.race([
+          fetchPromise,
+          timeoutPromise
+        ]);
+
         if (!error && data?.value) {
           const parsedValue = data.value as OnboardingVersion;
-          if (parsedValue === 'v1' || parsedValue === 'v2') {
+          if (parsedValue === 'v1' || parsedValue === 'v2' || parsedValue === 'v3') {
             setVersion(parsedValue);
           }
         }
       } catch (err) {
-        console.error('Error fetching onboarding version:', err);
+        console.warn('Error fetching onboarding version (using default):', err);
+        // Default to v1 on error or timeout
+        setVersion(DEFAULT_VERSION);
       } finally {
         setLoading(false);
       }

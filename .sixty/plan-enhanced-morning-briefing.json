@@ -1,0 +1,204 @@
+{
+  "feature": {
+    "id": "enhanced-morning-briefing",
+    "name": "PRD-06: Enhanced Morning Briefing",
+    "prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-06",
+    "status": "complete",
+    "phase": "Phase 2 — Daily Rhythm",
+    "effort": "1.5-2 weeks",
+    "dependencies": ["PRD-01 (config)", "PRD-04 (risk scores)"],
+    "createdAt": "2026-02-21T00:00:00Z",
+    "completedAt": "2026-02-22T00:00:00Z"
+  },
+  "stories": [
+    {
+      "id": "BRF-001",
+      "feature": "enhanced-morning-briefing",
+      "title": "Create pipeline_snapshots table and quota/target config schema",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations"] },
+      "blocks": ["BRF-003", "BRF-004", "BRF-005"],
+      "parallelWith": ["BRF-002"],
+      "acceptance": [
+        "pipeline_snapshots table: org_id, user_id, snapshot_date, period, total_pipeline_value, weighted_pipeline_value, deals_by_stage (jsonb), deals_at_risk, closed_this_period, target, coverage_ratio, forecast_accuracy_trailing",
+        "Unique index on (org_id, user_id, snapshot_date)",
+        "RLS policies for org isolation + user read-own",
+        "pipeline_targets config stored in agent_config_org_overrides (revenue, deals_closed, pipeline_generated, coverage_ratio_target)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222500001_pipeline_snapshots.sql"
+      ]
+    },
+    {
+      "id": "BRF-002",
+      "feature": "enhanced-morning-briefing",
+      "title": "Seed agent_config_defaults for morning_briefing agent type",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["BRF-004", "BRF-007"],
+      "parallelWith": ["BRF-001"],
+      "acceptance": [
+        "agent_config_defaults seeded: briefing_format (detailed/summary), pipeline_math_enabled (true), quarter_start_month (1), overnight_summary_enabled (true), delivery_time (08:00), delivery_method (slack_dm)",
+        "Methodology overrides: MEDDIC emphasises champion/metrics in gap analysis, BANT emphasises budget/authority",
+        "Migration is idempotent"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222500002_morning_briefing_agent_config.sql"
+      ]
+    },
+    {
+      "id": "BRF-003",
+      "feature": "enhanced-morning-briefing",
+      "title": "Build pipeline math RPC functions (gap analysis, coverage ratio, weighted pipeline)",
+      "type": "logic",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["BRF-001"], "files": [], "schema": ["pipeline_snapshots", "deals"] },
+      "blocks": ["BRF-004", "BRF-006", "BRF-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "calculate_pipeline_math(org_id, user_id, period) RPC returns: target, closed_so_far, pct_to_target, weighted_pipeline, coverage_ratio, gap_amount, projected_close (using trailing close rate)",
+        "get_weighted_pipeline(user_id) uses stage-based probabilities from deal stages config",
+        "Calculations work with NULL target (returns pipeline stats only, skips gap analysis)",
+        "Results cached for 15 minutes via pipeline_snapshots upsert"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222500003_pipeline_math_rpcs.sql"
+      ]
+    },
+    {
+      "id": "BRF-004",
+      "feature": "enhanced-morning-briefing",
+      "title": "Build quarter phase detection and highest-leverage action recommender",
+      "type": "logic",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["BRF-002", "BRF-003"], "files": [], "schema": [] },
+      "blocks": ["BRF-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "detectQuarterPhase() returns build (weeks 1-4) / progress (weeks 5-9) / close (weeks 10-13) with adjusted emphasis weights",
+        "recommendHighestLeverageAction() combines gap analysis + risk scores + deal stage to produce single actionable recommendation",
+        "Recommendation includes: action text, target deal, expected impact, urgency level",
+        "Pure TypeScript functions in _shared/orchestrator/adapters/pipelineMath.ts"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/pipelineMath.ts"
+      ]
+    },
+    {
+      "id": "BRF-005",
+      "feature": "enhanced-morning-briefing",
+      "title": "Create weekly pipeline snapshot cron job",
+      "type": "integration",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["BRF-001"], "files": [], "schema": ["pipeline_snapshots"] },
+      "blocks": [],
+      "parallelWith": ["BRF-004"],
+      "acceptance": [
+        "Snapshot function captures: total pipeline, weighted pipeline, deals by stage, at-risk count, closed this period, target, coverage ratio per user",
+        "Cron runs every Monday at 5am (before morning briefing cycle)",
+        "Uses call_proactive_edge_function() pattern",
+        "Forecast accuracy calculated: compare last week's snapshot predictions vs actual closes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/agent-pipeline-snapshot/index.ts",
+        "supabase/migrations/20260222500004_schedule_pipeline_snapshot_cron.sql"
+      ]
+    },
+    {
+      "id": "BRF-006",
+      "feature": "enhanced-morning-briefing",
+      "title": "Build overnight work summary tracker",
+      "type": "logic",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["BRF-003"], "files": [], "schema": [] },
+      "blocks": ["BRF-007"],
+      "parallelWith": ["BRF-004"],
+      "acceptance": [
+        "getOvernightSummary(user_id, since_timestamp) queries: enrichments completed, email opens detected, campaign replies, signals detected",
+        "Sources: activities table (type=enrichment), deal_signal_temperature changes, campaign reply events",
+        "Returns structured summary: [{type, description, timestamp, deal_name}]",
+        "Adapter in _shared/orchestrator/adapters/overnightSummary.ts"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/overnightSummary.ts"
+      ]
+    },
+    {
+      "id": "BRF-007",
+      "feature": "enhanced-morning-briefing",
+      "title": "Upgrade proactive-pipeline-analysis with pipeline math and new Slack blocks",
+      "type": "integration",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["BRF-002", "BRF-003", "BRF-004", "BRF-006"], "files": ["supabase/functions/proactive-pipeline-analysis/index.ts"], "schema": [] },
+      "blocks": ["BRF-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "Morning briefing includes: gap-to-target analysis, quarter phase context, coverage ratio, highest-leverage action recommendation",
+        "Overnight work summary section: 'While you slept: ...'",
+        "Respects briefing_format config (detailed vs summary)",
+        "Slack Block Kit updated with pipeline math section and action buttons"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/proactive-pipeline-analysis/index.ts",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ]
+    },
+    {
+      "id": "BRF-008",
+      "feature": "enhanced-morning-briefing",
+      "title": "Register fleet routes and sequence for enhanced morning briefing",
+      "type": "integration",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["BRF-007"], "files": [], "schema": ["fleet_event_routes", "fleet_sequence_definitions"] },
+      "blocks": ["BRF-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "Fleet event route: cron.morning_briefing -> enhanced_morning_briefing sequence",
+        "4-step sequence: calculate-pipeline-math -> detect-quarter-phase -> gather-overnight-summary -> deliver-enhanced-briefing",
+        "Migration is idempotent with ON CONFLICT on index expressions"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222500005_morning_briefing_fleet_routes.sql"
+      ]
+    },
+    {
+      "id": "BRF-009",
+      "feature": "enhanced-morning-briefing",
+      "title": "Integration test for enhanced morning briefing pipeline",
+      "type": "test",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["BRF-008"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Vitest suite covering: pipeline math calculations, quarter phase detection, gap analysis with/without target, overnight summary aggregation",
+        "Test scenarios: on-track rep, behind-target rep, no-target-set rep, early/mid/late quarter phases",
+        "Manual Slack test guide in TESTING.md"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/proactive-pipeline-analysis/test.ts",
+        "supabase/functions/proactive-pipeline-analysis/TESTING.md"
+      ]
+    }
+  ]
+}

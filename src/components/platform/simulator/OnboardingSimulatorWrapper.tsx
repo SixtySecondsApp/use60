@@ -10,14 +10,14 @@ import { Badge } from '@/components/ui/badge';
 import { OnboardingFlowSimulator } from './OnboardingFlowSimulator';
 import { OnboardingFlowSimulatorV2 } from './OnboardingFlowSimulatorV2';
 
-type OnboardingVersion = 'v1' | 'v2';
+type OnboardingVersion = 'v1' | 'v2' | 'v3';
 
 interface OnboardingSimulatorWrapperProps {
   defaultVersion?: OnboardingVersion;
 }
 
 export function OnboardingSimulatorWrapper({
-  defaultVersion = 'v2',
+  defaultVersion = 'v3', // Default to latest version
 }: OnboardingSimulatorWrapperProps) {
   const [version, setVersion] = useState<OnboardingVersion>(defaultVersion);
 
@@ -52,8 +52,18 @@ export function OnboardingSimulatorWrapper({
               }`}
             >
               V2 - Skills
-              <Badge className="text-xs ml-1 bg-violet-500/10 text-violet-500 border-violet-500/20">
-                New
+            </button>
+            <button
+              onClick={() => setVersion('v3')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                version === 'v3'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              V3 - Agent Teams
+              <Badge className="text-xs ml-1 bg-blue-500/10 text-blue-500 border-blue-500/20">
+                Latest
               </Badge>
             </button>
           </div>
@@ -67,11 +77,21 @@ export function OnboardingSimulatorWrapper({
           {version === 'v2' && (
             <span>AI-powered onboarding: Company analysis → Skills configuration</span>
           )}
+          {version === 'v3' && (
+            <span>Enhanced enrichment with parallel AI agents for 89% data completeness</span>
+          )}
         </div>
       </div>
 
       {/* Simulator Content */}
-      {version === 'v1' ? <OnboardingFlowSimulator /> : <OnboardingFlowSimulatorV2 />}
+      {version === 'v1' ? (
+        <OnboardingFlowSimulator />
+      ) : (
+        <OnboardingFlowSimulatorV2
+          forceRealApiMode={version === 'v3'}
+          versionLabel={version === 'v3' ? 'V3' : 'V2'}
+        />
+      )}
     </div>
   );
 }

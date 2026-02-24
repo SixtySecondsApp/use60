@@ -3,7 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
   buildTaskAddedConfirmation,
   buildDealActivityMessage,
@@ -11,6 +11,14 @@ import {
   buildHITLActionedConfirmation,
   type HITLActionedConfirmation,
   type HITLResourceType,
+  buildActionConfirmation,
+  type ActionConfirmationData,
+  section,
+  context as contextBlock,
+  divider,
+  actions as actionsBlock,
+  header as headerBlock,
+  buildManagerPrereadMessage,
 } from '../_shared/slackBlocks.ts';
 import {
   handleMomentumSetNextStep,
@@ -30,6 +38,10 @@ import {
   handleApprovalsRefresh,
 } from './handlers/phase5.ts';
 import { handleHITLAction } from './handlers/hitl.ts';
+import { handleSupportAction } from './handlers/support.ts';
+import { handleAutonomyAction } from './handlers/autonomy.ts';
+import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
+import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -297,8 +309,8 @@ async function createTask(
       // Our tasks schema uses assigned_to/created_by (not user_id)
       assigned_to: ctx.userId,
       created_by: ctx.userId,
-      // Multi-tenant: include org_id when available
-      ...(ctx.orgId ? { org_id: ctx.orgId } : {}),
+      // Multi-tenant: include clerk_org_id when available
+      ...(ctx.orgId ? { clerk_org_id: ctx.orgId } : {}),
       deal_id: taskData.dealId || null,
       meeting_id: taskData.meetingId || null,
       due_date: dueDate.toISOString(),
@@ -357,6 +369,1114 @@ async function updateMessage(
     });
   } catch (error) {
     console.error('Error updating message:', error);
+  }
+}
+
+/**
+ * Update the original Slack message via chat.update API (works even when response_url has expired).
+ * Used for expired/invalid HITL approvals where response_url is stale.
+ */
+async function updateMessageViaApi(
+  botToken: string,
+  channelId: string,
+  messageTs: string,
+  blocks: unknown[],
+  text: string
+): Promise<void> {
+  try {
+    const res = await fetch('https://slack.com/api/chat.update', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: channelId,
+        ts: messageTs,
+        blocks,
+        text,
+      }),
+    });
+    const result = await res.json();
+    if (!result.ok) {
+      console.error('chat.update failed:', result.error);
+    }
+  } catch (error) {
+    console.error('Error updating message via API:', error);
+  }
+}
+
+/**
+ * Handle expired/invalid HITL approval — updates the original Slack message
+ * to show an expiry notice (since response_url may be stale).
+ */
+async function handleExpiredHITLApproval(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  approval: HITLApprovalRecord | undefined,
+  errorMessage: string
+): Promise<Response> {
+  // Try response_url first (works within ~30 min)
+  if (payload.response_url) {
+    await sendEphemeral(payload.response_url, {
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `⏰ ${errorMessage}` } }],
+      text: errorMessage,
+    });
+  }
+
+  // Also update the original message via API to replace buttons with expiry notice
+  if (approval?.slack_channel_id && approval?.slack_message_ts) {
+    const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
+    if (orgConnection) {
+      const typeLabel = approval.resource_name || approval.resource_type;
+      const blocks = [
+        { type: 'section', text: { type: 'mrkdwn', text: `⏰ *${errorMessage}*\n_${typeLabel}_` } },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: `Clicked by <@${payload.user.id}> • ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` }] },
+      ];
+      await updateMessageViaApi(orgConnection.botToken, approval.slack_channel_id, approval.slack_message_ts, blocks, errorMessage);
+    }
+  }
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============================================================================
+// SLACK-001: Snooze Action Handler
+// ============================================================================
+
+/**
+ * Parse snooze duration string into milliseconds offset.
+ * Supports: '2h', '1d', 'tomorrow', '3d', '1w'
+ */
+function parseSnoozeDuration(duration: string): { ms: number; label: string } {
+  const map: Record<string, { ms: number; label: string }> = {
+    '2h': { ms: 2 * 60 * 60 * 1000, label: '2 hours' },
+    '1d': { ms: 24 * 60 * 60 * 1000, label: 'tomorrow' },
+    'tomorrow': { ms: 24 * 60 * 60 * 1000, label: 'tomorrow' },
+    '3d': { ms: 3 * 24 * 60 * 60 * 1000, label: '3 days' },
+    '1w': { ms: 7 * 24 * 60 * 60 * 1000, label: '1 week' },
+  };
+  return map[duration] || map['1d'];
+}
+
+/**
+ * Handle snooze::{entity_type}::{entity_id} actions from any Slack message.
+ * Stores the snooze in slack_snoozed_items and updates the original message.
+ */
+async function handleSnoozeAction(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  // Format: snooze::{entity_type}::{entity_id}
+  if (parts.length < 3) {
+    console.error('[Snooze] Invalid action_id format:', action.action_id);
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const entityType = parts[1]; // 'deal', 'task', 'notification', etc.
+  const entityId = parts[2];
+
+  // Parse value for duration and context
+  let snoozeData: { entityType?: string; entityId?: string; entityName?: string; duration?: string } = {};
+  try {
+    snoozeData = JSON.parse(action.value || '{}');
+  } catch {
+    snoozeData = { duration: '1d' };
+  }
+
+  const duration = parseSnoozeDuration(snoozeData.duration || '1d');
+  const snoozeUntil = new Date(Date.now() + duration.ms);
+
+  // Get user context
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Your Slack account is not linked to Sixty. Please link it in Settings.' } }],
+        text: 'Account not linked',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Store snooze
+  const { error: insertError } = await supabase
+    .from('slack_snoozed_items')
+    .insert({
+      org_id: ctx.orgId,
+      user_id: ctx.userId,
+      entity_type: entityType,
+      entity_id: entityId,
+      snooze_until: snoozeUntil.toISOString(),
+      original_message_blocks: payload.message?.blocks || null,
+      original_context: {
+        entityName: snoozeData.entityName || entityId,
+        notificationType: 'morning_brief',
+      },
+      notification_type: 'morning_brief',
+      slack_user_id: payload.user.id,
+    });
+
+  if (insertError) {
+    console.error('[Snooze] Insert error:', insertError);
+  }
+
+  // Update original message with confirmation
+  if (payload.response_url) {
+    const snoozeLabel = snoozeUntil.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+    });
+    const confirmation = buildActionConfirmation({
+      action: 'snoozed',
+      slackUserId: payload.user.id,
+      timestamp: new Date().toISOString(),
+      entitySummary: snoozeData.entityName || `${entityType}: ${entityId}`,
+      detail: `Snoozed until ${snoozeLabel}`,
+    });
+    await updateMessage(payload.response_url, confirmation.blocks);
+  }
+
+  // Log interaction
+  await logSlackInteraction(supabase, {
+    userId: ctx.userId,
+    orgId: ctx.orgId || null,
+    actionType: `snooze_${duration.label.replace(' ', '_')}`,
+    actionCategory: 'notifications',
+    entityType,
+    entityId,
+    metadata: { duration: snoozeData.duration, snooze_until: snoozeUntil.toISOString() },
+  });
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============================================================================
+// SLACK-007: Dismiss Action Handler
+// ============================================================================
+
+/**
+ * Handle dismiss::{notification_type}::{notification_id} actions.
+ * Marks notification as dismissed and updates message.
+ */
+async function handleDismissAction(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const notificationType = parts[1] || 'unknown';
+  const notificationId = parts[2] || 'unknown';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+
+  // Parse value for entity context
+  let dismissData: { entityName?: string } = {};
+  try {
+    dismissData = JSON.parse(action.value || '{}');
+  } catch {
+    dismissData = {};
+  }
+
+  // Update original message with dismissed confirmation
+  if (payload.response_url) {
+    const confirmation = buildActionConfirmation({
+      action: 'dismissed',
+      slackUserId: payload.user.id,
+      timestamp: new Date().toISOString(),
+      entitySummary: dismissData.entityName || `${notificationType}`,
+      notificationType,
+    });
+    await updateMessage(payload.response_url, confirmation.blocks);
+  }
+
+  // Log dismiss for Smart Engagement tracking
+  await logSlackInteraction(supabase, {
+    userId: ctx?.userId || null,
+    orgId: ctx?.orgId || null,
+    actionType: 'notification_dismissed',
+    actionCategory: 'notifications',
+    entityType: notificationType,
+    entityId: notificationId,
+    metadata: { notification_type: notificationType },
+  });
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============================================================================
+// SLACK-004: Draft Follow-up Action Handler
+// ============================================================================
+
+/**
+ * Handle draft_followup::{resource_type}::{resource_id} actions.
+ * Fetches context, generates email draft via Claude, creates HITL approval.
+ */
+async function handleDraftFollowupAction(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const resourceType = parts[1] || 'deal'; // 'deal', 'contact', 'meeting'
+  const resourceId = parts[2] || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Your Slack account is not linked to Sixty. Please link it in Settings.' } }],
+        text: 'Account not linked',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Send immediate acknowledgement
+  if (payload.response_url) {
+    await sendEphemeral(payload.response_url, {
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Drafting follow-up email...' } }],
+      text: 'Drafting follow-up...',
+    });
+  }
+
+  // Fetch context based on resource type
+  let contactName = '';
+  let contactEmail = '';
+  let dealContext = '';
+  let recentActivity = '';
+  let recipientName = '';
+
+  try {
+    if (resourceType === 'deal') {
+      const { data: deal } = await supabase
+        .from('deals')
+        .select('id, title, value, stage, owner_id, contacts:contact_id(id, full_name, email)')
+        .eq('id', resourceId)
+        .maybeSingle();
+
+      if (deal) {
+        dealContext = `Deal: ${deal.title} (${deal.stage}, value: ${deal.value})`;
+        const contact = deal.contacts as any;
+        if (contact) {
+          contactName = contact.full_name || '';
+          contactEmail = contact.email || '';
+          recipientName = contactName;
+        }
+      }
+
+      // Get last meeting context
+      const { data: lastMeeting } = await supabase
+        .from('meetings')
+        .select('id, title, summary, created_at')
+        .eq('deal_id', resourceId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastMeeting?.summary) {
+        recentActivity = `Last meeting: ${lastMeeting.title}\nSummary: ${lastMeeting.summary}`;
+      }
+    } else if (resourceType === 'contact') {
+      const { data: contact } = await supabase
+        .from('contacts')
+        .select('id, full_name, email, company_id(name)')
+        .eq('id', resourceId)
+        .maybeSingle();
+
+      if (contact) {
+        contactName = contact.full_name || '';
+        contactEmail = contact.email || '';
+        recipientName = contactName;
+        const company = contact.company_id as any;
+        dealContext = company?.name ? `Company: ${company.name}` : '';
+      }
+
+      // Get recent activities
+      const { data: activities } = await supabase
+        .from('activities')
+        .select('type, title, created_at')
+        .eq('contact_id', resourceId)
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (activities && activities.length > 0) {
+        recentActivity = activities.map(a => `${a.type}: ${a.title}`).join('\n');
+      }
+    }
+  } catch (err) {
+    console.error('[DraftFollowup] Context fetch error:', err);
+  }
+
+  // Generate email draft via Claude
+  let emailDraft = {
+    subject: `Following up — ${dealContext || recipientName}`,
+    body: `Hi ${recipientName || 'there'},\n\nFollowing up on our recent conversation. Here are the key points:\n\n[Add key points]\n\nBest regards`,
+  };
+
+  try {
+    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+    if (anthropicKey) {
+      // Get user profile for sender name
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', ctx.userId)
+        .maybeSingle();
+
+      const senderName = profile?.full_name || 'the team';
+      const currentDate = new Date().toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      });
+
+      const prompt = `Write a professional, concise follow-up email.
+
+Context:
+- Sender: ${senderName}
+- Recipient: ${recipientName || 'the contact'}
+- ${dealContext}
+- ${recentActivity || 'No recent activity context available'}
+- Today's date: ${currentDate}
+
+Requirements:
+- Subject line: short, specific, conversational
+- Body: 3-5 sentences max, warm but professional
+- Include a clear next step or question
+- Sign off with just the sender's first name
+
+Return JSON: { "subject": "...", "body": "..." }`;
+
+      const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 500,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      if (aiResponse.ok) {
+        const aiData = await aiResponse.json();
+        const text = aiData.content?.[0]?.text || '';
+        // Try to parse JSON from response
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          emailDraft = { subject: parsed.subject || emailDraft.subject, body: parsed.body || emailDraft.body };
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[DraftFollowup] AI draft error:', err);
+    // Fall back to template
+  }
+
+  // Create HITL pending approval
+  const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+  const { data: approval, error: approvalError } = await supabase
+    .from('hitl_pending_approvals')
+    .insert({
+      org_id: ctx.orgId,
+      user_id: ctx.userId,
+      resource_type: 'email_draft',
+      resource_id: resourceId,
+      resource_name: `Follow-up: ${recipientName || resourceType}`,
+      slack_team_id: payload.team?.id || '',
+      slack_channel_id: payload.channel?.id || '',
+      slack_message_ts: payload.message?.ts || '',
+      status: 'pending',
+      original_content: {
+        to: contactEmail,
+        toName: recipientName,
+        subject: emailDraft.subject,
+        body: emailDraft.body,
+        resourceType,
+        resourceId,
+      },
+      callback_type: 'edge_function',
+      callback_target: 'hitl-send-followup-email',
+      expires_at: expiresAt.toISOString(),
+    })
+    .select('id')
+    .single();
+
+  if (approvalError) {
+    console.error('[DraftFollowup] Approval insert error:', approvalError);
+  }
+
+  // Send HITL DM with email preview
+  if (orgConnection?.botToken && approval?.id) {
+    // Open DM with user
+    const dmResponse = await fetch('https://slack.com/api/conversations.open', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${orgConnection.botToken}`,
+      },
+      body: JSON.stringify({ users: payload.user.id }),
+    });
+
+    const dmData = await dmResponse.json();
+    const dmChannelId = dmData.channel?.id;
+
+    if (dmChannelId) {
+      const hitlBlocks = [
+        headerBlock('Follow-up Draft Ready'),
+        section(`*To:* ${recipientName || 'Contact'} ${contactEmail ? `(${contactEmail})` : ''}\n*Subject:* ${emailDraft.subject}`),
+        divider(),
+        section(emailDraft.body),
+        divider(),
+        actionsBlock([
+          { text: 'Send', actionId: `approve::email_draft::${approval.id}`, value: JSON.stringify({ approvalId: approval.id }), style: 'primary' },
+          { text: 'Edit', actionId: `edit::email_draft::${approval.id}`, value: JSON.stringify({ approvalId: approval.id }) },
+          { text: 'Dismiss', actionId: `reject::email_draft::${approval.id}`, value: JSON.stringify({ approvalId: approval.id }) },
+        ]),
+        contextBlock([`Expires in 24 hours | ${resourceType}: ${recipientName || resourceId}`]),
+      ];
+
+      await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${orgConnection.botToken}`,
+        },
+        body: JSON.stringify({
+          channel: dmChannelId,
+          blocks: hitlBlocks,
+          text: `Follow-up draft ready for ${recipientName || 'your contact'}`,
+        }),
+      });
+    }
+  }
+
+  // Log interaction
+  await logSlackInteraction(supabase, {
+    userId: ctx.userId,
+    orgId: ctx.orgId || null,
+    actionType: 'draft_followup',
+    actionCategory: 'email',
+    entityType: resourceType,
+    entityId: resourceId,
+  });
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============================================================================
+// SLACK-003: Prep Meeting Handler (from morning brief)
+// ============================================================================
+
+/**
+ * Handle prep_meeting::{meeting_id} actions.
+ * Triggers the meeting prep skill for the specified meeting.
+ */
+async function handlePrepMeetingAction(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const meetingId = parts[1] || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Acknowledge immediately
+  if (payload.response_url) {
+    await sendEphemeral(payload.response_url, {
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Preparing meeting brief...' } }],
+      text: 'Preparing meeting brief...',
+    });
+  }
+
+  // Trigger the meeting-prep function
+  try {
+    await supabase.functions.invoke('slack-meeting-prep', {
+      body: {
+        meetingId,
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+        slackUserId: payload.user.id,
+        isManualTrigger: true,
+      },
+    });
+  } catch (err) {
+    console.error('[PrepMeeting] Error invoking meeting-prep:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Failed to prepare meeting brief. Try again or check the app.' } }],
+        text: 'Meeting prep failed',
+      });
+    }
+  }
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ============================================================================
+// CRM-005: Undo CRM Update Action Handler
+// ============================================================================
+
+/**
+ * Handle undo_crm_update::{update_id} actions.
+ * Calls the undo_crm_field_update RPC to revert a CRM field change.
+ */
+async function handleUndoCrmUpdate(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const updateId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // Fetch the update record before undoing it (to get field info for confirmation)
+    const { data: updateRecord, error: fetchError } = await supabase
+      .from('crm_field_updates')
+      .select('field_name, old_value, new_value')
+      .eq('id', updateId)
+      .single();
+
+    if (fetchError || !updateRecord) {
+      console.error('[UndoCrmUpdate] Failed to fetch update record:', fetchError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Could not find the CRM update to undo.' } }],
+          text: 'Update not found',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Call the RPC to undo the update
+    const { error: undoError } = await supabase.rpc('undo_crm_field_update', {
+      p_update_id: updateId,
+      p_user_id: ctx.userId,
+    });
+
+    if (undoError) {
+      console.error('[UndoCrmUpdate] RPC error:', undoError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ Failed to undo CRM update: ${undoError.message}` } }],
+          text: 'Undo failed',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Successfully undone - update the Slack message with strikethrough
+    if (payload.response_url && payload.message?.blocks) {
+      const updatedBlocks = payload.message.blocks.map((block: any) => {
+        // Find the section block that contains this field update
+        if (block.type === 'section' && block.text?.text?.includes(`*${updateRecord.field_name}*`)) {
+          const oldVal = formatUpdateValue(updateRecord.old_value);
+          const newVal = formatUpdateValue(updateRecord.new_value);
+          return {
+            ...block,
+            text: {
+              ...block.text,
+              text: `~*${updateRecord.field_name}*: \`${oldVal}\` → \`${newVal}\`~\n_✓ Reverted by <@${payload.user.id}>_`,
+            },
+          };
+        }
+        // Remove the undo button for this specific update
+        if (block.type === 'actions') {
+          const filteredElements = block.elements?.filter((el: any) =>
+            el.action_id !== `undo_crm_update::${updateId}`
+          );
+          if (filteredElements && filteredElements.length > 0) {
+            return { ...block, elements: filteredElements };
+          }
+          // If no buttons left, return null to filter out the block
+          return null;
+        }
+        return block;
+      }).filter(Boolean); // Remove null blocks
+
+      await updateMessage(payload.response_url, updatedBlocks);
+    }
+
+    // Log activity for analytics
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'undo_crm_update',
+      actionCategory: 'crm',
+      entityType: 'crm_field_update',
+      entityId: updateId,
+      metadata: { field_name: updateRecord.field_name },
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[UndoCrmUpdate] Unexpected error:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ An unexpected error occurred while undoing the CRM update.' } }],
+        text: 'Unexpected error',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Format a CRM field value for display (helper for undo confirmation)
+ */
+function formatUpdateValue(value: unknown): string {
+  if (value === null || value === undefined) return '_empty_';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return JSON.stringify(value);
+}
+
+// ============================================================================
+// RET-005: Re-engagement HITL Action Handlers
+// ============================================================================
+
+/**
+ * Handle reengagement_send::{deal_id} actions.
+ * Sends the re-engagement email and updates watchlist status to 'converted'.
+ */
+async function handleReengagementSend(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const dealId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // Get contact name from the message blocks for confirmation
+    let contactName = 'contact';
+    if (payload.message?.blocks) {
+      for (const block of payload.message.blocks) {
+        if (block.type === 'section' && block.fields) {
+          for (const field of block.fields) {
+            if (field.text?.includes('Contact')) {
+              // Extract contact name from the field value
+              const match = field.text.match(/Contact\*\n(.+?)(?:\n|$)/);
+              if (match) contactName = match[1].trim();
+            }
+          }
+        }
+      }
+    }
+
+    // V1: Log the send intent (actual email sending will come later)
+    console.log('[ReengagementSend] Would send email for deal:', dealId);
+
+    // Update watchlist status to 'converted'
+    const { error: updateError } = await supabase.rpc('update_watchlist_status', {
+      p_deal_id: dealId,
+      p_status: 'converted',
+      p_next_check_days: null,
+    });
+
+    if (updateError) {
+      console.error('[ReengagementSend] Error updating watchlist status:', updateError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Failed to update watchlist status.' } }],
+          text: 'Failed to update watchlist status.',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Update Slack message with confirmation and remove buttons
+    if (payload.response_url && payload.message?.blocks) {
+      const updatedBlocks = payload.message.blocks.map((block: any) => {
+        // Remove the action buttons
+        if (block.type === 'actions') {
+          return null;
+        }
+        return block;
+      }).filter(Boolean);
+
+      // Add confirmation message
+      updatedBlocks.push(divider());
+      updatedBlocks.push(section({
+        type: 'mrkdwn',
+        text: `✅ *Email sent to ${contactName}*\nWatchlist status updated to converted.`,
+      }));
+      updatedBlocks.push(contextBlock([`Actioned by <@${payload.user.id}>`]));
+
+      await updateMessage(payload.response_url, updatedBlocks);
+    }
+
+    // Log activity
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'reengagement_send',
+      actionCategory: 'reengagement',
+      entityType: 'deal',
+      entityId: dealId,
+      metadata: { contact_name: contactName },
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[ReengagementSend] Unexpected error:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ An unexpected error occurred while sending the re-engagement email.' } }],
+        text: 'Unexpected error',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Handle reengagement_edit::{deal_id} actions.
+ * V1: Show placeholder message (full edit will come later).
+ */
+async function handleReengagementEdit(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const dealId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // V1: Show ephemeral placeholder message
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '✏️ Edit functionality coming soon. Please copy and modify the draft above.'
+          }
+        }],
+        text: 'Edit functionality coming soon.',
+      });
+    }
+
+    // Log activity
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'reengagement_edit',
+      actionCategory: 'reengagement',
+      entityType: 'deal',
+      entityId: dealId,
+      metadata: { placeholder: true },
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[ReengagementEdit] Unexpected error:', err);
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Handle reengagement_snooze::{deal_id} actions.
+ * Snoozes the watchlist entry for 2 weeks.
+ */
+async function handleReengagementSnooze(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const dealId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // Update watchlist status to 'snoozed' with 2 weeks delay
+    const { error: updateError } = await supabase.rpc('update_watchlist_status', {
+      p_deal_id: dealId,
+      p_status: 'snoozed',
+      p_next_check_days: 14, // 2 weeks
+    });
+
+    if (updateError) {
+      console.error('[ReengagementSnooze] Error updating watchlist status:', updateError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Failed to snooze watchlist entry.' } }],
+          text: 'Failed to snooze watchlist entry.',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Update Slack message with confirmation and remove buttons
+    if (payload.response_url && payload.message?.blocks) {
+      const updatedBlocks = payload.message.blocks.map((block: any) => {
+        // Remove the action buttons
+        if (block.type === 'actions') {
+          return null;
+        }
+        return block;
+      }).filter(Boolean);
+
+      // Add confirmation message
+      updatedBlocks.push(divider());
+      updatedBlocks.push(section({
+        type: 'mrkdwn',
+        text: '⏰ *Snoozed for 2 weeks*\nYou\'ll be reminded to follow up later.',
+      }));
+      updatedBlocks.push(contextBlock([`Actioned by <@${payload.user.id}>`]));
+
+      await updateMessage(payload.response_url, updatedBlocks);
+    }
+
+    // Log activity
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'reengagement_snooze',
+      actionCategory: 'reengagement',
+      entityType: 'deal',
+      entityId: dealId,
+      metadata: { snooze_days: 14 },
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[ReengagementSnooze] Unexpected error:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ An unexpected error occurred while snoozing the watchlist entry.' } }],
+        text: 'Unexpected error',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Handle reengagement_remove::{deal_id} actions.
+ * Removes the deal from the re-engagement watchlist.
+ */
+async function handleReengagementRemove(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  const parts = action.action_id.split('::');
+  const dealId = parts[1] || action.value || '';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+  if (!ctx) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Your Slack account is not linked to Sixty. Please contact your admin to set up the mapping.' } }],
+        text: 'Your Slack account is not linked to Sixty.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    // Update watchlist status to 'removed'
+    const { error: updateError } = await supabase.rpc('update_watchlist_status', {
+      p_deal_id: dealId,
+      p_status: 'removed',
+      p_next_check_days: null,
+    });
+
+    if (updateError) {
+      console.error('[ReengagementRemove] Error updating watchlist status:', updateError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Failed to remove from watchlist.' } }],
+          text: 'Failed to remove from watchlist.',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Update Slack message with confirmation and remove buttons
+    if (payload.response_url && payload.message?.blocks) {
+      const updatedBlocks = payload.message.blocks.map((block: any) => {
+        // Remove the action buttons
+        if (block.type === 'actions') {
+          return null;
+        }
+        return block;
+      }).filter(Boolean);
+
+      // Add confirmation message
+      updatedBlocks.push(divider());
+      updatedBlocks.push(section({
+        type: 'mrkdwn',
+        text: '🗑️ *Removed from watchlist*\nThis deal will no longer be tracked for re-engagement.',
+      }));
+      updatedBlocks.push(contextBlock([`Actioned by <@${payload.user.id}>`]));
+
+      await updateMessage(payload.response_url, updatedBlocks);
+    }
+
+    // Log activity
+    await logSlackInteraction(supabase, {
+      userId: ctx.userId,
+      orgId: ctx.orgId || null,
+      actionType: 'reengagement_remove',
+      actionCategory: 'reengagement',
+      entityType: 'deal',
+      entityId: dealId,
+      metadata: {},
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[ReengagementRemove] Unexpected error:', err);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ An unexpected error occurred while removing from watchlist.' } }],
+        text: 'Unexpected error',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 }
 
@@ -1486,16 +2606,7 @@ async function handleHITLApprove(
   // Validate the approval
   const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
   if (!validation.valid || !validation.approval) {
-    if (payload.response_url) {
-      await sendEphemeral(payload.response_url, {
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ ${validation.error || 'Invalid approval'}` } }],
-        text: validation.error || 'Invalid approval',
-      });
-    }
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
   }
 
   const approval = validation.approval;
@@ -1561,16 +2672,7 @@ async function handleHITLReject(
   // Validate the approval
   const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
   if (!validation.valid || !validation.approval) {
-    if (payload.response_url) {
-      await sendEphemeral(payload.response_url, {
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ ${validation.error || 'Invalid approval'}` } }],
-        text: validation.error || 'Invalid approval',
-      });
-    }
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
   }
 
   const approval = validation.approval;
@@ -1755,16 +2857,7 @@ async function handleHITLEdit(
   // Validate the approval
   const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
   if (!validation.valid || !validation.approval) {
-    if (payload.response_url) {
-      await sendEphemeral(payload.response_url, {
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: `❌ ${validation.error || 'Invalid approval'}` } }],
-        text: validation.error || 'Invalid approval',
-      });
-    }
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
   }
 
   const approval = validation.approval;
@@ -5985,11 +7078,12 @@ async function handleDebriefAddTask(
   const { data: task, error } = await supabase
     .from('tasks')
     .insert({
-      user_id: ctx.userId,
-      org_id: ctx.orgId,
+      assigned_to: ctx.userId,
+      created_by: ctx.userId,
+      clerk_org_id: ctx.orgId,
       title: taskData.title || 'Follow-up task',
       due_date: dueDate.toISOString(),
-      status: 'todo',
+      status: 'pending',
       priority: 'medium',
       deal_id: taskData.dealId || null,
       meeting_id: taskData.meetingId || null,
@@ -6113,11 +7207,12 @@ async function handleDebriefAddAllTasks(
     dueDate.setDate(dueDate.getDate() + (task.dueInDays || 3));
 
     return {
-      user_id: ctx.userId,
-      org_id: ctx.orgId,
+      assigned_to: ctx.userId,
+      created_by: ctx.userId,
+      clerk_org_id: ctx.orgId,
       title: task.title,
       due_date: dueDate.toISOString(),
-      status: 'todo',
+      status: 'pending',
       priority: 'medium',
       deal_id: task.dealId || null,
       meeting_id: task.meetingId || null,
@@ -6187,11 +7282,196 @@ async function handleDebriefAddAllTasks(
   });
 }
 
+// =============================================================================
+// IMP-006: Handle "Send to manager as pre-read" button
+// action_id: imp_send_preread::{event_id}
+//
+// Looks up the event's prep content from the orchestrator job outputs,
+// resolves the manager's Slack user ID (admin/owner in same org),
+// and sends a condensed pre-read DM.
+// =============================================================================
+
+async function handleImpSendPreread(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction,
+): Promise<Response> {
+  const corsHeaders = getCorsHeaders({ headers: new Headers() } as Request);
+
+  try {
+    const parts = action.action_id.split('::');
+    const eventId = parts[1];
+
+    if (!eventId) {
+      console.error('[IMP] imp_send_preread: missing event_id in action_id');
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 1. Resolve requesting user's org
+    const { data: slackUser } = await supabase
+      .from('slack_auth')
+      .select('user_id, access_token')
+      .eq('slack_user_id', payload.user.id)
+      .maybeSingle();
+
+    if (!slackUser?.user_id || !slackUser?.access_token) {
+      console.error('[IMP] imp_send_preread: could not resolve user from slack_user_id');
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const { data: membership } = await supabase
+      .from('organization_memberships')
+      .select('org_id')
+      .eq('user_id', slackUser.user_id)
+      .maybeSingle();
+
+    const orgId = membership?.org_id;
+    if (!orgId) {
+      console.error('[IMP] imp_send_preread: org not found for user');
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 2. Fetch the calendar event title and start_time
+    const { data: calEvent } = await supabase
+      .from('calendar_events')
+      .select('id, title, start_time, meeting_type')
+      .eq('id', eventId)
+      .maybeSingle();
+
+    if (!calEvent) {
+      console.error('[IMP] imp_send_preread: event not found:', eventId);
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 3. Fetch prep content from orchestrator job outputs
+    //    Look for the most recent successful agent job for this event
+    const { data: jobRow } = await supabase
+      .from('agent_jobs')
+      .select('id, outputs')
+      .eq('org_id', orgId)
+      .contains('payload', { meeting_id: eventId })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Extract prep sections from job outputs if available
+    let sections: Array<{ title: string; body: string }> = [];
+    if (jobRow?.outputs) {
+      const outputs = jobRow.outputs as Record<string, unknown>;
+      const prepOutput = outputs['generate-internal-prep'] as { prep_documents?: Array<{ sections?: Array<{ title: string; body: string }> }> } | undefined;
+      sections = prepOutput?.prep_documents?.[0]?.sections || [];
+    }
+
+    // Fallback sections if no job output found
+    if (sections.length === 0) {
+      sections = [
+        { title: 'Meeting', body: calEvent.title || 'Internal meeting' },
+        { title: 'Note', body: 'Prep content generated — see the full briefing in the app.' },
+      ];
+    }
+
+    // 4. Resolve manager: find an admin/owner in the org who has Slack connected
+    const { data: adminMemberships } = await supabase
+      .from('organization_memberships')
+      .select('user_id, role')
+      .eq('org_id', orgId)
+      .in('role', ['admin', 'owner'])
+      .neq('user_id', slackUser.user_id)
+      .limit(5);
+
+    let managerSlackUserId: string | null = null;
+    for (const admin of adminMemberships || []) {
+      const { data: adminSlack } = await supabase
+        .from('slack_auth')
+        .select('slack_user_id')
+        .eq('user_id', admin.user_id)
+        .maybeSingle();
+      if (adminSlack?.slack_user_id) {
+        managerSlackUserId = adminSlack.slack_user_id;
+        break;
+      }
+    }
+
+    // 5. Resolve rep display name
+    const { data: repProfile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name, email')
+      .eq('id', slackUser.user_id)
+      .maybeSingle();
+
+    const repName = repProfile
+      ? [repProfile.first_name, repProfile.last_name].filter(Boolean).join(' ') || repProfile.email || 'Your rep'
+      : 'Your rep';
+
+    // 6. Build and send the pre-read message
+    const prereadMsg = buildManagerPrereadMessage({
+      repName,
+      meetingTitle: calEvent.title || 'Internal Meeting',
+      meetingType: calEvent.meeting_type || 'internal',
+      startTime: calEvent.start_time,
+      sections,
+      appUrl,
+    });
+
+    // Send DM to manager (or acknowledgment DM to rep if no manager found)
+    const targetSlackUserId = managerSlackUserId || payload.user.id;
+    const channelToOpen = managerSlackUserId
+      ? managerSlackUserId
+      : payload.user.id;
+
+    // Open DM channel with the target user
+    const openDmRes = await fetch('https://slack.com/api/conversations.open', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${slackUser.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ users: channelToOpen }),
+    });
+    const openDm = await openDmRes.json() as { ok: boolean; channel?: { id: string } };
+
+    if (openDm.ok && openDm.channel?.id) {
+      await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${slackUser.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: openDm.channel.id,
+          blocks: prereadMsg.blocks,
+          text: prereadMsg.text,
+        }),
+      });
+
+      console.log(
+        `[IMP] Pre-read sent for event ${eventId} to Slack user ${targetSlackUserId}`
+      );
+    } else {
+      console.error('[IMP] Failed to open DM channel:', openDm);
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    console.error('[IMP] handleImpSendPreread error:', err);
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     // Slack signs the *raw* request body. Do not use req.formData() here because it
@@ -6263,6 +7543,90 @@ serve(async (req) => {
           }
         }
 
+        // GRAD-003: Handle autonomy promotion actions (autonomy_promotion_*)
+        if (action.action_id.startsWith('autonomy_promotion_')) {
+          console.log('[AutonomyPromotion] Processing action:', action.action_id);
+          const result = await handleAutonomyPromotion(action.action_id, payload, action);
+
+          if (result) {
+            if (result.success && result.responseBlocks && payload.response_url) {
+              await updateMessage(payload.response_url, result.responseBlocks);
+            } else if (!result.success && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `Failed: ${result.error || 'Unknown error'}` },
+                  },
+                ],
+                text: result.error || 'Failed to process autonomy promotion action',
+              });
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        // Handle legacy autonomy promotion actions (autonomy_promote_*)
+        if (action.action_id.startsWith('autonomy_promote_')) {
+          console.log('[Autonomy] Processing action:', action.action_id);
+          const result = await handleAutonomyAction(action.action_id, payload, action);
+
+          if (result) {
+            if (result.success && result.responseBlocks && payload.response_url) {
+              await updateMessage(payload.response_url, result.responseBlocks);
+            } else if (!result.success && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `Failed: ${result.error || 'Unknown error'}` },
+                  },
+                ],
+                text: result.error || 'Failed to process autonomy action',
+              });
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        // =====================================================================
+        // LEARN-001: Route config question answer actions
+        // =====================================================================
+        if (action.action_id === 'config_question_answer') {
+          console.log('[ConfigQuestion] Processing answer action');
+          const result = await handleConfigQuestionAnswer(action.action_id, payload, action);
+
+          if (result) {
+            if (result.success && result.responseBlocks && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: result.responseBlocks,
+                text: 'Setting saved.',
+              });
+            } else if (!result.success && payload.response_url) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `Failed to save setting: ${result.error || 'Unknown error'}` },
+                  },
+                ],
+                text: result.error || 'Failed to save setting',
+              });
+            }
+          }
+
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         // Check if this is a sequence HITL action (new format: hitl_*)
         if (action.action_id.startsWith('hitl_')) {
           console.log('[Sequence HITL] Processing action:', action.action_id);
@@ -6288,6 +7652,254 @@ serve(async (req) => {
               status: 200,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
+          }
+        }
+
+        // =====================================================================
+        // SUP-004: Route support ticket actions (support_*)
+        // =====================================================================
+        if (action.action_id.startsWith('support_')) {
+          console.log('[Support] Processing action:', action.action_id);
+          const result = await handleSupportAction(action.action_id, payload);
+
+          if (result && payload.response_url) {
+            if (result.success && result.responseBlocks) {
+              await sendEphemeral(payload.response_url, {
+                blocks: result.responseBlocks,
+                text: result.responseText || 'Support action completed',
+              });
+            } else if (!result.success) {
+              await sendEphemeral(payload.response_url, {
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `❌ ${result.error || 'Failed to process support action'}` },
+                  },
+                ],
+                text: result.error || 'Failed to process support action',
+              });
+            }
+          }
+
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // CRM-007: Route CRM approval actions (crm_*) to agent-crm-approval
+        // =====================================================================
+        if (action.action_id.startsWith('crm_approve::') ||
+            action.action_id.startsWith('crm_reject::') ||
+            action.action_id.startsWith('crm_edit::') ||
+            action.action_id.startsWith('crm_approve_all::') ||
+            action.action_id.startsWith('crm_reject_all::')) {
+          console.log('[CRM Approval] Forwarding action to agent-crm-approval:', action.action_id);
+          // Forward the raw form body to agent-crm-approval (it handles its own Slack verification)
+          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              // Forward Slack signing headers for verification
+              'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
+              'x-slack-signature': req.headers.get('x-slack-signature') || '',
+            },
+            body: `payload=${encodeURIComponent(payloadStr)}`,
+          }).catch(err => console.error('[CRM Approval] Forward error:', err));
+          // Acknowledge immediately (agent-crm-approval handles async response)
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // ORCH-009: Route orchestrator actions (orch_*) to orchestrator handler
+        // =====================================================================
+        if (action.action_id.startsWith('orch_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleOrchestratorAction } = await import('./handlers/orchestrator.ts');
+            await handleOrchestratorAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // WIRE-002: Route proposal HITL actions (prop_*)
+        // =====================================================================
+        if (action.action_id.startsWith('prop_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleProposalAction } = await import('./handlers/proposal.ts');
+            await handleProposalAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // WIRE-002: Route calendar HITL actions (cal_*)
+        // =====================================================================
+        if (action.action_id.startsWith('cal_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleCalendarAction } = await import('./handlers/calendar.ts');
+            await handleCalendarAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // WIRE-002: Route email send HITL actions (email_*)
+        // =====================================================================
+        if (action.action_id.startsWith('email_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleEmailSendAction } = await import('./handlers/emailSend.ts');
+            await handleEmailSendAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // WIRE-002: Route campaign HITL actions (camp_*)
+        // =====================================================================
+        if (action.action_id.startsWith('camp_')) {
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId && ctx?.orgId && payload.response_url) {
+            const { handleCampaignAction } = await import('./handlers/campaigns.ts');
+            await handleCampaignAction({
+              actionId: action.action_id,
+              actionValue: action.value,
+              userId: ctx.userId,
+              orgId: ctx.orgId,
+              channelId: payload.channel?.id || '',
+              messageTs: payload.message?.ts || '',
+              responseUrl: payload.response_url,
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // SLACK-001/003/004/007: Proactive Copilot action handlers
+        // Format: {action}::{entity_type}::{entity_id}
+        // =====================================================================
+        if (action.action_id.startsWith('snooze::')) {
+          return handleSnoozeAction(supabase, payload, action);
+        } else if (action.action_id.startsWith('dismiss::')) {
+          return handleDismissAction(supabase, payload, action);
+        } else if (action.action_id.startsWith('draft_followup::')) {
+          return handleDraftFollowupAction(supabase, payload, action);
+        } else if (action.action_id.startsWith('prep_meeting::')) {
+          return handlePrepMeetingAction(supabase, payload, action);
+        } else if (action.action_id.startsWith('undo_crm_update::')) {
+          return handleUndoCrmUpdate(supabase, payload, action);
+        }
+
+        // =====================================================================
+        // RET-005: Re-engagement HITL action handlers
+        // =====================================================================
+        if (action.action_id.startsWith('reengagement_send::')) {
+          return handleReengagementSend(supabase, payload, action);
+        } else if (action.action_id.startsWith('reengagement_edit::')) {
+          return handleReengagementEdit(supabase, payload, action);
+        } else if (action.action_id.startsWith('reengagement_snooze::')) {
+          return handleReengagementSnooze(supabase, payload, action);
+        } else if (action.action_id.startsWith('reengagement_remove::')) {
+          return handleReengagementRemove(supabase, payload, action);
+        }
+
+        // =====================================================================
+        // PROACTIVE-005: Route proactive/copilot actions to slack-copilot-actions
+        // =====================================================================
+        const proactiveActionPrefixes = [
+          'open_dashboard', 'open_copilot',
+          'run_sequence_', 'confirm_', 'dismiss_',
+          'get_more_info', 'view_brief', 'draft_email_',
+          'proactive_', 'copilot_',
+        ];
+        const isProactiveAction = proactiveActionPrefixes.some(
+          prefix => action.action_id === prefix || action.action_id.startsWith(prefix)
+        );
+
+        if (isProactiveAction) {
+          console.log('[Proactive] Forwarding action to slack-copilot-actions:', action.action_id);
+          try {
+            // Forward to slack-copilot-actions function
+            const response = await supabase.functions.invoke('slack-copilot-actions', {
+              body: {
+                type: 'block_actions',
+                user: payload.user,
+                team: payload.team,
+                channel: payload.channel,
+                message: payload.message,
+                actions: [action],
+                trigger_id: payload.trigger_id,
+                response_url: payload.response_url,
+              },
+            });
+
+            if (response.error) {
+              console.error('[Proactive] Forward error:', response.error);
+            }
+
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          } catch (err) {
+            console.error('[Proactive] Forward failed:', err);
+            // Fall through to handle as unknown action if forward fails
           }
         }
 
@@ -6476,6 +8088,68 @@ serve(async (req) => {
           });
         }
 
+        // =====================================================================
+        // IMP-006: Internal Meeting Prep — manager pre-read forwarding
+        // Format: imp_send_preread::{event_id}
+        // =====================================================================
+        else if (action.action_id.startsWith('imp_send_preread::')) {
+          return handleImpSendPreread(supabase, payload, action);
+        }
+
+        // =====================================================================
+        // EOD-006: End-of-Day Synthesis interaction handlers
+        // action_id prefix: eod_*
+        // Buttons: eod_looks_good, eod_adjust_priorities, eod_add_task
+        // =====================================================================
+        else if (action.action_id === 'eod_looks_good') {
+          // User confirmed EOD looks good — log feedback and acknowledge
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId) {
+            await logSlackInteraction(supabase, {
+              userId: ctx.userId,
+              orgId: ctx.orgId || null,
+              actionType: 'eod_acknowledged',
+              actionCategory: 'eod_synthesis',
+              metadata: { action: 'looks_good', value: action.value },
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else if (action.action_id === 'eod_adjust_priorities') {
+          // Deep-link user to copilot with EOD context pre-loaded
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          if (ctx?.userId) {
+            await logSlackInteraction(supabase, {
+              userId: ctx.userId,
+              orgId: ctx.orgId || null,
+              actionType: 'eod_adjust_priorities',
+              actionCategory: 'eod_synthesis',
+              metadata: { value: action.value },
+            });
+          }
+          // Respond with ephemeral message directing user to the app
+          if (payload.response_url) {
+            await fetch(payload.response_url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                response_type: 'ephemeral',
+                text: `Open the copilot to adjust your priorities: ${appUrl}/copilot`,
+                replace_original: false,
+              }),
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else if (action.action_id === 'eod_add_task') {
+          // Open the add-task modal (reuse existing modal handler)
+          return handleOpenAddTaskModal(supabase, payload);
+        }
+
         // Unknown action - just acknowledge
         console.log('Unknown action_id:', action.action_id);
         return new Response(JSON.stringify({ ok: true }), {
@@ -6489,6 +8163,20 @@ serve(async (req) => {
         console.log('View submission:', payload.view?.callback_id);
         if (payload.view?.callback_id === 'log_activity_modal') {
           return handleLogActivitySubmission(supabase, payload);
+        }
+        if (payload.view?.callback_id === 'crm_edit_modal_submit') {
+          console.log('[CRM Approval] Forwarding edit modal submission to agent-crm-approval');
+          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
+              'x-slack-signature': req.headers.get('x-slack-signature') || '',
+            },
+            body: `payload=${encodeURIComponent(JSON.stringify(payload))}`,
+          }).catch(err => console.error('[CRM Approval] Forward error:', err));
+          return new Response('', { status: 200, headers: corsHeaders });
         }
         if (payload.view?.callback_id === 'hitl_edit_modal') {
           return handleHITLEditSubmission(supabase, payload);

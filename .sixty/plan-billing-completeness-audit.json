@@ -1,0 +1,408 @@
+{
+  "project": {
+    "name": "Billing System Completeness — Gap Closure",
+    "template": "existing-codebase",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "payments": "stripe",
+      "styling": "tailwind"
+    },
+    "createdAt": "2026-02-21T00:00:00Z",
+    "branch": "feat/credit-tracking",
+    "context": "Audit identified gaps after CTRAK-001–013 and SUBBILL-001–011 were built. This plan closes every remaining hole."
+  },
+
+  "features": [
+    {
+      "id": "gap-onboard",
+      "name": "Onboarding → Trial Auto-Start",
+      "status": "pending",
+      "description": "Auto-start free trial at onboarding completion so users don't land on dashboard with no subscription."
+    },
+    {
+      "id": "gap-wire",
+      "name": "Wire Credit Deduction to Unwired Functions",
+      "status": "pending",
+      "description": "18+ edge functions consume real AI API costs but never call logAICostEvent(). This is the #1 money leak."
+    },
+    {
+      "id": "gap-cors",
+      "name": "Fix Legacy CORS & Unpinned Imports",
+      "status": "pending",
+      "description": "4 Stripe edge functions use deprecated corsHeaders and unpinned supabase-js. Will break on staging deploy."
+    },
+    {
+      "id": "gap-margin",
+      "name": "Admin Margin Tracking — Provider Cost per Event",
+      "status": "pending",
+      "description": "estimated_cost was repurposed to credits. Need actual USD provider cost stored per-event for real margin reporting."
+    },
+    {
+      "id": "gap-polish",
+      "name": "Billing Polish & Missing Wiring",
+      "status": "pending",
+      "description": "Stripe price IDs setup, auto top-up payment method flow, analytics hardcoded zeros, orphaned code cleanup."
+    }
+  ],
+
+  "stories": [
+
+    {
+      "id": "GAP-001",
+      "feature": "gap-onboard",
+      "title": "Auto-start free trial at onboarding completion",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["src/pages/onboarding/v2/CompletionStep.tsx", "supabase/functions/start-free-trial/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GAP-002", "GAP-003"],
+      "acceptance": [
+        "CompletionStep.tsx calls start-free-trial edge function after grant-welcome-credits succeeds",
+        "start-free-trial is idempotent — if trial already exists, no-op and return success",
+        "User lands on dashboard with an active 14-day trial subscription (status='trialing')",
+        "If start-free-trial fails (network error), log error but don't block onboarding completion — user can start manually from billing page",
+        "Trial banner appears immediately on first dashboard load"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/onboarding/v2/CompletionStep.tsx"
+      ],
+      "notes": "The start-free-trial edge function already exists and works. We just need to call it from CompletionStep. The useStartFreeTrial hook exists in useSubscription.ts."
+    },
+
+    {
+      "id": "GAP-002",
+      "feature": "gap-wire",
+      "title": "Wire credit deduction to HIGH-severity unwired functions (batch 1)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/costTracking.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GAP-001", "GAP-003"],
+      "acceptance": [
+        "meeting-generate-scorecard: import + call logAICostEvent() after Anthropic response with feature_key='meeting_summary'",
+        "meeting-process-structured-summary: import + call logAICostEvent() after Anthropic response with feature_key='meeting_summary'",
+        "meeting-intelligence-search: import + call logAICostEvent() after Anthropic response with feature_key='meeting_summary'",
+        "generate-email-sequence: import + call logAICostEvent() after each AI call with feature_key='content_generation'",
+        "generate-proposal: import + call logAICostEvent() after AI response with feature_key='content_generation'",
+        "All 5 functions extract token usage from response (extractAnthropicUsage or manual) and pass to logAICostEvent",
+        "Each function calls checkCreditBalance() before the AI call and returns 402 if insufficient"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/meeting-generate-scorecard/index.ts",
+        "supabase/functions/meeting-process-structured-summary/index.ts",
+        "supabase/functions/meeting-intelligence-search/index.ts",
+        "supabase/functions/generate-email-sequence/index.ts",
+        "supabase/functions/generate-proposal/index.ts"
+      ],
+      "notes": "Pattern: import { logAICostEvent, checkCreditBalance, extractAnthropicUsage } from '../_shared/costTracking.ts'. Call checkCreditBalance before AI call. Extract usage from response. Call logAICostEvent after. Same pattern used in api-copilot and copilot-autonomous."
+    },
+
+    {
+      "id": "GAP-003",
+      "feature": "gap-wire",
+      "title": "Wire credit deduction to MEDIUM-severity unwired functions (batch 2)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/costTracking.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GAP-001", "GAP-002"],
+      "acceptance": [
+        "generate-marketing-content: logAICostEvent with feature_key='content_generation'",
+        "generate-icp-profiles: logAICostEvent with feature_key='research_enrichment'",
+        "analyze-writing-style: logAICostEvent with feature_key='content_generation'",
+        "categorize-email: logAICostEvent with feature_key='task_execution'",
+        "generate-more-actions: logAICostEvent with feature_key='task_execution'",
+        "research-fact-profile: logAICostEvent with feature_key='research_enrichment'",
+        "research-product-profile: logAICostEvent with feature_key='research_enrichment'",
+        "docs-agent: logAICostEvent with feature_key='copilot_chat'",
+        "ops-workflow-orchestrator: logAICostEvent with feature_key='task_execution'",
+        "extract-action-items: wire the already-imported but never-called logAICostEvent"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/generate-marketing-content/index.ts",
+        "supabase/functions/generate-icp-profiles/index.ts",
+        "supabase/functions/analyze-writing-style/index.ts",
+        "supabase/functions/categorize-email/index.ts",
+        "supabase/functions/generate-more-actions/index.ts",
+        "supabase/functions/research-fact-profile/index.ts",
+        "supabase/functions/research-product-profile/index.ts",
+        "supabase/functions/docs-agent/index.ts",
+        "supabase/functions/ops-workflow-orchestrator/index.ts",
+        "supabase/functions/extract-action-items/index.ts"
+      ],
+      "notes": "Same pattern as GAP-002. extract-action-items already has the import — just needs the actual call wired in after the AI response."
+    },
+
+    {
+      "id": "GAP-004",
+      "feature": "gap-wire",
+      "title": "Wire credit deduction to unwired integration functions (batch 3)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/costTracking.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GAP-003"],
+      "acceptance": [
+        "instantly-push: logFlatRateCostEvent with feature_key='email_send', cost from credit_menu",
+        "apollo-enrich: logFlatRateCostEvent with feature_key='apollo_enrichment'",
+        "apollo-org-enrich: logFlatRateCostEvent with feature_key='apollo_enrichment'",
+        "apollo-reveal: logFlatRateCostEvent with feature_key='apollo_enrichment'",
+        "apollo-collect-more: logFlatRateCostEvent with feature_key='apollo_search'",
+        "ai-ark-enrich: logFlatRateCostEvent with feature_key='ai_ark_people'",
+        "ai-ark-similarity: logFlatRateCostEvent with feature_key='ai_ark_company'",
+        "ai-ark-semantic: logFlatRateCostEvent with feature_key='ai_ark_company'",
+        "All functions call checkCreditBalance() before the external API call"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/instantly-push/index.ts",
+        "supabase/functions/apollo-enrich/index.ts",
+        "supabase/functions/apollo-org-enrich/index.ts",
+        "supabase/functions/apollo-reveal/index.ts",
+        "supabase/functions/apollo-collect-more/index.ts",
+        "supabase/functions/ai-ark-enrich/index.ts",
+        "supabase/functions/ai-ark-similarity/index.ts",
+        "supabase/functions/ai-ark-semantic/index.ts"
+      ],
+      "notes": "For integrations, use logFlatRateCostEvent which reads cost from credit_menu table. Pattern already established in apollo-search and ai-ark-search."
+    },
+
+    {
+      "id": "GAP-005",
+      "feature": "gap-cors",
+      "title": "Fix legacy CORS and unpinned imports in Stripe edge functions",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GAP-002", "GAP-003", "GAP-004"],
+      "acceptance": [
+        "create-checkout-session: replace import of corsHeaders from cors.ts with getCorsHeaders(req) from corsHelper.ts",
+        "stripe-create-product: replace corsHeaders with getCorsHeaders(req), pin @supabase/supabase-js@2.43.4",
+        "stripe-update-product: replace corsHeaders with getCorsHeaders(req), pin @supabase/supabase-js@2.43.4",
+        "stripe-sync-product: replace corsHeaders with getCorsHeaders(req), pin @supabase/supabase-js@2.43.4",
+        "All 4 functions use the Response(body, { headers: getCorsHeaders(req) }) pattern for all response paths including OPTIONS",
+        "Test: OPTIONS preflight returns correct Access-Control-Allow-Origin for the request origin"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/create-checkout-session/index.ts",
+        "supabase/functions/stripe-create-product/index.ts",
+        "supabase/functions/stripe-update-product/index.ts",
+        "supabase/functions/stripe-sync-product/index.ts"
+      ],
+      "notes": "Pattern: import { getCorsHeaders } from '../_shared/corsHelper.ts'. Replace all `new Response(body, { headers: corsHeaders })` with `new Response(body, { headers: getCorsHeaders(req) })`. Also replace OPTIONS handler."
+    },
+
+    {
+      "id": "GAP-006",
+      "feature": "gap-margin",
+      "title": "Add provider_cost_usd column to ai_cost_events and compute at write time",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": ["ai_cost_events", "cost_rates"] },
+      "blocks": ["GAP-007"],
+      "parallelWith": ["GAP-005"],
+      "acceptance": [
+        "Migration adds provider_cost_usd DECIMAL(12,6) column to ai_cost_events (nullable, defaults null for historical rows)",
+        "Migration adds credits_charged DECIMAL(12,4) column to ai_cost_events (nullable, for explicit credit tracking separate from estimated_cost)",
+        "costTracking.ts logAICostEvent() computes provider_cost_usd from input_tokens * input_rate + output_tokens * output_rate using cost_rates table",
+        "costTracking.ts logAICostEvent() writes credits_charged with the credit amount deducted",
+        "logFlatRateCostEvent() sets provider_cost_usd to null (no token-based cost) and credits_charged to the flat rate amount",
+        "Backward compatible: existing queries on estimated_cost still work"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260221060000_provider_cost_column.sql",
+        "supabase/functions/_shared/costTracking.ts"
+      ],
+      "notes": "cost_rates table already exists with provider, model, input_cost_per_million, output_cost_per_million. logAICostEvent already receives tokens. We just need to look up the rate and compute: (input_tokens / 1_000_000 * input_rate) + (output_tokens / 1_000_000 * output_rate)."
+    },
+
+    {
+      "id": "GAP-007",
+      "feature": "gap-margin",
+      "title": "Update CostAnalysis admin page to use stored provider_cost_usd for margin",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["GAP-006"], "files": ["src/pages/platform/CostAnalysis.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "CostAnalysis overview tab: Total Provider Cost (USD) from SUM(provider_cost_usd), Total Credits Charged from SUM(credits_charged), Margin % = (credits_revenue - provider_cost) / credits_revenue * 100",
+        "Credits revenue computed as: credits_charged * credit_pack_rate (£0.396/credit for Insight pack)",
+        "By Model tab: shows provider_cost_usd breakdown per model alongside credits_charged",
+        "Audit Logs tab: new columns showing provider_cost_usd and credits_charged per event",
+        "Historical rows (provider_cost_usd=null) show 'N/A' or computed estimate from tokens × current rates",
+        "Currency display: provider cost in USD, revenue in GBP with conversion rate input"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/platform/CostAnalysis.tsx",
+        "src/lib/services/costAnalysisService.ts"
+      ],
+      "notes": "costAnalysisService.ts already has getCostAnalysisSummary(). Extend the queries to use the new columns. For historical rows, fall back to tokens × cost_rates lookup."
+    },
+
+    {
+      "id": "GAP-008",
+      "feature": "gap-polish",
+      "title": "Wire BillingAnalytics churn_rate and trial_conversion (currently hardcoded 0)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": ["src/pages/admin/BillingAnalytics.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GAP-007"],
+      "acceptance": [
+        "churn_rate: count orgs where status changed to 'canceled' in period / total active orgs at period start",
+        "trial_conversion_rate: count orgs that went trialing→active in period / total orgs that started trial in period",
+        "Both computed via RPC or direct query in billingAnalyticsService.ts",
+        "BillingAnalytics stats card shows real values instead of 0",
+        "Handle edge case: no orgs → show 0% (not NaN)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/billingAnalyticsService.ts",
+        "src/pages/admin/BillingAnalytics.tsx"
+      ]
+    },
+
+    {
+      "id": "GAP-009",
+      "feature": "gap-wire",
+      "title": "Wire LOW-severity unwired functions (batch 4 — remaining)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/costTracking.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GAP-008"],
+      "acceptance": [
+        "prospecting-refine: logAICostEvent with feature_key='research_enrichment'",
+        "slack-daily-digest: logAICostEvent with feature_key='content_generation'",
+        "process-lead-prep: logAICostEvent with feature_key='research_enrichment'",
+        "generate-embedding: logFlatRateCostEvent with feature_key='task_execution' (low cost, but tracked)",
+        "ops-table-predictions: wire the already-imported but never-called logAICostEvent",
+        "enrich-company: logFlatRateCostEvent with feature_key='research_enrichment'",
+        "enrich-organization: logFlatRateCostEvent with feature_key='research_enrichment'",
+        "deep-enrich-organization: logFlatRateCostEvent with feature_key='research_enrichment'",
+        "search-crm-with-icp: logAICostEvent with feature_key='research_enrichment'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/prospecting-refine/index.ts",
+        "supabase/functions/slack-daily-digest/index.ts",
+        "supabase/functions/process-lead-prep/index.ts",
+        "supabase/functions/generate-embedding/index.ts",
+        "supabase/functions/ops-table-predictions/index.ts",
+        "supabase/functions/enrich-company/index.ts",
+        "supabase/functions/enrich-organization/index.ts",
+        "supabase/functions/deep-enrich-organization/index.ts",
+        "supabase/functions/search-crm-with-icp/index.ts"
+      ]
+    },
+
+    {
+      "id": "GAP-010",
+      "feature": "gap-polish",
+      "title": "Add post-onboarding activation checklist widget",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["GAP-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["GAP-009"],
+      "acceptance": [
+        "New ActivationChecklist component shown on Dashboard page for first 7 days after onboarding",
+        "6 milestones from onboardingService.ts: account_created (auto-checked), profile_completed, first_meeting_synced, meeting_intelligence_used, crm_integrated, team_invited",
+        "Collapsible card with progress bar (e.g., 2/6 complete)",
+        "Each milestone links to the relevant page (e.g., 'Sync Calendar' links to /settings/integrations)",
+        "Dismissible after all milestones complete OR after 7 days (stores dismissal in localStorage)",
+        "Uses Lucide icons, follows existing Card/Badge component patterns"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/dashboard/ActivationChecklist.tsx",
+        "src/pages/Dashboard.tsx"
+      ],
+      "notes": "onboardingService.ts already defines the 6 milestones and tracks them in waitlist_onboarding_progress. Just need to surface them in a UI widget."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 0,
+    "currentFeature": "billing-completeness",
+    "lastUpdated": "2026-02-21T00:00:00Z",
+    "estimatedTotalMinutes": 240,
+    "estimatedHours": "3-4 hours (with parallel execution)",
+    "parallelGroups": [
+      {
+        "name": "Phase 1: Critical Gaps (P0/P1)",
+        "stories": ["GAP-001", "GAP-002", "GAP-003"],
+        "note": "All independent — run in parallel. Stops the money leak + fixes onboarding."
+      },
+      {
+        "name": "Phase 2: Infrastructure Fixes (P1/P2)",
+        "stories": ["GAP-004", "GAP-005"],
+        "note": "Integration wiring + CORS fixes. Can parallel with Phase 1."
+      },
+      {
+        "name": "Phase 3: Margin Tracking (P2)",
+        "stories": ["GAP-006", "GAP-007"],
+        "note": "Sequential: schema first, then UI update."
+      },
+      {
+        "name": "Phase 4: Polish (P3/P4)",
+        "stories": ["GAP-008", "GAP-009", "GAP-010"],
+        "note": "Analytics fix, remaining wiring, activation checklist. All independent."
+      }
+    ]
+  },
+
+  "existingInfrastructure": {
+    "alreadyBuilt": [
+      "CTRAK-001–013: Credit menu table, credit_logs, costTracking.ts DB lookup, admin-credit-menu, get-credit-menu, grace threshold, budget caps, purge job, credit menu UI, admin credit menu UI, copilot usage queries, proactive alerts",
+      "SUBBILL-001–011: subscription_plans Basic/Pro rows, subscription credit RPCs, TypeScript types, subscriptionService updates, stripe-webhook credit lifecycle, create-checkout-session plan selection, BillingSettingsPage rebuild, credit balance section, transaction history, plan change modal, trial mechanics",
+      "Credit purchase flow: create-credit-checkout, stripe-webhook fulfillment, CreditPurchaseModal, pack inventory",
+      "Auto top-up: auto_top_up_settings, credit-auto-topup edge function, AutoTopUpSettings UI, failure auto-disable",
+      "Admin pages: CostAnalysis, AIUsageAdmin, BillingAnalytics, PricingControl, CreditMenuAdmin",
+      "Trial system: start-free-trial, TrialBanner, TrialConversionModal, TrialBadge, useTrialProgress"
+    ],
+    "doNotRebuild": "All of the above is working. This plan only closes gaps."
+  },
+
+  "outOfScope": [
+    "Stripe price ID creation in Stripe Dashboard — manual admin task, not code",
+    "Auto top-up payment method save flow — works via Stripe portal redirect for now",
+    "Invoice history custom UI — handled by Stripe Customer Portal",
+    "credit_log_summaries UI — data exists but low priority, can wait",
+    "Agency pack sales CTA flow — sales-only, no self-serve needed",
+    "Currency normalization (GBP/USD) across all services — larger refactor"
+  ],
+
+  "summary": {
+    "whatThisFixes": [
+      "18+ functions eating real API costs with no credit deduction (P0 money leak)",
+      "Users landing on dashboard with no trial after onboarding (P1 friction)",
+      "4 Stripe functions that will fail on staging deploy (P1 CORS + import bug)",
+      "Margin tracking using approximate calculations instead of stored provider costs (P2 accuracy)",
+      "BillingAnalytics showing hardcoded zeros for churn and trial conversion (P3 data quality)",
+      "No post-onboarding activation guidance (P4 engagement)"
+    ],
+    "afterCompletion": "The billing system will be 100% complete: every AI/integration feature deducts credits, trial auto-starts, Stripe functions deploy cleanly, margin tracking is precise, and new users get guided activation."
+  }
+}

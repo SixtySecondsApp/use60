@@ -175,7 +175,7 @@ export interface Recording {
 
   // Enhanced AI Analysis (sentiment, talk time, coaching)
   sentiment_score?: number | null; // -1.0 to 1.0
-  coach_rating?: number | null; // 0-100 scale
+  coach_rating?: number | null; // 1-10 scale
   coach_summary?: string | null;
   talk_time_rep_pct?: number | null;
   talk_time_customer_pct?: number | null;
@@ -188,6 +188,9 @@ export interface Recording {
   // Speaker identification
   speakers?: RecordingSpeaker[] | null;
   speaker_identification_method?: SpeakerIdentificationMethod | null;
+
+  // Attendees (stored at deploy time for speaker identification)
+  attendees?: Array<{ email: string; name?: string }> | null;
 
   // CRM links
   crm_contacts?: CRMContactLink[] | null;
@@ -217,6 +220,7 @@ export interface RecordingInsert {
   meeting_url: string;
   meeting_title?: string | null;
   calendar_event_id?: string | null;
+  attendees?: Array<{ email: string; name?: string }> | null;
   status?: RecordingStatus;
 }
 

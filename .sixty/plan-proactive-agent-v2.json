@@ -1,0 +1,633 @@
+{
+  "name": "Proactive Agent Master Plan v2",
+  "version": "2.0",
+  "createdAt": "2026-02-13T00:00:00Z",
+  "description": "From Working Parts to Autonomous Sales Copilot — wire existing 30+ Slack functions, 6 specialist agents, sequence executor, and proactive delivery system into event-driven workflows via a single orchestrator",
+  "author": "Andrew Bryce",
+  "principle": "Extend, don't rebuild. No new queue tables. No new preference tables. No polling heartbeat.",
+  "features": [
+    { "id": "orch", "name": "Build 1: The Orchestrator", "status": "pending", "weeks": "1-2", "stories": 10 },
+    { "id": "intents", "name": "Build 2: Intent Detection", "status": "pending", "weeks": "3-4", "stories": 3 },
+    { "id": "calendar", "name": "Build 3: Calendar Availability Finder", "status": "pending", "weeks": "5-6", "stories": 3 },
+    { "id": "email-send", "name": "Build 4: Email Send-as-Rep", "status": "pending", "weeks": "7-8", "stories": 4 },
+    { "id": "proposal-pipe", "name": "Build 5: Proposal Pipeline", "status": "pending", "weeks": "7-8", "stories": 2 },
+    { "id": "campaign-mon", "name": "Build 6: Campaign Monitoring", "status": "pending", "weeks": "9-10", "stories": 3 },
+    { "id": "coaching", "name": "Build 7: Coaching & Trend Analysis", "status": "pending", "weeks": "11-12", "stories": 4 }
+  ],
+  "total_stories": 29,
+  "stories": [
+    {
+      "id": "ORCH-001",
+      "title": "Extend sequence_jobs table for orchestrator",
+      "feature": "orch",
+      "type": "schema",
+      "priority": 1,
+      "status": "pending",
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": [] },
+      "files": [
+        "supabase/migrations/20260213000001_extend_sequence_jobs_orchestrator.sql"
+      ],
+      "acceptance": [
+        "Add event_source TEXT column to sequence_jobs",
+        "Add event_chain JSONB column to sequence_jobs",
+        "Add trigger_payload JSONB column to sequence_jobs",
+        "Add idempotency_key TEXT UNIQUE column to sequence_jobs",
+        "Create index on idempotency_key",
+        "Create deal_last_activity materialized view"
+      ]
+    },
+    {
+      "id": "ORCH-002",
+      "title": "Create orchestrator types and interfaces",
+      "feature": "orch",
+      "type": "backend",
+      "priority": 2,
+      "status": "pending",
+      "estimatedMinutes": 40,
+      "dependencies": { "stories": [] },
+      "files": [
+        "supabase/functions/_shared/orchestrator/types.ts"
+      ],
+      "acceptance": [
+        "OrchestratorEvent interface with type, source, org_id, user_id, payload, parent_job_id",
+        "SequenceState interface with event, context tiers, steps_completed, outputs, pending_approvals, queued_followups",
+        "SequenceStep interface with skill, requires_context, requires_approval, criticality",
+        "ContextTier1/2/3 interfaces matching existing _shared/proactive/ data shapes",
+        "Export all types for use across orchestrator modules"
+      ]
+    },
+    {
+      "id": "ORCH-003",
+      "title": "Build context tier loader",
+      "feature": "orch",
+      "type": "backend",
+      "priority": 3,
+      "status": "pending",
+      "estimatedMinutes": 60,
+      "dependencies": { "stories": ["ORCH-002"] },
+      "files": [
+        "supabase/functions/_shared/orchestrator/contextLoader.ts"
+      ],
+      "acceptance": [
+        "loadContext() function that accepts OrchestratorEvent and tier list",
+        "Tier 1 loads: org profile, user prefs (slack_user_preferences + slack_user_mappings), feature settings, ICP, product profile, cost budget",
+        "Tier 2 loads: CRM contact, company, deal, meeting history, email threads, activities",
+        "Tier 3 on-demand: apollo, linkedin, news, template, campaign",
+        "Context loaded ONCE per sequence, stored in sequence_jobs.context, not per-step",
+        "Reuse existing _shared/proactive/ modules for data fetching"
+      ]
+    },
+    {
+      "id": "ORCH-004",
+      "title": "Define event-to-sequence mappings",
+      "feature": "orch",
+      "type": "backend",
+      "priority": 4,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["ORCH-002"] },
+      "files": [
+        "supabase/functions/_shared/orchestrator/eventSequences.ts"
+      ],
+      "acceptance": [
+        "EVENT_SEQUENCES map with meeting_ended, pre_meeting_90min, email_received, proposal_generation, calendar_find_times, stale_deal_revival sequences",
+        "Each step has skill name, requires_context array, requires_approval flag, criticality (critical/best-effort)",
+        "getSequenceForEvent() function that returns the step list for an event type",
+        "Stub skills referenced but not yet built (detect-intents, find-available-slots) marked with available: false"
+      ]
+    },
+    {
+      "id": "ORCH-005",
+      "title": "Build orchestrator runner with self-invocation",
+      "feature": "orch",
+      "type": "backend",
+      "priority": 5,
+      "status": "pending",
+      "estimatedMinutes": 90,
+      "dependencies": { "stories": ["ORCH-001", "ORCH-002", "ORCH-003", "ORCH-004"] },
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ],
+      "acceptance": [
+        "runSequence() accepts OrchestratorEvent, loads context once, iterates steps",
+        "Each step calls the corresponding edge function or skill adapter",
+        "30s SAFETY_MARGIN: if timeRemaining < 30s, persist state to sequence_jobs.context and self-invoke",
+        "Self-invocation via fetch to agent-orchestrator with resume_job_id",
+        "Idempotency: check for existing job with same idempotency_key before starting",
+        "On step failure: retry transient errors (up to 2x), skip best-effort steps, halt on critical failure",
+        "On requires_approval: pause sequence, create slack_pending_actions entry, return",
+        "On sequence complete: process queued_followups by creating new OrchestratorEvents",
+        "Cost budget check at sequence start (not per-step)"
+      ]
+    },
+    {
+      "id": "ORCH-006",
+      "title": "Build skill adapters for existing edge functions",
+      "feature": "orch",
+      "type": "backend",
+      "priority": 6,
+      "status": "pending",
+      "estimatedMinutes": 60,
+      "dependencies": { "stories": ["ORCH-002"] },
+      "parallelWith": ["ORCH-007", "ORCH-008"],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/actionItems.ts",
+        "supabase/functions/_shared/orchestrator/adapters/nextActions.ts",
+        "supabase/functions/_shared/orchestrator/adapters/createTasks.ts",
+        "supabase/functions/_shared/orchestrator/adapters/emailClassifier.ts"
+      ],
+      "acceptance": [
+        "Thin adapter wrapping extract-action-items edge function",
+        "Thin adapter wrapping suggest-next-actions (or the skill equivalent)",
+        "Thin adapter wrapping create-task-from-action-item (batch version)",
+        "Adapter for categorize-email (existing) mapped to classify-email-intent interface",
+        "Each adapter: accepts SequenceState context, calls edge function, returns structured output"
+      ]
+    },
+    {
+      "id": "ORCH-007",
+      "title": "Create agent-orchestrator edge function",
+      "feature": "orch",
+      "type": "backend",
+      "priority": 7,
+      "status": "pending",
+      "estimatedMinutes": 60,
+      "dependencies": { "stories": ["ORCH-005"] },
+      "parallelWith": ["ORCH-006", "ORCH-008"],
+      "files": [
+        "supabase/functions/agent-orchestrator/index.ts"
+      ],
+      "acceptance": [
+        "Edge function entry point that handles POST requests",
+        "Accepts OrchestratorEvent or resume_job_id in body",
+        "New event: validates, creates sequence_jobs record with idempotency_key, calls runner.runSequence()",
+        "Resume: loads sequence_jobs record, calls runner.resumeSequence()",
+        "Uses getCorsHeaders(req) from corsHelper.ts",
+        "Service role client for cross-user operations",
+        "Handles OPTIONS preflight"
+      ]
+    },
+    {
+      "id": "ORCH-008",
+      "title": "Wire meetingbaas-webhook to orchestrator",
+      "feature": "orch",
+      "type": "backend",
+      "priority": 8,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["ORCH-007"] },
+      "parallelWith": ["ORCH-006", "ORCH-007"],
+      "files": [
+        "supabase/functions/meetingbaas-webhook/index.ts"
+      ],
+      "acceptance": [
+        "After existing transcript processing completes (syncRecordingToMeeting), call agent-orchestrator with meeting_ended event",
+        "Pass meeting_id, org_id, user_id, contact_id (if matched) in payload",
+        "Non-blocking: fire-and-forget call to orchestrator (don't wait for response)",
+        "Only trigger if meeting has attendees_count > 1 (real meetings)",
+        "Don't break existing webhook behavior — this is additive"
+      ]
+    },
+    {
+      "id": "ORCH-009",
+      "title": "Wire slack-interactive to orchestrator for HITL resume",
+      "feature": "orch",
+      "type": "backend",
+      "priority": 9,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["ORCH-007"] },
+      "files": [
+        "supabase/functions/slack-interactive/handlers/orchestrator.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "acceptance": [
+        "New handler for action_ids starting with 'orch_' prefix",
+        "On approval (orch_approve_*): load slack_pending_actions record, call orchestrator with resume_job_id",
+        "On rejection (orch_reject_*): update slack_pending_actions status to cancelled, send confirmation Slack message",
+        "On edit (orch_edit_*): open modal or redirect to app for editing",
+        "Register handler in slack-interactive index.ts router"
+      ]
+    },
+    {
+      "id": "ORCH-010",
+      "title": "Upgrade proactive-meeting-prep to use orchestrator",
+      "feature": "orch",
+      "type": "backend",
+      "priority": 10,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["ORCH-007"] },
+      "files": [
+        "supabase/functions/proactive-meeting-prep/index.ts"
+      ],
+      "acceptance": [
+        "After finding meetings needing prep, call agent-orchestrator with pre_meeting_90min event instead of inline processing",
+        "Pass meeting_id, org_id, user_id, attendees in payload",
+        "Keep fallback: if orchestrator call fails, continue with existing inline prep logic",
+        "Add feature flag check: only use orchestrator if notification_feature_settings.orchestrator_enabled is true (default: false for safe rollout)"
+      ]
+    },
+    {
+      "id": "INT-001",
+      "title": "Create detect-intents edge function",
+      "feature": "intents",
+      "type": "backend",
+      "priority": 11,
+      "status": "pending",
+      "estimatedMinutes": 60,
+      "dependencies": { "stories": ["ORCH-007"] },
+      "files": [
+        "supabase/functions/detect-intents/index.ts"
+      ],
+      "acceptance": [
+        "Edge function that accepts transcript text + context (org profile, attendees, rep name)",
+        "Calls Claude Haiku with structured JSON output prompt for commitments, buying signals, follow-up items",
+        "Returns typed IntentDetectionResult with confidence scores",
+        "Only includes items with confidence > 0.7",
+        "Tracks AI cost via costTracking.ts",
+        "Uses getCorsHeaders(req)"
+      ]
+    },
+    {
+      "id": "INT-002",
+      "title": "Build detect-intents orchestrator adapter",
+      "feature": "intents",
+      "type": "backend",
+      "priority": 12,
+      "status": "pending",
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["INT-001", "ORCH-006"] },
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/detectIntents.ts"
+      ],
+      "acceptance": [
+        "Adapter wrapping detect-intents edge function for orchestrator",
+        "Maps SequenceState context to edge function input",
+        "Maps IntentDetectionResult to orchestrator outputs format",
+        "Generates queued_followups from detected intents (commitment:send_proposal -> proposal_generation event, etc.)"
+      ]
+    },
+    {
+      "id": "INT-003",
+      "title": "Wire intent detection into meeting_ended sequence",
+      "feature": "intents",
+      "type": "backend",
+      "priority": 13,
+      "status": "pending",
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["INT-002"] },
+      "files": [
+        "supabase/functions/_shared/orchestrator/eventSequences.ts"
+      ],
+      "acceptance": [
+        "Update meeting_ended sequence to include detect-intents as step 2 (after extract-action-items)",
+        "Mark detect-intents step as available: true",
+        "After detect-intents completes, runner processes queued_followups",
+        "Test: mock transcript with 'I'll send you a proposal' -> orchestrator creates proposal_generation event in queued_followups"
+      ]
+    },
+    {
+      "id": "CAL-001",
+      "title": "Create find-available-slots edge function",
+      "feature": "calendar",
+      "type": "backend",
+      "priority": 14,
+      "status": "pending",
+      "estimatedMinutes": 75,
+      "dependencies": { "stories": ["ORCH-007"] },
+      "files": [
+        "supabase/functions/find-available-slots/index.ts"
+      ],
+      "acceptance": [
+        "Read rep's Google Calendar events for next 5-10 business days",
+        "Identify free slots respecting: existing meetings, buffer preferences (15min), quiet hours, working hours from slack_user_preferences",
+        "If prospect timezone known, filter to overlapping business hours",
+        "Score slots by preference (morning/afternoon, day of week)",
+        "Return top 3-5 options with timezone-aware formatting",
+        "Uses Google Calendar API via existing OAuth tokens (google_calendar_tokens table)",
+        "Uses getCorsHeaders(req)"
+      ]
+    },
+    {
+      "id": "CAL-002",
+      "title": "Create calendar event creation endpoint",
+      "feature": "calendar",
+      "type": "backend",
+      "priority": 15,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["CAL-001"] },
+      "files": [
+        "supabase/functions/create-calendar-event/index.ts"
+      ],
+      "acceptance": [
+        "Creates a Google Calendar event via API for the selected time slot",
+        "Adds attendees (rep + prospect email)",
+        "Sets meeting title, description, and optional video conferencing link",
+        "Returns event ID and confirmation details",
+        "Uses existing Google Calendar OAuth tokens"
+      ]
+    },
+    {
+      "id": "CAL-003",
+      "title": "Build calendar Slack UI and orchestrator wiring",
+      "feature": "calendar",
+      "type": "backend",
+      "priority": 16,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["CAL-001", "CAL-002", "ORCH-009"] },
+      "files": [
+        "supabase/functions/slack-interactive/handlers/calendar.ts",
+        "supabase/functions/_shared/orchestrator/adapters/calendar.ts"
+      ],
+      "acceptance": [
+        "Slack block kit message showing available time slots with radio buttons",
+        "Buttons: Send times via email, Send calendar invite, Show more options, I'll handle this",
+        "On slot selection + Send invite: call create-calendar-event",
+        "Orchestrator adapter for find-available-slots and create-calendar-event",
+        "Wire into calendar_find_times sequence in eventSequences.ts"
+      ]
+    },
+    {
+      "id": "EMAIL-001",
+      "title": "Create email-send-as-rep skill definition",
+      "feature": "email-send",
+      "type": "skill",
+      "priority": 17,
+      "status": "pending",
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": [] },
+      "parallelWith": ["PROP-001"],
+      "files": [],
+      "acceptance": [
+        "Skill definition already exists at .claude/skills/email-send-as-rep/SKILL.md — verify it matches implementation requirements",
+        "Validate with npm run validate-skills"
+      ]
+    },
+    {
+      "id": "EMAIL-002",
+      "title": "Gmail API send integration",
+      "feature": "email-send",
+      "type": "backend",
+      "priority": 18,
+      "status": "pending",
+      "estimatedMinutes": 75,
+      "dependencies": { "stories": ["ORCH-007"] },
+      "files": [
+        "supabase/functions/email-send-as-rep/index.ts"
+      ],
+      "acceptance": [
+        "Edge function that sends email via Gmail API using rep's OAuth tokens",
+        "Requires gmail.send scope (check user's authorized scopes, return clear error if missing)",
+        "Email appears in rep's Sent folder (Gmail API handles natively)",
+        "Thread-aware: use In-Reply-To and References headers for replies",
+        "Append rep's email signature",
+        "Track send in sequence_jobs with full audit trail",
+        "Daily send limit per rep (default 50, configurable)",
+        "Uses getCorsHeaders(req) and costTracking.ts"
+      ]
+    },
+    {
+      "id": "EMAIL-003",
+      "title": "Email HITL approval flow in Slack",
+      "feature": "email-send",
+      "type": "backend",
+      "priority": 19,
+      "status": "pending",
+      "estimatedMinutes": 60,
+      "dependencies": { "stories": ["EMAIL-002", "ORCH-009"] },
+      "parallelWith": ["PROP-002"],
+      "files": [
+        "supabase/functions/slack-interactive/handlers/emailSend.ts",
+        "supabase/functions/_shared/orchestrator/adapters/emailSend.ts"
+      ],
+      "acceptance": [
+        "Slack block showing full email preview: to, subject, body (truncated with expand)",
+        "Buttons: Send now, Edit in use60, Send later, Cancel",
+        "On Send now: 30-second undo window with Cancel send button",
+        "On approve after undo: call email-send-as-rep edge function",
+        "All sends logged in sequence_jobs audit trail",
+        "Orchestrator adapter wiring for draft-followup-email -> email-send-as-rep chain"
+      ]
+    },
+    {
+      "id": "EMAIL-004",
+      "title": "OAuth scope upgrade UI for Gmail send",
+      "feature": "email-send",
+      "type": "frontend",
+      "priority": 20,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["EMAIL-002"] },
+      "files": [
+        "src/components/settings/EmailSendPermission.tsx",
+        "src/pages/Settings.tsx"
+      ],
+      "acceptance": [
+        "Settings page section showing current Gmail permissions",
+        "If send permission not granted: prompt 'To enable automated follow-ups, we need send permission for your Gmail'",
+        "Re-authorization flow that requests gmail.send scope",
+        "Store updated scopes in google_calendar_tokens or equivalent table",
+        "Graceful degradation: features work without send permission, just show 'permission needed' when trying to send"
+      ]
+    },
+    {
+      "id": "PROP-001",
+      "title": "Wire proposal generation into orchestrator",
+      "feature": "proposal-pipe",
+      "type": "backend",
+      "priority": 21,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["ORCH-007"] },
+      "parallelWith": ["EMAIL-001"],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+      ],
+      "acceptance": [
+        "Adapter wrapping existing generate-proposal edge function",
+        "Accepts trigger_phrase from intent detection and meeting context",
+        "Template selection based on deal type, stage, discussed features",
+        "Populate template with CRM data + conversation context",
+        "Returns draft proposal for review"
+      ]
+    },
+    {
+      "id": "PROP-002",
+      "title": "Proposal review and delivery flow",
+      "feature": "proposal-pipe",
+      "type": "backend",
+      "priority": 22,
+      "status": "pending",
+      "estimatedMinutes": 60,
+      "dependencies": { "stories": ["PROP-001", "ORCH-009"] },
+      "parallelWith": ["EMAIL-003"],
+      "files": [
+        "supabase/functions/slack-interactive/handlers/proposal.ts"
+      ],
+      "acceptance": [
+        "Slack block showing proposal summary with link to full document",
+        "Buttons: Approve & send, Edit first, Generate shareable link, Skip",
+        "On Approve & send: if email-send-as-rep available, send via email; otherwise generate shareable link",
+        "Wire proposal_generation sequence in eventSequences.ts with all steps",
+        "HITL pause at present-for-review step"
+      ]
+    },
+    {
+      "id": "CAMP-001",
+      "title": "Create monitor-campaigns edge function",
+      "feature": "campaign-mon",
+      "type": "backend",
+      "priority": 23,
+      "status": "pending",
+      "estimatedMinutes": 60,
+      "dependencies": { "stories": ["ORCH-007"] },
+      "files": [
+        "supabase/functions/monitor-campaigns/index.ts"
+      ],
+      "acceptance": [
+        "Pull campaign metrics from Instantly API (open/click/reply rates)",
+        "Compare performance vs. benchmarks",
+        "Classify replies by intent (positive, negative, out-of-office, unsubscribe)",
+        "Generate optimization recommendations (subject line A/B, send time adjustments)",
+        "Flag underperforming campaigns",
+        "Uses getCorsHeaders(req) and costTracking.ts"
+      ]
+    },
+    {
+      "id": "CAMP-002",
+      "title": "Campaign monitoring Slack delivery",
+      "feature": "campaign-mon",
+      "type": "backend",
+      "priority": 24,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["CAMP-001", "ORCH-009"] },
+      "files": [
+        "supabase/functions/slack-interactive/handlers/campaigns.ts"
+      ],
+      "acceptance": [
+        "Slack block kit message with campaign performance summary",
+        "Reply sections with intent badges (positive/negative/OOO)",
+        "Action buttons per reply: Draft response, View thread, Mark closed, Add to nurture",
+        "Suggestion section with Apply/Keep testing buttons",
+        "Daily cron trigger via orchestrator"
+      ]
+    },
+    {
+      "id": "CAMP-003",
+      "title": "Wire campaign monitoring into orchestrator daily cron",
+      "feature": "campaign-mon",
+      "type": "backend",
+      "priority": 25,
+      "status": "pending",
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["CAMP-002"] },
+      "files": [
+        "supabase/functions/_shared/orchestrator/eventSequences.ts",
+        "supabase/functions/_shared/orchestrator/adapters/campaignMonitor.ts"
+      ],
+      "acceptance": [
+        "Orchestrator adapter for monitor-campaigns",
+        "New campaign_daily_check event sequence in eventSequences.ts",
+        "Cron integration: existing morning cron triggers campaign check alongside other daily tasks",
+        "Response drafting integration: positive replies trigger draft-response flow with HITL"
+      ]
+    },
+    {
+      "id": "COACH-001",
+      "title": "Create coaching_analyses table",
+      "feature": "coaching",
+      "type": "schema",
+      "priority": 26,
+      "status": "pending",
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": [] },
+      "files": [
+        "supabase/migrations/20260213000002_create_coaching_analyses.sql"
+      ],
+      "acceptance": [
+        "coaching_analyses table with: id, user_id, org_id, meeting_id (nullable for weekly), analysis_type (per_meeting/weekly), talk_ratio, question_quality_score, objection_handling_score, discovery_depth_score, insights JSONB, recommendations JSONB, raw_metrics JSONB, created_at",
+        "RLS policies: users can read own, service role full access",
+        "Indexes on user_id + created_at for weekly aggregation queries"
+      ]
+    },
+    {
+      "id": "COACH-002",
+      "title": "Create coaching-analysis edge function",
+      "feature": "coaching",
+      "type": "backend",
+      "priority": 27,
+      "status": "pending",
+      "estimatedMinutes": 75,
+      "dependencies": { "stories": ["COACH-001", "ORCH-007"] },
+      "files": [
+        "supabase/functions/coaching-analysis/index.ts"
+      ],
+      "acceptance": [
+        "Accepts transcript text + meeting metadata",
+        "Calculates talk ratio (rep vs prospect speaking time)",
+        "Scores question quality (discovery depth, open vs closed)",
+        "Analyzes objection handling effectiveness",
+        "Generates per-meeting micro-feedback (2-3 bullet points)",
+        "For weekly mode: aggregates coaching_analyses from past 7 days, correlates with win/loss outcomes",
+        "Stores results in coaching_analyses table",
+        "Uses costTracking.ts"
+      ]
+    },
+    {
+      "id": "COACH-003",
+      "title": "Coaching Slack delivery and digest",
+      "feature": "coaching",
+      "type": "backend",
+      "priority": 28,
+      "status": "pending",
+      "estimatedMinutes": 45,
+      "dependencies": { "stories": ["COACH-002", "ORCH-009"] },
+      "files": [
+        "supabase/functions/slack-interactive/handlers/coaching.ts"
+      ],
+      "acceptance": [
+        "Per-meeting micro-feedback Slack block (3 bullet points after each meeting)",
+        "Weekly coaching digest Slack block with: numbers, improving areas, focus areas, winning patterns",
+        "Action buttons: View detailed analysis, Adjust coaching preferences",
+        "Coaching preferences stored in existing slack_user_preferences JSONB metadata column"
+      ]
+    },
+    {
+      "id": "COACH-004",
+      "title": "Wire coaching into orchestrator sequences",
+      "feature": "coaching",
+      "type": "backend",
+      "priority": 29,
+      "status": "pending",
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["COACH-003"] },
+      "files": [
+        "supabase/functions/_shared/orchestrator/eventSequences.ts",
+        "supabase/functions/_shared/orchestrator/adapters/coaching.ts"
+      ],
+      "acceptance": [
+        "Orchestrator adapter for coaching-analysis",
+        "Per-meeting coaching added as final step in meeting_ended sequence (best-effort)",
+        "Weekly coaching digest triggered via weekly cron event",
+        "New coaching_weekly event sequence in eventSequences.ts",
+        "Respects user preference for coaching frequency (per-meeting, weekly, both, none)"
+      ]
+    }
+  ],
+  "parallel_groups": [
+    { "stories": ["ORCH-002", "ORCH-004"], "reason": "Types and event sequences can be defined simultaneously" },
+    { "stories": ["ORCH-006", "ORCH-007", "ORCH-008"], "reason": "Independent modules, different file sets" },
+    { "stories": ["EMAIL-001", "PROP-001"], "reason": "Skill definitions and proposal adapter in parallel" },
+    { "stories": ["EMAIL-003", "PROP-002"], "reason": "HITL flows for email and proposals in parallel" },
+    { "stories": ["COACH-001", "CAL-001"], "reason": "Schema and calendar function have no deps" }
+  ],
+  "execution": {
+    "completedStories": 0,
+    "lastUpdated": "2026-02-13T00:00:00Z"
+  }
+}

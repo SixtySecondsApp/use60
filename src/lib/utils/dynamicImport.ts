@@ -61,7 +61,16 @@ export async function retryableImport<T>(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await importFn();
+      const module = await importFn();
+      // Reset one-time dev reload guard after successful load.
+      if (import.meta.env.DEV) {
+        try {
+          sessionStorage.removeItem(`lazy-reload-attempted:${window.location.pathname}`);
+        } catch {
+          // Ignore storage issues.
+        }
+      }
+      return module;
     } catch (error) {
       lastError = error as Error;
       
@@ -108,8 +117,23 @@ export async function retryableImport<T>(
             return Promise.reject(new Error('Reloading page to clear cache'));
           }
         } else {
-          // In dev, don't auto-clear storage; it's noisy and can wipe sessions during iteration.
+          // In dev, don't clear storage; it can wipe sessions during iteration.
+          // But do attempt a one-time hard reload to recover from stale HMR graphs.
           if (import.meta.env.DEV) {
+            try {
+              const reloadKey = `lazy-reload-attempted:${window.location.pathname}`;
+              const alreadyReloaded = sessionStorage.getItem(reloadKey) === '1';
+              if (!alreadyReloaded) {
+                sessionStorage.setItem(reloadKey, '1');
+                setTimeout(() => {
+                  window.location.reload();
+                }, 50);
+                return Promise.reject(new Error('Reloading page to recover dynamic import'));
+              }
+            } catch {
+              // If sessionStorage is unavailable, fall through to original error.
+            }
+
             return Promise.reject(lastError);
           }
 

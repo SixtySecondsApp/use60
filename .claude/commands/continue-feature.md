@@ -1,12 +1,68 @@
+---
+requires-profile: true
+---
+
 # /continue-feature — Execute stories from prd.json (Ralph-style loop)
 
 **Iterations requested:** $ARGUMENTS (default: 10)
+
+---
+
+## STEP 0: Select Model Profile
+
+Before proceeding, ask the user to select which model profile to use:
+- **Economy** — Fastest, lowest cost
+- **Balanced** — Good balance of speed & accuracy
+- **Thorough** — Most accurate, highest cost
+
+Use the `AskUserQuestion` tool with these options.
+
+**Note**: Based on selection, appropriate models will be assigned:
+- Economy: Quick implementations, small stories
+- Balanced: Regular feature development, typical stories
+- Thorough: Complex logic, multi-system changes
+
+---
 
 Execute up to N iterations, completing one user story per iteration from `prd.json`.
 
 ---
 
+## HOOKS (Claude-level configuration)
+
+This command is hook-aware. Hooks are configured at the Claude settings level (not in a repo file).
+
+**Preflight behavior:**
+- At command start, check if hook configuration is available.
+- If hooks are unavailable or fail to load, log a warning and continue.
+- Hook failures are **never blocking** — the command always proceeds.
+
+**Continue hook events emitted:**
+| Event | Payload | When |
+|-------|---------|------|
+| `continue.onStart` | `{ runSlug, iterationCount }` | Loop begins |
+| `story.onStart` | `{ storyId, title }` | Story implementation starts |
+| `story.onQualityGatesStart` | `{ storyId }` | Quality gates begin |
+| `story.onQualityGatesPass` | `{ storyId }` | All gates pass |
+| `story.onQualityGatesFail` | `{ storyId, error, retryCount }` | Gate fails |
+| `story.onComplete` | `{ storyId, filesChanged }` | Story done successfully |
+| `story.onBlocked` | `{ storyId, reason }` | Story marked blocked |
+| `continue.onComplete` | `{ completedCount, remainingCount }` | Loop ends |
+
+**Session limits (hook-configured):**
+- `maxStoriesPerSession`: Stop after N stories (default: 10, from $ARGUMENTS).
+- `maxHoursPerSession`: Stop after N hours (default: none).
+
+---
+
 ## LOOP WORKFLOW
+
+### Step 0: Hook preflight
+
+1. Emit `continue.onStart` event with runSlug (if known) and iterationCount.
+2. If hook system is unavailable, log: `⚠️ Hooks unavailable — continuing without hook events.`
+3. If session limits are configured, enforce them throughout the loop.
+4. Continue to Step 1 regardless of hook status.
 
 For each iteration (up to the requested count):
 
@@ -38,13 +94,19 @@ If the story looks too big to complete in one iteration, **split it**:
 
 ### Step 4: Update AI Dev Hub task → in_progress
 
-If `aiDevHubTaskId` is null, create the task first:
-- Project ID: from `prd.json.aiDevHubProjectId` (or `cae03d2d-74ac-49e6-9da2-aae2440e0c00`)
+**Skip entirely if `prd.json.aiDevHubProjectId` is `null` or Dev Hub MCP is unavailable.**
+
+If `aiDevHubTaskId` is null but `aiDevHubProjectId` exists, lazy-create the task:
+- Project ID: from `prd.json.aiDevHubProjectId`
 - Title: `[<runSlug>] <storyId>: <title>`
-- Status: `in_progress`
+- Type: `"feature"`
+- Status: `"in_progress"`
+- Priority: mapped from story priority (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
 - Store the returned taskId in `prd.json`
 
-If `aiDevHubTaskId` exists, update status to `in_progress`.
+If `aiDevHubTaskId` exists, update status to `"in_progress"`.
+
+If create/update fails, log warning and continue (never block execution).
 
 ### Step 5: Implement the story
 
@@ -67,19 +129,61 @@ Follow **use60 patterns** while implementing:
 const { dealService, activityService } = useServices();
 ```
 
-### Step 6: Run quality gates
+### Step 6: Run quality gates (tiered for speed)
 
-Run these commands (all must pass):
+Emit `story.onQualityGatesStart` event.
 
+**CRITICAL:** For rapid iteration, rely on IDE real-time checking. Only run CLI gates that complete in <30 seconds.
+
+#### Gate 1: Lint changed files (~5-15s) — ALWAYS RUN
 ```bash
-npm run build:check:strict
-npm run lint
-npm run test:run
+CHANGED=$(git diff --name-only HEAD~1 -- '*.ts' '*.tsx' | tr '\n' ' ')
+if [ -n "$CHANGED" ]; then
+  npx eslint $CHANGED --max-warnings 0 --quiet  # --quiet shows only errors
+fi
+```
+**Note:** Pre-existing warnings are OK. Only fail on NEW errors from this story.
+
+#### Gate 2: Tests for changed files (~5-30s) — ALWAYS RUN
+```bash
+npx vitest run --changed HEAD~1 --passWithNoTests
+```
+
+#### Gate 3: Type check — SKIP (rely on IDE)
+**DO NOT RUN** `tsc --noEmit` or `build:check:strict` every story — takes 3+ min on this codebase.
+
+Instead:
+- Trust IDE real-time TypeScript errors (red squiggles)
+- If IDE shows no errors in changed files, gate passes
+- Run full type check only on **final story**
+
+#### Full validation — FINAL STORY ONLY or `fullValidation: true`
+```bash
+npm run build:check:strict  # Full TypeScript (~3-5 min)
+npm run lint                # Full ESLint
+npm run test:run            # All unit tests
 ```
 
 **For UI stories:**
-- Verify in browser on `localhost:5175`
-- Run Playwright tests if relevant: `npm run test:e2e`
+- Quick visual spot-check on `localhost:5175` (30 sec max)
+- If it looks right, it passes
+- E2E: Skip unless `e2e: true` or final story
+
+**Time budget:**
+- Ultra-fast path (Gate 1-2): ~15-30 seconds
+- Full validation (final story): ~5 minutes
+
+**Hook-configured retry behavior (if available):**
+
+If quality gates fail and hooks specify retry behavior:
+1. Attempt auto-fix if configured (e.g., `npm run lint -- --fix`).
+2. Re-run failing gate(s) up to `maxRetries` (default: 1).
+3. Emit `story.onQualityGatesFail` with `{ storyId, error, retryCount }` on each failure.
+4. If retries exhausted, follow `fallback` action:
+   - `"pause"`: Stop the loop and report (default behavior).
+   - `"mark-blocked"`: Mark story blocked and continue to next story.
+
+If hooks are unavailable, use default behavior: stop on first failure.
 
 ### Step 7: Handle result
 
@@ -102,17 +206,25 @@ npm run test:run
    ---
    ```
 4. If a reusable pattern was discovered, add it to the `## Codebase Patterns` section at the TOP of `progress.txt`
-5. Update AI Dev Hub task:
-   - Status: `in_review`
-   - Add comment: Summary of implementation + files changed + gates passed
-6. **Auto-commit** with message: `feat: <storyId> - <Story Title>`
+5. Update AI Dev Hub task (if `aiDevHubTaskId` exists and Dev Hub is available):
+   - Try `update_task` with status `"in review"`
+   - If API error (known bug), keep status as `"in progress"` and add comment via `create_comment`: `"[STATUS] Story completed — ready for review"`
+   - Add completion comment via `create_comment`: Summary of implementation + files changed + gates passed
+   - Log: `Dev Hub: task updated` or `Dev Hub: status update failed (known API bug) — added comment instead`
+   - **Dev Hub failures are non-blocking** — log and continue
+6. **Commit** per the commit policy (see COMMIT FORMAT & POLICY section):
+   - Unattended: auto-commit with message `feat: <storyId> - <Story Title>`
+   - Interactive: ask before committing
+7. Emit `story.onComplete` event with `{ storyId, filesChanged }`.
 
 **If gates FAIL:**
 
 1. Keep `passes: false`
-2. Update AI Dev Hub task:
-   - Status: `blocked`
-   - Add comment: Error details + what needs to be fixed
+2. Update AI Dev Hub task (if `aiDevHubTaskId` exists and Dev Hub is available):
+   - Try `update_task` with status `"blocked"`
+   - If API error, keep status and add comment via `create_comment`: `"[STATUS] Blocked — <error summary>"`
+   - Add comment with error details + what needs to be fixed
+   - **Dev Hub failures are non-blocking** — log and continue
 3. Append failure note to `progress.txt`
 4. Stop the loop and report:
    ```
@@ -134,6 +246,8 @@ After completing a story successfully:
 
 ## END OF LOOP SUMMARY
 
+Emit `continue.onComplete` event with `{ completedCount, remainingCount }`.
+
 After the loop ends (or all stories complete), print:
 
 ```
@@ -145,6 +259,7 @@ Total stories: Y
 Remaining: Z
 
 Commits made: N
+🔗 Hooks: <executed | unavailable>
 
 🎫 AI Dev Hub tasks updated
 
@@ -155,9 +270,18 @@ Next steps:
 
 ---
 
-## COMMIT FORMAT
+## COMMIT FORMAT & POLICY
 
-Auto-commits use this format:
+**Commit policy (hook-aware):**
+- **Unattended runs** (e.g., automated loops, background execution): Auto-commit on successful story completion.
+- **Interactive runs** (user is present): Ask before committing unless explicitly instructed otherwise.
+
+To determine run mode:
+- If the command was invoked with an iteration count > 1 and no user interaction occurred, treat as unattended.
+- If hooks indicate `autoConfirm.storyComplete = true`, treat as unattended.
+- Otherwise, treat as interactive.
+
+**Commit message format:**
 ```
 feat: <storyId> - <Story Title>
 ```
@@ -185,6 +309,20 @@ Examples:
 
 ## QUALITY GATE COMMANDS
 
+### Fast gates (use for most stories)
+```bash
+# Tier 1: Quick type check
+npx tsc --noEmit --skipLibCheck
+
+# Tier 2: Lint only changed files
+CHANGED=$(git diff --name-only HEAD~1 -- '*.ts' '*.tsx' | tr '\n' ' ')
+[ -n "$CHANGED" ] && npx eslint $CHANGED --max-warnings 0
+
+# Tier 3: Tests for changed files only
+npx vitest run --changed HEAD~1 --passWithNoTests
+```
+
+### Full gates (final story or fullValidation: true)
 ```bash
 # TypeScript strict check + build
 npm run build:check:strict
@@ -195,7 +333,7 @@ npm run lint
 # Unit tests
 npm run test:run
 
-# E2E tests (for UI stories)
+# E2E tests (only if e2e: true or final story)
 npm run test:e2e
 ```
 

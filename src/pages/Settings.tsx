@@ -18,18 +18,12 @@ import { useNavigate } from 'react-router-dom';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useMemo } from 'react';
-import { useSlackOrgSettings } from '@/lib/hooks/useSlackSettings';
-import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
-import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
-import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
-import { useBullhornIntegration } from '@/lib/hooks/useBullhornIntegration';
 import {
   User,
   Palette,
   Sparkles,
   MessageSquare,
   Mail,
-  CheckSquare,
   Key,
   ChevronRight,
   Users,
@@ -37,10 +31,16 @@ import {
   Video,
   Phone,
   Workflow,
-  Paintbrush,
   CreditCard,
   Brain,
   Briefcase,
+  Zap,
+  Wallet,
+  Plug,
+  BookOpen,
+  ShieldCheck,
+  ArrowRightLeft,
+  Target,
 } from 'lucide-react';
 
 interface SettingsSection {
@@ -55,22 +55,7 @@ interface SettingsSection {
 export default function Settings() {
   const navigate = useNavigate();
   const { permissions } = useOrg();
-  const { isPlatformAdmin } = useUserPermissions();
-  const { data: slackOrgSettings, isLoading: slackOrgLoading, error: slackOrgError } = useSlackOrgSettings();
-  const isSlackConnected = !slackOrgLoading && !slackOrgError && slackOrgSettings?.is_connected === true;
-  
-  const { isConnected: isFathomConnected, loading: fathomLoading } = useFathomIntegration();
-  const showFathomSettings = !fathomLoading && isFathomConnected;
-
-  const { isConnected: isJustCallConnected, loading: justcallLoading } = useJustCallIntegration();
-  const showJustCallSettings = !justcallLoading && isJustCallConnected;
-
-  const { isConnected: isHubSpotConnected, loading: hubspotLoading } = useHubSpotIntegration();
-  const showHubSpotSettings = !hubspotLoading && isHubSpotConnected;
-
-  const { isConnected: isBullhornConnected, loading: bullhornLoading } = useBullhornIntegration();
-  const showBullhornSettings = !bullhornLoading && isBullhornConnected;
-
+  const { isPlatformAdmin, isViewingAsExternal } = useUserPermissions();
   const allSettingsSections: SettingsSection[] = [
     {
       id: 'account',
@@ -92,6 +77,22 @@ export default function Settings() {
       icon: Brain,
       description: 'Company context, AI skills, and writing styles',
       path: '/settings/ai-intelligence',
+      requiresOrgAdmin: true,
+    },
+    {
+      id: 'autonomy',
+      label: 'Autonomy & Approvals',
+      icon: ShieldCheck,
+      description: 'Control how the AI agent executes actions and requires approval',
+      path: '/settings/autonomy',
+      requiresOrgAdmin: true,
+    },
+    {
+      id: 'methodology',
+      label: 'Sales Methodology',
+      icon: BookOpen,
+      description: 'Configure the sales framework your AI agent uses to qualify deals and coach reps',
+      path: '/settings/methodology',
       requiresOrgAdmin: true,
     },
     {
@@ -124,18 +125,19 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
-      id: 'task-sync',
-      label: 'Task Auto-Sync',
-      icon: CheckSquare,
-      description: 'AI-powered automatic task creation from action items',
-      path: '/settings/task-sync',
+      id: 'custom-sops',
+      label: 'Custom Playbooks (SOPs)',
+      icon: Workflow,
+      description: 'Define automated playbooks that fire on transcript phrases, CRM changes, or a schedule',
+      path: '/settings/custom-sops',
+      requiresOrgAdmin: true,
     },
     {
-      id: 'meeting-sync',
-      label: 'Meeting Sync',
+      id: 'meeting-settings',
+      label: 'Meeting Settings',
       icon: Video,
-      description: 'Auto-log meetings from Fathom, Fireflies, and other integrations',
-      path: '/settings/meeting-sync',
+      description: 'Configure meeting recording and transcription tools',
+      path: '/settings/meeting-settings',
     },
     {
       id: 'call-types',
@@ -144,6 +146,13 @@ export default function Settings() {
       description: 'Configure call types for AI-powered meeting classification',
       path: '/settings/call-types',
       requiresOrgAdmin: true,
+    },
+    {
+      id: 'google-workspace',
+      label: 'Google Workspace',
+      icon: Mail,
+      description: 'Gmail, Calendar, Drive, and Tasks integration',
+      path: '/settings/integrations/google-workspace',
     },
     {
       id: 'email-sync',
@@ -176,6 +185,22 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
+      id: 'crm-field-mapping',
+      label: 'CRM Field Mapping',
+      icon: ArrowRightLeft,
+      description: 'Map CRM fields to sixty fields and configure write policies',
+      path: '/settings/crm-field-mapping',
+      requiresOrgAdmin: true,
+    },
+    {
+      id: 'attio',
+      label: 'Attio',
+      icon: Users,
+      description: 'Configure object sync, attribute mapping, and AI notes',
+      path: '/settings/integrations/attio',
+      requiresOrgAdmin: true,
+    },
+    {
       id: 'bullhorn',
       label: 'Bullhorn ATS',
       icon: Briefcase,
@@ -184,28 +209,36 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
-      id: 'team-members',
-      label: 'Team Members',
-      icon: Users,
-      description: 'Manage team members and invitations',
-      path: '/settings/team-members',
+      id: 'instantly',
+      label: 'Instantly',
+      icon: Zap,
+      description: 'Email outreach campaigns, lead push, and engagement sync',
+      path: '/settings/integrations/instantly',
       requiresOrgAdmin: true,
     },
     {
-      id: 'organization',
-      label: 'Organization',
+      id: 'organization-management',
+      label: 'Organization Management',
       icon: Building2,
-      description: 'Manage organization name and details',
-      path: '/settings/organization',
+      description: 'Manage organization, team members, and invitations',
+      path: '/settings/organization-management',
+      requiresOrgAdmin: false,
+    },
+    {
+      id: 'credits',
+      label: 'Credits & AI',
+      icon: Wallet,
+      description: 'View AI credit balance, usage trends, and purchase history',
+      path: '/settings/credits',
       requiresOrgAdmin: true,
     },
     {
-      id: 'branding',
-      label: 'Branding',
-      icon: Paintbrush,
-      description: 'Manage your organization logo and branding',
-      path: '/settings/branding',
-      requiresOrgAdmin: true,
+      id: 'goals',
+      label: 'Sales Goals',
+      icon: Target,
+      description: 'Set monthly targets for New Business, Outbound, Meetings, and Proposals',
+      path: '/settings/goals',
+      requiresOrgAdmin: false,
     },
     {
       id: 'billing',
@@ -215,53 +248,48 @@ export default function Settings() {
       path: '/settings/billing',
       requiresOrgAdmin: true,
     },
+    {
+      id: 'integrations-hub',
+      label: 'Integrations Hub',
+      icon: Plug,
+      description: 'Connect your tools and services',
+      path: '/integrations',
+    },
+    {
+      id: 'help-docs',
+      label: 'Help & Docs',
+      icon: BookOpen,
+      description: 'Product guides, help articles, and support',
+      path: '/docs',
+    },
   ];
 
   // Filter sections based on permissions
   const settingsSections = useMemo(() => {
+    // When viewing as external/customer, treat as a non-admin external user regardless of actual permissions
+    const effectiveCanManage = !isViewingAsExternal && (permissions.canManageTeam || permissions.canManageSettings || isPlatformAdmin);
+
     return allSettingsSections.filter(section => {
-      // Slack settings should only appear when the org is already connected.
-      // If Slack isn't connected (or the status can't be determined), hide the entry entirely.
-      if (section.id === 'slack') {
-        return isSlackConnected;
-      }
-      // JustCall settings should only appear when JustCall is connected.
-      if (section.id === 'justcall') {
-        return showJustCallSettings;
-      }
-      // HubSpot settings should only appear when HubSpot is connected.
-      if (section.id === 'hubspot') {
-        return showHubSpotSettings;
-      }
-      // Bullhorn settings should only appear when Bullhorn is connected.
-      if (section.id === 'bullhorn') {
-        return showBullhornSettings;
-      }
-      // Meeting Sync settings should only appear when Fathom is connected.
-      if (section.id === 'meeting-sync') {
-        return showFathomSettings;
-      }
       if (section.requiresOrgAdmin) {
-        // Allow org admins AND platform admins to see team settings
-        return permissions.canManageTeam || permissions.canManageSettings || isPlatformAdmin;
+        // Allow org admins AND platform admins to see team settings (not when viewing as external)
+        return effectiveCanManage;
       }
       return true;
     });
-  }, [allSettingsSections, permissions, isPlatformAdmin, isSlackConnected, showFathomSettings, showJustCallSettings, showHubSpotSettings, showBullhornSettings]);
+  }, [allSettingsSections, permissions, isPlatformAdmin, isViewingAsExternal]);
 
   const categories = useMemo(() => {
     const personalSections = settingsSections.filter(s =>
       ['account', 'appearance'].includes(s.id)
     );
     const aiSections = settingsSections.filter(s =>
-      ['ai-intelligence', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'task-sync', 'call-types'].includes(s.id)
+      ['ai-intelligence', 'autonomy', 'methodology', 'ai-personalization', 'sales-coaching', 'api-keys', 'follow-ups', 'call-types', 'custom-sops'].includes(s.id)
     );
-    // Meeting Sync is now under Integrations (only shown when Fathom is connected)
     const integrationSections = settingsSections.filter(s =>
-      ['email-sync', 'slack', 'justcall', 'hubspot', 'bullhorn', 'meeting-sync'].includes(s.id)
+      ['google-workspace', 'email-sync', 'slack', 'justcall', 'hubspot', 'crm-field-mapping', 'attio', 'bullhorn', 'instantly', 'meeting-settings'].includes(s.id)
     );
     const teamSections = settingsSections.filter(s =>
-      ['team-members', 'organization', 'branding', 'billing'].includes(s.id)
+      ['organization-management', 'credits', 'billing', 'goals'].includes(s.id)
     );
 
     const cats = [
@@ -288,6 +316,18 @@ export default function Settings() {
         id: 'team',
         label: 'Team',
         sections: teamSections,
+      });
+    }
+
+    // "More" category for pages removed from nav but still accessible
+    const moreSections = settingsSections.filter(s =>
+      ['integrations-hub', 'help-docs'].includes(s.id)
+    );
+    if (moreSections.length > 0) {
+      cats.push({
+        id: 'more',
+        label: 'More',
+        sections: moreSections,
       });
     }
 

@@ -1,0 +1,92 @@
+{
+  "test_cases": [
+    {
+      "id": "small_startup",
+      "name": "Small Startup (High Availability)",
+      "domain": "conturae.com",
+      "expected_completeness": 89,
+      "expected_source": "skill_research",
+      "expected_fields": {
+        "company_name": "Conturae",
+        "founded_year": "2022",
+        "funding_status": "pre-seed",
+        "key_people": [
+          { "name": "Dan Debnam", "title": "CEO" },
+          { "name": "Jen Timothy", "title": "COO" }
+        ],
+        "review_ratings": true,
+        "average_review_rating": 5.0
+      },
+      "timeout_seconds": 90
+    },
+    {
+      "id": "midsize_company",
+      "name": "Mid-Size Company",
+      "domain": "stripe.com",
+      "expected_completeness": 85,
+      "expected_source": "skill_research",
+      "expected_fields": {
+        "company_name": "Stripe",
+        "founded_year": true,
+        "funding_rounds": true,
+        "key_people": true,
+        "products": true,
+        "competitors": true
+      },
+      "timeout_seconds": 90
+    },
+    {
+      "id": "enterprise",
+      "name": "Enterprise Company",
+      "domain": "salesforce.com",
+      "expected_completeness": 85,
+      "expected_source": "skill_research",
+      "expected_fields": {
+        "company_name": "Salesforce",
+        "founded_year": true,
+        "headquarters": true,
+        "leadership_backgrounds": true,
+        "company_milestones": true,
+        "differentiators": true
+      },
+      "timeout_seconds": 90
+    },
+    {
+      "id": "unknown_company",
+      "name": "Unknown Company (Graceful Degradation)",
+      "domain": "fake-company-xyz-definitely-not-real.com",
+      "expected_completeness": 30,
+      "expected_source": "website_fallback",
+      "expected_status": "error",
+      "allow_failure": true,
+      "timeout_seconds": 120
+    },
+    {
+      "id": "redirect_domain",
+      "name": "Domain Redirect (Error Handling)",
+      "domain": "conturi.com",
+      "expected_completeness": 30,
+      "expected_source": "website_fallback",
+      "expected_status": "error",
+      "allow_failure": true,
+      "timeout_seconds": 120
+    }
+  ],
+  "validation_rules": {
+    "min_completeness_skill_research": 80,
+    "max_completeness_website": 50,
+    "max_duration_skill_research_seconds": 60,
+    "max_duration_website_seconds": 180,
+    "min_new_context_variables": 15,
+    "required_new_variables": [
+      "founded_year",
+      "headquarters",
+      "funding_status",
+      "review_ratings",
+      "buying_signals_detected",
+      "company_milestones",
+      "differentiators",
+      "market_trends"
+    ]
+  }
+}

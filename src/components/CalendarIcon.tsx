@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar } from 'lucide-react';
+import { Calendar, CheckCircle2, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCalendarEventsFromDB } from '@/lib/hooks/useCalendarEvents';
 import { useGoogleServiceEnabled } from '@/lib/hooks/useGoogleIntegration';
+import { useSlackIntegration } from '@/lib/hooks/useSlackIntegration';
+import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { format, isToday, isTomorrow } from 'date-fns';
@@ -14,7 +17,10 @@ export function CalendarIcon() {
   const calendarRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const isCalendarEnabled = useGoogleServiceEnabled('calendar');
+  const { isConnected: isSlackConnected } = useSlackIntegration();
+  const { isConnected: isFathomConnected } = useFathomIntegration();
 
   // Calculate date range for upcoming events (today + next 7 days)
   const dateRange = useMemo(() => {
@@ -99,17 +105,22 @@ export function CalendarIcon() {
 
   // Calculate panel position when opening
   const handleToggle = () => {
-    if (!isOpen && calendarRef.current) {
-      const rect = calendarRef.current.getBoundingClientRect();
-      const isMobile = window.innerWidth < 640;
+    if (!isOpen) {
+      // Force-refresh calendar connection status so stale "not connected" data is cleared immediately
+      queryClient.invalidateQueries({ queryKey: ['google', 'services'] });
 
-      if (isMobile) {
-        setPanelPosition({ top: 0, left: 0 });
-      } else {
-        setPanelPosition({
-          top: rect.bottom + 8,
-          left: Math.max(8, rect.left + rect.width - 384)
-        });
+      if (calendarRef.current) {
+        const rect = calendarRef.current.getBoundingClientRect();
+        const isMobile = window.innerWidth < 640;
+
+        if (isMobile) {
+          setPanelPosition({ top: 0, left: 0 });
+        } else {
+          setPanelPosition({
+            top: rect.bottom + 8,
+            left: Math.max(8, rect.left + rect.width - 384)
+          });
+        }
       }
     }
     setIsOpen(!isOpen);
@@ -202,6 +213,48 @@ export function CalendarIcon() {
                     )}
                   </div>
                 </div>
+                {/* Integration connection status indicators */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    {isCalendarEnabled ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-gray-400" />
+                    )}
+                    <span className={cn(
+                      "text-xs",
+                      isCalendarEnabled ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"
+                    )}>
+                      Google Calendar
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {isSlackConnected ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-gray-400" />
+                    )}
+                    <span className={cn(
+                      "text-xs",
+                      isSlackConnected ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"
+                    )}>
+                      Slack
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {isFathomConnected ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-gray-400" />
+                    )}
+                    <span className={cn(
+                      "text-xs",
+                      isFathomConnected ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"
+                    )}>
+                      Fathom
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Content */}
@@ -213,7 +266,10 @@ export function CalendarIcon() {
                       Connect Google Calendar to view your events
                     </p>
                     <button
-                      onClick={handleViewFullPage}
+                      onClick={() => {
+                        navigate('/settings/integrations/google-workspace');
+                        setIsOpen(false);
+                      }}
                       className="px-4 py-2 bg-[#37bd7e] text-white rounded-lg hover:bg-[#2da76c] transition-colors text-sm"
                     >
                       Connect Calendar

@@ -9,7 +9,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getUserOrgId, requireOrgRole } from '../_shared/edgeAuth.ts';
 
 type Action = 'status' | 'connect_api_token' | 'check_webhook' | 'disconnect' | 'trigger_sync' | 'update_webhook_secret';
@@ -362,12 +362,19 @@ serve(async (req) => {
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
+      const cronSecret = Deno.env.get('CRON_SECRET') ?? '';
+
+      const syncHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${serviceKey}`,
+      };
+      if (cronSecret) {
+        syncHeaders['x-cron-secret'] = cronSecret;
+      }
+
       const response = await fetch(`${supabaseUrl}/functions/v1/sync-savvycal-events`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${serviceKey}`,
-        },
+        headers: syncHeaders,
         body: JSON.stringify({
           org_id: orgId,
           since_hours: sinceHours,

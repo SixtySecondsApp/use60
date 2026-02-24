@@ -12,7 +12,7 @@ import { MeetingsEmptyState } from './MeetingsEmptyState'
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration'
 import { useDebouncedSearch, filterItems } from '@/lib/hooks/useDebounce'
 import { MeetingsFilterBar } from './MeetingsFilterBar'
-import { DateRangePreset, DateRange, getDateRangeFromPreset } from '@/components/ui/date-filter'
+import { useDateRangeFilter } from '@/components/ui/DateRangeFilter'
 import { toast } from 'sonner'
 import {
   Table,
@@ -92,9 +92,11 @@ interface Meeting {
   next_actions_count: number | null
   meeting_type?: 'discovery' | 'demo' | 'negotiation' | 'closing' | 'follow_up' | 'general' | null
   classification_confidence?: number | null
-  // Source type for voice vs Fathom meetings
-  source_type?: 'fathom' | 'voice'
+  // Source type for voice, 60 Notetaker, or Fathom meetings
+  source_type?: 'fathom' | 'voice' | '60_notetaker'
   voice_recording_id?: string | null
+  // Meeting provider (fathom, fireflies, etc.)
+  provider?: string
   // Processing status columns for real-time UI updates
   thumbnail_status?: ProcessingStatus
   transcript_status?: ProcessingStatus
@@ -167,13 +169,15 @@ const StatCard: React.FC<{
 
 // Skeleton Components for Loading State
 const StatCardSkeleton: React.FC = () => (
-  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-3 sm:p-5 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10">
-    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-2 w-20 bg-gray-200/60 dark:bg-gray-700/40" />
-        <Skeleton className="h-8 sm:h-9 w-16 bg-gray-200/60 dark:bg-gray-700/40" />
-      </div>
-      <Skeleton className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl bg-gray-200/60 dark:bg-gray-700/40 mt-2 sm:mt-0" />
+  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-4 sm:p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10 flex flex-col">
+    {/* Icon row — matches real StatCard's icon container at top */}
+    <div className="flex items-start justify-between gap-3 mb-3">
+      <Skeleton className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+    </div>
+    {/* Title + value column */}
+    <div className="flex flex-col gap-2 flex-1">
+      <Skeleton className="h-3 w-20 bg-gray-200/60 dark:bg-gray-700/40" />
+      <Skeleton className="h-8 sm:h-9 w-16 bg-gray-200/60 dark:bg-gray-700/40" />
     </div>
   </div>
 )
@@ -209,37 +213,54 @@ const MeetingCardSkeleton: React.FC = () => (
 const MeetingRowSkeleton: React.FC = () => (
   <TableRow className="border-gray-200/50 dark:border-gray-700/30">
     <TableCell><Skeleton className="h-4 w-32 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-4 w-24 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-4 w-16 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-24 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-16 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
     <TableCell><Skeleton className="h-4 w-20 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-4 w-12 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-5 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-5 w-14 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-5 w-10 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
-    <TableCell><Skeleton className="h-4 w-6 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-12 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden lg:table-cell"><Skeleton className="h-5 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden lg:table-cell"><Skeleton className="h-5 w-14 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden xl:table-cell"><Skeleton className="h-5 w-10 rounded-full bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
+    <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-6 bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
     <TableCell><Skeleton className="h-8 w-8 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" /></TableCell>
   </TableRow>
 )
 
 const MeetingsListSkeleton: React.FC<{ view: 'list' | 'grid' }> = ({ view }) => (
-  <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+  <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 w-full max-w-full overflow-x-hidden min-h-full bg-[#F8FAFC] dark:bg-transparent">
+    {/* Recording Source Tabs Skeleton */}
+    <div className="flex items-center gap-2 flex-wrap w-full">
+      <Skeleton className="h-8 w-36 sm:w-44 rounded-md bg-gray-200/60 dark:bg-gray-700/40" />
+      <Skeleton className="h-8 w-28 sm:w-32 rounded-md bg-gray-200/60 dark:bg-gray-700/40" />
+    </div>
+
+    {/* Meeting Usage Bar Skeleton */}
+    <Skeleton className="h-10 w-full rounded-xl bg-gray-200/60 dark:bg-gray-700/40" />
+
     {/* Header Skeleton */}
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <div className="flex items-center gap-2 sm:gap-3">
-        <Skeleton className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <Skeleton className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
         <div className="min-w-0 flex-1">
-          <Skeleton className="h-6 sm:h-8 w-24 mb-2 bg-gray-200/60 dark:bg-gray-700/40" />
-          <Skeleton className="h-3 w-32 sm:w-56 bg-gray-200/60 dark:bg-gray-700/40" />
+          <Skeleton className="h-7 sm:h-8 w-28 mb-2 bg-gray-200/60 dark:bg-gray-700/40" />
+          <Skeleton className="h-3 w-48 sm:w-64 bg-gray-200/60 dark:bg-gray-700/40" />
         </div>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <Skeleton className="h-8 w-24 sm:w-32 rounded-xl bg-gray-200/60 dark:bg-gray-700/40" />
-        <Skeleton className="h-8 w-16 sm:w-20 rounded-xl bg-gray-200/60 dark:bg-gray-700/40" />
+        {/* Scope toggle skeleton (My / Team) */}
+        <div className="flex bg-white/80 dark:bg-gray-900/40 rounded-xl p-1 border border-gray-200/50 dark:border-gray-700/30">
+          <Skeleton className="h-7 w-12 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" />
+          <Skeleton className="h-7 w-14 rounded-lg bg-gray-200/60 dark:bg-gray-700/40 ml-1" />
+        </div>
+        {/* View toggle skeleton (List / Grid) */}
+        <div className="flex bg-white/80 dark:bg-gray-900/40 rounded-xl p-1 border border-gray-200/50 dark:border-gray-700/30">
+          <Skeleton className="h-7 w-8 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" />
+          <Skeleton className="h-7 w-8 rounded-lg bg-gray-200/60 dark:bg-gray-700/40 ml-1" />
+        </div>
       </div>
     </div>
 
     {/* Stats Skeleton */}
-    <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
       {[...Array(5)].map((_, i) => (
         <StatCardSkeleton key={i} />
       ))}
@@ -313,8 +334,7 @@ const MeetingsList: React.FC = () => {
 
   // Filtering state
   const { searchQuery, debouncedSearchQuery, isSearching, setSearchQuery } = useDebouncedSearch('', 400)
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('all')
-  const [customDateRange, setCustomDateRange] = useState<DateRange | null>(null)
+  const dateFilter = useDateRangeFilter('month')
   const [selectedRepId, setSelectedRepId] = useState<string | null | undefined>(undefined)
   const [durationBucket, setDurationBucket] = useState<'all' | 'short' | 'medium' | 'long'>('all')
   const [sentimentCategory, setSentimentCategory] = useState<'all' | 'positive' | 'neutral' | 'challenging'>('all')
@@ -323,14 +343,14 @@ const MeetingsList: React.FC = () => {
   // Calculate active filter count
   const activeFilterCount = useMemo(() => {
     let count = 0
-    if (datePreset !== 'all') count++
+    if (dateFilter.datePreset !== 'month') count++
     if (selectedRepId) count++
     if (durationBucket !== 'all') count++
     if (sentimentCategory !== 'all') count++
     if (coachingCategory !== 'all') count++
     if (searchQuery.trim()) count++
     return count
-  }, [datePreset, selectedRepId, durationBucket, sentimentCategory, coachingCategory, searchQuery])
+  }, [dateFilter.datePreset, selectedRepId, durationBucket, sentimentCategory, coachingCategory, searchQuery])
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
 
@@ -342,11 +362,11 @@ const MeetingsList: React.FC = () => {
   // Reset to page 1 when any filter changes
   useEffect(() => {
     setCurrentPage(1)
-  }, [sortField, sortDirection, datePreset, customDateRange, selectedRepId, durationBucket, sentimentCategory, coachingCategory, debouncedSearchQuery])
+  }, [sortField, sortDirection, dateFilter.dateRange, selectedRepId, durationBucket, sentimentCategory, coachingCategory, debouncedSearchQuery])
 
   useEffect(() => {
     fetchMeetings()
-  }, [scope, user, activeOrgId, currentPage, sortField, sortDirection, datePreset, customDateRange, selectedRepId])
+  }, [scope, user, activeOrgId, currentPage, sortField, sortDirection, dateFilter.dateRange, selectedRepId])
 
   // Auto-sync when user arrives with Fathom connected but no meetings
   // This handles users coming from onboarding who skipped the sync step
@@ -400,6 +420,8 @@ const MeetingsList: React.FC = () => {
       try {
         for (const m of meetings) {
           if (m.thumbnail_url || !(m.share_url || m.fathom_recording_id)) continue
+          // Skip non-Fathom meetings (no embeddable video)
+          if (m.provider && m.provider !== 'fathom') continue
 
           // Build embed URL from share_url or recording id
           let embedUrl: string | null = null
@@ -510,8 +532,9 @@ const MeetingsList: React.FC = () => {
       // Use explicit any to avoid deep type instantiation issues with Supabase query chaining
       const countQueryBase = supabase
         .from('meetings')
-        .select('*', { count: 'exact', head: true }) as any
-      
+        .select('*', { count: 'exact', head: true })
+        .neq('source_type', '60_notetaker') as any // 60 Notetaker has its own tab
+
       // Apply filters
       let countQuery = countQueryBase
       if (activeOrgId) {
@@ -539,6 +562,7 @@ const MeetingsList: React.FC = () => {
           action_items:meeting_action_items(completed),
           tasks!tasks_meeting_id_fkey(status)
         `)
+        .neq('source_type', '60_notetaker') // 60 Notetaker has its own tab
         .order(sortField, { ascending: sortDirection === 'asc' })
         .range(from, to) as any
 
@@ -557,11 +581,10 @@ const MeetingsList: React.FC = () => {
       }
 
       // Server-side date filtering
-      const dateRange = customDateRange || getDateRangeFromPreset(datePreset)
-      if (dateRange) {
+      if (dateFilter.dateRange) {
         query = query
-          .gte('meeting_start', dateRange.start.toISOString())
-          .lte('meeting_start', dateRange.end.toISOString())
+          .gte('meeting_start', dateFilter.dateRange.start.toISOString())
+          .lte('meeting_start', dateFilter.dateRange.end.toISOString())
       }
 
       // Server-side rep filtering (when scope is 'team')
@@ -703,7 +726,7 @@ const MeetingsList: React.FC = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 w-full max-w-full overflow-x-hidden">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 w-full max-w-full overflow-x-hidden min-h-full bg-[#F8FAFC] dark:bg-transparent">
       {/* Recording Source Tabs */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -889,7 +912,7 @@ const MeetingsList: React.FC = () => {
         />
         <StatCard
           title="Coach Score"
-          value={stats.avgCoachRating ? `${stats.avgCoachRating}/10` : 'N/A'}
+          value={stats.avgCoachRating ? `${Math.min(stats.avgCoachRating, 10)}/10` : 'N/A'}
           icon={<Award className="h-5 w-5" />}
           trend={stats.avgCoachRating > 7 ? 'up' : stats.avgCoachRating < 5 ? 'down' : 'neutral'}
         />
@@ -904,12 +927,7 @@ const MeetingsList: React.FC = () => {
         sortDirection={sortDirection}
         onSortFieldChange={setSortField}
         onSortDirectionToggle={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-        datePreset={datePreset}
-        customDateRange={customDateRange}
-        onDateChange={(preset, range) => {
-          setDatePreset(preset)
-          setCustomDateRange(range)
-        }}
+        dateFilter={dateFilter}
         selectedRepId={selectedRepId}
         onRepChange={setSelectedRepId}
         scope={scope}
@@ -924,8 +942,7 @@ const MeetingsList: React.FC = () => {
           setSearchQuery('')
           setSortField('meeting_start')
           setSortDirection('desc')
-          setDatePreset('all')
-          setCustomDateRange(null)
+          dateFilter.handleClear()
           setSelectedRepId(undefined)
           setDurationBucket('all')
           setSentimentCategory('all')
@@ -998,6 +1015,16 @@ const MeetingsList: React.FC = () => {
                           <div className="flex items-start gap-2">
                             {meeting.source_type === 'voice' && (
                               <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-500/20 rounded text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5">
+                                <Mic className="h-3 w-3" />
+                              </div>
+                            )}
+                            {meeting.source_type === '60_notetaker' && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-500/20 rounded text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5">
+                                <Bot className="h-3 w-3" />
+                              </div>
+                            )}
+                            {meeting.provider === 'fireflies' && meeting.source_type !== 'voice' && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 dark:bg-orange-500/20 rounded text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5">
                                 <Mic className="h-3 w-3" />
                               </div>
                             )}
@@ -1094,7 +1121,33 @@ const MeetingsList: React.FC = () => {
                 >
                   {/* Media Thumbnail Area - Voice or Video */}
                   <div className="relative aspect-video bg-gray-100/80 dark:bg-gray-800/40 rounded-xl mb-3 sm:mb-4 overflow-hidden border border-gray-200/30 dark:border-gray-700/20">
-                    {meeting.source_type === 'voice' ? (
+                    {meeting.source_type === '60_notetaker' ? (
+                      /* 60 Notetaker Meeting - Video Thumbnail */
+                      <>
+                        {meeting.thumbnail_url && !meeting.thumbnail_url.includes('dummyimage.com') ? (
+                          <img
+                            src={meeting.thumbnail_url}
+                            alt={meeting.title}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-500/10 via-blue-600/5 to-indigo-500/10 dark:from-blue-500/20 dark:via-blue-600/10 dark:to-indigo-500/20">
+                            <Video className="h-10 w-10 text-blue-400/60" />
+                          </div>
+                        )}
+                        {/* 60 Notetaker badge - top left */}
+                        <div className="absolute top-2 left-2">
+                          <div className="px-2 py-1 bg-blue-500/90 backdrop-blur-sm rounded-md text-[10px] text-white flex items-center gap-1">
+                            <Bot className="h-3 w-3" />
+                            60 Notetaker
+                          </div>
+                        </div>
+                      </>
+                    ) : meeting.source_type === 'voice' ? (
                       /* Voice Meeting - Audio Waveform Display */
                       <>
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-emerald-500/10 via-emerald-600/5 to-teal-500/10 dark:from-emerald-500/20 dark:via-emerald-600/10 dark:to-teal-500/20">
@@ -1105,7 +1158,7 @@ const MeetingsList: React.FC = () => {
                                 key={i}
                                 className="w-1.5 bg-emerald-500/60 dark:bg-emerald-400/60 rounded-full"
                                 style={{
-                                  height: `${20 + Math.sin(i * 0.8) * 15 + Math.random() * 10}px`,
+                                  height: `${20 + Math.sin(i * 0.8) * 15 + (i % 4) * 3}px`,
                                   animation: `waveform ${0.5 + i * 0.1}s ease-in-out infinite alternate`,
                                   animationDelay: `${i * 50}ms`,
                                 }}
@@ -1122,6 +1175,21 @@ const MeetingsList: React.FC = () => {
                           <div className="px-2 py-1 bg-emerald-500/90 backdrop-blur-sm rounded-md text-[10px] text-white flex items-center gap-1">
                             <Mic className="h-3 w-3" />
                             Voice
+                          </div>
+                        </div>
+                      </>
+                    ) : meeting.provider === 'fireflies' ? (
+                      /* Fireflies Meeting - Transcript Display */
+                      <>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-orange-500/10 via-orange-600/5 to-amber-500/10 dark:from-orange-500/20 dark:via-orange-600/10 dark:to-amber-500/20">
+                          <Mic className="h-10 w-10 text-orange-500/60 dark:text-orange-400/60 mb-2" />
+                          <span className="text-sm font-medium text-orange-600 dark:text-orange-400">Fireflies Transcript</span>
+                        </div>
+                        {/* Fireflies badge - top left */}
+                        <div className="absolute top-2 left-2">
+                          <div className="px-2 py-1 bg-orange-500/90 backdrop-blur-sm rounded-md text-[10px] text-white flex items-center gap-1">
+                            <Mic className="h-3 w-3" />
+                            Fireflies
                           </div>
                         </div>
                       </>
@@ -1395,8 +1463,7 @@ const MeetingsList: React.FC = () => {
               setDurationBucket('all')
               setSentimentCategory('all')
               setCoachingCategory('all')
-              setDatePreset('all')
-              setCustomDateRange(null)
+              dateFilter.handleClear()
             }}
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
           >

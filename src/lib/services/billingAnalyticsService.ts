@@ -120,18 +120,78 @@ export async function getChurnRate(
   endDate: Date,
   currency?: string
 ): Promise<ChurnRate[]> {
-  const { data, error } = await supabase.rpc('calculate_churn_rate', {
-    p_start_date: startDate.toISOString().split('T')[0],
-    p_end_date: endDate.toISOString().split('T')[0],
-    p_currency: currency || null,
-  });
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
 
-  if (error) {
-    console.error('Error calculating churn rate:', error);
+  // Active subscriptions at period start (status active/trialing before start date)
+  const { data: activeAtStart, error: activeError } = await supabase
+    .from('organization_subscriptions')
+    .select('id, current_recurring_amount_cents, currency')
+    .in('status', ['active', 'trialing'])
+    .lte('started_at', startIso)
+    .or(`canceled_at.is.null,canceled_at.gt.${startIso}`);
+
+  if (activeError) {
+    console.error('Error fetching active subscriptions for churn rate:', activeError);
     throw new Error('Failed to calculate churn rate');
   }
 
-  return data || [];
+  // Subscriptions canceled during the period
+  const { data: canceled, error: canceledError } = await supabase
+    .from('organization_subscriptions')
+    .select('id, current_recurring_amount_cents, currency')
+    .eq('status', 'canceled')
+    .gte('canceled_at', startIso)
+    .lte('canceled_at', endIso);
+
+  if (canceledError) {
+    console.error('Error fetching canceled subscriptions for churn rate:', canceledError);
+    throw new Error('Failed to calculate churn rate');
+  }
+
+  const activeSubs = activeAtStart || [];
+  const canceledSubs = canceled || [];
+
+  // Filter by currency if specified
+  const filteredActive = currency
+    ? activeSubs.filter((s) => s.currency === currency)
+    : activeSubs;
+  const filteredCanceled = currency
+    ? canceledSubs.filter((s) => s.currency === currency)
+    : canceledSubs;
+
+  const activeCount = filteredActive.length;
+  const canceledCount = filteredCanceled.length;
+  const mrrStart = filteredActive.reduce(
+    (sum, s) => sum + (s.current_recurring_amount_cents || 0),
+    0
+  );
+  const mrrLost = filteredCanceled.reduce(
+    (sum, s) => sum + (s.current_recurring_amount_cents || 0),
+    0
+  );
+
+  const subscriberChurnRate = activeCount > 0 ? (canceledCount / activeCount) * 100 : 0;
+  const mrrChurnRate = mrrStart > 0 ? (mrrLost / mrrStart) * 100 : 0;
+
+  // Return empty array (no data) rather than zeros when there are no subscriptions at all
+  if (activeCount === 0 && canceledCount === 0) {
+    return [];
+  }
+
+  return [
+    {
+      period_start: startDate.toISOString().split('T')[0],
+      period_end: endDate.toISOString().split('T')[0],
+      subscriber_churn_rate: Math.round(subscriberChurnRate * 10) / 10,
+      mrr_churn_rate: Math.round(mrrChurnRate * 10) / 10,
+      subscribers_canceled: canceledCount,
+      mrr_lost_cents: mrrLost,
+      active_subscriptions_start: activeCount,
+      mrr_start_cents: mrrStart,
+      currency: currency || filteredActive[0]?.currency || filteredCanceled[0]?.currency || 'GBP',
+    },
+  ];
 }
 
 // ============================================================================
@@ -188,17 +248,56 @@ export async function getTrialConversionRate(
   startDate: Date,
   endDate: Date
 ): Promise<TrialConversion[]> {
-  const { data, error } = await supabase.rpc('calculate_trial_conversion_rate', {
-    p_start_date: startDate.toISOString().split('T')[0],
-    p_end_date: endDate.toISOString().split('T')[0],
-  });
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
 
-  if (error) {
-    console.error('Error calculating trial conversion rate:', error);
+  // All orgs that started a trial in the period
+  const { data: trialsStarted, error: trialsError } = await supabase
+    .from('organization_subscriptions')
+    .select('id, status, trial_start_at, trial_ends_at')
+    .gte('trial_start_at', startIso)
+    .lte('trial_start_at', endIso)
+    .not('trial_start_at', 'is', null);
+
+  if (trialsError) {
+    console.error('Error fetching trial starts for conversion rate:', trialsError);
     throw new Error('Failed to calculate trial conversion rate');
   }
 
-  return data || [];
+  const trials = trialsStarted || [];
+
+  if (trials.length === 0) {
+    return [];
+  }
+
+  // Converted = trial that became active (status = 'active' and had a trial)
+  const converted = trials.filter((t) => t.status === 'active');
+
+  // Average trial duration in days
+  const trialsWithDuration = trials.filter(
+    (t) => t.trial_start_at && t.trial_ends_at
+  );
+  const avgTrialDays =
+    trialsWithDuration.length > 0
+      ? trialsWithDuration.reduce((sum, t) => {
+          const start = new Date(t.trial_start_at!).getTime();
+          const end = new Date(t.trial_ends_at!).getTime();
+          return sum + (end - start) / (1000 * 60 * 60 * 24);
+        }, 0) / trialsWithDuration.length
+      : 0;
+
+  const conversionRate = (converted.length / trials.length) * 100;
+
+  return [
+    {
+      period_start: startDate.toISOString().split('T')[0],
+      period_end: endDate.toISOString().split('T')[0],
+      trials_started: trials.length,
+      trials_converted: converted.length,
+      conversion_rate: Math.round(conversionRate * 10) / 10,
+      avg_trial_days: Math.round(avgTrialDays * 10) / 10,
+    },
+  ];
 }
 
 // ============================================================================

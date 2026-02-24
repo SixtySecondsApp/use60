@@ -40,6 +40,18 @@ function getStepsForTool(toolType: ToolType): Omit<ToolStep, 'id'>[] {
       { label: 'Filtering meetings', icon: 'activity', state: 'pending' },
       { label: 'Loading meeting details', icon: 'activity', state: 'pending' }
     ],
+    next_meeting_prep: [
+      { label: 'Finding your next meeting', icon: 'calendar', state: 'pending' },
+      { label: 'Loading deal + contact context', icon: 'users', state: 'pending' },
+      { label: 'Generating one-page brief', icon: 'activity', state: 'pending' },
+      { label: 'Preparing prep task preview', icon: 'check-circle', state: 'pending' }
+    ],
+    post_meeting_followup_pack: [
+      { label: 'Loading most recent recorded meeting', icon: 'calendar', state: 'pending' },
+      { label: 'Extracting decisions & next steps', icon: 'activity', state: 'pending' },
+      { label: 'Drafting buyer email + Slack update', icon: 'mail', state: 'pending' },
+      { label: 'Preparing follow-up task preview', icon: 'check-circle', state: 'pending' }
+    ],
     contact_lookup: [
       { label: 'Searching contacts', icon: 'users', state: 'pending' },
       { label: 'Loading recent activity', icon: 'activity', state: 'pending' }
@@ -79,6 +91,13 @@ function getStepsForTool(toolType: ToolType): Omit<ToolStep, 'id'>[] {
       { label: 'Comparing periods', icon: 'bar-chart', state: 'pending' },
       { label: 'Generating insights', icon: 'lightbulb', state: 'pending' },
       { label: 'Creating recommendations', icon: 'target', state: 'pending' }
+    ],
+    entity_resolution: [
+      { label: 'Searching CRM contacts', icon: 'users', state: 'pending' },
+      { label: 'Searching recent meetings', icon: 'calendar', state: 'pending' },
+      { label: 'Searching calendar events', icon: 'calendar', state: 'pending' },
+      { label: 'Searching recent emails', icon: 'mail', state: 'pending' },
+      { label: 'Resolving best match', icon: 'activity', state: 'pending' }
     ]
   };
 

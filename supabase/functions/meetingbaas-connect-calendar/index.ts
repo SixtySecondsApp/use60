@@ -29,6 +29,22 @@ interface MeetingBaaSCalendarResponse {
   created_at: string;
 }
 
+interface MeetingBaaSBotConfig {
+  bot_name: string;
+  bot_image?: string;
+  recording_mode?: 'audio_only' | 'video_only' | 'audio_and_video';
+  speech_to_text?: {
+    provider: 'Default' | 'Gladia' | 'Runpod';
+  };
+  automatic_leave?: {
+    waiting_room_timeout?: number;
+    noone_joined_timeout?: number;
+    everyone_left_timeout?: number;
+  };
+  deduplication_key?: string;
+  extra?: Record<string, unknown>;
+}
+
 // =============================================================================
 // MeetingBaaS API
 // =============================================================================
@@ -112,6 +128,57 @@ async function createMeetingBaaSCalendar(
   } catch (error) {
     console.error('[MeetingBaaS API] Exception:', error);
     return { error: error instanceof Error ? error.message : 'Network error' };
+  }
+}
+
+/**
+ * Schedule bots for all calendar events with meeting URLs.
+ * This uses MeetingBaaS v2 native bot scheduling which eliminates
+ * the need for polling/cron-based auto-join schedulers.
+ */
+async function scheduleMeetingBaaSBots(
+  apiKey: string,
+  calendarId: string,
+  config: MeetingBaaSBotConfig
+): Promise<{ success: boolean; error?: string; data?: unknown }> {
+  try {
+    console.log('[MeetingBaaS API] Scheduling bots for calendar:', {
+      calendarId,
+      botName: config.bot_name,
+      recordingMode: config.recording_mode,
+    });
+
+    const response = await fetch(`${MEETINGBAAS_API_BASE}/calendars/${calendarId}/bots`, {
+      method: 'POST',
+      headers: {
+        'x-meeting-baas-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config),
+    });
+
+    const data = await response.json();
+    console.log('[MeetingBaaS API] Schedule bots response:', {
+      status: response.status,
+      ok: response.ok,
+      data: JSON.stringify(data).substring(0, 1000),
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data?.message || data?.error || `HTTP ${response.status}`,
+        data,
+      };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('[MeetingBaaS API] Schedule bots exception:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Network error',
+    };
   }
 }
 
@@ -578,6 +645,84 @@ serve(async (req) => {
 
     console.log(`[MeetingBaaS Connect] Calendar connected: ${finalMbCalendar.id} for user ${effectiveUserId}`);
 
+    // =========================================================================
+    // NATIVE BOT SCHEDULING: Automatically schedule bots for all calendar events
+    // This eliminates the need for our polling auto-join-scheduler cron job
+    // =========================================================================
+    let botSchedulingResult: { success: boolean; error?: string } = { success: false };
+
+    // Check if user has notetaker settings enabled
+    const { data: notetakerSettings } = await supabase
+      .from('notetaker_user_settings')
+      .select('is_enabled, record_external, record_internal, selected_calendar_id')
+      .eq('user_id', effectiveUserId)
+      .maybeSingle();
+
+    // Check org's auto-record settings
+    const { data: orgSettings } = await supabase
+      .from('organizations')
+      .select('recording_settings, name')
+      .eq('id', orgId)
+      .single();
+
+    const recordingSettings = orgSettings?.recording_settings || {};
+    const autoRecordEnabled = recordingSettings.auto_record_enabled === true;
+    const userNotetakerEnabled = notetakerSettings?.is_enabled !== false; // Default to enabled
+
+    console.log('[MeetingBaaS Connect] Auto-record check:', {
+      orgAutoRecordEnabled: autoRecordEnabled,
+      userNotetakerEnabled,
+      recordExternal: notetakerSettings?.record_external,
+      recordInternal: notetakerSettings?.record_internal,
+    });
+
+    if (autoRecordEnabled && userNotetakerEnabled) {
+      // Configure bot with org/user preferences
+      const botConfig: MeetingBaaSBotConfig = {
+        bot_name: recordingSettings.bot_name || '60 Notetaker',
+        bot_image: recordingSettings.bot_avatar || 'https://app.use60.com/60-avatar.png',
+        recording_mode: 'audio_and_video',
+        speech_to_text: {
+          provider: 'Gladia', // Use Gladia for better transcription
+        },
+        automatic_leave: {
+          waiting_room_timeout: 600, // 10 minutes
+          noone_joined_timeout: 300, // 5 minutes
+          everyone_left_timeout: 60, // 1 minute
+        },
+        // Include org/user context for webhook processing
+        extra: {
+          org_id: orgId,
+          user_id: effectiveUserId,
+          org_name: orgSettings?.name,
+        },
+      };
+
+      botSchedulingResult = await scheduleMeetingBaaSBots(
+        meetingbaasApiKey,
+        finalMbCalendar.id,
+        botConfig
+      );
+
+      if (botSchedulingResult.success) {
+        console.log(`[MeetingBaaS Connect] Native bot scheduling enabled for calendar: ${finalMbCalendar.id}`);
+
+        // Update the meetingbaas_calendars record to indicate bot scheduling is active
+        await supabase
+          .from('meetingbaas_calendars')
+          .update({
+            bot_scheduling_enabled: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('meetingbaas_calendar_id', finalMbCalendar.id);
+      } else {
+        console.warn('[MeetingBaaS Connect] Failed to enable native bot scheduling:', botSchedulingResult.error);
+        // Don't fail the whole operation - calendar is still connected
+      }
+    } else {
+      console.log('[MeetingBaaS Connect] Skipping bot scheduling - auto-record not enabled');
+    }
+
     return jsonResponse({
       success: true,
       message: 'Calendar connected to MeetingBaaS successfully',
@@ -588,6 +733,10 @@ serve(async (req) => {
         email: userEmail || finalMbCalendar.email,
       },
       webhook_url: webhookUrl,
+      bot_scheduling: {
+        enabled: botSchedulingResult.success,
+        error: botSchedulingResult.error,
+      },
     }, req);
 
   } catch (error) {

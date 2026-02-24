@@ -3,7 +3,7 @@
  *
  * Processes a completed recording through the full analysis pipeline:
  * 1. Download recording from MeetingBaaS
- * 2. Transcribe using Gladia (or MeetingBaaS fallback)
+ * 2. Transcribe using AssemblyAI (or MeetingBaaS/Gladia fallback)
  * 3. Identify speakers using email matching + AI inference
  * 4. Generate AI summary with highlights and action items
  * 5. Update recording with results
@@ -16,9 +16,10 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { S3Client, PutObjectCommand, HeadObjectCommand } from 'npm:@aws-sdk/client-s3@3';
+import { S3Client, GetObjectCommand } from 'npm:@aws-sdk/client-s3@3';
 import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
-import { corsHeaders, handleCorsPreflightWithResponse } from '../_shared/corsHelper.ts';
+import { legacyCorsHeaders as corsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { checkCreditBalance } from '../_shared/costTracking.ts';
 import {
   createMeetingBaaSClient,
   extractDomain,
@@ -27,108 +28,8 @@ import {
 } from '../_shared/meetingbaas.ts';
 // Import AI analysis function from fathom-sync for sentiment, talk time, and coaching
 import { analyzeTranscriptWithClaude, TranscriptAnalysis } from '../fathom-sync/aiAnalysis.ts';
-
-// =============================================================================
-// Storage Upload Helper
-// =============================================================================
-
-interface UploadRecordingResult {
-  success: boolean;
-  storageUrl?: string;
-  storagePath?: string;
-  error?: string;
-}
-
-/**
- * Download recording from MeetingBaaS and upload to AWS S3
- * Bucket: use60-application (eu-west-2)
- * Folder structure: /meeting-recordings/{org_id}/{user_id}/{recording_id}/recording.mp4
- */
-async function uploadRecordingToStorage(
-  supabase: SupabaseClient,
-  recordingUrl: string,
-  orgId: string,
-  userId: string,
-  recordingId: string
-): Promise<UploadRecordingResult> {
-  console.log('[ProcessRecording] Downloading recording from MeetingBaaS...');
-
-  try {
-    // Initialize S3 client
-    const s3Client = new S3Client({
-      region: Deno.env.get('AWS_REGION') || 'eu-west-2',
-      credentials: {
-        accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID')!,
-        secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY')!,
-      },
-    });
-
-    const bucketName = Deno.env.get('AWS_S3_BUCKET') || 'use60-application';
-
-    // Download the recording
-    const response = await fetch(recordingUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download recording: ${response.status}`);
-    }
-
-    // Get content type and determine file extension
-    const contentType = response.headers.get('content-type') || 'video/mp4';
-    let fileExtension = 'mp4';
-    if (contentType.includes('webm')) {
-      fileExtension = 'webm';
-    } else if (contentType.includes('audio')) {
-      fileExtension = contentType.includes('wav') ? 'wav' : 'mp3';
-    }
-
-    // Create S3 key: meeting-recordings/{org_id}/{user_id}/{recording_id}/recording.{ext}
-    const s3Key = `meeting-recordings/${orgId}/${userId}/${recordingId}/recording.${fileExtension}`;
-
-    console.log(`[ProcessRecording] Uploading to S3: s3://${bucketName}/${s3Key}`);
-
-    // Get the recording data as array buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-
-    // Upload to S3
-    const putCommand = new PutObjectCommand({
-      Bucket: bucketName,
-      Key: s3Key,
-      Body: uint8Array,
-      ContentType: contentType,
-      Metadata: {
-        'org-id': orgId,
-        'user-id': userId,
-        'recording-id': recordingId,
-      },
-    });
-
-    await s3Client.send(putCommand);
-
-    // Generate a signed URL (7 days expiry)
-    const getCommand = new HeadObjectCommand({
-      Bucket: bucketName,
-      Key: s3Key,
-    });
-
-    const signedUrl = await getSignedUrl(s3Client, getCommand, {
-      expiresIn: 60 * 60 * 24 * 7, // 7 days
-    });
-
-    console.log(`[ProcessRecording] S3 upload successful: ${s3Key}`);
-
-    return {
-      success: true,
-      storageUrl: signedUrl,
-      storagePath: s3Key,
-    };
-  } catch (error) {
-    console.error('[ProcessRecording] S3 upload error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Upload failed',
-    };
-  }
-}
+import { syncRecordingToMeeting } from '../_shared/recordingCompleteSync.ts';
+import { formatUtterancesToTranscriptText, type SpeakerNameMap } from '../_shared/transcriptFormatter.ts';
 
 // =============================================================================
 // Types
@@ -137,6 +38,20 @@ async function uploadRecordingToStorage(
 interface ProcessRecordingRequest {
   recording_id: string;
   bot_id?: string;
+  // Optional URLs passed from webhook - use these instead of fetching from MeetingBaaS API
+  video_url?: string;
+  audio_url?: string;
+  // Transcript data passed from transcript.ready webhook - use this instead of calling MeetingBaaS API
+  transcript?: {
+    text: string;
+    utterances: Array<{
+      speaker: number;
+      start: number;
+      end: number;
+      text: string;
+      confidence?: number;
+    }>;
+  };
 }
 
 interface TranscriptUtterance {
@@ -190,92 +105,82 @@ interface AttendeeInfo {
 }
 
 // =============================================================================
-// Gladia Transcription Service
+// AssemblyAI Transcription Service
 // =============================================================================
 
-interface GladiaTranscriptResult {
-  text: string;
-  utterances: TranscriptUtterance[];
-  speakers?: { id: number; count: number }[];
-}
-
-async function transcribeWithGladia(audioUrl: string): Promise<GladiaTranscriptResult> {
-  const gladiaApiKey = Deno.env.get('GLADIA_API_KEY');
-  if (!gladiaApiKey) {
-    throw new Error('GLADIA_API_KEY not configured');
+async function transcribeWithAssemblyAI(audioUrl: string): Promise<TranscriptData> {
+  const apiKey = Deno.env.get('ASSEMBLYAI_API_KEY');
+  if (!apiKey) {
+    throw new Error('ASSEMBLYAI_API_KEY not configured');
   }
 
-  console.log('[ProcessRecording] Starting Gladia transcription...');
+  console.log('[ProcessRecording] Starting AssemblyAI transcription...');
 
-  // Step 1: Request transcription
-  const transcriptResponse = await fetch('https://api.gladia.io/v2/transcription', {
+  // Step 1: Submit transcription request
+  const submitResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
     method: 'POST',
     headers: {
-      'x-gladia-key': gladiaApiKey,
+      'Authorization': apiKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       audio_url: audioUrl,
-      diarization: true,
-      diarization_config: {
-        min_speakers: 2,
-        max_speakers: 10,
-      },
+      speech_models: ['universal-3-pro', 'universal-2'],
+      speaker_labels: true,
     }),
   });
 
-  if (!transcriptResponse.ok) {
-    const error = await transcriptResponse.text();
-    throw new Error(`Gladia API error: ${error}`);
+  if (!submitResponse.ok) {
+    const error = await submitResponse.text();
+    throw new Error(`AssemblyAI submit error: ${error}`);
   }
 
-  const { result_url } = await transcriptResponse.json();
+  const { id: transcriptId } = await submitResponse.json();
+  console.log(`[ProcessRecording] AssemblyAI transcript ID: ${transcriptId}`);
 
   // Step 2: Poll for results
-  let result = null;
   let attempts = 0;
   const maxAttempts = 120; // 10 minutes with 5s intervals
 
-  while (!result && attempts < maxAttempts) {
+  while (attempts < maxAttempts) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
-    const statusResponse = await fetch(result_url, {
-      headers: { 'x-gladia-key': gladiaApiKey },
+    const pollResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+      headers: { 'Authorization': apiKey },
     });
 
-    if (!statusResponse.ok) {
+    if (!pollResponse.ok) {
       attempts++;
       continue;
     }
 
-    const status = await statusResponse.json();
+    const result = await pollResponse.json();
 
-    if (status.status === 'done') {
-      result = status.result;
-    } else if (status.status === 'error') {
-      throw new Error(`Gladia transcription failed: ${status.error}`);
+    if (result.status === 'completed') {
+      console.log('[ProcessRecording] AssemblyAI transcription complete');
+
+      // Map AssemblyAI utterances to our format
+      // AssemblyAI uses speaker labels like "A", "B", "C"... — map to numeric IDs
+      const utterances: TranscriptUtterance[] = (result.utterances || []).map((u: any) => ({
+        speaker: u.speaker ? u.speaker.charCodeAt(0) - 'A'.charCodeAt(0) : 0,
+        start: (u.start || 0) / 1000, // AssemblyAI uses ms, we use seconds
+        end: (u.end || 0) / 1000,
+        text: u.text || '',
+        confidence: u.confidence,
+      }));
+
+      return {
+        text: result.text || '',
+        utterances,
+      };
+    } else if (result.status === 'error') {
+      throw new Error(`AssemblyAI transcription failed: ${result.error}`);
     }
 
     attempts++;
   }
 
-  if (!result) {
-    throw new Error('Gladia transcription timed out');
-  }
-
-  console.log('[ProcessRecording] Gladia transcription complete');
-
-  return {
-    text: result.transcription?.full_transcript || '',
-    utterances: (result.transcription?.utterances || []).map((u: any) => ({
-      speaker: u.speaker ?? 0,
-      start: u.start ?? 0,
-      end: u.end ?? 0,
-      text: u.text ?? '',
-      confidence: u.confidence,
-    })),
-    speakers: result.transcription?.speakers,
-  };
+  throw new Error('AssemblyAI transcription timed out');
 }
 
 // =============================================================================
@@ -306,7 +211,7 @@ function identifySpeakers(
     // Try to match to attendee by index (naive approach)
     const attendee = attendees[index];
     if (attendee) {
-      const isInternal = internalDomain
+      const isInternal = internalDomain && attendee.email
         ? isInternalEmail(attendee.email, internalDomain)
         : false;
 
@@ -526,7 +431,10 @@ async function checkAndFlagForHITL(
 async function processRecording(
   supabase: SupabaseClient,
   recordingId: string,
-  botId?: string
+  botId?: string,
+  videoUrl?: string,
+  audioUrl?: string,
+  providedTranscript?: ProcessRecordingRequest['transcript']
 ): Promise<{ success: boolean; error?: string }> {
   console.log('[ProcessRecording] Starting pipeline for recording:', recordingId);
 
@@ -559,72 +467,149 @@ async function processRecording(
 
   try {
     // Update status to processing
-    await supabase
+    const { error: statusError } = await supabase
       .from('recordings')
       .update({ status: 'processing' })
       .eq('id', recordingId);
 
-    const settings = recording.organizations?.recording_settings;
-    const internalDomain = recording.organizations?.company_domain || null;
-
-    // Step 1: Get recording URL from MeetingBaaS
-    console.log('[ProcessRecording] Step 1: Fetching recording from MeetingBaaS...');
-    const meetingBaaSClient = createMeetingBaaSClient();
-    const { data: recordingData, error: recordingError } =
-      await meetingBaaSClient.getRecording(effectiveBotId);
-
-    if (recordingError || !recordingData) {
-      throw new Error(recordingError?.message || 'Failed to get recording from MeetingBaaS');
+    if (statusError) {
+      console.error('[ProcessRecording] Failed to update status to processing:', statusError.message);
     }
 
-    // Step 1.5: Upload recording to our storage
-    console.log('[ProcessRecording] Step 1.5: Uploading to storage...');
-    const uploadResult = await uploadRecordingToStorage(
-      supabase,
-      recordingData.url,
-      recording.org_id,
-      recording.user_id,
-      recordingId
-    );
+    const internalDomain = recording.organizations?.company_domain || null;
 
-    if (!uploadResult.success) {
-      console.warn('[ProcessRecording] Storage upload failed, using MeetingBaaS URL:', uploadResult.error);
-      // Don't fail the whole pipeline - we can still process with MeetingBaaS URL
+    // Step 1: Resolve recording URL
+    // Priority: 1) Already in S3, 2) URLs from webhook/request, 3) MeetingBaaS bot status API
+    console.log('[ProcessRecording] Step 1: Resolving recording URL...');
+    const meetingBaaSClient = createMeetingBaaSClient();
+
+    let recordingMediaUrl: string | null = null;
+
+    // Priority 1: Recording already uploaded to S3 (e.g., by webhook handler)
+    if (recording.recording_s3_key) {
+      console.log('[ProcessRecording] Step 1: Recording already in S3:', recording.recording_s3_key);
+      // Generate a fresh signed GET URL so external services (AssemblyAI) can download it
+      try {
+        const s3Client = new S3Client({
+          region: Deno.env.get('AWS_REGION') || 'eu-west-2',
+          credentials: {
+            accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID')!,
+            secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY')!,
+          },
+        });
+        const getCmd = new GetObjectCommand({
+          Bucket: Deno.env.get('AWS_S3_BUCKET') || 'use60-application',
+          Key: recording.recording_s3_key,
+        });
+        recordingMediaUrl = await getSignedUrl(s3Client, getCmd, { expiresIn: 60 * 60 * 2 }); // 2 hours
+        console.log('[ProcessRecording] Step 1: Generated fresh signed GET URL');
+      } catch (s3Err) {
+        console.warn('[ProcessRecording] Step 1: Failed to generate signed URL, falling back to stored URL:', s3Err);
+        recordingMediaUrl = recording.recording_s3_url || null;
+      }
+    }
+
+    // Priority 2: URLs passed directly (from webhook bot.completed payload or manual trigger)
+    if (!recordingMediaUrl) {
+      const passedUrl = videoUrl || audioUrl;
+      if (passedUrl) {
+        console.log('[ProcessRecording] Step 1: Using URL from request:', passedUrl.substring(0, 80) + '...');
+        recordingMediaUrl = passedUrl;
+      }
+    }
+
+    // Priority 3: Try MeetingBaaS recording endpoint (GET /v2/bots/{botId}/recording)
+    if (!recordingMediaUrl) {
+      console.log('[ProcessRecording] Step 1: Trying MeetingBaaS recording endpoint...');
+      try {
+        const { data: recData, error: recError } = await meetingBaaSClient.getRecording(effectiveBotId);
+        if (recError) {
+          console.warn('[ProcessRecording] Step 1: Recording endpoint error:', recError.message);
+        } else if (recData?.url) {
+          recordingMediaUrl = recData.url;
+          console.log('[ProcessRecording] Step 1: Got URL from recording endpoint');
+        }
+      } catch (err) {
+        console.warn('[ProcessRecording] Step 1: Recording endpoint failed:', err);
+      }
+    }
+
+    // Priority 4: Try MeetingBaaS bot status API (GET /v2/bots/{botId}) as last resort
+    if (!recordingMediaUrl) {
+      console.log('[ProcessRecording] Step 1: Trying MeetingBaaS bot status API...');
+      try {
+        const { data: botData } = await meetingBaaSClient.getBotStatus(effectiveBotId);
+        const botDataAny = botData as Record<string, unknown> | undefined;
+        console.log('[ProcessRecording] Step 1: Bot status keys:', Object.keys(botDataAny || {}));
+        const botVideoUrl = (botDataAny?.video_url || botDataAny?.video || botDataAny?.mp4) as string | undefined;
+        const botAudioUrl = (botDataAny?.audio_url || botDataAny?.audio) as string | undefined;
+        const botRecordingUrl = botDataAny?.recording_url as string | undefined;
+        const output = botDataAny?.output as Record<string, unknown> | undefined;
+        const outputVideoUrl = (output?.video_url || output?.video || output?.mp4) as string | undefined;
+        recordingMediaUrl = botVideoUrl || botAudioUrl || botRecordingUrl || outputVideoUrl || null;
+        if (recordingMediaUrl) {
+          console.log('[ProcessRecording] Step 1: Got URL from bot status API');
+        } else {
+          console.warn('[ProcessRecording] Step 1: No recording URL in bot status. Keys:', Object.keys(botDataAny || {}));
+        }
+      } catch (err) {
+        console.warn('[ProcessRecording] Step 1: Bot status API failed:', err);
+      }
+    }
+
+    if (!recordingMediaUrl) {
+      throw new Error(
+        'No recording URL available. The recording URL is delivered via webhook (bot.completed event). ' +
+        'Ensure MeetingBaaS webhooks are correctly configured and sending events to the meetingbaas-webhook endpoint. ' +
+        'Alternatively, pass video_url or audio_url in the request body.'
+      );
+    }
+
+    const recordingData = { url: recordingMediaUrl, expires_at: '' };
+
+    // Step 1.5: Resolve S3 storage info
+    // NOTE: S3 upload is NOT done here — Edge Functions cannot handle large file transfers
+    // (memory + CPU time limits). The video URL from MeetingBaaS is used directly for
+    // transcription. S3 upload is handled separately by upload-recording-to-s3 function.
+    const uploadResult = {
+      success: true,
+      storagePath: recording.recording_s3_key || null,
+      storageUrl: recording.recording_s3_url || recordingMediaUrl,
+    };
+    if (recording.recording_s3_key) {
+      console.log('[ProcessRecording] Step 1.5: Recording already in S3:', recording.recording_s3_key);
+    } else {
+      console.log('[ProcessRecording] Step 1.5: No S3 upload — using source URL directly for transcription');
     }
 
     // Step 2: Get transcript
+    // Priority: 1) Already saved in DB (from poll-stuck-bots or webhook), 2) AssemblyAI
     console.log('[ProcessRecording] Step 2: Getting transcript...');
     let transcript: TranscriptData;
 
-    const transcriptionProvider = settings?.default_transcription_provider || 'meetingbaas';
-
-    if (transcriptionProvider === 'gladia') {
-      // Use Gladia for transcription
-      transcript = await transcribeWithGladia(recordingData.url);
-    } else {
-      // Use MeetingBaaS transcription
-      const { data: mbTranscript, error: transcriptError } =
-        await meetingBaaSClient.getTranscript(effectiveBotId);
-
-      if (transcriptError || !mbTranscript) {
-        throw new Error(transcriptError?.message || 'Failed to get transcript');
+    // Priority 1: Check if transcript already exists in DB (pre-fetched by poll-stuck-bots)
+    if (recording.transcript_json && recording.transcript_text) {
+      const savedTranscript = recording.transcript_json as TranscriptData;
+      if (savedTranscript.text && savedTranscript.utterances?.length > 0) {
+        console.log(`[ProcessRecording] Step 2: Using existing transcript from DB (${savedTranscript.text.length} chars, ${savedTranscript.utterances.length} utterances)`);
+        transcript = savedTranscript;
+      } else {
+        console.log('[ProcessRecording] Step 2: DB transcript incomplete, using AssemblyAI');
+        transcript = await transcribeWithAssemblyAI(recordingData.url);
       }
-
-      transcript = {
-        text: mbTranscript.text,
-        utterances: mbTranscript.utterances.map((u) => ({
-          speaker: u.speaker,
-          start: u.start,
-          end: u.end,
-          text: u.text,
-          confidence: u.confidence,
-        })),
-      };
+    } else {
+      // Priority 2: Transcribe with AssemblyAI
+      console.log('[ProcessRecording] Step 2: No transcript in DB, using AssemblyAI');
+      transcript = await transcribeWithAssemblyAI(recordingData.url);
     }
 
-    // Get attendees from calendar event if available
+    // Get attendees: Priority 1 = recordings.attendees (stored at deploy time)
+    // Priority 2 = calendar_events.attendees (legacy fallback)
     let attendees: AttendeeInfo[] = [];
-    if (recording.calendar_event_id) {
+    if (recording.attendees && Array.isArray(recording.attendees) && recording.attendees.length > 0) {
+      attendees = recording.attendees;
+      console.log(`[ProcessRecording] Using ${attendees.length} attendees from recording record`);
+    } else if (recording.calendar_event_id) {
       const { data: calendarEvent } = await supabase
         .from('calendar_events')
         .select('attendees')
@@ -633,6 +618,7 @@ async function processRecording(
 
       if (calendarEvent?.attendees) {
         attendees = calendarEvent.attendees;
+        console.log(`[ProcessRecording] Using ${attendees.length} attendees from calendar event`);
       }
     }
 
@@ -652,32 +638,63 @@ async function processRecording(
     // Update speakers with any AI enhancements
     speakers = analysis.speakers;
 
+    // Step 4.25: Format transcript_text with speaker names and timestamps
+    // Produces [HH:MM:SS] Speaker Name: text — compatible with Fathom/Fireflies rendering
+    const speakerNameMap: SpeakerNameMap = {};
+    for (const s of speakers) {
+      speakerNameMap[s.speaker_id] = s.name || `Speaker ${s.speaker_id + 1}`;
+    }
+    const formattedTranscriptText = formatUtterancesToTranscriptText(
+      transcript.utterances,
+      speakerNameMap
+    );
+    if (formattedTranscriptText) {
+      console.log(`[ProcessRecording] Formatted transcript: ${formattedTranscriptText.length} chars, ${transcript.utterances.length} utterances`);
+    }
+
     // Step 4.5: Run enhanced AI analysis for sentiment, talk time, and coaching
     // Uses the same analysis pipeline as Fathom recordings for consistency
     console.log('[ProcessRecording] Step 4.5: Running enhanced AI analysis...');
     let enhancedAnalysis: TranscriptAnalysis | null = null;
-    try {
-      enhancedAnalysis = await analyzeTranscriptWithClaude(
-        transcript.text,
-        {
-          id: recordingId,
-          title: recording.meeting_title || 'Meeting',
-          meeting_start: recording.meeting_start_time || new Date().toISOString(),
-          owner_email: null, // Will be populated from user if needed
-        },
-        supabase,
-        recording.user_id,
-        recording.org_id
-      );
-      console.log('[ProcessRecording] Enhanced AI analysis complete:', {
-        sentiment: enhancedAnalysis.sentiment.score,
-        talkTimeRep: enhancedAnalysis.talkTime.repPct,
-        coachRating: enhancedAnalysis.coaching.rating,
-        actionItems: enhancedAnalysis.actionItems.length,
-      });
-    } catch (aiError) {
-      console.warn('[ProcessRecording] Enhanced AI analysis failed (non-fatal):', aiError);
-      // Continue with basic analysis only
+
+    // Check credit balance before AI analysis
+    let creditsAvailable = true;
+    if (recording.org_id) {
+      try {
+        const creditCheck = await checkCreditBalance(supabase, recording.org_id);
+        if (!creditCheck.allowed) {
+          console.warn('[ProcessRecording] Skipping AI analysis: insufficient credits for org', recording.org_id);
+          creditsAvailable = false;
+        }
+      } catch (e) {
+        // fail open: continue with AI analysis if credit check fails
+      }
+    }
+
+    if (creditsAvailable) {
+      try {
+        enhancedAnalysis = await analyzeTranscriptWithClaude(
+          transcript.text,
+          {
+            id: recordingId,
+            title: recording.meeting_title || 'Meeting',
+            meeting_start: recording.meeting_start_time || new Date().toISOString(),
+            owner_email: null, // Will be populated from user if needed
+          },
+          supabase,
+          recording.user_id,
+          recording.org_id
+        );
+        console.log('[ProcessRecording] Enhanced AI analysis complete:', {
+          sentiment: enhancedAnalysis.sentiment.score,
+          talkTimeRep: enhancedAnalysis.talkTime.repPct,
+          coachRating: enhancedAnalysis.coaching.rating,
+          actionItems: enhancedAnalysis.actionItems.length,
+        });
+      } catch (aiError) {
+        console.warn('[ProcessRecording] Enhanced AI analysis failed (non-fatal):', aiError);
+        // Continue with basic analysis only
+      }
     }
 
     // Step 5: Check for HITL needs
@@ -704,11 +721,11 @@ async function processRecording(
 
     const recordingUpdate: Record<string, unknown> = {
       status: 'ready',
-      // Use our storage URL if available, fallback to MeetingBaaS URL
-      recording_s3_url: uploadResult.storageUrl || recordingData.url,
+      // Use our storage URL if available, fallback to original media URL
+      recording_s3_url: uploadResult.storageUrl || recordingMediaUrl,
       recording_s3_key: uploadResult.storagePath || null,
       transcript_json: transcript,
-      transcript_text: transcript.text,
+      transcript_text: formattedTranscriptText || transcript.text,
       summary: analysis.summary,
       highlights: analysis.highlights,
       action_items: analysis.action_items,
@@ -721,37 +738,45 @@ async function processRecording(
     // Add enhanced AI analysis fields if available
     if (enhancedAnalysis) {
       recordingUpdate.sentiment_score = enhancedAnalysis.sentiment.score;
-      recordingUpdate.coach_rating = enhancedAnalysis.coaching.rating * 10; // Convert 1-10 to 0-100 scale
+      recordingUpdate.coach_rating = enhancedAnalysis.coaching.rating; // 1-10 scale (matches frontend display)
       recordingUpdate.coach_summary = enhancedAnalysis.coaching.summary;
       recordingUpdate.talk_time_rep_pct = enhancedAnalysis.talkTime.repPct;
       recordingUpdate.talk_time_customer_pct = enhancedAnalysis.talkTime.customerPct;
       recordingUpdate.talk_time_judgement = getTalkTimeJudgement(enhancedAnalysis.talkTime.repPct);
     }
 
-    await supabase
+    const { error: recordingUpdateError } = await supabase
       .from('recordings')
       .update(recordingUpdate)
       .eq('id', recordingId);
+
+    if (recordingUpdateError) {
+      console.error('[ProcessRecording] CRITICAL: Failed to save recording results:', recordingUpdateError.message);
+      console.error('[ProcessRecording] Update payload keys:', Object.keys(recordingUpdate));
+      throw new Error(`Failed to save recording results: ${recordingUpdateError.message}`);
+    }
+    console.log('[ProcessRecording] Step 7: Recording saved successfully');
 
     // Step 7.5: Sync to unified meetings table for 60_notetaker source
     console.log('[ProcessRecording] Step 7.5: Syncing to meetings table...');
     const meetingUpdate: Record<string, unknown> = {
       title: recording.meeting_title,
       summary: analysis.summary,
-      transcript_text: transcript.text,
+      transcript_text: formattedTranscriptText || transcript.text,
       transcript_json: transcript,
       duration_minutes: durationSeconds ? Math.round(durationSeconds / 60) : null,
       processing_status: 'ready',
       recording_s3_key: uploadResult.storagePath || null,
-      recording_s3_url: uploadResult.storageUrl || recordingData.url,
+      recording_s3_url: uploadResult.storageUrl || recordingMediaUrl,
       speakers: speakers,
+      provider: '60_notetaker',
       updated_at: new Date().toISOString(),
     };
 
     // Add enhanced AI analysis fields to meeting
     if (enhancedAnalysis) {
       meetingUpdate.sentiment_score = enhancedAnalysis.sentiment.score;
-      meetingUpdate.coach_rating = enhancedAnalysis.coaching.rating * 10; // Convert 1-10 to 0-100 scale
+      meetingUpdate.coach_rating = enhancedAnalysis.coaching.rating; // 1-10 scale (matches frontend display)
       meetingUpdate.coach_summary = enhancedAnalysis.coaching.summary;
       meetingUpdate.talk_time_rep_pct = enhancedAnalysis.talkTime.repPct;
       meetingUpdate.talk_time_customer_pct = enhancedAnalysis.talkTime.customerPct;
@@ -786,11 +811,12 @@ async function processRecording(
           const actionItemsToInsert = enhancedAnalysis.actionItems.map((item) => ({
             meeting_id: meeting.id,
             title: item.title,
-            assignee: item.assignedTo,
-            due_date: item.deadline,
+            assignee_name: item.assignedTo,
+            deadline_at: item.deadline ? new Date(item.deadline).toISOString() : null,
             priority: item.priority,
-            status: 'pending',
-            confidence: item.confidence,
+            completed: false,
+            ai_confidence_score: item.confidence,
+            ai_generated: true,
             created_at: new Date().toISOString(),
           }));
 
@@ -810,12 +836,16 @@ async function processRecording(
     }
 
     // Step 8: Update bot deployment status
-    await supabase
+    const { error: deployError } = await supabase
       .from('bot_deployments')
       .update({
         status: 'completed',
       })
       .eq('bot_id', effectiveBotId);
+
+    if (deployError) {
+      console.warn('[ProcessRecording] Failed to update bot deployment status (non-fatal):', deployError.message);
+    }
 
     // Step 9: Trigger CRM sync
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -845,33 +875,13 @@ async function processRecording(
       }
     }
 
-    // Step 10: Generate thumbnail for the recording
-    if (supabaseUrl && serviceRoleKey && uploadResult.storagePath) {
-      try {
-        console.log('[ProcessRecording] Step 10: Triggering thumbnail generation...');
-        const thumbnailResponse = await fetch(`${supabaseUrl}/functions/v1/generate-s3-video-thumbnail`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${serviceRoleKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            recording_id: recordingId,
-            bot_id: effectiveBotId,
-            timestamp: 30, // Extract frame at 30 seconds
-          }),
-        });
-
-        if (thumbnailResponse.ok) {
-          const thumbnailResult = await thumbnailResponse.json();
-          console.log('[ProcessRecording] Thumbnail generated:', thumbnailResult.success);
-        } else {
-          console.warn('[ProcessRecording] Thumbnail generation failed:', await thumbnailResponse.text());
-        }
-      } catch (err) {
-        console.warn('[ProcessRecording] Thumbnail error (non-blocking):', err);
-      }
-    }
+    // Step 10: Sync S3 URLs to meetings and generate thumbnail
+    console.log('[ProcessRecording] Step 10: Syncing S3 URLs and generating thumbnail...');
+    await syncRecordingToMeeting({
+      recording_id: recordingId,
+      bot_id: effectiveBotId,
+      supabase,
+    });
 
     // Step 11: Send recording ready notification
     if (supabaseUrl && serviceRoleKey) {
@@ -893,6 +903,44 @@ async function processRecording(
       }
     }
 
+    // Step 12: Fire-and-forget: trigger orchestrator for post-meeting workflow
+    try {
+      // Fetch the meeting record to get all required fields
+      const { data: meeting } = await supabase
+        .from('meetings')
+        .select('id, title, owner_user_id, org_id, contact_id, attendees_count')
+        .eq('bot_id', effectiveBotId)
+        .eq('source_type', '60_notetaker')
+        .maybeSingle();
+
+      // Only trigger for real meetings (2+ attendees)
+      if (meeting && (meeting.attendees_count || 0) > 1) {
+        fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'meeting_ended',
+            source: 'edge:process-recording',
+            org_id: meeting.org_id || recording.org_id,
+            user_id: meeting.owner_user_id || recording.user_id,
+            payload: {
+              meeting_id: meeting.id,
+              contact_id: meeting.contact_id || null,
+              title: meeting.title,
+              transcript_available: true,
+            },
+            idempotency_key: `meeting_ended:${meeting.id}`,
+          }),
+        }).catch(err => console.error('[ProcessRecording] Orchestrator call failed:', err));
+      }
+    } catch (err) {
+      console.error('[ProcessRecording] Failed to trigger orchestrator:', err);
+      // Don't fail the pipeline — this is additive
+    }
+
     console.log('[ProcessRecording] Pipeline complete for recording:', recordingId);
 
     return { success: true };
@@ -900,13 +948,18 @@ async function processRecording(
     console.error('[ProcessRecording] Pipeline error:', error);
 
     // Update recording with error status
-    await supabase
+    const errorMessage = error instanceof Error ? error.message : 'Processing failed';
+    const { error: failUpdateError } = await supabase
       .from('recordings')
       .update({
         status: 'failed',
-        error_message: error instanceof Error ? error.message : 'Processing failed',
+        error_message: errorMessage,
       })
       .eq('id', recordingId);
+
+    if (failUpdateError) {
+      console.error('[ProcessRecording] Failed to update error status:', failUpdateError.message);
+    }
 
     return {
       success: false,
@@ -922,7 +975,9 @@ async function processRecording(
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return handleCorsPreflightWithResponse();
+    const preflightResponse = handleCorsPreflightRequest(req);
+    if (preflightResponse) return preflightResponse;
+    return new Response('ok', { status: 200, headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
@@ -963,7 +1018,14 @@ serve(async (req) => {
       );
     }
 
-    const result = await processRecording(supabase, body.recording_id, body.bot_id);
+    const result = await processRecording(
+      supabase,
+      body.recording_id,
+      body.bot_id,
+      body.video_url,
+      body.audio_url,
+      body.transcript
+    , body.video_url, body.audio_url);
 
     return new Response(JSON.stringify(result), {
       status: result.success ? 200 : 500,

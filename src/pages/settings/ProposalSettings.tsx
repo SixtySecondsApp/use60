@@ -16,8 +16,9 @@ import {
 } from '@/lib/services/proposalService';
 import { AIProviderService } from '@/lib/services/aiProvider';
 import { toast } from 'sonner';
-import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check } from 'lucide-react';
+import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import TemplateManager from '@/components/proposals/TemplateManager';
 
 // Template type descriptions and guidance
 const TEMPLATE_GUIDANCE = {
@@ -750,6 +751,10 @@ export default function ProposalSettings() {
       <Tabs defaultValue="design_system" className="space-y-6">
         <TabsList className="bg-white border border-transparent shadow-sm dark:bg-gray-900/50 dark:backdrop-blur-xl dark:border-gray-800/50">
           <TabsTrigger value="models">AI Models</TabsTrigger>
+          <TabsTrigger value="structured_templates" className="flex items-center gap-1">
+            <LayoutTemplate className="w-3 h-3" />
+            Templates
+          </TabsTrigger>
           <TabsTrigger value="design_system" className="flex items-center gap-1">
             <Palette className="w-3 h-3" />
             Design System
@@ -889,6 +894,10 @@ export default function ProposalSettings() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="structured_templates">
+          <TemplateManager />
         </TabsContent>
 
         {renderTemplateTab('design_system')}

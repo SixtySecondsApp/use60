@@ -23,11 +23,12 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, RefreshCw, Check, AlertCircle, Mail } from 'lucide-react';
+import { Loader2, RefreshCw, Check, AlertCircle, Mail, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   useFathomUserMappings,
   useUpdateFathomUserMapping,
+  useDeleteFathomUserMapping,
   type FathomUserMapping as FathomUserMappingType,
 } from '@/lib/hooks/useFathomSettings';
 import { useOrgMembers } from '@/lib/hooks/useOrgMembers';
@@ -41,6 +42,7 @@ export function FathomUserMapping({ onRefresh, isRefreshing }: FathomUserMapping
   const { data: mappings, isLoading: mappingsLoading, refetch } = useFathomUserMappings();
   const { data: orgMembers, isLoading: membersLoading } = useOrgMembers();
   const updateMapping = useUpdateFathomUserMapping();
+  const deleteMapping = useDeleteFathomUserMapping();
 
   const isLoading = mappingsLoading || membersLoading;
 
@@ -70,6 +72,17 @@ export function FathomUserMapping({ onRefresh, isRefreshing }: FathomUserMapping
       onRefresh();
     }
     refetch();
+  };
+
+  const handleDelete = (mappingId: string, email: string) => {
+    if (confirm(`Are you sure you want to delete the mapping for ${email}?`)) {
+      deleteMapping.mutate(mappingId, {
+        onSuccess: () => {
+          toast.success('Mapping deleted');
+        },
+        onError: (e: any) => toast.error(e?.message || 'Failed to delete mapping'),
+      });
+    }
   };
 
   const getStatusBadge = (mapping: FathomUserMappingType) => {
@@ -115,12 +128,13 @@ export function FathomUserMapping({ onRefresh, isRefreshing }: FathomUserMapping
               <TableHead>Fathom User</TableHead>
               <TableHead>Sixty User</TableHead>
               <TableHead className="w-[150px]">Status</TableHead>
+              <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {(!mappings || mappings.length === 0) ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                   <div className="flex flex-col items-center gap-2">
                     <Mail className="h-8 w-8 text-muted-foreground/50" />
                     <p>No Fathom users found yet.</p>
@@ -177,6 +191,17 @@ export function FathomUserMapping({ onRefresh, isRefreshing }: FathomUserMapping
                     </Select>
                   </TableCell>
                   <TableCell>{getStatusBadge(mapping)}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(mapping.id, mapping.fathom_user_email)}
+                      disabled={deleteMapping.isPending}
+                      className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/30"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}

@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  X, 
-  Building2, 
-  User, 
-  Mail, 
-  Phone, 
-  Calendar, 
+import {
+  X,
+  Building2,
+  User,
+  Mail,
+  Phone,
+  Calendar,
   DollarSign,
   FileText,
   Tag,
   Zap,
   TrendingUp,
-  Clock
+  Clock,
+  Layers
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { 
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -29,6 +30,11 @@ import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 import { extractDomainFromDeal } from '@/lib/utils/domainUtils';
 import { useCompanyLogo } from '@/lib/hooks/useCompanyLogo';
+import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
+import { useNavigate } from 'react-router-dom';
+import { AiArkSimilaritySearch } from '@/components/prospecting/AiArkSimilaritySearch';
+import { DealTemperatureSummary } from '@/components/signals/DealTemperatureSummary';
+import { useActiveOrgId } from '@/lib/stores/orgStore';
 
 interface DealDetailsModalProps {
   isOpen: boolean;
@@ -72,6 +78,10 @@ export function DealDetailsModal({ isOpen, onClose, dealId }: DealDetailsModalPr
   const [deal, setDeal] = useState<DealDetails | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [showSimilaritySearch, setShowSimilaritySearch] = useState(false);
+  const navigate = useNavigate();
+  const { isConnected: aiArkConnected } = useAiArkIntegration();
+  const orgId = useActiveOrgId();
 
   // Extract domain for logo
   const domainForLogo = useMemo(() => {
@@ -244,6 +254,7 @@ export function DealDetailsModal({ isOpen, onClose, dealId }: DealDetailsModalPr
   if (!isOpen) return null;
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-gray-900/95 backdrop-blur-xl border-gray-800/50 text-white p-0 rounded-xl max-w-4xl max-h-[90vh] overflow-hidden">
         {isLoading ? (
@@ -518,8 +529,27 @@ export function DealDetailsModal({ isOpen, onClose, dealId }: DealDetailsModalPr
               </div>
             </div>
 
+            {/* Signal Temperature Section */}
+            {dealId && orgId && (
+              <div className="mb-8">
+                <DealTemperatureSummary dealId={dealId} orgId={orgId} />
+              </div>
+            )}
+
             {/* Footer */}
-            <DialogFooter className="p-6 pt-4 border-t border-gray-800/50">
+            <DialogFooter className="p-6 pt-4 border-t border-gray-800/50 flex items-center justify-between">
+              <div>
+                {aiArkConnected && domainForLogo && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setShowSimilaritySearch(true)}
+                    className="text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 border border-violet-500/20"
+                  >
+                    <Layers className="w-4 h-4 mr-2" />
+                    Find Similar Companies
+                  </Button>
+                )}
+              </div>
               <Button
                 variant="ghost"
                 onClick={onClose}
@@ -537,7 +567,7 @@ export function DealDetailsModal({ isOpen, onClose, dealId }: DealDetailsModalPr
                 Deal Not Found
               </DialogTitle>
               <DialogDescription className="text-gray-400">
-                The requested deal could not be found or you don't have permission to view it.
+                The requested deal could not be found or you don&apos;t have permission to view it.
               </DialogDescription>
             </DialogHeader>
             <div className="p-8 text-center">
@@ -547,5 +577,31 @@ export function DealDetailsModal({ isOpen, onClose, dealId }: DealDetailsModalPr
         )}
       </DialogContent>
     </Dialog>
+
+      {/* AI Ark Similarity Search Dialog */}
+      {showSimilaritySearch && (
+        <Dialog open={showSimilaritySearch} onOpenChange={setShowSimilaritySearch}>
+          <DialogContent className="sm:max-w-4xl bg-zinc-900 border-zinc-700 text-white max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-white flex items-center gap-2">
+                <Layers className="w-5 h-5 text-violet-400" />
+                Find Similar Companies
+              </DialogTitle>
+              <DialogDescription className="text-zinc-400">
+                Find companies similar to {domainForLogo}
+              </DialogDescription>
+            </DialogHeader>
+            <AiArkSimilaritySearch
+              initialDomain={domainForLogo || ''}
+              onComplete={(tableId) => {
+                setShowSimilaritySearch(false);
+                onClose();
+                navigate(`/ops/${tableId}`);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }

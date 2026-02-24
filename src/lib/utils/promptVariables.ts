@@ -50,6 +50,34 @@ export interface VariableContext {
     submitterIp?: string;
     submitterUserAgent?: string;
   };
+  factProfile?: {
+    id: string;
+    company_name: string;
+    industry: string;
+    description: string;
+    products: string[];
+    value_propositions: string[];
+    pain_points: string[];
+    differentiators: string[];
+    tech_stack: string[];
+    target_industries: string[];
+    target_roles: string[];
+  };
+  productProfile?: {
+    id: string;
+    name: string;
+    category: string;
+    description: string;
+    value_propositions: string[];
+    pricing_model: string;
+    key_features: string[];
+    differentiators: string[];
+    pain_points_solved: string[];
+    target_industries: string[];
+    target_company_sizes: string[];
+    target_roles: string[];
+    use_cases: string[];
+  };
   custom?: Record<string, any>;
 }
 

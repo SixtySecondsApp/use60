@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface DropdownMenuProps {
@@ -69,7 +70,7 @@ export function DropdownMenu({ children }: DropdownMenuProps) {
 
   return (
     <DropdownMenuContext.Provider value={{ isOpen, setIsOpen, triggerRef, contentRef }}>
-      <div className="relative">{children}</div>
+      <div className="relative inline-block">{children}</div>
     </DropdownMenuContext.Provider>
   );
 }
@@ -100,33 +101,62 @@ export function DropdownMenuContent({
   align = 'start',
   className = '',
 }: DropdownMenuContentProps) {
-  const { isOpen, contentRef } = React.useContext(DropdownMenuContext);
+  const { isOpen, contentRef, triggerRef } = React.useContext(DropdownMenuContext);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
-  const alignmentClass = {
-    start: 'left-0',
-    center: 'left-1/2 -translate-x-1/2',
-    end: 'right-0',
-  }[align];
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const menuWidth = 192; // min-w-[12rem] approximate
 
-  return (
+    let left: number;
+    if (align === 'end') {
+      left = rect.right - menuWidth;
+    } else if (align === 'center') {
+      left = rect.left + rect.width / 2 - menuWidth / 2;
+    } else {
+      left = rect.left;
+    }
+
+    // Keep within viewport
+    left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8));
+
+    setPosition({ top: rect.bottom + 4, left });
+  }, [align, triggerRef]);
+
+  useEffect(() => {
+    if (isOpen) {
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+    }
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen, updatePosition]);
+
+  return ReactDOM.createPortal(
     <AnimatePresence>
-      {isOpen && (
+      {isOpen && position && (
         <motion.div
           ref={contentRef}
-          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+          initial={{ opacity: 0, y: -4, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+          exit={{ opacity: 0, y: -4, scale: 0.95 }}
           transition={{ duration: 0.1 }}
+          style={{ top: position.top, left: position.left }}
           className={`
-            absolute top-full mt-1 z-50 min-w-[8rem] rounded-md border shadow-md backdrop-blur-sm
+            fixed z-[9999] min-w-[12rem] rounded-md border shadow-md backdrop-blur-sm
             bg-white/95 dark:bg-gray-900/95 border-[#E2E8F0] dark:border-gray-700/50 text-[#1E293B] dark:text-gray-100 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-none
-            ${alignmentClass} ${className}
+            ${className}
           `}
         >
           <div className="p-1">{children}</div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
 

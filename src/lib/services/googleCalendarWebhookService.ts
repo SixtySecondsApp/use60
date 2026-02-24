@@ -89,6 +89,7 @@ class GoogleCalendarWebhookService {
           webhook_url: webhookUrl,
           expiration_time: expirationTime,
           is_active: true,
+          channel_token: data.channelToken || null,
         })
         .select()
         .single();

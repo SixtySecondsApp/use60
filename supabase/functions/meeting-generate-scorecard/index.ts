@@ -14,8 +14,9 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { corsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
+import { logAICostEvent, checkCreditBalance, extractAnthropicUsage } from '../_shared/costTracking.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -547,7 +548,7 @@ async function analyzeTranscript(
   template: ScorecardTemplate | null,
   meetingTitle: string,
   existingTalkTimeData: { rep_pct: number | null; customer_pct: number | null }
-): Promise<{ analysis: ScorecardAnalysis; tokensUsed: number }> {
+): Promise<{ analysis: ScorecardAnalysis; tokensUsed: number; inputTokens: number; outputTokens: number }> {
   if (!anthropicApiKey) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
@@ -588,7 +589,9 @@ async function analyzeTranscript(
 
   const result = await response.json();
   const content = result.content[0]?.text;
-  const tokensUsed = (result.usage?.input_tokens || 0) + (result.usage?.output_tokens || 0);
+  const inputTokens = result.usage?.input_tokens || 0;
+  const outputTokens = result.usage?.output_tokens || 0;
+  const tokensUsed = inputTokens + outputTokens;
 
   // Parse JSON
   let analysis: ScorecardAnalysis;
@@ -603,7 +606,7 @@ async function analyzeTranscript(
     throw new Error('Failed to parse AI response as JSON');
   }
 
-  return { analysis, tokensUsed };
+  return { analysis, tokensUsed, inputTokens, outputTokens };
 }
 
 /**
@@ -668,9 +671,9 @@ function calculateScorecard(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const corsPreflightResponse = handleCorsPreflightRequest(req);
+  if (corsPreflightResponse) return corsPreflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const { meetingId, templateId, skipWorkflow }: RequestBody = await req.json();
@@ -730,6 +733,15 @@ serve(async (req) => {
 
     const orgId = membership.org_id;
 
+    // Credit balance check before AI call
+    const balanceCheck = await checkCreditBalance(supabase, orgId);
+    if (!balanceCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Insufficient credits' }),
+        { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Get call type for this meeting (if classified)
     const callType = await getCallTypeForMeeting(supabase, meeting.call_type_id);
 
@@ -780,7 +792,7 @@ serve(async (req) => {
 
     // Analyze transcript
     const startTime = Date.now();
-    const { analysis, tokensUsed } = await analyzeTranscript(
+    const { analysis, tokensUsed, inputTokens, outputTokens } = await analyzeTranscript(
       meeting.transcript_text,
       template,
       meeting.title,
@@ -790,6 +802,18 @@ serve(async (req) => {
       }
     );
     const processingTimeMs = Date.now() - startTime;
+
+    // Log AI cost event
+    await logAICostEvent(
+      supabase,
+      meeting.owner_user_id,
+      orgId,
+      'anthropic',
+      'claude-sonnet-4-20250514',
+      inputTokens,
+      outputTokens,
+      'meeting_summary',
+    );
 
     // Calculate final scores
     const { metricScores, overallScore } = calculateScorecard(analysis, template);

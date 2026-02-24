@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -144,6 +144,9 @@ serve(async (req) => {
       'crm.objects.companies.read',
       'crm.objects.companies.write',
       'crm.objects.owners.read',
+      // CRM Lists (needed for importing from HubSpot lists)
+      'crm.lists.read',
+      'crm.lists.write',
       // Engagements (notes, calls, emails, meetings, tasks)
       'sales-email-read',
       'timeline',

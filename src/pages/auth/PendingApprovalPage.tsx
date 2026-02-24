@@ -1,0 +1,583 @@
+/**
+ * Pending Approval Page
+ *
+ * Shown when a user tries to access protected routes but their request
+ * is pending approval. They can't access any features until approved.
+ * Accessible via /auth/pending-approval
+ */
+
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Clock, LogOut, Mail, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrg } from '@/lib/contexts/OrgContext';
+import { supabase } from '@/lib/supabase/clientV2';
+import { toast } from 'sonner';
+import { cancelJoinRequest } from '@/lib/services/joinRequestService';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useApprovalDetection } from '@/lib/hooks/useApprovalDetection';
+import { notificationService, Notification } from '@/lib/services/notificationService';
+
+export default function PendingApprovalPage() {
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const { refreshOrgs, switchOrg } = useOrg();
+  const [joinRequest, setJoinRequest] = useState<{
+    orgName: string;
+    email: string;
+    requestId: string;
+    orgId: string;
+  } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+
+  // Use approval detection hook
+  const { isApproved, membership, refetch } = useApprovalDetection(
+    user?.id,
+    joinRequest?.orgId,
+    true
+  );
+
+  useEffect(() => {
+    // Fetch join request details
+    const fetchJoinRequest = async () => {
+      if (!user?.id) return;
+
+      try {
+        // First try organization_join_requests (new joins)
+        let data = await supabase
+          .from('organization_join_requests')
+          .select('id, org_id, email, organizations(name)')
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        // If not found, try rejoin_requests (users rejoining after leaving)
+        if (!data.data) {
+          console.log('[PendingApprovalPage] No new join request found, checking rejoin requests...');
+          try {
+            // rejoin_requests doesn't have email column, so join to organizations for org name
+            data = await supabase
+              .from('rejoin_requests')
+              .select('id, org_id, organizations(name)')
+              .eq('user_id', user.id)
+              .eq('status', 'pending')
+              .maybeSingle();
+
+            if (data.error) {
+              console.log('[PendingApprovalPage] Retrying rejoin_requests query without org join due to error:', data.error?.message);
+              // Retry without the organization join
+              data = await supabase
+                .from('rejoin_requests')
+                .select('id, org_id')
+                .eq('user_id', user.id)
+                .eq('status', 'pending')
+                .maybeSingle();
+            }
+          } catch (err) {
+            console.error('[PendingApprovalPage] Error querying rejoin_requests:', err);
+            data = { data: null, error: err };
+          }
+        }
+
+        if (data.data) {
+          console.log('[PendingApprovalPage] Join/Rejoin request data:', data.data);
+          setJoinRequest({
+            requestId: data.data.id,
+            orgId: data.data.org_id,
+            orgName: data.data.organizations?.name || 'the organization',
+            email: data.data.email || user?.email || '',
+          });
+        } else {
+          // No pending join request found - user may have been removed or request was deleted
+          console.log('[PendingApprovalPage] No pending join or rejoin request found, auto-restarting onboarding');
+
+          // Reset profile status to active
+          await supabase
+            .from('profiles')
+            .update({ profile_status: 'active' })
+            .eq('id', user.id);
+
+          // Show toast and redirect
+          toast.info('Your join request was removed. Restarting onboarding...');
+          setTimeout(() => {
+            navigate('/onboarding?step=website_input', { replace: true });
+          }, 1500);
+        }
+      } catch (err) {
+        console.error('Error fetching join request:', err);
+      }
+    };
+
+    fetchJoinRequest();
+  }, [user?.id, user?.email, navigate]);
+
+  // Automatic polling for approval detection (5 seconds)
+  useEffect(() => {
+    if (!user?.id || !joinRequest?.orgId) {
+      return;
+    }
+
+    const POLL_INTERVAL = 5000; // 5 seconds
+    setIsPolling(true);
+
+    // Polling function
+    const pollForApproval = () => {
+      console.log('[PendingApprovalPage] Polling for approval...');
+      refetch();
+    };
+
+    // Set up interval
+    const intervalId = setInterval(pollForApproval, POLL_INTERVAL);
+
+    // Clean up interval on unmount
+    return () => {
+      console.log('[PendingApprovalPage] Clearing polling interval');
+      clearInterval(intervalId);
+      setIsPolling(false);
+    };
+  }, [user?.id, joinRequest?.orgId, refetch]);
+
+  // Handler for when approval is detected
+  const handleApprovalDetected = async (membership: { org_id: string }) => {
+    try {
+      setIsLoadingDashboard(true);
+      setIsPolling(false);
+
+      console.log('[PendingApprovalPage] Starting approval flow for org:', membership.org_id);
+
+      // 1. Update profile status to active
+      if (user?.id) {
+        console.log('[PendingApprovalPage] Updating profile status to active');
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ profile_status: 'active' })
+          .eq('id', user.id);
+
+        if (profileError) {
+          console.error('[PendingApprovalPage] Error updating profile status:', profileError);
+          // Don't fail the flow if profile update fails - continue anyway
+        }
+      }
+
+      // 2. Reload organizations to get the newly added membership
+      console.log('[PendingApprovalPage] Refreshing organizations');
+      await refreshOrgs();
+
+      // 3. Force-switch to the newly joined organization
+      // This ensures we switch away from any inactive org that might be persisted
+      console.log('[PendingApprovalPage] Force-switching to organization:', membership.org_id);
+
+      // Use the org store directly to force the switch, bypassing the inactive org check
+      const { useOrgStore } = await import('@/lib/stores/orgStore');
+      useOrgStore.getState().setActiveOrg(membership.org_id);
+
+      // Also call switchOrg to trigger any side effects, but it won't redirect since org is active
+      await switchOrg(membership.org_id);
+
+      // 4. Mark onboarding as complete to prevent redirect loop
+      // Users who went through personal email → join request flow may not have completed enrichment/skills steps
+      if (user?.id) {
+        try {
+          const { error: onboardingError } = await supabase
+            .from('user_onboarding_progress')
+            .upsert(
+              {
+                user_id: user.id,
+                onboarding_step: 'complete',
+                onboarding_completed_at: new Date().toISOString(),
+              },
+              { onConflict: 'user_id' }
+            );
+
+          if (onboardingError) {
+            console.error('[PendingApprovalPage] Error marking onboarding complete:', onboardingError);
+          } else {
+            console.log('[PendingApprovalPage] Marked onboarding as complete');
+            // Clear onboarding localStorage to ensure fresh state on next login
+            try {
+              localStorage.removeItem(`sixty_onboarding_${user.id}`);
+            } catch (e) {
+              console.warn('Failed to clear onboarding localStorage:', e);
+            }
+          }
+        } catch (error) {
+          console.error('[PendingApprovalPage] Failed to mark onboarding complete:', error);
+        }
+      }
+
+      // 5. Show success message and navigate to dashboard
+      // Use a longer delay (2.5 seconds) to ensure all data is synced and ProtectedRoute can detect completion
+      toast.success('Welcome! Redirecting to your dashboard...');
+      setTimeout(() => {
+        console.log('[PendingApprovalPage] Navigating to dashboard');
+        navigate('/dashboard', { replace: true });
+      }, 2500);
+    } catch (error) {
+      console.error('[PendingApprovalPage] Error handling approval:', error);
+      toast.error('Failed to load dashboard. Please try refreshing the page.');
+      setIsLoadingDashboard(false);
+    }
+  };
+
+  // Handle approval detection (polling-based)
+  useEffect(() => {
+    if (isApproved && membership && !isLoadingDashboard) {
+      console.log('[PendingApprovalPage] Approval detected via polling!', membership);
+      handleApprovalDetected(membership);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isApproved, membership, isLoadingDashboard]);
+
+  // Listen for real-time approval notification (faster than polling)
+  useEffect(() => {
+    if (!user?.id || isLoadingDashboard) return;
+
+    const handleNotification = (notification: Notification) => {
+      // Check if this is an approval notification for our org
+      if (
+        notification.entity_type === 'join_approval' &&
+        notification.metadata?.org_id === joinRequest?.orgId
+      ) {
+        console.log('[PendingApprovalPage] Approval notification received!', notification);
+        // Trigger approval flow with org_id from notification
+        handleApprovalDetected({ org_id: notification.metadata.org_id });
+      }
+    };
+
+    // Subscribe to real-time notifications
+    notificationService.subscribeToNotifications(user.id);
+    notificationService.addNotificationListener(handleNotification);
+
+    return () => {
+      notificationService.removeNotificationListener(handleNotification);
+      // Don't unsubscribe here - other components may need it
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, joinRequest?.orgId, isLoadingDashboard]);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/auth/login', { replace: true });
+    } catch (err) {
+      toast.error('Failed to log out');
+    }
+  };
+
+  const checkApprovalStatus = async () => {
+    if (!user) return;
+
+    setChecking(true);
+    try {
+      // FIRST: Check for approved requests (most important check)
+      let approvedRequests = await supabase
+        .from('organization_join_requests')
+        .select('status, org_id')
+        .eq('user_id', user.id)
+        .eq('status', 'approved')
+        .maybeSingle();
+
+      // If not found in join requests, check rejoin_requests
+      if (!approvedRequests.data) {
+        try {
+          approvedRequests = await supabase
+            .from('rejoin_requests')
+            .select('status, org_id')
+            .eq('user_id', user.id)
+            .eq('status', 'approved')
+            .maybeSingle();
+        } catch (err) {
+          console.error('[PendingApprovalPage] Error checking rejoin_requests approval:', err);
+          approvedRequests = { data: null };
+        }
+      }
+
+      // If approved, check for active membership
+      if (approvedRequests.data) {
+        console.log('[PendingApprovalPage] Found approved request, checking for membership...');
+
+        const { data: membership } = await supabase
+          .from('organization_memberships')
+          .select('org_id, role')
+          .eq('user_id', user.id)
+          .eq('org_id', approvedRequests.data.org_id)
+          .maybeSingle();
+
+        if (membership) {
+          toast.success('Approved! Redirecting to your dashboard...');
+          // Trigger the full approval flow
+          await handleApprovalDetected({ org_id: membership.org_id });
+          return;
+        } else {
+          toast.warning('Approved but membership not found. Please contact support.');
+          return;
+        }
+      }
+
+      // SECOND: Check for pending requests
+      let pendingRequests = await supabase
+        .from('organization_join_requests')
+        .select('status, org_id')
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      // If not found, check rejoin_requests
+      if (!pendingRequests.data) {
+        pendingRequests = await supabase
+          .from('rejoin_requests')
+          .select('status, org_id')
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+      }
+
+      if (pendingRequests.data) {
+        // Still pending
+        toast.info('Still waiting for admin approval. We\'ll email you when approved!');
+        return;
+      }
+
+      // LAST: No approved and no pending - request was likely cancelled or rejected
+      console.warn('[PendingApprovalPage] No approved or pending request found');
+      toast.warning('Your request was cancelled or the organization was removed. Restarting onboarding...');
+
+      // Auto-reset profile status to allow restart
+      await supabase
+        .from('profiles')
+        .update({ profile_status: 'active' })
+        .eq('id', user.id);
+
+      setTimeout(() => {
+        navigate('/onboarding?step=website_input', { replace: true });
+      }, 2000);
+
+    } catch (error) {
+      console.error('[PendingApprovalPage] Error checking approval status:', error);
+      toast.error('Failed to check status. Please try again.');
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!user?.id || !joinRequest?.requestId) {
+      console.error('[PendingApprovalPage] Missing required data:', { userId: user?.id, requestId: joinRequest?.requestId });
+      toast.error('Unable to cancel request. Please refresh the page and try again.');
+      return;
+    }
+
+    setCanceling(true);
+    setShowCancelDialog(false);
+
+    try {
+      console.log('[PendingApprovalPage] Cancelling join request:', joinRequest.requestId);
+      const result = await cancelJoinRequest(joinRequest.requestId, user.id);
+
+      if (result.success) {
+        toast.success('Join request cancelled. Redirecting to onboarding...');
+        setTimeout(() => {
+          // Pass flag to ProtectedRoute to skip stale pending request check
+          navigate('/onboarding?step=website_input', {
+            replace: true,
+            state: { fromCancelRequest: true }
+          });
+        }, 1000);
+      } else {
+        console.error('[PendingApprovalPage] Cancel failed:', result.error);
+        toast.error(result.error || 'Failed to cancel request');
+      }
+    } catch (error) {
+      console.error('[PendingApprovalPage] Error cancelling request:', error);
+      toast.error('Failed to cancel request. Please try again.');
+    } finally {
+      setCanceling(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(74,74,117,0.25),transparent)] pointer-events-none" />
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md"
+      >
+        <div className="relative bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800/50 p-8">
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-900/90 via-gray-900/70 to-gray-900/30 rounded-2xl -z-10" />
+          <div className="absolute -right-20 -top-20 w-40 h-40 bg-violet-500/10 blur-3xl rounded-full" />
+
+          <div className="text-center">
+            <motion.div
+              animate={{ rotate: [0, 5, -5, 0] }}
+              transition={{ repeat: Infinity, duration: 3 }}
+              className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-violet-500/20 mx-auto mb-6"
+            >
+              <Clock className="w-8 h-8 text-violet-500" />
+            </motion.div>
+
+            <h1 className="text-2xl font-bold text-white mb-2">
+              Request Pending Approval
+            </h1>
+            <p className="text-gray-400 mb-6">
+              Your request to join{' '}
+              <span className="text-white font-medium">
+                {joinRequest?.orgName || 'the organization'}
+              </span>{' '}
+              is awaiting admin review.
+            </p>
+          </div>
+
+          <div className="space-y-4 mb-6">
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4">
+              <p className="text-xs font-medium uppercase tracking-wide mb-1 text-gray-400">
+                Email Address
+              </p>
+              <p className="font-medium text-white">{joinRequest?.email || user?.email}</p>
+            </div>
+
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4">
+              <p className="text-xs font-medium uppercase tracking-wide mb-1 text-gray-400">
+                Status
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-violet-500 rounded-full animate-pulse" />
+                <p className="font-medium text-white">
+                  {isLoadingDashboard ? 'Loading your dashboard...' : 'Awaiting Admin Review'}
+                </p>
+              </div>
+              {isPolling && !isLoadingDashboard && (
+                <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Checking status...</span>
+                </div>
+              )}
+              {isLoadingDashboard && (
+                <div className="flex items-center gap-2 mt-2 text-xs text-green-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Preparing your workspace...</span>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-violet-900/20 border border-violet-800/50 rounded-xl p-4">
+              <div className="flex gap-3">
+                <Clock className="w-5 h-5 text-violet-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-violet-100 mb-1">What to Expect</p>
+                  <p className="text-sm text-violet-200/80">
+                    Once approved, you'll receive an email with a link to access your organization dashboard. This usually happens within 24 hours.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 flex items-center gap-3">
+              <Mail className="w-5 h-5 text-gray-400 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-300">Check your email regularly</p>
+                <p className="text-xs text-gray-500 truncate">
+                  Look for approval notification from {joinRequest?.email}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Button
+              onClick={checkApprovalStatus}
+              disabled={checking || isLoadingDashboard}
+              variant="outline"
+              className="w-full !bg-transparent border-violet-500 text-violet-400 hover:!bg-violet-500/10 shadow-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {checking ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Checking Status...
+                </>
+              ) : (
+                'Check Approval Status'
+              )}
+            </Button>
+            {joinRequest?.requestId ? (
+              <>
+                <Button
+                  onClick={() => setShowCancelDialog(true)}
+                  disabled={canceling || isLoadingDashboard}
+                  variant="outline"
+                  className="w-full !bg-transparent border-gray-500 text-gray-400 hover:!bg-gray-500/10 shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {canceling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Cancelling...
+                    </>
+                  ) : (
+                    'Cancel Request & Restart Onboarding'
+                  )}
+                </Button>
+                <p className="text-xs text-gray-400 text-center -mt-1">
+                  Wrong organization? Cancel and start over
+                </p>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={async () => {
+                    // Reset profile status and redirect
+                    if (user?.id) {
+                      await supabase
+                        .from('profiles')
+                        .update({ profile_status: 'active' })
+                        .eq('id', user.id);
+                    }
+                    navigate('/onboarding?step=website_input', { replace: true });
+                  }}
+                  variant="outline"
+                  className="w-full !bg-transparent border-violet-500 text-violet-400 hover:!bg-violet-500/10 shadow-none"
+                >
+                  Restart Onboarding
+                </Button>
+                <p className="text-xs text-gray-400 text-center -mt-1">
+                  Your join request was removed. Click to start over.
+                </p>
+              </>
+            )}
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              className="w-full !bg-transparent border-red-500 text-red-400 hover:!bg-red-500/10 shadow-none"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Log Out
+            </Button>
+          </div>
+
+          <p className="text-xs text-gray-500 text-center mt-6">
+            Questions? Contact your organization administrator or email support@use60.com
+          </p>
+        </div>
+      </motion.div>
+
+      {/* Cancel Confirmation Dialog */}
+      <ConfirmDialog
+        open={showCancelDialog}
+        onClose={() => setShowCancelDialog(false)}
+        onConfirm={handleCancelRequest}
+        title="Cancel Join Request?"
+        description={`Are you sure you want to cancel your request to join ${joinRequest?.orgName || 'this organization'}? You'll be able to create a new organization or request to join a different one.`}
+        confirmText="Yes, Cancel Request"
+        cancelText="No, Keep Request"
+        confirmVariant="warning"
+        loading={canceling}
+      />
+    </div>
+  );
+}

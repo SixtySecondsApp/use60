@@ -1,0 +1,185 @@
+{
+  "feature": "pipeline-outreach-response",
+  "title": "Pipeline Outreach Structured Response — Visual Email Drafts from Copilot",
+  "description": "Replace the markdown wall that copilot returns for pipeline health + email drafting queries with interactive, actionable email preview cards. Each email draft is editable inline with Send Now (Gmail) and Queue to Action Centre options.",
+  "createdAt": "2026-02-10T14:25:00Z",
+  "consultReport": ".sixty/consult/pipeline-outreach-response.md",
+  "status": "planned",
+  "totalStories": 7,
+  "completedStories": 0,
+  "stories": [
+    {
+      "id": "POR-001",
+      "title": "Add PipelineOutreachResponse types and data interfaces",
+      "type": "frontend",
+      "status": "planned",
+      "estimate": "15min",
+      "dependencies": [],
+      "description": "Add the new response type and all supporting TypeScript interfaces to src/components/copilot/types.ts. Includes: PipelineOutreachResponseData with pipeline_summary (stale_count, total_deals, risk_level, health_score), email_drafts[] (contactId, contactName, company, email, subject, body, urgency, strategyNotes, lastInteraction, daysSinceContact), and suggested_actions[]. Add 'pipeline_outreach' to the CopilotResponseType union.",
+      "files": [
+        "src/components/copilot/types.ts"
+      ],
+      "acceptanceCriteria": [
+        "PipelineOutreachResponseData interface defined with all fields",
+        "EmailDraftItem interface with contactId, contactName, company, to, subject, body, urgency, strategyNotes",
+        "PipelineSummary interface with stale_count, total_deals, risk_level, health_score",
+        "'pipeline_outreach' added to CopilotResponseType union"
+      ]
+    },
+    {
+      "id": "POR-002",
+      "title": "Build PipelineOutreachResponse.tsx component",
+      "type": "frontend",
+      "status": "planned",
+      "estimate": "50min",
+      "dependencies": ["POR-001"],
+      "description": "Create the main response panel component at src/components/copilot/responses/PipelineOutreachResponse.tsx. Structure: (1) Pipeline Summary card at top with health metrics (stale count, risk level, health score bar). (2) Scrollable email draft cards list — each card shows: contact name + company + urgency badge, editable subject line (click-to-edit), expandable body with inline textarea editing, strategy notes as collapsed tooltip, 'Send Now' button (primary), 'Queue for Later' button (secondary), 'Dismiss' icon button. (3) Bulk actions bar at bottom: 'Send All' and 'Add All to Action Centre'. Follow existing patterns: Lucide icons only, Tailwind dark theme (gray-800/900), collapsible sections like DailyBriefResponse, edit pattern from EmailActionCenter. Use onActionClick prop for all actions.",
+      "files": [
+        "src/components/copilot/responses/PipelineOutreachResponse.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Pipeline summary card renders with health metrics",
+        "Email draft cards render with contact info, subject, body preview",
+        "Click-to-edit on subject and body fields",
+        "Send Now button emits 'send_email_now' action with edited content",
+        "Queue for Later button emits 'queue_email_action_centre' action",
+        "Dismiss button removes card from list with animation",
+        "Bulk Send All and Add All to Action Centre buttons at bottom",
+        "Urgency badges (high=red, medium=amber, low=green)",
+        "Responsive: works on both desktop and mobile widths",
+        "No emoji icons — Lucide only"
+      ]
+    },
+    {
+      "id": "POR-003",
+      "title": "Register PipelineOutreachResponse in CopilotResponse router",
+      "type": "frontend",
+      "status": "planned",
+      "estimate": "5min",
+      "dependencies": ["POR-002"],
+      "description": "Add the 'pipeline_outreach' case to the switch statement in src/components/copilot/CopilotResponse.tsx to render PipelineOutreachResponse. Import the component and route to it when response.type === 'pipeline_outreach'.",
+      "files": [
+        "src/components/copilot/CopilotResponse.tsx"
+      ],
+      "acceptanceCriteria": [
+        "pipeline_outreach case added to switch in CopilotResponse.tsx",
+        "Component imported and rendered with data + onActionClick props"
+      ]
+    },
+    {
+      "id": "POR-004",
+      "title": "Add structured response detection for pipeline outreach",
+      "type": "backend",
+      "status": "planned",
+      "estimate": "35min",
+      "dependencies": ["POR-001"],
+      "description": "Add detection logic in supabase/functions/_shared/structuredResponseDetector.ts to recognize when the copilot output contains batch email drafts from pipeline review. Detection criteria: tool executions include a combination of (get_pipeline_summary OR get_contacts_needing_attention) AND (compose_email OR email content patterns in the response text). When detected, parse the AI's text response to extract individual email drafts (to, subject, body) and pipeline health data, then return a StructuredResponse with type='pipeline_outreach'. Also handle the case where copilot-autonomous returns email drafts inline — use regex/pattern matching to extract email blocks from markdown formatted output.",
+      "files": [
+        "supabase/functions/_shared/structuredResponseDetector.ts"
+      ],
+      "acceptanceCriteria": [
+        "Detection function identifies pipeline + email draft combination",
+        "Extracts individual email drafts from tool results or text parsing",
+        "Returns StructuredResponse with type='pipeline_outreach'",
+        "Pipeline summary data extracted from get_pipeline_summary results",
+        "Falls back gracefully to null (plain text) if extraction fails",
+        "Works for both api-copilot and copilot-autonomous paths"
+      ]
+    },
+    {
+      "id": "POR-005",
+      "title": "Wire Send Now action to Gmail via HITL approval",
+      "type": "frontend",
+      "status": "planned",
+      "estimate": "25min",
+      "dependencies": ["POR-002"],
+      "description": "Handle the 'send_email_now' action in AssistantShell.tsx (or within the PipelineOutreachResponse component itself). Flow: (1) Create a hitl_pending_approvals record with resource_type='email_draft', status='approved', the email content in original_content, and callback_target='hitl-send-followup-email'. (2) Call the hitl-send-followup-email edge function with the approval_id and action='approved'. (3) Show toast on success/failure. (4) Update the card state to 'sent'. Follow the pattern from useEmailActions.ts useApproveEmailAction mutation.",
+      "files": [
+        "src/components/copilot/responses/PipelineOutreachResponse.tsx",
+        "src/components/assistant/AssistantShell.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Clicking Send Now creates HITL approval record",
+        "Calls hitl-send-followup-email edge function",
+        "Toast notification on success ('Email sent to {name}')",
+        "Toast notification on failure with error message",
+        "Card updates to show 'Sent' badge and disables buttons",
+        "Loading state while sending (spinner on button)"
+      ]
+    },
+    {
+      "id": "POR-006",
+      "title": "Wire Queue for Later action to Action Centre",
+      "type": "frontend",
+      "status": "planned",
+      "estimate": "20min",
+      "dependencies": ["POR-002"],
+      "description": "Handle the 'queue_email_action_centre' action. Flow: (1) Insert into action_centre_items table with action_type='email', preview_data containing the email draft (to, subject, body), contact_id linked, source_type='copilot_conversation', risk_level based on urgency. (2) Show toast 'Added to Action Centre'. (3) Update card state to 'queued'. Also handle bulk 'Add All to Action Centre' which loops through remaining unprocessed drafts. Use supabase client for the insert.",
+      "files": [
+        "src/components/copilot/responses/PipelineOutreachResponse.tsx"
+      ],
+      "acceptanceCriteria": [
+        "Clicking Queue for Later creates action_centre_items record",
+        "Record includes email content in preview_data JSONB",
+        "Contact and deal linked via contact_id/deal_id",
+        "Source type set to 'copilot_conversation'",
+        "Toast notification 'Queued to Action Centre'",
+        "Card shows 'Queued' badge",
+        "Bulk 'Add All' processes all remaining cards",
+        "Navigable from Action Centre after queuing"
+      ]
+    },
+    {
+      "id": "POR-007",
+      "title": "Deploy edge function and test E2E",
+      "type": "test",
+      "status": "planned",
+      "estimate": "20min",
+      "dependencies": ["POR-003", "POR-004", "POR-005", "POR-006"],
+      "description": "Deploy updated structuredResponseDetector.ts to staging (via copilot-autonomous deployment since it imports the shared module). Test full flow: (1) Send 'Review my pipeline health and draft follow-up emails for stale deals' in copilot. (2) Verify structured panel renders instead of markdown. (3) Edit an email subject and body. (4) Click Send Now on one email — verify Gmail sends. (5) Click Queue for Later on another — verify it appears in Action Centre. (6) Click Add All — verify bulk queue. (7) Regression: verify simple queries still return plain text.",
+      "files": [],
+      "acceptanceCriteria": [
+        "Edge function deployed to staging with --no-verify-jwt",
+        "Pipeline query returns structured panel (not markdown)",
+        "Email editing works (subject + body)",
+        "Send Now delivers email via Gmail",
+        "Queue for Later adds to Action Centre",
+        "Bulk actions work for remaining cards",
+        "Simple queries (e.g. 'hello') still return plain text",
+        "No console errors in browser"
+      ]
+    }
+  ],
+  "parallelOpportunities": [
+    {
+      "group": ["POR-004", "POR-005", "POR-006"],
+      "reason": "Backend detection and frontend actions are independent — detection is in edge function, actions are in React components",
+      "timeSaved": "30min"
+    },
+    {
+      "group": ["POR-002", "POR-004"],
+      "reason": "Frontend component and backend detection can be built in parallel after types are defined",
+      "timeSaved": "35min"
+    }
+  ],
+  "risks": [
+    {
+      "severity": "medium",
+      "area": "backend",
+      "issue": "Parsing email drafts from copilot's freeform text output is fragile — the AI might format emails differently each time",
+      "mitigation": "Use the tool_executions array (structured data) as primary source, fall back to text parsing only if needed. Could also add a structured output instruction to the copilot's system prompt for this skill."
+    },
+    {
+      "severity": "medium",
+      "area": "integration",
+      "issue": "Gmail OAuth may not be configured for all users — Send Now would fail",
+      "mitigation": "Check google_integrations before showing Send Now button. If not configured, show only Queue to Action Centre + a 'Connect Gmail' link."
+    },
+    {
+      "severity": "low",
+      "area": "ux",
+      "issue": "structuredResponseDetector currently runs server-side — if detection misses the pattern, user gets markdown fallback",
+      "mitigation": "Add client-side fallback detection in useCopilotChat that can parse email patterns from markdown and offer to show them as cards"
+    }
+  ]
+}

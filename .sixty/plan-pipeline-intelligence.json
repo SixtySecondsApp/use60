@@ -1,0 +1,823 @@
+{
+  "feature": {
+    "id": "pipeline-intelligence",
+    "name": "Pipeline Intelligence Redesign",
+    "description": "Unify pipeline, deal health, and relationship health into a single data-rich experience with event-driven scoring, proactive AI alerts, ops table integration, and CRM sync",
+    "consultReport": ".sixty/consult/pipeline-intelligence-redesign.md",
+    "createdAt": "2026-02-16T12:00:00Z",
+    "status": "pending"
+  },
+
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Performance & Data Layer",
+      "description": "Fix N+1 queries, create unified data RPC, establish standard Deals ops table",
+      "status": "pending"
+    },
+    {
+      "id": "phase-2",
+      "name": "Pipeline Redesign (UI/UX)",
+      "description": "Full redesign with data-rich cards, sheet panel, merged health layer, mobile responsive",
+      "status": "pending"
+    },
+    {
+      "id": "phase-3",
+      "name": "Event-Driven Health & Proactive AI",
+      "description": "Real-time health recalculation and copilot-driven alerts via Slack + in-app",
+      "status": "pending"
+    },
+    {
+      "id": "phase-4",
+      "name": "Ops Table Integration & CRM Sync",
+      "description": "Standard Deals table enrichment + bidirectional HubSpot/Attio push",
+      "status": "pending"
+    },
+    {
+      "id": "phase-5",
+      "name": "Copilot Deep Integration",
+      "description": "Always-on health context, intervention skill, unified response components",
+      "status": "pending"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "PIPE-001",
+      "phase": "phase-1",
+      "title": "Create get_pipeline_with_health PostgreSQL RPC",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["deals", "deal_health_scores", "relationship_health_scores", "next_action_suggestions", "deal_splits_with_users"] },
+      "blocks": ["PIPE-002", "PIPE-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Single RPC returns deals + stages + health_scores + relationship_health + splits + next_actions in one round trip",
+        "Supports filtering by stage, health_status, risk_level, owner, search term via JSONB params",
+        "Supports sorting by value, health_score, days_in_stage, close_date, created_at",
+        "Returns aggregated stage_metrics (count + value per stage) alongside deal rows",
+        "EXPLAIN ANALYZE shows <100ms for 200 deals with all joins"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/YYYYMMDD_pipeline_intelligence_rpc.sql"
+      ]
+    },
+    {
+      "id": "PIPE-002",
+      "phase": "phase-1",
+      "title": "Create usePipelineData hook consuming unified RPC",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["PIPE-001"], "files": [], "schema": [] },
+      "blocks": ["PIPE-008", "PIPE-009", "PIPE-010", "PIPE-011"],
+      "parallelWith": ["PIPE-003"],
+      "acceptance": [
+        "Single React Query hook wraps the RPC with proper queryKey including filters and sort",
+        "Returns typed { deals, healthScores, relationshipScores, nextActions, splits, stageMetrics }",
+        "staleTime: 30s, uses Supabase Realtime channel for invalidation on deal changes",
+        "Replaces useDeals + useBatchedDealMetadata + useDealSplits composition",
+        "Zero per-card queries — all metadata pre-indexed by dealId for O(1) lookup"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/pipeline/hooks/usePipelineData.ts",
+        "src/components/pipeline/hooks/usePipelineFilters.ts"
+      ]
+    },
+    {
+      "id": "PIPE-003",
+      "phase": "phase-1",
+      "title": "Add company logo batch cache layer",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["PIPE-001"], "files": [], "schema": [] },
+      "blocks": ["PIPE-008"],
+      "parallelWith": ["PIPE-002"],
+      "acceptance": [
+        "New useCompanyLogoBatch(domains: string[]) hook fetches all logos in single edge function call",
+        "Returns Map<domain, logoUrl> indexed for O(1) card lookup",
+        "React Query cache with 24h TTL per domain — no re-fetch on page navigation",
+        "Graceful fallback to initials avatar when logo unavailable",
+        "Eliminates N edge function calls (50 deals = 1 call instead of 50)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/pipeline/hooks/useCompanyLogoBatch.ts",
+        "supabase/functions/fetch-company-logos-batch/index.ts"
+      ]
+    },
+    {
+      "id": "PIPE-004",
+      "phase": "phase-1",
+      "title": "Create standard Deals ops table schema + migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": ["ops_tables", "ops_table_columns"] },
+      "blocks": ["PIPE-005", "PIPE-006"],
+      "parallelWith": ["PIPE-001"],
+      "acceptance": [
+        "Migration creates Deals standard table definition with 18 system columns (deal_name, company, value, stage, close_date, owner, deal_health_score, health_status, relationship_health_score, relationship_health_status, risk_level, risk_factors, days_in_stage, ghost_probability, sentiment_trend, last_meeting_date, last_activity_date, next_action)",
+        "System columns marked is_system=true, is_locked=true — cannot be deleted",
+        "Table marked is_standard=true — cannot be deleted",
+        "Rows are read-only (synced from deals table) — RLS blocks manual INSERT",
+        "Users can add custom columns (enrichment, formula, AI) via normal ops table column API"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_standard_deals_ops_table.sql"
+      ]
+    },
+    {
+      "id": "PIPE-005",
+      "phase": "phase-1",
+      "title": "Build sync_deals_to_ops_table function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["PIPE-004"], "files": [], "schema": [] },
+      "blocks": ["PIPE-007"],
+      "parallelWith": ["PIPE-006"],
+      "acceptance": [
+        "PostgreSQL function syncs deals + health scores + relationship health into Deals ops table rows/cells",
+        "Runs on initial provisioning and on health score updates (upsert pattern)",
+        "Maps deal fields to ops table cells with source_type='app'",
+        "Handles deal deletion by removing corresponding ops table row",
+        "Idempotent — safe to run multiple times without duplicates"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_sync_deals_ops_function.sql"
+      ]
+    },
+    {
+      "id": "PIPE-006",
+      "phase": "phase-1",
+      "title": "Wire Deals table into provision-standard-ops-tables",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["PIPE-004"], "files": ["supabase/functions/provision-standard-ops-tables/index.ts"], "schema": [] },
+      "blocks": ["PIPE-007"],
+      "parallelWith": ["PIPE-005"],
+      "acceptance": [
+        "provision-standard-ops-tables edge function creates Deals table as 5th standard table",
+        "Existing orgs get Deals table on next provisioning call (idempotent check)",
+        "New orgs get all 5 tables (Leads, Meetings, Contacts, Companies, Deals)",
+        "Initial sync populates Deals rows from existing deals for the org"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/provision-standard-ops-tables/index.ts",
+        "src/lib/services/standardTableSync.ts"
+      ]
+    },
+    {
+      "id": "PIPE-007",
+      "phase": "phase-1",
+      "title": "Add deals sync to standardTableSync service",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["PIPE-005", "PIPE-006"], "files": [], "schema": [] },
+      "blocks": ["PIPE-022"],
+      "parallelWith": [],
+      "acceptance": [
+        "standardTableSync.ts handles deal create/update/delete events → Deals ops table row upsert/delete",
+        "Health score changes trigger cell updates for health columns in ops table",
+        "Source tracking: rows marked source_type='app', cells track last_updated_at",
+        "Works with existing webhook handlers (deals table changes)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/standardTableSync.ts"
+      ]
+    },
+    {
+      "id": "PIPE-008",
+      "phase": "phase-2",
+      "title": "Design and implement new DealCard component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["PIPE-002", "PIPE-003"], "files": [], "schema": [] },
+      "blocks": ["PIPE-011"],
+      "parallelWith": ["PIPE-009", "PIPE-010"],
+      "acceptance": [
+        "Data-rich Attio/HubSpot-style card showing: company + value, deal name, deal health score (color-coded), relationship health score, days in stage, trend indicator, risk count, pending action count, owner avatar",
+        "Wrapped in React.memo() with stable batched props from usePipelineData",
+        "Zero individual queries — all data comes from pre-indexed batch maps",
+        "Color-coded health indicators: green (healthy), yellow (warning), red (critical), gray (stalled/ghost)",
+        "Draggable via dnd-kit with smooth animations"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/pipeline/DealCard.tsx",
+        "src/components/pipeline/DealCardSkeleton.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-009",
+      "phase": "phase-2",
+      "title": "Build DealIntelligenceSheet panel",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["PIPE-002"], "files": [], "schema": [] },
+      "blocks": ["PIPE-031"],
+      "parallelWith": ["PIPE-008", "PIPE-010"],
+      "acceptance": [
+        "Right-side Sheet panel with !top-16 !h-[calc(100vh-4rem)] (below top bar)",
+        "Sections: Header (company, deal, value, stage, owner), Health Overview (combined deal + relationship sparklines), Risk Signals (merged, sorted by severity), Ghost Detection (active signals + probability), Activity Timeline (last 10 interactions), Sentiment Trend (30-day chart), Next Best Actions (ranked), Related Contacts (with relationship health), Quick Actions bar",
+        "Lazy-loads detail data on open via useDealSheet hook (single query for timeline + sentiment)",
+        "Includes 'Ask Copilot about this deal' button that pre-loads full context",
+        "Smooth open/close animation, keyboard dismissible (Escape)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/pipeline/DealIntelligenceSheet.tsx",
+        "src/components/pipeline/DealHealthSignals.tsx",
+        "src/components/pipeline/DealRiskFactors.tsx",
+        "src/components/pipeline/DealActivityTimeline.tsx",
+        "src/components/pipeline/hooks/useDealSheet.ts"
+      ]
+    },
+    {
+      "id": "PIPE-010",
+      "phase": "phase-2",
+      "title": "Redesign PipelineHeader with integrated health stats",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["PIPE-002"], "files": [], "schema": [] },
+      "blocks": ["PIPE-011"],
+      "parallelWith": ["PIPE-008", "PIPE-009"],
+      "acceptance": [
+        "Quick stats row: Total $, Weighted $, Deal count, Healthy/Warning/Critical/Ghost counts with color indicators",
+        "Filter bar: Stage, Health Status, Risk Level, Owner, Search — all URL-persisted via usePipelineFilters",
+        "Sort options: Value, Health Score, Days in Stage, Close Date, Created At",
+        "View toggle: Kanban | Table (icons, keyboard shortcut K/T)",
+        "Responsive: stacks on mobile with collapsible filter section"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/pipeline/PipelineHeader.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-011",
+      "phase": "phase-2",
+      "title": "Refactor Pipeline.tsx — clean architecture with sheet integration",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["PIPE-008", "PIPE-010"], "files": [], "schema": [] },
+      "blocks": ["PIPE-013", "PIPE-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "PipelineView.tsx replaces Pipeline.tsx — under 400 lines (down from 891)",
+        "Simplified PipelineContext using usePipelineData (single RPC, no multi-hook composition)",
+        "DealIntelligenceSheet integrated — click card opens sheet, pipeline stays visible on left",
+        "DnD-kit drag-and-drop preserved with optimistic updates",
+        "Clean separation: PipelineKanban.tsx for kanban, PipelineTable.tsx for table view"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/pipeline/PipelineView.tsx",
+        "src/components/pipeline/PipelineKanban.tsx",
+        "src/lib/contexts/PipelineContext.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-012",
+      "phase": "phase-2",
+      "title": "Update PipelineTable with health columns and inline indicators",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["PIPE-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-011"],
+      "acceptance": [
+        "Table columns: Name, Company, Value, Stage, Health Score, Relationship Health, Risk Level, Days in Stage, Close Date, Owner",
+        "Health columns render color-coded badges inline",
+        "Click row opens DealIntelligenceSheet (same as kanban card click)",
+        "Sortable by all columns, filterable via PipelineHeader"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/pipeline/PipelineTable.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-013",
+      "phase": "phase-2",
+      "title": "Remove standalone health dashboards — redirect to pipeline",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["PIPE-011"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-014"],
+      "acceptance": [
+        "/crm/deal-health redirects to /crm/pipeline?health=critical,warning",
+        "/crm/relationship-health redirects to /crm/pipeline?risk=high,critical",
+        "Old DealHealthDashboard and RelationshipHealthDashboard components removed",
+        "Navigation sidebar updated — single 'Pipeline' entry replaces 3 separate entries",
+        "No broken links — all internal references updated"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/PipelinePage.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-014",
+      "phase": "phase-2",
+      "title": "Build DealTrendChart — sparkline component for cards and sheet",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["PIPE-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-013"],
+      "acceptance": [
+        "Compact sparkline chart component showing health score trend over last 30 days",
+        "Uses deal_health_history table data for historical points",
+        "Two sizes: 'inline' (card — 60x20px, no labels) and 'expanded' (sheet — 200x80px, with labels)",
+        "Color gradient follows health status (green → yellow → red)",
+        "Renders via lightweight canvas or SVG — no heavy chart library dependency"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/pipeline/DealTrendChart.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-015",
+      "phase": "phase-2",
+      "title": "Mobile-responsive pipeline layout",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["PIPE-011"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Below md breakpoint: kanban collapses to filterable vertical list (stage as section headers)",
+        "Deal cards stack vertically with full width, no horizontal scrolling needed",
+        "DealIntelligenceSheet becomes full-screen overlay on mobile (not side panel)",
+        "PipelineHeader filters collapse into a dropdown/sheet on mobile",
+        "Touch-friendly: swipe to change stage filter, tap to open deal sheet"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/pipeline/PipelineView.tsx",
+        "src/components/pipeline/PipelineKanban.tsx",
+        "src/components/pipeline/DealIntelligenceSheet.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-016",
+      "phase": "phase-3",
+      "title": "Create PostgreSQL event triggers for health recalculation",
+      "type": "schema",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": [], "files": [], "schema": ["deals", "meetings", "activities", "communication_events"] },
+      "blocks": ["PIPE-017"],
+      "parallelWith": [],
+      "acceptance": [
+        "Trigger on deals UPDATE (stage_id change) fires pg_notify('health_recalc', deal_id)",
+        "Trigger on meetings INSERT/UPDATE fires pg_notify with linked deal_ids",
+        "Trigger on activities INSERT fires pg_notify with deal_id",
+        "Trigger on communication_events INSERT fires pg_notify with contact_id for relationship health",
+        "Debounce: triggers use a queue table with UNIQUE constraint on (deal_id, created_at::date) to prevent duplicate recalcs within 5 minutes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/YYYYMMDD_health_event_triggers.sql"
+      ]
+    },
+    {
+      "id": "PIPE-017",
+      "phase": "phase-3",
+      "title": "Build health-recalculate edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["PIPE-016"], "files": [], "schema": [] },
+      "blocks": ["PIPE-018", "PIPE-019"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function processes health_recalc_queue entries",
+        "Recalculates deal health score using existing dealHealthService logic",
+        "Recalculates relationship health score for affected contacts",
+        "Upserts new scores to deal_health_scores and relationship_health_scores",
+        "Inserts snapshot into deal_health_history for trend tracking",
+        "Returns { dealsRecalculated, relationshipsRecalculated, significantChanges[] }"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/health-recalculate/index.ts"
+      ]
+    },
+    {
+      "id": "PIPE-018",
+      "phase": "phase-3",
+      "title": "Build proactive alert evaluation engine",
+      "type": "backend",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": ["PIPE-017"], "files": [], "schema": [] },
+      "blocks": ["PIPE-019", "PIPE-020"],
+      "parallelWith": [],
+      "acceptance": [
+        "When health-recalculate detects significant change (>20 point drop, status change, ghost probability >60%), evaluates alert rules",
+        "Generates alert payloads with: deal context, change summary, severity, suggested actions",
+        "Writes alerts to deal_health_alerts table with severity and channel routing",
+        "Deduplication: no duplicate alert for same deal + alert_type within 24 hours"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/health-recalculate/alertEvaluator.ts"
+      ]
+    },
+    {
+      "id": "PIPE-019",
+      "phase": "phase-3",
+      "title": "Implement Slack alert delivery for critical health changes",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["PIPE-018"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-020"],
+      "acceptance": [
+        "Critical severity alerts pushed to user's connected Slack channel",
+        "Slack message uses Block Kit with: deal name, health change, risk signals, action buttons",
+        "Action buttons: 'Open Deal', 'Ask Copilot', 'Snooze Alert'",
+        "Respects user notification preferences (opt-out per alert type)",
+        "Rate limited: max 10 Slack alerts per user per day"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/health-recalculate/slackNotifier.ts"
+      ]
+    },
+    {
+      "id": "PIPE-020",
+      "phase": "phase-3",
+      "title": "Implement in-app copilot proactive health messages",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["PIPE-018"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-019"],
+      "acceptance": [
+        "All severity alerts appear as proactive messages in copilot chat panel",
+        "Message format: alert icon + deal name + health change + suggested actions with action buttons",
+        "Actions: 'Open Deal' (navigates to pipeline + opens sheet), 'Draft Email', 'Schedule Call'",
+        "Realtime subscription on deal_health_alerts table filtered by user_id",
+        "Badge indicator on copilot icon showing unread alert count"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useCopilotAlerts.ts",
+        "src/components/copilot/ProactiveAlertMessage.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-021",
+      "phase": "phase-3",
+      "title": "Add user-configurable alert thresholds in settings",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["PIPE-018"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New section in Settings page: 'Deal Health Alerts'",
+        "Toggle per alert type: health_drop, ghost_risk, no_activity, stage_stall, sentiment_decline, close_date_risk",
+        "Channel selection per alert: In-app only, Slack + In-app, None",
+        "Severity threshold: minimum severity to receive (info, warning, critical)",
+        "Saved to user_settings table, read by alert evaluation engine"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/settings/DealHealthAlertSettings.tsx",
+        "src/lib/hooks/useAlertPreferences.ts"
+      ]
+    },
+    {
+      "id": "PIPE-022",
+      "phase": "phase-4",
+      "title": "Wire health score computed columns in Deals ops table",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["PIPE-007", "PIPE-017"], "files": [], "schema": [] },
+      "blocks": ["PIPE-023"],
+      "parallelWith": [],
+      "acceptance": [
+        "When health-recalculate updates scores, corresponding ops table cells auto-update",
+        "Computed columns (health_score, health_status, risk_level, etc.) refresh within 5 minutes of underlying data change",
+        "Cell metadata tracks last_computed_at timestamp",
+        "No manual editing of computed cells — UI shows lock icon"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/standardTableSync.ts",
+        "supabase/functions/health-recalculate/opsSyncHandler.ts"
+      ]
+    },
+    {
+      "id": "PIPE-023",
+      "phase": "phase-4",
+      "title": "Add AI enrichment column presets for deals",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["PIPE-022"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-024", "PIPE-025"],
+      "acceptance": [
+        "When adding columns to Deals ops table, show preset enrichment templates: 'Close Probability Reasoning', 'Risk Mitigation Suggestion', 'Competitive Intelligence', 'Stakeholder Analysis'",
+        "Each preset has pre-configured enrichment_prompt referencing deal health columns via {column_key} syntax",
+        "Presets work with existing enrichment pipeline (enrich-dynamic-table edge function)",
+        "Users can also create fully custom enrichment columns as normal"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/ops/AddColumnModal.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-024",
+      "phase": "phase-4",
+      "title": "Build HubSpot health score property provisioning and push",
+      "type": "backend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["PIPE-017"], "files": [], "schema": [] },
+      "blocks": ["PIPE-027"],
+      "parallelWith": ["PIPE-023", "PIPE-025"],
+      "acceptance": [
+        "On first sync: creates custom properties in HubSpot deal object (sixty_deal_health_score, sixty_health_status, sixty_risk_level, sixty_relationship_health, sixty_ghost_risk, sixty_days_in_stage)",
+        "On health recalculation: pushes updated scores to HubSpot deal properties via API",
+        "Batch push: up to 100 deals per API call (HubSpot batch update endpoint)",
+        "Error handling: log failed pushes, retry on next recalculation cycle",
+        "Respects HubSpot rate limits (100 requests per 10 seconds)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/health-recalculate/hubspotSync.ts"
+      ]
+    },
+    {
+      "id": "PIPE-025",
+      "phase": "phase-4",
+      "title": "Build Attio health score field provisioning and push",
+      "type": "backend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["PIPE-017"], "files": [], "schema": [] },
+      "blocks": ["PIPE-027"],
+      "parallelWith": ["PIPE-023", "PIPE-024"],
+      "acceptance": [
+        "On first sync: creates custom fields on Attio deal object (Deal Health Score, Health Status, Risk Level, Relationship Health, Ghost Risk %, Days in Stage)",
+        "On health recalculation: pushes updated scores to Attio deal records via API",
+        "Uses Attio batch API for efficiency",
+        "Error handling with retry on next recalculation"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/health-recalculate/attioSync.ts"
+      ]
+    },
+    {
+      "id": "PIPE-026",
+      "phase": "phase-4",
+      "title": "Implement health score CRM push on every recalculation",
+      "type": "backend",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": { "stories": ["PIPE-024", "PIPE-025"], "files": [], "schema": [] },
+      "blocks": ["PIPE-027"],
+      "parallelWith": [],
+      "acceptance": [
+        "health-recalculate edge function chains CRM push after score update",
+        "Detects which CRM is connected for the org (HubSpot, Attio, or both)",
+        "Pushes only changed scores (delta detection) to minimize API calls",
+        "Async: CRM push does not block health recalculation response"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/health-recalculate/crmPushOrchestrator.ts"
+      ]
+    },
+    {
+      "id": "PIPE-027",
+      "phase": "phase-4",
+      "title": "Add CRM sync status indicators in pipeline UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 18,
+      "dependencies": { "stories": ["PIPE-026"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "DealIntelligenceSheet shows 'CRM Sync' section: last synced timestamp, sync status (success/error/pending), CRM name",
+        "PipelineHeader shows global sync indicator (icon + tooltip: 'Last synced to HubSpot 5m ago')",
+        "Sync errors surface with retry button",
+        "Settings page shows CRM sync configuration (which fields to push, frequency)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/pipeline/DealIntelligenceSheet.tsx",
+        "src/components/pipeline/PipelineHeader.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-028",
+      "phase": "phase-5",
+      "title": "Update copilot-autonomous to always include health context",
+      "type": "backend",
+      "status": "pending",
+      "priority": 19,
+      "dependencies": { "stories": ["PIPE-001"], "files": [], "schema": [] },
+      "blocks": ["PIPE-029"],
+      "parallelWith": [],
+      "acceptance": [
+        "Remove include_health flag from get_deal action — health scores always included",
+        "get_pipeline_deals always returns health_score, health_status, risk_level, relationship_health for each deal",
+        "System prompt updated to instruct Claude to reference health signals when discussing deals",
+        "No additional API calls — health data comes from existing joins"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    {
+      "id": "PIPE-029",
+      "phase": "phase-5",
+      "title": "Update deal-related skills to reference health + relationship data",
+      "type": "backend",
+      "status": "pending",
+      "priority": 20,
+      "dependencies": { "stories": ["PIPE-028"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-030", "PIPE-031"],
+      "acceptance": [
+        "deal-next-best-actions SKILL.md instructions reference deal_health_score and risk_factors in reasoning",
+        "deal-slippage-diagnosis SKILL.md instructions cross-reference relationship_health and ghost_probability",
+        "deal-rescue-plan SKILL.md instructions include relationship context and sentiment trend",
+        "pipeline-focus-task-planner SKILL.md prioritizes deals using combined health + relationship scores",
+        "All updated skills pass validate-skills"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "skills/atomic/deal-next-best-actions/SKILL.md",
+        "skills/atomic/deal-slippage-diagnosis/SKILL.md",
+        "skills/atomic/deal-rescue-plan/SKILL.md",
+        "skills/atomic/pipeline-focus-task-planner/SKILL.md"
+      ]
+    },
+    {
+      "id": "PIPE-030",
+      "phase": "phase-5",
+      "title": "Build DealIntelligenceResponse copilot component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 20,
+      "dependencies": { "stories": ["PIPE-028"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-029", "PIPE-031"],
+      "acceptance": [
+        "New structured response component replacing separate DealHealthResponse and PipelineResponse",
+        "Unified card layout: deal health + relationship health + risk signals + suggested actions",
+        "Action buttons: 'Open Deal' (opens pipeline sheet), 'Draft Email', 'Schedule Meeting'",
+        "Renders for both single-deal and multi-deal queries",
+        "Registered in response component registry for copilot rendering"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/copilot/responses/DealIntelligenceResponse.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-031",
+      "phase": "phase-5",
+      "title": "Add 'Ask Copilot about this deal' from DealIntelligenceSheet",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 20,
+      "dependencies": { "stories": ["PIPE-009", "PIPE-028"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-029", "PIPE-030"],
+      "acceptance": [
+        "Button in DealIntelligenceSheet opens copilot panel with pre-loaded deal context",
+        "Copilot receives: deal name, company, value, stage, health scores, risk factors, recent activity summary, relationship health, ghost signals",
+        "Initial message: 'Analyzing [Deal Name] — what would you like to know?'",
+        "Works with both copilot-autonomous and api-copilot modes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/pipeline/DealIntelligenceSheet.tsx",
+        "src/lib/contexts/CopilotContext.tsx"
+      ]
+    },
+    {
+      "id": "PIPE-032",
+      "phase": "phase-5",
+      "title": "Create deal-intelligence-summary skill",
+      "type": "backend",
+      "status": "pending",
+      "priority": 21,
+      "dependencies": { "stories": ["PIPE-028"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["PIPE-033", "PIPE-034"],
+      "acceptance": [
+        "New SKILL.md at skills/atomic/deal-intelligence-summary/ with triggers: 'summarize this deal', 'deal intelligence', 'how is this deal doing', 'deal overview'",
+        "Instructions guide copilot to generate narrative summary combining: deal health score + trend, relationship health + ghost risk, risk signals with severity, recent activity highlights, recommended next actions with reasoning",
+        "Output format: structured narrative (not just metrics) — reads like a sales manager briefing",
+        "Passes validate-skills, under 5000 token budget"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "skills/atomic/deal-intelligence-summary/SKILL.md"
+      ]
+    },
+    {
+      "id": "PIPE-033",
+      "phase": "phase-5",
+      "title": "Create deal-reengagement-intervention skill",
+      "type": "backend",
+      "status": "pending",
+      "priority": 21,
+      "dependencies": { "stories": ["PIPE-028"], "files": [], "schema": [] },
+      "blocks": ["PIPE-034"],
+      "parallelWith": ["PIPE-032"],
+      "acceptance": [
+        "New SKILL.md at skills/atomic/deal-reengagement-intervention/ with triggers: 'reengage this contact', 'they're ghosting me', 'intervention', 'how to reconnect', 'break through'",
+        "Instructions guide copilot to: analyze ghost detection signals, review communication history, select intervention strategy (permission_to_close, value_add, pattern_interrupt, soft_checkin, channel_switch), generate personalized message with reasoning",
+        "Replaces standalone TemplateLibrary.tsx and InterventionModal.tsx UI",
+        "Passes validate-skills, under 5000 token budget"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "skills/atomic/deal-reengagement-intervention/SKILL.md"
+      ]
+    },
+    {
+      "id": "PIPE-034",
+      "phase": "phase-5",
+      "title": "Remove standalone intervention template UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 22,
+      "dependencies": { "stories": ["PIPE-033"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "TemplateLibrary.tsx, InterventionModal.tsx removed from relationship-health components",
+        "RelationshipHealthDashboard 'interventions' and 'templates' view modes removed (dashboard already removed in PIPE-013)",
+        "Any remaining references to intervention template UI updated to route through copilot",
+        "Intervention tracking tables preserved — copilot skill writes outcomes to same tables for analytics continuity"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/relationship-health/TemplateLibrary.tsx",
+        "src/components/relationship-health/InterventionModal.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 34,
+    "completedStories": 0,
+    "currentPhase": "phase-1",
+    "lastUpdated": "2026-02-16T12:00:00Z"
+  },
+
+  "parallelGroups": [
+    { "stories": ["PIPE-001", "PIPE-004"], "phase": "phase-1", "reason": "Independent schema work — RPC and ops table" },
+    { "stories": ["PIPE-002", "PIPE-003"], "phase": "phase-1", "reason": "Both depend on PIPE-001, no file overlap" },
+    { "stories": ["PIPE-005", "PIPE-006"], "phase": "phase-1", "reason": "Both depend on PIPE-004, different files" },
+    { "stories": ["PIPE-008", "PIPE-009", "PIPE-010"], "phase": "phase-2", "reason": "Independent UI components, all depend on PIPE-002" },
+    { "stories": ["PIPE-012", "PIPE-011"], "phase": "phase-2", "reason": "Table and kanban refactor can proceed in parallel" },
+    { "stories": ["PIPE-013", "PIPE-014"], "phase": "phase-2", "reason": "Cleanup and chart component are independent" },
+    { "stories": ["PIPE-019", "PIPE-020"], "phase": "phase-3", "reason": "Slack and in-app alerts are independent delivery channels" },
+    { "stories": ["PIPE-023", "PIPE-024", "PIPE-025"], "phase": "phase-4", "reason": "Enrichment presets and CRM provisioning are independent" },
+    { "stories": ["PIPE-029", "PIPE-030", "PIPE-031"], "phase": "phase-5", "reason": "Skill updates, response component, and sheet action are independent" },
+    { "stories": ["PIPE-032", "PIPE-033"], "phase": "phase-5", "reason": "Two new skills with no file overlap" }
+  ]
+}

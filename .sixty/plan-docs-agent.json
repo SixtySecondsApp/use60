@@ -1,0 +1,153 @@
+{
+  "feature": "docs-agent",
+  "name": "Documentation AI Agent",
+  "description": "RAG-powered documentation agent using Claude Sonnet 4.6 with vector embeddings. Replaces naive text search with semantic retrieval + AI synthesis. Powers both the Support Centre chat and the main copilot.",
+  "createdAt": "2026-02-20T00:00:00Z",
+  "consultReport": null,
+  "model": "claude-sonnet-4-6",
+  "approach": "RAG (Retrieval-Augmented Generation) — embed docs_articles content with OpenAI text-embedding-3-small, store in pgvector, retrieve at query time, synthesize with Claude Sonnet 4.6",
+
+  "stories": [
+    {
+      "id": "DOC-001",
+      "title": "Add content_embedding column to docs_articles + match RPC",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "schema": ["docs_articles"] },
+      "blocks": ["DOC-002", "DOC-003", "DOC-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "docs_articles has content_embedding vector(1536) column",
+        "match_docs_by_embedding(query_embedding, match_threshold, match_count) RPC returns id, slug, title, category, content, similarity",
+        "IVFFlat index on content_embedding with cosine distance",
+        "Migration runs without errors on staging"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260220000002_docs_article_embeddings.sql"
+      ]
+    },
+    {
+      "id": "DOC-002",
+      "title": "Batch-embed all existing docs_articles",
+      "type": "script",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["DOC-001"], "schema": ["docs_articles"] },
+      "blocks": ["DOC-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Script reads all published docs_articles, generates embeddings via OpenAI text-embedding-3-small",
+        "Stores embeddings in content_embedding column",
+        "Supports --force flag to regenerate all",
+        "Logs count of generated/skipped/errored",
+        "Reuses pattern from scripts/lib/generateEmbeddings.ts"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "scripts/lib/generateDocEmbeddings.ts",
+        "scripts/embed-docs.ts"
+      ]
+    },
+    {
+      "id": "DOC-003",
+      "title": "Create docs-agent edge function (Claude Sonnet 4.6 + tool_use)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["DOC-001"], "schema": ["docs_articles"] },
+      "blocks": ["DOC-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function at supabase/functions/docs-agent/index.ts",
+        "Uses Anthropic SDK with claude-sonnet-4-6 model",
+        "Native tool_use with 2 tools: search_docs (vector similarity + full-text hybrid) and get_article (by slug)",
+        "Agentic loop: Claude decides when to search and what to retrieve (max 5 iterations)",
+        "System prompt: documentation specialist, always cite sources, return structured JSON with answer + sourceArticles + suggestedFollowUps",
+        "Streams response via SSE (same pattern as copilot-autonomous)",
+        "Supports conversation history for multi-turn context",
+        "Uses getCorsHeaders(req) from _shared/corsHelper.ts",
+        "JWT-protected with user context"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/docs-agent/index.ts"
+      ]
+    },
+    {
+      "id": "DOC-004",
+      "title": "Rewrite useSupportChat hook to call docs-agent with streaming",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["DOC-003"] },
+      "blocks": ["DOC-006"],
+      "parallelWith": ["DOC-005"],
+      "acceptance": [
+        "useSupportChat calls docs-agent edge function instead of naive textSearch",
+        "Streams Claude response in real-time (SSE parsing)",
+        "Passes conversation history for multi-turn context",
+        "Extracts sourceArticles and suggestedFollowUps from structured response",
+        "Existing ChatMessage interface preserved (backwards compatible)",
+        "Feedback still works via giveFeedback callback",
+        "Error handling with user-friendly messages"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/lib/hooks/useSupportChat.ts"
+      ]
+    },
+    {
+      "id": "DOC-005",
+      "title": "Add search_documentation tool to copilot-autonomous",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["DOC-001"] },
+      "blocks": [],
+      "parallelWith": ["DOC-004"],
+      "acceptance": [
+        "New tool 'search_documentation' added to copilot-autonomous tools array",
+        "Tool handler: embeds query via generate-embedding function, runs match_docs_by_embedding RPC, returns top 5 articles with title, slug, category, content snippet, similarity score",
+        "Claude uses results to answer documentation questions inline in copilot chat",
+        "Existing 8 tools remain unchanged"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    {
+      "id": "DOC-006",
+      "title": "Update SupportAIChat for streaming + auto-embed on article save",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["DOC-004"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "SupportAIChat shows streaming text as it arrives (character by character)",
+        "Loading state shows 'Searching docs...' then 'Generating answer...' phases",
+        "docs-api edge function auto-generates embedding on article create/update",
+        "Existing UI (sources, follow-ups, feedback, escalate) continues working"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/support/SupportAIChat.tsx",
+        "supabase/functions/docs-api/index.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 0,
+    "estimatedTotal": "2.5-3 hours",
+    "parallelGroups": [
+      { "stories": ["DOC-004", "DOC-005"], "reason": "Independent: frontend hook vs backend tool, both depend only on DOC-001 schema" }
+    ],
+    "criticalPath": "DOC-001 → DOC-003 → DOC-004 → DOC-006"
+  }
+}

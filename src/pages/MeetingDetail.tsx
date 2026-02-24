@@ -1,29 +1,26 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase/clientV2';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, ListTodo, Trash2, CheckCircle2, Plus, X, RefreshCw, BarChart3, Clock } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic } from 'lucide-react';
 import FathomPlayerV2, { FathomPlayerV2Handle } from '@/components/FathomPlayerV2';
 import { VoiceMeetingPlayer } from '@/components/meetings/VoiceMeetingPlayer';
 import { AskAIChat } from '@/components/meetings/AskAIChat';
 import { MeetingContent } from '@/components/meetings/MeetingContent';
-import { NextActionSuggestions } from '@/components/meetings/NextActionSuggestions';
-import { CreateTaskModal } from '@/components/meetings/CreateTaskModal';
 import { useActivitiesActions } from '@/lib/hooks/useActivitiesActions';
-import { useNextActionSuggestions } from '@/lib/hooks/useNextActionSuggestions';
-import { useTasks } from '@/lib/hooks/useTasks';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import { toast } from 'sonner';
 import { ProposalWizard } from '@/components/proposals/ProposalWizard';
 import { TalkTimeChart } from '@/components/meetings/analytics/TalkTimeChart';
 import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsights';
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard';
-import EmailComposerModal from '@/components/contacts/EmailComposerModal';
 import { ShareMeetingModal } from '@/components/meetings/ShareMeetingModal';
+import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary';
 import { useActivationTracking } from '@/lib/hooks/useActivationTracking';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 
@@ -61,8 +58,15 @@ interface Meeting {
   transcript_status?: ProcessingStatus;
   summary_status?: ProcessingStatus;
   // Voice meeting fields
-  source_type?: 'fathom' | 'voice';
+  source_type?: 'fathom' | 'voice' | '60_notetaker';
   voice_recording_id?: string | null;
+  // 60 Notetaker fields
+  bot_id?: string | null;
+  video_url?: string | null;
+  audio_url?: string | null;
+  recording_id?: string | null;
+  // Meeting provider (fathom, fireflies, etc.)
+  provider?: string;
 }
 
 // Voice recording data for voice meetings
@@ -130,6 +134,28 @@ function formatTimestamp(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/** Compute reliable duration in minutes from meeting data */
+function getDisplayDuration(m: { duration_minutes: number; meeting_start: string; meeting_end: string }): number {
+  let mins = m.duration_minutes;
+  // Sanity check: if > 300 (5 hours), likely stored in seconds
+  if (mins > 300) mins = Math.round(mins / 60);
+  // Fallback: compute from start/end times if duration is missing or zero
+  if (!mins || mins <= 0) {
+    const diff = new Date(m.meeting_end).getTime() - new Date(m.meeting_start).getTime();
+    if (diff > 0) mins = Math.round(diff / 60000);
+  }
+  return mins || 0;
+}
+
+/** Parse "HH:MM:SS" or "MM:SS" timestamp to seconds */
+function parseTimestampToSeconds(ts: string): number | null {
+  const parts = ts.split(':').map(Number);
+  if (parts.some(isNaN)) return null;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return null;
+}
+
 // Enhanced markdown parser for Fathom summaries with beautiful styling
 function parseMarkdownSummary(markdown: string): string {
   return markdown
@@ -159,6 +185,34 @@ function parseMarkdownSummary(markdown: string): string {
     .replace(/\n/g, '<br/>');
 }
 
+// Speaker color system matching the reference transcript design
+const SPEAKER_CONFIGS = [
+  {
+    gradient: 'linear-gradient(135deg, #3b82f6, #60a5fa)',
+    color: '#60a5fa',
+    rowHoverClass: 'group-hover:bg-blue-500/10 group-hover:border-blue-400/20',
+    tsHoverClass: 'group-hover:text-blue-400',
+  },
+  {
+    gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
+    color: '#a78bfa',
+    rowHoverClass: 'group-hover:bg-violet-500/10 group-hover:border-violet-400/20',
+    tsHoverClass: 'group-hover:text-violet-400',
+  },
+  {
+    gradient: 'linear-gradient(135deg, #059669, #34d399)',
+    color: '#34d399',
+    rowHoverClass: 'group-hover:bg-emerald-500/10 group-hover:border-emerald-400/20',
+    tsHoverClass: 'group-hover:text-emerald-400',
+  },
+  {
+    gradient: 'linear-gradient(135deg, #ea580c, #fb923c)',
+    color: '#fb923c',
+    rowHoverClass: 'group-hover:bg-orange-500/10 group-hover:border-orange-400/20',
+    tsHoverClass: 'group-hover:text-orange-400',
+  },
+];
+
 export function MeetingDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -168,19 +222,18 @@ export function MeetingDetail() {
   const emit = useEventEmitter();
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);
   const [attendees, setAttendees] = useState<MeetingAttendee[]>([]);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
   const [thumbnailEnsured, setThumbnailEnsured] = useState(false);
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [creatingTaskId, setCreatingTaskId] = useState<string | null>(null);
-  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
-  const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false);
   const [summaryViewTracked, setSummaryViewTracked] = useState(false);
+  const [hasStructuredSummary, setHasStructuredSummary] = useState(false);
   const [voiceRecordingData, setVoiceRecordingData] = useState<VoiceRecordingData | null>(null);
   const [voiceCurrentTime, setVoiceCurrentTime] = useState(0);
+  const [speakerAvatarMap, setSpeakerAvatarMap] = useState<Map<string, string>>(new Map());
 
   // Activation tracking for North Star metric
   const { trackFirstSummaryViewed } = useActivationTracking();
@@ -188,44 +241,9 @@ export function MeetingDetail() {
 
   const primaryExternal = attendees.find(a => a.is_external);
 
-  // AI Suggestions hook
-  const {
-    suggestions,
-    loading: suggestionsLoading,
-    refetch: refetchSuggestions,
-    pendingCount
-  } = useNextActionSuggestions(id || '', 'meeting');
-
-  // Unified Tasks hook - fetches all tasks for this meeting
-  const {
-    tasks,
-    isLoading: tasksLoading,
-    fetchTasks: refetchTasks,
-    completeTask,
-    uncompleteTask
-  } = useTasks({ meeting_id: id }, { autoFetch: true });
-
-  // State for action item operations
-  const [addingToTasksId, setAddingToTasksId] = useState<string | null>(null);
-  const [removingFromTasksId, setRemovingFromTasksId] = useState<string | null>(null);
-
-  // Animation state management
-  const [animatingActionItemId, setAnimatingActionItemId] = useState<string | null>(null);
-  const [newlyAddedTaskId, setNewlyAddedTaskId] = useState<string | null>(null);
   const [showProposalWizard, setShowProposalWizard] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
-  const [showEmailModal, setShowEmailModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
-
-  // Clear newly added task highlight after animation completes
-  useEffect(() => {
-    if (newlyAddedTaskId) {
-      const timer = setTimeout(() => {
-        setNewlyAddedTaskId(null);
-      }, 1500); // Clear after 1.5s (animation + pulse complete)
-      return () => clearTimeout(timer);
-    }
-  }, [newlyAddedTaskId]);
 
   const handleQuickAdd = async (type: 'meeting' | 'outbound' | 'proposal' | 'sale') => {
     if (!meeting) return;
@@ -261,7 +279,21 @@ export function MeetingDetail() {
   };
 
   useEffect(() => {
-    if (!id) return;
+    window.scrollTo(0, 0);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) {
+      navigate('/meetings', { replace: true });
+      return;
+    }
+
+    // Redirect immediately if the id doesn't look like a valid UUID
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(id)) {
+      navigate('/meetings', { replace: true });
+      return;
+    }
 
     const fetchMeetingDetails = async () => {
       try {
@@ -275,8 +307,25 @@ export function MeetingDetail() {
           .eq('id', id)
           .single();
 
-        if (meetingError) throw meetingError;
+        if (meetingError) {
+          // PGRST116 = row not found — redirect instead of showing error
+          if ((meetingError as any).code === 'PGRST116') {
+            navigate('/meetings', { replace: true });
+            return;
+          }
+          throw meetingError;
+        }
         setMeeting(meetingData);
+
+        // Fetch company name if company_id exists
+        if (meetingData.company_id) {
+          const { data: companyData } = await supabase
+            .from('companies')
+            .select('id, name')
+            .eq('id', meetingData.company_id)
+            .maybeSingle();
+          if (companyData) setCompanyName(companyData.name);
+        }
 
         // Fetch attendees - combine internal (meeting_attendees) and external (meeting_contacts via contacts)
         // Note: Type assertion used here until database types are regenerated
@@ -313,7 +362,7 @@ export function MeetingDetail() {
             id: a.id,
             name: a.name,
             email: a.email,
-            is_external: false,
+            is_external: a.is_external ?? false,
             role: a.role
           })),
           ...((externalContactsData || []) as any[])
@@ -386,6 +435,36 @@ export function MeetingDetail() {
     fetchVoiceRecordingData();
   }, [meeting?.voice_recording_id, meeting?.source_type]);
 
+  // Fetch profile avatars for attendees so transcript can show org member photos
+  useEffect(() => {
+    const emails = attendees.map(a => a.email).filter(Boolean) as string[];
+    if (emails.length === 0) return;
+
+    const fetchProfiles = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('email, avatar_url, remove_avatar, first_name, last_name')
+        .in('email', emails);
+
+      if (!data?.length) return;
+
+      const map = new Map<string, string>();
+      for (const profile of data) {
+        if (profile.avatar_url && !profile.remove_avatar) {
+          // Map by full name (from attendees) → avatarUrl
+          const attendee = attendees.find(a => a.email === profile.email);
+          if (attendee?.name) map.set(attendee.name, profile.avatar_url);
+          // Also map by first name for partial matches
+          const firstName = (profile.first_name || attendee?.name || '').trim().split(/\s+/)[0];
+          if (firstName) map.set(firstName, profile.avatar_url);
+        }
+      }
+      setSpeakerAvatarMap(map);
+    };
+
+    fetchProfiles();
+  }, [attendees]);
+
   // Real-time subscription for processing status updates
   useEffect(() => {
     if (!id) return;
@@ -425,11 +504,16 @@ export function MeetingDetail() {
     }
   }, [meeting, progress?.first_summary_viewed, summaryViewTracked, trackFirstSummaryViewed]);
 
-  // Ensure thumbnail exists for this meeting
+  // Ensure thumbnail exists for this meeting (Fathom only — other providers have no embeddable video)
   useEffect(() => {
     const ensureThumbnail = async () => {
       if (!meeting || thumbnailEnsured) return;
       if (meeting.thumbnail_url) {
+        setThumbnailEnsured(true);
+        return;
+      }
+      // Skip non-Fathom meetings (no embeddable video for thumbnail generation)
+      if (meeting.provider && meeting.provider !== 'fathom') {
         setThumbnailEnsured(true);
         return;
       }
@@ -492,355 +576,20 @@ export function MeetingDetail() {
     ensureThumbnail();
   }, [meeting, thumbnailEnsured]);
 
-  // Handle timestamp jumps in video player
+  // Handle timestamp jumps in video player.
+  // Updates currentTimestamp (passed as startSeconds to FathomPlayerV2).
+  // Also calls seekToTimestamp directly via ref for postMessage-based seeking,
+  // and scrolls the video player into view.
   const handleTimestampJump = useCallback((seconds: number) => {
-    setCurrentTimestamp(seconds);
-
-    if (playerRef.current) {
-      playerRef.current.seekToTimestamp(seconds);
-    }
+    // Call seek directly via ref (postMessage to Fathom embed)
+    playerRef.current?.seekToTimestamp(seconds);
+    // Also update state so FathomPlayerV2's useEffect fires (handles edge cases)
+    setCurrentTimestamp(prev => prev === seconds ? seconds + 0.001 : seconds);
+    // Scroll the video player into view
+    const playerEl = document.querySelector('[data-player-container]');
+    playerEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, []);
 
-  // Toggle an action item's completion (bidirectional sync via DB triggers)
-  const toggleActionItem = useCallback(async (id: string, completed: boolean) => {
-    try {
-      // Optimistic update
-      setActionItems(prev => prev.map(ai => ai.id === id ? { ...ai, completed: !completed } : ai));
-
-      // Note: Type assertion used here until database types are regenerated
-      const { error } = await (supabase
-        .from('meeting_action_items') as any)
-        .update({ completed: !completed, updated_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (error) {
-        // Revert on error
-        setActionItems(prev => prev.map(ai => ai.id === id ? { ...ai, completed } : ai));
-        throw error;
-      }
-    } catch (e) {
-    }
-  }, []);
-
-  // Handle action item extraction - defined before early returns to satisfy Rules of Hooks
-  const handleGetActionItems = useCallback(async () => {
-    if (!meeting) return;
-    setIsExtracting(true);
-    try {
-      let data: any | null = null;
-      try {
-        const res = await supabase.functions.invoke('extract-action-items', {
-          body: { meetingId: meeting.id }
-        });
-        if (res.error) throw res.error;
-        data = res.data;
-      } catch (err: any) {
-        const isTransportErr = err?.name === 'FunctionsFetchError' || (typeof err?.message === 'string' && err.message.includes('Failed to send a request'));
-        if (!isTransportErr) throw err;
-
-        // Fallback: call the Edge Function directly
-        const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL as string | undefined;
-        const anonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-        const functionsUrlEnv = (import.meta as any).env?.VITE_SUPABASE_FUNCTIONS_URL as string | undefined;
-        const projectRef = supabaseUrl?.split('//')[1]?.split('.')[0];
-        const subdomainBase = projectRef ? `https://${projectRef}.functions.supabase.co` : undefined;
-        const defaultBase = supabaseUrl ? `${supabaseUrl}/functions/v1` : undefined;
-        const candidates = [functionsUrlEnv, subdomainBase, defaultBase].filter(Boolean) as string[];
-
-        const { data: sessionData } = await supabase.auth.getSession();
-        const accessToken = sessionData.session?.access_token;
-        let lastError: any = err;
-        for (const base of candidates) {
-          try {
-            const resp = await fetch(`${base}/extract-action-items`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
-                ...(anonKey ? { 'apikey': anonKey } : {}),
-                'X-Client-Info': 'sales-dashboard-v2',
-              },
-              body: JSON.stringify({ meetingId: meeting.id })
-            });
-            if (!resp.ok) {
-              lastError = new Error(`HTTP ${resp.status}`);
-              continue;
-            }
-            data = await resp.json();
-            break;
-          } catch (e) {
-            lastError = e;
-            continue;
-          }
-        }
-        if (!data) throw lastError;
-      }
-
-      // Refresh action items list
-      const { data: actionItemsData } = await supabase
-        .from('meeting_action_items')
-        .select('*')
-        .eq('meeting_id', meeting.id)
-        .order('timestamp_seconds', { ascending: true });
-      setActionItems(actionItemsData || []);
-
-      // Show empty state message if none created
-      const created = Number((data as any)?.itemsCreated || 0);
-      if (created === 0) {
-        toast.info('No Action Items From Meeting');
-      } else {
-        toast.success(`Added ${created} action item${created === 1 ? '' : 's'}`);
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to extract action items');
-    } finally {
-      setIsExtracting(false);
-    }
-  }, [meeting]);
-
-  // Create task from action item
-  const handleCreateTask = useCallback(async (actionItemId: string) => {
-    try {
-      setCreatingTaskId(actionItemId);
-
-      const { data, error } = await supabase.functions.invoke('create-task-from-action-item', {
-        body: { action_item_id: actionItemId }
-      });
-
-      if (error) throw error;
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to create task');
-      }
-
-      // Update the action item in state
-      setActionItems(prev => prev.map(item =>
-        item.id === actionItemId
-          ? { ...item, task_id: data.task.id, synced_to_task: true, sync_status: 'synced' }
-          : item
-      ));
-
-      toast.success('Task created successfully');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to create task');
-    } finally {
-      setCreatingTaskId(null);
-    }
-  }, []);
-
-  // Delete action item
-  const handleDeleteActionItem = useCallback(async (actionItemId: string) => {
-    try {
-      setDeletingItemId(actionItemId);
-
-      const { error } = await supabase
-        .from('meeting_action_items')
-        .delete()
-        .eq('id', actionItemId);
-
-      if (error) throw error;
-
-      // Remove from state
-      setActionItems(prev => prev.filter(item => item.id !== actionItemId));
-
-      toast.success('Action item deleted');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to delete action item');
-    } finally {
-      setDeletingItemId(null);
-    }
-  }, []);
-
-
-  // Helper function to map action item priority to valid task priority
-  const mapPriorityToTaskPriority = (priority: string | null): 'low' | 'medium' | 'high' | 'urgent' => {
-    if (!priority) return 'medium';
-
-    const prio = priority.toLowerCase().trim();
-
-    // Direct matches
-    if (['low', 'medium', 'high', 'urgent'].includes(prio)) {
-      return prio as any;
-    }
-
-    // Fuzzy matches
-    if (prio.includes('urgent') || prio.includes('critical') || prio.includes('asap')) return 'urgent';
-    if (prio.includes('high') || prio.includes('important')) return 'high';
-    if (prio.includes('low') || prio.includes('minor')) return 'low';
-
-    // Default fallback
-    return 'medium';
-  };
-
-  // Helper function to map action item category to valid task_type
-  const mapCategoryToTaskType = (category: string | null): 'call' | 'email' | 'meeting' | 'follow_up' | 'proposal' | 'demo' | 'general' => {
-    if (!category) return 'general';
-
-    const cat = category.toLowerCase().trim();
-
-    // Direct matches
-    if (['call', 'email', 'meeting', 'follow_up', 'proposal', 'demo', 'general'].includes(cat)) {
-      return cat as any;
-    }
-
-    // Fuzzy matches
-    if (cat.includes('call') || cat.includes('phone')) return 'call';
-    if (cat.includes('email') || cat.includes('message')) return 'email';
-    if (cat.includes('meeting') || cat.includes('meet')) return 'meeting';
-    if (cat.includes('follow') || cat.includes('followup')) return 'follow_up';
-    if (cat.includes('proposal') || cat.includes('quote')) return 'proposal';
-    if (cat.includes('demo') || cat.includes('presentation')) return 'demo';
-
-    // Default fallback
-    return 'general';
-  };
-
-  // Handler to add action item to tasks
-  const handleAddToTasks = useCallback(async (actionItem: ActionItem) => {
-    if (!meeting?.id) return;
-
-    try {
-      // Step 1: Start exit animation
-      setAddingToTasksId(actionItem.id);
-      setAnimatingActionItemId(actionItem.id);
-
-      // Step 2: Wait for exit animation to complete (300ms)
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error('Authentication required');
-        setAnimatingActionItemId(null);
-        return;
-      }
-
-      // Create task from action item
-      // Note: Tasks table requires at least one of: company_id, contact_id, contact_email, or deal_id
-      const taskData: any = {
-        title: actionItem.title,
-        description: `Action item from meeting: ${meeting.title}`,
-        due_date: actionItem.deadline_at || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-        priority: mapPriorityToTaskPriority(actionItem.priority),
-        status: actionItem.completed ? 'completed' : 'pending',
-        task_type: mapCategoryToTaskType(actionItem.category),
-        assigned_to: user.id,
-        created_by: user.id,
-        meeting_id: meeting.id,  // CRITICAL: Link task to meeting for filtering
-        meeting_action_item_id: actionItem.id,
-        notes: actionItem.playback_url ? `Video playback: ${actionItem.playback_url}` : null,
-        completed: actionItem.completed
-      };
-
-      // Add CRM relationships if available
-      if (meeting.company_id) taskData.company_id = meeting.company_id;
-      if (meeting.primary_contact_id) taskData.contact_id = meeting.primary_contact_id;
-
-      // If no CRM relationships, use assignee email as fallback to satisfy constraint
-      if (!meeting.company_id && !meeting.primary_contact_id) {
-        taskData.contact_email = actionItem.assignee_email || user.email;
-      }
-
-      // Note: Type assertion used here until database types are regenerated
-      const { data: newTask, error: taskError } = await (supabase
-        .from('tasks') as any)
-        .insert(taskData)
-        .select()
-        .single() as { data: { id: string } | null; error: any };
-
-      if (taskError) {
-        throw taskError;
-      }
-
-      if (!newTask) {
-        throw new Error('Failed to create task - no data returned');
-      }
-
-      // Update action item with task link
-      // Note: Type assertion used here until database types are regenerated
-      const { error: updateError } = await (supabase
-        .from('meeting_action_items') as any)
-        .update({
-          task_id: newTask.id,
-          synced_to_task: true,
-          sync_status: 'synced',
-          synced_at: new Date().toISOString()
-        })
-        .eq('id', actionItem.id);
-
-      if (updateError) throw updateError;
-
-      // Step 3: Update action items state
-      setActionItems(prev => prev.map(item =>
-        item.id === actionItem.id
-          ? { ...item, task_id: newTask.id, synced_to_task: true, sync_status: 'synced' as const }
-          : item
-      ));
-
-      // Step 4: Refresh tasks and set newly added task for entrance animation
-      await refetchTasks();
-      setNewlyAddedTaskId(newTask.id);
-
-      toast.success('Action item added to tasks');
-    } catch (e) {
-      const errorMessage = e instanceof Error
-        ? e.message
-        : (typeof e === 'object' && e !== null && 'message' in e)
-          ? String((e as any).message)
-          : 'Failed to add to tasks';
-      toast.error(errorMessage);
-      // Clear animation state on error
-      setAnimatingActionItemId(null);
-    } finally {
-      setAddingToTasksId(null);
-      // Clear animating state after a small delay to allow error handling
-      setTimeout(() => setAnimatingActionItemId(null), 100);
-    }
-  }, [meeting, refetchTasks, tasks.length]);
-
-  // Handler to remove action item from tasks
-  const handleRemoveFromTasks = useCallback(async (actionItem: ActionItem) => {
-    if (!actionItem.task_id) return;
-
-    try {
-      setRemovingFromTasksId(actionItem.id);
-
-      // Delete the task
-      const { error: deleteError } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('id', actionItem.task_id);
-
-      if (deleteError) throw deleteError;
-
-      // Update action item to remove task link
-      // Note: Type assertion used here until database types are regenerated
-      const { error: updateError } = await (supabase
-        .from('meeting_action_items') as any)
-        .update({
-          task_id: null,
-          synced_to_task: false,
-          sync_status: null,
-          synced_at: null
-        })
-        .eq('id', actionItem.id);
-
-      if (updateError) throw updateError;
-
-      // Refresh both action items and tasks
-      setActionItems(prev => prev.map(item =>
-        item.id === actionItem.id
-          ? { ...item, task_id: null, synced_to_task: false, sync_status: null }
-          : item
-      ));
-      refetchTasks();
-
-      toast.success('Task removed');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to remove task');
-    } finally {
-      setRemovingFromTasksId(null);
-    }
-  }, [refetchTasks]);
 
   // Reprocess meeting with AI analysis
   const handleReprocessMeeting = useCallback(async () => {
@@ -872,9 +621,14 @@ export function MeetingDetail() {
           setMeeting(updatedMeeting);
         }
 
-        // Also refresh action items if any were created
+        // Refresh action items if any were created
         if (data.action_items_created > 0) {
-          await handleGetActionItems();
+          const { data: items } = await supabase
+            .from('meeting_action_items')
+            .select('*')
+            .eq('meeting_id', meeting.id)
+            .order('timestamp_seconds', { ascending: true });
+          setActionItems(items || []);
         }
       } else {
         throw new Error(data?.error || 'Reprocessing failed');
@@ -885,7 +639,7 @@ export function MeetingDetail() {
     } finally {
       setIsReprocessing(false);
     }
-  }, [meeting?.id, handleGetActionItems]);
+  }, [meeting?.id]);
 
   // Attach click handlers to Fathom timestamp links in summary
   useEffect(() => {
@@ -930,8 +684,89 @@ export function MeetingDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 max-w-7xl min-w-0">
+        {/* Header skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 min-w-0">
+          <div className="space-y-2 min-w-0 flex-1">
+            {/* Back button */}
+            <Skeleton className="h-9 w-20 rounded-md bg-gray-200/60 dark:bg-gray-700/40" />
+            {/* Title */}
+            <Skeleton className="h-8 sm:h-9 w-3/4 bg-gray-200/60 dark:bg-gray-700/40" />
+            {/* Date + duration */}
+            <Skeleton className="h-4 w-56 bg-gray-200/60 dark:bg-gray-700/40" />
+          </div>
+          {/* Badges */}
+          <div className="flex gap-2 flex-shrink-0">
+            <Skeleton className="h-6 w-20 rounded-full bg-gray-200/60 dark:bg-gray-700/40" />
+            <Skeleton className="h-6 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40" />
+          </div>
+        </div>
+
+        {/* Main grid skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-w-0">
+          {/* Left column: video + tabs */}
+          <div className="lg:col-span-8 space-y-3 sm:space-y-4 min-w-0">
+            {/* Video player area — h-[320px] matches actual player */}
+            <Skeleton className="w-full h-[320px] rounded-2xl bg-gray-200/60 dark:bg-gray-700/40" />
+
+            {/* Tab bar */}
+            <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 sm:p-6 space-y-4">
+              {/* Tab triggers */}
+              <div className="grid grid-cols-4 gap-1 bg-gray-100/80 dark:bg-gray-800/50 rounded-lg p-1">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-8 rounded-md bg-gray-200/60 dark:bg-gray-700/40" />
+                ))}
+              </div>
+              {/* Tab content placeholder — summary area */}
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full bg-gray-200/60 dark:bg-gray-700/40" />
+                <Skeleton className="h-4 w-5/6 bg-gray-200/60 dark:bg-gray-700/40" />
+                <Skeleton className="h-4 w-4/6 bg-gray-200/60 dark:bg-gray-700/40" />
+                <Skeleton className="h-4 w-full bg-gray-200/60 dark:bg-gray-700/40" />
+                <Skeleton className="h-4 w-3/4 bg-gray-200/60 dark:bg-gray-700/40" />
+              </div>
+            </div>
+          </div>
+
+          {/* Right column: sidebar cards */}
+          <div className="lg:col-span-4 space-y-3 sm:space-y-4 min-w-0">
+            {/* Quick actions card */}
+            <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 space-y-3">
+              <Skeleton className="h-5 w-28 bg-gray-200/60 dark:bg-gray-700/40" />
+              <div className="grid grid-cols-2 gap-2">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-9 rounded-lg bg-gray-200/60 dark:bg-gray-700/40" />
+                ))}
+              </div>
+            </div>
+
+            {/* Attendees card */}
+            <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 space-y-3">
+              <Skeleton className="h-5 w-24 bg-gray-200/60 dark:bg-gray-700/40" />
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <Skeleton className="h-8 w-8 rounded-full bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 w-28 bg-gray-200/60 dark:bg-gray-700/40" />
+                    <Skeleton className="h-3 w-36 bg-gray-200/60 dark:bg-gray-700/40" />
+                  </div>
+                  <Skeleton className="h-5 w-16 rounded-full bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+                </div>
+              ))}
+            </div>
+
+            {/* Meeting info card */}
+            <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 space-y-2">
+              <Skeleton className="h-5 w-24 bg-gray-200/60 dark:bg-gray-700/40" />
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex justify-between">
+                  <Skeleton className="h-3.5 w-16 bg-gray-200/60 dark:bg-gray-700/40" />
+                  <Skeleton className="h-3.5 w-24 bg-gray-200/60 dark:bg-gray-700/40" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -964,14 +799,16 @@ export function MeetingDetail() {
               <span className="hidden sm:inline">Back</span>
             </Button>
           </div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold break-words">{meeting.title}</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold break-words">
+            {meeting.title}{companyName ? ` — ${companyName}` : ''}
+          </h1>
           <p className="text-xs sm:text-sm text-muted-foreground break-words">
             {new Date(meeting.meeting_start).toLocaleDateString('en-US', {
               weekday: 'long',
               year: 'numeric',
               month: 'long',
               day: 'numeric',
-            })} • {Math.round(meeting.duration_minutes)} min
+            })} • {getDisplayDuration(meeting)} min
           </p>
         </div>
 
@@ -994,17 +831,6 @@ export function MeetingDetail() {
               {labelSentiment(meeting.sentiment_score)}
             </Badge>
           )}
-          <Button size="sm" onClick={handleGetActionItems} disabled={isExtracting} className="min-h-[40px] whitespace-nowrap">
-            {isExtracting ? 'Getting...' : 'Get Action Items'}
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setShowProposalWizard(true)}
-            className="min-h-[40px] whitespace-nowrap bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Generate Proposal
-          </Button>
         </div>
       </div>
 
@@ -1012,10 +838,10 @@ export function MeetingDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-w-0">
         {/* Left Column - Video & Content */}
         <div className="lg:col-span-8 space-y-3 sm:space-y-4 min-w-0">
-          {/* Media Player - Voice or Fathom */}
+          {/* Media Player - Voice, 60 Notetaker, or Fathom */}
           {meeting.source_type === 'voice' && meeting.voice_recording_id ? (
             /* Voice Meeting Player with Stacked Waveforms */
-            <div className="glassmorphism-card overflow-hidden">
+            <div className="glassmorphism-card overflow-hidden" style={{ maxHeight: '320px' }}>
               <VoiceMeetingPlayer
                 voiceRecordingId={meeting.voice_recording_id}
                 speakers={voiceRecordingData?.speakers || []}
@@ -1025,16 +851,46 @@ export function MeetingDetail() {
                 className="p-4"
               />
             </div>
+          ) : meeting.source_type === '60_notetaker' && meeting.video_url ? (
+            /* 60 Notetaker Video Player */
+            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }}>
+              <video
+                controls
+                preload="metadata"
+                className="w-full h-full bg-black"
+                style={{ objectFit: 'contain' }}
+                poster={meeting.thumbnail_url || undefined}
+              >
+                <source src={meeting.video_url} type="video/mp4" />
+                Your browser does not support the video element.
+              </video>
+            </div>
+          ) : meeting.provider === 'fireflies' ? (
+            /* Fireflies Meeting - Link to transcript */
+            <div className="glassmorphism-card p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Mic className="h-5 w-5 text-orange-500" />
+                <span className="font-semibold text-orange-600 dark:text-orange-400">Fireflies Recording</span>
+              </div>
+              {meeting.share_url && (
+                <Button asChild variant="outline" size="sm">
+                  <a href={meeting.share_url} target="_blank" rel="noopener noreferrer">
+                    Open in Fireflies
+                    <ExternalLink className="h-3 w-3 ml-2" />
+                  </a>
+                </Button>
+              )}
+            </div>
           ) : (meeting.fathom_recording_id || meeting.share_url) ? (
             /* Fathom Video Player */
-            <div className="glassmorphism-card overflow-hidden">
+            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }} data-player-container>
               <FathomPlayerV2
                 ref={playerRef}
                 shareUrl={meeting.share_url}
                 title={meeting.title}
                 startSeconds={currentTimestamp}
                 timeoutMs={10000}
-                className="aspect-video"
+                className="h-full"
                 onLoad={() => undefined}
                 onError={() => undefined}
               />
@@ -1149,7 +1005,13 @@ export function MeetingDetail() {
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('sale')}>Add Sale</Button>
                   </div>
 
-                  {meeting.summary ? (
+                  {/* AI Structured Summary (classification, outcomes, objections, etc.) */}
+                  <div className="mb-4">
+                    <StructuredMeetingSummary meetingId={meeting.id} onSummaryReady={setHasStructuredSummary} />
+                  </div>
+
+                  {/* Only show basic summary when no structured summary is available */}
+                  {!hasStructuredSummary && meeting.summary ? (
                     <div className="text-sm text-muted-foreground leading-relaxed">
                       {(() => {
                         try {
@@ -1210,7 +1072,7 @@ export function MeetingDetail() {
                     {meeting.share_url && (
                       <Button asChild variant="outline" size="sm">
                         <a href={meeting.share_url} target="_blank" rel="noopener noreferrer">
-                          Open in Fathom
+                          Open in {meeting.provider === 'fireflies' ? 'Fireflies' : 'Fathom'}
                           <ExternalLink className="h-3 w-3 ml-2" />
                         </a>
                       </Button>
@@ -1221,25 +1083,139 @@ export function MeetingDetail() {
                 {/* Transcript Tab */}
                 <TabsContent value="transcript" className="mt-0">
                   {meeting.transcript_text ? (
-                    <div className="glassmorphism-light p-4 rounded-lg max-h-[600px] overflow-y-auto">
-                      <div className="text-sm leading-relaxed space-y-3">
-                        {meeting.transcript_text.split('\n').map((line, idx) => {
-                          // Check if line starts with a speaker name (pattern: "Name: text")
-                          const speakerMatch = line.match(/^([^:]+):\s*(.*)$/);
-                          if (speakerMatch) {
-                            const [, speaker, text] = speakerMatch;
-                            return (
-                              <div key={idx} className="flex gap-3">
-                                <div className="font-semibold text-blue-400 min-w-[120px] shrink-0">{speaker}:</div>
-                                <div className="text-muted-foreground flex-1">{text}</div>
+                    <div className="max-h-[600px] overflow-y-auto pr-1 scrollbar-custom">
+                      <div className="text-sm space-y-0">
+                      {(() => {
+                        const speakerSlotMap = new Map<string, number>();
+                        let slotIdx = 0;
+                        const getSlot = (speaker: string) => {
+                          if (!speakerSlotMap.has(speaker)) speakerSlotMap.set(speaker, slotIdx++ % SPEAKER_CONFIGS.length);
+                          return speakerSlotMap.get(speaker)!;
+                        };
+                        const getFirstName = (name: string) => name.trim().split(/\s+/)[0];
+
+                        const lines = meeting.transcript_text!.split('\n');
+                        const result: React.ReactNode[] = [];
+                        let prevSpeaker: string | null = null;
+
+                        lines.forEach((line, idx) => {
+                          // Timestamped format: [HH:MM:SS] Speaker: text
+                          const tsMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/);
+                          if (tsMatch) {
+                            const [, ts, speaker, text] = tsMatch;
+                            const seconds = parseTimestampToSeconds(ts);
+                            const sp = speaker.trim();
+                            const slot = getSlot(sp);
+                            const { gradient, color, rowHoverClass, tsHoverClass } = SPEAKER_CONFIGS[slot];
+                            const firstName = getFirstName(sp);
+                            const initial = firstName[0]?.toUpperCase() ?? '?';
+                            const isCont = sp === prevSpeaker;
+                            const avatarUrl = speakerAvatarMap.get(sp) || speakerAvatarMap.get(firstName);
+
+                            if (!isCont && prevSpeaker !== null) {
+                              result.push(
+                                <div key={`br-${idx}`} className="my-2 h-px bg-gradient-to-r from-transparent via-gray-200/60 dark:via-gray-700/40 to-transparent" />
+                              );
+                            }
+
+                            const inner = (
+                              <div className={`group w-full text-left flex items-start gap-3 px-2 py-2 rounded-lg border border-transparent transition-all duration-150 ${rowHoverClass}`}>
+                                {/* Speaker avatar + name column */}
+                                <div className="w-9 shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                                  {!isCont ? (
+                                    <>
+                                      {avatarUrl ? (
+                                        <img src={avatarUrl} alt={firstName} className="w-6 h-6 rounded-md object-cover shrink-0" />
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                                             style={{ background: gradient }}>
+                                          {initial}
+                                        </div>
+                                      )}
+                                      <span className="text-[10px] font-medium leading-none" style={{ color }}>{firstName}</span>
+                                    </>
+                                  ) : (
+                                    <div className="w-6 h-6" />
+                                  )}
+                                </div>
+                                {/* Content + timestamp */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">{text}</p>
+                                    {seconds !== null && (
+                                      <span className={`font-mono text-[11px] text-gray-400 dark:text-gray-500 shrink-0 mt-0.5 transition-colors ${tsHoverClass}`}>{ts}</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             );
+
+                            result.push(
+                              seconds !== null ? (
+                                <button key={idx} className="w-full text-left" onClick={() => handleTimestampJump(seconds)}>
+                                  {inner}
+                                </button>
+                              ) : (
+                                <div key={idx}>{inner}</div>
+                              )
+                            );
+                            prevSpeaker = sp;
+                            return;
                           }
-                          // Plain text line (no speaker)
-                          return line.trim() ? (
-                            <div key={idx} className="text-muted-foreground">{line}</div>
-                          ) : null;
-                        })}
+
+                          // Legacy format: Speaker: text (no timestamp)
+                          const spMatch = line.match(/^([^:]+):\s*(.*)$/);
+                          if (spMatch) {
+                            const [, speaker, text] = spMatch;
+                            const sp = speaker.trim();
+                            const slot = getSlot(sp);
+                            const { gradient, color, rowHoverClass } = SPEAKER_CONFIGS[slot];
+                            const firstName = getFirstName(sp);
+                            const initial = firstName[0]?.toUpperCase() ?? '?';
+                            const isCont = sp === prevSpeaker;
+                            const avatarUrl = speakerAvatarMap.get(sp) || speakerAvatarMap.get(firstName);
+
+                            if (!isCont && prevSpeaker !== null) {
+                              result.push(
+                                <div key={`br-${idx}`} className="my-2 h-px bg-gradient-to-r from-transparent via-gray-200/60 dark:via-gray-700/40 to-transparent" />
+                              );
+                            }
+                            result.push(
+                              <div key={idx} className={`flex items-start gap-3 px-2 py-2 rounded-lg border border-transparent ${rowHoverClass}`}>
+                                <div className="w-9 shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                                  {!isCont ? (
+                                    <>
+                                      {avatarUrl ? (
+                                        <img src={avatarUrl} alt={firstName} className="w-6 h-6 rounded-md object-cover shrink-0" />
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                                             style={{ background: gradient }}>
+                                          {initial}
+                                        </div>
+                                      )}
+                                      <span className="text-[10px] font-medium leading-none" style={{ color }}>{firstName}</span>
+                                    </>
+                                  ) : (
+                                    <div className="w-6 h-6" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">{text}</p>
+                                </div>
+                              </div>
+                            );
+                            prevSpeaker = sp;
+                            return;
+                          }
+
+                          // Plain text line
+                          if (line.trim()) {
+                            result.push(<div key={idx} className="text-sm text-muted-foreground pl-12 py-1">{line}</div>);
+                          }
+                        });
+
+                        return result;
+                      })()}
                       </div>
                     </div>
                   ) : meeting.transcript_status === 'processing' ? (
@@ -1294,335 +1270,67 @@ export function MeetingDetail() {
           {meeting && (
             <QuickActionsCard
               meeting={meeting}
-              onEmailClick={() => setShowEmailModal(true)}
+              onEmailClick={() => toast.info('Email follow-up requires OAuth setup — coming soon')}
               onBookCallClick={() => toast.info('Book call feature coming soon')}
               onShareClick={() => setShowShareModal(true)}
-              onProposalClick={() => setShowProposalWizard(true)}
             />
           )}
 
-          {/* Unified Tasks Section - Static container, only task cards animate */}
-          <div className="section-card min-w-0">
-            <div className="flex items-center justify-between mb-4 min-w-0 gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <h3 className="font-semibold text-base sm:text-lg truncate">
-                  Tasks ({tasks.length})
-                </h3>
-              </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Button
-                      onClick={() => setCreateTaskModalOpen(true)}
-                      variant="default"
-                      size="sm"
-                      className="flex items-center gap-2 min-h-[40px] whitespace-nowrap"
-                    >
-                      <ListTodo className="w-4 h-4" />
-                      <span className="hidden sm:inline">Add Task</span>
-                      <span className="sm:hidden">Add</span>
-                    </Button>
-                  </div>
-                </div>
-
-            <div className="space-y-2 max-h-[700px] overflow-y-auto">
-              {tasksLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : tasks.length > 0 ? (
-                tasks.map((task) => {
-                  const isNewlyAdded = task.id === newlyAddedTaskId;
-                  return (
-                    <motion.div
-                      key={task.id}
-                      className="glassmorphism-light p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                      initial={isNewlyAdded ? { opacity: 0, x: 100, scale: 0.9 } : false}
-                      animate={isNewlyAdded ? {
-                        opacity: 1,
-                        x: 0,
-                        scale: 1,
-                        boxShadow: [
-                          '0 0 0 0 rgba(34, 197, 94, 0)',
-                          '0 0 0 4px rgba(34, 197, 94, 0.3)',
-                          '0 0 0 0 rgba(34, 197, 94, 0)'
-                        ]
-                      } : {}}
-                      transition={isNewlyAdded ? {
-                        duration: 0.4,
-                        ease: 'easeOut',
-                        boxShadow: { duration: 1, times: [0, 0.5, 1] }
-                      } : {}}
-                    >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-start gap-2 flex-1">
-                        <input
-                          type="checkbox"
-                          checked={task.status === 'completed'}
-                          onChange={async () => {
-                            try {
-                              if (task.status === 'completed') {
-                                await uncompleteTask(task.id);
-                                toast.success('Task marked as incomplete');
-                              } else {
-                                await completeTask(task.id);
-                                toast.success('Task marked as complete');
-                              }
-                              await refetchTasks();
-                            } catch (error) {
-                              const errorMessage = error instanceof Error
-                                ? error.message
-                                : (typeof error === 'object' && error !== null && 'message' in error)
-                                  ? String((error as any).message)
-                                  : 'Failed to update task';
-                              toast.error(errorMessage);
-                            }
-                          }}
-                          className="mt-0.5 h-4 w-4 rounded border-gray-300 bg-white text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-emerald-500"
-                          aria-label="Mark task complete"
-                        />
-                        <div className="flex-1">
-                          <div className={`font-medium text-sm ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
-                            {task.title}
-                          </div>
-                          {task.description && (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                              {task.description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge
-                        variant={
-                          task.priority === 'urgent' || task.priority === 'high'
-                            ? 'destructive'
-                            : 'secondary'
-                        }
-                        className="text-xs"
-                      >
-                        {task.priority}
-                      </Badge>
-                      {task.status === 'completed' && (
-                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/60 dark:text-green-300 text-xs">
-                          ✓ Complete
-                        </Badge>
-                      )}
-                      {task.task_type && (
-                        <span className="text-xs text-muted-foreground capitalize">
-                          {task.task_type.replace('_', ' ')}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Timestamp playback if available */}
-                    {task.metadata?.timestamp_seconds && (
-                      <div className="mt-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleTimestampJump(task.metadata.timestamp_seconds)}
-                          className="text-xs"
-                        >
-                          <Play className="h-3 w-3 mr-1" />
-                          {formatTimestamp(task.metadata.timestamp_seconds)}
-                        </Button>
-                      </div>
-                    )}
-                    </motion.div>
-                  );
-                })
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    No tasks yet for this meeting
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Convert action items to tasks using the "Add to Tasks" button below
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Action Items Section */}
-          <div className="section-card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">
-                Action Items ({actionItems.length})
-              </h3>
-            </div>
-
-            <div className="space-y-2 max-h-[700px] overflow-y-auto">
-              {actionItems.length > 0 ? (
-                <AnimatePresence mode="popLayout">
-                  {actionItems
-                    .filter(item => item.id !== animatingActionItemId)
-                    .map((item) => (
-                      <motion.div
-                        key={item.id}
-                        className="glassmorphism-light p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{
-                          opacity: 0,
-                          scale: 0.8,
-                          y: 20,
-                          transition: { duration: 0.3, ease: 'easeIn' }
-                        }}
-                        layout
-                      >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-start gap-2 flex-1">
-                        <input
-                          type="checkbox"
-                          checked={item.completed}
-                          onChange={() => toggleActionItem(item.id, item.completed)}
-                          className="mt-0.5 h-4 w-4 rounded border-gray-300 bg-white text-emerald-600 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-emerald-500"
-                          aria-label="Mark action item complete"
-                        />
-                        <div className="flex-1">
-                          <div className={`font-medium text-sm ${item.completed ? 'line-through text-muted-foreground' : ''}`}>
-                            {item.title}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap mb-2">
-                      <Badge
-                        variant={
-                          item.priority === 'urgent' || item.priority === 'high'
-                            ? 'destructive'
-                            : 'secondary'
-                        }
-                        className="text-xs"
-                      >
-                        {item.priority}
-                      </Badge>
-                      {item.completed && (
-                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/60 dark:text-green-300 text-xs">
-                          ✓ Complete
-                        </Badge>
-                      )}
-                      {item.ai_generated && (
-                        <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300 text-xs">
-                          🤖 AI
-                        </Badge>
-                      )}
-                      {item.category && (
-                        <span className="text-xs text-muted-foreground capitalize">
-                          {item.category.replace('_', ' ')}
-                        </span>
-                      )}
-                      {item.synced_to_task && (
-                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 text-xs">
-                          ✓ In Tasks
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2">
-                      {!item.synced_to_task ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAddToTasks(item)}
-                          disabled={addingToTasksId === item.id}
-                          className="text-xs"
-                        >
-                          {addingToTasksId === item.id ? (
-                            <>
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                              Adding...
-                            </>
-                          ) : (
-                            <>
-                              <ListTodo className="h-3 w-3 mr-1" />
-                              Add to Tasks
-                            </>
-                          )}
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleRemoveFromTasks(item)}
-                          disabled={removingFromTasksId === item.id}
-                          className="text-xs"
-                        >
-                          {removingFromTasksId === item.id ? (
-                            <>
-                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                              Removing...
-                            </>
-                          ) : (
-                            <>
-                              <X className="h-3 w-3 mr-1" />
-                              Remove from Tasks
-                            </>
-                          )}
-                        </Button>
-                      )}
-
-                      {/* Timestamp playback if available */}
-                      {item.timestamp_seconds && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleTimestampJump(item.timestamp_seconds!)}
-                          className="text-xs"
-                        >
-                          <Play className="h-3 w-3 mr-1" />
-                          {formatTimestamp(item.timestamp_seconds)}
-                        </Button>
-                      )}
-                    </div>
-                      </motion.div>
-                    ))}
-                </AnimatePresence>
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    No action items yet for this meeting
-                  </p>
-                  <Button
-                    onClick={handleGetActionItems}
-                    variant="outline"
-                    size="sm"
-                    disabled={!meeting?.transcript_text}
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Extract Action Items
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* Attendees */}
           <div className="section-card">
-            <div className="font-semibold mb-2">Attendees</div>
-            <div className="space-y-2">
+            <div className="font-semibold mb-3">Attendees ({attendees.length})</div>
+            <div className="space-y-1">
               {attendees.length > 0 ? (
-                attendees.map((attendee) => {
+                (() => {
+                  // Build speaker→slot map matching transcript color assignment
+                  const attendeeSlotMap = new Map<string, number>();
+                  let slotCounter = 0;
+                  for (const a of attendees) {
+                    const name = a.name?.trim();
+                    if (name && !attendeeSlotMap.has(name)) {
+                      attendeeSlotMap.set(name, slotCounter++ % SPEAKER_CONFIGS.length);
+                    }
+                  }
+                  return attendees.map((attendee, idx) => {
                   const isExternal = attendee.is_external;
                   const contactId = isExternal ? attendee.id : null;
+                  const firstName = attendee.name?.trim().split(/\s+/)[0] ?? '';
+                  const initial = firstName[0]?.toUpperCase() ?? '?';
+                  const avatarUrl = speakerAvatarMap.get(attendee.name ?? '') || speakerAvatarMap.get(firstName);
+                  const speakerName = attendee.name?.trim() ?? '';
+                  const colorSlot = attendeeSlotMap.get(speakerName) ?? (idx % SPEAKER_CONFIGS.length);
+
                   const content = (
-                    <div className="flex items-center justify-between text-sm">
-                      <div>
-                        <div className="font-medium">{attendee.name}</div>
+                    <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-2 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-900/40 transition-colors">
+                      {/* Avatar */}
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt={firstName}
+                          className="w-8 h-8 rounded-full object-cover shrink-0"
+                        />
+                      ) : (
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0"
+                          style={{ background: SPEAKER_CONFIGS[colorSlot].gradient }}
+                        >
+                          {initial}
+                        </div>
+                      )}
+                      {/* Info */}
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm truncate">{attendee.name}</div>
                         {attendee.email && (
-                          <div className="text-muted-foreground text-xs">{attendee.email}</div>
+                          <div className="text-xs text-muted-foreground truncate">{attendee.email}</div>
                         )}
                       </div>
+                      {/* Badge */}
                       {isExternal ? (
-                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300">
+                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 shrink-0">
                           External
                         </Badge>
                       ) : (
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="shrink-0">
                           Internal
                         </Badge>
                       )}
@@ -1630,22 +1338,16 @@ export function MeetingDetail() {
                   );
 
                   return contactId ? (
-                    <Link
-                      key={attendee.id}
-                      to={`/crm/contacts/${contactId}`}
-                      className="block hover:bg-gray-100 dark:hover:bg-zinc-900/40 rounded-lg px-2 -mx-2 transition-colors"
-                    >
+                    <Link key={attendee.id} to={`/crm/contacts/${contactId}`} className="block">
                       {content}
                     </Link>
                   ) : (
-                    <div
-                      key={attendee.id}
-                      className="block hover:bg-gray-100 dark:hover:bg-zinc-900/40 rounded-lg px-2 -mx-2 transition-colors"
-                    >
+                    <div key={attendee.id}>
                       {content}
                     </div>
                   );
-                })
+                });
+                })()
               ) : (
                 <p className="text-sm text-muted-foreground">No attendees recorded</p>
               )}
@@ -1658,7 +1360,7 @@ export function MeetingDetail() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Duration:</span>
-                <span>{Math.round(meeting.duration_minutes)} minutes</span>
+                <span>{getDisplayDuration(meeting)} minutes</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Host:</span>
@@ -1675,52 +1377,36 @@ export function MeetingDetail() {
             </div>
           </div>
 
-          {/* Debug Info */}
-          <div className="section-card">
-            <div className="font-semibold mb-2">Debug Info</div>
-            <div className="text-xs font-mono text-muted-foreground space-y-1 break-all">
-              <div>
-                <span className="text-muted-foreground/70">Recording ID:</span>
-                <br />
-                {meeting.fathom_recording_id}
-              </div>
-              <div>
-                <span className="text-muted-foreground/70">Share URL:</span>
-                <br />
-                {meeting.share_url}
+          {/* Debug Info - development only */}
+          {import.meta.env.DEV && (
+            <div className="section-card">
+              <div className="font-semibold mb-2">Debug Info</div>
+              <div className="text-xs font-mono text-muted-foreground space-y-1 break-all">
+                <div>
+                  <span className="text-muted-foreground/70">Recording ID:</span>
+                  <br />
+                  {meeting.fathom_recording_id}
+                </div>
+                <div>
+                  <span className="text-muted-foreground/70">Share URL:</span>
+                  <br />
+                  {meeting.share_url}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Create Task Modal */}
-      {meeting && (
-        <CreateTaskModal
-          meetingId={meeting.id}
-          meetingTitle={meeting.title}
-          open={createTaskModalOpen}
-          onOpenChange={setCreateTaskModalOpen}
-          onTaskCreated={refetchTasks}
-        />
-      )}
       {meeting && (
         <ProposalWizard
           open={showProposalWizard}
           onOpenChange={setShowProposalWizard}
           meetingIds={[meeting.id]}
           contactName={meeting.contact?.email || undefined}
-          companyName={meeting.company?.name}
+          companyName={companyName || meeting.company?.name}
         />
       )}
-      {/* Email Composer Modal for follow-up emails */}
-      <EmailComposerModal
-        isOpen={showEmailModal}
-        onClose={() => setShowEmailModal(false)}
-        contactEmail={primaryExternal?.email || undefined}
-        contactName={primaryExternal?.name || meeting?.title}
-        defaultSubject={meeting ? `Follow-up: ${meeting.title}` : undefined}
-      />
       {/* Share Meeting Modal */}
       {meeting && (
         <ShareMeetingModal

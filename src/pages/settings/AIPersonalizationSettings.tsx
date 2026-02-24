@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, Check, Sparkles, PenTool, Save, Mail, Zap } from 'lucide-react';
+import { Plus, Trash2, Check, Sparkles, PenTool, Save, Mail, Zap, Bot, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,22 +9,75 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { SalesTemplateService, type UserWritingStyle } from '@/lib/services/salesTemplateService';
 import { EmailTrainingWizard } from '@/components/ai-voice';
+import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
+import { useCopilot } from '@/lib/contexts/CopilotContext';
 
 export default function AIPersonalizationSettings() {
   const [styles, setStyles] = useState<UserWritingStyle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [showTrainingWizard, setShowTrainingWizard] = useState(false);
+  const [emailSignOff, setEmailSignOff] = useState('');
+  const [emailSignOffSaving, setEmailSignOffSaving] = useState(false);
   const [currentStyle, setCurrentStyle] = useState<Partial<UserWritingStyle>>({
     name: '',
     tone_description: '',
     examples: ['']
   });
 
+  // CPT-003: Copilot engine preference
+  const {
+    copilotEnginePreference,
+    setCopilotEnginePreference,
+    isLoadingEnginePreference,
+  } = useCopilot();
+  const [engineSaving, setEngineSaving] = useState(false);
+
   useEffect(() => {
     fetchStyles();
+    fetchEmailSignOff();
   }, []);
+
+  const fetchEmailSignOff = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('user_tone_settings')
+        .select('email_sign_off')
+        .eq('user_id', user.id)
+        .eq('content_type', 'email')
+        .maybeSingle();
+      if (data?.email_sign_off) {
+        setEmailSignOff(data.email_sign_off);
+      }
+    } catch (error) {
+      logger.error('Failed to load email sign-off:', error);
+    }
+  };
+
+  const saveEmailSignOff = async () => {
+    try {
+      setEmailSignOffSaving(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await supabase
+        .from('user_tone_settings')
+        .upsert({
+          user_id: user.id,
+          content_type: 'email',
+          email_sign_off: emailSignOff || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,content_type' });
+      if (error) throw error;
+      toast.success('Email sign-off saved');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save email sign-off');
+    } finally {
+      setEmailSignOffSaving(false);
+    }
+  };
 
   const fetchStyles = async () => {
     try {
@@ -38,19 +91,40 @@ export default function AIPersonalizationSettings() {
     }
   };
 
+  // CPT-003: Save engine preference
+  const handleEngineChange = async (pref: 'autonomous' | 'classic') => {
+    if (pref === copilotEnginePreference) return;
+    setEngineSaving(true);
+    try {
+      await setCopilotEnginePreference(pref);
+      toast.success(
+        pref === 'autonomous'
+          ? 'Switched to Autonomous engine (Claude)'
+          : 'Switched to Classic engine (Gemini)'
+      );
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save copilot engine preference');
+    } finally {
+      setEngineSaving(false);
+    }
+  };
+
   const handleSave = async () => {
-    if (!currentStyle.name || !currentStyle.tone_description || !currentStyle.examples?.length) {
+    const name = currentStyle.name?.trim();
+    const toneDescription = currentStyle.tone_description?.trim();
+
+    if (!name || !toneDescription) {
       toast.error('Please fill in all fields');
       return;
     }
 
     try {
       // Filter empty examples
-      const cleanExamples = currentStyle.examples.filter(ex => ex.trim());
-      
+      const cleanExamples = (currentStyle.examples || []).filter(ex => ex.trim());
+
       await SalesTemplateService.createWritingStyle({
-        name: currentStyle.name,
-        tone_description: currentStyle.tone_description,
+        name,
+        tone_description: toneDescription,
         examples: cleanExamples,
         is_default: styles.length === 0 // Make default if it's the first one
       });
@@ -98,6 +172,130 @@ export default function AIPersonalizationSettings() {
           </Button>
         )}
       </div>
+
+      {/* CPT-003: Copilot Engine */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <div className="p-2 rounded-lg bg-[#37bd7e]/10">
+              <Bot className="w-5 h-5 text-[#37bd7e]" />
+            </div>
+            Copilot Engine
+          </CardTitle>
+          <CardDescription>
+            Choose which AI engine powers your copilot. Switching engines starts a fresh conversation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingEnginePreference ? (
+            <div className="text-sm text-gray-500 dark:text-gray-400">Loading preference...</div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Autonomous option */}
+              <button
+                type="button"
+                disabled={engineSaving}
+                onClick={() => handleEngineChange('autonomous')}
+                className={[
+                  'flex-1 flex items-start gap-3 rounded-lg border p-4 text-left transition-all',
+                  copilotEnginePreference === 'autonomous'
+                    ? 'border-[#37bd7e] bg-[#37bd7e]/5 ring-1 ring-[#37bd7e]'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-[#37bd7e]/50 hover:bg-[#37bd7e]/5',
+                  engineSaving ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer',
+                ].join(' ')}
+              >
+                <div className="mt-0.5 flex-shrink-0">
+                  <Sparkles className="w-5 h-5 text-[#37bd7e]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      Autonomous
+                    </span>
+                    <Badge variant="outline" className="bg-[#37bd7e]/10 text-[#37bd7e] border-[#37bd7e]/20 text-xs">
+                      Claude
+                    </Badge>
+                    {copilotEnginePreference === 'autonomous' && (
+                      <Check className="w-4 h-4 text-[#37bd7e] ml-auto" />
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Powered by Anthropic Claude. Uses native tool-use for agentic actions, skill-first execution, and streaming responses. Recommended for most users.
+                  </p>
+                </div>
+              </button>
+
+              {/* Classic option */}
+              <button
+                type="button"
+                disabled={engineSaving}
+                onClick={() => handleEngineChange('classic')}
+                className={[
+                  'flex-1 flex items-start gap-3 rounded-lg border p-4 text-left transition-all',
+                  copilotEnginePreference === 'classic'
+                    ? 'border-blue-500 bg-blue-500/5 ring-1 ring-blue-500'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-500/50 hover:bg-blue-500/5',
+                  engineSaving ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer',
+                ].join(' ')}
+              >
+                <div className="mt-0.5 flex-shrink-0">
+                  <Cpu className="w-5 h-5 text-blue-500" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      Classic
+                    </span>
+                    <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs">
+                      Gemini
+                    </Badge>
+                    {copilotEnginePreference === 'classic' && (
+                      <Check className="w-4 h-4 text-blue-500 ml-auto" />
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Powered by Google Gemini. Features 48 rich response panels, deterministic workflow routing, and the full preview-confirm HITL pattern.
+                  </p>
+                </div>
+              </button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Email Sign-Off */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <div className="p-2 rounded-lg bg-[#37bd7e]/10">
+              <Mail className="w-5 h-5 text-[#37bd7e]" />
+            </div>
+            Email Sign-Off
+          </CardTitle>
+          <CardDescription>
+            How you close off emails. Used by AI when generating outreach sequences and follow-ups.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-2 max-w-sm">
+            <textarea
+              value={emailSignOff}
+              onChange={(e) => setEmailSignOff(e.target.value)}
+              placeholder={"e.g.\nBest regards,\nAndrew"}
+              rows={3}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y"
+            />
+            <Button
+              onClick={saveEmailSignOff}
+              disabled={emailSignOffSaving}
+              className="bg-[#37bd7e] hover:bg-[#2da76c] w-fit"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {emailSignOffSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Train from Emails Card */}
       {!isEditing && (

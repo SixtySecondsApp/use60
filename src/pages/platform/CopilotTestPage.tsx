@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Loader2,
 } from 'lucide-react';
+import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -269,7 +270,8 @@ export default function CopilotTestPage() {
       {/* Header */}
       <div className="border-b border-gray-200 dark:border-gray-700/50 px-6 py-6">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between">
+          <BackToPlatform />
+          <div className="flex items-center justify-between mt-2">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-lg">
                 <FlaskConical className="w-6 h-6" />

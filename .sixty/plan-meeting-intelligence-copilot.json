@@ -1,0 +1,225 @@
+{
+  "feature": "meeting-intelligence-copilot",
+  "title": "Meeting Intelligence Copilot Integration",
+  "description": "Integrate the Meeting Analytics RAG pipeline (Railway PostgreSQL + pgvector) into the copilot-autonomous system. Adds a single meeting-intelligence-query skill, two new execute_action handlers (meeting_intelligence_query + search_meeting_context), a new MeetingIntelligenceResponse structured panel with adaptive layout, and full action loop (create tasks, draft emails, update deals from meeting intelligence).",
+  "consultReport": ".sixty/consult/meeting-intelligence-copilot.md",
+  "createdAt": "2026-02-19T00:00:00Z",
+  "stories": [
+    {
+      "id": "MTGI-001",
+      "title": "Add meeting intelligence action handlers to executeAction adapter",
+      "type": "backend",
+      "description": "Add meeting_intelligence_query and search_meeting_context to the executeAction adapter. Both handlers make internal HTTP calls to the meeting-analytics edge function. meeting_intelligence_query calls POST /api/search/ask with the user's question and optional params (transcriptId, maxMeetings). search_meeting_context calls POST /api/search/ask with a query derived from deal/contact context for proactive enrichment. Both need MEETING_ANALYTICS_BASE_URL env var (defaults to Supabase edge function URL). Response includes answer, sources, structuredData, and metadata.",
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/types.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ],
+      "acceptance_criteria": [
+        "meeting_intelligence_query action calls meeting-analytics /api/search/ask and returns {answer, sources, structuredData, metadata}",
+        "search_meeting_context action calls /api/search/ask with smaller maxMeetings default (5) for lightweight enrichment",
+        "Both actions construct the meeting-analytics URL from env var MEETING_ANALYTICS_BASE_URL or fallback to SUPABASE_URL/functions/v1/meeting-analytics",
+        "Both actions pass through auth headers (apikey + Bearer token)",
+        "Error handling returns clear message if meeting-analytics is unreachable"
+      ],
+      "estimate": "25min",
+      "dependencies": []
+    },
+    {
+      "id": "MTGI-002",
+      "title": "Add meeting analytics aggregation action handlers",
+      "type": "backend",
+      "description": "Add meeting_analytics_dashboard, meeting_analytics_talk_time, meeting_analytics_sentiment_trends, and meeting_analytics_insights action handlers. These call the meeting-analytics edge function's /api/dashboard/metrics, /api/analytics/talk-time, /api/analytics/sentiment-trends, and /api/insights/{transcriptId} endpoints respectively. These support the aggregation & trends query type.",
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/types.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ],
+      "acceptance_criteria": [
+        "meeting_analytics_dashboard returns dashboard metrics (total meetings, avg sentiment, talk time stats)",
+        "meeting_analytics_talk_time returns talk time analytics per speaker",
+        "meeting_analytics_sentiment_trends returns sentiment trend data over time",
+        "meeting_analytics_insights returns per-transcript insights (topics, sentiment, action items, key moments)",
+        "All actions use the same base URL and auth pattern as MTGI-001"
+      ],
+      "estimate": "20min",
+      "dependencies": ["MTGI-001"]
+    },
+    {
+      "id": "MTGI-003",
+      "title": "Register meeting intelligence actions in copilot-autonomous tool definitions",
+      "type": "backend",
+      "description": "Add the new meeting intelligence actions to the execute_action enum and description in copilot-autonomous/index.ts. Add clear documentation in the tool description for when Claude should use each action. Also add search_meeting_context as a separate top-level tool (not under execute_action) so Claude can proactively call it when discussing deals/contacts.",
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "acceptance_criteria": [
+        "meeting_intelligence_query added to execute_action enum with docs: '{ question, transcriptId?, maxMeetings? } - RAG search across meeting transcripts'",
+        "meeting_analytics_dashboard, meeting_analytics_talk_time, meeting_analytics_sentiment_trends, meeting_analytics_insights added to execute_action enum",
+        "search_meeting_context added as a separate top-level tool (5th tool) with its own input_schema: { query, contactName?, companyName?, maxResults? }",
+        "System prompt updated to instruct Claude to proactively call search_meeting_context when discussing deals or contacts",
+        "execute_action enum list updated to include all new actions"
+      ],
+      "estimate": "25min",
+      "dependencies": ["MTGI-001"]
+    },
+    {
+      "id": "MTGI-004",
+      "title": "Add structured response detection for meeting intelligence",
+      "type": "backend",
+      "description": "Update structuredResponseDetector.ts to detect meeting intelligence results and format them as a meeting_intelligence structured response type. Detection triggers on meeting_intelligence_query, search_meeting_context, meeting_analytics_dashboard, meeting_analytics_talk_time, meeting_analytics_sentiment_trends tool results. Maps the RAG response into the MeetingIntelligenceResponseData structure with queryType inference, sources, structuredData, and suggestedActions.",
+      "files": [
+        "supabase/functions/_shared/structuredResponseDetector.ts"
+      ],
+      "acceptance_criteria": [
+        "meeting_intelligence_query results detected and mapped to meeting_intelligence response type",
+        "queryType inferred from metadata.isAggregateQuestion and result shape (semantic vs aggregate vs structured vs cross_meeting)",
+        "Sources formatted with transcriptId, transcriptTitle, text, similarity, date, sentiment",
+        "Structured data forwarded from RAG response (meeting details, action items, key moments, talk time)",
+        "Suggested actions generated: create_task (if action items exist), draft_email, post_slack",
+        "search_meeting_context results formatted as a lighter meeting_context panel (no suggested actions)"
+      ],
+      "estimate": "30min",
+      "dependencies": ["MTGI-001"]
+    },
+    {
+      "id": "MTGI-005",
+      "title": "Create meeting-intelligence-query skill",
+      "type": "skill",
+      "description": "Create skills/atomic/meeting-intelligence-query/SKILL.md with V3 frontmatter. Single skill handling all 4 query types: semantic search, structured filters, aggregation/trends, cross-meeting intelligence. Trigger phrases cover common user intents. Skill content instructs Claude on which actions to use for each query type and how to chain searches for cross-meeting patterns.",
+      "files": [
+        "skills/atomic/meeting-intelligence-query/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Valid V3 frontmatter with name, description, category (sales-ai), triggers, inputs, outputs",
+        "Description optimized for embedding similarity: mentions 'search meetings', 'transcripts', 'RAG', 'objections', 'sentiment', 'analytics'",
+        "Trigger patterns: 'search meetings', 'what was discussed', 'meeting insights', 'how many meetings', 'sentiment trend', 'what objections', 'across all meetings', 'competitors mentioned'",
+        "Content instructs Claude: semantic questions → meeting_intelligence_query, aggregation → meeting_analytics_dashboard/talk_time/sentiment_trends, specific transcript → meeting_analytics_insights",
+        "Content explains multi-turn pattern: initial broad search → refine with transcriptId → drill into specific excerpts",
+        "Content instructs Claude to suggest actions after presenting results (create tasks from action items, draft follow-up, post Slack)",
+        "Passes npm run validate-skills"
+      ],
+      "estimate": "25min",
+      "dependencies": []
+    },
+    {
+      "id": "MTGI-006",
+      "title": "Define MeetingIntelligenceResponse types and add to copilot type system",
+      "type": "frontend",
+      "description": "Add MeetingIntelligenceResponseData interface to the copilot types. Add 'meeting_intelligence' and 'meeting_context' to the CopilotResponseType union. Types mirror the structured response data from MTGI-004: queryType, answer, sources, structuredData, metadata, suggestedActions.",
+      "files": [
+        "src/components/copilot/types.ts"
+      ],
+      "acceptance_criteria": [
+        "MeetingIntelligenceResponseData interface defined with queryType, answer, sources[], structuredData[], metadata, suggestedActions[]",
+        "Source type includes: transcriptId, transcriptTitle, text, similarity, date?, sentiment?, positiveScore?",
+        "StructuredMeeting type includes: title, id, date, sentiment, positiveScore, agreements, decisions, objections, questions, actionItems, summary, talkTime",
+        "SuggestedAction type includes: type ('create_task'|'draft_email'|'update_deal'|'post_slack'), label, data",
+        "'meeting_intelligence' and 'meeting_context' added to response type union"
+      ],
+      "estimate": "15min",
+      "dependencies": []
+    },
+    {
+      "id": "MTGI-007",
+      "title": "Build MeetingIntelligenceResponse panel component",
+      "type": "frontend",
+      "description": "Create the adaptive structured response panel. For semantic queries: markdown answer + collapsible source citations (title, date, similarity %, snippet, sentiment badge) + key signals summary. For structured queries: meeting cards grid with sentiment badge, date, company, talk time, action items count. For aggregation queries: stats summary + mini trend indicators. For cross-meeting queries: pattern cards with mention counts and timeline. All layouts include suggested action buttons (Create Tasks, Draft Follow-up, Post Slack). Uses existing Radix UI primitives, Tailwind, Framer Motion for animations. Mirrors AskAnythingPanel design language.",
+      "files": [
+        "src/components/copilot/responses/MeetingIntelligenceResponse.tsx"
+      ],
+      "acceptance_criteria": [
+        "Semantic layout: markdown answer → collapsible sources (each with title, date, similarity badge, excerpt, sentiment indicator) → key signals count",
+        "Structured layout: meeting card grid with title, date, sentiment badge, talk time bar, action items count, expand for details",
+        "Aggregation layout: stat cards (meeting count, avg sentiment, avg talk time) + trend arrows",
+        "Cross-meeting layout: pattern cards (topic/competitor, mention count, meetings list, excerpts)",
+        "Suggested action buttons render with icons: create_task → CheckSquare, draft_email → Mail, post_slack → MessageSquare",
+        "onActionClick callback emits standard actions to AssistantShell",
+        "Source cards link to transcript detail (open_meeting action with transcriptId)",
+        "Uses Lucide React icons (not emoji)",
+        "Framer Motion for card reveal animations"
+      ],
+      "estimate": "45min",
+      "dependencies": ["MTGI-006"]
+    },
+    {
+      "id": "MTGI-008",
+      "title": "Build MeetingContextResponse lightweight panel",
+      "type": "frontend",
+      "description": "Create a lighter panel for proactive meeting context enrichment (triggered by search_meeting_context). Shows a compact card with: AI summary of relevant meeting context, 2-3 top source citations, and a 'See more in Meeting Analytics' link. No action buttons — this is informational context appended to deal/contact discussions.",
+      "files": [
+        "src/components/copilot/responses/MeetingContextResponse.tsx"
+      ],
+      "acceptance_criteria": [
+        "Compact card layout with 'Meeting Context' header and search icon",
+        "AI summary text (markdown) of relevant meeting context",
+        "Up to 3 source citations with title, date, and relevance snippet",
+        "'View in Meeting Analytics' link that navigates to /meeting-analytics",
+        "Visually distinct from the full MeetingIntelligenceResponse (subtle background, no action buttons)",
+        "Collapsible — can be expanded/collapsed by user"
+      ],
+      "estimate": "20min",
+      "dependencies": ["MTGI-006"]
+    },
+    {
+      "id": "MTGI-009",
+      "title": "Register panels in CopilotResponse router and wire action handlers",
+      "type": "frontend",
+      "description": "Register MeetingIntelligenceResponse and MeetingContextResponse in CopilotResponse.tsx switch statement. Add action handlers in AssistantShell.tsx for meeting intelligence suggested actions: create_task_from_meeting (pre-fills task with meeting action item data), draft_email_from_meeting (triggers follow-up drafter with meeting context), open_transcript (navigates to meeting analytics transcript detail).",
+      "files": [
+        "src/components/copilot/CopilotResponse.tsx",
+        "src/components/assistant/AssistantShell.tsx"
+      ],
+      "acceptance_criteria": [
+        "case 'meeting_intelligence' routes to MeetingIntelligenceResponse in CopilotResponse.tsx",
+        "case 'meeting_context' routes to MeetingContextResponse in CopilotResponse.tsx",
+        "AssistantShell handles 'create_task_from_meeting' action: opens task creation with pre-filled title and description from action item",
+        "AssistantShell handles 'draft_email_from_meeting' action: sends copilot message requesting follow-up draft with meeting context",
+        "AssistantShell handles 'open_transcript' action: navigates to /meeting-analytics with transcript ID",
+        "All new imports added correctly"
+      ],
+      "estimate": "20min",
+      "dependencies": ["MTGI-007", "MTGI-008"]
+    },
+    {
+      "id": "MTGI-010",
+      "title": "Deploy edge functions, sync skill, and test end-to-end",
+      "type": "deployment",
+      "description": "Deploy updated copilot-autonomous and meeting-analytics edge functions to staging. Run sync-skills to compile new meeting-intelligence-query skill. Test all 4 query types through the copilot chat, verify structured panels render, test proactive enrichment on a deal query, and test action loop (create task from meeting action item).",
+      "files": [],
+      "acceptance_criteria": [
+        "copilot-autonomous deployed to staging with --no-verify-jwt",
+        "meeting-analytics deployed to staging with --no-verify-jwt (if modified)",
+        "npm run sync-skills succeeds with new meeting-intelligence-query skill",
+        "Copilot answers semantic question ('what objections came up?') with sources panel",
+        "Copilot answers aggregation question ('how many meetings this week?') with stats",
+        "Copilot answers structured query ('show negative calls with Acme') with meeting cards",
+        "Proactive enrichment works: asking about a deal/contact triggers search_meeting_context",
+        "Create task from meeting action item works end-to-end",
+        "Multi-turn follow-up refines previous search"
+      ],
+      "estimate": "45min",
+      "dependencies": ["MTGI-003", "MTGI-004", "MTGI-005", "MTGI-009"]
+    }
+  ],
+  "parallel_opportunities": [
+    {
+      "group": ["MTGI-002", "MTGI-003", "MTGI-004"],
+      "reason": "All depend only on MTGI-001 (action handlers). Independent files: copilot-autonomous index, structuredResponseDetector, executeAction types.",
+      "time_saved": "50min"
+    },
+    {
+      "group": ["MTGI-005", "MTGI-006"],
+      "reason": "Skill file and frontend types are completely independent — no file overlap.",
+      "time_saved": "15min"
+    },
+    {
+      "group": ["MTGI-007", "MTGI-008"],
+      "reason": "Both panel components depend only on MTGI-006 (types). No file overlap between them.",
+      "time_saved": "20min"
+    }
+  ],
+  "total_estimate": {
+    "sequential": "4.5 hours",
+    "with_parallelism": "2.5-3 hours",
+    "stories": 10
+  }
+}

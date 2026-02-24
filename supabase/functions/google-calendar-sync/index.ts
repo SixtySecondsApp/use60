@@ -20,6 +20,7 @@ import { authenticateRequest, getUserOrgId } from '../_shared/edgeAuth.ts';
 import { getGoogleIntegration } from '../_shared/googleOAuth.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
 import { extractMeetingUrl } from '../_shared/meetingUrlExtractor.ts';
+import { triggerPreMeetingIfSoon } from '../_shared/orchestrator/triggerPreMeeting.ts';
 
 // Helper for logging sync operations to integration_sync_logs table
 async function logSyncOperation(
@@ -96,15 +97,28 @@ serve(async (req) => {
       },
     });
 
-    // Authenticate request - supports both user JWT and service role
-    const { userId, mode } = await authenticateRequest(
-      req,
-      supabase,
-      supabaseServiceKey,
-      body.userId
-    );
+    // Authenticate request - supports both user JWT and service role/cron
+    let userId: string;
+    let mode: string;
 
-    console.log(`[CALENDAR-SYNC] Authenticated as ${mode}, userId: ${userId}`);
+    // If userId is provided in body, trust it (cron/service-role call)
+    // This matches auto-join-scheduler pattern for cron jobs
+    if (body.userId) {
+      userId = body.userId;
+      mode = 'cron';
+      console.log(`[CALENDAR-SYNC] Cron/service call with userId: ${userId}`);
+    } else {
+      // User JWT authentication
+      const authResult = await authenticateRequest(
+        req,
+        supabase,
+        supabaseServiceKey,
+        undefined
+      );
+      userId = authResult.userId;
+      mode = authResult.mode;
+      console.log(`[CALENDAR-SYNC] Authenticated as ${mode}, userId: ${userId}`);
+    }
 
     const { syncToken, startDate, endDate } = body;
 
@@ -135,12 +149,14 @@ serve(async (req) => {
     // Determine sync parameters
     const calendarId = 'primary'; // Default to primary calendar
     let currentSyncToken = syncToken || syncStatus?.calendar_sync_token || undefined;
+    // Reduced initial sync window: 14 days back + 30 days forward (was 90+180)
+    // to prevent 504 timeouts on first sync when no sync token exists.
     let timeMin =
       startDate ||
-      (currentSyncToken ? undefined : new Date(Date.now() - 90 * 86400000).toISOString());
+      (currentSyncToken ? undefined : new Date(Date.now() - 14 * 86400000).toISOString());
     let timeMax =
       endDate ||
-      (currentSyncToken ? undefined : new Date(Date.now() + 180 * 86400000).toISOString());
+      (currentSyncToken ? undefined : new Date(Date.now() + 30 * 86400000).toISOString());
 
     // Get user's organization ID - NO DEFAULT FALLBACK
     // Users without org membership will have null org_id
@@ -274,14 +290,23 @@ serve(async (req) => {
     let nextPageToken: string | undefined = undefined;
     let nextSyncToken: string | undefined = undefined;
     const now = new Date().toISOString();
+    const syncStartTime = Date.now();
+    const MAX_SYNC_TIME_MS = 120000; // 120s hard limit (edge function timeout is 150s)
+    const MAX_EVENTS_PER_SYNC = 500; // Hard cap to prevent timeouts on initial sync
+    let totalEventsProcessed = 0;
 
     // Fetch events from Google Calendar API
     for (let page = 0; page < 50; page++) {
+      // Time-based circuit breaker - stop before edge function timeout
+      if (Date.now() - syncStartTime > MAX_SYNC_TIME_MS) {
+        console.warn(`[CALENDAR-SYNC] Approaching timeout after ${Math.round((Date.now() - syncStartTime) / 1000)}s. Stopping pagination at page ${page}. Stats so far:`, stats);
+        break;
+      }
       // Safety cap to prevent infinite loops
       const params = new URLSearchParams();
       params.set('singleEvents', 'true');
       params.set('orderBy', 'startTime');
-      params.set('maxResults', '2500'); // Google's max per page
+      params.set('maxResults', '250'); // Reduced from 2500 to prevent timeouts and allow circuit breaker checks
 
       if (nextPageToken) {
         params.set('pageToken', nextPageToken);
@@ -303,8 +328,8 @@ serve(async (req) => {
         console.warn('[CALENDAR-SYNC] Sync token expired (410). Falling back to time-based sync.');
         nextPageToken = undefined;
         currentSyncToken = undefined;
-        timeMin = new Date(Date.now() - 90 * 86400000).toISOString();
-        timeMax = new Date(Date.now() + 180 * 86400000).toISOString();
+        timeMin = new Date(Date.now() - 14 * 86400000).toISOString();
+        timeMax = new Date(Date.now() + 30 * 86400000).toISOString();
         continue;
       }
 
@@ -327,8 +352,8 @@ serve(async (req) => {
           console.warn('[CALENDAR-SYNC] Invalid sync token detected (400). Resetting token.');
           currentSyncToken = undefined;
           nextPageToken = undefined;
-          timeMin = new Date(Date.now() - 90 * 86400000).toISOString();
-          timeMax = new Date(Date.now() + 180 * 86400000).toISOString();
+          timeMin = new Date(Date.now() - 14 * 86400000).toISOString();
+          timeMax = new Date(Date.now() + 30 * 86400000).toISOString();
           continue;
         }
 
@@ -437,57 +462,77 @@ serve(async (req) => {
             stats.created++;
           }
 
-          // Log successful event sync
-          const eventTitle = ev.summary || '(No title)'
-          const eventStart = ev.start?.dateTime || ev.start?.date
-          const formattedDate = eventStart ? new Date(eventStart).toLocaleDateString() : ''
-          await logSyncOperation(supabase, {
-            orgId,
-            userId,
-            operation: isCancelled ? 'delete' : 'sync',
-            direction: 'inbound',
-            entityType: 'event',
-            entityId: eventDbId,
-            entityName: `${eventTitle}${formattedDate ? ` (${formattedDate})` : ''}`,
-            metadata: {
-              google_event_id: ev.id,
-              all_day: !ev.start?.dateTime,
-              attendees_count: Array.isArray(ev.attendees) ? ev.attendees.length : 0,
-            },
-          })
+          // NOTE: Per-event logSyncOperation removed to prevent DB flooding
+          // (was generating ~13k+ RPC calls/day). A single summary log is written at the end.
 
-          // Upsert attendees to calendar_attendees table (with proper error handling)
+          // Fire pre-meeting brief if this event is starting soon
+          if (!isCancelled && payload.attendees_count > 1) {
+            triggerPreMeetingIfSoon({
+              start_time: payload.start_time,
+              user_id: userId,
+              org_id: orgId,
+              meeting_id: eventDbId,
+              title: payload.title,
+              attendees: payload.attendees,
+              attendees_count: payload.attendees_count,
+              meeting_url: payload.meeting_url,
+            });
+          }
+
+          // Batch upsert attendees (instead of one-by-one)
           if (Array.isArray(ev.attendees) && ev.attendees.length > 0) {
-            for (const attendee of ev.attendees) {
-              try {
+            try {
+              const attendeeRows = ev.attendees
+                .filter((a: any) => a.email)
+                .map((attendee: any) => ({
+                  event_id: eventDbId,
+                  email: attendee.email,
+                  name: attendee.displayName || null,
+                  is_organizer: attendee.organizer === true,
+                  is_required: attendee.optional !== true,
+                  response_status: attendee.responseStatus || 'needsAction',
+                  responded_at: attendee.responseStatus !== 'needsAction' ? now : null,
+                }));
+              if (attendeeRows.length > 0) {
                 await supabase
                   .from('calendar_attendees')
-                  .upsert(
-                    {
-                      event_id: eventDbId,
-                      email: attendee.email,
-                      name: attendee.displayName || null,
-                      is_organizer: attendee.organizer === true,
-                      is_required: attendee.optional !== true,
-                      response_status: attendee.responseStatus || 'needsAction',
-                      responded_at: attendee.responseStatus !== 'needsAction' ? now : null,
-                    },
-                    { onConflict: 'event_id,email' }
-                  );
-              } catch (attendeeError) {
-                // Silently fail attendee upserts - event is more important
-                console.warn('Failed to upsert attendee:', attendeeError);
+                  .upsert(attendeeRows, { onConflict: 'event_id,email' });
               }
+            } catch (attendeeError) {
+              // Silently fail attendee upserts - event is more important
+              console.warn('Failed to batch upsert attendees:', attendeeError);
             }
           }
         } catch (err) {
           console.error('Error processing event:', err);
           stats.skipped++;
         }
+
+        totalEventsProcessed++;
+      }
+
+      // Save sync token after each page so retries are incremental (not full resync)
+      if (nextSyncToken) {
+        await supabase
+          .from('user_sync_status')
+          .update({
+            calendar_sync_token: nextSyncToken,
+            calendar_last_synced_at: now,
+            updated_at: now,
+          })
+          .eq('user_id', userId);
+      }
+
+      // Hard cap: stop early if we've processed enough events (prevents timeouts on initial sync)
+      if (!currentSyncToken && totalEventsProcessed >= MAX_EVENTS_PER_SYNC) {
+        console.log(`[CALENDAR-SYNC] Reached event cap (${totalEventsProcessed}/${MAX_EVENTS_PER_SYNC}). Stopping early — next sync will be incremental.`);
+        break;
       }
 
       if (!nextPageToken) break;
     }
+
+    console.log(`[CALENDAR-SYNC] Synced ${totalEventsProcessed} total events`, stats);
 
     // Update user_sync_status with new sync token and timestamp
     const updatePayload: any = {
@@ -511,6 +556,26 @@ serve(async (req) => {
         last_sync_token: nextSyncToken || undefined,
       })
       .eq('id', calendarRecordId);
+
+    // Log a single summary sync operation (instead of per-event logging)
+    const totalEvents = stats.created + stats.updated + stats.deleted + stats.skipped;
+    const syncDurationMs = Date.now() - syncStartTime;
+    if (totalEvents > 0) {
+      await logSyncOperation(supabase, {
+        orgId,
+        userId,
+        operation: 'sync',
+        direction: 'inbound',
+        entityType: 'calendar_batch',
+        entityName: `Calendar sync: ${stats.created} created, ${stats.deleted} deleted, ${stats.skipped} skipped`,
+        metadata: {
+          ...stats,
+          total_events: totalEvents,
+          duration_ms: syncDurationMs,
+          has_sync_token: !!nextSyncToken,
+        },
+      });
+    }
 
     return jsonResponse({
       success: true,

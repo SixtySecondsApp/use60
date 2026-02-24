@@ -280,10 +280,10 @@ const DealCard: React.FC<DealCardProps> = ({
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`relative bg-gradient-to-br from-gray-900/80 to-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border transition-all duration-300 overflow-hidden group cursor-pointer ${
-        isSelected && isSelectMode 
-          ? 'border-emerald-500/30 ring-1 ring-emerald-500/20' 
-          : 'border-gray-800/50 hover:border-emerald-500/30'
+      className={`relative bg-gradient-to-br from-white to-gray-50 dark:from-gray-900/80 dark:to-gray-900/40 backdrop-blur-xl rounded-2xl p-6 border transition-all duration-300 overflow-hidden group cursor-pointer ${
+        isSelected && isSelectMode
+          ? 'border-emerald-500/30 ring-1 ring-emerald-500/20'
+          : 'border-gray-200 dark:border-gray-800/50 hover:border-emerald-500/30'
       }`}
       onClick={() => onNavigate?.(deal)}
     >

@@ -1,430 +1,485 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
-  flexRender,
-} from '@tanstack/react-table';
-import {
-  ChevronDown,
-  ChevronUp,
-  Edit,
-  Trash,
-  Calendar,
-  PoundSterling,
-  Users,
-  Circle,
-  Phone,
-  FileText,
-} from 'lucide-react';
+/**
+ * PipelineTable Component (PIPE-012)
+ *
+ * Premium glass-morphism table view with health columns and inline indicators.
+ */
+
+import React from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
-import { usePipeline } from '@/lib/contexts/PipelineContext';
-import { useUser } from '@/lib/hooks/useUser';
-import { canDeleteDeal, isDealSplit } from '@/lib/utils/adminUtils';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import type { PipelineDeal } from './hooks/usePipelineData';
 
 interface PipelineTableProps {
-  onDealClick: (deal: any) => void;
-  onDeleteDeal: (id: string) => void;
+  deals: PipelineDeal[];
+  onDealClick: (dealId: string) => void;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  onSort?: (column: string) => void;
 }
 
-function PipelineTableComponent({ onDealClick, onDeleteDeal }: PipelineTableProps) {
-  const { userData } = useUser();
-  const [sorting, setSorting] = useState([]);
-  const { deals, stages, searchTerm, filterOptions, deleteDeal } = usePipeline();
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [dealToDelete, setDealToDelete] = useState<string | null>(null);
+// =============================================================================
+// Helper Functions
+// =============================================================================
 
-  // Filter deals based on current filters
-  const filteredDeals = useMemo(() => {
-    return deals.filter(deal => {
-      // Apply search filter
-      if (searchTerm && !(
-        deal.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        deal.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        deal.contact_name?.toLowerCase().includes(searchTerm.toLowerCase())
-      )) {
-        return false;
-      }
-      
-      // Apply value filter
-      if (filterOptions.minValue && deal.value < filterOptions.minValue) {
-        return false;
-      }
-      if (filterOptions.maxValue && deal.value > filterOptions.maxValue) {
-        return false;
-      }
-      
-      // Apply probability filter
-      if (filterOptions.probability && deal.probability < filterOptions.probability) {
-        return false;
-      }
-      
-      return true;
-    });
-  }, [deals, searchTerm, filterOptions]);
+/**
+ * Format currency
+ */
+function formatCurrency(value: number | null): string {
+  if (value === null || value === undefined) return '$0';
 
-  const handleRowClick = useCallback((id: string) => {
-    setExpandedRow(expandedRow === id ? null : id);
-  }, [expandedRow]);
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
-  const handleDeleteClick = useCallback((id: string) => {
-    setDealToDelete(id);
-    setDeleteDialogOpen(true);
-  }, []);
+/**
+ * Deterministic avatar gradient from a name string
+ */
+function getAvatarGradient(name: string | null): string {
+  const gradients = [
+    'from-violet-600 to-violet-400',
+    'from-blue-600 to-blue-400',
+    'from-emerald-600 to-emerald-400',
+    'from-amber-600 to-amber-400',
+    'from-pink-600 to-pink-400',
+    'from-cyan-600 to-cyan-400',
+    'from-red-600 to-red-400',
+    'from-indigo-600 to-indigo-400',
+  ];
+  if (!name) return gradients[0];
+  const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return gradients[hash % gradients.length];
+}
 
-  const confirmDelete = useCallback(async () => {
-    if (dealToDelete) {
-      setDeleteDialogOpen(false);
-      setDealToDelete(null);
-      // Only use onDeleteDeal which calls the deleteDeal and handles refresh
-      await onDeleteDeal(dealToDelete);
-    }
-  }, [dealToDelete, onDeleteDeal]);
+/**
+ * Get initials from a name (up to 2 characters)
+ */
+function getInitials(name: string | null): string {
+  if (!name) return '?';
+  return name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
 
-  const getStage = useCallback((stageId: string) => {
-    return stages.find(s => s.id === stageId);
-  }, [stages]);
+/**
+ * Get health dot color + glow classes
+ */
+function getHealthDotClasses(status: string | null): { dot: string; glow: string; text: string } {
+  switch (status) {
+    case 'healthy':
+      return {
+        dot: 'bg-emerald-500',
+        glow: 'shadow-[0_0_6px_rgba(52,217,154,0.4)]',
+        text: 'text-emerald-600 dark:text-emerald-400',
+      };
+    case 'warning':
+    case 'at_risk':
+      return {
+        dot: 'bg-amber-500',
+        glow: 'shadow-[0_0_6px_rgba(251,191,36,0.4)]',
+        text: 'text-amber-600 dark:text-amber-400',
+      };
+    case 'critical':
+      return {
+        dot: 'bg-red-500',
+        glow: 'shadow-[0_0_6px_rgba(248,113,113,0.4)]',
+        text: 'text-red-600 dark:text-red-400',
+      };
+    case 'stalled':
+    case 'ghost':
+      return {
+        dot: 'bg-gray-400',
+        glow: 'shadow-[0_0_6px_rgba(156,163,175,0.3)]',
+        text: 'text-gray-500 dark:text-gray-400',
+      };
+    default:
+      return {
+        dot: 'bg-gray-300 dark:bg-gray-600',
+        glow: '',
+        text: 'text-gray-500 dark:text-gray-400',
+      };
+  }
+}
 
-  const getStageColor = useCallback((stageId: string) => {
-    const stage = getStage(stageId);
-    return stage?.color || 'gray';
-  }, [getStage]);
+/**
+ * Get probability bar + text color classes
+ */
+function getProbabilityColors(probability: number | null): { bar: string; text: string } {
+  const p = probability ?? 0;
+  if (p > 60) return { bar: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' };
+  if (p >= 30) return { bar: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400' };
+  return { bar: 'bg-red-500', text: 'text-red-600 dark:text-red-400' };
+}
 
-  const getStageName = useCallback((stageId: string) => {
-    const stage = getStage(stageId);
-    return stage?.name || 'Unknown';
-  }, [getStage]);
+/**
+ * Get risk badge label
+ */
+function getRiskLabel(level: string | null): string {
+  switch (level) {
+    case 'critical':
+      return 'Critical';
+    case 'high':
+      return 'High';
+    case 'medium':
+      return 'Medium';
+    case 'low':
+      return 'Low';
+    default:
+      return '--';
+  }
+}
 
-  const getActivityIcon = useCallback((type: string) => {
-    switch (type) {
-      case 'sale':
-        return PoundSterling;
-      case 'outbound':
-        return Phone;
-      case 'meeting':
-        return Users;
-      case 'proposal':
-        return FileText;
-      default:
-        return FileText;
-    }
-  }, []);
+/**
+ * Get risk dot/text colors
+ */
+function getRiskColors(level: string | null): { dot: string; glow: string; text: string } {
+  switch (level) {
+    case 'critical':
+      return {
+        dot: 'bg-red-500',
+        glow: 'shadow-[0_0_6px_rgba(248,113,113,0.4)]',
+        text: 'text-red-600 dark:text-red-400',
+      };
+    case 'high':
+      return {
+        dot: 'bg-orange-500',
+        glow: 'shadow-[0_0_6px_rgba(249,115,22,0.4)]',
+        text: 'text-orange-600 dark:text-orange-400',
+      };
+    case 'medium':
+      return {
+        dot: 'bg-amber-500',
+        glow: 'shadow-[0_0_6px_rgba(251,191,36,0.4)]',
+        text: 'text-amber-600 dark:text-amber-400',
+      };
+    case 'low':
+      return {
+        dot: 'bg-emerald-500',
+        glow: 'shadow-[0_0_6px_rgba(52,217,154,0.4)]',
+        text: 'text-emerald-600 dark:text-emerald-400',
+      };
+    default:
+      return {
+        dot: 'bg-gray-300 dark:bg-gray-600',
+        glow: '',
+        text: 'text-gray-500 dark:text-gray-400',
+      };
+  }
+}
 
-  const formatCurrency = useCallback((value: number) => {
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
-      currency: 'GBP',
-      maximumFractionDigits: 0
-    }).format(value);
-  }, []);
+/**
+ * Format health status label
+ */
+function formatHealthLabel(status: string | null): string {
+  switch (status) {
+    case 'healthy':
+      return 'Healthy';
+    case 'warning':
+      return 'Warning';
+    case 'at_risk':
+      return 'At Risk';
+    case 'critical':
+      return 'Critical';
+    case 'stalled':
+      return 'Stalled';
+    case 'ghost':
+      return 'Ghost';
+    default:
+      return '--';
+  }
+}
 
-  const columns = useMemo(
-    () => [
-      {
-        accessorKey: 'company',
-        header: 'Company',
-        cell: ({ row }) => {
-          const deal = row.original;
-          return (
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleRowClick(deal.id)}>
-              <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700/50 flex items-center justify-center">
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                  {deal.company?.charAt(0)?.toUpperCase() || '#'}
-                </span>
-              </div>
-              <div>
-                <div className="text-sm font-medium text-gray-900 dark:text-white">{deal.company || 'Unknown Company'}</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400">{deal.name}</div>
-              </div>
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: 'value',
-        header: 'Deal Value',
-        cell: ({ row }) => {
-          const value = parseFloat(row.original.value);
-          return (
-            <div className="text-sm font-medium text-gray-900 dark:text-white">
-              {formatCurrency(value)}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: 'stage_id',
-        header: 'Stage',
-        cell: ({ row }) => {
-          const stageId = row.original.stage_id;
-          const stageName = getStageName(stageId);
-          const stageColor = getStageColor(stageId);
-          const stage = getStage(stageId);
-          
-          // Create styles for the color indicator, handling custom colors
-          let indicatorStyles = {};
-          
-          if (stage?.color) {
-            indicatorStyles = {
-              backgroundColor: stage.color
-            };
-          }
-          
-          return (
-            <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-md" style={indicatorStyles}></div>
-              <span className="text-sm text-gray-900 dark:text-white">{stageName}</span>
-              {stage?.default_probability && (
-                <span className="text-xs text-gray-600 dark:text-gray-400 ml-1">({stage.default_probability}%)</span>
-              )}
-            </div>
-          );
-        }
-      },
-      {
-        accessorKey: 'probability',
-        header: 'Probability',
-        cell: ({ row }) => {
-          const probability = row.original.probability || 0;
-          const stageId = row.original.stage_id;
-          const stageColor = getStageColor(stageId);
-          const stage = getStage(stageId);
-          
-          // Create styles for the progress bar
-          let progressStyles = {};
-          
-          if (stage?.color) {
-            progressStyles = {
-              backgroundColor: stage.color
-            };
-          } else {
-            progressStyles = {
-              backgroundColor: '#10b981' // Default to emerald-500
-            };
-          }
-          
-          return (
-            <div className="flex items-center gap-2">
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  className="h-2 rounded-full"
-                  style={{
-                    width: `${probability}%`,
-                    ...progressStyles
-                  }}
-                ></div>
-              </div>
-              <span className="text-xs text-gray-600 dark:text-gray-400">{probability}%</span>
-            </div>
-          );
-        }
-      },
-      {
-        accessorKey: 'contact_name',
-        header: 'Contact',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-            <span className="text-sm text-gray-900 dark:text-white">{row.original.contact_name || 'No contact'}</span>
-          </div>
-        )
-      },
-      {
-        accessorKey: 'created_at',
-        header: 'Created',
-        cell: ({ row }) => {
-          const date = new Date(row.original.created_at);
-          return (
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              <span className="text-sm text-gray-700 dark:text-gray-300">{format(date, 'MMM d, yyyy')}</span>
-            </div>
-          );
-        }
-      },
-      {
-        id: 'actions',
-        cell: ({ row }) => {
-          const deal = row.original;
-          const canDelete = canDeleteDeal(deal, userData);
-          const isSplit = isDealSplit(deal);
-          
-          return (
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDealClick(deal);
-                }}
-                className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              {canDelete ? (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteClick(deal.id);
-                  }}
-                  className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-500"
-                >
-                  <Trash className="h-4 w-4" />
-                </Button>
-              ) : isSplit ? (
-                <div 
-                  className="h-8 w-8 flex items-center justify-center text-gray-500 cursor-not-allowed"
-                  title="Split deals can only be deleted by administrators"
-                >
-                  <Trash className="h-4 w-4 opacity-30" />
-                </div>
-              ) : (
-                <div 
-                  className="h-8 w-8 flex items-center justify-center text-gray-500 cursor-not-allowed"
-                  title="You can only delete deals you own"
-                >
-                  <Trash className="h-4 w-4 opacity-30" />
-                </div>
-              )}
-            </div>
-          );
-        },
-      },
-    ],
-    [stages, userData, handleRowClick, formatCurrency, getStageName, getStageColor, getStage, onDealClick, handleDeleteClick]
-  );
+// =============================================================================
+// Sub-components
+// =============================================================================
 
-  const table = useReactTable({
-    data: filteredDeals,
-    columns,
-    state: {
-      sorting,
-    },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-  });
+/**
+ * Column header with sort indicator
+ */
+function SortableHeader({
+  label,
+  column,
+  sortBy,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  column: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  onSort?: (column: string) => void;
+}) {
+  const isSorted = sortBy === column;
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-        <div className="overflow-x-auto scrollbar-none">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
-                {table.getFlatHeaders().map((header) => (
-                  <th
-                    key={header.id}
-                    className="text-left p-4 text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider"
-                  >
-                    {header.isPlaceholder ? null : (
-                      <div
-                        className={`flex items-center gap-2 ${
-                          header.column.getCanSort() ? 'cursor-pointer select-none' : ''
-                        }`}
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                        {{
-                          asc: <ChevronUp className="h-4 w-4" />,
-                          desc: <ChevronDown className="h-4 w-4" />,
-                        }[header.column.getIsSorted() as string] ?? null}
-                      </div>
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.length > 0 ? (
-                table.getRowModel().rows.map((row) => (
-                  <React.Fragment key={row.id}>
-                    <tr
-                      className="border-b border-gray-200 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/30 cursor-pointer"
-                      onClick={() => handleRowClick(row.original.id)}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="p-4">
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                    {expandedRow === row.original.id && (
-                      <tr className="bg-gray-50 dark:bg-gray-800/20">
-                        <td colSpan={columns.length} className="p-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                              <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400">Deal Details</h4>
-                              <p className="text-sm text-gray-900 dark:text-white">{row.original.description || 'No description provided'}</p>
-                            </div>
-                            <div className="space-y-2">
-                              <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400">Contact Information</h4>
-                              <p className="text-sm text-gray-900 dark:text-white">{row.original.contact_name || 'No contact'}</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">{row.original.contact_email || 'No email'}</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">{row.original.contact_phone || 'No phone'}</p>
-                            </div>
-                            <div className="space-y-2">
-                              <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400">Next Steps</h4>
-                              <p className="text-sm text-gray-900 dark:text-white">{row.original.next_steps || 'No next steps defined'}</p>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={columns.length} className="p-8 text-center text-gray-600 dark:text-gray-400">
-                    No deals match your filters
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+    <th
+      className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none"
+      onClick={() => onSort?.(column)}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        {isSorted && (
+          sortDir === 'asc'
+            ? <ChevronUp className="w-3.5 h-3.5" />
+            : <ChevronDown className="w-3.5 h-3.5" />
+        )}
       </div>
+    </th>
+  );
+}
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Deal</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-gray-700 dark:text-gray-300">Are you sure you want to delete this deal? This action cannot be undone.</p>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+/**
+ * Stage pill with colored dot
+ */
+function StagePill({ name, color }: { name: string | null; color: string | null }) {
+  const label = name || 'Unknown';
+  const bgColor = color ? `${color}18` : undefined;
+  const textColor = color || undefined;
+  const dotColor = color || '#9ca3af';
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+      style={{
+        backgroundColor: bgColor,
+        color: textColor,
+      }}
+    >
+      <span
+        className="w-[6px] h-[6px] rounded-full flex-shrink-0"
+        style={{ backgroundColor: dotColor }}
+      />
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Health pill with glowing dot
+ */
+function HealthPill({ status, score }: { status: string | null; score: number | null }) {
+  const { dot, glow, text } = getHealthDotClasses(status);
+  const label = score !== null ? score : formatHealthLabel(status);
+
+  return (
+    <span className={`flex items-center gap-1.5 text-xs font-semibold ${text}`}>
+      <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${dot} ${glow}`} />
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Probability bar with numeric value
+ */
+function ProbabilityBar({ probability }: { probability: number | null }) {
+  const value = probability ?? 0;
+  const { bar, text } = getProbabilityColors(probability);
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-[50px] h-[5px] bg-gray-100 dark:bg-white/[0.04] rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full ${bar} transition-all duration-300`}
+          style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }}
+        />
+      </div>
+      <span className={`text-[11px] font-semibold tabular-nums ${text}`}>
+        {value}%
+      </span>
     </div>
   );
 }
 
-export const PipelineTable = React.memo(PipelineTableComponent);
+/**
+ * Owner avatar with gradient and initials
+ */
+function OwnerAvatar({ name }: { name: string | null }) {
+  const gradient = getAvatarGradient(name);
+  const initials = getInitials(name);
+
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className={`w-6 h-6 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center flex-shrink-0`}
+      >
+        <span className="text-[9px] font-bold text-white leading-none">
+          {initials}
+        </span>
+      </div>
+      {name && (
+        <span className="text-xs text-gray-700 dark:text-gray-300 truncate max-w-[100px]">
+          {name}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Company column with gradient avatar, company name, and deal name
+ */
+function CompanyCell({ company, dealName }: { company: string | null; dealName: string }) {
+  const gradient = getAvatarGradient(company);
+  const initials = getInitials(company);
+
+  return (
+    <div className="flex items-center gap-3 min-w-0">
+      <div
+        className={`w-8 h-8 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center flex-shrink-0`}
+      >
+        <span className="text-[10px] font-bold text-white leading-none">
+          {initials}
+        </span>
+      </div>
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+          {company || 'No Company'}
+        </div>
+        <div className="text-[11px] text-gray-500 dark:text-gray-500 truncate">
+          {dealName}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Main Component
+// =============================================================================
+
+export function PipelineTable({
+  deals,
+  onDealClick,
+  sortBy,
+  sortDir,
+  onSort,
+}: PipelineTableProps) {
+  if (deals.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+        No deals found
+      </div>
+    );
+  }
+
+  // Build owner name from split_users if available
+  const getOwnerName = (deal: PipelineDeal): string | null => {
+    if (deal.split_users && deal.split_users.length > 0) {
+      return deal.split_users[0].full_name || null;
+    }
+    return null;
+  };
+
+  return (
+    <div className="rounded-2xl overflow-hidden bg-white/80 dark:bg-white/[0.03] backdrop-blur-xl border border-gray-200/80 dark:border-white/[0.06]">
+      <div className="overflow-x-auto">
+        <table
+          className="min-w-full"
+          style={{ borderCollapse: 'separate', borderSpacing: 0 }}
+        >
+          <thead className="bg-gray-50/80 dark:bg-white/[0.02] backdrop-blur-xl">
+            <tr>
+              <SortableHeader label="Company" column="company" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+              <SortableHeader label="Value" column="value" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                Stage
+              </th>
+              <SortableHeader label="Health" column="health_score" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                Rel. Health
+              </th>
+              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                Risk
+              </th>
+              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                Probability
+              </th>
+              <SortableHeader label="Days" column="days_in_stage" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+              <SortableHeader label="Close Date" column="close_date" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                Owner
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {deals.map((deal, index) => {
+              const ownerName = getOwnerName(deal);
+              const riskColors = getRiskColors(deal.risk_level);
+              const isLast = index === deals.length - 1;
+
+              return (
+                <tr
+                  key={deal.id}
+                  onClick={() => onDealClick(deal.id)}
+                  className={`hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors cursor-pointer ${
+                    !isLast ? 'border-b border-gray-100 dark:border-white/[0.06]' : ''
+                  }`}
+                >
+                  {/* Company + Deal Name */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <CompanyCell company={deal.company} dealName={deal.name} />
+                  </td>
+
+                  {/* Value */}
+                  <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
+                    {formatCurrency(deal.value)}
+                  </td>
+
+                  {/* Stage */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <StagePill name={deal.stage_name} color={deal.stage_color} />
+                  </td>
+
+                  {/* Health Score */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <HealthPill status={deal.health_status} score={deal.health_score} />
+                  </td>
+
+                  {/* Relationship Health */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <HealthPill status={deal.relationship_health_status} score={deal.relationship_health_score} />
+                  </td>
+
+                  {/* Risk */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className={`flex items-center gap-1.5 text-xs font-semibold ${riskColors.text}`}>
+                      <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${riskColors.dot} ${riskColors.glow}`} />
+                      {getRiskLabel(deal.risk_level)}
+                    </span>
+                  </td>
+
+                  {/* Probability */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <ProbabilityBar probability={deal.probability} />
+                  </td>
+
+                  {/* Days in Stage */}
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400 tabular-nums">
+                    {deal.days_in_current_stage || 0}d
+                  </td>
+
+                  {/* Close Date */}
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400">
+                    {deal.close_date ? format(new Date(deal.close_date), 'MMM d, yyyy') : '--'}
+                  </td>
+
+                  {/* Owner */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <OwnerAvatar name={ownerName} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

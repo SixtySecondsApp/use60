@@ -5,10 +5,12 @@
  * Displays tasks completing as the AI scrapes and analyzes the website.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Loader } from 'lucide-react';
+import { AlertTriangle, Check, Loader } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
+import { Button } from '@/components/ui/button';
 
 interface EnrichmentLoadingStepProps {
   domain: string;
@@ -16,29 +18,88 @@ interface EnrichmentLoadingStepProps {
 }
 
 const tasks = [
-  { label: 'Scanning website', threshold: 20 },
-  { label: 'Identifying industry', threshold: 40 },
-  { label: 'Analyzing products', threshold: 60 },
-  { label: 'Finding competitors', threshold: 80 },
-  { label: 'Building profile', threshold: 100 },
+  { label: 'Fetching website pages', threshold: 15, detail: 'Reading homepage and key pages...' },
+  { label: 'Analyzing company information', threshold: 35, detail: 'Extracting products and services...' },
+  { label: 'Identifying competitors', threshold: 55, detail: 'Researching market position...' },
+  { label: 'Learning brand voice', threshold: 75, detail: 'Understanding messaging style...' },
+  { label: 'Generating AI skills', threshold: 95, detail: 'Creating personalized configurations...' },
+  { label: 'Finalizing profile', threshold: 100, detail: 'Almost done!' },
 ];
 
 export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: EnrichmentLoadingStepProps) {
+  const queryClient = useQueryClient();
   const [progress, setProgress] = useState(0);
-  const { organizationId: storeOrgId, startEnrichment, enrichment, isEnrichmentLoading, enrichmentError, setStep } = useOnboardingV2Store();
+  const [startTime] = useState(Date.now());
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [showStillWorkingMessage, setShowStillWorkingMessage] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const {
+    organizationId: storeOrgId,
+    startEnrichment,
+    enrichment,
+    isEnrichmentLoading,
+    enrichmentError,
+    setStep,
+    enrichmentSource,
+    enrichmentRetryCount,
+    pollingStartTime,
+    resetAndCleanup,
+    hasDomainMismatch,
+    emailDomain,
+    signupCompanyDomain,
+    resolveDomainMismatch,
+  } = useOnboardingV2Store();
+
+  const handleStartOver = useCallback(async () => {
+    if (isResetting) return;
+    setIsResetting(true);
+    try {
+      await resetAndCleanup(queryClient);
+    } finally {
+      setIsResetting(false);
+    }
+  }, [isResetting, resetAndCleanup, queryClient]);
 
   // Use organizationId from store (which gets updated when new org is created)
   // Fall back to prop if store is empty
   const organizationId = storeOrgId || propOrgId;
 
-  // Start enrichment on mount
+  // Guard: Redirect to website_input if no organizationId (cannot proceed without it)
   useEffect(() => {
-    if (!organizationId || organizationId === '') {
-      console.warn('EnrichmentLoadingStep: organizationId is empty, skipping enrichment start');
+    // Skip guard during manual enrichment initialization (organizationId set asynchronously)
+    if (enrichmentSource === 'manual' && isEnrichmentLoading && !enrichment) {
+      // Manual enrichment just started, organizationId may be pending async resolution
       return;
     }
-    startEnrichment(organizationId, domain);
-  }, [organizationId, domain, startEnrichment]);
+
+    if (!organizationId || organizationId === '') {
+      console.error(
+        `[EnrichmentLoadingStep] No organizationId for ${enrichmentSource || 'unknown'} enrichment. ` +
+        `Redirecting to website_input. Loading: ${isEnrichmentLoading}, Has enrichment: ${!!enrichment}`
+      );
+      setStep('website_input');
+      return;
+    }
+  }, [organizationId, setStep, enrichmentSource, isEnrichmentLoading, enrichment]);
+
+  // Start enrichment on mount (only for website-based enrichment, not manual)
+  // Manual enrichment is already started in submitManualEnrichment
+  useEffect(() => {
+    if (!organizationId || organizationId === '') {
+      return; // Guard above already handles redirect
+    }
+
+    // Skip if this is manual enrichment (no domain, and source is 'manual')
+    if (!domain && enrichmentSource === 'manual') {
+      console.log('EnrichmentLoadingStep: Manual enrichment already started, skipping startEnrichment');
+      return;
+    }
+
+    // Only start enrichment for website-based flow
+    if (domain) {
+      startEnrichment(organizationId, domain);
+    }
+  }, [organizationId, domain, startEnrichment, enrichmentSource]);
 
   // Simulate progress while enrichment is running
   useEffect(() => {
@@ -65,6 +126,31 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
     return () => clearInterval(interval);
   }, [isEnrichmentLoading, enrichment?.status]);
 
+  // Track elapsed time while loading
+  useEffect(() => {
+    if (!isEnrichmentLoading) return;
+
+    const timer = setInterval(() => {
+      const start = pollingStartTime || startTime;
+      setElapsedTime(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isEnrichmentLoading, pollingStartTime, startTime]);
+
+  // Show "still working" message after 30 seconds
+  useEffect(() => {
+    if (isEnrichmentLoading || enrichment?.status === 'scraping' || enrichment?.status === 'analyzing') {
+      const timer = setTimeout(() => {
+        if (progress >= 80 && enrichment?.status !== 'completed') {
+          setShowStillWorkingMessage(true);
+        }
+      }, 30000); // 30 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [isEnrichmentLoading, enrichment?.status, progress]);
+
   // Auto-advance when complete
   useEffect(() => {
     if (progress >= 100 && enrichment?.status === 'completed') {
@@ -76,6 +162,8 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
   }, [progress, enrichment?.status, setStep]);
 
   if (enrichmentError) {
+    const hasRetriedMultipleTimes = enrichmentRetryCount >= 2;
+
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -84,17 +172,71 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
       >
         <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-6">
-            <span className="text-3xl">⚠️</span>
+            <AlertTriangle className="w-8 h-8 text-red-400" />
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Something went wrong</h2>
-          <p className="text-gray-400 mb-6">{enrichmentError}</p>
-          <button
-            onClick={() => organizationId && startEnrichment(organizationId, domain)}
-            disabled={!organizationId}
-            className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Try Again
-          </button>
+          <h2 className="text-xl font-bold text-white mb-2">
+            {hasRetriedMultipleTimes ? 'Unable to analyze website' : 'Enrichment failed'}
+          </h2>
+          <p className="text-gray-400 mb-2">{enrichmentError}</p>
+          <p className="text-sm text-gray-500 mb-6">
+            {hasRetriedMultipleTimes
+              ? 'We recommend entering your company details manually to continue.'
+              : 'Some websites block automated access. You can retry or enter your company details manually.'}
+          </p>
+          <div className="flex flex-col gap-3">
+            {hasRetriedMultipleTimes ? (
+              <>
+                <button
+                  onClick={() => setStep('manual_enrichment')}
+                  className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors"
+                >
+                  Enter Details Manually
+                </button>
+                <button
+                  onClick={() => {
+                    if (!organizationId) return;
+                    if (enrichmentSource === 'manual' || !domain) {
+                      location.reload();
+                    } else {
+                      startEnrichment(organizationId, domain, true);
+                    }
+                  }}
+                  disabled={!organizationId}
+                  className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Try Again Anyway
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    if (!organizationId) return;
+                    if (enrichmentSource === 'manual' || !domain) {
+                      location.reload();
+                    } else {
+                      startEnrichment(organizationId, domain, true);
+                    }
+                  }}
+                  disabled={!organizationId}
+                  className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Retry
+                </button>
+                <button
+                  onClick={() => setStep('manual_enrichment')}
+                  className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-medium transition-colors"
+                >
+                  Enter Details Manually
+                </button>
+              </>
+            )}
+          </div>
+          {enrichmentRetryCount > 0 && (
+            <p className="text-xs text-gray-500 mt-4">
+              Attempt {enrichmentRetryCount + 1} of enrichment
+            </p>
+          )}
         </div>
       </motion.div>
     );
@@ -107,6 +249,42 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
       exit={{ opacity: 0, scale: 0.95 }}
       className="w-full max-w-md mx-auto px-4"
     >
+      {/* Domain Mismatch Picker */}
+      {hasDomainMismatch && emailDomain && signupCompanyDomain && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-lg mx-auto px-4 mb-6"
+        >
+          <div className="rounded-2xl border border-amber-700/50 bg-amber-900/20 p-6">
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Which domain should we research?
+            </h3>
+            <p className="text-sm text-gray-400 mb-4">
+              Your email (@{emailDomain}) and the website you entered ({signupCompanyDomain}) are different. Choose which domain to use for your company research.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => resolveDomainMismatch(emailDomain)}
+                variant="outline"
+                className="flex-1 border-gray-600 text-white hover:bg-gray-800"
+              >
+                {emailDomain}
+                <span className="block text-xs text-gray-400 mt-0.5">from your email</span>
+              </Button>
+              <Button
+                onClick={() => resolveDomainMismatch(signupCompanyDomain)}
+                variant="outline"
+                className="flex-1 border-gray-600 text-white hover:bg-gray-800"
+              >
+                {signupCompanyDomain}
+                <span className="block text-xs text-gray-400 mt-0.5">from your website</span>
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 p-8 sm:p-12 text-center">
         {/* Progress Circle */}
         <div className="relative w-24 h-24 mx-auto mb-8">
@@ -141,6 +319,15 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
             <span className="text-2xl font-bold text-white">{Math.round(progress)}%</span>
           </div>
         </div>
+
+        {/* Time Display */}
+        <p className="text-xs text-gray-500 mb-6">
+          {progress < 90 ? (
+            <>Analyzing... ({Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')} elapsed)</>
+          ) : (
+            <>Finalizing... ({Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')} elapsed)</>
+          )}
+        </p>
 
         {/* Title */}
         <h2 className="text-xl font-bold text-white mb-2">
@@ -213,6 +400,22 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
           </motion.div>
         )}
 
+        {/* Still Working Message - appears after 30 seconds */}
+        {showStillWorkingMessage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-6 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg"
+          >
+            <p className="text-sm text-blue-300">
+              <strong>Still analyzing your company...</strong>
+              <br />
+              Our AI is doing deep research to create the best possible assistant for you.
+              This usually takes 20-40 seconds. Thank you for your patience!
+            </p>
+          </motion.div>
+        )}
+
         {/* Progressive Data Preview */}
         {enrichment && (enrichment.company_name || enrichment.products?.length) && (
           <motion.div
@@ -239,6 +442,17 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
             )}
           </motion.div>
         )}
+
+        {/* Start Over Link */}
+        <div className="mt-8 pt-6 border-t border-gray-800/50">
+          <button
+            onClick={handleStartOver}
+            disabled={isResetting}
+            className="text-xs text-gray-500 hover:text-gray-400 transition-colors disabled:opacity-50"
+          >
+            {isResetting ? 'Resetting...' : 'Start over'}
+          </button>
+        </div>
       </div>
     </motion.div>
   );

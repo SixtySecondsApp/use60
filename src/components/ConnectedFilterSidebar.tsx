@@ -324,16 +324,16 @@ export function ConnectedFilterSidebar({
   };
 
   const shouldAnimate = !isFirstRender.current && !skipInitialAnimation;
-  
+
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={shouldAnimate ? { x: -256 } : { x: 0 }}
+          initial={shouldAnimate ? { x: 256 } : { x: 0 }}
           animate={{ x: 0 }}
-          exit={{ x: -256 }}
+          exit={{ x: 256 }}
           transition={shouldAnimate ? { type: "spring", damping: 25, stiffness: 200 } : { duration: 0 }}
-          className="fixed left-0 top-0 h-full w-[256px] bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 z-[150] overflow-hidden flex flex-col"
+          className="fixed right-0 top-0 h-full w-[256px] bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 z-[150] overflow-hidden flex flex-col"
         >
           {/* Header */}
           <div className="p-6 border-b border-gray-200 dark:border-gray-800">

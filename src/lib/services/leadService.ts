@@ -26,8 +26,9 @@ export async function fetchLeads(): Promise<LeadWithPrep[]> {
         *,
         lead_prep_notes(*),
         owner:profiles!leads_owner_id_fkey(id, first_name, last_name, email),
-        source:lead_sources!leads_source_id_fkey(id, name, source_key),
+        source:lead_sources!leads_source_id_fkey(id, name, source_key, channel),
         contact:contacts!leads_contact_id_fkey(id, title, first_name, last_name, email),
+        company:companies!leads_company_id_fkey(id, name, domain, industry, size, enrichment_data),
         converted_deal:deals!leads_converted_deal_id_fkey(
           id,
           name,

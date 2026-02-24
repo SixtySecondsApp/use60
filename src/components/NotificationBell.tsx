@@ -90,6 +90,7 @@ export function NotificationBell() {
           <AnimatePresence>
             {unreadCount > 0 && (
               <motion.div
+                key="unread-badge"
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 exit={{ scale: 0 }}
@@ -110,13 +111,25 @@ export function NotificationBell() {
       {/* Notification Panel - Rendered as Portal */}
       {isOpen && createPortal(
         <AnimatePresence>
+          {/* Mobile overlay */}
           <motion.div
+            key="mobile-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[199] bg-black/20 backdrop-blur-sm sm:hidden"
+            onClick={() => setIsOpen(false)}
+          />
+
+          {/* Panel */}
+          <motion.div
+            key="notification-panel"
             ref={panelRef}
             initial={{ opacity: 0, y: -10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed z-[200] inset-0 sm:inset-auto"
+            className="fixed z-[200] inset-0 sm:inset-auto flex items-start justify-end pt-16 pr-4 sm:pt-0"
             style={window.innerWidth >= 640 ? {
               top: `${panelPosition.top}px`,
               left: `${panelPosition.left}px`,

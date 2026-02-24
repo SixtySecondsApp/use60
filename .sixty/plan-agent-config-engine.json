@@ -1,0 +1,340 @@
+{
+  "name": "PRD-01: Agent Configuration Engine",
+  "version": "1.0",
+  "createdAt": "2026-02-21T21:00:00Z",
+  "description": "Three-layer config system (platform defaults → org overrides → user overrides) with resolution logic, caching, and a shared TypeScript config loader for all agent edge functions. Foundation for the Always-On Copilot.",
+  "source_prd": "docs/copilot/always_on_60/use60_master_plan.md#PRD-01",
+  "existing_infrastructure": {
+    "agent_team_config": "Exists — org-level model/budget config (single table, no layering)",
+    "proactive_agent_config": "Exists — org-level sequence enable/disable",
+    "user_sequence_preferences": "Exists — user-level sequence opt-out",
+    "note": "Current system has scattered per-feature config tables. PRD-01 unifies into a single 3-layer resolution engine that all agents use."
+  },
+  "definition_of_done": "Any edge function can call getAgentConfig(orgId, userId, agentType) and receive a fully resolved config object in <50ms. Methodology switch changes resolved config values correctly. All existing agent configs migrated to new system.",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Schema & Resolution Functions",
+      "description": "Database tables, seed data, and Postgres resolution functions",
+      "priority": "critical",
+      "duration": "1 session",
+      "stories": ["CFG-001", "CFG-002", "CFG-003", "CFG-004"]
+    },
+    {
+      "id": "phase-2",
+      "name": "Edge Function Config Loader",
+      "description": "Shared TypeScript loader with caching for all edge functions",
+      "priority": "critical",
+      "duration": "1 session",
+      "stories": ["CFG-005", "CFG-006"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Methodology Templates",
+      "description": "Seed methodology templates and wire into resolution",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": ["CFG-007", "CFG-008"]
+    },
+    {
+      "id": "phase-4",
+      "name": "Frontend Service & Hook",
+      "description": "React Query hooks and service layer for config CRUD",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": ["CFG-009", "CFG-010"]
+    },
+    {
+      "id": "phase-5",
+      "name": "Integration & Verification",
+      "description": "Wire one existing agent to the new config engine and verify end-to-end",
+      "priority": "high",
+      "duration": "1 session",
+      "stories": ["CFG-011", "CFG-012"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "CFG-001",
+      "title": "Create agent_config_defaults table with platform seed data",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CFG-002", "CFG-003", "CFG-004", "CFG-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "agent_config_defaults table created with columns: id (uuid PK), agent_type (text), config_key (text), config_value (jsonb), description (text), created_at, updated_at",
+        "UNIQUE constraint on (agent_type, config_key)",
+        "Seeded with defaults for agent types: crm_update, deal_risk, reengagement, morning_briefing, eod_synthesis, internal_meeting_prep, email_signals, coaching_digest",
+        "Each agent type has config keys: mission, playbook, boundaries, voice, heartbeat, delivery, thresholds",
+        "RLS: service_role full access, authenticated read-only"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222000001_agent_config_engine.sql"
+      ]
+    },
+    {
+      "id": "CFG-002",
+      "title": "Create agent_config_org_overrides table with RLS",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-001"], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["CFG-004", "CFG-005"],
+      "parallelWith": ["CFG-003"],
+      "acceptance": [
+        "agent_config_org_overrides table: id (uuid PK), org_id (uuid FK→organizations), agent_type (text), config_key (text), config_value (jsonb), updated_by (uuid), created_at, updated_at",
+        "UNIQUE constraint on (org_id, agent_type, config_key)",
+        "RLS: org admins/owners can manage (using get_org_role pattern), org members can read, service_role full access",
+        "Foreign key to organizations(id) with ON DELETE CASCADE"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260222000001_agent_config_engine.sql"
+      ]
+    },
+    {
+      "id": "CFG-003",
+      "title": "Create agent_config_user_overrides and overridable tables",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-001"], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["CFG-004", "CFG-005"],
+      "parallelWith": ["CFG-002"],
+      "acceptance": [
+        "agent_config_user_overrides table: id (uuid PK), org_id (uuid), user_id (uuid FK→auth.users), agent_type (text), config_key (text), config_value (jsonb), created_at, updated_at",
+        "UNIQUE constraint on (org_id, user_id, agent_type, config_key)",
+        "agent_config_user_overridable table: id (uuid PK), org_id (uuid), agent_type (text), config_key (text), is_overridable (boolean default false), updated_by (uuid)",
+        "RLS: users can manage own overrides (user_id = auth.uid()), admins manage overridable flags",
+        "User override INSERT/UPDATE check: config_key must be in overridable list for that org+agent_type"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222000001_agent_config_engine.sql"
+      ]
+    },
+    {
+      "id": "CFG-004",
+      "title": "Create resolve_agent_config() and resolve_agent_config_all() Postgres functions",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-002", "CFG-003"], "files": [], "schema": ["agent_config_defaults", "agent_config_org_overrides", "agent_config_user_overrides"] },
+      "blocks": ["CFG-005", "CFG-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "resolve_agent_config(p_org_id uuid, p_user_id uuid, p_agent_type text, p_config_key text) → jsonb: returns user override → org override → platform default (first non-null)",
+        "resolve_agent_config_all(p_org_id uuid, p_user_id uuid, p_agent_type text) → TABLE(config_key text, config_value jsonb, source text): returns all config keys for an agent type with source column (user|org|default)",
+        "Both functions are STABLE SECURITY DEFINER with search_path set to 'public'",
+        "Performance: resolve_agent_config_all for a single agent type completes in <50ms with 50+ config keys"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222000001_agent_config_engine.sql"
+      ]
+    },
+    {
+      "id": "CFG-005",
+      "title": "Create shared agentConfigEngine.ts loader for edge functions",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-004"], "files": ["supabase/functions/_shared/agentConfig.ts"], "schema": [] },
+      "blocks": ["CFG-006", "CFG-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "New file: supabase/functions/_shared/config/agentConfigEngine.ts",
+        "Exports getAgentConfig(client, orgId, userId, agentType): calls resolve_agent_config_all RPC and returns typed config object",
+        "Exports getAgentConfigKey(client, orgId, userId, agentType, configKey): calls resolve_agent_config RPC for single key",
+        "5-minute in-memory cache keyed by (orgId, userId, agentType) with TTL eviction",
+        "Cache invalidation via cache.clear() export for testing",
+        "Graceful degradation: if RPC fails, returns hardcoded defaults with console.warn",
+        "TypeScript types: AgentConfigMap, AgentConfigResult with source attribution"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/config/agentConfigEngine.ts",
+        "supabase/functions/_shared/config/types.ts"
+      ]
+    },
+    {
+      "id": "CFG-006",
+      "title": "Create config management edge function (agent-config-admin)",
+      "phase": "phase-2",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-005"], "files": [], "schema": [] },
+      "blocks": ["CFG-009"],
+      "parallelWith": ["CFG-007"],
+      "acceptance": [
+        "New edge function: supabase/functions/agent-config-admin/index.ts",
+        "Handlers: get_config (read resolved config for agent_type), list_agent_types, set_org_override, remove_org_override, set_user_override, remove_user_override, set_overridable, get_overridable_keys",
+        "Auth: JWT-validated, org role check (admin/owner for org writes, member for reads, user for own overrides)",
+        "Uses getCorsHeaders(req) from corsHelper.ts",
+        "Returns source attribution on reads (so UI can show which layer a value comes from)",
+        "Validates config_key exists in defaults table before allowing overrides"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/agent-config-admin/index.ts"
+      ]
+    },
+    {
+      "id": "CFG-007",
+      "title": "Create agent_methodology_templates table and seed 5 methodologies",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-001"], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["CFG-008"],
+      "parallelWith": ["CFG-006"],
+      "acceptance": [
+        "agent_methodology_templates table: id (uuid PK), methodology_key (text UNIQUE), name (text), description (text), config_overrides (jsonb), qualification_criteria (jsonb), stage_rules (jsonb), coaching_focus (jsonb), is_active (boolean), created_at",
+        "Seeded with 5 methodologies: generic, meddic, bant, spin, challenger",
+        "Each methodology defines config_overrides that map to agent_config_defaults keys",
+        "RLS: authenticated read-only, service_role full access"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260222000002_agent_methodology_templates.sql"
+      ]
+    },
+    {
+      "id": "CFG-008",
+      "title": "Add apply_methodology() Postgres function",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-007"], "files": [], "schema": ["agent_methodology_templates"] },
+      "blocks": ["CFG-011"],
+      "parallelWith": [],
+      "acceptance": [
+        "apply_methodology(p_org_id uuid, p_methodology_key text, p_applied_by uuid) → void: reads methodology template config_overrides and upserts into agent_config_org_overrides for all affected agent types",
+        "Stores active methodology as org override: config_key='active_methodology' on agent_type='global'",
+        "Returns count of config keys written for confirmation",
+        "Validates methodology_key exists in templates table before applying"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260222000002_agent_methodology_templates.sql"
+      ]
+    },
+    {
+      "id": "CFG-009",
+      "title": "Create agentConfigService.ts frontend service",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "frontend",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-006"], "files": [], "schema": [] },
+      "blocks": ["CFG-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "New file: src/lib/services/agentConfigService.ts",
+        "Functions: getAgentConfig(orgId, agentType), listAgentTypes(), setOrgOverride(orgId, agentType, key, value), removeOrgOverride(orgId, agentType, key), setUserOverride(orgId, agentType, key, value), getMethodologies(), applyMethodology(orgId, methodologyKey)",
+        "All functions call agent-config-admin edge function via supabase.functions.invoke()",
+        "TypeScript types for all request/response shapes",
+        "Follows existing service patterns (explicit column selection, error handling with toast)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/services/agentConfigService.ts"
+      ]
+    },
+    {
+      "id": "CFG-010",
+      "title": "Create useAgentConfig React Query hook",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "frontend",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-009"], "files": [], "schema": [] },
+      "blocks": ["CFG-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "New file: src/lib/hooks/useAgentConfig.ts",
+        "useAgentConfig(agentType): React Query hook returning resolved config with source attribution",
+        "useAgentTypes(): React Query hook returning list of agent types",
+        "useMethodologies(): React Query hook returning available methodologies",
+        "useMutateAgentConfig(): mutation hook for setting org/user overrides with optimistic updates",
+        "useApplyMethodology(): mutation hook for switching methodology",
+        "Stale time: 5 minutes (matches backend cache TTL)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/hooks/useAgentConfig.ts"
+      ]
+    },
+    {
+      "id": "CFG-011",
+      "title": "Wire proactive orchestrator to use new config engine",
+      "phase": "phase-5",
+      "priority": "P1",
+      "type": "integration",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-005", "CFG-008"], "files": ["supabase/functions/_shared/orchestrator/runner.ts"], "schema": [] },
+      "blocks": ["CFG-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "Orchestrator runner imports getAgentConfig from new config engine",
+        "Sequence steps read their config via getAgentConfig(client, orgId, userId, agentType) instead of hardcoded values",
+        "Existing proactive_agent_config still works as a fallback during migration",
+        "No behaviour change for existing users (defaults match current hardcoded values)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/functions/_shared/orchestrator/adapters/dealRisk.ts"
+      ]
+    },
+    {
+      "id": "CFG-012",
+      "title": "End-to-end verification and deploy to staging",
+      "phase": "phase-5",
+      "priority": "P1",
+      "type": "verification",
+      "status": "pending",
+      "dependencies": { "stories": ["CFG-011"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration runs cleanly on fresh database",
+        "resolve_agent_config_all returns correct 3-layer resolution (verify: default → org override → user override precedence)",
+        "apply_methodology correctly bulk-writes org overrides for all agent types",
+        "Config loader in edge functions returns config in <50ms",
+        "agent-config-admin edge function deployed to staging with --no-verify-jwt",
+        "Frontend hook fetches and displays config correctly"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    }
+  ],
+  "execution": {
+    "totalStories": 12,
+    "completedStories": 0,
+    "currentFeature": "agent-config-engine",
+    "lastUpdated": "2026-02-21T21:00:00Z"
+  },
+  "parallel_groups": [
+    { "group": 1, "stories": ["CFG-001"], "note": "Foundation table + seed data" },
+    { "group": 2, "stories": ["CFG-002", "CFG-003"], "note": "Override tables can be built in parallel" },
+    { "group": 3, "stories": ["CFG-004"], "note": "Resolution functions need all 3 tables" },
+    { "group": 4, "stories": ["CFG-005"], "note": "Shared loader needs resolution functions" },
+    { "group": 5, "stories": ["CFG-006", "CFG-007"], "note": "Admin endpoint and methodology templates can parallel" },
+    { "group": 6, "stories": ["CFG-008"], "note": "Apply methodology needs templates table" },
+    { "group": 7, "stories": ["CFG-009"], "note": "Frontend service needs admin endpoint" },
+    { "group": 8, "stories": ["CFG-010", "CFG-011"], "note": "React hook and orchestrator wiring can parallel" },
+    { "group": 9, "stories": ["CFG-012"], "note": "Final verification" }
+  ]
+}

@@ -6,7 +6,10 @@ import logger from '@/lib/utils/logger';
 // Support both VITE_ prefixed (development) and non-prefixed (Vercel) variable names
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY;
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || import.meta.env.SUPABASE_SERVICE_ROLE_KEY;
+// SECURITY: Never use Secret keys (formerly service role keys) in frontend code!
+// Secret keys bypass RLS and should NEVER be exposed to the browser.
+// The supabaseAdmin client should only be used server-side (edge functions, API routes).
+const supabaseServiceKey = undefined; // Removed: import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
 // Validate required environment variables
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -161,9 +164,8 @@ class PerformanceAwareQueryBuilder {
   }
 }
 
-// Create singleton instances with optimized configuration
+// Create singleton instance with optimized configuration
 let supabaseInstance: TypedSupabaseClient | null = null;
-let supabaseAdminInstance: TypedSupabaseClient | null = null;
 
 /**
  * OPTIMIZED Supabase client for user operations
@@ -315,30 +317,30 @@ export const supabaseOptimized: TypedSupabaseClient = (() => {
 })();
 
 /**
- * OPTIMIZED Admin Supabase client for service role operations
+ * Admin Supabase client - DISABLED for frontend security
+ *
+ * SECURITY WARNING: This should NOT be used in frontend code!
+ * Secret keys (formerly service role keys) bypass Row Level Security and should NEVER be exposed to the browser.
+ *
+ * This client should only be used in:
+ * - Server-side code (Node.js scripts)
+ * - Edge functions (Supabase Edge Functions)
+ * - API routes (Vercel serverless functions)
+ *
+ * For frontend operations, use the regular `supabase` client which uses the Publishable key and respects RLS.
  */
 export const supabaseAdminOptimized: TypedSupabaseClient = (() => {
-  if (!supabaseAdminInstance && supabaseServiceKey) {
-    supabaseAdminInstance = createClient<Database>(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        storageKey: 'sb.auth.admin.v3'
-      },
-      
-      // Same connection optimizations as regular client
-      db: CONNECTION_POOL_CONFIG.db,
-      
-      global: {
-        headers: {
-          'X-Client-Info': 'sales-dashboard-admin-v3-optimized',
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-        },
-        fetch: CONNECTION_POOL_CONFIG.global.fetch
-      }
-    });
-  }
-  return supabaseAdminInstance || supabaseOptimized;
+  // SECURITY: Admin client should not be available in frontend
+  // If you need admin operations, use edge functions or API routes instead
+  console.warn(
+    '⚠️ SECURITY WARNING: supabaseAdmin should not be used in frontend code. ' +
+    'Secret keys bypass RLS and expose your database. ' +
+    'Use edge functions or API routes for admin operations instead.'
+  );
+
+  // Return regular client instead of admin client
+  // This prevents accidental exposure of secret keys
+  return supabaseOptimized;
 })();
 
 // Query result caching system

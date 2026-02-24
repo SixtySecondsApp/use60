@@ -290,10 +290,19 @@ export class ApplicationConfig implements IApplicationConfig {
   private getEnvValueInternal(key: string, defaultValue: string | null = null): string {
     // In browser environment, use import.meta.env
     if (typeof window !== 'undefined') {
+      // Try VITE_ prefixed version first, then fallback to non-prefixed for Vercel compatibility
+      if (key.startsWith('VITE_')) {
+        const nonPrefixedKey = key.substring(5); // Remove 'VITE_' prefix
+        return (import.meta.env as any)[key] || (import.meta.env as any)[nonPrefixedKey] || defaultValue || '';
+      }
       return (import.meta.env as any)[key] || defaultValue || '';
     }
     
     // In Node.js environment, use process.env
+    if (key.startsWith('VITE_')) {
+      const nonPrefixedKey = key.substring(5); // Remove 'VITE_' prefix
+      return process.env[key] || process.env[nonPrefixedKey] || defaultValue || '';
+    }
     return process.env[key] || defaultValue || '';
   }
 

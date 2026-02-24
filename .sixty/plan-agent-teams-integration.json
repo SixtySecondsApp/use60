@@ -1,0 +1,357 @@
+{
+  "project": {
+    "name": "Agent Teams Production Integration",
+    "description": "Wire existing agent team infrastructure (demo-only) into live Copilot chat, Skills system, and Ops Workflow Builder. Make multi-agent always-on for all orgs with sensible defaults.",
+    "createdAt": "2026-02-10T00:00:00Z",
+    "parentPlan": ".sixty/plan-agent-teams.json"
+  },
+  "stack": {
+    "framework": "react-vite",
+    "database": "supabase",
+    "auth": "supabase-auth",
+    "styling": "tailwind",
+    "ai": "anthropic-claude"
+  },
+  "features": [
+    {
+      "id": "always-on",
+      "name": "Always-On Default Config",
+      "status": "complete",
+      "priority": 1,
+      "description": "Remove the config-gate. When no agent_team_config row exists, use in-memory defaults (economy tier, all 6 agents, $50/day). Multi-agent becomes the default for every org."
+    },
+    {
+      "id": "skills-affinity",
+      "name": "Skills Agent Affinity",
+      "status": "complete",
+      "priority": 2,
+      "description": "Tag existing skills with agent_affinity metadata so each specialist auto-discovers its relevant skills. Update list_skills filtering and agent system prompts."
+    },
+    {
+      "id": "copilot-integration",
+      "name": "Copilot Production Integration",
+      "status": "complete",
+      "priority": 3,
+      "description": "Verify and fix the live copilot multi-agent path. Ensure transparent delegation works in production chat (not just demo). Fix edge cases around conversation persistence and memory."
+    },
+    {
+      "id": "ops-multi-agent",
+      "name": "Ops Workflow Builder Multi-Agent",
+      "status": "complete",
+      "priority": 4,
+      "description": "Upgrade ops-workflow-orchestrator to use parallel agent teams for faster, higher-quality NLT workflow generation. Research agent handles ICP/search, Outreach agent handles email sequences, Prospecting agent handles execution."
+    },
+    {
+      "id": "automation",
+      "name": "Agent Scheduler & Triggers",
+      "status": "complete",
+      "priority": 5,
+      "description": "Build out the skeleton agent-scheduler and agent-trigger edge functions for cron and event-driven agent runs."
+    }
+  ],
+  "stories": [
+    {
+      "id": "INT-001",
+      "feature": "always-on",
+      "title": "Return default config when no agent_team_config row exists",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/agentConfig.ts"], "schema": [] },
+      "blocks": ["INT-002", "INT-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "loadAgentTeamConfig() returns DEFAULT_CONFIG when no DB row (not null)",
+        "DEFAULT_CONFIG: orchestrator_model=claude-haiku-4-5-20251001, worker_model=same, all 6 agents, $50/day budget",
+        "Existing orgs with a config row still use their custom config",
+        "New function getDefaultConfig() exported for reuse"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/agentConfig.ts"
+      ]
+    },
+    {
+      "id": "INT-002",
+      "feature": "always-on",
+      "title": "Remove force_single_agent check for non-demo contexts",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": ["INT-001"], "files": ["supabase/functions/copilot-autonomous/index.ts"], "schema": [] },
+      "blocks": ["INT-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "force_single_agent context flag still works for demo comparison mode",
+        "Normal copilot requests always attempt multi-agent classification",
+        "Single-domain messages still route to single specialist (no overhead for simple queries)",
+        "Budget exceeded gracefully falls back to single-agent path"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    {
+      "id": "INT-003",
+      "feature": "skills-affinity",
+      "title": "Add agent_affinity field to skill frontmatter spec",
+      "type": "documentation",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["INT-001"], "files": [], "schema": [] },
+      "blocks": ["INT-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "SKILL_FRONTMATTER_GUIDE.md updated with agent_affinity field definition",
+        "agent_affinity is an array of AgentName strings (pipeline, outreach, research, crm_ops, meetings, prospecting)",
+        "Field is optional — skills without it are available to all agents",
+        "validate-skills script updated to validate agent_affinity values"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "docs/copilot/SKILL_FRONTMATTER_GUIDE.md"
+      ]
+    },
+    {
+      "id": "INT-004",
+      "feature": "skills-affinity",
+      "title": "Tag all 31 atomic skills with agent_affinity",
+      "type": "content",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["INT-003"], "files": [], "schema": [] },
+      "blocks": ["INT-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "All 31 atomic skills have agent_affinity in frontmatter",
+        "Mapping: meeting-prep-brief→[meetings], post-meeting-followup-drafter→[outreach,meetings], lead-research→[research,prospecting], deal-*→[pipeline], company-analysis→[research,pipeline], followup-*→[outreach], ai-ark-*→[research,prospecting], apify-*→[prospecting], etc.",
+        "Skills validate successfully with npm run validate-skills",
+        "Skills synced to DB with npm run sync-skills:dry (dry run)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/*/SKILL.md"
+      ]
+    },
+    {
+      "id": "INT-005",
+      "feature": "skills-affinity",
+      "title": "Update list_skills handler to filter by agent_affinity",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["INT-004"], "files": ["supabase/functions/_shared/skillsToolHandlers.ts"], "schema": [] },
+      "blocks": ["INT-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "handleListSkills() accepts optional agent_name parameter",
+        "When agent_name provided, filter skills where agent_affinity includes that agent OR agent_affinity is empty/null",
+        "agentSpecialist.ts passes config.name as agent_name when calling list_skills",
+        "Existing calls without agent_name still return all skills (backward compatible)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/skillsToolHandlers.ts",
+        "supabase/functions/_shared/agentSpecialist.ts"
+      ]
+    },
+    {
+      "id": "INT-006",
+      "feature": "copilot-integration",
+      "title": "End-to-end test: copilot multi-agent in staging",
+      "type": "testing",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["INT-002", "INT-005"], "files": [], "schema": [] },
+      "blocks": ["INT-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Deploy copilot-autonomous to staging with --no-verify-jwt",
+        "Single-domain query (e.g. 'show my pipeline') → single specialist delegation, response visible in chat",
+        "Multi-domain query (e.g. 'review my pipeline and draft follow-ups for stale deals') → parallel delegation, AgentWorkingIndicator shows both agents, synthesized response in chat",
+        "Conversation persistence works (message saved to copilot_messages)",
+        "agent_routing_log has entries for both queries",
+        "No regression: simple queries ('hello', 'what can you do') don't trigger multi-agent"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    },
+    {
+      "id": "INT-007",
+      "feature": "copilot-integration",
+      "title": "Fix conversation memory context for multi-agent responses",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["INT-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["INT-008"],
+      "acceptance": [
+        "Multi-agent synthesis response is saved as a single message in copilot_messages (not per-agent fragments)",
+        "Memory extraction runs on the synthesized response (not individual agent outputs)",
+        "Conversation compaction handles multi-agent responses correctly",
+        "Follow-up messages in the same conversation have context from prior multi-agent responses"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    {
+      "id": "INT-008",
+      "feature": "ops-multi-agent",
+      "title": "Create parallel plan decomposition for ops-workflow-orchestrator",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["INT-005"], "files": ["supabase/functions/ops-workflow-orchestrator/index.ts"], "schema": [] },
+      "blocks": ["INT-009"],
+      "parallelWith": ["INT-007"],
+      "acceptance": [
+        "New function decomposePromptMultiAgent() that delegates planning to parallel specialists",
+        "Research agent: analyzes ICP criteria, optimizes Apollo search params",
+        "Outreach agent: plans email sequence strategy, angle, timing using sales-sequence skill patterns",
+        "Prospecting agent: determines enrichment needs and campaign structure",
+        "Results merged into the existing SkillPlan format (backward compatible)",
+        "Falls back to single-agent decomposePrompt() if multi-agent fails"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts"
+      ]
+    },
+    {
+      "id": "INT-009",
+      "feature": "ops-multi-agent",
+      "title": "Parallelize ops workflow execution steps",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["INT-008"], "files": [], "schema": [] },
+      "blocks": ["INT-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "Search + email sequence planning can run in parallel (search doesn't block email angle planning)",
+        "Enrichment runs after search completes but email generation starts immediately on enriched rows",
+        "SSE events include agent attribution (which specialist is handling which step)",
+        "Frontend useWorkflowOrchestrator.ts handles new agent SSE events",
+        "Total execution time reduced by 30-50% vs sequential"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts",
+        "src/lib/hooks/useWorkflowOrchestrator.ts"
+      ]
+    },
+    {
+      "id": "INT-010",
+      "feature": "ops-multi-agent",
+      "title": "Add agent indicators to ops workflow progress UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["INT-009"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["INT-011"],
+      "acceptance": [
+        "WorkflowProgress component shows which specialist is handling each step",
+        "Agent icon + name badge on each step card (reuse AgentWorkingIndicator styling)",
+        "Parallel steps shown side-by-side (not stacked) when running simultaneously",
+        "Completion summary shows agents used and time saved vs sequential"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/ops/WorkflowProgress.tsx",
+        "src/lib/hooks/useWorkflowOrchestrator.ts"
+      ]
+    },
+    {
+      "id": "INT-011",
+      "feature": "automation",
+      "title": "Build agent-scheduler edge function for cron-triggered runs",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["INT-001"], "files": ["supabase/functions/agent-scheduler/index.ts"], "schema": ["agent_schedules"] },
+      "blocks": ["INT-013"],
+      "parallelWith": ["INT-010", "INT-012"],
+      "acceptance": [
+        "Edge function queries active schedules where cron matches current window (±5 min)",
+        "For each matching schedule: instantiates specialist agent with prompt_template",
+        "Agent runs with scoped tools (same as copilot specialist runner)",
+        "Result delivered via configured channel (in_app notification, Slack, email)",
+        "Updates last_run_at on schedule after execution",
+        "Pre-built schedules: morning pipeline brief (9am daily), follow-up check (2pm daily), weekly pipeline review (Monday 9am)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/agent-scheduler/index.ts"
+      ]
+    },
+    {
+      "id": "INT-012",
+      "feature": "automation",
+      "title": "Build agent-trigger edge function for event-triggered runs",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["INT-001"], "files": ["supabase/functions/agent-trigger/index.ts"], "schema": ["agent_triggers"] },
+      "blocks": ["INT-013"],
+      "parallelWith": ["INT-010", "INT-011"],
+      "acceptance": [
+        "Edge function receives event payload (deal_created, deal_stage_changed, meeting_completed, contact_created, task_overdue, email_received)",
+        "Queries active triggers matching event type for the org",
+        "Instantiates specialist agent with trigger's prompt_template + event context",
+        "Pre-built triggers: deal_created→research agent (auto-enrich), meeting_completed→outreach agent (draft follow-up)",
+        "Rate limiting: max 10 triggers per org per hour"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/agent-trigger/index.ts"
+      ]
+    },
+    {
+      "id": "INT-013",
+      "feature": "automation",
+      "title": "Wire automation UI to live scheduler and trigger functions",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["INT-011", "INT-012"], "files": ["src/pages/platform/AgentTeamSettings.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "AgentTeamSettings Schedules tab creates/edits real agent_schedules rows",
+        "AgentTeamSettings Triggers tab creates/edits real agent_triggers rows",
+        "Pre-built schedule templates available from a dropdown",
+        "Run history shows last_run_at and result summary per schedule",
+        "Toast confirmation on create/update/delete"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/AgentTeamSettings.tsx",
+        "src/lib/services/agentTeamService.ts"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 13,
+    "completedStories": 13,
+    "currentFeature": "all-complete",
+    "parallelGroups": [
+      ["INT-001"],
+      ["INT-002", "INT-003"],
+      ["INT-004"],
+      ["INT-005"],
+      ["INT-006"],
+      ["INT-007", "INT-008"],
+      ["INT-009"],
+      ["INT-010", "INT-011", "INT-012"],
+      ["INT-013"]
+    ],
+    "estimatedTotalMinutes": 275,
+    "criticalPath": ["INT-001", "INT-002", "INT-006", "INT-008", "INT-009", "INT-010"],
+    "lastUpdated": "2026-02-10T12:00:00Z"
+  }
+}
