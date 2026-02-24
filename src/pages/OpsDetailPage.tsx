@@ -2463,8 +2463,8 @@ function OpsDetailPage() {
                 </button>
               )}
 
-              {/* Profile context selector */}
-              {sortedProfiles.length > 0 && (
+              {/* Profile context selector — only show when multiple profiles exist */}
+              {sortedProfiles.length > 1 && (
                 <Select
                   value={table.context_profile_id ?? '__default__'}
                   onValueChange={(val) => {

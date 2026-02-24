@@ -48,6 +48,7 @@ export const CommandCentreWowDemo = lazyWithRetry(() => import('@/pages/platform
 export const CommitmentDetectionDemo = lazyWithRetry(() => import('@/pages/platform/CommitmentDetectionDemo'));
 export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/AgentTeamSettings'));
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
+export const MultiAgentResearchDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentResearchDemoPage'));
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
 export const AgentAbilitiesPage = lazyWithRetry(() => import('@/pages/platform/AgentAbilitiesPage'));
 export const OrchestratorDashboard = lazyWithRetry(() => import('@/pages/platform/OrchestratorDashboard'));
