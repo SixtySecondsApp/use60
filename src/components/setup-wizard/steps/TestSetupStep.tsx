@@ -407,9 +407,11 @@ STEP 3 — Write one cold email using what you found. Rules:
 - Open with something specific about THEM (role, company, recent news)
 - One clear ask
 - Human tone, not a template
+- NEVER use em dashes (—) or en dashes (–). Use a hyphen (-), a full stop, or restructure the sentence instead.
 ${signOffInstruction}
 
-IMPORTANT: Output ONLY the final email. Start directly with "Subject:" — no preamble, no explanation, no commentary before or after the email.`;
+IMPORTANT: Output ONLY the final email. Start directly with "Subject:" — no preamble, no explanation, no commentary before or after the email.
+If you lack personalization data, do NOT ask the user for details. Instead, offer a specific next step YOU can take, like "If you want me to personalise this further, I can take a look at their LinkedIn profile and rewrite it with more context."`;
 
 
     try {

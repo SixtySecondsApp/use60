@@ -50,6 +50,8 @@ export async function sendSlackDM(
     const messagePayload: any = {
       channel: channelId,
       text: text || 'Notification from use60',
+      unfurl_links: false,
+      unfurl_media: false,
     };
 
     if (blocks && blocks.length > 0) {

@@ -1,0 +1,1112 @@
+{
+  "project": {
+    "name": "V2 Architecture Foundations",
+    "template": "existing-codebase",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind",
+      "ai": "multi-provider"
+    },
+    "createdAt": "2026-02-22T22:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "obs",
+      "name": "Platform Observability (Layer 1)",
+      "status": "pending",
+      "prd": "PRD Section 5 — Structured event logging",
+      "createdAt": "2026-02-22T22:00:00Z"
+    },
+    {
+      "id": "model",
+      "name": "Model Router with Credit Integration",
+      "status": "pending",
+      "prd": "PRD Section 3 — Intelligence tiers, fallback chains, credit governance",
+      "createdAt": "2026-02-22T22:00:00Z"
+    },
+    {
+      "id": "route",
+      "name": "Unified Server-Side Routing",
+      "status": "pending",
+      "prd": "PRD Section 1 — One routing brain, multiple consumers",
+      "createdAt": "2026-02-22T22:00:00Z"
+    },
+    {
+      "id": "skill",
+      "name": "Skill Versioning & Namespacing",
+      "status": "pending",
+      "prd": "PRD Section 2 — Version management, namespaces, org pinning",
+      "createdAt": "2026-02-22T22:00:00Z"
+    },
+    {
+      "id": "memory",
+      "name": "Adaptive Session Memory",
+      "status": "pending",
+      "prd": "PRD Section 4 — Model-aware compaction, semantic summarisation",
+      "createdAt": "2026-02-22T22:00:00Z"
+    },
+    {
+      "id": "retry",
+      "name": "Fleet Agent Error Handling & Retry",
+      "status": "pending",
+      "prd": "PRD Section 6.1 — Standardised retry, partial results, DLQ",
+      "createdAt": "2026-02-22T22:00:00Z"
+    },
+    {
+      "id": "backpressure",
+      "name": "Command Centre Backpressure",
+      "status": "pending",
+      "prd": "PRD Section 6.2 — Priority queues, rate limiting",
+      "createdAt": "2026-02-22T22:00:00Z"
+    },
+    {
+      "id": "dedup",
+      "name": "Fleet Deduplication Strategy",
+      "status": "pending",
+      "prd": "PRD Section 6.3 — Entity-level dedup with evidence merging",
+      "createdAt": "2026-02-22T22:00:00Z"
+    },
+    {
+      "id": "xchannel",
+      "name": "Cross-Channel Session Continuity",
+      "status": "pending",
+      "prd": "PRD Section 6.4 — Bidirectional context bridging",
+      "createdAt": "2026-02-22T22:00:00Z"
+    },
+    {
+      "id": "obs2",
+      "name": "Platform Observability (Layers 2 & 3)",
+      "status": "pending",
+      "prd": "PRD Section 5 — Agent execution tracking, health monitoring",
+      "createdAt": "2026-02-22T22:00:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "OBS-001",
+      "feature": "obs",
+      "title": "Create system_logs table and retention migration",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["OBS-002", "OBS-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "system_logs table created with all columns from PRD (trace_id, span_id, parent_span_id, timestamp, service, action, level, user_id, org_id, agent_name, duration_ms, metadata jsonb, error_message)",
+        "Indexes on trace_id, timestamp, service, action, level, user_id, org_id, agent_name",
+        "GIN index on metadata column",
+        "RLS policies: service role can insert, users can read own org logs, platform admin reads all"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 3,
+      "files": [
+        "supabase/migrations/20260222220001_system_logs.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-02-22T22:05:00Z",
+      "completedAt": "2026-02-22T22:08:00Z"
+    },
+    {
+      "id": "OBS-002",
+      "feature": "obs",
+      "title": "Create _shared/logger.ts structured logging module",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["OBS-001"], "files": ["supabase/functions/_shared/corsHelper.ts"], "schema": ["system_logs"] },
+      "blocks": ["OBS-003", "MODEL-001"],
+      "parallelWith": [],
+      "acceptance": [
+        "Logger class with debug/info/warn/error methods matching LogEvent interface from PRD",
+        "Auto-generates trace_id and span_id UUIDs; accepts parent_span_id for nesting",
+        "createSpan() helper for timing operations (returns span with stop() method that logs duration_ms)",
+        "Batch insert to system_logs via service role client (batches every 5 events or 2 seconds)",
+        "Graceful failure — logging errors never crash the host edge function"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/logger.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "OBS-003",
+      "feature": "obs",
+      "title": "Create logs-cleanup cron edge function for retention",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["OBS-001", "OBS-002"], "files": [], "schema": ["system_logs"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function logs-cleanup that runs on nightly cron schedule",
+        "Deletes debug logs older than 30 days, info/warn older than 90 days, error older than 365 days",
+        "Logs its own execution via logger.ts (self-dogfooding)",
+        "Reports rows deleted per level to system_logs"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/logs-cleanup/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "MODEL-001",
+      "feature": "model",
+      "title": "Create model_config table and seed default model matrix",
+      "type": "schema",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["OBS-002"], "files": [], "schema": [] },
+      "blocks": ["MODEL-002", "MODEL-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "model_config table with columns: id, provider, model_id, intelligence_tier, feature, is_primary, is_fallback, fallback_order, credit_cost, max_tokens, is_active, updated_at",
+        "Seed data for default model matrix (Low/Medium/High × copilot/fleet_agent/recording/embedding/enrichment)",
+        "model_health table with columns: model_id, failure_count, last_failure_at, window_start, is_circuit_open",
+        "Unique constraint on (intelligence_tier, feature, is_primary) where is_primary = true"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_model_config.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MODEL-002",
+      "feature": "model",
+      "title": "Create _shared/modelRouter.ts — resolveModel + circuit breaker",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["MODEL-001", "OBS-002"], "files": [], "schema": ["model_config", "model_health"] },
+      "blocks": ["MODEL-003", "MODEL-004", "ROUTE-001"],
+      "parallelWith": [],
+      "acceptance": [
+        "resolveModel(request: ModelRequest) returns ModelResolution with provider, model_id, credit_cost, max_tokens",
+        "Reads user intelligence tier from user_settings, falls back to org default",
+        "Circuit breaker: checks model_health table, skips to fallback if 3+ failures in 5min window",
+        "Fallback chain walks fallback_order from model_config when primary unavailable",
+        "All resolution decisions logged via logger.ts with trace_id"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/modelRouter.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MODEL-003",
+      "feature": "model",
+      "title": "Add credit deduction and budget checking to modelRouter",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["MODEL-002"], "files": [], "schema": ["model_config"] },
+      "blocks": ["MODEL-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "checkBudget(user_id, org_id) returns { remaining, can_proceed } from credit_transactions",
+        "deductCredits(user_id, resolution, actual_tokens) inserts to credit_transactions with agent_name, model_id, tokens_used, credits_deducted, trace_id",
+        "Grace threshold: allows negative balances up to -10 credits, blocks new executions beyond that",
+        "Fleet agent per-run budgets defined as constants (Morning Briefing: 8, EOD: 8, Meeting Prep: 5, etc.)",
+        "budget_exceeded flag emitted when agent exceeds per-run cap"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/modelRouter.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MODEL-004",
+      "feature": "model",
+      "title": "Integrate modelRouter into copilot-autonomous edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["MODEL-003"], "files": ["supabase/functions/copilot-autonomous/index.ts"], "schema": [] },
+      "blocks": ["MODEL-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "copilot-autonomous calls resolveModel() instead of hardcoded claude-sonnet-4-6",
+        "Model resolution logged with trace_id in system_logs",
+        "On model failure, fallback activates automatically and response continues",
+        "Credit deduction happens after response completes with actual token count",
+        "Existing streaming and tool_use behavior unchanged"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MODEL-005",
+      "feature": "model",
+      "title": "Integrate modelRouter into api-copilot and fleet agent functions",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["MODEL-004"], "files": ["supabase/functions/api-copilot/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "api-copilot calls resolveModel() instead of hardcoded Gemini 2.5 Flash",
+        "agent-orchestrator passes model resolution to fleet agent executions",
+        "slack-copilot calls resolveModel() for its Anthropic intent classifier",
+        "All AI invocations across copilot, fleet, recording, and enrichment go through modelRouter",
+        "Circuit breaker auto-recovers after 5-minute window expires"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/api-copilot/index.ts",
+        "supabase/functions/agent-orchestrator/index.ts",
+        "supabase/functions/slack-copilot/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "ROUTE-001",
+      "feature": "route",
+      "title": "Create route-message edge function with server-side routing pipeline",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["MODEL-002", "OBS-002"], "files": ["src/lib/services/copilotRoutingService.ts"], "schema": ["system_logs"] },
+      "blocks": ["ROUTE-002", "ROUTE-003", "ROUTE-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "POST /route-message accepts { message, source, org_id, user_id, context? }",
+        "Returns { route, skill_key?, confidence, model_override?, matched_by }",
+        "5-step pipeline: intent classification → sequence triggers → skill triggers → semantic fallback → general",
+        "Short-circuits on first match above confidence threshold",
+        "Logs routing decision to system_logs with trace_id and duration_ms"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/route-message/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ROUTE-002",
+      "feature": "route",
+      "title": "Add routing_cache table and caching logic to route-message",
+      "type": "backend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["ROUTE-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["ROUTE-003"],
+      "acceptance": [
+        "routing_cache table with hash key, response json, created_at, expires_at",
+        "Cache key = hash(message + org_id + source), TTL = 2 minutes",
+        "Cache hit skips full pipeline, returns cached result with matched_by: 'cache'",
+        "Cache miss runs pipeline then stores result",
+        "P95 routing latency under 200ms including embedding step"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_routing_cache.sql",
+        "supabase/functions/route-message/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ROUTE-003",
+      "feature": "route",
+      "title": "Migrate CopilotContext.sendMessage() to use route-message edge function",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["ROUTE-001"], "files": ["src/lib/contexts/CopilotContext.tsx", "src/lib/services/copilotRoutingService.ts"], "schema": [] },
+      "blocks": ["ROUTE-005"],
+      "parallelWith": ["ROUTE-002"],
+      "acceptance": [
+        "CopilotContext.sendMessage() calls route-message with source: 'web_copilot' before calling AI",
+        "Routing result passed to copilot-autonomous/api-copilot as skill context",
+        "Client-side copilotRoutingService.routeToSkill() no longer called from sendMessage()",
+        "Existing copilot chat behavior unchanged from user perspective",
+        "Routing latency measured and logged via performance.now()"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/contexts/CopilotContext.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ROUTE-004",
+      "feature": "route",
+      "title": "Migrate slack-copilot to use route-message instead of hardcoded intent classifier",
+      "type": "backend",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": ["ROUTE-001"], "files": ["supabase/functions/slack-copilot/index.ts"], "schema": [] },
+      "blocks": ["ROUTE-005"],
+      "parallelWith": ["ROUTE-003"],
+      "acceptance": [
+        "slack-copilot calls route-message with source: 'slack_copilot' and thread context",
+        "Intent classification in route-message replaces slack-copilot's inline classifier",
+        "Existing Slack response behavior unchanged",
+        "Thread context (thread_id) passed through to route-message for stateful routing"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-copilot/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "ROUTE-005",
+      "feature": "route",
+      "title": "Migrate fleet router to use route-message and deprecate client-side routing",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["ROUTE-003", "ROUTE-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Fleet router calls route-message with source: 'fleet_agent' and agent_name context",
+        "All three routing surfaces (web, Slack, fleet) use the same edge function",
+        "copilotRoutingService.ts marked deprecated with JSDoc, no longer imported by any active code path",
+        "Zero client-side routing logic remains in the active frontend code paths"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/agent-orchestrator/index.ts",
+        "src/lib/services/copilotRoutingService.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "SKILL-001",
+      "feature": "skill",
+      "title": "Add version, namespace, source columns to platform_skills and organization_skills",
+      "type": "schema",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["ROUTE-001"], "files": [], "schema": ["platform_skills", "organization_skills"] },
+      "blocks": ["SKILL-002", "SKILL-003", "SKILL-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "platform_skills gains: version (int, default 1), namespace (text, default 'shared'), source (text, default 'platform'), is_current (bool, default true), changelog (text), deprecated_at (timestamptz)",
+        "organization_skills gains: pinned_version (int, nullable), source (text), namespace_override (text, nullable)",
+        "CHECK constraint on namespace IN ('copilot', 'fleet', 'slack', 'shared')",
+        "CHECK constraint on source IN ('platform', 'org', 'user')",
+        "All existing rows migrated: version=1, is_current=true, namespace='shared', source='platform'"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_skill_versioning.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SKILL-002",
+      "feature": "skill",
+      "title": "Update get_organization_skills_for_agent RPC with namespace filtering and version pinning",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["SKILL-001"], "files": [], "schema": ["platform_skills", "organization_skills"] },
+      "blocks": ["SKILL-005"],
+      "parallelWith": ["SKILL-003"],
+      "acceptance": [
+        "RPC accepts new p_source parameter ('web_copilot', 'slack_copilot', 'fleet_agent', 'command_centre')",
+        "Filters skills by visible namespaces: web→copilot+shared, slack→slack+shared, fleet→fleet+shared",
+        "Respects namespace_override on organization_skills (allows org to expose fleet skills to copilot)",
+        "When pinned_version is set, joins on version instead of is_current=true",
+        "Backward compatible: omitting p_source returns all namespaces (existing behavior)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_skill_rpc_namespace.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SKILL-003",
+      "feature": "skill",
+      "title": "Update sync-skills.ts for versioning, namespace, and changelog",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["SKILL-001"], "files": ["scripts/sync-skills.ts"], "schema": ["platform_skills"] },
+      "blocks": ["SKILL-005"],
+      "parallelWith": ["SKILL-002"],
+      "acceptance": [
+        "Reads namespace and source from SKILL.md frontmatter (defaults: namespace=shared, source=platform)",
+        "Auto-increments version on content change (compares hash of content body)",
+        "Sets is_current=true on new version, is_current=false on previous (preserves old versions)",
+        "Supports --deprecate skill_key flag to mark deprecated_at without deleting",
+        "npm run validate-skills checks namespace and source validity"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "scripts/sync-skills.ts",
+        "scripts/lib/skillParser.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SKILL-004",
+      "feature": "skill",
+      "title": "Convert 8 Slack intent handlers to slack-namespaced skills",
+      "type": "backend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["SKILL-001"], "files": [], "schema": ["platform_skills"] },
+      "blocks": ["SKILL-005"],
+      "parallelWith": ["SKILL-002", "SKILL-003"],
+      "acceptance": [
+        "8 new SKILL.md files created in skills/atomic/ with namespace: slack",
+        "Skills: slack-deal-query, slack-contact-query, slack-pipeline-query, slack-history-query, slack-coaching-query, slack-competitive-query, slack-actions-query, slack-general-query",
+        "Each skill contains the prompt logic currently in the hardcoded Slack handler",
+        "Skills have appropriate triggers matching current intent classification patterns"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "skills/atomic/slack-deal-query/SKILL.md",
+        "skills/atomic/slack-contact-query/SKILL.md",
+        "skills/atomic/slack-pipeline-query/SKILL.md",
+        "skills/atomic/slack-history-query/SKILL.md",
+        "skills/atomic/slack-coaching-query/SKILL.md",
+        "skills/atomic/slack-competitive-query/SKILL.md",
+        "skills/atomic/slack-actions-query/SKILL.md",
+        "skills/atomic/slack-general-query/SKILL.md"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SKILL-005",
+      "feature": "skill",
+      "title": "Wire route-message to use namespace filtering from skill versioning",
+      "type": "backend",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": { "stories": ["SKILL-002", "SKILL-003", "SKILL-004"], "files": ["supabase/functions/route-message/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "route-message passes source to get_organization_skills_for_agent RPC",
+        "Fleet agents only discover fleet and shared skills, never copilot or slack",
+        "Slack copilot only discovers slack and shared skills",
+        "Web copilot only discovers copilot and shared skills",
+        "Skill Builder UI shows namespace and version metadata (read-only display)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/route-message/index.ts",
+        "src/components/platform/skills/SkillBuilder.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "MEM-001",
+      "feature": "memory",
+      "title": "Create conversation_context table for cross-channel memory",
+      "type": "schema",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["MODEL-002"], "files": [], "schema": [] },
+      "blocks": ["MEM-002", "MEM-003", "XCHAN-001"],
+      "parallelWith": ["SKILL-001"],
+      "acceptance": [
+        "conversation_context table with: id, user_id, org_id, channel, channel_ref, entity_type, entity_id, context_summary, last_updated",
+        "CHECK constraint on channel IN ('web_copilot', 'slack_copilot', 'fleet_agent')",
+        "CHECK constraint on entity_type IN ('deal', 'contact', 'company', 'meeting', 'task')",
+        "RLS: users can only read/write own rows (user_id = auth.uid())",
+        "Index on (user_id, entity_type, entity_id, last_updated)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_conversation_context.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MEM-002",
+      "feature": "memory",
+      "title": "Implement adaptive compaction threshold in copilotSessionService",
+      "type": "backend",
+      "status": "pending",
+      "priority": 15,
+      "dependencies": { "stories": ["MEM-001", "MODEL-002"], "files": ["src/lib/services/copilotSessionService.ts"], "schema": [] },
+      "blocks": ["MEM-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "getCompactionThreshold(model_id) replaces hardcoded 80k constant",
+        "Threshold = floor((maxContext - 4096 - 8192 - 4096) * 0.75) per model",
+        "Claude Haiku/Sonnet: ~137k tokens, Gemini Flash: ~736k tokens",
+        "Compaction threshold updates automatically when model changes via intelligence tier or fallback",
+        "Existing compactSession() flow unchanged except for dynamic threshold"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/services/copilotSessionService.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MEM-003",
+      "feature": "memory",
+      "title": "Implement three-tier semantic compaction (verbatim, summarised, entity facts)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 16,
+      "dependencies": { "stories": ["MEM-002"], "files": ["src/lib/services/copilotSessionService.ts", "src/lib/services/copilotMemoryService.ts"], "schema": [] },
+      "blocks": ["MEM-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "Tier 1: Last 20 messages kept verbatim (configurable)",
+        "Tier 2: Messages older than Tier 1 but within 7 days summarised via low-tier AI call",
+        "Tier 2 summaries stored in copilot_session_summaries with extracted decisions, actions, deal stages, entities, preferences",
+        "Tier 3: Messages older than 7 days reduced to structured entity-relationship facts in copilot_memories with source provenance",
+        "Compaction runs asynchronously after response is streamed, never adds user-visible latency"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/services/copilotSessionService.ts",
+        "src/lib/services/copilotMemoryService.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "MEM-004",
+      "feature": "memory",
+      "title": "Wire copilot-autonomous to read and write conversation_context",
+      "type": "backend",
+      "status": "pending",
+      "priority": 17,
+      "dependencies": { "stories": ["MEM-003"], "files": ["supabase/functions/copilot-autonomous/index.ts"], "schema": ["conversation_context"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "On message received: extract entity references, resolve via resolve_entity, query conversation_context for last 7 days",
+        "Max 3 context blocks injected, prioritised by recency, capped at 2000 tokens total",
+        "After 3+ messages about an entity: write summary to conversation_context with channel='web_copilot'",
+        "Fleet agent context prefixed with agent name for attribution",
+        "Context blocks clearly labeled with source and timestamp in system prompt"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "RETRY-001",
+      "feature": "retry",
+      "title": "Create _shared/agentRunner.ts execution wrapper with retry logic",
+      "type": "backend",
+      "status": "pending",
+      "priority": 18,
+      "dependencies": { "stories": ["OBS-002", "MODEL-002"], "files": [], "schema": [] },
+      "blocks": ["RETRY-002", "RETRY-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "runAgent(config, executor) wraps any fleet agent execution with standardised error handling",
+        "Retry policy per failure type: transient 5xx (2 retries, exponential backoff), context exceeded (1 retry, truncated input), model unavailable (1 retry via fallback), validation error (0 retries)",
+        "Partial results: when allow_partial_results=true, emit completed items even on mid-execution failure",
+        "Credit budget enforcement: completes current step but skips remaining on budget_exceeded",
+        "All retries and failures logged via logger.ts with trace_id"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/agentRunner.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "RETRY-002",
+      "feature": "retry",
+      "title": "Create agent_dead_letters table and dead letter queue logic",
+      "type": "schema",
+      "status": "pending",
+      "priority": 19,
+      "dependencies": { "stories": ["RETRY-001"], "files": [], "schema": ["system_logs"] },
+      "blocks": ["RETRY-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "agent_dead_letters table with: id, trace_id, agent_name, trigger_type, trigger_payload (jsonb), failure_reason, error_detail, retry_count, created_at, resolved_at",
+        "Failed executions (after all retries) write to DLQ with full error context",
+        "RLS: service role writes, platform admin reads",
+        "Index on (agent_name, created_at) and (resolved_at) for health check queries"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_agent_dead_letters.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "RETRY-003",
+      "feature": "retry",
+      "title": "Create agent-dead-letter-retry cron and integrate agentRunner into fleet agents",
+      "type": "backend",
+      "status": "pending",
+      "priority": 20,
+      "dependencies": { "stories": ["RETRY-002"], "files": ["supabase/functions/agent-orchestrator/index.ts"], "schema": ["agent_dead_letters"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Daily cron agent-dead-letter-retry re-runs unresolved items from last 24 hours",
+        "Successful retry marks item resolved_at = now()",
+        "Repeated failure keeps item in queue for manual investigation",
+        "agent-orchestrator updated to wrap agent executions with runAgent()",
+        "At least 2 fleet agent functions converted to use agentRunner wrapper"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/agent-dead-letter-retry/index.ts",
+        "supabase/functions/agent-orchestrator/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BP-001",
+      "feature": "backpressure",
+      "title": "Add queue priority columns to Command Centre inbox table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 21,
+      "dependencies": { "stories": ["OBS-002"], "files": [], "schema": [] },
+      "blocks": ["BP-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "Add columns: queue_priority (int 0-3), queued_at (timestamptz), processing_started_at (timestamptz nullable), processing_attempts (int default 0)",
+        "Default queue_priority = 2 (normal) for backward compatibility",
+        "Index on (queue_priority, queued_at) for ordered processing",
+        "Existing Command Centre items migrated with queue_priority = 2"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_cc_backpressure.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "BP-002",
+      "feature": "backpressure",
+      "title": "Implement rate limiting and priority processing in cc-enrich",
+      "type": "backend",
+      "status": "pending",
+      "priority": 22,
+      "dependencies": { "stories": ["BP-001"], "files": [], "schema": [] },
+      "blocks": ["BP-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "cc-enrich processes items by priority (P0 first, then P1, P2, P3)",
+        "Max 5 items enriching concurrently",
+        "Per-provider rate limits: HubSpot 8/min, Google Calendar 10/min, Slack 5/min",
+        "Rate-limited items re-queued with 60-second delay instead of failing",
+        "P0/P1 items bypass queue depth limits entirely"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/cc-enrich/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "BP-003",
+      "feature": "backpressure",
+      "title": "Add batch processing mode for bulk events in cc-enrich",
+      "type": "backend",
+      "status": "pending",
+      "priority": 23,
+      "dependencies": { "stories": ["BP-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "When queue depth > 20 items at same priority, switch to batch mode",
+        "Batch CRM lookups (one query for 10 deals instead of 10 individual)",
+        "Batch calendar lookups (one range query instead of per-meeting)",
+        "Batch Slack notifications (one summary message per channel instead of N individual)",
+        "Queue health metrics logged: depth by priority, avg time-in-queue, throughput"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/cc-enrich/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "DEDUP-001",
+      "feature": "dedup",
+      "title": "Add dedup columns to Command Centre inbox and create merge logic",
+      "type": "schema",
+      "status": "pending",
+      "priority": 24,
+      "dependencies": { "stories": ["BP-002"], "files": [], "schema": [] },
+      "blocks": ["DEDUP-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "Add columns: dedup_key (text, indexed), merge_group_id (uuid), is_primary (bool), merged_evidence (jsonb), merged_confidence (decimal), contributing_agents (text[]), merge_window_expires (timestamptz)",
+        "dedup_key computed as entity_type:entity_id:action_type",
+        "Index on (dedup_key, merge_window_expires) for efficient merge lookups"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_cc_dedup.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DEDUP-002",
+      "feature": "dedup",
+      "title": "Implement pre-enrichment and post-scoring dedup in Command Centre pipeline",
+      "type": "backend",
+      "status": "pending",
+      "priority": 25,
+      "dependencies": { "stories": ["DEDUP-001"], "files": [], "schema": [] },
+      "blocks": ["DEDUP-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Pre-enrichment: on item arrival, check dedup_key within 4-hour window; if match exists and window open, merge without re-enriching",
+        "Merge keeps highest-confidence item as primary, appends evidence with source attribution",
+        "Confidence aggregation: 1 - product(1 - confidence_i), capped at 0.95",
+        "Priority escalation: 3+ contributing agents bumps priority up one level (P2→P1)",
+        "Superseded items (primary already actioned) archived without merging"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/cc-enrich/index.ts",
+        "supabase/functions/cc-prioritise/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DEDUP-003",
+      "feature": "dedup",
+      "title": "Post-scoring dedup re-check and merge confidence threshold crossing",
+      "type": "backend",
+      "status": "pending",
+      "priority": 26,
+      "dependencies": { "stories": ["DEDUP-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "After cc-prioritise scores an item, re-check merge group for threshold crossing",
+        "If merged confidence crosses autonomy threshold (suggest→approve), update primary item status",
+        "Require at least 2 agents with individual confidence > 0.6 before aggregation boosts above any single agent's score",
+        "Multi-agent corroboration produces a single evidence-rich item in Command Centre UI"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/cc-prioritise/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "XCHAN-001",
+      "feature": "xchannel",
+      "title": "Implement Slack thread context extraction to conversation_context",
+      "type": "backend",
+      "status": "pending",
+      "priority": 27,
+      "dependencies": { "stories": ["MEM-001"], "files": ["supabase/functions/slack-copilot/index.ts"], "schema": ["conversation_context"] },
+      "blocks": ["XCHAN-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "After thread goes quiet for 15 min or reaches 10 messages, extract context summary",
+        "Extract entities (deals, contacts, companies) from thread messages",
+        "Upsert to conversation_context with channel='slack_copilot' and channel_ref=thread_id",
+        "Context summary generated via low-tier model call (uses modelRouter)",
+        "Privacy: context scoped to user_id, never visible to other users"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-copilot/index.ts",
+        "supabase/functions/_shared/slack-copilot/threadMemory.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "XCHAN-002",
+      "feature": "xchannel",
+      "title": "Implement fleet agent context writes and 14-day cleanup",
+      "type": "backend",
+      "status": "pending",
+      "priority": 28,
+      "dependencies": { "stories": ["XCHAN-001"], "files": [], "schema": ["conversation_context"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "cc-enrich writes entity-scoped summaries to conversation_context with channel='fleet_agent' and channel_ref=trace_id",
+        "cc-daily-cleanup cron archives conversation_context entries older than 14 days",
+        "Users can delete context via copilot command 'forget what we discussed about [entity]'",
+        "Bidirectional: Slack→web and web→Slack context both work",
+        "Entity resolution via resolve_entity maps variations (e.g. 'Acme' and 'Acme Corporation') to same CRM record"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/cc-enrich/index.ts",
+        "supabase/functions/cc-daily-cleanup/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "OBS2-001",
+      "feature": "obs2",
+      "title": "Create agent_executions table for fleet agent run tracking",
+      "type": "schema",
+      "status": "pending",
+      "priority": 29,
+      "dependencies": { "stories": ["RETRY-003", "BP-003", "DEDUP-003", "XCHAN-002"], "files": [], "schema": ["system_logs"] },
+      "blocks": ["OBS2-002", "OBS2-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "agent_executions table with all columns from PRD: id, trace_id, agent_name, execution_type, triggered_by, started_at, completed_at, status, items_emitted, items_processed, model_id, model_was_fallback, tokens_consumed, credits_consumed, error_message, metadata, user_id, org_id",
+        "Status CHECK: running, completed, failed, partial, budget_exceeded",
+        "Indexes on (agent_name, started_at), (org_id, started_at), (trace_id)",
+        "Relate to existing copilot_executions via trace_id (not replacing it)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD_agent_executions.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "OBS2-002",
+      "feature": "obs2",
+      "title": "Instrument all fleet agents and pipeline stages with agent_executions tracking",
+      "type": "backend",
+      "status": "pending",
+      "priority": 30,
+      "dependencies": { "stories": ["OBS2-001"], "files": ["supabase/functions/_shared/agentRunner.ts"], "schema": ["agent_executions"] },
+      "blocks": ["OBS2-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "agentRunner.ts automatically writes to agent_executions on start and completion",
+        "Every fleet agent run tracked with trace_id, model_id, tokens/credits consumed",
+        "Command Centre pipeline stages (cc-enrich, cc-prioritise, cc-auto-execute) write execution records",
+        "Partial results flagged with status='partial' and items_emitted count",
+        "trace_id propagated from fleet-router → agent → cc-enrich → cc-prioritise → auto-execute → Slack notification"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/agentRunner.ts",
+        "supabase/functions/cc-enrich/index.ts",
+        "supabase/functions/cc-prioritise/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "OBS2-003",
+      "feature": "obs2",
+      "title": "Create fleet-health cron with health snapshots and Slack alerting",
+      "type": "backend",
+      "status": "pending",
+      "priority": 31,
+      "dependencies": { "stories": ["OBS2-002"], "files": [], "schema": ["agent_executions", "agent_dead_letters"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "fleet-health edge function runs every 5 minutes on cron",
+        "Checks each agent against expected cadence (daily 7am for morning briefing, hourly for deal risk, etc.)",
+        "Verifies: last run completed within cadence, no failures, failure rate <10% in 24h, no stuck 'running' >10min",
+        "Writes fleet_health_snapshots table: snapshot_at, agent_name, status, last_success_at, failure_rate_24h, avg_duration_ms, credits_consumed_24h",
+        "Slack alerts: #platform-ops for warnings, #platform-ops @here for critical (agent down, pipeline stalled, circuit breaker open, DLQ >5 items)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/fleet-health/index.ts",
+        "supabase/migrations/YYYYMMDD_fleet_health_snapshots.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 35,
+    "completedStories": 7,
+    "currentFeature": null,
+    "lastUpdated": "2026-02-22T22:00:00Z",
+    "parallelGroups": [
+      { "phase": "1", "stories": ["OBS-001"], "label": "Foundation: system_logs table" },
+      { "phase": "2", "stories": ["OBS-002", "OBS-003"], "label": "Foundation: logger.ts + cleanup cron" },
+      { "phase": "3", "stories": ["MODEL-001"], "label": "Model Router: schema" },
+      { "phase": "4", "stories": ["MODEL-002"], "label": "Model Router: core resolution + circuit breaker" },
+      { "phase": "5", "stories": ["MODEL-003"], "label": "Model Router: credits + budgets" },
+      { "phase": "6", "stories": ["MODEL-004", "MODEL-005"], "label": "Model Router: integration rollout" },
+      { "phase": "7", "stories": ["ROUTE-001"], "label": "Unified Routing: edge function" },
+      { "phase": "8", "stories": ["ROUTE-002", "ROUTE-003", "ROUTE-004"], "label": "Unified Routing: cache + migrations (parallel)" },
+      { "phase": "9", "stories": ["ROUTE-005"], "label": "Unified Routing: fleet + deprecation" },
+      { "phase": "10", "stories": ["SKILL-001", "MEM-001"], "label": "Skill Versioning + Memory: schemas (parallel)" },
+      { "phase": "11", "stories": ["SKILL-002", "SKILL-003", "SKILL-004", "MEM-002"], "label": "Skill + Memory: implementation (parallel)" },
+      { "phase": "12", "stories": ["SKILL-005", "MEM-003"], "label": "Skill wiring + Tier 2/3 compaction" },
+      { "phase": "13", "stories": ["MEM-004"], "label": "Memory: copilot-autonomous integration" },
+      { "phase": "14", "stories": ["RETRY-001"], "label": "Fleet Retry: agentRunner wrapper" },
+      { "phase": "15", "stories": ["RETRY-002", "BP-001"], "label": "Fleet Retry DLQ + Backpressure schema (parallel)" },
+      { "phase": "16", "stories": ["RETRY-003", "BP-002"], "label": "DLQ cron + rate limiting (parallel)" },
+      { "phase": "17", "stories": ["BP-003", "XCHAN-001"], "label": "Batch processing + Slack context extraction (parallel)" },
+      { "phase": "18", "stories": ["DEDUP-001", "XCHAN-002"], "label": "Dedup schema + fleet context writes (parallel)" },
+      { "phase": "19", "stories": ["DEDUP-002"], "label": "Dedup: merge implementation" },
+      { "phase": "20", "stories": ["DEDUP-003"], "label": "Dedup: post-scoring threshold crossing" },
+      { "phase": "21", "stories": ["OBS2-001"], "label": "Observability L2: agent_executions table" },
+      { "phase": "22", "stories": ["OBS2-002"], "label": "Observability L2: instrument all agents" },
+      { "phase": "23", "stories": ["OBS2-003"], "label": "Observability L3: fleet-health + alerting" }
+    ]
+  }
+}

@@ -60,8 +60,8 @@ export function getDefaultConfig(orgId: string): AgentTeamConfig {
   return {
     id: 'default',
     organization_id: orgId,
-    orchestrator_model: 'claude-sonnet-4-6-20250514',
-    worker_model: 'claude-sonnet-4-6-20250514',
+    orchestrator_model: 'claude-sonnet-4-6',
+    worker_model: 'claude-sonnet-4-6',
     enabled_agents: [...ALL_AGENTS],
     budget_limit_daily_usd: 50,
     created_at: now,
