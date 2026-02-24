@@ -1,9 +1,9 @@
 /**
- * MultiAgentDemoPage
+ * MultiAgentResearchDemoPage
  *
- * Side-by-side race page that showcases single-agent vs multi-agent copilot.
- * User picks a sales scenario, clicks Run, and watches both paths execute in parallel.
- * Demo mode uses client-side simulation — no database tables required.
+ * Side-by-side race page for research scenarios: single-agent (sequential)
+ * vs multi-agent (parallel). Research tasks complete fast (~3-4s multi-agent)
+ * to show the dramatic speedup of parallel agent execution.
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useNavigate } from 'react-router-dom';
-import { ScenarioSelector, SALES_SCENARIOS } from '@/components/platform/demo/ScenarioSelector';
+import { ScenarioSelector, RESEARCH_SCENARIOS } from '@/components/platform/demo/ScenarioSelector';
 import { RacePanel } from '@/components/platform/demo/RacePanel';
 import { MetricsComparison } from '@/components/platform/demo/MetricsComparison';
 import type { Scenario, PanelMetrics } from '@/components/platform/demo/types';
@@ -23,7 +23,7 @@ import type { Scenario, PanelMetrics } from '@/components/platform/demo/types';
 // Main Component
 // =============================================================================
 
-export default function MultiAgentDemoPage() {
+export default function MultiAgentResearchDemoPage() {
   const navigate = useNavigate();
   const { isPlatformAdmin } = useUserPermissions();
 
@@ -33,7 +33,6 @@ export default function MultiAgentDemoPage() {
   const [singleMetrics, setSingleMetrics] = useState<PanelMetrics | null>(null);
   const [multiMetrics, setMultiMetrics] = useState<PanelMetrics | null>(null);
 
-  // Track when both panels finish
   const handleSingleMetrics = useCallback((metrics: PanelMetrics) => {
     setSingleMetrics(metrics);
   }, []);
@@ -42,7 +41,6 @@ export default function MultiAgentDemoPage() {
     setMultiMetrics(metrics);
   }, []);
 
-  // Check if both done
   const bothDone = singleMetrics && multiMetrics;
   useEffect(() => {
     if (bothDone && raceState === 'running') {
@@ -65,7 +63,6 @@ export default function MultiAgentDemoPage() {
     setStartSignal(0);
   };
 
-  // Access control
   if (!isPlatformAdmin) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
@@ -86,13 +83,13 @@ export default function MultiAgentDemoPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-3">
-              Multi-Agent Demo
+              Multi-Agent Research Demo
               <Badge variant="outline" className="text-xs font-normal">
                 Demo Mode
               </Badge>
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              See the speed difference: run the same prompt through single-agent and multi-agent paths side by side.
+              See the speed difference: run the same research task through single-agent (sequential) and multi-agent (parallel) paths side by side.
             </p>
           </div>
         </div>
@@ -101,14 +98,14 @@ export default function MultiAgentDemoPage() {
       {/* Scenario Selection */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Choose a Scenario</CardTitle>
+          <CardTitle className="text-base">Choose a Research Scenario</CardTitle>
           <CardDescription>
-            Select a sales scenario to race single-agent vs multi-agent execution.
+            Select a research task to race single-agent (sequential) vs multi-agent (parallel) execution.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ScenarioSelector
-            scenarios={SALES_SCENARIOS}
+            scenarios={RESEARCH_SCENARIOS}
             selectedId={selectedScenario?.id ?? null}
             onSelect={setSelectedScenario}
             disabled={raceState === 'running'}
