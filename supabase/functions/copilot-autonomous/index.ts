@@ -62,7 +62,7 @@ const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-sonnet-4-6-20250514';
 const MAX_ITERATIONS = 15;
 const MAX_TOKENS = 4096;
 

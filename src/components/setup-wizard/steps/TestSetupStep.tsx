@@ -657,7 +657,7 @@ IMPORTANT: Output ONLY the final email. Start directly with "Subject:" — no pr
             Write Your First Cold Email
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Enter a real prospect — our AI team will research them and craft a personalized email.
+            Give me a real prospect — I'll deploy my research team and craft a personalized email.
           </p>
         </div>
       </div>
@@ -788,10 +788,10 @@ IMPORTANT: Output ONLY the final email. Start directly with "Subject:" — no pr
                   <Brain className="w-4 h-4 text-indigo-500 animate-pulse" />
                 )}
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {phase === 'deploying' && 'Deploying research agents...'}
+                  {phase === 'deploying' && 'Deploying my research team...'}
                   {phase === 'researching' && `Researching ${prospectName} at ${prospectCompany}...`}
-                  {phase === 'synthesizing' && 'Synthesizing research findings...'}
-                  {phase === 'writing' && 'Composing personalized email...'}
+                  {phase === 'synthesizing' && 'Synthesizing what I found...'}
+                  {phase === 'writing' && 'Writing your email now...'}
                 </span>
               </div>
               <span className="text-[10px] font-medium text-indigo-500 bg-indigo-100 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">
