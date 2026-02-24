@@ -415,7 +415,7 @@ serve(async (req) => {
         let orgId = org_id || null
         if (!orgId) {
           const { data: orgMembers } = await serviceClient
-            .from('organization_members')
+            .from('organization_memberships')
             .select('org_id')
             .eq('user_id', user.id)
             .limit(1)

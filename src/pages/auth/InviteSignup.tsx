@@ -212,6 +212,9 @@ export default function InviteSignup() {
 
           if (profileError) {
             console.warn('[InviteSignup] Failed to save profile names:', profileError);
+            // Profile upsert failed - this is usually recoverable since the RPC
+            // has defensive profile creation. Show a warning but continue.
+            toast.warning('Profile setup partially completed. Your name may need to be updated in settings.');
           }
         }
       } catch (profileErr) {

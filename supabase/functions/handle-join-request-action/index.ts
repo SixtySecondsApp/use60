@@ -3,12 +3,12 @@
  *
  * Processes admin approval/rejection of organization join requests.
  * When approved: generates magic link token, sets expiry, sends approval email
- * When rejected: marks request as rejected, sends rejection email via AWS SES
+ * When rejected: marks request as rejected, sends rejection email via DB template (with SES fallback)
  *
  * Flow:
  * 1. Validate request and admin permissions
  * 2. Update database records
- * 3. Send rejection email directly via AWS SES (sendEmail function)
+ * 3. Send rejection email via DB template (encharge-send-email), with SES fallback
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
@@ -432,28 +432,53 @@ serve(async (req: Request): Promise<Response> => {
         // Don't fail - rejection was already recorded
       }
 
-      // Send rejection email via SES
+      // Send rejection email via encharge-send-email (using DB template)
       const rejectionReason = rejection_reason || 'Your request does not meet our criteria at this time.';
-      const emailHtml = generateRejectionEmailTemplate(
-        userName,
-        org.name,
-        rejectionReason
-      );
+      const enchargeFunctionUrl = `${SUPABASE_URL}/functions/v1/encharge-send-email`;
 
-      const emailResult = await sendEmail({
-        to: joinRequest.email,
-        subject: `Your Request to Join ${org.name} - Update`,
-        html: emailHtml,
-        text: `Your request to join ${org.name} was not approved.\n\nReason: ${rejectionReason}\n\nIf you have questions, contact support@use60.com`,
-        from: 'noreply@use60.com',
-        fromName: '60',
+      const emailResponse = await fetch(enchargeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'apikey': SUPABASE_SERVICE_ROLE_KEY,
+        },
+        body: JSON.stringify({
+          template_type: 'join_request_rejected',
+          to_email: joinRequest.email,
+          to_name: userName,
+          user_id: joinRequest.user_id,
+          variables: {
+            first_name: profile?.first_name || userName,
+            recipient_name: userName,
+            org_name: org.name,
+            organization_name: org.name,
+            rejection_reason: rejectionReason,
+          },
+        }),
       });
 
-      if (!emailResult.success) {
-        console.error('Failed to send rejection email:', emailResult.error);
-        // Don't fail the whole request if email fails - the rejection was still recorded
+      if (!emailResponse.ok) {
+        console.error('Failed to send rejection email via template:', emailResponse.status);
+        // Fallback: try direct SES send with hardcoded template
+        const emailHtml = generateRejectionEmailTemplate(userName, org.name, rejectionReason);
+        const emailResult = await sendEmail({
+          to: joinRequest.email,
+          subject: `Your Request to Join ${org.name} - Update`,
+          html: emailHtml,
+          text: `Your request to join ${org.name} was not approved.
+
+Reason: ${rejectionReason}
+
+If you have questions, contact support@use60.com`,
+          from: 'noreply@use60.com',
+          fromName: '60',
+        });
+        if (!emailResult.success) {
+          console.error('Fallback rejection email also failed:', emailResult.error);
+        }
       } else {
-        console.log(`Rejection email sent to ${joinRequest.email} for organization ${org.name}`);
+        console.log(`Rejection email sent via template to ${joinRequest.email}`);
       }
 
       return new Response(

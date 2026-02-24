@@ -44,6 +44,7 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
   const { data: orgProfile, isLoading, error } = useOrgProfile(orgId);
   const recompileMutation = useRecompileOrgSkills();
   const [isResearching, setIsResearching] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const handleReResearch = async (profile: FactProfile) => {
     setIsResearching(true);
@@ -67,6 +68,7 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
   };
 
   const handleSyncToSkills = async (profile: FactProfile) => {
+    setIsSyncing(true);
     try {
       // Use the edge function for comprehensive sync (enrichment + context)
       const { data, error: syncError } = await supabase.functions.invoke('sync-fact-profile-context', {
@@ -79,6 +81,8 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
       await recompileMutation.mutateAsync(orgId);
     } catch {
       // Error toasts are handled by the mutation hooks
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -288,12 +292,12 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
             size="sm"
             onClick={() => handleSyncToSkills(orgProfile)}
             disabled={
-              syncMutation.isPending ||
+              isSyncing ||
               recompileMutation.isPending ||
               !isResearchComplete
             }
           >
-            {syncMutation.isPending || recompileMutation.isPending ? (
+            {isSyncing || recompileMutation.isPending ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
               <ArrowRightLeft className="w-4 h-4 mr-2" />

@@ -2,10 +2,15 @@
  * Send Rejoin Invitation Email Edge Function
  *
  * Sends rejoin invitation emails to previously removed members via AWS SES
+ * Supports database email templates with fallback to hardcoded template
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { sendEmail } from '../_shared/ses.ts';
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +23,18 @@ interface SendRejoinInvitationRequest {
   user_name?: string;
   organization_name: string;
   admin_name: string;
+}
+
+/**
+ * Replace {{variable}} placeholders in a template string with actual values
+ */
+function processTemplate(template: string, variables: Record<string, any>): string {
+  let processed = template;
+  for (const [key, value] of Object.entries(variables)) {
+    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+    processed = processed.replace(regex, String(value || ''));
+  }
+  return processed;
 }
 
 /**
@@ -113,17 +130,59 @@ serve(async (req) => {
     }
 
     const recipientName = user_name || user_email.split('@')[0];
-    const emailHtml = generateRejoinEmailTemplate(
-      recipientName,
-      organization_name,
-      admin_name
-    );
+    const dashboardUrl = 'https://app.use60.com/dashboard';
+
+    // Try to fetch database template
+    let emailSubject: string;
+    let emailHtml: string;
+    let emailText: string;
+
+    try {
+      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+      const { data: template, error: templateError } = await supabaseAdmin
+        .from('encharge_email_templates')
+        .select('*')
+        .eq('template_type', 'rejoin_invitation')
+        .eq('is_active', true)
+        .single();
+
+      if (template && !templateError) {
+        // Use database template
+        const templateVariables = {
+          recipient_name: recipientName,
+          organization_name: organization_name,
+          admin_name: admin_name,
+          action_url: dashboardUrl,
+        };
+
+        emailSubject = processTemplate(template.subject_line, templateVariables);
+        emailHtml = processTemplate(template.html_body, templateVariables);
+        emailText = template.text_body
+          ? processTemplate(template.text_body, templateVariables)
+          : `${admin_name} from ${organization_name} is inviting you to rejoin on 60. Your previous data will be restored. Visit ${dashboardUrl} to accept.`;
+
+        console.log('Using database template for rejoin_invitation');
+      } else {
+        // Fall back to hardcoded template
+        console.log('Database template not found, using fallback. Error:', templateError?.message);
+        emailSubject = `${admin_name} invited you to rejoin ${organization_name} on 60`;
+        emailHtml = generateRejoinEmailTemplate(recipientName, organization_name, admin_name);
+        emailText = `${admin_name} from ${organization_name} is inviting you to rejoin on 60. Your previous data will be restored. Visit ${dashboardUrl} to accept.`;
+      }
+    } catch (dbError) {
+      // If database access fails entirely, fall back to hardcoded template
+      console.error('Failed to fetch database template, using fallback:', dbError);
+      emailSubject = `${admin_name} invited you to rejoin ${organization_name} on 60`;
+      emailHtml = generateRejoinEmailTemplate(recipientName, organization_name, admin_name);
+      emailText = `${admin_name} from ${organization_name} is inviting you to rejoin on 60. Your previous data will be restored. Visit ${dashboardUrl} to accept.`;
+    }
 
     const result = await sendEmail({
       to: user_email,
-      subject: `${admin_name} invited you to rejoin ${organization_name} on 60`,
+      subject: emailSubject,
       html: emailHtml,
-      text: `${admin_name} from ${organization_name} is inviting you to rejoin on 60. Your previous data will be restored. Visit https://app.use60.com/dashboard to accept.`,
+      text: emailText,
       from: 'invites@use60.com',
       fromName: '60',
     });

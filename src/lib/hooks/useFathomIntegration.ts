@@ -332,6 +332,9 @@ export function useFathomIntegration() {
       };
 
       // Listen for OAuth completion via postMessage
+      // Declare pollIntervalId before handleMessage so it can be cleared on success
+      let pollIntervalId: ReturnType<typeof setInterval> | null = null;
+
       const handleMessage = async (event: MessageEvent) => {
         console.log('[useFathomIntegration] Received postMessage:', {
           type: event.data?.type,
@@ -366,6 +369,7 @@ export function useFathomIntegration() {
         if (event.data?.type === 'fathom-oauth-success') {
           console.log('[useFathomIntegration] Received postMessage success (direct mode)');
           popup?.close();
+          if (pollIntervalId) clearInterval(pollIntervalId);
           window.removeEventListener('message', handleMessage);
           await handleConnectionSuccess();
           return;
@@ -380,6 +384,7 @@ export function useFathomIntegration() {
             console.error('[useFathomIntegration] Missing code or state in relay message');
             toast.error('OAuth relay failed: missing parameters');
             popup?.close();
+            if (pollIntervalId) clearInterval(pollIntervalId);
             window.removeEventListener('message', handleMessage);
             return;
           }
@@ -426,12 +431,14 @@ export function useFathomIntegration() {
 
             console.log('[useFathomIntegration] Token exchange successful');
             popup?.close();
+            if (pollIntervalId) clearInterval(pollIntervalId);
             window.removeEventListener('message', handleMessage);
             await handleConnectionSuccess();
           } catch (err) {
             console.error('[useFathomIntegration] Error handling code relay:', err);
             toast.error(err instanceof Error ? err.message : 'Failed to complete OAuth flow');
             popup?.close();
+            if (pollIntervalId) clearInterval(pollIntervalId);
             window.removeEventListener('message', handleMessage);
           }
         }
@@ -443,13 +450,13 @@ export function useFathomIntegration() {
       // This handles cases where cross-origin restrictions block the message
       let pollCount = 0;
       const maxPolls = 60; // Poll for up to 60 seconds
-      const pollInterval = setInterval(async () => {
+      pollIntervalId = setInterval(async () => {
         pollCount++;
 
         // Check if popup is closed
         if (popup?.closed) {
           console.log('[useFathomIntegration] Popup closed, checking for connection...');
-          clearInterval(pollInterval);
+          clearInterval(pollIntervalId!);
           window.removeEventListener('message', handleMessage);
 
           // Check if we got connected
@@ -479,7 +486,7 @@ export function useFathomIntegration() {
 
           if (integrationData) {
             console.log('[useFathomIntegration] Connection found via polling');
-            clearInterval(pollInterval);
+            clearInterval(pollIntervalId!);
             window.removeEventListener('message', handleMessage);
             popup?.close();
             await handleConnectionSuccess();
@@ -489,7 +496,7 @@ export function useFathomIntegration() {
         // Stop polling after max time
         if (pollCount >= maxPolls) {
           console.log('[useFathomIntegration] Polling timeout');
-          clearInterval(pollInterval);
+          clearInterval(pollIntervalId!);
           window.removeEventListener('message', handleMessage);
         }
       }, 1000);

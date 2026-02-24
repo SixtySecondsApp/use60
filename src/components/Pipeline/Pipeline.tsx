@@ -335,10 +335,10 @@ function PipelineContent() {
     if (fromStage === toStage && overId === activeId) return;
 
     // Find the index in the target stage
-    let toIndex = localDealsByStage[toStage].findIndex(d => d.id === overId);
+    let toIndex = localDealsByStage[toStage]?.findIndex(d => d.id === overId) ?? -1;
     if (toIndex === -1 || overId === toStage) {
       // If dropped on the column itself or empty space, add to end
-      toIndex = localDealsByStage[toStage].length;
+      toIndex = localDealsByStage[toStage]?.length ?? 0;
     }
 
     // Prevent unnecessary updates
@@ -412,12 +412,12 @@ function PipelineContent() {
     let toIndex = draggedOverIndex;
     if (over) {
       const overId = String(over.id);
-      toIndex = localDealsByStage[toStage].findIndex(d => d.id === overId);
+      toIndex = localDealsByStage[toStage]?.findIndex(d => d.id === overId) ?? -1;
       if (toIndex === -1 || overId === toStage) {
-        toIndex = localDealsByStage[toStage].length;
+        toIndex = localDealsByStage[toStage]?.length ?? 0;
       }
     } else if (toIndex == null) {
-      toIndex = localDealsByStage[toStage].length;
+      toIndex = localDealsByStage[toStage]?.length ?? 0;
     }
 
     // Update localDealsByStage for final state
