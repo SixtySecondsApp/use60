@@ -8,13 +8,13 @@ description: |
 metadata:
   author: sixty-ai
   version: "2"
-  category: relationship-ai
+  category: sales-ai
   skill_type: atomic
   is_active: true
   context_profile: account
   agent_affinity:
-    - customer-success
-    - account-management
+    - pipeline
+    - meetings
   triggers:
     - pattern: "schedule QBR"
       intent: "qbr_scheduling"

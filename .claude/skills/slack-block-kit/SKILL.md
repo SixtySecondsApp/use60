@@ -15,8 +15,7 @@ metadata:
   skill_type: atomic
   is_active: true
   agent_affinity:
-    - integrations
-    - notifications
+    - crm_ops
   triggers:
     - pattern: "slack message"
       intent: "build_slack_message"

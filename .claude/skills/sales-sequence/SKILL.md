@@ -336,15 +336,18 @@ The biggest risk with AI-generated emails is they sound AI-generated. To avoid t
 
 - **Vary sentence length dramatically.** A long sentence followed by a two-word fragment. Then a question. Then a short statement. This is how humans write.
 - **Use contractions.** "You're" not "you are." "Don't" not "do not." "It's" not "it is."
-- **Include occasional imperfection.** A dash instead of a semicolon. Starting a sentence with "And" or "But." An aside in parentheses.
+- **Include occasional imperfection.** Starting a sentence with "And" or "But." An aside in parentheses.
+- **No em dashes (—).** Em dashes are the single biggest AI tell in emails. Real people don't type them. Use a hyphen (-), a full stop, or just restructure the sentence. Never use — or – in any email.
+- **No oxford commas.** Drop the comma before "and" in lists. "Sales, marketing and ops" not "sales, marketing, and ops." Oxford commas read as formal and edited, not conversational.
+- **Don't swap punctuation for colons or dashes.** If a sentence needs a colon or em dash to work, rewrite it as two short sentences instead. Keep punctuation simple: full stops, commas, question marks.
 - **Be specific, not general.** "Your team of 12 SDRs" not "teams like yours." "Your Series B in October" not "companies at your stage."
 - **Have a point of view.** The email should feel like it came from someone who thinks about this topic, not someone who generated text about it.
-- **Never use these AI tells:** "I'd love to," "I wanted to reach out," "hoping to connect," "best-in-class," "cutting-edge," "revolutionize," "empower," uniform sentence lengths, perfect grammar everywhere.
+- **Never use these AI tells:** "I'd love to," "I wanted to reach out," "hoping to connect," "best-in-class," "cutting-edge," "revolutionize," "empower," uniform sentence lengths, perfect grammar everywhere, em dashes, oxford commas.
 
 ## Error Handling
 
 ### "I don't have enough personalization data"
-Write the email with placeholder brackets: `[specific detail about their recent hiring push]`. Explain what kind of research would make the email stronger. Even without data, the structure and rules still apply.
+Never ask the user to provide details you could find yourself. Write the best email you can with what you have, then proactively offer a specific next step YOU can take. For example: "If you want me to personalise this further, I can take a look at their LinkedIn profile and rewrite it with more context." or "I can research their recent company news and sharpen the opener - want me to?" Always offer to do the work, never push it back to the user.
 
 ### "The client wants a longer email"
 Push back gently. Show them the data: 75-100 words = 51% response rate. Longer emails work for follow-ups and warm leads, not cold outreach. If they insist, write it but flag the tradeoff.

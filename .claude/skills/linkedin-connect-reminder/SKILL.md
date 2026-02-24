@@ -13,7 +13,7 @@ metadata:
   is_active: true
   context_profile: sales
   agent_affinity:
-    - relationship
+    - outreach
   triggers:
     - pattern: "connect on LinkedIn"
       intent: "linkedin_connect"

@@ -14,7 +14,7 @@ metadata:
   context_profile: sales
   agent_affinity:
     - pipeline
-    - analytics
+    - research
   triggers:
     - pattern: "tag this deal"
       intent: "deal_tagging"

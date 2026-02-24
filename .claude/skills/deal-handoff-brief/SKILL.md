@@ -14,7 +14,7 @@ metadata:
   context_profile: sales
   agent_affinity:
     - pipeline
-    - relationships
+    - outreach
   triggers:
     - pattern: "hand off this deal"
       intent: "deal_handoff"
