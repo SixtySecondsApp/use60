@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, FileText, Clock, ChevronLeft, ChevronRight, Languages, Trash2, Hash } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,8 +16,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useMaTranscripts, useMaDeleteTranscript } from '@/lib/hooks/useMeetingAnalytics';
 
+interface DateRange {
+  start: Date;
+  end: Date;
+}
+
 interface TranscriptsTabProps {
   timeRange?: string;
+  period?: string;
+  dateRange?: DateRange;
 }
 
 const PAGE_SIZE = 50;
@@ -37,17 +44,27 @@ function confidenceBadgeClass(confidence: number | null): string {
   return 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400';
 }
 
-export function TranscriptsTab({ timeRange }: TranscriptsTabProps) {
+export function TranscriptsTab({ timeRange, period, dateRange }: TranscriptsTabProps) {
   const navigate = useNavigate();
   const [searchFilter, setSearchFilter] = useState('');
   const [page, setPage] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const deleteMutation = useMaDeleteTranscript();
 
+  // Reset to first page whenever the date filter changes
+  useEffect(() => {
+    setPage(0);
+  }, [period, dateRange?.start?.toISOString(), dateRange?.end?.toISOString()]);
+
+  const startDate = dateRange?.start ? dateRange.start.toISOString() : undefined;
+  const endDate = dateRange?.end ? dateRange.end.toISOString() : undefined;
+
   const { data: transcripts, isLoading, isError, error } = useMaTranscripts({
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     order: 'DESC',
+    startDate,
+    endDate,
   });
 
   const filtered = useMemo(() => {

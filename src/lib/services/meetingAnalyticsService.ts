@@ -108,6 +108,8 @@ export interface TranscriptListParams {
   order?: 'ASC' | 'DESC';
   includeDemo?: boolean;
   demoOnly?: boolean;
+  startDate?: string;
+  endDate?: string;
 }
 
 export async function getTranscripts(params: TranscriptListParams = {}) {
@@ -118,6 +120,8 @@ export async function getTranscripts(params: TranscriptListParams = {}) {
   if (params.order) qs.set('order', params.order);
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaTranscript[]>(`/api/transcripts${query ? `?${query}` : ''}`);
 }
@@ -137,12 +141,16 @@ export async function deleteTranscript(id: string) {
 export interface DashboardParams {
   includeDemo?: boolean;
   demoOnly?: boolean;
+  startDate?: string;
+  endDate?: string;
 }
 
 export async function getDashboardMetrics(params: DashboardParams = {}) {
   const qs = new URLSearchParams();
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaDashboardMetrics>(`/api/dashboard/metrics${query ? `?${query}` : ''}`);
 }
@@ -151,6 +159,8 @@ export async function getDashboardTrends(params: DashboardParams = {}) {
   const qs = new URLSearchParams();
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaDashboardTrends>(`/api/dashboard/trends${query ? `?${query}` : ''}`);
 }
@@ -159,6 +169,8 @@ export async function getDashboardAlerts(params: DashboardParams = {}) {
   const qs = new URLSearchParams();
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaDashboardAlert[]>(`/api/dashboard/alerts${query ? `?${query}` : ''}`);
 }
@@ -168,6 +180,8 @@ export async function getTopPerformers(params: DashboardParams & { limit?: numbe
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
   if (params.limit) qs.set('limit', String(params.limit));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaTopPerformer[]>(`/api/dashboard/top-performers${query ? `?${query}` : ''}`);
 }
@@ -177,6 +191,8 @@ export async function getPipelineHealth(params: DashboardParams & { limit?: numb
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
   if (params.limit) qs.set('limit', String(params.limit));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaPipelineHealth[]>(`/api/dashboard/pipeline-health${query ? `?${query}` : ''}`);
 }
@@ -249,6 +265,8 @@ export async function getSalesPerformance(params: DashboardParams = {}) {
   const qs = new URLSearchParams();
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaSalesPerformance[]>(`/api/insights/sales-performance${query ? `?${query}` : ''}`);
 }
@@ -287,9 +305,13 @@ export async function sendReport(params: { type: 'daily' | 'weekly'; settingId?:
   );
 }
 
-export async function getReportHistory(limit?: number) {
-  const qs = limit ? `?limit=${limit}` : '';
-  return apiFetch<MaReportHistoryEntry[]>(`/api/reports/history${qs}`);
+export async function getReportHistory(params: { limit?: number; startDate?: string; endDate?: string } = {}) {
+  const qs = new URLSearchParams();
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
+  const query = qs.toString();
+  return apiFetch<MaReportHistoryEntry[]>(`/api/reports/history${query ? `?${query}` : ''}`);
 }
 
 export async function getReport(id: string) {
@@ -340,6 +362,8 @@ export async function getTalkTimeAnalytics(params: DashboardParams & { limit?: n
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
   if (params.limit) qs.set('limit', String(params.limit));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaTalkTimeEntry[]>(`/api/analytics/talk-time${query ? `?${query}` : ''}`);
 }
@@ -349,6 +373,8 @@ export async function getConversionAnalytics(params: DashboardParams & { limit?:
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
   if (params.limit) qs.set('limit', String(params.limit));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaConversionEntry[]>(`/api/analytics/conversion${query ? `?${query}` : ''}`);
 }
@@ -358,6 +384,8 @@ export async function getSentimentTrends(params: DashboardParams & { days?: numb
   if (params.includeDemo !== undefined) qs.set('includeDemo', String(params.includeDemo));
   if (params.demoOnly !== undefined) qs.set('demoOnly', String(params.demoOnly));
   if (params.days) qs.set('days', String(params.days));
+  if (params.startDate) qs.set('startDate', params.startDate);
+  if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString();
   return apiFetch<MaSentimentTrends>(`/api/analytics/sentiment-trends${query ? `?${query}` : ''}`);
 }

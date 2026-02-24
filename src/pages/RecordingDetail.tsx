@@ -1039,7 +1039,7 @@ export const RecordingDetail: React.FC = () => {
                   <div className="flex items-center justify-between mb-3">
                     <div className="font-semibold text-gray-900 dark:text-gray-100">Coaching Score</div>
                     <span className={cn("text-2xl font-bold", getCoachColor(recording.coach_rating))}>
-                      {Math.round(recording.coach_rating)}/100
+                      {Math.round(recording.coach_rating)}/10
                     </span>
                   </div>
                   {recording.coach_summary && (

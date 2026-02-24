@@ -464,7 +464,7 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
 
       {/* Inline chat welcome (overlay mode, no messages) */}
       {showInlineWelcome && (
-        <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-custom p-5 space-y-4">
           {/* Assistant welcome bubble */}
           <div className="flex gap-3">
             <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
@@ -500,7 +500,7 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
 
       {/* Messages area (has messages) */}
       {!isEmpty && (
-        <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 relative">
+        <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-custom p-5 space-y-4 relative">
           {messages
             // Hide empty assistant placeholder while the typing indicator is showing
             .filter((m) => !(isLoading && m.role === 'assistant' && !m.content))

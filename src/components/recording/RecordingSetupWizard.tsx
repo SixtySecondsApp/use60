@@ -24,12 +24,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+  Dialog,
+  DialogContent,
+} from '@/components/ui/dialog';
 import {
   Calendar,
   Bot,
@@ -180,11 +177,11 @@ export const RecordingSetupWizard: React.FC<RecordingSetupWizardProps> = ({ onCo
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-      <div className="w-full max-w-2xl">
+    <Dialog open onOpenChange={(open) => { if (!open) handleSkipToEnd(); }}>
+      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
         {/* Progress Steps */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
+        <div className="px-6 pt-6 pb-4">
+          <div className="flex items-center justify-between">
             <StepIndicator
               step={1}
               label="Connect Calendar"
@@ -448,8 +445,8 @@ export const RecordingSetupWizard: React.FC<RecordingSetupWizardProps> = ({ onCo
             </WizardCard>
           )}
         </AnimatePresence>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -466,21 +463,20 @@ interface WizardCardProps {
 
 const WizardCard: React.FC<WizardCardProps> = ({ icon: Icon, title, description, children }) => (
   <motion.div
-    initial={{ opacity: 0, y: 20 }}
+    initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -20 }}
-    transition={{ duration: 0.3 }}
+    exit={{ opacity: 0, y: -10 }}
+    transition={{ duration: 0.2 }}
+    className="px-6 pb-6"
   >
-    <Card className="shadow-xl">
-      <CardHeader>
-        <div className="mx-auto mb-4 h-14 w-14 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-          <Icon className="h-7 w-7 text-emerald-600" />
-        </div>
-        <CardTitle className="text-center text-xl">{title}</CardTitle>
-        <CardDescription className="text-center">{description}</CardDescription>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
+    <div className="flex flex-col items-center mb-4">
+      <div className="mb-3 h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+        <Icon className="h-6 w-6 text-emerald-600" />
+      </div>
+      <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white">{title}</h3>
+      <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-1">{description}</p>
+    </div>
+    {children}
   </motion.div>
 );
 

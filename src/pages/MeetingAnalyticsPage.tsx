@@ -288,15 +288,15 @@ export default function MeetingAnalyticsPage() {
               </TabsContent>
 
               <TabsContent value="transcripts" className="mt-0">
-                <TranscriptsTab />
+                <TranscriptsTab period={period} dateRange={dateRange} />
               </TabsContent>
 
               <TabsContent value="insights" className="mt-0">
-                <InsightsTab />
+                <InsightsTab period={period} dateRange={dateRange} />
               </TabsContent>
 
               <TabsContent value="reports" className="mt-0">
-                <ReportsTab />
+                <ReportsTab period={period} dateRange={dateRange} />
               </TabsContent>
             </motion.div>
           </AnimatePresence>

@@ -108,6 +108,11 @@ verify_jwt = false
 [functions.fireflies-sync]
 verify_jwt = false
 
+# Apify integration - called from browser with user JWT
+# We handle auth verification manually inside the function (CORS preflight needs to work)
+[functions.apify-connect]
+verify_jwt = false
+
 # Google Calendar API - called from browser to sync/manage calendar
 # Handle auth internally (CORS preflight needs to work)
 [functions.google-calendar]
@@ -339,6 +344,16 @@ verify_jwt = false
 # Send organization invitation - called from browser with user JWT
 # Handles CORS manually inside function (CORS preflight needs to work)
 [functions.send-organization-invitation]
+verify_jwt = false
+
+# Encharge email sending - called server-to-server from other edge functions
+# Handles auth internally via isServiceRoleAuth() (exact key match + JWT decode)
+[functions.encharge-send-email]
+verify_jwt = false
+
+# Send password reset email - called from browser with user JWT
+# Handles auth internally, calls encharge-send-email downstream
+[functions.send-password-reset-email]
 verify_jwt = false
 
 # Meeting structured summary - called from browser with user JWT

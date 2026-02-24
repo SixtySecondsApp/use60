@@ -8,11 +8,28 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { sendEmail } from '../_shared/ses.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+// Determine CORS origin - allow localhost for development and known production domains
+const getAllowedOrigin = (req: Request): string => {
+  const origin = req.headers.get('origin');
+  if (
+    origin?.includes('localhost') ||
+    origin?.includes('127.0.0.1') ||
+    origin?.includes('192.168.')
+  ) {
+    return origin || '*';
+  }
+  if (origin?.includes('use60.com')) {
+    return origin || '*';
+  }
+  return '*';
+};
+
+const corsHeaders = (req?: Request) => ({
+  'Access-Control-Allow-Origin': req ? getAllowedOrigin(req) : '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+  'Access-Control-Max-Age': '86400',
+});
 
 interface SendInvitationRequest {
   to_email: string;
@@ -112,7 +129,7 @@ serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
-      headers: corsHeaders,
+      headers: corsHeaders(req),
     });
   }
 
@@ -134,7 +151,7 @@ serve(async (req) => {
         }),
         {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         }
       );
     }
@@ -165,7 +182,7 @@ serve(async (req) => {
         }),
         {
           status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         }
       );
     }
@@ -178,7 +195,7 @@ serve(async (req) => {
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       }
     );
   } catch (error) {
@@ -190,7 +207,7 @@ serve(async (req) => {
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       }
     );
   }

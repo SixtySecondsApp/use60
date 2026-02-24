@@ -37,6 +37,8 @@ interface ActivityFilters {
 
 interface ActivityFiltersStore {
   filters: ActivityFilters;
+  /** True when dateRange was explicitly set (e.g. heatmap click), false on default/reset */
+  dateRangeExplicit: boolean;
   setFilters: (filters: Partial<ActivityFilters>) => void;
   resetFilters: () => void;
   clearSubTypeFilters: () => void;
@@ -62,18 +64,22 @@ const defaultFilters: ActivityFilters = {
 
 export const useActivityFilters = create<ActivityFiltersStore>((set) => ({
   filters: defaultFilters,
-  setFilters: (newFilters) => 
+  dateRangeExplicit: false,
+  setFilters: (newFilters) =>
     set((state) => ({
-      filters: { 
+      filters: {
         // Keep existing filters
         ...state.filters,
         // Override with new filters
         ...newFilters
-      }
+      },
+      // Mark dateRange as explicitly set when caller provides one
+      dateRangeExplicit: 'dateRange' in newFilters ? true : state.dateRangeExplicit,
     })),
   resetFilters: () =>
     set({
-      filters: { ...defaultFilters }
+      filters: { ...defaultFilters },
+      dateRangeExplicit: false,
     }),
   clearSubTypeFilters: () =>
     set((state) => ({

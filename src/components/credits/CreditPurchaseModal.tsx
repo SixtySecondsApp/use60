@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 interface CreditPurchaseModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  showPopularBadge?: boolean;
 }
 
 const PACK_ICONS: Record<string, React.ReactNode> = {
@@ -37,7 +38,7 @@ const COMPARE_ROWS = [
   { label: 'Content generation', feature: 'content_generation' },
 ];
 
-export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurchaseModalProps) {
+export default function CreditPurchaseModal({ open, onOpenChange, showPopularBadge = true }: CreditPurchaseModalProps) {
   const orgId = useOrgId();
   const { userData } = useUser();
   const { currencyCode, symbol } = useOrgMoney();
@@ -89,7 +90,7 @@ export default function CreditPurchaseModal({ open, onOpenChange }: CreditPurcha
 
             return (
               <div key={packType} className="relative">
-                {isPopular && (
+                {isPopular && showPopularBadge && (
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
                     <span className="inline-flex items-center gap-1 bg-blue-500/90 dark:bg-blue-600/90 backdrop-blur-sm text-white text-xs font-medium px-3 py-1 rounded-full shadow-sm">
                       <Star className="h-3 w-3 fill-white" />

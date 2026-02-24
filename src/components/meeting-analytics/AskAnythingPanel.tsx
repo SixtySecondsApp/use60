@@ -7,6 +7,21 @@ import { useMaAsk } from '@/lib/hooks/useMeetingAnalytics';
 import { useUser } from '@/lib/hooks/useUser';
 import type { MaAskResponse, MaAskSource } from '@/lib/types/meetingAnalytics';
 
+const botIconUrl = (import.meta.env.VITE_COPILOT_BOT_ICON_URL as string | undefined) || '/favicon_0_64x64.png';
+
+function BotAvatar({ className = '' }: { className?: string }) {
+  const [iconError, setIconError] = useState(false);
+  return (
+    <div className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 mt-0.5 overflow-hidden ${className}`}>
+      {!iconError && botIconUrl ? (
+        <img src={botIconUrl} alt="60" className="w-full h-full object-cover" onError={() => setIconError(true)} />
+      ) : (
+        <Bot className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+      )}
+    </div>
+  );
+}
+
 interface AskAnythingPanelProps {
   transcriptId?: string;
   compact?: boolean;
@@ -223,7 +238,7 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
             onFocus={() => setIsExpanded(true)}
             placeholder="Ask a question across your meetings..."
             rows={1}
-            className="flex-1 resize-none rounded-xl bg-gray-50/80 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/30 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all duration-200"
+            className="flex-1 resize-none overflow-hidden rounded-xl bg-gray-50/80 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/30 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 transition-all duration-200"
           />
           <button
             onClick={() => handleSubmit(input)}
@@ -291,11 +306,7 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
               <div className={`max-w-[85%] space-y-2 ${msg.role === 'user' ? 'order-1' : 'order-2'}`}>
                 {/* Message bubble */}
                 <div className="flex items-start gap-2">
-                  {msg.role === 'assistant' && (
-                    <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 mt-0.5">
-                      <Bot className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                  )}
+                  {msg.role === 'assistant' && <BotAvatar />}
                   <div
                     className={`text-sm leading-relaxed ${
                       msg.role === 'user'
@@ -355,9 +366,7 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
             className="flex justify-start"
           >
             <div className="flex items-start gap-2">
-              <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 mt-0.5">
-                <Bot className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              </div>
+              <BotAvatar />
               <div className="bg-white/80 dark:bg-gray-800/60 backdrop-blur-xl rounded-2xl rounded-bl-md px-4 py-3 border border-gray-200/50 dark:border-gray-700/30 shadow-sm flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-500" />
                 <span className="text-sm text-gray-400 dark:text-gray-500">Thinking...</span>
@@ -395,7 +404,7 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
           placeholder="Ask a question..."
           rows={1}
           disabled={askMutation.isPending}
-          className="flex-1 resize-none rounded-xl bg-gray-50/80 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/30 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200"
+          className="flex-1 resize-none overflow-hidden rounded-xl bg-gray-50/80 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/30 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200"
         />
         <button
           onClick={() => handleSubmit(input)}
