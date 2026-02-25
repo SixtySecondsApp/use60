@@ -180,9 +180,12 @@ export function createRAGClient(options?: CreateRAGClientOptions): RAGClient {
     if (!filters) return null;
     const conditions: string[] = [];
 
-    if (filters.company_id) {
-      conditions.push(`company_id = "${filters.company_id}"`);
-    }
+    // Note: company_id metadata filtering is intentionally disabled.
+    // Many meetings were indexed before company_id was set, so the Gemini
+    // store documents don't have company_id in their custom metadata.
+    // The org store is already scoped per-org, and the semantic queries
+    // are specific enough to return relevant results without it.
+    // Revisit once re-indexing with company_id metadata is triggered.
 
     // Note: exclude_meeting_id is handled post-search (Gemini metadata
     // filters don't support != operators). We filter out the excluded
