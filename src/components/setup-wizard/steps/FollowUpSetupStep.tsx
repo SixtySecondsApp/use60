@@ -145,7 +145,7 @@ export function FollowUpSetupStep() {
             Learn Your Email Style
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            We'll analyze your sent emails to match your tone of voice and sign-off.
+            Let me study your sent emails so when I write for you, it sounds like you.
           </p>
         </div>
       </div>
@@ -313,8 +313,7 @@ export function FollowUpSetupStep() {
                 Analyze your sent emails
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-sm mx-auto">
-                We'll scan your recent sent emails to learn how you write — your tone, vocabulary, greetings, and sign-offs.
-                AI-generated emails will sound like you.
+                I'll scan your last 90 days of sent emails to learn your tone, vocabulary, and sign-off. When I write for you, it'll sound like you.
               </p>
             </div>
 

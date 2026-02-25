@@ -17,6 +17,8 @@ import {
   RefreshCw,
   Link2,
   ExternalLink,
+  Globe,
+  Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -524,6 +526,22 @@ export function SkillDetailView({
             <div className="flex items-center gap-3">
               <h1 className="font-semibold text-lg text-white">{skill.skill_key}</h1>
               <Badge variant="outline" className="bg-white/5 border-white/10 text-gray-300">{skill.category}</Badge>
+              <Badge
+                variant="outline"
+                className="bg-white/5 border-white/10 text-gray-400 gap-1 text-[11px]"
+                title="Namespace — controls which agents can discover this skill"
+              >
+                <Globe className="h-3 w-3" />
+                {skill.namespace}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="bg-white/5 border-white/10 text-gray-400 gap-1 text-[11px]"
+                title="Skill version"
+              >
+                <Tag className="h-3 w-3" />
+                v{skill.version}
+              </Badge>
               {hasChanges && (
                 <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block animate-pulse" />

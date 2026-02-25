@@ -46,7 +46,7 @@ import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const slackSigningSecret = Deno.env.get('SLACK_SIGNING_SECRET');
-const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://use60.com';
+const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://app.use60.com';
 
 interface SlackUser {
   id: string;
@@ -248,7 +248,7 @@ async function postToChannel(
     body: JSON.stringify({
       channel: channelId,
       blocks: message.blocks,
-      text: message.text,
+      text: message.text, unfurl_links: false, unfurl_media: false,
     }),
   });
 }
@@ -869,7 +869,7 @@ Return JSON: { "subject": "...", "body": "..." }`;
         body: JSON.stringify({
           channel: dmChannelId,
           blocks: hitlBlocks,
-          text: `Follow-up draft ready for ${recipientName || 'your contact'}`,
+          text: `Follow-up draft ready for ${recipientName || 'your contact'}`, unfurl_links: false, unfurl_media: false,
         }),
       });
     }
@@ -4312,7 +4312,7 @@ async function handleDraftReplySubmission(
     body: JSON.stringify({
       channel: meta.channelId,
       thread_ts: meta.threadTs, // Reply in thread
-      text: replyText,
+      text: replyText, unfurl_links: false, unfurl_media: false,
       blocks: [
         {
           type: 'section',
@@ -7443,7 +7443,7 @@ async function handleImpSendPreread(
         body: JSON.stringify({
           channel: openDm.channel.id,
           blocks: prereadMsg.blocks,
-          text: prereadMsg.text,
+          text: prereadMsg.text, unfurl_links: false, unfurl_media: false,
         }),
       });
 
@@ -7867,6 +7867,7 @@ serve(async (req) => {
           'run_sequence_', 'confirm_', 'dismiss_',
           'get_more_info', 'view_brief', 'draft_email_',
           'proactive_', 'copilot_',
+          'task_action_', 'meeting_prep_confirm', 'meeting_prep_skip',
         ];
         const isProactiveAction = proactiveActionPrefixes.some(
           prefix => action.action_id === prefix || action.action_id.startsWith(prefix)
