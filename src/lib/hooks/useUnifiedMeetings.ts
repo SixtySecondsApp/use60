@@ -274,6 +274,13 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
   const filtered = useMemo(() => {
     let items = unified
 
+    // Hide failed 60 Notetaker recordings by default — opt-in via "Failed" status filter
+    if (filters.statusFilter === 'all') {
+      items = items.filter(
+        (item) => item.sourceTable !== 'recordings' || item.status !== 'failed'
+      )
+    }
+
     // Search filter
     if (debouncedSearchQuery.trim()) {
       const q = debouncedSearchQuery.toLowerCase()

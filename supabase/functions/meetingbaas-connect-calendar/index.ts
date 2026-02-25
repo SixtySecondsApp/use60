@@ -190,7 +190,6 @@ async function listMeetingBaaSCalendars(
       method: 'GET',
       headers: {
         'x-meeting-baas-api-key': apiKey,
-        'Content-Type': 'application/json',
       },
     });
 
@@ -403,8 +402,8 @@ serve(async (req) => {
 
     // Handle case where calendar already exists in MeetingBaaS but not in our DB
     let finalMbCalendar = mbCalendar;
-    if (mbError && mbError.includes('already exists')) {
-      console.log('[MeetingBaaS Connect] Calendar already exists in MeetingBaaS, fetching existing calendars...');
+    if (mbError && (mbError.includes('already exists') || mbError.includes('limit'))) {
+      console.log('[MeetingBaaS Connect] Calendar already exists or limit reached in MeetingBaaS, fetching existing calendars...');
 
       // Some MeetingBaaS error payloads include the existing calendar id — try to use it first
       const existingIdCandidate =
@@ -455,21 +454,25 @@ serve(async (req) => {
             cal?.calendar_id ??
             cal?.calendarId ??
             null;
-          const calEmail = cal?.email ?? null;
+          const calEmail = (cal?.email ?? cal?.account_email ?? '').toLowerCase();
+          const normalizedUserEmail = (userEmail ?? '').toLowerCase();
+          const normalizedCalendarId = (calendar_id ?? '').toLowerCase();
           const platform = String(cal?.platform ?? cal?.calendar_platform ?? '').toLowerCase();
           const isGoogle = !platform || platform.includes('google');
 
-          // Match by raw_calendar_id OR by email (for "primary" calendar)
+          // Match by raw_calendar_id, by email (for "primary" calendar), or by calendar_id matching email
           const matchesRawId = rawId === calendar_id;
-          const matchesPrimary = calendar_id === 'primary' && calEmail === userEmail;
+          const matchesByEmail = !!(calEmail && normalizedUserEmail && calEmail === normalizedUserEmail);
+          const matchesPrimary = matchesByEmail && (calendar_id === 'primary' || normalizedCalendarId === calEmail);
 
           console.log('[MeetingBaaS Connect] Checking calendar:', {
-            calId: cal.id,
+            calId: cal.id ?? cal.calendar_id,
             rawId,
             calEmail,
             platform,
             isGoogle,
             matchesRawId,
+            matchesByEmail,
             matchesPrimary,
           });
 
@@ -652,12 +655,21 @@ serve(async (req) => {
     // =========================================================================
     let botSchedulingResult: { success: boolean; error?: string } = { success: false };
 
-    // Check if user has notetaker settings enabled
+    // Re-enable notetaker for this user if it was disabled (e.g. by a previous disconnect)
+    // Connecting a calendar implies the user wants auto-recording active
     const { data: notetakerSettings } = await supabase
       .from('notetaker_user_settings')
       .select('is_enabled, record_external, record_internal, selected_calendar_id')
       .eq('user_id', effectiveUserId)
       .maybeSingle();
+
+    if (notetakerSettings && !notetakerSettings.is_enabled) {
+      console.log('[MeetingBaaS Connect] Re-enabling notetaker for user (was disabled by previous disconnect)');
+      await supabase
+        .from('notetaker_user_settings')
+        .update({ is_enabled: true, updated_at: new Date().toISOString() })
+        .eq('user_id', effectiveUserId);
+    }
 
     // Check org's auto-record settings
     const { data: orgSettings } = await supabase
@@ -668,7 +680,7 @@ serve(async (req) => {
 
     const recordingSettings = orgSettings?.recording_settings || {};
     const autoRecordEnabled = recordingSettings.auto_record_enabled === true;
-    const userNotetakerEnabled = notetakerSettings?.is_enabled !== false; // Default to enabled
+    const userNotetakerEnabled = true; // User just connected calendar — they want recording active
 
     console.log('[MeetingBaaS Connect] Auto-record check:', {
       orgAutoRecordEnabled: autoRecordEnabled,
