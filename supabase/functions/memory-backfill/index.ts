@@ -90,7 +90,7 @@ serve(async (req) => {
   // Status values in use: 'open', 'active'. Exclude closed_won / closed_lost.
   const { data: deals, error: dealsError } = await supabase
     .from('deals')
-    .select('id, name, stage_id, value, org_id')
+    .select('id, name, stage_id, value, org_id, company_id')
     .eq('org_id', org_id)
     .in('status', ['open', 'active'])
     .order('updated_at', { ascending: false })
@@ -135,22 +135,35 @@ serve(async (req) => {
 
     for (const dealId of batch) {
       try {
-        // ── 3a: Find meetings for this org with transcripts ────────────────
-        // Meetings are linked to deals via company; the simplest backfill
-        // strategy is to search recent org meetings that have transcript text.
-        // meetings table uses org_id (UUID) and owner_user_id per CLAUDE.md.
-        const { data: meetings } = await supabase
+        // ── 3a: Find meetings linked to this deal's company ──────────────
+        // Meetings are linked to deals via company_id. Filter by the deal's
+        // company to avoid extracting events from unrelated meetings.
+        const deal = deals.find((d) => String(d.id) === dealId);
+        const companyId = deal?.company_id;
+
+        let meetingsQuery = supabase
           .from('meetings')
           .select('id, title, meeting_start')
           .eq('org_id', org_id)
           .not('transcript_text', 'is', null)
           .order('meeting_start', { ascending: false })
-          .limit(10); // last 10 meetings max per deal
+          .limit(10);
+
+        if (companyId) {
+          meetingsQuery = meetingsQuery.eq('company_id', companyId);
+        }
+
+        const { data: meetings } = await meetingsQuery;
 
         if (meetings?.length) {
           // ── 3b: Extract memory events from each meeting ──────────────────
           for (const meeting of meetings) {
             try {
+              // Derive meeting date for RAG window (YYYY-MM-DD)
+              const mDate = meeting.meeting_start
+                ? new Date(meeting.meeting_start).toISOString().split('T')[0]
+                : undefined;
+
               const events = await extractEventsFromMeeting({
                 meetingId: String(meeting.id),
                 dealId,
@@ -158,6 +171,7 @@ serve(async (req) => {
                 supabase,
                 ragClient,
                 anthropicApiKey,
+                meetingDate: mDate,
                 extractedBy: 'memory-backfill',
                 confidenceThreshold: 0.6, // slightly lower threshold for backfill
               });

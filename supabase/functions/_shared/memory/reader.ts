@@ -26,6 +26,10 @@ import type {
   Stakeholder,
 } from './types.ts';
 import { RAGClient } from './ragClient.ts';
+import {
+  getOpenCommitments as getOpenCommitmentsFromDb,
+  getOverdueCommitments as getOverdueCommitmentsFromDb,
+} from './commitments.ts';
 
 // ---- Private helpers --------------------------------------------------------
 
@@ -118,87 +122,19 @@ export function createDealMemoryReader(
     return (data ?? []) as DealMemoryEvent[];
   }
 
-  // ---- getOpenCommitments --------------------------------------------------
+  // ---- getOpenCommitments (delegates to commitments.ts) --------------------
 
   async function getOpenCommitments(
     dealId: string,
     orgId: string,
   ): Promise<Commitment[]> {
-    const { data, error } = await supabase
-      .from('deal_memory_events')
-      .select('id, summary, detail, source_timestamp, contact_ids')
-      .eq('org_id', orgId)
-      .eq('deal_id', dealId)
-      .eq('is_active', true)
-      .eq('event_type', 'commitment_made')
-      .order('source_timestamp', { ascending: false });
-
-    if (error) {
-      console.error('[DealMemoryReader] getOpenCommitments error:', error.message);
-      return [];
-    }
-
-    return ((data ?? []) as Array<{
-      id: string;
-      summary: string;
-      detail: Record<string, unknown>;
-      source_timestamp: string;
-      contact_ids: string[];
-    }>)
-      .filter((row) => (row.detail as Record<string, unknown>).status === 'pending')
-      .map((row) => ({
-        event_id: row.id,
-        owner: ((row.detail as Record<string, unknown>).owner ?? 'rep') as 'rep' | 'prospect',
-        action: row.summary,
-        deadline: ((row.detail as Record<string, unknown>).deadline as string) ?? null,
-        status: 'pending' as const,
-        created_at: row.source_timestamp,
-      }));
+    return getOpenCommitmentsFromDb(dealId, orgId, supabase);
   }
 
-  // ---- getOverdueCommitments -----------------------------------------------
+  // ---- getOverdueCommitments (delegates to commitments.ts) -----------------
 
   async function getOverdueCommitments(orgId: string): Promise<Commitment[]> {
-    const { data, error } = await supabase
-      .from('deal_memory_events')
-      .select('id, deal_id, summary, detail, source_timestamp, contact_ids')
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .eq('event_type', 'commitment_made')
-      .order('source_timestamp', { ascending: false })
-      .limit(200);
-
-    if (error) {
-      console.error('[DealMemoryReader] getOverdueCommitments error:', error.message);
-      return [];
-    }
-
-    const now = new Date();
-
-    return ((data ?? []) as Array<{
-      id: string;
-      deal_id: string;
-      summary: string;
-      detail: Record<string, unknown>;
-      source_timestamp: string;
-      contact_ids: string[];
-    }>)
-      .filter((row) => {
-        const detail = row.detail as Record<string, unknown>;
-        return (
-          detail.status === 'pending' &&
-          detail.deadline &&
-          new Date(detail.deadline as string) < now
-        );
-      })
-      .map((row) => ({
-        event_id: row.id,
-        owner: ((row.detail as Record<string, unknown>).owner ?? 'rep') as 'rep' | 'prospect',
-        action: row.summary,
-        deadline: ((row.detail as Record<string, unknown>).deadline as string) ?? null,
-        status: 'pending' as const,
-        created_at: row.source_timestamp,
-      }));
+    return getOverdueCommitmentsFromDb(orgId, supabase);
   }
 
   // ---- getStakeholderMap ---------------------------------------------------

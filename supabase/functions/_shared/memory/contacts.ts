@@ -22,9 +22,9 @@ function resolveBoost(event: Pick<DealMemoryEvent, 'event_type' | 'detail'>): nu
       : ENGAGEMENT_BOOSTS.email_exchange_outbound;
   }
   if (event_type === 'sentiment_shift') {
-    return detail.direction === 'positive'
-      ? ENGAGEMENT_BOOSTS.sentiment_shift_positive
-      : ENGAGEMENT_BOOSTS.sentiment_shift_negative;
+    if (detail.direction === 'positive') return ENGAGEMENT_BOOSTS.sentiment_shift_positive;
+    if (detail.direction === 'negative') return ENGAGEMENT_BOOSTS.sentiment_shift_negative;
+    return 0; // neutral — no boost or penalty
   }
   return 0;
 }

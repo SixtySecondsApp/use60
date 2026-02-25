@@ -56,6 +56,7 @@ CREATE POLICY "org_members_select_contact_memory"
 DROP POLICY IF EXISTS "service_role_all_contact_memory" ON contact_memory;
 CREATE POLICY "service_role_all_contact_memory"
   ON contact_memory FOR ALL
+  TO service_role
   USING (true) WITH CHECK (true);
 
 -- ---------------------------------------------------------------------------
@@ -139,6 +140,7 @@ CREATE POLICY "managers_select_org_rep_memory"
 DROP POLICY IF EXISTS "service_role_all_rep_memory" ON rep_memory;
 CREATE POLICY "service_role_all_rep_memory"
   ON rep_memory FOR ALL
+  TO service_role
   USING (true) WITH CHECK (true);
 
 -- ---------------------------------------------------------------------------

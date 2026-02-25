@@ -11,14 +11,6 @@
 # Development branch uses connection pooler for better performance
 pooler = { enabled = true, port = 6543, pool_mode = "transaction" }
 
-# Extensions required by migrations (must be declared for preview branches)
-[db.extensions]
-citext = { schema = "public" }
-pg_trgm = { schema = "extensions" }
-pg_cron = { schema = "pg_catalog" }
-pg_net = { schema = "extensions" }
-pgcrypto = { schema = "extensions" }
-
 [functions.process-single-activity]
 enabled = true
 verify_jwt = true

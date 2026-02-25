@@ -97,6 +97,7 @@ export async function extractEventsFromMeeting(params: {
   supabase: ReturnType<typeof createClient>;
   ragClient: RAGClient;
   anthropicApiKey: string;
+  meetingDate?: string; // YYYY-MM-DD — defaults to today if omitted
   confidenceThreshold?: number;
   extractedBy?: string;
 }): Promise<DealMemoryEvent[]> {
@@ -117,6 +118,7 @@ export async function extractEventsFromMeeting(params: {
     .from('deal_memory_events')
     .select('id, event_type, event_category, summary, detail, source_timestamp, contact_ids')
     .eq('deal_id', dealId)
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .gte('source_timestamp', thirtyDaysAgo);
 
@@ -126,11 +128,8 @@ export async function extractEventsFromMeeting(params: {
 
   const recentEvents: ExistingEventContext[] = existingEvents ?? [];
 
-  // Derive the meeting date to build a ±1 day window for RAG filters
-  // We can't fetch the meeting row here without a second DB call — use today
-  // as a reasonable default. Callers with a known meeting date should set it
-  // via the meetingDate param in the edge function before calling this helper.
-  const meetingDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  // Use provided meeting date or fall back to today
+  const meetingDate = params.meetingDate ?? new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const dayBefore = new Date(Date.parse(meetingDate) - 24 * 60 * 60 * 1000).toISOString();
   const dayAfter = new Date(Date.parse(meetingDate) + 24 * 60 * 60 * 1000).toISOString();
 
@@ -238,9 +237,15 @@ export async function extractEventsFromMeeting(params: {
   // Step 5: Batch insert
   const insertedEvents = await batchInsertEvents(allNewEvents, supabase);
 
-  // Step 6: Resolve supersession — map old event IDs → newly inserted event IDs
+  // Step 6: Resolve supersession — match by summary (not index, since partial
+  // chunk failures can shift indices in the returned array)
   for (const { candidateIndex, supersedes } of pendingSupersession) {
-    const inserted = insertedEvents[candidateIndex];
+    const candidate = allNewEvents[candidateIndex];
+    if (!candidate) continue;
+
+    const inserted = insertedEvents.find(
+      (e) => e.event_type === candidate.event_type && e.summary === candidate.summary,
+    );
     if (inserted?.id) {
       supersessionMap.set(supersedes, inserted.id);
     }

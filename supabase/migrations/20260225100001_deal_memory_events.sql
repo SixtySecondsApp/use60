@@ -67,6 +67,7 @@ CREATE POLICY "org_members_select_deal_memory_events"
 DROP POLICY IF EXISTS "service_role_all_deal_memory_events" ON deal_memory_events;
 CREATE POLICY "service_role_all_deal_memory_events"
   ON deal_memory_events FOR ALL
+  TO service_role
   USING (true) WITH CHECK (true);
 
 -- ---------------------------------------------------------------------------

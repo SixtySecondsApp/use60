@@ -88,7 +88,7 @@ serve(async (req: Request) => {
         });
 
         if (shouldRegen) {
-          await generateSnapshot({
+          const result = await generateSnapshot({
             dealId: did,
             orgId: org_id,
             supabase,
@@ -96,7 +96,7 @@ serve(async (req: Request) => {
             anthropicApiKey,
             generatedBy: 'scheduled',
           });
-          generated++;
+          if (result?.id) generated++;
 
           // Small delay to avoid hitting model rate limits in rapid succession
           await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
