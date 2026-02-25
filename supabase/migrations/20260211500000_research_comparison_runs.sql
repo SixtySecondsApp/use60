@@ -36,7 +36,8 @@ CREATE TABLE research_comparison_runs (
 ALTER TABLE research_comparison_runs ENABLE ROW LEVEL SECURITY;
 
 -- RLS policy: Users can read own org runs
-CREATE POLICY "Users can read own org runs"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own org runs"
   ON research_comparison_runs FOR SELECT
   USING (
     organization_id IN (
@@ -44,9 +45,12 @@ CREATE POLICY "Users can read own org runs"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS policy: Users can insert own org runs
-CREATE POLICY "Users can insert own org runs"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own org runs"
   ON research_comparison_runs FOR INSERT
   WITH CHECK (
     organization_id IN (
@@ -55,6 +59,8 @@ CREATE POLICY "Users can insert own org runs"
     )
     AND user_id = auth.uid()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Index for performance
 CREATE INDEX idx_research_comparison_runs_org_created

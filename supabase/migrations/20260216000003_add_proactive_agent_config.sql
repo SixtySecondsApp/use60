@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS proactive_agent_config (
 ALTER TABLE proactive_agent_config ENABLE ROW LEVEL SECURITY;
 
 -- Organization admins can manage config (SELECT/INSERT/UPDATE/DELETE)
-CREATE POLICY "Org admins can manage proactive agent config"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can manage proactive agent config"
 ON proactive_agent_config FOR ALL
 TO authenticated
 USING (
@@ -74,9 +75,12 @@ WITH CHECK (
       AND role IN ('owner', 'admin')
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Organization members can read config (SELECT only)
-CREATE POLICY "Org members can read proactive agent config"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read proactive agent config"
 ON proactive_agent_config FOR SELECT
 TO authenticated
 USING (
@@ -87,13 +91,18 @@ USING (
       AND user_id = auth.uid()
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (for edge functions and orchestrator)
-CREATE POLICY "Service role full access to proactive agent config"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to proactive agent config"
 ON proactive_agent_config FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Trigger: Update updated_at on row changes

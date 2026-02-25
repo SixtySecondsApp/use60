@@ -32,41 +32,56 @@ CREATE INDEX IF NOT EXISTS idx_agent_team_config_org_id ON agent_team_config(org
 ALTER TABLE agent_team_config ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access
-CREATE POLICY "Service role full access to agent_team_config"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_team_config"
   ON agent_team_config
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org members can read their own org's config
-CREATE POLICY "Org members can view agent_team_config"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view agent_team_config"
   ON agent_team_config
   FOR SELECT
   TO authenticated
   USING (can_access_org_data(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can insert config
-CREATE POLICY "Org admins can insert agent_team_config"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can insert agent_team_config"
   ON agent_team_config
   FOR INSERT
   TO authenticated
   WITH CHECK (can_admin_org(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can update config
-CREATE POLICY "Org admins can update agent_team_config"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update agent_team_config"
   ON agent_team_config
   FOR UPDATE
   TO authenticated
   USING (can_admin_org(organization_id))
   WITH CHECK (can_admin_org(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can delete config
-CREATE POLICY "Org admins can delete agent_team_config"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can delete agent_team_config"
   ON agent_team_config
   FOR DELETE
   TO authenticated
   USING (can_admin_org(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Auto-update updated_at trigger

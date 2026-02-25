@@ -110,7 +110,8 @@ ALTER TABLE auto_top_up_log ENABLE ROW LEVEL SECURITY;
 
 -- Org admins/owners can read their settings
 DROP POLICY IF EXISTS "Org admins can read their auto_top_up_settings" ON auto_top_up_settings;
-CREATE POLICY "Org admins can read their auto_top_up_settings"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can read their auto_top_up_settings"
   ON auto_top_up_settings FOR SELECT
   USING (
     EXISTS (
@@ -120,10 +121,13 @@ CREATE POLICY "Org admins can read their auto_top_up_settings"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners can upsert their settings
 DROP POLICY IF EXISTS "Org admins can upsert their auto_top_up_settings" ON auto_top_up_settings;
-CREATE POLICY "Org admins can upsert their auto_top_up_settings"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can upsert their auto_top_up_settings"
   ON auto_top_up_settings FOR INSERT
   WITH CHECK (
     EXISTS (
@@ -133,9 +137,12 @@ CREATE POLICY "Org admins can upsert their auto_top_up_settings"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Org admins can update their auto_top_up_settings" ON auto_top_up_settings;
-CREATE POLICY "Org admins can update their auto_top_up_settings"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update their auto_top_up_settings"
   ON auto_top_up_settings FOR UPDATE
   USING (
     EXISTS (
@@ -145,10 +152,13 @@ CREATE POLICY "Org admins can update their auto_top_up_settings"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can manage all
 DROP POLICY IF EXISTS "Platform admins can manage all auto_top_up_settings" ON auto_top_up_settings;
-CREATE POLICY "Platform admins can manage all auto_top_up_settings"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can manage all auto_top_up_settings"
   ON auto_top_up_settings FOR ALL
   USING (
     EXISTS (
@@ -157,12 +167,15 @@ CREATE POLICY "Platform admins can manage all auto_top_up_settings"
       AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- --- auto_top_up_log ---
 
 -- All org members can read the log (transparency for billing events)
 DROP POLICY IF EXISTS "Org members can read their auto_top_up_log" ON auto_top_up_log;
-CREATE POLICY "Org members can read their auto_top_up_log"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read their auto_top_up_log"
   ON auto_top_up_log FOR SELECT
   USING (
     EXISTS (
@@ -171,10 +184,13 @@ CREATE POLICY "Org members can read their auto_top_up_log"
       AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can manage all
 DROP POLICY IF EXISTS "Platform admins can manage all auto_top_up_log" ON auto_top_up_log;
-CREATE POLICY "Platform admins can manage all auto_top_up_log"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can manage all auto_top_up_log"
   ON auto_top_up_log FOR ALL
   USING (
     EXISTS (
@@ -183,6 +199,8 @@ CREATE POLICY "Platform admins can manage all auto_top_up_log"
       AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 6. Migrate existing auto-topup settings from org_credit_balance

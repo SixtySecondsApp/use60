@@ -32,19 +32,25 @@ CREATE INDEX IF NOT EXISTS idx_slack_pending_actions_expires
 ALTER TABLE slack_pending_actions ENABLE ROW LEVEL SECURITY;
 
 -- Service role can do everything
-CREATE POLICY "Service role has full access to slack_pending_actions"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to slack_pending_actions"
   ON slack_pending_actions
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can view their own pending actions
-CREATE POLICY "Users can view own pending actions"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own pending actions"
   ON slack_pending_actions
   FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Comment
 COMMENT ON TABLE slack_pending_actions IS 'Stores pending Slack HITL actions awaiting user confirmation before execution';

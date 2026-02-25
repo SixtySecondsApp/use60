@@ -7,7 +7,8 @@
 -- Current values: pending, in_progress, completed, cancelled
 -- New values: pending_review, ai_working, draft_ready, approved, dismissed, expired
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_status_check
+DO $$ BEGIN
+  ALTER TABLE tasks ADD CONSTRAINT tasks_status_check
   CHECK (status IN (
     'pending',
     'in_progress',
@@ -21,12 +22,15 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_status_check
     'dismissed',
     'expired'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update task_type CHECK constraint to include new AI action types
 -- Current values: follow_up, email, call, proposal (from tasks_task_type_check)
 -- New values: research, meeting_prep, crm_update, slack_message, content, alert, insight
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_task_type_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_task_type_check
+DO $$ BEGIN
+  ALTER TABLE tasks ADD CONSTRAINT tasks_task_type_check
   CHECK (task_type IN (
     'call',
     'email',
@@ -43,11 +47,14 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_task_type_check
     'alert',
     'insight'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Also update the type column CHECK constraint (legacy duplicate column)
 -- This column appears to be a duplicate of task_type
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_type_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_type_check
+DO $$ BEGIN
+  ALTER TABLE tasks ADD CONSTRAINT tasks_type_check
   CHECK (type IN (
     'call',
     'email',
@@ -64,6 +71,8 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_type_check
     'alert',
     'insight'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comments for new status values
 COMMENT ON CONSTRAINT tasks_status_check ON tasks IS

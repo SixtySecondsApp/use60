@@ -85,32 +85,44 @@ DROP POLICY IF EXISTS "Everyone can view proposal_templates" ON proposal_templat
 DROP POLICY IF EXISTS "Authenticated users can manage proposal_templates" ON proposal_templates;
 
 -- 2a. SELECT: Users can see global templates (org_id IS NULL) + their org's templates + their own personal templates
-CREATE POLICY "Users can view accessible templates" ON proposal_templates
+DO $$ BEGIN
+  CREATE POLICY "Users can view accessible templates" ON proposal_templates
     FOR SELECT USING (
         org_id IS NULL
         OR org_id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid())
         OR user_id = auth.uid()
     );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 2b. INSERT: Users can create templates in their org or as personal templates
-CREATE POLICY "Users can create org templates" ON proposal_templates
+DO $$ BEGIN
+  CREATE POLICY "Users can create org templates" ON proposal_templates
     FOR INSERT WITH CHECK (
         org_id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid())
         OR user_id = auth.uid()
     );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 2c. UPDATE: Users can update their own templates or org templates they created
-CREATE POLICY "Users can update own templates" ON proposal_templates
+DO $$ BEGIN
+  CREATE POLICY "Users can update own templates" ON proposal_templates
     FOR UPDATE USING (
         user_id = auth.uid()
         OR (created_by = auth.uid() AND org_id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()))
     );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 2d. DELETE: Users can delete their own templates (not global starters)
-CREATE POLICY "Users can delete own templates" ON proposal_templates
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own templates" ON proposal_templates
     FOR DELETE USING (
         user_id = auth.uid() AND org_id IS NOT NULL
     );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 3. INDEXES

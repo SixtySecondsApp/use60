@@ -79,7 +79,8 @@ ALTER TABLE reengagement_watchlist ENABLE ROW LEVEL SECURITY;
 
 -- Users in the same org can view watchlist entries
 DROP POLICY IF EXISTS "Users can view org reengagement watchlist" ON reengagement_watchlist;
-CREATE POLICY "Users can view org reengagement watchlist"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org reengagement watchlist"
   ON reengagement_watchlist FOR SELECT
   TO authenticated
   USING (
@@ -89,14 +90,19 @@ CREATE POLICY "Users can view org reengagement watchlist"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (for edge functions)
 DROP POLICY IF EXISTS "Service role has full access to reengagement_watchlist" ON reengagement_watchlist;
-CREATE POLICY "Service role has full access to reengagement_watchlist"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to reengagement_watchlist"
   ON reengagement_watchlist FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Comments

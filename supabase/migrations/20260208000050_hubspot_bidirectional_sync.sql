@@ -72,7 +72,8 @@ CREATE INDEX IF NOT EXISTS idx_dynamic_table_cells_hubspot_pushed
 
 ALTER TABLE public.hubspot_sync_history ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view sync history of accessible tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can view sync history of accessible tables"
   ON public.hubspot_sync_history
   FOR SELECT
   USING (
@@ -84,6 +85,8 @@ CREATE POLICY "Users can view sync history of accessible tables"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DO $$
 BEGIN

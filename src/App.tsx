@@ -76,7 +76,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, CommandCentreWowDemo, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, CommandCentreWowDemo, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, MultiAgentResearchDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, DemoPrepBriefing, DemoConversationalCopilot,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -446,6 +446,9 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
 
                 <Route path="/platform/agent-teams" element={<PlatformAdminRouteGuard><AppLayout><AgentTeamSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/multi-agent-demo" element={<PlatformAdminRouteGuard><AppLayout><MultiAgentDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/multi-agent-research-demo" element={<PlatformAdminRouteGuard><AppLayout><MultiAgentResearchDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/demo/prep-briefing" element={<PlatformAdminRouteGuard><AppLayout><DemoPrepBriefing /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/demo/conversational-copilot" element={<PlatformAdminRouteGuard><AppLayout><DemoConversationalCopilot /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-teams-live" element={<PlatformAdminRouteGuard><AppLayout><AgentTeamsLiveDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-abilities" element={<PlatformAdminRouteGuard><AppLayout><AgentAbilitiesPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/credit-system-demo" element={<PlatformAdminRouteGuard><AppLayout><CreditSystemDemo /></AppLayout></PlatformAdminRouteGuard>} />

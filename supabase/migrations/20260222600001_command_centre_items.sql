@@ -114,33 +114,45 @@ ALTER TABLE command_centre_items ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own items
 DROP POLICY IF EXISTS "Users can view own items" ON command_centre_items;
-CREATE POLICY "Users can view own items"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own items"
   ON command_centre_items FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own items (approve / dismiss / snooze)
 DROP POLICY IF EXISTS "Users can update own items" ON command_centre_items;
-CREATE POLICY "Users can update own items"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own items"
   ON command_centre_items FOR UPDATE
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert their own items (e.g. manually created items)
 DROP POLICY IF EXISTS "Users can insert own items" ON command_centre_items;
-CREATE POLICY "Users can insert own items"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own items"
   ON command_centre_items FOR INSERT
   TO authenticated
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (edge functions / orchestrator agents)
 DROP POLICY IF EXISTS "Service role full access" ON command_centre_items;
-CREATE POLICY "Service role full access"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access"
   ON command_centre_items FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Table and column comments

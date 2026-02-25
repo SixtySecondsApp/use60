@@ -25,9 +25,12 @@ CREATE TABLE IF NOT EXISTS coaching_skill_progression (
 );
 
 -- Unique constraint: one row per user per week
-ALTER TABLE coaching_skill_progression
+DO $$ BEGIN
+  ALTER TABLE coaching_skill_progression
   ADD CONSTRAINT unique_coaching_progression_per_week
   UNIQUE (org_id, user_id, week_start);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_coaching_skill_progression_user_week
@@ -40,12 +43,16 @@ CREATE INDEX IF NOT EXISTS idx_coaching_skill_progression_user_week
 ALTER TABLE coaching_skill_progression ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own progression
-CREATE POLICY "Users can read own coaching progression"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own coaching progression"
   ON coaching_skill_progression FOR SELECT
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can read all org progression (for manager views)
-CREATE POLICY "Org admins can read all org coaching progression"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can read all org coaching progression"
   ON coaching_skill_progression FOR SELECT
   USING (
     EXISTS (
@@ -55,15 +62,23 @@ CREATE POLICY "Org admins can read all org coaching progression"
         AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role inserts (edge functions write progression data)
-CREATE POLICY "Service role can insert coaching progression"
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert coaching progression"
   ON coaching_skill_progression FOR INSERT
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can update coaching progression"
+DO $$ BEGIN
+  CREATE POLICY "Service role can update coaching progression"
   ON coaching_skill_progression FOR UPDATE
   USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ----------------------------------------------------------------------------
 -- 3. Helper RPC: get_coaching_progression

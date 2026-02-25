@@ -109,7 +109,8 @@ ALTER TABLE email_signal_events ENABLE ROW LEVEL SECURITY;
 
 -- Users in the same org can view signals
 DROP POLICY IF EXISTS "Users can view org email_signal_events" ON email_signal_events;
-CREATE POLICY "Users can view org email_signal_events"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org email_signal_events"
   ON email_signal_events FOR SELECT
   TO authenticated
   USING (
@@ -119,14 +120,19 @@ CREATE POLICY "Users can view org email_signal_events"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (for edge functions / signal scorer)
 DROP POLICY IF EXISTS "Service role full access to email_signal_events" ON email_signal_events;
-CREATE POLICY "Service role full access to email_signal_events"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to email_signal_events"
   ON email_signal_events FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Table and column comments

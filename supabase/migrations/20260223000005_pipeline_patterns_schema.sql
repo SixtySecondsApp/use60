@@ -82,25 +82,34 @@ ALTER TABLE pipeline_patterns ENABLE ROW LEVEL SECURITY;
 
 -- org members can read
 DROP POLICY IF EXISTS "org_members_select_pipeline_patterns" ON pipeline_patterns;
-CREATE POLICY "org_members_select_pipeline_patterns"
+DO $$ BEGIN
+  CREATE POLICY "org_members_select_pipeline_patterns"
   ON pipeline_patterns FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- org members can dismiss (update status)
 DROP POLICY IF EXISTS "org_members_update_pipeline_patterns" ON pipeline_patterns;
-CREATE POLICY "org_members_update_pipeline_patterns"
+DO $$ BEGIN
+  CREATE POLICY "org_members_update_pipeline_patterns"
   ON pipeline_patterns FOR UPDATE
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- service role full access
 DROP POLICY IF EXISTS "service_role_all_pipeline_patterns" ON pipeline_patterns;
-CREATE POLICY "service_role_all_pipeline_patterns"
+DO $$ BEGIN
+  CREATE POLICY "service_role_all_pipeline_patterns"
   ON pipeline_patterns FOR ALL
   USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ----------------------------------------------------------------------------
 -- 4. Auto-expire cron function

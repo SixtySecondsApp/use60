@@ -53,25 +53,35 @@ CREATE TRIGGER trg_fleet_event_routes_updated_at
 ALTER TABLE fleet_event_routes ENABLE ROW LEVEL SECURITY;
 
 -- Service role: full access
-CREATE POLICY "fleet_event_routes_service_all"
+DO $$ BEGIN
+  CREATE POLICY "fleet_event_routes_service_all"
   ON fleet_event_routes FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Authenticated: read platform defaults (org_id IS NULL)
-CREATE POLICY "fleet_event_routes_read_defaults"
+DO $$ BEGIN
+  CREATE POLICY "fleet_event_routes_read_defaults"
   ON fleet_event_routes FOR SELECT
   USING (org_id IS NULL AND auth.role() = 'authenticated');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins: manage their org routes
-CREATE POLICY "fleet_event_routes_org_admin"
+DO $$ BEGIN
+  CREATE POLICY "fleet_event_routes_org_admin"
   ON fleet_event_routes FOR ALL
   USING (
     org_id IS NOT NULL
     AND get_org_role(auth.uid(), org_id) IN ('admin', 'owner')
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org members: read their org routes
-CREATE POLICY "fleet_event_routes_org_read"
+DO $$ BEGIN
+  CREATE POLICY "fleet_event_routes_org_read"
   ON fleet_event_routes FOR SELECT
   USING (
     org_id IS NOT NULL
@@ -81,6 +91,8 @@ CREATE POLICY "fleet_event_routes_org_read"
         AND organization_memberships.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Grant access
 GRANT SELECT, INSERT, UPDATE, DELETE ON fleet_event_routes TO service_role;
@@ -139,22 +151,32 @@ CREATE TRIGGER trg_fleet_sequence_definitions_updated_at
 -- RLS
 ALTER TABLE fleet_sequence_definitions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "fleet_sequence_definitions_service_all"
+DO $$ BEGIN
+  CREATE POLICY "fleet_sequence_definitions_service_all"
   ON fleet_sequence_definitions FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "fleet_sequence_definitions_read_defaults"
+DO $$ BEGIN
+  CREATE POLICY "fleet_sequence_definitions_read_defaults"
   ON fleet_sequence_definitions FOR SELECT
   USING (org_id IS NULL AND auth.role() = 'authenticated');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "fleet_sequence_definitions_org_admin"
+DO $$ BEGIN
+  CREATE POLICY "fleet_sequence_definitions_org_admin"
   ON fleet_sequence_definitions FOR ALL
   USING (
     org_id IS NOT NULL
     AND get_org_role(auth.uid(), org_id) IN ('admin', 'owner')
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "fleet_sequence_definitions_org_read"
+DO $$ BEGIN
+  CREATE POLICY "fleet_sequence_definitions_org_read"
   ON fleet_sequence_definitions FOR SELECT
   USING (
     org_id IS NOT NULL
@@ -164,6 +186,8 @@ CREATE POLICY "fleet_sequence_definitions_org_read"
         AND organization_memberships.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON fleet_sequence_definitions TO service_role;
 GRANT SELECT ON fleet_sequence_definitions TO authenticated;
@@ -198,22 +222,32 @@ CREATE INDEX IF NOT EXISTS idx_fleet_handoff_routes_org
 -- RLS
 ALTER TABLE fleet_handoff_routes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "fleet_handoff_routes_service_all"
+DO $$ BEGIN
+  CREATE POLICY "fleet_handoff_routes_service_all"
   ON fleet_handoff_routes FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "fleet_handoff_routes_read_defaults"
+DO $$ BEGIN
+  CREATE POLICY "fleet_handoff_routes_read_defaults"
   ON fleet_handoff_routes FOR SELECT
   USING (org_id IS NULL AND auth.role() = 'authenticated');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "fleet_handoff_routes_org_admin"
+DO $$ BEGIN
+  CREATE POLICY "fleet_handoff_routes_org_admin"
   ON fleet_handoff_routes FOR ALL
   USING (
     org_id IS NOT NULL
     AND get_org_role(auth.uid(), org_id) IN ('admin', 'owner')
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "fleet_handoff_routes_org_read"
+DO $$ BEGIN
+  CREATE POLICY "fleet_handoff_routes_org_read"
   ON fleet_handoff_routes FOR SELECT
   USING (
     org_id IS NOT NULL
@@ -223,6 +257,8 @@ CREATE POLICY "fleet_handoff_routes_org_read"
         AND organization_memberships.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON fleet_handoff_routes TO service_role;
 GRANT SELECT ON fleet_handoff_routes TO authenticated;

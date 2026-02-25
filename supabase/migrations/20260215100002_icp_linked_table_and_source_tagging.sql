@@ -28,12 +28,15 @@ CREATE INDEX IF NOT EXISTS idx_icp_profiles_linked_table_id
 ALTER TABLE public.dynamic_tables
   DROP CONSTRAINT IF EXISTS dynamic_tables_source_type_check;
 
-ALTER TABLE public.dynamic_tables
+DO $$ BEGIN
+  ALTER TABLE public.dynamic_tables
   ADD CONSTRAINT dynamic_tables_source_type_check
   CHECK (source_type IN (
     'manual', 'apollo', 'csv', 'copilot',
     'hubspot', 'attio', 'ops_table', 'standard', 'icp'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON CONSTRAINT dynamic_tables_source_type_check ON public.dynamic_tables IS
   'standard = provisioned from template, ops_table = user-created ops table, icp = auto-created from ICP profile';

@@ -106,7 +106,8 @@ ALTER TABLE public.icp_profiles ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: org members can view profiles in their org
 DROP POLICY IF EXISTS "Org members can view icp_profiles" ON public.icp_profiles;
-CREATE POLICY "Org members can view icp_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view icp_profiles"
   ON public.icp_profiles
   FOR SELECT
   USING (
@@ -115,10 +116,13 @@ CREATE POLICY "Org members can view icp_profiles"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- INSERT: org members can create profiles (with created_by = auth.uid())
 DROP POLICY IF EXISTS "Org members can create icp_profiles" ON public.icp_profiles;
-CREATE POLICY "Org members can create icp_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Org members can create icp_profiles"
   ON public.icp_profiles
   FOR INSERT
   WITH CHECK (
@@ -128,10 +132,13 @@ CREATE POLICY "Org members can create icp_profiles"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- UPDATE: creator or org admins can update
 DROP POLICY IF EXISTS "Creator or admin can update icp_profiles" ON public.icp_profiles;
-CREATE POLICY "Creator or admin can update icp_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Creator or admin can update icp_profiles"
   ON public.icp_profiles
   FOR UPDATE
   USING (
@@ -142,10 +149,13 @@ CREATE POLICY "Creator or admin can update icp_profiles"
       AND role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- DELETE: creator or org admins can delete
 DROP POLICY IF EXISTS "Creator or admin can delete icp_profiles" ON public.icp_profiles;
-CREATE POLICY "Creator or admin can delete icp_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Creator or admin can delete icp_profiles"
   ON public.icp_profiles
   FOR DELETE
   USING (
@@ -156,13 +166,18 @@ CREATE POLICY "Creator or admin can delete icp_profiles"
       AND role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access
 DROP POLICY IF EXISTS "Service role full access to icp_profiles" ON public.icp_profiles;
-CREATE POLICY "Service role full access to icp_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to icp_profiles"
   ON public.icp_profiles
   FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Step 6: Row Level Security — icp_search_history
@@ -172,7 +187,8 @@ ALTER TABLE public.icp_search_history ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: org members can view search history
 DROP POLICY IF EXISTS "Org members can view icp_search_history" ON public.icp_search_history;
-CREATE POLICY "Org members can view icp_search_history"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view icp_search_history"
   ON public.icp_search_history
   FOR SELECT
   USING (
@@ -181,10 +197,13 @@ CREATE POLICY "Org members can view icp_search_history"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- INSERT: org members can insert search history
 DROP POLICY IF EXISTS "Org members can insert icp_search_history" ON public.icp_search_history;
-CREATE POLICY "Org members can insert icp_search_history"
+DO $$ BEGIN
+  CREATE POLICY "Org members can insert icp_search_history"
   ON public.icp_search_history
   FOR INSERT
   WITH CHECK (
@@ -194,13 +213,18 @@ CREATE POLICY "Org members can insert icp_search_history"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access
 DROP POLICY IF EXISTS "Service role full access to icp_search_history" ON public.icp_search_history;
-CREATE POLICY "Service role full access to icp_search_history"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to icp_search_history"
   ON public.icp_search_history
   FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Done

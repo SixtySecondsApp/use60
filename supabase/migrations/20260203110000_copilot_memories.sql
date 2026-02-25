@@ -80,38 +80,53 @@ CREATE INDEX IF NOT EXISTS idx_copilot_memories_created
 ALTER TABLE copilot_memories ENABLE ROW LEVEL SECURITY;
 
 -- Users can manage only their own memories
-CREATE POLICY "Users can view own memories"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own memories"
   ON copilot_memories
   FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own memories"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own memories"
   ON copilot_memories
   FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own memories"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own memories"
   ON copilot_memories
   FOR UPDATE
   TO authenticated
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can delete own memories"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own memories"
   ON copilot_memories
   FOR DELETE
   TO authenticated
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can manage all memories (for edge functions)
-CREATE POLICY "Service role can manage all memories"
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage all memories"
   ON copilot_memories
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Trigger to update updated_at timestamp

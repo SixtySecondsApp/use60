@@ -53,7 +53,8 @@ CREATE TRIGGER trigger_update_dynamic_table_views_updated_at
 ALTER TABLE public.dynamic_table_views ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own views + system views for tables in their org
-CREATE POLICY "Users can view own and system views"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own and system views"
   ON public.dynamic_table_views
   FOR SELECT
   USING (
@@ -69,9 +70,12 @@ CREATE POLICY "Users can view own and system views"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can create views for tables in their org
-CREATE POLICY "Users can create views"
+DO $$ BEGIN
+  CREATE POLICY "Users can create views"
   ON public.dynamic_table_views
   FOR INSERT
   WITH CHECK (
@@ -84,18 +88,26 @@ CREATE POLICY "Users can create views"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own views
-CREATE POLICY "Users can update own views"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own views"
   ON public.dynamic_table_views
   FOR UPDATE
   USING (created_by = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can delete their own non-system views
-CREATE POLICY "Users can delete own non-system views"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own non-system views"
   ON public.dynamic_table_views
   FOR DELETE
   USING (created_by = auth.uid() AND is_system = FALSE);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Service role policies (for edge functions creating system views)

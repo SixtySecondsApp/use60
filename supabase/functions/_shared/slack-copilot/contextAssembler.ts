@@ -4,6 +4,184 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type { ClassifiedIntent, QueryContext, CopilotIntentType } from './types.ts';
 
+/** Model tier hint for response generation */
+export type ModelTier = 'low' | 'medium' | 'high';
+
+/** Data source configuration per intent */
+export interface IntentDataConfig {
+  supabase: string[];
+  ragMode: 'always' | 'conditional' | 'never';
+  ragCondition?: string; // e.g., 'if_3_plus_meetings'
+  tokenBudget: number;
+  modelTier: ModelTier;
+  creditRange: [number, number];
+}
+
+export const INTENT_DATA_CONFIG: Record<string, IntentDataConfig> = {
+  deal_query: {
+    supabase: ['deals', 'activities', 'contacts', 'tasks'],
+    ragMode: 'conditional',
+    ragCondition: 'if_3_plus_meetings',
+    tokenBudget: 3000,
+    modelTier: 'medium',
+    creditRange: [0.5, 1.5],
+  },
+  contact_query: {
+    supabase: ['contacts', 'meetings', 'activities'],
+    ragMode: 'conditional',
+    ragCondition: 'if_asked_about_conversations',
+    tokenBudget: 2000,
+    modelTier: 'medium',
+    creditRange: [0.3, 0.8],
+  },
+  pipeline_query: {
+    supabase: ['deals', 'pipeline_metrics'],
+    ragMode: 'never',
+    tokenBudget: 2500,
+    modelTier: 'medium',
+    creditRange: [0.2, 0.4],
+  },
+  history_query: {
+    supabase: ['deals', 'meetings', 'activities'],
+    ragMode: 'always',
+    tokenBudget: 4000,
+    modelTier: 'high',
+    creditRange: [0.8, 2.0],
+  },
+  metrics_query: {
+    supabase: ['meetings', 'activities', 'deals'],
+    ragMode: 'never',
+    tokenBudget: 1500,
+    modelTier: 'low',
+    creditRange: [0.1, 0.3],
+  },
+  risk_query: {
+    supabase: ['deals', 'activities', 'pipeline_metrics'],
+    ragMode: 'never',
+    tokenBudget: 2500,
+    modelTier: 'medium',
+    creditRange: [0.3, 0.6],
+  },
+  competitive_query: {
+    supabase: ['deals', 'competitive'],
+    ragMode: 'always',
+    tokenBudget: 2500,
+    modelTier: 'medium',
+    creditRange: [0.5, 1.2],
+  },
+  coaching_query: {
+    supabase: ['deals', 'meetings'],
+    ragMode: 'always',
+    tokenBudget: 3000,
+    modelTier: 'high',
+    creditRange: [0.8, 1.5],
+  },
+  draft_email: {
+    supabase: ['deals', 'contacts', 'activities'],
+    ragMode: 'always',
+    tokenBudget: 3500,
+    modelTier: 'high',
+    creditRange: [1.0, 2.0],
+  },
+  draft_check_in: {
+    supabase: ['deals', 'contacts', 'activities'],
+    ragMode: 'conditional',
+    ragCondition: 'if_3_plus_meetings',
+    tokenBudget: 2500,
+    modelTier: 'medium',
+    creditRange: [0.8, 1.5],
+  },
+  update_crm: {
+    supabase: ['deals'],
+    ragMode: 'never',
+    tokenBudget: 1000,
+    modelTier: 'low',
+    creditRange: [0.1, 0.2],
+  },
+  create_task: {
+    supabase: ['deals', 'contacts'],
+    ragMode: 'never',
+    tokenBudget: 1000,
+    modelTier: 'low',
+    creditRange: [0.1, 0.2],
+  },
+  trigger_prep: {
+    supabase: ['meetings'],
+    ragMode: 'never',
+    tokenBudget: 500,
+    modelTier: 'low',
+    creditRange: [0.1, 0.2],
+  },
+  trigger_enrichment: {
+    supabase: ['contacts', 'deals'],
+    ragMode: 'never',
+    tokenBudget: 500,
+    modelTier: 'low',
+    creditRange: [0.1, 0.2],
+  },
+  schedule_meeting: {
+    supabase: ['contacts'],
+    ragMode: 'never',
+    tokenBudget: 1000,
+    modelTier: 'low',
+    creditRange: [0.1, 0.2],
+  },
+  help: {
+    supabase: [],
+    ragMode: 'never',
+    tokenBudget: 800,
+    modelTier: 'low',
+    creditRange: [0.05, 0.1],
+  },
+  feedback: {
+    supabase: [],
+    ragMode: 'never',
+    tokenBudget: 500,
+    modelTier: 'low',
+    creditRange: [0.05, 0.1],
+  },
+  clarification_needed: {
+    supabase: [],
+    ragMode: 'never',
+    tokenBudget: 500,
+    modelTier: 'low',
+    creditRange: [0.05, 0.1],
+  },
+  general: {
+    supabase: ['deals'],
+    ragMode: 'never',
+    tokenBudget: 2000,
+    modelTier: 'medium',
+    creditRange: [0.2, 0.5],
+  },
+};
+
+/** Get the model tier for an intent */
+export function getModelTier(intent: string): ModelTier {
+  return INTENT_DATA_CONFIG[intent]?.modelTier ?? 'medium';
+}
+
+/** Get token budget for an intent */
+export function getTokenBudget(intent: string): number {
+  return INTENT_DATA_CONFIG[intent]?.tokenBudget ?? 2000;
+}
+
+/** Check if RAG should be loaded for this intent */
+export function shouldLoadRag(intent: string, meetingCount?: number): boolean {
+  const config = INTENT_DATA_CONFIG[intent];
+  if (!config) return false;
+  if (config.ragMode === 'always') return true;
+  if (config.ragMode === 'never') return false;
+  // conditional
+  if (config.ragCondition === 'if_3_plus_meetings') {
+    return (meetingCount ?? 0) >= 3;
+  }
+  if (config.ragCondition === 'if_asked_about_conversations') {
+    return true; // Caller determines this from message content
+  }
+  return false;
+}
+
 /**
  * Assemble query context based on the classified intent.
  * Loads only the data relevant to the query type to stay within token budgets.
@@ -49,12 +227,37 @@ function getLoadersForIntent(intentType: CopilotIntentType): ContextLoader[] {
       return [loadMeetings, loadRecentActivities, loadContacts];
     case 'contact_query':
       return [loadContacts, loadRecentActivities, loadDeals];
-    case 'action_request':
-      return [loadDeals, loadContacts, loadMeetings];
     case 'competitive_query':
       return [loadCompetitiveIntel, loadDeals];
     case 'coaching_query':
       return [loadDeals, loadMeetings, loadPipelineSnapshot];
+    case 'metrics_query':
+      return [loadDeals, loadMeetings, loadRecentActivities];
+    case 'risk_query':
+      return [loadDeals, loadRiskScores, loadPipelineSnapshot];
+    case 'draft_email':
+      return [loadDeals, loadContacts, loadRecentActivities];
+    case 'draft_check_in':
+      return [loadDeals, loadContacts, loadRecentActivities];
+    case 'update_crm':
+      return [loadDeals];
+    case 'create_task':
+      return [loadDeals, loadContacts];
+    case 'trigger_prep':
+      return [loadMeetings];
+    case 'trigger_enrichment':
+      return [loadContacts, loadDeals];
+    case 'schedule_meeting':
+      return [loadContacts];
+    case 'help':
+    case 'feedback':
+    case 'clarification_needed':
+      return [];
+    case 'general':
+      return [loadDeals];
+    // Backward-compatible aliases
+    case 'action_request':
+      return [loadDeals, loadContacts, loadRecentActivities];
     case 'general_chat':
       return [loadPipelineSnapshot];
     default:

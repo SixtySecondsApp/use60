@@ -14,6 +14,16 @@ import { getServiceClient, enrichContactContext } from './contextEnrichment.ts';
 import { logAICostEvent, extractAnthropicUsage, extractGeminiUsage } from '../../costTracking.ts';
 import { createDealMemoryReader } from '../../memory/reader.ts';
 import { createRAGClient } from '../../memory/ragClient.ts';
+import { detectMeetingHistory } from '../../meeting-prep/historyDetector.ts';
+import { getHistoricalContext, createRAGClient as createPrepRAGClient } from '../../meeting-prep/ragQueries.ts';
+import {
+  buildReturnMeetingPrompt,
+  buildReturnMeetingSlackBlocks,
+  buildFirstMeetingSlackBlocks,
+  buildReturnMeetingMarkdown,
+  RETURN_MEETING_SYSTEM_PROMPT,
+} from '../../meeting-prep/briefingComposer.ts';
+import type { HistoricalContext } from '../../meeting-prep/types.ts';
 
 // =============================================================================
 // Adapter 1: Enrich Attendees
@@ -1173,7 +1183,7 @@ export const generateBriefingAdapter: SkillAdapter = {
       let dealMemoryContext = '';
       if (enrichAttendeesOutput?.deal?.id) {
         try {
-          const ragClient = createRAGClient();
+          const ragClient = createRAGClient(state.event.org_id);
           const reader = createDealMemoryReader(supabase, ragClient);
 
           const dealContext = await reader.getDealContext(
@@ -1235,6 +1245,120 @@ export const generateBriefingAdapter: SkillAdapter = {
           console.error('[preMeeting] Deal memory context loading failed (non-blocking):', err);
         }
       }
+
+      // ---- NEW: Detect return meeting and fire targeted RAG queries ----
+      let meetingHistory: Awaited<ReturnType<typeof detectMeetingHistory>> | null = null;
+      let ragHistoricalContext: HistoricalContext | null = null;
+
+      try {
+        // Extract attendee emails for history detection
+        const attendeeEmails: string[] = (enrichAttendeesOutput?.attendees || [])
+          .filter((a: any) => !a.is_internal && a.email)
+          .map((a: any) => a.email.toLowerCase());
+
+        if (attendeeEmails.length > 0) {
+          const meetingId = state.event.payload.meeting_id as string;
+          meetingHistory = await detectMeetingHistory(
+            supabase,
+            meetingId,
+            attendeeEmails,
+            state.event.user_id,
+            state.event.org_id,
+          );
+
+          console.log(
+            `[generate-briefing] Meeting history: isReturn=${meetingHistory.isReturnMeeting}, ` +
+            `priorMeetings=${meetingHistory.priorMeetingCount}`
+          );
+
+          // If this is a return meeting, fire the 8 targeted RAG queries
+          if (meetingHistory.isReturnMeeting && meetingHistory.priorMeetingCount > 0) {
+            const ragClient = createPrepRAGClient(state.event.org_id);
+            // Use the primary contact's ID for scoping
+            const primaryContactId = enrichAttendeesOutput?.attendees?.find(
+              (a: any) => a.is_known_contact && !a.is_internal
+            )?.contact_id || null;
+
+            ragHistoricalContext = await getHistoricalContext(
+              primaryContactId,
+              state.event.user_id,
+              ragClient,
+            );
+            // Set the meeting count from the history detector
+            ragHistoricalContext.meetingCount = meetingHistory.priorMeetingCount;
+
+            console.log(
+              `[generate-briefing] RAG context: hasHistory=${ragHistoricalContext.hasHistory}, ` +
+              `sections=${Object.keys(ragHistoricalContext.sections).length}/${8}, ` +
+              `failed=${ragHistoricalContext.failedQueries.length}`
+            );
+          }
+        }
+      } catch (err) {
+        console.error('[generate-briefing] History detection/RAG failed (non-blocking):', err);
+        // Continue with standard briefing — no regression
+      }
+
+      // Build prompt — use return-meeting template if RAG context is available
+      let promptText: string;
+      let systemPrompt: string;
+
+      if (ragHistoricalContext?.hasHistory && meetingHistory?.isReturnMeeting) {
+        // Return meeting: use the new structured prompt with RAG context
+        systemPrompt = RETURN_MEETING_SYSTEM_PROMPT;
+
+        // Format attendee profiles
+        const attendeeProfilesStr = (enrichAttendeesOutput?.attendees || [])
+          .map((a: any) => {
+            const parts = [a.name];
+            if (a.title) parts.push(`(${a.title})`);
+            if (a.company) parts.push(`at ${a.company}`);
+            parts.push(a.is_known_contact ? '[Known Contact]' : '[New Contact]');
+            return `- ${parts.join(' ')}`;
+          })
+          .join('\n');
+
+        // Format attendee comparison
+        const attendeeComparisonStr = (meetingHistory.attendeeHistory || [])
+          .map((ah: any) => {
+            if (ah.classification === 'new') return `- ${ah.email}: NEW (first meeting)`;
+            return `- ${ah.email}: RETURNING (${ah.meetingsAttended} prior meetings, last seen ${ah.lastSeen || 'unknown'})`;
+          })
+          .join('\n') || 'No attendee comparison data';
+
+        // Format HubSpot context
+        const hubspotStr = enrichAttendeesOutput?.deal
+          ? `Deal: ${enrichAttendeesOutput.deal.name}, Stage: ${enrichAttendeesOutput.deal.stage}, Value: $${enrichAttendeesOutput.deal.value?.toLocaleString() || 'unknown'}`
+          : '';
+
+        // Format company news
+        const newsStr = companyNewsOutput?.company_profile?.recent_news
+          ?.slice(0, 3)
+          .map((n: any) => `- ${n.title || n.headline || n}`)
+          .join('\n') || '';
+
+        promptText = buildReturnMeetingPrompt({
+          meetingTitle,
+          meetingTime: meetingStart,
+          meetingNumber: meetingHistory.priorMeetingCount + 1,
+          companyName: enrichAttendeesOutput?.company?.name || 'Unknown Company',
+          dealStage: enrichAttendeesOutput?.deal?.stage || null,
+          daysInStage: null, // TODO: calculate from deal data
+          dealAmount: enrichAttendeesOutput?.deal?.value || null,
+          attendeeProfiles: attendeeProfilesStr,
+          attendeeComparison: attendeeComparisonStr,
+          historicalContext: ragHistoricalContext,
+          hubspotContext: hubspotStr,
+          companyNews: newsStr,
+        });
+
+        // Also include deal memory context if available
+        if (dealMemoryContext) {
+          promptText += `\n\n## ADDITIONAL DEAL MEMORY\n${dealMemoryContext}`;
+        }
+      } else {
+        // First meeting or no RAG: use the existing prompt logic
+        systemPrompt = 'You are a meeting preparation assistant. Adapt your tone and language to the meeting context. For sales meetings (with active deals or sales-stage keywords), use sales language. For service, onboarding, or professional meetings, use neutral professional language — do NOT use sales jargon like prospect, pipeline, or close. For internal meetings, focus on progress and alignment. Generate a comprehensive but concise pre-meeting briefing. Return ONLY valid JSON.';
 
       // Build prompt
       const promptSections: string[] = [];
@@ -1458,7 +1582,8 @@ export const generateBriefingAdapter: SkillAdapter = {
       promptSections.push('');
       promptSections.push('Return ONLY valid JSON. No markdown, no explanations.');
 
-      const promptText = promptSections.join('\n');
+      promptText = promptSections.join('\n');
+      } // end else (first meeting / no RAG)
 
       // Try AI synthesis
       let briefing: any;
@@ -1485,7 +1610,7 @@ export const generateBriefingAdapter: SkillAdapter = {
               model: 'claude-haiku-4-5-20251001',
               max_tokens: 1024,
               temperature: 0.3,
-              system: 'You are a meeting preparation assistant. Adapt your tone and language to the meeting context. For sales meetings (with active deals or sales-stage keywords), use sales language. For service, onboarding, or professional meetings, use neutral professional language — do NOT use sales jargon like prospect, pipeline, or close. For internal meetings, focus on progress and alignment. Generate a comprehensive but concise pre-meeting briefing. Return ONLY valid JSON.',
+              system: systemPrompt,
               messages: [{ role: 'user', content: promptText }],
             }),
           });
@@ -1509,6 +1634,13 @@ export const generateBriefingAdapter: SkillAdapter = {
 
           briefing = JSON.parse(jsonMatch[0]);
           console.log('[generate-briefing] AI briefing generated successfully');
+
+          // If this was a return meeting, also store the enhanced format data
+          if (ragHistoricalContext?.hasHistory && meetingHistory?.isReturnMeeting) {
+            briefing._isReturnMeeting = true;
+            briefing._meetingNumber = meetingHistory.priorMeetingCount + 1;
+            briefing._companyName = enrichAttendeesOutput?.company?.name || 'Unknown';
+          }
 
           // Track cost for briefing generation
           const supabase = getServiceClient();
@@ -1715,45 +1847,83 @@ export const deliverSlackBriefingAdapter: SkillAdapter = {
         console.warn('[deliver-slack-briefing] No Slack user mapping found');
         deliveryError = 'No Slack user mapping';
       } else {
-        // Build Slack blocks from briefing data
-        // Note: This would ideally use a proper block builder, but for now we'll create a simple message
-        const blocks = [
-          {
-            type: 'header',
-            text: {
-              type: 'plain_text',
-              text: `📋 Meeting Briefing: ${meetingTitle}`,
-            },
-          },
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: briefing.executive_summary || 'Upcoming meeting briefing prepared.',
-            },
-          },
-        ];
+        // Build Slack blocks from briefing data — route based on meeting type
+        let blocks: any[];
 
-        if (briefing.talking_points?.length > 0) {
-          blocks.push({ type: 'divider' });
-          blocks.push({
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `*Key Topics:*\n${briefing.talking_points.map((p: string) => `• ${p}`).join('\n')}`,
-            },
+        if (briefing._isReturnMeeting) {
+          // Return meeting — use the new structured block format
+          const meetingTime = new Date(state.event.payload.start_time as string).toLocaleString('en-GB', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
           });
-        }
 
-        if (briefing.questions_to_ask?.length > 0) {
-          blocks.push({ type: 'divider' });
-          blocks.push({
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `*Questions to Ask:*\n${briefing.questions_to_ask.map((q: string) => `• ${q}`).join('\n')}`,
+          blocks = buildReturnMeetingSlackBlocks(
+            briefing,
+            meetingTitle,
+            meetingTime,
+            briefing._meetingNumber || 2,
+            briefing._companyName || enrichAttendeesOutput?.company?.name || 'Company',
+          );
+
+          // Add deep link action button for the deal, if available
+          const dealId = enrichAttendeesOutput?.deal?.id;
+          if (dealId) {
+            blocks.push({ type: 'divider' });
+            blocks.push({
+              type: 'actions',
+              elements: [
+                {
+                  type: 'button',
+                  text: { type: 'plain_text', text: 'View Deal' },
+                  url: `https://app.use60.com/deals/${dealId}`,
+                  action_id: 'prep_view_deal',
+                },
+              ],
+            });
+          }
+        } else {
+          // First meeting or legacy — use the existing inline block building
+          blocks = [
+            {
+              type: 'header',
+              text: {
+                type: 'plain_text',
+                text: `Meeting Briefing: ${meetingTitle}`,
+              },
             },
-          });
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: briefing.executive_summary || 'Upcoming meeting briefing prepared.',
+              },
+            },
+          ];
+
+          if (briefing.talking_points?.length > 0) {
+            blocks.push({ type: 'divider' });
+            blocks.push({
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `*Key Topics:*\n${briefing.talking_points.map((p: string) => `• ${p}`).join('\n')}`,
+              },
+            });
+          }
+
+          if (briefing.questions_to_ask?.length > 0) {
+            blocks.push({ type: 'divider' });
+            blocks.push({
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `*Questions to Ask:*\n${briefing.questions_to_ask.map((q: string) => `• ${q}`).join('\n')}`,
+              },
+            });
+          }
         }
 
         const payload: ProactiveNotificationPayload = {

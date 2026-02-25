@@ -19,15 +19,19 @@ DROP POLICY IF EXISTS "allow_select_own_invitations" ON "public"."organization_i
 -- Step 3: Create proper RLS policies
 
 -- Users can see invitations sent to their email address
-CREATE POLICY "Users can view invitations sent to their email"
+DO $$ BEGIN
+  CREATE POLICY "Users can view invitations sent to their email"
   ON "public"."organization_invitations"
   FOR SELECT
   USING (
     email = (SELECT email FROM auth.users WHERE id = auth.uid())
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins and owners can see all invitations for their organization
-CREATE POLICY "Org admins can view their org invitations"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can view their org invitations"
   ON "public"."organization_invitations"
   FOR SELECT
   USING (
@@ -37,9 +41,12 @@ CREATE POLICY "Org admins can view their org invitations"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins and owners can create invitations for their organization
-CREATE POLICY "Org admins can create invitations"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can create invitations"
   ON "public"."organization_invitations"
   FOR INSERT
   WITH CHECK (
@@ -49,9 +56,12 @@ CREATE POLICY "Org admins can create invitations"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins and owners can update invitations for their organization
-CREATE POLICY "Org admins can update their org invitations"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update their org invitations"
   ON "public"."organization_invitations"
   FOR UPDATE
   USING (
@@ -61,9 +71,12 @@ CREATE POLICY "Org admins can update their org invitations"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins and owners can delete/revoke invitations for their organization
-CREATE POLICY "Org admins can delete their org invitations"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can delete their org invitations"
   ON "public"."organization_invitations"
   FOR DELETE
   USING (
@@ -73,6 +86,8 @@ CREATE POLICY "Org admins can delete their org invitations"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Note: The get-invitation-by-token edge function and complete_invite_signup RPC
 -- use the service role key which bypasses RLS entirely, so token lookups still work.

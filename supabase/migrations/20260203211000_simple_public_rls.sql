@@ -9,6 +9,9 @@ DROP POLICY IF EXISTS "organization_invitations_public_select" ON "public"."orga
 DROP POLICY IF EXISTS "allow_select_all" ON "public"."organization_invitations";
 
 -- Create single permissive policy that allows SELECT for everyone
-CREATE POLICY "organization_invitations_public_select" ON "public"."organization_invitations"
+DO $$ BEGIN
+  CREATE POLICY "organization_invitations_public_select" ON "public"."organization_invitations"
   FOR SELECT
   USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

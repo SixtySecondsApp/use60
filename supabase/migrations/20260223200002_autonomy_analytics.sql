@@ -22,15 +22,21 @@ CREATE INDEX idx_autonomy_analytics_action ON public.autonomy_analytics(org_id, 
 
 ALTER TABLE public.autonomy_analytics ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Org members can view autonomy analytics"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view autonomy analytics"
   ON public.autonomy_analytics FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM public.organization_memberships om WHERE om.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access to autonomy_analytics"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to autonomy_analytics"
   ON public.autonomy_analytics FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RPC to calculate and refresh analytics
 CREATE OR REPLACE FUNCTION public.refresh_autonomy_analytics(p_org_id uuid)

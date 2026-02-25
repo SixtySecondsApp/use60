@@ -4,6 +4,9 @@
 
 DROP POLICY IF EXISTS "Allow public organization view for invitations" ON "public"."organizations";
 
-CREATE POLICY "Allow public organization view for invitations" ON "public"."organizations"
+DO $$ BEGIN
+  CREATE POLICY "Allow public organization view for invitations" ON "public"."organizations"
 FOR SELECT
 USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

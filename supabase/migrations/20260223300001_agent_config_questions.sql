@@ -28,15 +28,21 @@ CREATE TABLE IF NOT EXISTS agent_config_question_templates (
 
 ALTER TABLE agent_config_question_templates ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Service role full access to question templates"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to question templates"
 ON agent_config_question_templates FOR ALL
 TO service_role
 USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Authenticated users can read question templates"
+DO $$ BEGIN
+  CREATE POLICY "Authenticated users can read question templates"
 ON agent_config_question_templates FOR SELECT
 TO authenticated
 USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 GRANT SELECT ON agent_config_question_templates TO authenticated;
 GRANT ALL ON agent_config_question_templates TO service_role;
@@ -83,7 +89,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_config_questions_trigger
 ALTER TABLE agent_config_questions ENABLE ROW LEVEL SECURITY;
 
 -- Users can see and answer their own questions
-CREATE POLICY "Users can read own config questions"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own config questions"
 ON agent_config_questions FOR SELECT
 TO authenticated
 USING (
@@ -93,9 +100,12 @@ USING (
     AND get_org_role(auth.uid(), org_id) IS NOT NULL
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own questions (answer them)
-CREATE POLICY "Users can update own config questions"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own config questions"
 ON agent_config_questions FOR UPDATE
 TO authenticated
 USING (
@@ -112,12 +122,17 @@ WITH CHECK (
     AND get_org_role(auth.uid(), org_id) IN ('owner', 'admin')
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access (for seeding, trigger evaluation)
-CREATE POLICY "Service role full access to config questions"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to config questions"
 ON agent_config_questions FOR ALL
 TO service_role
 USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 GRANT SELECT, UPDATE ON agent_config_questions TO authenticated;
 GRANT ALL ON agent_config_questions TO service_role;
@@ -147,15 +162,21 @@ CREATE INDEX IF NOT EXISTS idx_agent_config_question_log_user_recent
 
 ALTER TABLE agent_config_question_log ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can read own question log"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own question log"
 ON agent_config_question_log FOR SELECT
 TO authenticated
 USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access to question log"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to question log"
 ON agent_config_question_log FOR ALL
 TO service_role
 USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 GRANT SELECT ON agent_config_question_log TO authenticated;
 GRANT ALL ON agent_config_question_log TO service_role;

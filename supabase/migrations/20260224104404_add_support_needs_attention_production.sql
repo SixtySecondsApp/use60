@@ -31,11 +31,13 @@ $$;
 DROP TRIGGER IF EXISTS ticket_insert_needs_attention ON public.support_tickets;
 DROP TRIGGER IF EXISTS ticket_status_needs_attention ON public.support_tickets;
 
+DROP TRIGGER IF EXISTS ticket_insert_needs_attention ON public.support_tickets;
 CREATE TRIGGER ticket_insert_needs_attention
   BEFORE INSERT ON public.support_tickets
   FOR EACH ROW
   EXECUTE FUNCTION public.update_ticket_needs_attention();
 
+DROP TRIGGER IF EXISTS ticket_status_needs_attention ON public.support_tickets;
 CREATE TRIGGER ticket_status_needs_attention
   BEFORE UPDATE ON public.support_tickets
   FOR EACH ROW
@@ -64,6 +66,7 @@ $$;
 
 DROP TRIGGER IF EXISTS message_updates_ticket_attention ON public.support_messages;
 
+DROP TRIGGER IF EXISTS message_updates_ticket_attention ON public.support_messages;
 CREATE TRIGGER message_updates_ticket_attention
   AFTER INSERT ON public.support_messages
   FOR EACH ROW

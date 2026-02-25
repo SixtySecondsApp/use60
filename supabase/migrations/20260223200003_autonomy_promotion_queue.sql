@@ -54,22 +54,40 @@ ALTER TABLE public.autonomy_audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.autonomy_cooldowns ENABLE ROW LEVEL SECURITY;
 
 -- Org members can view
-CREATE POLICY "Org members can view promotion queue"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view promotion queue"
   ON public.autonomy_promotion_queue FOR SELECT
   USING (org_id IN (SELECT om.org_id FROM public.organization_memberships om WHERE om.user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Org members can view audit log"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view audit log"
   ON public.autonomy_audit_log FOR SELECT
   USING (org_id IN (SELECT om.org_id FROM public.organization_memberships om WHERE om.user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Org members can view cooldowns"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view cooldowns"
   ON public.autonomy_cooldowns FOR SELECT
   USING (org_id IN (SELECT om.org_id FROM public.organization_memberships om WHERE om.user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access
-CREATE POLICY "Service role full access to promotion_queue" ON public.autonomy_promotion_queue FOR ALL USING (auth.role() = 'service_role');
-CREATE POLICY "Service role full access to audit_log" ON public.autonomy_audit_log FOR ALL USING (auth.role() = 'service_role');
-CREATE POLICY "Service role full access to cooldowns" ON public.autonomy_cooldowns FOR ALL USING (auth.role() = 'service_role');
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to promotion_queue" ON public.autonomy_promotion_queue FOR ALL USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to audit_log" ON public.autonomy_audit_log FOR ALL USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to cooldowns" ON public.autonomy_cooldowns FOR ALL USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON TABLE public.autonomy_promotion_queue IS 'Pending autonomy promotion suggestions for admin review (PRD-24)';
 COMMENT ON TABLE public.autonomy_audit_log IS 'Complete audit trail of all autonomy policy changes (PRD-24)';

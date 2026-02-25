@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS relationship_milestones (
 
 -- Add CHECK constraints
 ALTER TABLE relationship_milestones DROP CONSTRAINT IF EXISTS relationship_milestones_type_check;
-ALTER TABLE relationship_milestones ADD CONSTRAINT relationship_milestones_type_check
+DO $$ BEGIN
+  ALTER TABLE relationship_milestones ADD CONSTRAINT relationship_milestones_type_check
   CHECK (milestone_type IN (
     'onboarding_checkin',
     'qbr_due',
@@ -28,15 +29,20 @@ ALTER TABLE relationship_milestones ADD CONSTRAINT relationship_milestones_type_
     'trial_ending',
     'contract_expiring'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE relationship_milestones DROP CONSTRAINT IF EXISTS relationship_milestones_status_check;
-ALTER TABLE relationship_milestones ADD CONSTRAINT relationship_milestones_status_check
+DO $$ BEGIN
+  ALTER TABLE relationship_milestones ADD CONSTRAINT relationship_milestones_status_check
   CHECK (status IN (
     'pending',
     'signal_sent',
     'completed',
     'skipped'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Performance index for scanner queries
 CREATE INDEX IF NOT EXISTS idx_relationship_milestones_scanner
@@ -57,7 +63,8 @@ ALTER TABLE relationship_milestones ENABLE ROW LEVEL SECURITY;
 
 -- Org members can read milestones for their org
 DROP POLICY IF EXISTS "Org members can view milestones" ON relationship_milestones;
-CREATE POLICY "Org members can view milestones"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view milestones"
   ON relationship_milestones FOR SELECT
   USING (
     org_id IN (
@@ -65,12 +72,17 @@ CREATE POLICY "Org members can view milestones"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can do everything (for cron scanner)
 DROP POLICY IF EXISTS "Service role full access" ON relationship_milestones;
-CREATE POLICY "Service role full access"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access"
   ON relationship_milestones FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Updated_at trigger
 CREATE OR REPLACE FUNCTION update_relationship_milestones_updated_at()

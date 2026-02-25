@@ -40,17 +40,23 @@ CREATE INDEX IF NOT EXISTS email_change_tokens_user_id_idx ON public.email_chang
 ALTER TABLE public.email_change_tokens ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policy: Users can view their own tokens
-CREATE POLICY "Users can read own email change tokens"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own email change tokens"
   ON public.email_change_tokens
   FOR SELECT
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policy: Service role (edge functions) can read all for verification
-CREATE POLICY "Service role can manage email change tokens"
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage email change tokens"
   ON public.email_change_tokens
   FOR ALL
   USING (current_setting('role') = 'authenticated' OR auth.jwt() ->> 'role' = 'service_role')
   WITH CHECK (current_setting('role') = 'authenticated' OR auth.jwt() ->> 'role' = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Comment for clarity
 COMMENT ON TABLE public.email_change_tokens IS 'Stores secure tokens for email change verification. Each token is single-use and expires after 24 hours.';

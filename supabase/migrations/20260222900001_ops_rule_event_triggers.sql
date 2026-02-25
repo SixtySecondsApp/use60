@@ -52,10 +52,13 @@ CREATE INDEX IF NOT EXISTS idx_ops_rule_trigger_debounce_fired
 -- Service role can read/write this table (trigger runs as SECURITY DEFINER)
 ALTER TABLE public.ops_rule_trigger_debounce ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "service_role_manage_debounce"
+DO $$ BEGIN
+  CREATE POLICY "service_role_manage_debounce"
   ON public.ops_rule_trigger_debounce
   FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- 2. Shared helper: read credentials from Vault

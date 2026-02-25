@@ -9,7 +9,8 @@ DROP POLICY IF EXISTS "profiles_insert" ON public.profiles;
 -- 1. Service role (for edge functions)
 -- 2. Users to insert their own profile (id = auth.uid())
 -- 3. Special case: Allow insertion if creating profile for an unverified email in auth.users
-CREATE POLICY "profiles_insert" ON public.profiles
+DO $$ BEGIN
+  CREATE POLICY "profiles_insert" ON public.profiles
 FOR INSERT
 WITH CHECK (
   public.is_service_role()
@@ -22,6 +23,8 @@ WITH CHECK (
     AND created_at > NOW() - INTERVAL '1 hour'  -- Only within 1 hour of user creation
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comment explaining the policy
 COMMENT ON POLICY "profiles_insert" ON public.profiles IS 'Allows service role, users to insert their own profile, and allows initial profile creation immediately after signup via email match in auth.users';

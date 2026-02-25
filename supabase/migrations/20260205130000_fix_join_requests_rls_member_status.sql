@@ -13,7 +13,8 @@ DROP POLICY IF EXISTS "org_admins_view_join_requests" ON organization_join_reque
 DROP POLICY IF EXISTS "org_admins_update_join_requests" ON organization_join_requests;
 
 -- Recreate SELECT policy with member_status check
-CREATE POLICY "org_admins_view_join_requests"
+DO $$ BEGIN
+  CREATE POLICY "org_admins_view_join_requests"
   ON organization_join_requests
   FOR SELECT
   USING (
@@ -24,9 +25,12 @@ CREATE POLICY "org_admins_view_join_requests"
       AND member_status = 'active'  -- CRITICAL FIX: Only active admins can view
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Recreate UPDATE policy with member_status check
-CREATE POLICY "org_admins_update_join_requests"
+DO $$ BEGIN
+  CREATE POLICY "org_admins_update_join_requests"
   ON organization_join_requests
   FOR UPDATE
   USING (
@@ -37,6 +41,8 @@ CREATE POLICY "org_admins_update_join_requests"
       AND member_status = 'active'  -- CRITICAL FIX: Only active admins can update
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comment for documentation
 COMMENT ON POLICY "org_admins_view_join_requests" ON organization_join_requests IS

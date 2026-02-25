@@ -4,7 +4,8 @@
 ALTER TABLE public.dynamic_table_columns
   DROP CONSTRAINT IF EXISTS dynamic_table_columns_column_type_check;
 
-ALTER TABLE public.dynamic_table_columns
+DO $$ BEGIN
+  ALTER TABLE public.dynamic_table_columns
   ADD CONSTRAINT dynamic_table_columns_column_type_check
   CHECK (column_type IN (
     'text', 'email', 'url', 'number', 'boolean', 'enrichment',
@@ -14,5 +15,7 @@ ALTER TABLE public.dynamic_table_columns
     'hubspot_property', 'apollo_property', 'apollo_org_property',
     'instantly'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 NOTIFY pgrst, 'reload schema';
