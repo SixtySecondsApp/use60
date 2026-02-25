@@ -164,7 +164,7 @@ function warmthLabel(level: number): string {
     1: 'Businesslike — keeps it purely professional',
     2: 'Cordial — friendly but restrained',
     3: 'Warm — personable, acknowledges the relationship',
-    4: 'Very warm — openly friendly, uses the person's name naturally',
+    4: "Very warm — openly friendly, uses the person's name naturally",
     5: 'Highly personal — reads like an email to a close contact',
   };
   return labels[Math.round(level)] ?? 'Warm — personable, acknowledges the relationship';
