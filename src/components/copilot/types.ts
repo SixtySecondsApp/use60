@@ -82,6 +82,13 @@ export interface CopilotContext {
   orgId?: string;
   userId: string;
   temporalContext?: TemporalContextPayload;
+  /** Server-side routing result from route-message edge function */
+  routingContext?: {
+    skill_key?: string;
+    confidence?: number;
+    matched_by?: string;
+    latency_ms?: number;
+  };
 }
 
 export interface CopilotContextPayload {

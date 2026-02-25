@@ -60,7 +60,7 @@ export function NotetakerSetupStep() {
             Enable AI Notetaker
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Automatically record and transcribe your meetings for AI-powered insights.
+            I'll join your meetings, record them, and pull out the key moments.
           </p>
         </div>
       </div>
@@ -125,15 +125,15 @@ export function NotetakerSetupStep() {
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              Records meetings with an AI notetaker bot
+              I'll sit in on meetings and take notes for you
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              Auto-transcribes for meeting summaries
+              I'll auto-transcribe everything
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              Extracts action items and follow-ups
+              I'll extract action items and follow-ups
             </div>
           </div>
 

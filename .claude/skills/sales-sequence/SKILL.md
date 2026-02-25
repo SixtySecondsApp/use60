@@ -347,7 +347,7 @@ The biggest risk with AI-generated emails is they sound AI-generated. To avoid t
 ## Error Handling
 
 ### "I don't have enough personalization data"
-Write the email with placeholder brackets: `[specific detail about their recent hiring push]`. Explain what kind of research would make the email stronger. Even without data, the structure and rules still apply.
+Never ask the user to provide details you could find yourself. Write the best email you can with what you have, then proactively offer a specific next step YOU can take. For example: "If you want me to personalise this further, I can take a look at their LinkedIn profile and rewrite it with more context." or "I can research their recent company news and sharpen the opener - want me to?" Always offer to do the work, never push it back to the user.
 
 ### "The client wants a longer email"
 Push back gently. Show them the data: 75-100 words = 51% response rate. Longer emails work for follow-ups and warm leads, not cold outreach. If they insist, write it but flag the tradeoff.

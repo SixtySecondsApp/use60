@@ -39,6 +39,11 @@ export interface CCItem {
   resolved_at: string | null;
   deal_id: string | null;
   contact_id: string | null;
+  enrichment_context: Record<string, unknown>;
+  confidence_factors: Record<string, unknown>;
+  priority_factors: Record<string, unknown>;
+  enriched_at: string | null;
+  parent_item_id: string | null;
 }
 
 export interface CCItemFilters {
@@ -51,11 +56,12 @@ export interface CCItemFilters {
 }
 
 export interface CCStats {
-  total_open: number;
-  total_ready: number;
+  total_active: number;
+  needs_review: number;
   needs_input: number;
   auto_completed_today: number;
   resolved_today: number;
+  pending_approval: number;
 }
 
 // Explicit column selection — never select('*')
@@ -83,6 +89,11 @@ const CC_ITEM_COLUMNS = [
   'resolved_at',
   'deal_id',
   'contact_id',
+  'enrichment_context',
+  'confidence_factors',
+  'priority_factors',
+  'enriched_at',
+  'parent_item_id',
 ].join(', ');
 
 // ============================================================================
@@ -143,40 +154,26 @@ class CommandCentreItemsService {
 
   async getStats(): Promise<CCStats> {
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayISO = today.toISOString();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
 
-      const { data, error } = await supabase
-        .from('command_centre_items')
-        .select('id, status, requires_human_input, resolved_at')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.rpc('get_cc_stats', {
+        p_user_id: user.id,
+      });
 
       if (error) {
         logger.error('[commandCentreItemsService.getStats] Error:', error);
         throw error;
       }
 
-      const items = data || [];
-
-      const stats: CCStats = {
-        total_open: items.filter(i => i.status === 'open' || i.status === 'enriching').length,
-        total_ready: items.filter(i => i.status === 'ready').length,
-        needs_input: items.filter(
-          i => i.requires_human_input && (i.requires_human_input as string[]).length > 0
-        ).length,
-        auto_completed_today: items.filter(
-          i => i.status === 'auto_resolved' && i.resolved_at && i.resolved_at >= todayISO
-        ).length,
-        resolved_today: items.filter(
-          i =>
-            (i.status === 'completed' || i.status === 'dismissed' || i.status === 'auto_resolved') &&
-            i.resolved_at &&
-            i.resolved_at >= todayISO
-        ).length,
+      return (data as CCStats) ?? {
+        total_active: 0,
+        needs_review: 0,
+        needs_input: 0,
+        auto_completed_today: 0,
+        resolved_today: 0,
+        pending_approval: 0,
       };
-
-      return stats;
     } catch (err) {
       logger.error('[commandCentreItemsService.getStats] Exception:', err);
       throw err;
@@ -216,6 +213,11 @@ class CommandCentreItemsService {
         toast.error('Failed to approve item');
         throw error;
       }
+
+      // Fire-and-forget Slack sync — non-blocking, does not affect user action
+      supabase.functions.invoke('cc-action-sync', {
+        body: { item_id: id, action: 'approved' },
+      }).catch(err => logger.warn('[commandCentreItemsService] Slack sync failed (non-blocking):', err));
     } catch (err) {
       logger.error('[commandCentreItemsService.approveItem] Exception:', err);
       throw err;
@@ -234,6 +236,11 @@ class CommandCentreItemsService {
         toast.error('Failed to dismiss item');
         throw error;
       }
+
+      // Fire-and-forget Slack sync — non-blocking, does not affect user action
+      supabase.functions.invoke('cc-action-sync', {
+        body: { item_id: id, action: 'dismissed' },
+      }).catch(err => logger.warn('[commandCentreItemsService] Slack sync failed (non-blocking):', err));
     } catch (err) {
       logger.error('[commandCentreItemsService.dismissItem] Exception:', err);
       throw err;
@@ -289,6 +296,45 @@ class CommandCentreItemsService {
       }
     } catch (err) {
       logger.error('[commandCentreItemsService.updateDraftedAction] Exception:', err);
+      throw err;
+    }
+  }
+
+  async approveAndSendEmail(
+    id: string,
+    emailPayload: { to: string; subject: string; body_html: string },
+  ): Promise<void> {
+    try {
+      // Step 1: Call email-send-as-rep edge function
+      const { error: sendError } = await supabase.functions.invoke('email-send-as-rep', {
+        body: {
+          to: emailPayload.to,
+          subject: emailPayload.subject,
+          body: emailPayload.body_html,
+        },
+      });
+
+      if (sendError) {
+        logger.error('[commandCentreItemsService.approveAndSendEmail] Send error:', sendError);
+        throw sendError;
+      }
+
+      // Step 2: Mark item as completed
+      const { error: updateError } = await supabase
+        .from('command_centre_items')
+        .update({
+          status: 'completed',
+          resolution_channel: 'manual_approved_and_sent',
+          resolved_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (updateError) {
+        logger.error('[commandCentreItemsService.approveAndSendEmail] Update error:', updateError);
+        throw updateError;
+      }
+    } catch (err) {
+      logger.error('[commandCentreItemsService.approveAndSendEmail] Exception:', err);
       throw err;
     }
   }

@@ -8,191 +8,233 @@
       "styling": "tailwind"
     }
   },
-  "feature": "ui-polish",
-  "consultReport": ".sixty/consult/ui-polish.md",
-  "createdAt": "2026-02-23",
-  "stories": [
+  "features": [
     {
-      "id": "UI-001",
-      "feature": "ui-polish",
-      "title": "Fix Sentiment and TalkTime charts plotting null values at top of chart",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 1,
-      "acceptance": [
-        "Sentiment chart does not render data points at the top of the chart",
-        "TalkTime chart does not render data points at the top of the chart",
-        "Both charts show gaps where data is null (no line drawn through null points at top)",
-        "Non-null data points still connect smoothly",
-        "Volume chart behaviour unchanged"
-      ],
-      "estimatedMinutes": 10,
-      "actualMinutes": null,
-      "files": [
-        "src/components/insights/TeamTrendsChart.tsx"
-      ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["UI-002", "UI-003", "UI-004", "UI-005"],
-      "startedAt": null,
-      "completedAt": null
+      "id": "command-centre-evolution",
+      "name": "Command Centre Evolution",
+      "status": "complete",
+      "createdAt": "2026-02-25"
     },
     {
-      "id": "UI-002",
-      "feature": "ui-polish",
-      "title": "Fix transcript attendee sidebar speaker color mismatch",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 2,
-      "acceptance": [
-        "Speaker avatar color in attendees sidebar matches the same speaker's avatar color in the transcript",
-        "Speaker name text color matches avatar background color",
-        "Attendees sidebar uses speaker-name-based slot lookup (not array index)"
-      ],
-      "estimatedMinutes": 10,
-      "actualMinutes": null,
-      "files": [
-        "src/pages/MeetingDetail.tsx"
-      ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["UI-001", "UI-003", "UI-004", "UI-005"],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "UI-003",
-      "feature": "ui-polish",
-      "title": "Credits navbar: show 'N credits' label and add pulsating green dot",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 3,
-      "acceptance": [
-        "Credits button shows '342 credits' not '342 cr'",
-        "Green status dot next to credits pulsates (like notification dot) using animate-pulse in green",
-        "Pulse is subtle — not distracting"
-      ],
-      "estimatedMinutes": 10,
-      "actualMinutes": null,
-      "files": [
-        "src/components/credits/CreditWidget.tsx"
-      ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["UI-001", "UI-002", "UI-004", "UI-005"],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "UI-004",
-      "feature": "ui-polish",
-      "title": "Dashboard Activity tab: add entry animation matching Team Performance",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 4,
-      "acceptance": [
-        "Switching to Activity tab triggers fade-in + slide-up animation (opacity 0→1, y 20→0)",
-        "Animation matches the motion.div pattern used in TeamKPIGrid",
-        "Content width/scaling is consistent with Overview tab"
-      ],
-      "estimatedMinutes": 10,
-      "actualMinutes": null,
-      "files": [
-        "src/pages/Dashboard.tsx"
-      ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-005"],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "UI-005",
-      "feature": "ui-polish",
-      "title": "Meetings tab: add consistent spacing to match app standard padding",
-      "type": "frontend",
-      "status": "pending",
-      "priority": 5,
-      "acceptance": [
-        "Meetings list content has px-4 sm:px-6 lg:px-8 horizontal padding",
-        "Vertical padding matches app standard (py-6 sm:py-8)",
-        "Content is no longer flush to screen edges",
-        "Pattern matches MeetingAnalyticsPage and Dashboard padding"
-      ],
-      "estimatedMinutes": 5,
-      "actualMinutes": null,
-      "files": [
-        "src/components/meetings/UnifiedMeetingsList.tsx"
-      ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004"],
-      "startedAt": null,
-      "completedAt": null
+      "id": "followup-email-v2",
+      "name": "Follow-Up Email v2 — Quality + Demo Polish",
+      "status": "complete",
+      "consultReport": ".sixty/consult/followup-email-v2.md",
+      "createdAt": "2026-02-25"
     }
   ],
+  "stories": [
     {
-      "id": "UI-006",
-      "feature": "ui-polish",
-      "title": "Fix Most Popular badge clipped by CreditPurchaseModal card border",
+      "id": "FUV2-001",
+      "feature": "followup-email-v2",
+      "title": "Enrich analysis object with sentiment, key topics, and buying signals",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Meeting SELECT in generate-follow-up/index.ts includes sentiment_score, sentiment_reasoning, and summary_oneliner",
+        "Analysis object populates sentiment field from sentiment_score: positive (>0.5), neutral (-0.5 to 0.5), challenging (<-0.5)",
+        "Key topics extracted from summary via simple keyword extraction and populated in analysis.keyTopics",
+        "Buying signals extracted from summary (budget mentions, timeline confirmations, stakeholder buy-in) populated in analysis.buyingSignals",
+        "Composer prompt receives populated sentiment, keyTopics, and buyingSignals instead of empty defaults"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 12,
+      "files": [
+        "supabase/functions/generate-follow-up/index.ts"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["FUV2-002", "FUV2-008"],
+      "parallelWith": ["FUV2-003", "FUV2-006"],
+      "startedAt": "2026-02-25T15:10:00Z",
+      "completedAt": "2026-02-25T15:22:00Z"
+    },
+    {
+      "id": "FUV2-002",
+      "feature": "followup-email-v2",
+      "title": "Add regenerate-with-guidance flow (backend + frontend)",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "POST endpoint accepts optional regenerate_guidance string and cached_rag_context object",
+        "When guidance provided, re-composes email with same RAG context plus user instructions appended to prompt",
+        "Frontend shows text input modal when Regenerate button is clicked",
+        "Regenerated email replaces previous result with a 'Regenerated' badge",
+        "No re-query of RAG — uses cached context from first generation (saves credits and time)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 18,
+      "files": [
+        "supabase/functions/generate-follow-up/index.ts",
+        "supabase/functions/_shared/follow-up/composer.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
+      ],
+      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["FUV2-004"],
+      "startedAt": "2026-02-25T16:00:00Z",
+      "completedAt": "2026-02-25T16:18:00Z"
+    },
+    {
+      "id": "FUV2-003",
+      "feature": "followup-email-v2",
+      "title": "Render email as styled preview with subject header and signature",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Email result renders in a Card with email-client styling: To field, bold subject line, body with proper paragraphs",
+        "Signature (sender name) rendered in muted text below body, visually separated",
+        "Markdown-style formatting (bold with **, bullet lists) parsed and rendered as HTML",
+        "Links in email body rendered as clickable blue text",
+        "Word count shown below email in muted text"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 15,
+      "files": [
+        "src/pages/platform/FollowUpDemoPage.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["FUV2-004"],
+      "parallelWith": ["FUV2-001", "FUV2-006"],
+      "startedAt": "2026-02-25T15:10:00Z",
+      "completedAt": "2026-02-25T15:25:00Z"
+    },
+    {
+      "id": "FUV2-004",
+      "feature": "followup-email-v2",
+      "title": "Add inline email editor with edit/preview toggle",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "Edit button on email preview switches to editable textarea for body and input for subject",
+        "Preview button returns to styled read-only view with edited content",
+        "Edited content persists in state — Copy button copies edited version",
+        "Cancel button reverts to original generated content",
+        "Edit state does not re-trigger generation"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 12,
+      "files": [
+        "src/pages/platform/FollowUpDemoPage.tsx"
+      ],
+      "dependencies": { "stories": ["FUV2-003"], "files": [], "schema": [] },
+      "blocks": ["FUV2-005"],
+      "parallelWith": ["FUV2-002"],
+      "startedAt": "2026-02-25T16:20:00Z",
+      "completedAt": "2026-02-25T16:32:00Z"
+    },
+    {
+      "id": "FUV2-005",
+      "feature": "followup-email-v2",
+      "title": "Add Send to Slack approval button with preview block",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "Send to Slack button on demo page calls generate-follow-up with delivery='slack'",
+        "Backend formats email as Slack Block Kit message with approve/edit/dismiss buttons",
+        "Sends to user's Slack DM channel via slack-events bot",
+        "UI shows confirmation toast: 'Sent to Slack for approval'",
+        "If Slack not connected, button is disabled with tooltip explaining setup"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 20,
+      "files": [
+        "supabase/functions/generate-follow-up/index.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
+      ],
+      "dependencies": { "stories": ["FUV2-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-02-25T16:35:00Z",
+      "completedAt": "2026-02-25T16:55:00Z"
+    },
+    {
+      "id": "FUV2-006",
+      "feature": "followup-email-v2",
+      "title": "Show actual RAG findings in context breakdown, not just counts",
       "type": "frontend",
       "status": "complete",
       "priority": 6,
       "acceptance": [
-        "Most Popular badge renders fully above the card's border (not overlapping/clipped by it)",
-        "Badge is visually floating above the top edge of the popular card",
-        "Other pack cards are unaffected"
+        "Context breakdown expands to show actual findings: commitment text, concern keywords, commercial mentions",
+        "Each context category is collapsible with a chevron toggle",
+        "Collapsed state shows count badge, expanded shows 2-3 line summaries per category",
+        "Empty categories hidden (not shown as '0 found')",
+        "Backend SSE result event includes ragSummary object with category labels and snippet text"
       ],
-      "estimatedMinutes": 5,
-      "actualMinutes": null,
+      "estimatedMinutes": 15,
+      "actualMinutes": 12,
       "files": [
-        "src/components/credits/CreditPurchaseModal.tsx"
+        "supabase/functions/generate-follow-up/index.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
       ],
       "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004", "UI-005", "UI-007"],
-      "startedAt": null,
-      "completedAt": null
+      "parallelWith": ["FUV2-001", "FUV2-003"],
+      "startedAt": "2026-02-25T15:30:00Z",
+      "completedAt": "2026-02-25T15:42:00Z"
     },
     {
-      "id": "UI-007",
-      "feature": "ui-polish",
-      "title": "Replace 'cr' abbreviation with 'credits' throughout credit UI",
-      "type": "frontend",
+      "id": "FUV2-007",
+      "feature": "followup-email-v2",
+      "title": "Add step timing display and total generation time",
+      "type": "fullstack",
       "status": "complete",
       "priority": 7,
       "acceptance": [
-        "All visible 'cr' abbreviations replaced with 'credits' (e.g. '342 cr' → '342 credits')",
-        "Per-unit rates updated (e.g. 'cr/mo' → 'credits/mo', 'cr/day' → 'credits/day')",
-        "No regressions in credit display logic"
+        "Each SSE step event includes durationMs field calculated from step start to complete",
+        "Frontend displays duration next to each completed step: 'Loading attendees (0.3s)'",
+        "Total generation time shown below all steps after completion",
+        "Steps that were skipped show 'skipped' instead of a duration",
+        "Running steps show elapsed time counter updating every 500ms"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 10,
       "files": [
-        "src/components/credits/UsageBreakdownChart.tsx",
-        "src/components/credits/TransactionLog.tsx",
-        "src/components/credits/StorageUsageCard.tsx",
-        "src/components/credits/LowBalanceBanner.tsx",
-        "src/components/credits/CreditEstimator.tsx",
-        "src/components/credits/CreditMigrationModal.tsx",
-        "src/components/credits/PackInventory.tsx",
-        "src/components/credits/ARBudgetSettings.tsx",
-        "src/components/credits/CreditMenuTable.tsx",
-        "src/components/credits/CreditWidgetDropdown.tsx",
-        "src/components/credits/SimpleModelTierSelector.tsx",
-        "src/pages/settings/CreditsSettingsPage.tsx"
+        "supabase/functions/generate-follow-up/index.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
       ],
       "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004", "UI-005", "UI-006"],
-      "startedAt": null,
-      "completedAt": null
+      "parallelWith": ["FUV2-008"],
+      "startedAt": "2026-02-25T15:30:00Z",
+      "completedAt": "2026-02-25T15:40:00Z"
+    },
+    {
+      "id": "FUV2-008",
+      "feature": "followup-email-v2",
+      "title": "Add quality degradation warnings in generation metadata",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "SSE result event includes warnings array listing what degraded: missing writing style, no sentiment, RAG partial results, placeholder attendee",
+        "Each warning has a severity (info/warn) and human-readable message",
+        "Frontend renders warnings as amber badges below the context breakdown",
+        "Warnings are informational only — generation still completes",
+        "No warnings shown when all data sources returned successfully"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/generate-follow-up/index.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
+      ],
+      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["FUV2-007"],
+      "startedAt": "2026-02-25T15:30:00Z",
+      "completedAt": "2026-02-25T15:40:00Z"
     }
   ],
   "execution": {
-    "totalStories": 7,
-    "completedStories": 0,
-    "currentFeature": "ui-polish",
-    "lastUpdated": "2026-02-23"
+    "totalStories": 8,
+    "completedStories": 8,
+    "currentFeature": "followup-email-v2",
+    "lastUpdated": "2026-02-25T15:00:00Z"
   }
 }

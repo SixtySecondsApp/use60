@@ -1,4 +1,4 @@
-import { Rocket, Calendar, Video, Link2, Mail, Zap, Check } from 'lucide-react';
+import { Bot, Calendar, Video, Link2, Mail, Zap, Check, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSetupWizardStore, SETUP_STEPS, STEP_META, type SetupStep } from '@/lib/stores/setupWizardStore';
 import { cn } from '@/lib/utils';
@@ -20,12 +20,14 @@ export function SetupWizardWelcome() {
     <div className="p-8">
       {/* Header */}
       <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 mb-4">
-          <Rocket className="w-7 h-7 text-white" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 mb-4">
+          <Bot className="w-8 h-8 text-white" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Welcome to 60</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Let's get you set up in under 5 minutes
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+          Meet Sixty, your AI sales agent
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 max-w-sm mx-auto">
+          I&apos;m your always-on teammate. Let&apos;s get connected so I can start working for you.
         </p>
       </div>
 
@@ -37,7 +39,7 @@ export function SetupWizardWelcome() {
               Complete setup to earn
             </p>
             <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
+              <span className="text-3xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
                 100
               </span>
               <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
@@ -89,6 +91,9 @@ export function SetupWizardWelcome() {
                 )}>
                   {meta.label}
                 </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  {meta.description}
+                </p>
               </div>
               {completed ? (
                 <span className="text-xs font-medium text-green-600 dark:text-green-400">Done</span>
@@ -105,9 +110,10 @@ export function SetupWizardWelcome() {
       {/* CTA */}
       <Button
         onClick={() => setCurrentStep(firstIncomplete)}
-        className="w-full h-11 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-medium rounded-xl shadow-sm"
+        className="w-full h-11 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium rounded-xl shadow-sm"
       >
-        Let's Go
+        Get Started
+        <ArrowRight className="w-4 h-4 ml-2" />
       </Button>
     </div>
   );
