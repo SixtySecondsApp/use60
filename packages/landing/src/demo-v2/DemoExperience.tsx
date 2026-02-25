@@ -84,8 +84,8 @@ export default function DemoExperience() {
           {step === 'signup' && (
             <DemoSignup
               key="signup"
-              companyName={research.research?.company.name ?? ''}
-              stats={research.research?.stats ?? null}
+              researchData={research.research ?? null}
+              url={url}
             />
           )}
         </AnimatePresence>
