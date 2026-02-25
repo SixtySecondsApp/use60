@@ -6,19 +6,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
   buildMeetingDebriefMessage,
-  buildHITLApprovalMessage,
   type MeetingDebriefData,
-  type HITLApprovalData,
 } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
-import { loadProactiveContext, type ProactiveContext } from '../_shared/proactive/orgContext.ts';
 import { extractEventsFromMeeting } from '../_shared/memory/writer.ts';
-import { createRAGClient } from '../_shared/memory/ragClient.ts';
-import { detectMeetingHistory } from '../_shared/rag/historyDetector.ts';
-import { getFollowUpContext } from '../_shared/follow-up/ragQueries.ts';
-import { composeReturnMeetingFollowUp, composeFirstMeetingFollowUp } from '../_shared/follow-up/composer.ts';
-import type { ComposeInput } from '../_shared/follow-up/composer.ts';
-import { logAICostEvent, logFlatRateCostEvent, checkBudgetCap } from '../_shared/costTracking.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -174,160 +165,6 @@ Return your analysis as JSON with this exact structure:
       coachingInsight: 'Review the meeting recording for detailed insights.',
       keyQuotes: [],
     };
-  }
-}
-
-/**
- * Generate a follow-up email draft (HITL content).
- * Uses rich proactive context (writing style, tone, org) and the 5-section
- * methodology from the post-meeting-followup-drafter skill.
- * Fail-soft: return a deterministic draft if AI isn't configured.
- */
-async function generateFollowUpDraft(input: {
-  meetingTitle: string;
-  attendeeNameOrEmail: string;
-  summary: string;
-  actionItems: Array<{ task: string; dueInDays: number }>;
-  context: ProactiveContext;
-  companyName?: string;
-  dealName?: string;
-  dealStage?: string;
-  sentiment?: 'positive' | 'neutral' | 'challenging';
-  keyQuotes?: string[];
-  transcript?: string;
-}): Promise<{ subject: string; body: string }> {
-  const { context: ctx } = input;
-  const firstName = ctx.user.firstName || 'there';
-  const lastName = ctx.user.lastName || '';
-  const signoff = ctx.writingStyle?.signoffs?.[0] || ctx.toneSettings?.emailSignOff || 'Best';
-  const fallbackSubject = `Following up: ${input.meetingTitle}`;
-
-  if (!anthropicApiKey) {
-    const bullets = input.actionItems.slice(0, 4).map((a) => `- ${a.task}`).join('\n');
-    const body = `Hi ${input.attendeeNameOrEmail},\n\nThanks again for your time today.\n\nQuick recap:\n${input.summary}\n\nProposed next steps:\n${bullets || '- Confirm next steps and timeline'}\n\n${signoff},\n${firstName}`;
-    return { subject: fallbackSubject, body };
-  }
-
-  try {
-    const today = new Date();
-    const currentDateStr = today.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-
-    // Build writing style instructions
-    const ws = ctx.writingStyle;
-    const ts = ctx.toneSettings;
-    const wordsToAvoid = ts?.wordsToAvoid?.length
-      ? ts.wordsToAvoid
-      : [];
-
-    let styleBlock = '';
-    if (ws) {
-      styleBlock = `WRITING STYLE: ${ws.toneDescription || ws.name}
-- Formality: ${ws.formality}/5, Directness: ${ws.directness}/5, Warmth: ${ws.warmth}/5
-${ws.commonPhrases.length ? `- Common phrases the user uses: ${ws.commonPhrases.join(', ')}` : ''}
-- Sign off with: "${signoff}"
-${wordsToAvoid.length ? `- NEVER use these words/phrases: ${wordsToAvoid.join(', ')}` : ''}`;
-    }
-
-    // Tone calibration based on sentiment
-    const sentiment = input.sentiment || 'neutral';
-    let toneCalibration = '';
-    if (sentiment === 'positive') {
-      toneCalibration = '- Warm, confident, forward-looking. Direct CTA.';
-    } else if (sentiment === 'challenging') {
-      toneCalibration = '- Empathetic, direct, solution-oriented. Address the top concern.';
-    } else {
-      toneCalibration = '- Professional, helpful. Value-add CTA.';
-    }
-
-    const systemPrompt = `You are writing a follow-up email AS ${firstName} ${lastName}, from their first-person perspective.
-This email will be sent from ${firstName}'s email account — write it exactly as they would type it.
-
-${styleBlock}
-
-EMAIL STRUCTURE (5 sections):
-1. Opening + Recap (2-3 sentences) — reference something specific from the meeting
-2. "What We Heard" (3-5 bullets) — mirror the recipient's own words/concerns back to them
-3. Decisions + Commitments (if any were made)
-4. Next Steps (2-3 items with owners and dates)
-5. CTA — single specific ask, NOT "let me know if you have questions"
-
-TONE CALIBRATION:
-- Meeting sentiment was ${sentiment}
-${toneCalibration}
-
-RULES:
-- Write in FIRST PERSON as ${firstName} — never say "${firstName} and I" or "our team and I"
-- Keep under 200 words
-- Use the recipient's language, not sales jargon
-- Do NOT re-pitch features. This is a recap, not a sales pitch.
-- Every next step needs an owner and a date
-
-Return ONLY valid JSON: { "subject": "...", "body": "..." }`;
-
-    // Build enriched user message
-    const keyQuotesBlock = input.keyQuotes?.length
-      ? `\nKEY QUOTES FROM RECIPIENT:\n${input.keyQuotes.map((q) => `- "${q}"`).join('\n')}`
-      : '';
-
-    const transcriptBlock = input.transcript
-      ? `\nTRANSCRIPT EXCERPT:\n${input.transcript.substring(0, 3000)}`
-      : '';
-
-    const userMessage = `Draft a follow-up email.
-
-TODAY'S DATE: ${currentDateStr}
-SENDER: ${firstName} ${lastName} (${ctx.org.name})
-MEETING: ${input.meetingTitle}
-RECIPIENT: ${input.attendeeNameOrEmail}
-${input.companyName ? `COMPANY: ${input.companyName}` : ''}
-${input.dealName ? `DEAL: ${input.dealName}${input.dealStage ? ` (${input.dealStage})` : ''}` : ''}
-MEETING SENTIMENT: ${sentiment}
-SUMMARY: ${input.summary}${keyQuotesBlock}
-NEXT STEPS:
-${input.actionItems.slice(0, 6).map((a) => `- ${a.task}`).join('\n') || '- Confirm next steps'}${transcriptBlock}
-
-Return JSON: { "subject": "...", "body": "..." }`;
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1200,
-        temperature: 0.5,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Anthropic API error: ${error}`);
-    }
-
-    const result = await response.json();
-    const content = result.content?.[0]?.text || '';
-    const candidate = extractJsonObject(content) ?? content;
-    const parsed = JSON.parse(candidate);
-
-    return {
-      subject: String(parsed.subject || fallbackSubject).slice(0, 200),
-      body: String(parsed.body || '').slice(0, 5000),
-    };
-  } catch (e) {
-    console.warn('[slack-post-meeting] generateFollowUpDraft AI failed, using fallback:', (e as any)?.message);
-    const bullets = input.actionItems.slice(0, 4).map((a) => `- ${a.task}`).join('\n');
-    const body = `Hi ${input.attendeeNameOrEmail},\n\nThanks again for your time today.\n\nQuick recap:\n${input.summary}\n\nProposed next steps:\n${bullets || '- Confirm next steps and timeline'}\n\n${signoff},\n${firstName}`;
-    return { subject: fallbackSubject, body };
   }
 }
 
@@ -1053,277 +890,66 @@ serve(async (req) => {
       console.warn('[slack-post-meeting] Failed to create in-app notification:', (e as any)?.message || e);
     }
 
-    // HITL follow-up email approval (best-effort): DM owner with approve/edit/reject
+    // Auto-trigger follow-up generation (FUV3-002): fire-and-forget call to generate-follow-up
+    // with delivery='slack' so the follow-up draft lands in the user's Slack DM as a separate message.
     try {
       if (!isTest && meeting.owner_user_id) {
-        // Edge case guards (FU-015)
+        // Guard: skip if no transcript/summary to compose from
         const hasTranscript = !!(meeting.transcript_text || meeting.summary);
         const meetingDuration = meeting.duration_minutes || 0;
         const isNoShow = meetingDuration < 2;
 
-        if (!hasTranscript) {
-          console.log('[slack-post-meeting] Skipping follow-up: no transcript available for meeting', meeting.id);
-          // Skip follow-up generation — no transcript to compose from
-        } else if (isNoShow) {
-          console.log('[slack-post-meeting] Skipping follow-up: meeting appears to be a no-show (duration < 2 min)', meeting.id);
-          // Skip follow-up generation — meeting was too short
-        } else {
-        const ownerSlackId = await getSlackUserId(supabase, effectiveOrgId, meeting.owner_user_id);
-        const externalAttendee = Array.isArray(meeting.meeting_attendees)
-          ? (meeting.meeting_attendees as any[]).find((a) => a?.is_external && a?.email)
-          : null;
-
-        // Determine CC list (all other external attendees)
-        const allExternalAttendees = Array.isArray(meeting.meeting_attendees)
+        // Guard (AC-5): skip internal meetings — at least one external attendee required
+        const externalAttendees = Array.isArray(meeting.meeting_attendees)
           ? (meeting.meeting_attendees as any[]).filter((a) => a?.is_external && a?.email)
           : [];
-        const ccAttendees = allExternalAttendees.filter(
-          (a) => a.email !== externalAttendee?.email
-        );
-        const ccEmails = ccAttendees.map((a: any) => a.email).filter(Boolean);
+        const hasExternalAttendees = externalAttendees.length > 0;
 
-        if (ownerSlackId && externalAttendee?.email) {
-          // Load user writing style and org context for personalized email
-          const proactiveContext = await loadProactiveContext(supabase, effectiveOrgId, meeting.owner_user_id);
+        if (!hasTranscript) {
+          console.log('[slack-post-meeting] Skipping follow-up: no transcript available for meeting', meeting.id);
+        } else if (isNoShow) {
+          console.log('[slack-post-meeting] Skipping follow-up: meeting appears to be a no-show (duration < 2 min)', meeting.id);
+        } else if (!hasExternalAttendees) {
+          console.log('[slack-post-meeting] Skipping follow-up: no external attendees (internal meeting)', meeting.id);
+        } else {
 
-          // Resolve company name from the company_id lookup done earlier
-          let companyName: string | undefined;
-          try {
-            if (meeting.company_id) {
-              const { data: co } = await supabase
-                .from('companies')
-                .select('name')
-                .eq('id', meeting.company_id)
-                .maybeSingle();
-              companyName = (co as any)?.name || undefined;
-            }
-          } catch { /* non-fatal */ }
+          // Delay so the follow-up DM arrives clearly after the debrief message
+          await new Promise((resolve) => setTimeout(resolve, 2500));
 
-          // Detect if this is a return meeting
-          const meetingHistory = await detectMeetingHistory(
-            supabase,
-            meeting.id,
-            meeting.company_id || null,
-            effectiveOrgId,
-          );
-
-          let draft: { subject: string; body: string };
-          let ragContextForMetadata: any = null;
-
-          try {
-            if (!meetingHistory.isFirstMeeting) {
-              // Return meeting — use RAG-enhanced composer
-              console.log('[slack-post-meeting] RAG path: return meeting detected, priorMeetingCount:', meetingHistory.priorMeetingCount);
-              const ragClient = createRAGClient({ orgId: effectiveOrgId });
-              const followUpContext = await getFollowUpContext(
-                (deal as any)?.id || null,
-                [], // contact IDs — not easily available here
-                meeting.id,
-                meetingHistory.priorMeetingCount + 1, // current meeting is +1
-                ragClient,
-                meeting.company_id || null,
-              );
-              ragContextForMetadata = followUpContext;
-
-              const composeInput: ComposeInput = {
-                meeting: {
-                  id: meeting.id,
-                  title: meeting.title || 'Meeting',
-                  transcript: meeting.transcript_text?.substring(0, 3000),
-                },
-                analysis: {
-                  summary: analysis.summary,
-                  actionItems: (analysis.actionItems || []).map((a: any) => ({
-                    task: a.task,
-                    suggestedOwner: a.suggestedOwner,
-                    dueInDays: a.dueInDays,
-                  })),
-                  keyQuotes: analysis.keyQuotes,
-                  sentiment: analysis.sentiment,
-                },
-                recipient: {
-                  name: externalAttendee?.name || externalAttendee?.email,
-                  email: externalAttendee.email,
-                  companyName,
-                },
-                deal: deal ? {
-                  name: (deal as any)?.name,
-                  stage: (deal as any)?.stage_id,
-                  value: (deal as any)?.value,
-                } : null,
-                writingStyle: proactiveContext.writingStyle ? {
-                  toneDescription: proactiveContext.writingStyle.toneDescription,
-                  formality: proactiveContext.writingStyle.formality,
-                  directness: proactiveContext.writingStyle.directness,
-                  warmth: proactiveContext.writingStyle.warmth,
-                  commonPhrases: proactiveContext.writingStyle.commonPhrases,
-                  signoffs: proactiveContext.writingStyle.signoffs,
-                  wordsToAvoid: proactiveContext.toneSettings?.wordsToAvoid,
-                } : null,
-                senderFirstName: proactiveContext.user.firstName || 'there',
-                senderLastName: proactiveContext.user.lastName,
-                orgName: proactiveContext.org.name,
-              };
-
-              if (followUpContext.hasHistory) {
-                console.log('[slack-post-meeting] RAG path: composing return meeting follow-up with history');
-                const composed = await composeReturnMeetingFollowUp(composeInput, followUpContext);
-                draft = { subject: composed.subject, body: composed.body };
-              } else {
-                console.log('[slack-post-meeting] RAG path: return meeting but no RAG history found, using first-meeting composer');
-                const composed = await composeFirstMeetingFollowUp(composeInput);
-                draft = { subject: composed.subject, body: composed.body };
-              }
-            } else {
-              // First meeting — use the existing generateFollowUpDraft
-              console.log('[slack-post-meeting] RAG path: first meeting, using standard generateFollowUpDraft');
-              draft = await generateFollowUpDraft({
-                meetingTitle: meeting.title || 'Meeting',
-                attendeeNameOrEmail: externalAttendee?.name || externalAttendee?.email,
-                summary: analysis.summary,
-                actionItems: (analysis.actionItems || []).map((a: any) => ({ task: a.task, dueInDays: a.dueInDays })),
-                context: proactiveContext,
-                companyName,
-                dealName: (deal as any)?.name,
-                dealStage: (deal as any)?.stage_id,
-                sentiment: analysis.sentiment,
-                keyQuotes: analysis.keyQuotes,
-                transcript: meeting.transcript_text?.substring(0, 3000),
-              });
-            }
-          } catch (ragErr) {
-            console.warn('[slack-post-meeting] RAG-enhanced draft failed, falling back to generateFollowUpDraft:', (ragErr as any)?.message || ragErr);
-            draft = await generateFollowUpDraft({
-              meetingTitle: meeting.title || 'Meeting',
-              attendeeNameOrEmail: externalAttendee?.name || externalAttendee?.email,
-              summary: analysis.summary,
-              actionItems: (analysis.actionItems || []).map((a: any) => ({ task: a.task, dueInDays: a.dueInDays })),
-              context: proactiveContext,
-              companyName,
-              dealName: (deal as any)?.name,
-              dealStage: (deal as any)?.stage_id,
-              sentiment: analysis.sentiment,
-              keyQuotes: analysis.keyQuotes,
-              transcript: meeting.transcript_text?.substring(0, 3000),
-            });
-          }
-
-          // Track credits for follow-up generation (best-effort)
-          try {
-            if (ragContextForMetadata && ragContextForMetadata.queryCredits > 0) {
-              // RAG queries — flat rate per query batch
-              await logFlatRateCostEvent(
-                supabase,
-                meeting.owner_user_id,
-                effectiveOrgId,
-                'rag_api',
-                'follow-up-queries',
-                ragContextForMetadata.queryCredits,
-                'followup_rag_queries',
-                {
-                  meetingId: meeting.id,
-                  queriesReturned: Object.keys(ragContextForMetadata.sections).length,
-                  isReturnMeeting: true,
-                },
-              );
-            }
-            // The Sonnet composition cost is tracked inside composer.ts via the Anthropic API call
-            // We don't double-track it here — the API response usage is logged by the caller
-          } catch (creditErr) {
-            console.warn('[slack-post-meeting] Credit tracking failed (non-fatal):', (creditErr as any)?.message);
-          }
-
-          const approvalId = crypto.randomUUID();
-          const hitlData: HITLApprovalData = {
-            approvalId,
-            resourceType: 'email_draft',
-            resourceId: meeting.id,
-            resourceName: 'Follow-up Email',
-            content: {
-              recipientEmail: externalAttendee.email,
-              subject: draft.subject,
-              body: draft.body,
-              cc: ccEmails.length > 0 ? ccEmails : undefined,
+          // Fire-and-forget: dispatch to generate-follow-up — don't block the debrief response
+          const generateFollowUpUrl = `${supabaseUrl}/functions/v1/generate-follow-up`;
+          fetch(generateFollowUpUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
             },
-            context: {
-              meetingTitle: meeting.title || undefined,
-              meetingId: meeting.id,
-              contactName: externalAttendee?.name || externalAttendee?.email,
-              dealName: (deal as any)?.name,
-              dealId: (deal as any)?.id,
-            },
-            contextBadge: ragContextForMetadata ? {
-              transcript: true,
-              priorMeetings: meetingHistory.priorMeetingCount,
-              commitmentsTracked: ragContextForMetadata.sections?.prior_commitments?.chunks?.length || 0,
-              dealContext: !!deal,
-              writingStyle: !!proactiveContext.writingStyle,
-              credits: ragContextForMetadata.queryCredits || 0,
-            } : {
-              transcript: true,
-              priorMeetings: 0,
-              commitmentsTracked: 0,
-              dealContext: !!deal,
-              writingStyle: !!proactiveContext.writingStyle,
-            },
-            appUrl,
-          };
-
-          const hitlMessage = buildHITLApprovalMessage(hitlData);
-          const dmRes = await sendSlackDM(slackConfig.botToken, ownerSlackId, hitlMessage);
-          if (dmRes.ok && dmRes.ts && dmRes.channelId) {
-            await supabase.from('hitl_pending_approvals').insert({
-              id: approvalId,
-              org_id: effectiveOrgId,
+            body: JSON.stringify({
+              meeting_id: meeting.id,
+              delivery: 'slack',
               user_id: meeting.owner_user_id,
-              created_by: meeting.owner_user_id,
-              resource_type: 'email_draft',
-              resource_id: meeting.id,
-              resource_name: 'Follow-up Email',
-              slack_team_id: slackConfig.slackTeamId,
-              slack_channel_id: dmRes.channelId,
-              slack_message_ts: dmRes.ts,
-              slack_thread_ts: null,
-              status: 'pending',
-              original_content: hitlData.content,
-              callback_type: 'edge_function',
-              callback_target: 'hitl-send-followup-email',
-              callback_metadata: {
-                orgId: effectiveOrgId,
-                meetingId: meeting.id,
-                userId: meeting.owner_user_id,
-                ragContext: ragContextForMetadata ? JSON.stringify(ragContextForMetadata) : null,
-              },
-              metadata: {
-                source: 'slack_post_meeting',
-                meetingTitle: meeting.title,
-                isReturnMeeting: !meetingHistory.isFirstMeeting,
-                priorMeetingCount: meetingHistory.priorMeetingCount,
-              },
-            });
+            }),
+          }).then(async (res) => {
+            // Drain the SSE stream so the connection closes cleanly
+            if (res.body) {
+              const reader = res.body.getReader();
+              try {
+                while (true) {
+                  const { done } = await reader.read();
+                  if (done) break;
+                }
+              } catch { /* ignore read errors */ }
+            }
+            console.log('[slack-post-meeting] generate-follow-up completed, status:', res.status, 'meetingId:', meeting.id);
+          }).catch((fetchErr) => {
+            console.warn('[slack-post-meeting] generate-follow-up fire-and-forget error:', (fetchErr as any)?.message || fetchErr);
+          });
 
-            // In-app mirror: approval requested
-            await supabase.from('notifications').insert({
-              user_id: meeting.owner_user_id,
-              title: 'Approval needed: follow-up email',
-              message: `Review and approve the follow-up email draft for "${meeting.title || 'your meeting'}".`,
-              type: 'info',
-              category: 'workflow',
-              entity_type: 'email_draft',
-              entity_id: meeting.id,
-              action_url: '/meetings',
-              metadata: {
-                approval_id: approvalId,
-                meeting_id: meeting.id,
-                source: 'hitl',
-              },
-            });
-          }
+          console.log('[slack-post-meeting] generate-follow-up dispatched for meeting', meeting.id);
         }
-        } // end else (hasTranscript && !isNoShow)
       }
     } catch (e) {
-      console.warn('[slack-post-meeting] HITL follow-up setup failed:', (e as any)?.message || e);
+      console.warn('[slack-post-meeting] Follow-up auto-trigger failed (non-fatal):', (e as any)?.message || e);
     }
 
     console.log('Meeting debrief posted successfully:', meetingId || meeting?.id, { channelId, recipientType });
