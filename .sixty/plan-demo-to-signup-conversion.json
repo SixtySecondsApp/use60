@@ -1,0 +1,301 @@
+{
+  "feature": {
+    "id": "demo-convert",
+    "name": "Demo-to-Signup Conversion",
+    "description": "When users complete the /demo-v2 flow, collect name + email + password, create their account with all demo research pre-seeded so they skip skills onboarding entirely. Users land on dashboard with Setup Wizard instead of onboarding.",
+    "branch": "feature/demo-to-signup-conversion",
+    "status": "in_progress",
+    "createdAt": "2026-02-25T00:00:00Z"
+  },
+
+  "stories": [
+    {
+      "id": "DEMO-001",
+      "title": "Expand DemoSignup form with name + password fields",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "description": "Add first name, last name, password, confirm password fields to DemoSignup. Keep the dark zinc-950 aesthetic. The company domain is already known from the URL entered at the hero step — pass it through as a prop, don't ask again. Auto-focus on first name. Validate password >= 6 chars and confirm match. Keep the existing benefits list and success state.",
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["DEMO-003"],
+      "parallelWith": ["DEMO-002"],
+      "acceptance": [
+        "DemoSignup accepts full ResearchData + url as props (not just companyName + stats)",
+        "Form has: first name, last name, email, password, confirm password fields",
+        "Company domain derived from url prop — not shown as input",
+        "Client-side validation: password >= 6 chars, passwords match, email valid, names required",
+        "Loading and success states preserved with updated copy"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/demo-v2/DemoSignup.tsx",
+        "packages/landing/src/demo-v2/DemoExperience.tsx"
+      ]
+    },
+
+    {
+      "id": "DEMO-002",
+      "title": "Create demo-convert-account edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "description": "New edge function that receives demo research data + user info, creates the full account. Orchestrates: (1) create org with research data, (2) write organization_enrichment from research, (3) AI-generate skills via Gemini from research context, (4) write organization_skills, (5) write agent_config_org_overrides with sensible defaults, (6) mark onboarding complete, (7) grant welcome credits, (8) start free trial. Uses service role key for admin operations since user is being created.",
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/_shared/corsHelper.ts"],
+        "schema": ["organizations", "organization_enrichment", "organization_skills", "agent_config_org_overrides", "user_onboarding_progress"]
+      },
+      "blocks": ["DEMO-003"],
+      "parallelWith": ["DEMO-001"],
+      "acceptance": [
+        "Edge function deployed at demo-convert-account with --no-verify-jwt",
+        "Accepts POST with { user_id, research_data (ResearchData), domain } body",
+        "Creates organization with name, company_domain, company_bio from research",
+        "Creates organization_memberships with role: owner",
+        "Writes organization_enrichment from mapped research fields",
+        "AI-generates 5 skills (lead_qualification, lead_enrichment, brand_voice, objection_handling, icp) from research context via Gemini",
+        "Writes all 5 skills to organization_skills via save_organization_skill RPC",
+        "Writes agent_config_org_overrides defaults (sales_methodology: generic, fiscal_year_start_month: 1)",
+        "Upserts user_onboarding_progress with onboarding_step: complete, onboarding_completed_at: now",
+        "Calls add_credits RPC for welcome credits (10)",
+        "Handles idempotency — safe to retry"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/demo-convert-account/index.ts"
+      ]
+    },
+
+    {
+      "id": "DEMO-003",
+      "title": "Wire DemoSignup to real auth + demo-convert-account",
+      "type": "integration",
+      "status": "complete",
+      "priority": 2,
+      "description": "Replace the setTimeout stub in DemoSignup with real supabase.auth.signUp() call followed by demo-convert-account invocation. Flow: (1) signUp with email/password/metadata, (2) call auto-verify-email to skip email confirmation, (3) call demo-convert-account with user_id + research data, (4) on success show confirmation and redirect link to /auth/login. Note: landing package doesn't have the full supabase client — use direct fetch to Supabase Auth API and edge functions.",
+      "dependencies": {
+        "stories": ["DEMO-001", "DEMO-002"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["DEMO-005"],
+      "parallelWith": ["DEMO-004"],
+      "acceptance": [
+        "Calls Supabase signUp with { email, password, options: { data: { full_name, first_name, last_name, company_domain } } }",
+        "Calls auto-verify-email after signup to skip email confirmation",
+        "Calls demo-convert-account with user_id and full research data",
+        "Error handling: existing account shows login link, other errors show toast",
+        "Success state updated: 'Your account is ready. Log in to start.' with link to /auth/login",
+        "Handles the access code requirement (auto-applies a demo access code or bypasses)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/demo-v2/DemoSignup.tsx"
+      ]
+    },
+
+    {
+      "id": "DEMO-004",
+      "title": "Add signup_source column and demo access code",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "description": "Migration to add signup_source column to profiles table for tracking demo conversions. Also create a permanent 'demo' access code in access_codes table (or add bypass logic). The signup_source gets set to 'demo-v2' by the demo-convert-account edge function.",
+      "dependencies": {
+        "stories": ["DEMO-002"],
+        "files": [],
+        "schema": ["profiles", "access_codes"]
+      },
+      "blocks": ["DEMO-005"],
+      "parallelWith": ["DEMO-003"],
+      "acceptance": [
+        "Migration adds signup_source TEXT column to profiles table (nullable, no default)",
+        "Demo access code exists in access_codes table (code: 'DEMO60', max_uses: null, is_active: true)",
+        "demo-convert-account sets profiles.signup_source = 'demo-v2' for converted users",
+        "Migration is safe to run on staging and production"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260225000001_add_signup_source_and_demo_code.sql"
+      ]
+    },
+
+    {
+      "id": "DEMO-005",
+      "title": "Handle demo conversions in auth routing",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "description": "Ensure that when a demo-converted user logs in for the first time, they skip onboarding entirely and land on the dashboard. The onboarding_completed_at is already set by demo-convert-account, so ProtectedRoute should naturally skip the onboarding redirect. Verify this works end-to-end. Also ensure the Setup Wizard shows on first dashboard load for these users (it should by default since they haven't completed setup wizard steps).",
+      "dependencies": {
+        "stories": ["DEMO-003", "DEMO-004"],
+        "files": ["src/pages/auth/AuthCallback.tsx", "src/components/ProtectedRoute.tsx"],
+        "schema": []
+      },
+      "blocks": ["DEMO-007"],
+      "parallelWith": ["DEMO-006"],
+      "acceptance": [
+        "Demo-converted user logs in → lands on /dashboard (not /onboarding)",
+        "Setup Wizard dialog appears on first dashboard visit",
+        "No regression: normal signup users still go through onboarding",
+        "AuthCallback handles demo users correctly (onboarding_completed_at already set)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/auth/AuthCallback.tsx",
+        "src/components/ProtectedRoute.tsx"
+      ]
+    },
+
+    {
+      "id": "DEMO-006",
+      "title": "Trigger deep-enrich-organization in background after conversion",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "description": "The demo research is lighter than deep-enrich-organization (no tech stack, key people, funding, etc.). After demo-convert-account creates the org and seeds initial data, fire deep-enrich-organization in the background to backfill the full enrichment. This runs async — user doesn't wait for it. The edge function already supports force: true to re-enrich.",
+      "dependencies": {
+        "stories": ["DEMO-002"],
+        "files": ["supabase/functions/deep-enrich-organization/index.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["DEMO-005"],
+      "acceptance": [
+        "demo-convert-account fires deep-enrich-organization with { action: 'start', organization_id, domain, force: true } as a non-blocking fetch",
+        "If the background enrichment fails, the org still has the demo research data (graceful degradation)",
+        "Background enrichment merges with existing data, doesn't overwrite user-confirmed skills"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/demo-convert-account/index.ts"
+      ]
+    },
+
+    {
+      "id": "DEMO-007",
+      "title": "End-to-end test: demo flow → signup → dashboard",
+      "type": "test",
+      "status": "ready",
+      "priority": 4,
+      "description": "Manual end-to-end verification on staging. Walk through the complete flow: enter URL on /demo-v2, watch research, go through showcase + recap, fill signup form, verify account created, verify org seeded with research data, verify login lands on dashboard with Setup Wizard, verify AI Intelligence settings page shows pre-filled skills.",
+      "dependencies": {
+        "stories": ["DEMO-005"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Full flow works: demo-v2 URL entry → research → showcase → recap → signup → account created",
+        "Org has correct name, domain, company_bio from research",
+        "organization_enrichment has industry, competitors, value_propositions from research",
+        "organization_skills has all 5 skills AI-generated",
+        "Login redirects to /dashboard (skips onboarding)",
+        "Setup Wizard appears on dashboard",
+        "Settings > AI Intelligence shows pre-filled skills that are editable",
+        "Duplicate signup attempt shows 'account exists' error with login link"
+      ],
+      "estimatedMinutes": 20,
+      "files": []
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 6,
+    "estimatedTotal": "2-3 hours (with parallel execution)",
+    "parallelGroups": [
+      {
+        "group": ["DEMO-001", "DEMO-002"],
+        "reason": "Frontend form and backend edge function have no file overlap",
+        "timeSaved": "20-30 min"
+      },
+      {
+        "group": ["DEMO-003", "DEMO-004"],
+        "reason": "Integration wiring and schema migration are independent",
+        "timeSaved": "10 min"
+      },
+      {
+        "group": ["DEMO-005", "DEMO-006"],
+        "reason": "Auth routing verification and background enrichment are independent",
+        "timeSaved": "10 min"
+      }
+    ],
+    "criticalPath": "DEMO-002 → DEMO-003 → DEMO-005 → DEMO-007",
+    "mvp": {
+      "stories": ["DEMO-001", "DEMO-002", "DEMO-003"],
+      "estimate": "1.5 hours",
+      "delivers": "Working demo-to-signup with pre-seeded org (no signup_source tracking, no background deep enrichment)"
+    }
+  },
+
+  "risks": [
+    {
+      "severity": "high",
+      "area": "auth",
+      "issue": "DB trigger auto_create_org_for_new_user fires on profile insert before demo-convert-account runs, potentially creating a duplicate org",
+      "mitigation": "demo-convert-account checks if org already exists for user (via organization_memberships) and updates it instead of creating a new one"
+    },
+    {
+      "severity": "medium",
+      "area": "auth",
+      "issue": "auto-verify-email requires a meetings_waitlist entry — demo users may not have one",
+      "mitigation": "Either create a waitlist entry during demo conversion, or modify auto-verify to accept demo access code as alternative gate, or use service role to directly verify"
+    },
+    {
+      "severity": "medium",
+      "area": "landing",
+      "issue": "Landing package (packages/landing/) doesn't have the full Supabase client — uses raw fetch",
+      "mitigation": "Use direct Supabase REST API calls (already done for demo-research). Auth signup via POST to /auth/v1/signup, edge functions via POST to /functions/v1/"
+    },
+    {
+      "severity": "low",
+      "area": "data",
+      "issue": "Demo research stats (signals_found, etc.) are randomized — not real data",
+      "mitigation": "Don't persist stats to any table. Only persist company, ICP, competitors, and demo_actions data"
+    },
+    {
+      "severity": "low",
+      "area": "trial",
+      "issue": "start-free-trial requires a plan_id UUID from subscription_plans table",
+      "mitigation": "Use the default trial plan ID, or skip trial start and let it be triggered on first login via existing flow"
+    }
+  ],
+
+  "dataMapping": {
+    "researchToOrg": {
+      "company.name": "organizations.name",
+      "company.domain": "organizations.company_domain",
+      "company.product_summary": "organizations.company_bio"
+    },
+    "researchToEnrichment": {
+      "company.name": "organization_enrichment.company_name",
+      "company.domain": "organization_enrichment.domain",
+      "company.vertical": "organization_enrichment.industry",
+      "company.product_summary": "organization_enrichment.description",
+      "company.value_props": "organization_enrichment.value_propositions",
+      "company.employee_range": "organization_enrichment.employee_count",
+      "company.competitors": "organization_enrichment.competitors",
+      "company.icp.industry": "organization_enrichment.target_market"
+    },
+    "researchToSkills": {
+      "company.icp → icp skill": "{ companyProfile: icp.company_size + icp.industry, buyerPersona: icp.title, buyingSignals: AI-generated }",
+      "company.competitors → objection_handling": "AI-generated from competitor context",
+      "company.product_summary + vertical → brand_voice": "AI-generated tone from product context",
+      "company.icp → lead_qualification": "AI-generated criteria from ICP",
+      "company.vertical + icp → lead_enrichment": "AI-generated discovery questions"
+    },
+    "researchToAgentConfig": {
+      "defaults": {
+        "sales_methodology": "generic",
+        "fiscal_year_start_month": 1,
+        "sales_motion_type": "inferred from employee_range (< 50 → plg, 50-500 → mid_market, 500+ → enterprise)"
+      }
+    }
+  }
+}

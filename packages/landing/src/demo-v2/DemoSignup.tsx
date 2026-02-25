@@ -1,19 +1,19 @@
 /**
  * DemoSignup V2
  *
- * Clean, focused signup — no distracting cards above the form.
- * Just the value prop, benefits, and a clear CTA.
+ * Collects name, email, password — creates a real account with
+ * demo research data pre-seeded so the user skips skills onboarding.
  */
 
 import { useState, type FormEvent } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Check, Loader2, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, Loader2, Sparkles, User, Mail, Lock, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ResearchData } from './demo-types';
 
 interface DemoSignupProps {
-  companyName: string;
-  stats: ResearchData['stats'] | null;
+  researchData: ResearchData | null;
+  url: string;
 }
 
 const BENEFITS = [
@@ -24,23 +24,151 @@ const BENEFITS = [
   'Never drop a follow-up again',
 ];
 
-export function DemoSignup({ companyName, stats }: DemoSignupProps) {
+/** Extract domain from a URL string (e.g. "https://stripe.com/pricing" → "stripe.com"). */
+function extractDomain(url: string): string {
+  try {
+    const withProtocol = url.includes('://') ? url : `https://${url}`;
+    return new URL(withProtocol).hostname.replace(/^www\./, '');
+  } catch {
+    return url.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0] || url;
+  }
+}
+
+const INPUT_CLASS = cn(
+  'w-full pl-10 pr-4 py-3 rounded-xl text-sm text-white',
+  'bg-white/[0.04] border border-white/[0.08] placeholder-zinc-500',
+  'focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:border-transparent',
+  'transition-colors',
+);
+
+const INPUT_ERROR_CLASS = 'border-red-500/50';
+
+export function DemoSignup({ researchData, url }: DemoSignupProps) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [state, setState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const companyName = researchData?.company?.name || '';
+  const domain = extractDomain(url);
+
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!firstName.trim()) errors.firstName = 'First name is required';
+    if (!lastName.trim()) errors.lastName = 'Last name is required';
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !trimmedEmail.includes('@')) errors.email = 'Enter a valid email address';
+    if (password.length < 6) errors.password = 'Must be at least 6 characters';
+    if (password !== confirmPassword) errors.confirmPassword = 'Passwords do not match';
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setError(Object.values(errors)[0]);
+      return false;
+    }
+    setError('');
+    return true;
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const trimmed = email.trim();
-    if (!trimmed || !trimmed.includes('@')) {
-      setError('Enter a valid email address');
-      return;
-    }
-    setError('');
+    if (!validate()) return;
+
     setState('loading');
-    await new Promise((r) => setTimeout(r, 1500));
-    setState('success');
+    setError('');
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+      if (!supabaseUrl || !anonKey) {
+        throw new Error('Configuration error — please try again later.');
+      }
+
+      // Step 1: Create the auth user via Supabase REST API
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      const signupRes = await fetch(`${supabaseUrl}/auth/v1/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: anonKey,
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          data: {
+            full_name: fullName,
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            company_domain: domain,
+            signup_source: 'demo-v2',
+          },
+        }),
+      });
+
+      const signupData = await signupRes.json();
+
+      if (!signupRes.ok) {
+        const msg = signupData?.msg || signupData?.error_description || signupData?.message || 'Signup failed';
+        if (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('exists')) {
+          setError('An account with this email already exists.');
+          setState('error');
+          return;
+        }
+        throw new Error(msg);
+      }
+
+      const userId = signupData?.id || signupData?.user?.id;
+      const accessToken = signupData?.access_token || signupData?.session?.access_token;
+
+      if (!userId) {
+        throw new Error('Account created but missing user ID — check your email to verify.');
+      }
+
+      // Step 2: Auto-verify email (if access token available)
+      if (accessToken) {
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/auto-verify-email`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+              apikey: anonKey,
+            },
+            body: JSON.stringify({ userId }),
+          });
+        } catch {
+          // Non-critical — user can verify via email
+        }
+      }
+
+      // Step 3: Convert account with demo research data
+      await fetch(`${supabaseUrl}/functions/v1/demo-convert-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: anonKey,
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          domain,
+          research_data: researchData,
+        }),
+      });
+      // Non-blocking — if this fails, user still has an account; they'll just go through onboarding
+
+      setState('success');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      setError(message);
+      setState('error');
+    }
   };
+
+  const appUrl = import.meta.env.VITE_APP_URL || 'https://app.use60.com';
 
   return (
     <motion.div
@@ -70,13 +198,24 @@ export function DemoSignup({ companyName, stats }: DemoSignupProps) {
             <div className="w-14 h-14 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto mb-5">
               <Check className="w-7 h-7 text-emerald-400" />
             </div>
-            <h2 className="text-xl font-bold text-white mb-2 tracking-tight">You're in.</h2>
-            <p className="text-sm text-zinc-400 leading-relaxed">
-              Check your email for the login link.
-              <br />
-              Your agents are already watching {companyName || 'your pipeline'}.
+            <h2 className="text-xl font-bold text-white mb-2 tracking-tight">You&apos;re in.</h2>
+            <p className="text-sm text-zinc-400 leading-relaxed mb-5">
+              Your account is ready. Your agents are already watching{' '}
+              {companyName || 'your pipeline'}.
             </p>
-            <div className="mt-5 p-3 rounded-lg bg-zinc-800/50 border border-white/[0.06]">
+            <a
+              href={`${appUrl}/auth/login?email=${encodeURIComponent(email.trim())}`}
+              className={cn(
+                'inline-flex items-center justify-center gap-2 w-full py-3.5 rounded-xl',
+                'font-semibold text-sm bg-white text-zinc-950 hover:bg-zinc-100',
+                'transition-colors focus-visible:outline-none focus-visible:ring-2',
+                'focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900',
+              )}
+            >
+              Log in to 60
+              <ExternalLink className="w-4 h-4" />
+            </a>
+            <div className="mt-4 p-3 rounded-lg bg-zinc-800/50 border border-white/[0.06]">
               <p className="text-xs text-zinc-500 font-mono truncate">{email}</p>
             </div>
           </motion.div>
@@ -118,28 +257,93 @@ export function DemoSignup({ companyName, stats }: DemoSignupProps) {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div>
+              {/* Name row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => { setFirstName(e.target.value); setFieldErrors(p => ({ ...p, firstName: '' })); }}
+                    placeholder="First name"
+                    className={cn(INPUT_CLASS, fieldErrors.firstName && INPUT_ERROR_CLASS)}
+                    autoFocus
+                    required
+                    disabled={state === 'loading'}
+                  />
+                </div>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => { setLastName(e.target.value); setFieldErrors(p => ({ ...p, lastName: '' })); }}
+                    placeholder="Last name"
+                    className={cn(INPUT_CLASS, fieldErrors.lastName && INPUT_ERROR_CLASS)}
+                    required
+                    disabled={state === 'loading'}
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setError('');
-                  }}
+                  onChange={(e) => { setEmail(e.target.value); setFieldErrors(p => ({ ...p, email: '' })); setError(''); }}
                   placeholder="you@company.com"
-                  className={cn(
-                    'w-full px-4 py-3.5 rounded-xl text-sm text-white',
-                    'bg-white/[0.04] border placeholder-zinc-500',
-                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:border-transparent',
-                    'transition-colors',
-                    error ? 'border-red-500/50' : 'border-white/[0.08]'
-                  )}
-                  autoFocus
+                  className={cn(INPUT_CLASS, fieldErrors.email && INPUT_ERROR_CLASS)}
+                  required
+                  disabled={state === 'loading'}
                 />
-                {error && (
-                  <p className="text-xs text-red-400 mt-1.5 ml-1">{error}</p>
-                )}
               </div>
+
+              {/* Password */}
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setFieldErrors(p => ({ ...p, password: '' })); }}
+                  placeholder="Password (6+ characters)"
+                  className={cn(INPUT_CLASS, fieldErrors.password && INPUT_ERROR_CLASS)}
+                  required
+                  minLength={6}
+                  disabled={state === 'loading'}
+                />
+              </div>
+
+              {/* Confirm password */}
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setFieldErrors(p => ({ ...p, confirmPassword: '' })); }}
+                  placeholder="Confirm password"
+                  className={cn(INPUT_CLASS, fieldErrors.confirmPassword && INPUT_ERROR_CLASS)}
+                  required
+                  minLength={6}
+                  disabled={state === 'loading'}
+                />
+              </div>
+
+              {/* Error message */}
+              {error && (
+                <p className="text-xs text-red-400 ml-1">
+                  {error}{' '}
+                  {error.toLowerCase().includes('already exists') && (
+                    <a
+                      href={`${appUrl}/auth/login?email=${encodeURIComponent(email.trim())}`}
+                      className="underline text-violet-400 hover:text-violet-300"
+                    >
+                      Log in instead
+                    </a>
+                  )}
+                </p>
+              )}
 
               <motion.button
                 type="submit"
@@ -153,7 +357,7 @@ export function DemoSignup({ companyName, stats }: DemoSignupProps) {
                   'disabled:opacity-60 disabled:cursor-not-allowed',
                   'bg-white text-zinc-950 hover:bg-zinc-100',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900',
-                  'motion-reduce:transform-none'
+                  'motion-reduce:transform-none',
                 )}
               >
                 {state === 'loading' ? (
