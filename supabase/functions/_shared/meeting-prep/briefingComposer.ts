@@ -21,14 +21,18 @@ import type { RAGResult } from '../memory/types.ts';
 // ---- Prompt Templates -------------------------------------------------------
 
 const RETURN_MEETING_SYSTEM_PROMPT =
-  `You are a sales intelligence analyst preparing a pre-meeting brief for a sales rep. Write it like a trusted colleague who knows the deal inside out and is giving a 2-minute verbal briefing before the rep walks in.
+  `You are a trusted sales colleague giving a 2-minute verbal brief before a meeting. You know this deal inside out.
 
-TONE: Direct, specific, actionable. Reference exact details from transcripts. No filler like "it's important to build rapport." The rep knows that. Flag the things they might forget or didn't notice.`;
+TONE: Direct, specific, punchy. Short sentences. Reference exact details — names, dates, quotes. Skip generic advice. Flag what they might forget or miss. Write like you're talking, not filing a report.
+
+CRITICAL: Only include what you actually know from the data. Never invent details. If something is unknown, omit it or use null — do not fill gaps with guesses or generic statements.`;
 
 const FIRST_MEETING_SYSTEM_PROMPT =
-  `You are a sales intelligence analyst preparing a first-meeting brief for a sales rep. Write it like a knowledgeable colleague who has done thorough homework on the prospect and company.
+  `You are a trusted sales colleague giving a quick brief before a first meeting. You've done the homework — deliver it fast.
 
-TONE: Informative, structured, actionable. Focus on what the rep needs to know to have a great first conversation. Suggest specific discovery questions based on what you know about the company and attendee.`;
+TONE: Direct, specific, punchy. Short sentences. The rep will read this on their phone between meetings. Every word must earn its place. No filler, no corporate language, no "it's important to note."
+
+CRITICAL: If any piece of information is not available from the research data, use null — do not write phrases like "unable to retrieve," "recommend checking LinkedIn," or any placeholder text. Silence is better than noise.`;
 
 // ---- Interfaces for composer inputs -----------------------------------------
 
@@ -199,18 +203,19 @@ export function buildFirstMeetingPrompt(input: FirstMeetingInput): string {
   sections.push('---');
   sections.push('');
   sections.push('Generate a first-meeting brief in JSON format with:');
-  sections.push('1. attendees: array of { name, title, background, linkedin_notes }');
   sections.push(
-    '2. company_snapshot: 2-3 sentence company overview with ICP fit assessment',
+    '1. attendees: array of { name, title, background } — background is 1-2 sentences: who this person is and why it matters for this call. If background data is not available, use null.',
   );
   sections.push(
-    '3. discovery_questions: array of 4-6 personalized discovery questions based on attendee roles and company context',
+    '2. company_snapshot: 2-3 sentences — what the company does, who they serve, and one signal about ICP fit. Be specific, not generic.',
+  );
+  sections.push(
+    '3. discovery_questions: array of exactly 3 questions — short and punchy (max 15 words each, one sentence). Personalise each to the attendee\'s role or the company\'s situation. No preamble, no sub-questions.',
   );
   sections.push(
     '4. deal_context: { source, existing_deal: boolean, suggested_deal_stage }',
   );
-  sections.push('5. executive_summary: 2-3 sentence overview for the Slack header');
-  sections.push('6. talking_points: array of 3-5 key topics to raise');
+  sections.push('5. executive_summary: 1-2 sentence overview for the Slack header');
   sections.push('');
   sections.push('Return ONLY valid JSON. No markdown, no explanations.');
 
@@ -399,7 +404,6 @@ export function buildFirstMeetingSlackBlocks(
     for (const att of briefing.attendees) {
       attendeeText += `• *${att.name}*${att.title ? ` — ${att.title}` : ''}\n`;
       if (att.background) attendeeText += `  ${att.background}\n`;
-      if (att.linkedin_notes) attendeeText += `  _${att.linkedin_notes}_\n`;
     }
     blocks.push({
       type: 'section',
@@ -414,7 +418,7 @@ export function buildFirstMeetingSlackBlocks(
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: truncate(`*COMPANY SNAPSHOT*\n${briefing.company_snapshot}`, 2800),
+        text: truncate(`*THE COMPANY*\n${briefing.company_snapshot}`, 2800),
       },
     });
     blocks.push({ type: 'divider' });
@@ -422,26 +426,13 @@ export function buildFirstMeetingSlackBlocks(
 
   // Discovery questions
   if (briefing.discovery_questions?.length > 0) {
-    let questionsText = '*SUGGESTED DISCOVERY QUESTIONS*\n';
+    let questionsText = '*ASK THEM*\n';
     briefing.discovery_questions.forEach((q: string, i: number) => {
       questionsText += `${i + 1}. ${q}\n`;
     });
     blocks.push({
       type: 'section',
       text: { type: 'mrkdwn', text: truncate(questionsText, 2800) },
-    });
-    blocks.push({ type: 'divider' });
-  }
-
-  // Talking points
-  if (briefing.talking_points?.length > 0) {
-    let tpText = '*KEY TALKING POINTS*\n';
-    for (const tp of briefing.talking_points) {
-      tpText += `• ${tp}\n`;
-    }
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: truncate(tpText, 2800) },
     });
   }
 
@@ -549,24 +540,16 @@ export function buildFirstMeetingMarkdown(
   }
 
   if (briefing.company_snapshot) {
-    lines.push('## Company Snapshot');
+    lines.push('## The Company');
     lines.push(briefing.company_snapshot);
     lines.push('');
   }
 
   if (briefing.discovery_questions?.length > 0) {
-    lines.push('## Discovery Questions');
+    lines.push('## Ask Them');
     briefing.discovery_questions.forEach((q: string, i: number) => {
       lines.push(`${i + 1}. ${q}`);
     });
-    lines.push('');
-  }
-
-  if (briefing.talking_points?.length > 0) {
-    lines.push('## Talking Points');
-    for (const tp of briefing.talking_points) {
-      lines.push(`- ${tp}`);
-    }
     lines.push('');
   }
 
