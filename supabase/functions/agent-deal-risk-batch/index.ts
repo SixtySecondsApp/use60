@@ -15,7 +15,6 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
-import { runAgent } from '../_shared/agentRunner.ts';
 import { isServiceRoleAuth } from '../_shared/edgeAuth.ts';
 import {
   loadRiskScorerConfig,
@@ -128,118 +127,104 @@ serve(async (req) => {
 
     console.log(`[agent-deal-risk-batch] Scoring ${dealsToScore.length} deals for org ${orgId}`);
 
-    // Wrap scoring loop with runAgent for retry logic and telemetry
-    const agentResult = await runAgent(
-      { agentName: 'deal-risk-batch', userId: 'system', orgId },
-      async () => {
-        // Score each deal
-        for (const deal of dealsToScore) {
-          try {
-            const score = await scoreDeal(supabase, deal.deal_id, orgId, config);
+    // Score each deal
+    for (const deal of dealsToScore) {
+      try {
+        const score = await scoreDeal(supabase, deal.deal_id, orgId, config);
 
-            // Upsert to deal_risk_scores
-            await supabase.rpc('upsert_deal_risk_score', {
-              p_org_id: orgId,
-              p_deal_id: deal.deal_id,
-              p_score: score.riskScore,
-              p_signals: score.signals,
-              p_score_breakdown: score.scoreBreakdown,
-            });
+        // Upsert to deal_risk_scores
+        await supabase.rpc('upsert_deal_risk_score', {
+          p_org_id: orgId,
+          p_deal_id: deal.deal_id,
+          p_score: score.riskScore,
+          p_signals: score.signals,
+          p_score_breakdown: score.scoreBreakdown,
+        });
 
-            result.scored_deals++;
+        result.scored_deals++;
 
-            // Check if alert should be flagged
-            const alertThreshold = getEffectiveAlertThreshold(config);
-            let hoursSinceAlert = Infinity;
-            if (score.riskScore >= alertThreshold) {
-              // Check 24-hour suppression
-              const { data: existing } = await supabase
-                .from('deal_risk_scores')
-                .select('alert_sent_at')
-                .eq('deal_id', deal.deal_id)
-                .maybeSingle();
+        // Check if alert should be flagged
+        const alertThreshold = getEffectiveAlertThreshold(config);
+        let hoursSinceAlert = Infinity;
+        if (score.riskScore >= alertThreshold) {
+          // Check 24-hour suppression
+          const { data: existing } = await supabase
+            .from('deal_risk_scores')
+            .select('alert_sent_at')
+            .eq('deal_id', deal.deal_id)
+            .maybeSingle();
 
-              const lastAlertAt = existing?.alert_sent_at;
-              hoursSinceAlert = lastAlertAt
-                ? (Date.now() - new Date(lastAlertAt).getTime()) / (1000 * 60 * 60)
-                : Infinity;
+          const lastAlertAt = existing?.alert_sent_at;
+          hoursSinceAlert = lastAlertAt
+            ? (Date.now() - new Date(lastAlertAt).getTime()) / (1000 * 60 * 60)
+            : Infinity;
 
-              if (hoursSinceAlert >= 24) {
-                result.alerts_flagged++;
-              }
-            }
-
-            // Dual-write to Command Centre for at-risk deals (score >= alertThreshold or generally at risk < 70)
-            if (score.riskScore >= alertThreshold || score.riskScore >= 50) {
-              try {
-                // Fetch deal owner to attribute the CC item correctly
-                const { data: dealRow } = await supabase
-                  .from('deals')
-                  .select('owner_id, name')
-                  .eq('id', deal.deal_id)
-                  .maybeSingle();
-
-                const dealOwnerId = dealRow?.owner_id;
-                const dealName = dealRow?.name || deal.deal_name;
-
-                if (dealOwnerId) {
-                  const topSignals = score.signals
-                    .slice(0, 3)
-                    .map((s) => s.description);
-
-                  const urgency =
-                    score.riskScore >= 80 || score.overallLevel === 'critical'
-                      ? 'critical'
-                      : score.riskScore >= 50 || score.overallLevel === 'high'
-                      ? 'high'
-                      : 'normal';
-
-                  await writeToCommandCentre({
-                    org_id: orgId,
-                    user_id: dealOwnerId,
-                    source_agent: 'deal_risk',
-                    item_type: 'deal_action',
-                    title: `Deal at risk: ${dealName} (${score.riskScore}/100)`,
-                    summary: topSignals.length > 0
-                      ? `Risk signals: ${topSignals.join(', ')}`
-                      : `Risk level: ${score.overallLevel}`,
-                    context: {
-                      deal_id: deal.deal_id,
-                      score: score.riskScore,
-                      signals: score.signals,
-                      score_breakdown: score.scoreBreakdown,
-                      overall_level: score.overallLevel,
-                    },
-                    deal_id: deal.deal_id,
-                    urgency,
-                  });
-                }
-              } catch (ccErr) {
-                // CC failure must not break the agent's primary flow
-                console.error('[agent-deal-risk-batch] CC write failed for deal', deal.deal_id, String(ccErr));
-              }
-            }
-          } catch (err) {
-            const errMsg = `Deal ${deal.deal_id}: ${(err as Error).message}`;
-            console.error('[agent-deal-risk-batch]', errMsg);
-            result.errors.push(errMsg);
+          if (hoursSinceAlert >= 24) {
+            result.alerts_flagged++;
           }
         }
 
-        return result;
-      },
-    );
+        // Dual-write to Command Centre for at-risk deals (score >= alertThreshold or generally at risk < 70)
+        if (score.riskScore >= alertThreshold || score.riskScore >= 50) {
+          try {
+            // Fetch deal owner to attribute the CC item correctly
+            const { data: dealRow } = await supabase
+              .from('deals')
+              .select('owner_id, name')
+              .eq('id', deal.deal_id)
+              .maybeSingle();
 
-    if (agentResult.success) {
-      recordSuccess('deal-risk-batch');
-    } else {
-      recordFailure('deal-risk-batch');
+            const dealOwnerId = dealRow?.owner_id;
+            const dealName = dealRow?.name || deal.deal_name;
+
+            if (dealOwnerId) {
+              const topSignals = score.signals
+                .slice(0, 3)
+                .map((s) => s.description);
+
+              const urgency =
+                score.riskScore >= 80 || score.overallLevel === 'critical'
+                  ? 'critical'
+                  : score.riskScore >= 50 || score.overallLevel === 'high'
+                  ? 'high'
+                  : 'normal';
+
+              await writeToCommandCentre({
+                org_id: orgId,
+                user_id: dealOwnerId,
+                source_agent: 'deal_risk',
+                item_type: 'deal_action',
+                title: `Deal at risk: ${dealName} (${score.riskScore}/100)`,
+                summary: topSignals.length > 0
+                  ? `Risk signals: ${topSignals.join(', ')}`
+                  : `Risk level: ${score.overallLevel}`,
+                context: {
+                  deal_id: deal.deal_id,
+                  score: score.riskScore,
+                  signals: score.signals,
+                  score_breakdown: score.scoreBreakdown,
+                  overall_level: score.overallLevel,
+                },
+                deal_id: deal.deal_id,
+                urgency,
+              });
+            }
+          } catch (ccErr) {
+            // CC failure must not break the agent's primary flow
+            console.error('[agent-deal-risk-batch] CC write failed for deal', deal.deal_id, String(ccErr));
+          }
+        }
+      } catch (err) {
+        const errMsg = `Deal ${deal.deal_id}: ${(err as Error).message}`;
+        console.error('[agent-deal-risk-batch]', errMsg);
+        result.errors.push(errMsg);
+      }
     }
 
-    const batchResult = agentResult.data ?? result;
-    console.log(`[agent-deal-risk-batch] Complete: ${batchResult.scored_deals} scored, ${batchResult.alerts_flagged} flagged, ${batchResult.errors.length} errors`);
+    recordSuccess('deal-risk-batch');
+    console.log(`[agent-deal-risk-batch] Complete: ${result.scored_deals} scored, ${result.alerts_flagged} flagged, ${result.errors.length} errors`);
 
-    return jsonResponse(batchResult, req);
+    return jsonResponse(result, req);
 
   } catch (error) {
     console.error('[agent-deal-risk-batch] Error:', error);

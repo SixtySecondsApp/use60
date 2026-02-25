@@ -50,8 +50,6 @@ export async function sendSlackDM(
     const messagePayload: any = {
       channel: channelId,
       text: text || 'Notification from use60',
-      unfurl_links: false,
-      unfurl_media: false,
     };
 
     if (blocks && blocks.length > 0) {
@@ -249,23 +247,11 @@ export async function deliverToSlack(
     };
   }
 
-  // AOA-006: Load agent persona for voice injection
-  const persona = await loadAgentPersona(supabase, payload.recipientUserId);
-  const agentName = persona?.agent_name || 'Sixty';
-
-  // Inject persona name prefix into message text
-  const personalizedText = `[${agentName}] ${payload.message || 'Notification'}`;
-
-  // Inject persona header into blocks if present
-  const personalizedBlocks = payload.blocks
-    ? injectPersonaHeader(payload.blocks, agentName)
-    : undefined;
-
   const result = await sendSlackDM({
     botToken,
     slackUserId: payload.recipientSlackUserId,
-    blocks: personalizedBlocks || payload.blocks,
-    text: personalizedText,
+    blocks: payload.blocks,
+    text: payload.message,
   });
 
   // Record notification interaction for Smart Engagement Algorithm
@@ -296,48 +282,4 @@ export async function deliverToSlack(
     error: result.error,
     interactionId,
   };
-}
-
-/**
- * AOA-006: Load agent persona for a user (with defaults fallback)
- */
-async function loadAgentPersona(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<{ agent_name: string; tone: string } | null> {
-  try {
-    const { data } = await supabase
-      .from('agent_persona')
-      .select('agent_name, tone')
-      .eq('user_id', userId)
-      .maybeSingle();
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * AOA-006: Inject agent persona name into Slack Block Kit blocks.
- * Adds a context block at the top with the agent's name if the first block isn't already a context.
- */
-function injectPersonaHeader(blocks: any[], agentName: string): any[] {
-  if (!blocks || blocks.length === 0) return blocks;
-
-  // Don't double-inject if first block is already a context with the agent name
-  if (blocks[0]?.type === 'context' && JSON.stringify(blocks[0]).includes(agentName)) {
-    return blocks;
-  }
-
-  const personaContext = {
-    type: 'context',
-    elements: [
-      {
-        type: 'mrkdwn',
-        text: `*${agentName}* | Your AI Sales Agent`,
-      },
-    ],
-  };
-
-  return [personaContext, ...blocks];
 }

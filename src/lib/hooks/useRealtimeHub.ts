@@ -51,7 +51,6 @@ const TABLE_GROUPS = {
     'tasks',
     'notifications',
     'user_notifications',
-    'command_centre_items',
   ],
   // MEDIUM priority - important but less frequent
   medium: [
@@ -175,12 +174,6 @@ export function useRealtimeHub() {
         table: 'user_notifications',
         filter: `user_id=eq.${userId}`,
       }, (payload) => notifySubscribers('user_notifications', payload))
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'command_centre_items',
-        filter: `user_id=eq.${userId}`,
-      }, (payload) => notifySubscribers('command_centre_items', payload))
       .subscribe();
 
     channelsRef.current.set('high-priority', highPriorityChannel);

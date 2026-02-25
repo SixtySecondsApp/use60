@@ -8,617 +8,191 @@
       "styling": "tailwind"
     }
   },
-  "feature": "command-centre-evolution",
-  "consultReport": ".sixty/consult/command-centre-evolution.md",
-  "createdAt": "2026-02-25",
+  "feature": "ui-polish",
+  "consultReport": ".sixty/consult/ui-polish.md",
+  "createdAt": "2026-02-23",
   "stories": [
     {
-      "id": "CC-001",
-      "feature": "command-centre-evolution",
-      "title": "Add command_centre_items to Supabase Realtime publication and hub",
-      "type": "schema+frontend",
-      "status": "complete",
+      "id": "UI-001",
+      "feature": "ui-polish",
+      "title": "Fix Sentiment and TalkTime charts plotting null values at top of chart",
+      "type": "frontend",
+      "status": "pending",
       "priority": 1,
       "acceptance": [
-        "Migration adds command_centre_items to supabase_realtime publication with REPLICA IDENTITY FULL",
-        "useRealtimeHub high-priority channel subscribes to command_centre_items filtered by user_id",
-        "TABLE_GROUPS.high array includes 'command_centre_items'",
-        "useCommandCentreItemsQuery invalidates cache on Realtime callback instead of staleTime polling",
-        "staleTime increased to 5 minutes (Realtime handles freshness)"
-      ],
-      "estimatedMinutes": 15,
-      "actualMinutes": null,
-      "files": [
-        "supabase/migrations/20260225000001_cc_items_realtime.sql",
-        "src/lib/hooks/useRealtimeHub.ts",
-        "src/lib/hooks/useCommandCentreItemsQuery.ts"
-      ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-004",
-        "CC-005",
-        "CC-009"
-      ],
-      "parallelWith": [
-        "CC-002",
-        "CC-003"
-      ],
-      "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
-    },
-    {
-      "id": "CC-002",
-      "feature": "command-centre-evolution",
-      "title": "Add slack_message_ts, slack_channel_id, and auto_send_preferences columns",
-      "type": "schema",
-      "status": "complete",
-      "priority": 2,
-      "acceptance": [
-        "Migration adds slack_message_ts TEXT and slack_channel_id TEXT to command_centre_items",
-        "Migration adds auto_send_types JSONB column to user_settings with default empty object",
-        "Index on (slack_message_ts) WHERE slack_message_ts IS NOT NULL for Slack sync lookups",
-        "Existing data unaffected — all new columns are nullable"
+        "Sentiment chart does not render data points at the top of the chart",
+        "TalkTime chart does not render data points at the top of the chart",
+        "Both charts show gaps where data is null (no line drawn through null points at top)",
+        "Non-null data points still connect smoothly",
+        "Volume chart behaviour unchanged"
       ],
       "estimatedMinutes": 10,
       "actualMinutes": null,
       "files": [
-        "supabase/migrations/20260225000002_cc_slack_sync_columns.sql"
+        "src/components/insights/TeamTrendsChart.tsx"
       ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-010",
-        "CC-011"
-      ],
-      "parallelWith": [
-        "CC-001",
-        "CC-003"
-      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-002", "UI-003", "UI-004", "UI-005"],
       "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
+      "completedAt": null
     },
     {
-      "id": "CC-003",
-      "feature": "command-centre-evolution",
-      "title": "Replace client-side getStats with server-side RPC",
-      "type": "backend+frontend",
-      "status": "complete",
+      "id": "UI-002",
+      "feature": "ui-polish",
+      "title": "Fix transcript attendee sidebar speaker color mismatch",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "acceptance": [
+        "Speaker avatar color in attendees sidebar matches the same speaker's avatar color in the transcript",
+        "Speaker name text color matches avatar background color",
+        "Attendees sidebar uses speaker-name-based slot lookup (not array index)"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/MeetingDetail.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-003", "UI-004", "UI-005"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "UI-003",
+      "feature": "ui-polish",
+      "title": "Credits navbar: show 'N credits' label and add pulsating green dot",
+      "type": "frontend",
+      "status": "pending",
       "priority": 3,
       "acceptance": [
-        "New RPC get_cc_stats(p_user_id UUID) returns counts grouped by status in a single query",
-        "Returns: total_active, needs_review, auto_completed_today, pending_approval count",
-        "useCommandCentreStatsQuery calls the RPC instead of fetching all rows and counting in JS",
-        "Stats query invalidated by Realtime callback alongside items query"
+        "Credits button shows '342 credits' not '342 cr'",
+        "Green status dot next to credits pulsates (like notification dot) using animate-pulse in green",
+        "Pulse is subtle — not distracting"
       ],
-      "estimatedMinutes": 20,
+      "estimatedMinutes": 10,
       "actualMinutes": null,
       "files": [
-        "supabase/migrations/20260225000003_cc_stats_rpc.sql",
-        "src/lib/services/commandCentreItemsService.ts",
-        "src/lib/hooks/useCommandCentreItemsQuery.ts"
+        "src/components/credits/CreditWidget.tsx"
       ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-005"
-      ],
-      "parallelWith": [
-        "CC-001",
-        "CC-002"
-      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-004", "UI-005"],
       "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
+      "completedAt": null
     },
     {
-      "id": "CC-004",
-      "feature": "command-centre-evolution",
-      "title": "Build compression layout with feed + side panel split",
+      "id": "UI-004",
+      "feature": "ui-polish",
+      "title": "Dashboard Activity tab: add entry animation matching Team Performance",
       "type": "frontend",
-      "status": "complete",
+      "status": "pending",
       "priority": 4,
       "acceptance": [
-        "CommandCentre page uses a flex layout: feed area (flex-1) + panel area (w-[460px]) when panel is open",
-        "Feed compresses smoothly when panel opens (CSS transition, not Sheet overlay)",
-        "Panel slides in from right with 200ms ease-out animation",
-        "Closing panel returns feed to full width with matching transition",
-        "Panel area uses !top-16 !h-[calc(100vh-4rem)] to respect fixed top bar",
-        "Replaces current Sheet-based CCItemDetailPanel with inline panel component"
+        "Switching to Activity tab triggers fade-in + slide-up animation (opacity 0→1, y 20→0)",
+        "Animation matches the motion.div pattern used in TeamKPIGrid",
+        "Content width/scaling is consistent with Overview tab"
       ],
-      "estimatedMinutes": 30,
+      "estimatedMinutes": 10,
       "actualMinutes": null,
       "files": [
-        "src/pages/platform/CommandCentre.tsx",
-        "src/components/commandCentre/CCDetailPanel.tsx"
+        "src/pages/Dashboard.tsx"
       ],
-      "dependencies": {
-        "stories": [
-          "CC-001"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-006",
-        "CC-007",
-        "CC-008",
-        "CC-013"
-      ],
-      "parallelWith": [],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-005"],
       "startedAt": null,
       "completedAt": null
     },
     {
-      "id": "CC-005",
-      "feature": "command-centre-evolution",
-      "title": "Build unified feed with left-border severity and filter bar",
+      "id": "UI-005",
+      "feature": "ui-polish",
+      "title": "Meetings tab: add consistent spacing to match app standard padding",
       "type": "frontend",
-      "status": "complete",
+      "status": "pending",
       "priority": 5,
       "acceptance": [
-        "CCItemCard renders left border: blue (needs approval), amber (critical/high urgency), green (auto_resolved/completed), grey (informational)",
-        "Border derived from existing status + urgency + drafted_action fields — no new DB columns",
-        "Filter bar replaces 5 tabs: All (default) | Needs You (badge count) | Deals | Signals",
-        "Needs You badge count persists across all filters",
-        "All filter shows pending items pinned to top, then chronological",
-        "Filter state preserved when opening/closing side panel"
+        "Meetings list content has px-4 sm:px-6 lg:px-8 horizontal padding",
+        "Vertical padding matches app standard (py-6 sm:py-8)",
+        "Content is no longer flush to screen edges",
+        "Pattern matches MeetingAnalyticsPage and Dashboard padding"
       ],
-      "estimatedMinutes": 25,
+      "estimatedMinutes": 5,
       "actualMinutes": null,
       "files": [
-        "src/pages/platform/CommandCentre.tsx",
-        "src/components/commandCentre/CCItemCard.tsx",
-        "src/components/commandCentre/CCFilterBar.tsx"
+        "src/components/meetings/UnifiedMeetingsList.tsx"
       ],
-      "dependencies": {
-        "stories": [
-          "CC-001",
-          "CC-003"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-009"
-      ],
-      "parallelWith": [],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004"],
       "startedAt": null,
       "completedAt": null
-    },
+    }
+  ],
     {
-      "id": "CC-006",
-      "feature": "command-centre-evolution",
-      "title": "Build status bar with live counts and latest agent action",
+      "id": "UI-006",
+      "feature": "ui-polish",
+      "title": "Fix Most Popular badge clipped by CreditPurchaseModal card border",
       "type": "frontend",
       "status": "complete",
       "priority": 6,
       "acceptance": [
-        "Compact bar fixed above feed: copilot active indicator (pulsing green dot), actions today count, pending review count",
-        "Latest agent action shown: source_agent + title of most recent item, updated via Realtime",
-        "Clicking pending count filters to Needs You",
-        "Counts sourced from the server-side stats RPC, invalidated by Realtime",
-        "Falls back to 'All caught up' when no pending items"
+        "Most Popular badge renders fully above the card's border (not overlapping/clipped by it)",
+        "Badge is visually floating above the top edge of the popular card",
+        "Other pack cards are unaffected"
       ],
-      "estimatedMinutes": 20,
+      "estimatedMinutes": 5,
       "actualMinutes": null,
       "files": [
-        "src/components/commandCentre/CCStatusBar.tsx",
-        "src/pages/platform/CommandCentre.tsx"
+        "src/components/credits/CreditPurchaseModal.tsx"
       ],
-      "dependencies": {
-        "stories": [
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
+      "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": [
-        "CC-007"
-      ],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004", "UI-005", "UI-007"],
       "startedAt": null,
       "completedAt": null
     },
     {
-      "id": "CC-007",
-      "feature": "command-centre-evolution",
-      "title": "Build human+AI attribution pattern on feed cards",
+      "id": "UI-007",
+      "feature": "ui-polish",
+      "title": "Replace 'cr' abbreviation with 'credits' throughout credit UI",
       "type": "frontend",
       "status": "complete",
       "priority": 7,
       "acceptance": [
-        "Card shows agent avatar (28px icon derived from source_agent) for all items",
-        "Items needing review show user avatar (28px) alongside agent avatar with blue dot indicator",
-        "Approved items show user avatar with green checkmark overlay, card reduces opacity",
-        "Dismissed items fade out with brief animation, accessible via 'Show dismissed' toggle",
-        "Agent name shown in metadata line below description"
-      ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": [
-        "src/components/commandCentre/CCItemCard.tsx",
-        "src/components/commandCentre/CCAttribution.tsx"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-006"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-008",
-      "feature": "command-centre-evolution",
-      "title": "Build email preview panel with TipTap read-only and edit modes",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 8,
-      "acceptance": [
-        "When drafted_action.type === 'send_email', detail panel renders email-specific layout",
-        "Preview mode (default): To, Subject displayed above TipTap in editable={false} mode rendering body HTML",
-        "Edit button switches TipTap to editable={true}, Subject becomes editable input, full toolbar appears",
-        "Email renders as recipient would see it — proper formatting, links, paragraphs",
-        "Agent reasoning section below preview: why this email, confidence score, source event",
-        "Reuses existing TipTapEditor component from src/components/email/TipTapEditor.tsx"
-      ],
-      "estimatedMinutes": 30,
-      "actualMinutes": null,
-      "files": [
-        "src/components/commandCentre/panels/CCEmailPanel.tsx",
-        "src/components/commandCentre/CCDetailPanel.tsx"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-009"
-      ],
-      "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-009",
-      "feature": "command-centre-evolution",
-      "title": "Wire Approve & Send to email-send-as-rep with undo window",
-      "type": "frontend+backend",
-      "status": "complete",
-      "priority": 9,
-      "acceptance": [
-        "Approve & Send button in email panel calls email-send-as-rep edge function with drafted_action payload",
-        "5-second undo window shown after approval (reuse useUndoSend pattern from EmailComposerEnhanced)",
-        "If user edits before approving, edited content is saved to drafted_action then sent",
-        "On successful send: item status transitions to completed, Realtime updates feed",
-        "On send failure: toast error, item stays in ready state, user can retry",
-        "Approve without send (for non-email items) continues to work as before"
-      ],
-      "estimatedMinutes": 25,
-      "actualMinutes": null,
-      "files": [
-        "src/components/commandCentre/panels/CCEmailPanel.tsx",
-        "src/lib/services/commandCentreItemsService.ts",
-        "src/lib/hooks/useCommandCentreItemsQuery.ts"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-001",
-          "CC-005",
-          "CC-008"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-010",
-      "feature": "command-centre-evolution",
-      "title": "Add deep link routing and auto-open panel from URL params",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 10,
-      "acceptance": [
-        "URL /command-centre?item={id} auto-opens detail panel for that item on page load",
-        "URL /command-centre?filter=needs-you opens with Needs You filter active",
-        "URL /command-centre?filter=deals&item={id} opens deals filter with specific item panel",
-        "If item ID not found in current feed, fetches it directly via getItemById",
-        "URL params update when user opens/closes panel or changes filter (browser back works)"
-      ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": [
-        "src/pages/platform/CommandCentre.tsx"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-002"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-011"
-      ],
-      "parallelWith": [
-        "CC-004"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-011",
-      "feature": "command-centre-evolution",
-      "title": "Wire Slack deep links and bi-directional status sync",
-      "type": "backend",
-      "status": "complete",
-      "priority": 11,
-      "acceptance": [
-        "buildCommandCentreDigest View button URL changes from /command-centre to /command-centre?item={id}",
-        "All CC Slack action buttons (cc_approve, cc_dismiss) write slack_message_ts + slack_channel_id to the CC item",
-        "When user approves/dismisses in web UI, edge function calls Slack chat.update to replace action buttons with confirmation",
-        "Slack message shows 'Approved by {name}' or 'Dismissed' after web action",
-        "When user acts in Slack, Realtime pushes update to web — card de-emphasises in real-time"
-      ],
-      "estimatedMinutes": 30,
-      "actualMinutes": null,
-      "files": [
-        "supabase/functions/_shared/slackBlocks.ts",
-        "supabase/functions/slack-interactive/index.ts",
-        "supabase/functions/cc-action-sync/index.ts"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-002",
-          "CC-010"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-012",
-      "feature": "command-centre-evolution",
-      "title": "Build auto-send preferences UI and gate in approval flow",
-      "type": "frontend+backend",
-      "status": "complete",
-      "priority": 12,
-      "acceptance": [
-        "Settings page section: 'Copilot Auto-Send' with toggles per action type (follow_up, meeting_prep, etc.)",
-        "All toggles default to OFF — every action requires manual approval initially",
-        "Preferences stored in user_settings.preferences.auto_send_types as {type: boolean} map",
-        "cc-auto-execute checks auto_send_types before executing — skips if type not enabled",
-        "When auto-executed, feed item shows green border with 'Auto-sent — undo within 24h' label"
-      ],
-      "estimatedMinutes": 25,
-      "actualMinutes": null,
-      "files": [
-        "src/components/settings/AutoSendPreferences.tsx",
-        "supabase/functions/cc-auto-execute/index.ts",
-        "src/lib/services/commandCentreItemsService.ts"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-002"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-004",
-        "CC-010"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-013",
-      "feature": "command-centre-evolution",
-      "title": "Build typed detail panels for CRM diff, deal health, and signals",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 13,
-      "acceptance": [
-        "CRM Update panel: before/after diff table, confidence bar, source event, View in HubSpot / Undo actions",
-        "Deal Health panel: large health score with trend arrow, factor breakdown bars (champion, timeline, competitive, budget), recommended action",
-        "Signal panel: severity badge (high/medium/low), evidence text, signal history timeline, contextual action button",
-        "Panel type auto-detected from item_type and rendered via panel registry pattern"
-      ],
-      "estimatedMinutes": 30,
-      "actualMinutes": null,
-      "files": [
-        "src/components/commandCentre/panels/CCCrmDiffPanel.tsx",
-        "src/components/commandCentre/panels/CCDealHealthPanel.tsx",
-        "src/components/commandCentre/panels/CCSignalPanel.tsx",
-        "src/components/commandCentre/CCDetailPanel.tsx"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-008"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-014",
-      "feature": "command-centre-evolution",
-      "title": "Add empty states for all filter views",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 14,
-      "acceptance": [
-        "First load (no items): 'Your copilot is warming up' with Connect Calendar / Set up HubSpot CTAs",
-        "Filtered no matches: 'All clear — no [deals/signals] need your attention. Your copilot is handling things.'",
-        "All caught up (no pending): 'All caught up — your copilot handled {count} actions today'",
-        "Each empty state uses Lucide icons, not emoji"
+        "All visible 'cr' abbreviations replaced with 'credits' (e.g. '342 cr' → '342 credits')",
+        "Per-unit rates updated (e.g. 'cr/mo' → 'credits/mo', 'cr/day' → 'credits/day')",
+        "No regressions in credit display logic"
       ],
       "estimatedMinutes": 15,
       "actualMinutes": null,
       "files": [
-        "src/components/commandCentre/CCEmptyState.tsx",
-        "src/pages/platform/CommandCentre.tsx"
+        "src/components/credits/UsageBreakdownChart.tsx",
+        "src/components/credits/TransactionLog.tsx",
+        "src/components/credits/StorageUsageCard.tsx",
+        "src/components/credits/LowBalanceBanner.tsx",
+        "src/components/credits/CreditEstimator.tsx",
+        "src/components/credits/CreditMigrationModal.tsx",
+        "src/components/credits/PackInventory.tsx",
+        "src/components/credits/ARBudgetSettings.tsx",
+        "src/components/credits/CreditMenuTable.tsx",
+        "src/components/credits/CreditWidgetDropdown.tsx",
+        "src/components/credits/SimpleModelTierSelector.tsx",
+        "src/pages/settings/CreditsSettingsPage.tsx"
       ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
+      "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": [
-        "CC-001",
-        "CC-002",
-        "CC-003"
-      ],
-      "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
-    },
-    {
-      "id": "CC-015",
-      "feature": "command-centre-evolution",
-      "title": "Add keyboard navigation and batch review shortcuts",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 15,
-      "acceptance": [
-        "j/k navigates between feed items (visual highlight moves, side panel updates if open)",
-        "Enter opens/closes side panel for highlighted item",
-        "a approves highlighted item (with 5s undo for emails)",
-        "d dismisses highlighted item",
-        "e opens edit mode in side panel (for email items, activates TipTap edit)",
-        "Shortcuts only active when CommandCentre page is focused, not when typing in inputs"
-      ],
-      "estimatedMinutes": 25,
-      "actualMinutes": null,
-      "files": [
-        "src/pages/platform/CommandCentre.tsx",
-        "src/lib/hooks/useCommandCentreKeyboard.ts"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-005",
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-013"
-      ],
+      "parallelWith": ["UI-001", "UI-002", "UI-003", "UI-004", "UI-005", "UI-006"],
       "startedAt": null,
       "completedAt": null
-    },
-    {
-      "id": "CC-016",
-      "feature": "command-centre-evolution",
-      "title": "Add entrance animations and real-time feed transitions",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 16,
-      "acceptance": [
-        "New Realtime items slide in at top of feed with subtle entrance animation (200ms ease-out)",
-        "Approved items reduce opacity with 300ms transition, shift below pending items",
-        "Dismissed items fade out with 200ms animation",
-        "Filter switch is instant (client-side filter on loaded data, < 100ms)",
-        "Status bar counts animate on change (number counter transition)"
-      ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": [
-        "src/pages/platform/CommandCentre.tsx",
-        "src/components/commandCentre/CCItemCard.tsx",
-        "src/components/commandCentre/CCStatusBar.tsx"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-005",
-          "CC-006"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-015"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-017",
-      "feature": "command-centre-evolution",
-      "title": "Fix CCItem TypeScript interface and missing CC undo edge function",
-      "type": "backend+frontend",
-      "status": "complete",
-      "priority": 17,
-      "acceptance": [
-        "CCItem interface in commandCentreItemsService.ts includes enrichment_context, confidence_factors, priority_factors, enriched_at, parent_item_id",
-        "CC_ITEM_COLUMNS select list updated to include all missing columns",
-        "Create supabase/functions/cc-undo/index.ts wrapping existing undoExecution.ts shared module",
-        "Snooze sets status to 'open' with due_date (not leaving item in ready state)",
-        "Existing TypeScript casts in CCItemDetailPanel replaced with proper typed access"
-      ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": [
-        "src/lib/services/commandCentreItemsService.ts",
-        "supabase/functions/cc-undo/index.ts",
-        "src/components/commandCentre/CCItemDetailPanel.tsx"
-      ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-001",
-        "CC-002",
-        "CC-003",
-        "CC-014"
-      ],
-      "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
     }
   ],
   "execution": {
-    "totalStories": 17,
-    "completedStories": 17,
-    "currentFeature": "command-centre-evolution",
-    "lastUpdated": "2026-02-25T11:30:06.683Z"
+    "totalStories": 7,
+    "completedStories": 0,
+    "currentFeature": "ui-polish",
+    "lastUpdated": "2026-02-23"
   }
 }

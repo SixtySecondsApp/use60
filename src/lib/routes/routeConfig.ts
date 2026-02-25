@@ -372,26 +372,6 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     order: 8,
     badge: 'Demo',
   },
-  {
-    path: '/platform/multi-agent-demo',
-    access: 'internal',
-    label: 'Multi-Agent Sales Demo',
-    icon: Users,
-    showInNav: false,
-    navSection: 'tools',
-    order: 9,
-    badge: 'Demo',
-  },
-  {
-    path: '/platform/multi-agent-research-demo',
-    access: 'internal',
-    label: 'Multi-Agent Research Demo',
-    icon: Brain,
-    showInNav: false,
-    navSection: 'tools',
-    order: 10,
-    badge: 'Demo',
-  },
 
   // ========== Settings Section (Tier 1: All Users) ==========
   {

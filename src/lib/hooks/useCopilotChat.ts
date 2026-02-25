@@ -74,18 +74,9 @@ export interface UseCopilotChatOptions {
   historyLimit?: number;
 }
 
-export interface RoutingContext {
-  skill_key?: string;
-  confidence?: number;
-  matched_by?: string;
-  latency_ms?: number;
-}
-
 export interface SendMessageOptions {
   /** If true, don't show the user message in chat (used for enriched prompts from preflight) */
   silent?: boolean;
-  /** Routing result from route-message edge function, passed as context to the AI */
-  routingContext?: RoutingContext;
 }
 
 export interface UseCopilotChatReturn {
@@ -237,7 +228,6 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                 user_id: options.userId,
               },
               stream: true,
-              ...(sendOpts?.routingContext ? { routingContext: sendOpts.routingContext } : {}),
             }),
             signal: abortControllerRef.current.signal,
           }

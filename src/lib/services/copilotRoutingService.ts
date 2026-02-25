@@ -1,19 +1,6 @@
 /**
  * Copilot Routing Service
  *
- * @deprecated Client-side routing is superseded by the `route-message` edge function
- * which runs the same 5-step pipeline server-side. All active routing surfaces
- * (web copilot, Slack, fleet agents) now call `route-message` directly.
- *
- * This file is retained for reference and for any legacy code paths that have
- * not yet been migrated. Do not import this module in new code.
- *
- * Migration guide:
- * - Web copilot: migrated in ROUTE-003 — see CopilotContext.tsx
- * - Slack copilot: migrated in ROUTE-004 — see supabase/functions/slack-copilot/index.ts
- * - Fleet agents: migrated in ROUTE-005 — see supabase/functions/agent-orchestrator/index.ts
- *
- * Original routing logic:
  * Handles skill selection for the copilot with sequence-first routing:
  * 1. Check sequences first (pre-built, tested orchestrations)
  * 2. If sequence matches intent with confidence > 0.7, use it
@@ -324,9 +311,6 @@ function extractIndividualSkills(
 /**
  * Route a user message to the best matching skill
  *
- * @deprecated Use the `route-message` edge function instead (source: 'web_copilot' | 'slack_copilot' | 'fleet_agent').
- * This function performs client-side routing and has been superseded by the server-side pipeline.
- *
  * Decision flow:
  * 1. Check sequences first (agent-sequence category)
  * 2. If sequence matches with confidence > 0.7, use it
@@ -549,8 +533,6 @@ export async function routeToSkill(
 
 /**
  * Log routing decision for analytics
- *
- * @deprecated Routing logs are now written server-side by the `route-message` edge function.
  */
 export async function logRoutingDecision(
   userId: string,
@@ -578,10 +560,6 @@ export async function logRoutingDecision(
 // Export Service Object
 // =============================================================================
 
-/**
- * @deprecated Client-side routing service. Use the `route-message` edge function for all new routing.
- * See ROUTE-005 migration notes in the file-level JSDoc above.
- */
 export const copilotRoutingService = {
   routeToSkill,
   logRoutingDecision,

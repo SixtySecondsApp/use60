@@ -2500,8 +2500,8 @@ function OpsDetailPage() {
                 </button>
               )}
 
-              {/* Profile context selector — only show when multiple profiles exist */}
-              {sortedProfiles.length > 1 && (
+              {/* Profile context selector */}
+              {sortedProfiles.length > 0 && (
                 <Select
                   value={table.context_profile_id ?? '__default__'}
                   onValueChange={(val) => {

@@ -384,7 +384,6 @@ export interface SkillWithFolders {
   id: string;
   skill_key: string;
   category: SkillCategory;
-  namespace: 'copilot' | 'fleet' | 'slack' | 'shared';
   frontmatter: SkillFrontmatter;
   content_template: string;
   version: number;

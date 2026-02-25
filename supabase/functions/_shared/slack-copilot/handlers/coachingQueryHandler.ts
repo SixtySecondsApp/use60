@@ -7,15 +7,13 @@ import { section, fields, divider, context, formatCurrency } from '../responseFo
 export async function handleCoachingQuery(
   intent: ClassifiedIntent,
   queryContext: QueryContext,
-  anthropicApiKey: string | null,
-  modelId?: string
+  anthropicApiKey: string | null
 ): Promise<HandlerResult> {
   const query = (intent.entities.rawQuery || '').toLowerCase();
-  const resolvedModelId = modelId ?? 'claude-haiku-4-5-20251001';
 
   // Objection handling
   if (intent.entities.objectionType) {
-    return handleObjectionAdvice(intent.entities.objectionType, anthropicApiKey, resolvedModelId);
+    return handleObjectionAdvice(intent.entities.objectionType, anthropicApiKey);
   }
 
   // Performance snapshot
@@ -29,8 +27,7 @@ export async function handleCoachingQuery(
 
 async function handleObjectionAdvice(
   objection: string,
-  anthropicApiKey: string | null,
-  modelId: string
+  anthropicApiKey: string | null
 ): Promise<HandlerResult> {
   if (!anthropicApiKey) {
     return {
@@ -52,7 +49,7 @@ async function handleObjectionAdvice(
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: modelId,
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 400,
         system: 'You are a sales coaching expert. Give concise, actionable advice for handling sales objections. Include 2-3 specific response frameworks or phrases. Keep it under 200 words.',
         messages: [{

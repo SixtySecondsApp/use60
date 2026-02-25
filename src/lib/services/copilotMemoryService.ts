@@ -535,49 +535,6 @@ export class CopilotMemoryService {
   }
 
   // ===========================================================================
-  // Tier 3 Entity Facts (source-provenance tagged)
-  // ===========================================================================
-
-  /**
-   * Store structured entity-relationship facts extracted from Tier 3 messages
-   * (messages older than the TIER3_AGE_DAYS threshold).
-   *
-   * Each fact is stored as a copilot_memory with:
-   *   - category derived from the extracted memory type
-   *   - source_message_ids set to the originating message IDs for provenance
-   *   - context_summary = 'tier3_entity_fact' for identification
-   *
-   * This is called internally by compactWithTiers() — you do not need to call
-   * it directly.
-   */
-  async storeEntityFacts(
-    userId: string,
-    messages: CopilotMessage[],
-    anthropicClient: { messages: { create: (params: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }> } },
-    model: string = 'claude-haiku-4-5'
-  ): Promise<CopilotMemory[]> {
-    if (messages.length === 0) return [];
-
-    const sourceMessageIds = messages.map((m) => m.id);
-
-    // Extract entity facts using the standard memory extraction flow
-    const extracted = await this.extractMemories(messages, anthropicClient, model);
-
-    if (extracted.length === 0) return [];
-
-    const linked = await this.linkMemoriesToEntities(userId, extracted);
-
-    // Attach source provenance and mark as tier3 facts
-    const withProvenance = (linked as MemoryInput[]).map((m) => ({
-      ...m,
-      source_message_ids: sourceMessageIds,
-      context_summary: 'tier3_entity_fact',
-    }));
-
-    return this.storeMemories(withProvenance);
-  }
-
-  // ===========================================================================
   // Memory Management
   // ===========================================================================
 

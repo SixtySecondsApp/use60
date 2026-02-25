@@ -8,10 +8,9 @@
  * for all orgs.
  *
  * Usage:
- *   npx tsx scripts/sync-skills.ts                          # Full sync
- *   npx tsx scripts/sync-skills.ts --dry-run                # Preview only
+ *   npx tsx scripts/sync-skills.ts              # Full sync
+ *   npx tsx scripts/sync-skills.ts --dry-run    # Preview only
  *   npx tsx scripts/sync-skills.ts --skill meeting-prep-brief  # Single skill
- *   npx tsx scripts/sync-skills.ts --deprecate meeting-prep-brief  # Mark skill deprecated
  */
 
 import fs from 'node:fs';
@@ -32,10 +31,6 @@ const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const singleSkill = (() => {
   const idx = args.indexOf('--skill');
-  return idx !== -1 ? args[idx + 1] : null;
-})();
-const deprecateSkill = (() => {
-  const idx = args.indexOf('--deprecate');
   return idx !== -1 ? args[idx + 1] : null;
 })();
 
@@ -144,26 +139,6 @@ async function main() {
   console.log(`Found ${files.length} SKILL.md file(s)`);
   if (dryRun) console.log('DRY RUN — no database writes\n');
 
-  // ── Handle --deprecate flag ────────────────────────────────────
-  if (deprecateSkill) {
-    console.log(`Deprecating skill: ${deprecateSkill}`);
-    if (!dryRun) {
-      const { error } = await supabase
-        .from('platform_skills')
-        .update({ deprecated_at: new Date().toISOString() })
-        .eq('skill_key', deprecateSkill)
-        .is('deprecated_at', null);
-      if (error) {
-        console.error(`  ✗ Failed to deprecate ${deprecateSkill}: ${error.message}`);
-        process.exit(1);
-      }
-      console.log(`  ✓ ${deprecateSkill} marked as deprecated`);
-    } else {
-      console.log(`  [dry-run] Would mark ${deprecateSkill} as deprecated`);
-    }
-    return;
-  }
-
   const stats = { synced: 0, skipped: 0, errors: 0, warnings: 0 };
   const errors: Array<{ file: string; error: string }> = [];
 
@@ -189,58 +164,31 @@ async function main() {
         continue;
       }
 
-      // ── Versioning: check existing record for content change ───
-      const { data: existing } = await supabase
+      // Debug: log frontmatter before upsert
+      if (record.skill_key === 'company-research') {
+        console.log('  [DEBUG] company-research frontmatter keys:', Object.keys(record.frontmatter));
+        console.log('  [DEBUG] has requires_capabilities:', !!record.frontmatter.requires_capabilities);
+      }
+
+      // Upsert
+      const { error: upsertError } = await supabase
         .from('platform_skills')
-        .select('id, source_hash, version, is_current')
-        .eq('skill_key', record.skill_key)
-        .eq('is_current', true)
-        .maybeSingle();
+        .upsert(
+          {
+            skill_key: record.skill_key,
+            category: record.category,
+            frontmatter: record.frontmatter,
+            content_template: record.content_template,
+            is_active: record.is_active,
+          },
+          { onConflict: 'skill_key' }
+        );
 
-      const contentChanged = !existing || existing.source_hash !== record.source_hash;
-      const nextVersion = existing ? (existing.version ?? 1) + 1 : 1;
-
-      if (!contentChanged) {
-        console.log(`  - ${record.skill_key} (unchanged, skipping)`);
-        stats.skipped++;
-        continue;
+      if (upsertError) {
+        throw new Error(`Upsert failed: ${upsertError.message}`);
       }
 
-      // Mark previous version as no longer current
-      if (existing) {
-        const { error: archiveError } = await supabase
-          .from('platform_skills')
-          .update({ is_current: false })
-          .eq('id', existing.id);
-
-        if (archiveError) {
-          throw new Error(`Failed to archive previous version: ${archiveError.message}`);
-        }
-      }
-
-      // Insert new version
-      const { error: insertError } = await supabase
-        .from('platform_skills')
-        .insert({
-          skill_key: record.skill_key,
-          category: record.category,
-          frontmatter: record.frontmatter,
-          content_template: record.content_template,
-          is_active: record.is_active,
-          namespace: record.namespace,
-          source: record.source,
-          source_hash: record.source_hash,
-          source_path: record.source_path,
-          source_format: record.source_format,
-          version: nextVersion,
-          is_current: true,
-        });
-
-      if (insertError) {
-        throw new Error(`Insert failed: ${insertError.message}`);
-      }
-
-      console.log(`  ✓ ${record.skill_key} (v${nextVersion}, namespace=${record.namespace}, source=${record.source})`);
+      console.log(`  ✓ ${record.skill_key} (synced)`);
       stats.synced++;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

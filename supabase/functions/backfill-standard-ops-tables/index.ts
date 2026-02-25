@@ -462,10 +462,6 @@ async function backfillMeetings(
 
   const existingIds = new Set(existingRows?.map((r: any) => r.source_id) || []);
 
-  // Track fathom_recording_ids across all batches to prevent cross-batch duplicates.
-  // Same recording can exist with different owner_user_id values in the meetings table.
-  const globalSeenRecordingIds = new Set<string>();
-
   while (true) {
     // Query meetings with company join AND contact join via primary_contact_id
     const { data: meetings, error } = await svc
@@ -485,7 +481,6 @@ async function backfillMeetings(
         owner_user_id,
         share_url,
         transcript_text,
-        fathom_recording_id,
         companies!meetings_company_id_fkey(name),
         contacts!meetings_primary_contact_id_fkey(first_name, last_name, email, company_id)
       `)
@@ -496,24 +491,7 @@ async function backfillMeetings(
     if (error) throw new Error(`Failed to query meetings: ${error.message}`);
     if (!meetings?.length) break;
 
-    // Deduplicate: skip meetings whose source ID is already in the ops table
-    let newMeetings = meetings.filter((m: any) => !existingIds.has(m.id));
-    if (newMeetings.length === 0) {
-      offset += BATCH_SIZE;
-      continue;
-    }
-
-    // Deduplicate by fathom_recording_id — same recording can exist multiple
-    // times with different owner_user_id values in the meetings table.
-    // Keep the first occurrence (most recent by meeting_start due to query order).
-    newMeetings = newMeetings.filter((m: any) => {
-      if (m.fathom_recording_id) {
-        if (globalSeenRecordingIds.has(m.fathom_recording_id)) return false;
-        globalSeenRecordingIds.add(m.fathom_recording_id);
-      }
-      return true;
-    });
-
+    const newMeetings = meetings.filter((m: any) => !existingIds.has(m.id));
     if (newMeetings.length === 0) {
       offset += BATCH_SIZE;
       continue;
