@@ -256,6 +256,7 @@ export function buildReturnMeetingSlackBlocks(
   meetingTime: string,
   meetingNumber: number,
   companyName: string,
+  meetingId?: string | null,
 ): any[] {
   const blocks: any[] = [];
 
@@ -384,7 +385,55 @@ export function buildReturnMeetingSlackBlocks(
     });
   }
 
-  return blocks;
+  // Action buttons
+  if (meetingId) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Draft Booking Confirmation' },
+          action_id: 'prep_briefing::booking_confirm',
+          value: meetingId,
+          style: 'primary',
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Ask a Question' },
+          action_id: 'prep_briefing::ask_question',
+          value: meetingId,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Remind Me Before' },
+          action_id: 'prep_briefing::remind_before',
+          value: meetingId,
+        },
+      ],
+    });
+    // Feedback row
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: ':thumbsup: Helpful' },
+          action_id: 'prep_briefing::feedback_up',
+          value: meetingId,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: ':thumbsdown: Not Helpful' },
+          action_id: 'prep_briefing::feedback_down',
+          value: meetingId,
+        },
+      ],
+    });
+  }
+
+  // Strip consecutive dividers
+  return deduplicateDividers(blocks);
 }
 
 /**
@@ -518,7 +567,10 @@ export function buildFirstMeetingSlackBlocks(
     if (sf.deal_type) fitText += `\n*Deal type:* ${sf.deal_type}`;
     if (sf.watch_out) fitText += `\n\n:warning: *Watch out:* ${sf.watch_out}`;
 
-    blocks.push({ type: 'divider' });
+    // Only add divider if the previous block isn't already a divider
+    if (blocks.length > 0 && blocks[blocks.length - 1].type !== 'divider') {
+      blocks.push({ type: 'divider' });
+    }
     blocks.push({
       type: 'section',
       text: { type: 'mrkdwn', text: truncate(fitText, 2800) },
@@ -546,7 +598,7 @@ export function buildFirstMeetingSlackBlocks(
       elements: [
         {
           type: 'button',
-          text: { type: 'plain_text', text: 'Send Booking Confirmation' },
+          text: { type: 'plain_text', text: 'Draft Booking Confirmation' },
           action_id: 'prep_briefing::booking_confirm',
           value: meetingId,
           style: 'primary',
@@ -557,11 +609,36 @@ export function buildFirstMeetingSlackBlocks(
           action_id: 'prep_briefing::ask_question',
           value: meetingId,
         },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Remind Me Before' },
+          action_id: 'prep_briefing::remind_before',
+          value: meetingId,
+        },
+      ],
+    });
+    // Feedback row
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: ':thumbsup: Helpful' },
+          action_id: 'prep_briefing::feedback_up',
+          value: meetingId,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: ':thumbsdown: Not Helpful' },
+          action_id: 'prep_briefing::feedback_down',
+          value: meetingId,
+        },
       ],
     });
   }
 
-  return blocks;
+  // Strip consecutive dividers — Slack can silently drop blocks after them
+  return deduplicateDividers(blocks);
 }
 
 // ---- Markdown Formatters ----------------------------------------------------
@@ -720,6 +797,18 @@ export function buildFirstMeetingMarkdown(
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength - 1) + '\u2026';
+}
+
+/**
+ * Remove consecutive dividers from a block array.
+ * Slack can silently truncate messages that contain back-to-back dividers.
+ */
+function deduplicateDividers(blocks: any[]): any[] {
+  return blocks.filter((block, i) => {
+    if (block.type !== 'divider') return true;
+    if (i === 0) return false; // no leading divider
+    return blocks[i - 1]?.type !== 'divider';
+  });
 }
 
 // Re-export prompt constants for testing
