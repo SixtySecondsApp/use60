@@ -357,7 +357,6 @@ async function handleGenerateFollowUp(
 
           const ragClient = createRAGClient({
             orgId: meeting.org_id as string,
-            supabase,
           });
 
           followUpContext = await getFollowUpContext(
