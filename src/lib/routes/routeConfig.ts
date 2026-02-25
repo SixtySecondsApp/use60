@@ -39,6 +39,7 @@ import {
   Brain,
   Send,
   LifeBuoy,
+  FileText,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -391,6 +392,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     navSection: 'tools',
     order: 10,
     badge: 'Demo',
+  },
+  {
+    path: '/platform/demo/prep-briefing',
+    access: 'platformAdmin',
+    label: 'Prep Briefing Demo',
+    icon: FileText,
+    showInNav: false,
+    navSection: 'platform',
+    order: 56,
+    badge: 'New',
   },
 
   // ========== Settings Section (Tier 1: All Users) ==========
