@@ -5,6 +5,9 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { parseIntent, buildCapabilityList } from '../_shared/slackIntentParser.ts';
+import { reactionStateMachine } from '../_shared/slackReactions.ts';
+// CC-015: Slash command router — maps /60 subcommands to pre-resolved intents
+import { parseSlashCommand } from '../_shared/slack-copilot/slashCommands.ts';
 
 // Helper for logging sync operations to integration_sync_logs table
 async function logSyncOperation(
@@ -300,13 +303,22 @@ async function handleEvent(
       if (event.channel_type === 'im' && !event.bot_id && !event.subtype) {
         await handleDirectMessage(supabase, event, teamId);
       } else {
-        console.log('Message event received in channel:', event.channel);
+        // SLK-011: Proactive entity detection for channel messages
+        // Fire and forget — don't await, don't block the response
+        handleChannelEntityDetection(supabase, event, teamId).catch((err) => {
+          console.error('[slack-events] Entity detection error:', err);
+        });
       }
       break;
 
     case 'app_mention':
       // SLACK-023: @60 mention — route to intent parser
       await handleAppMention(supabase, event, teamId);
+      break;
+
+    case 'link_shared':
+      // SLK-012: Unfurl app.use60.com deal links with rich cards
+      handleLinkShared(supabase, event, teamId);
       break;
 
     case 'reaction_added':
@@ -400,23 +412,9 @@ async function handleDirectMessage(
     return;
   }
 
-  // Post typing indicator
-  try {
-    await fetch('https://slack.com/api/reactions.add', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${botToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        channel,
-        timestamp: messageTs,
-        name: 'eyes',
-      }),
-    });
-  } catch {
-    // Non-critical
-  }
+  // Reaction state machine for processing indicators
+  const reactions = reactionStateMachine(botToken, channel, messageTs!);
+  await reactions.pending();
 
   // Invoke the slack-copilot edge function for processing
   try {
@@ -445,35 +443,22 @@ async function handleDirectMessage(
       console.error('[slack-events] slack-copilot invocation failed:', response.status, errText);
       await postSlackMessage(botToken, channel, threadTs,
         "Sorry, I'm having trouble processing that right now. Please try again in a moment.");
+      await reactions.error();
+    } else {
+      await reactions.done();
     }
   } catch (err) {
     console.error('[slack-events] Error invoking slack-copilot:', err);
     await postSlackMessage(botToken, channel, threadTs,
       "Something went wrong. Please try again or use `/sixty help`.");
-  }
-
-  // Remove typing indicator
-  try {
-    await fetch('https://slack.com/api/reactions.remove', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${botToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        channel,
-        timestamp: messageTs,
-        name: 'eyes',
-      }),
-    });
-  } catch {
-    // Non-critical
+    await reactions.error();
   }
 }
 
 /**
- * SLACK-023: Handle @60 app_mention events
- * Parses the message, routes to the appropriate handler, and responds in-thread.
+ * SLACK-023 / SLK-008: Handle @60 app_mention events
+ * Routes through the full copilot pipeline (slack-copilot edge function)
+ * instead of the limited keyword regex parser.
  */
 async function handleAppMention(
   supabase: ReturnType<typeof createClient>,
@@ -546,85 +531,80 @@ async function handleAppMention(
     return;
   }
 
-  // Parse intent
-  const result = parseIntent(text);
-  let responseText = '';
+  // Idempotency check
+  const mentionTs = event.ts;
+  const { data: existingMsg } = await supabase
+    .from('slack_copilot_messages')
+    .select('id')
+    .eq('slack_ts', mentionTs)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMsg) {
+    console.log('[slack-events] Duplicate app_mention event, skipping:', mentionTs);
+    return;
+  }
+
+  // Strip bot mention from text
+  const cleanText = text.replace(/<@[A-Z0-9]+>/g, '').trim();
+
+  // CC-015: Check if the mention text is a known /60 subcommand.
+  // If so, resolve the intent immediately and pass it to slack-copilot,
+  // which will skip AI classification entirely (confidence: 1.0).
+  const slashResult = parseSlashCommand(cleanText);
+
+  // Reaction state machine
+  const reactions = reactionStateMachine(botToken, channel, event.ts!);
+  await reactions.pending();
+
   let success = true;
 
   try {
-    if (!result.intent || result.intent.type === 'help') {
-      // SLACK-027: Fallback handler with capability list
-      responseText = buildCapabilityList();
-    } else {
-      // Route to handlers
-      switch (result.intent.type) {
-        case 'today':
-          responseText = "I'm pulling up your day... Check your DM for the full brief, or use `/sixty today` for an instant snapshot.";
-          // Trigger morning brief edge function for this user (async)
-          break;
+    const copilotUrl = `${supabaseUrl}/functions/v1/slack-copilot`;
 
-        case 'pipeline_summary':
-          responseText = "Checking your pipeline... Use `/sixty pipeline` for the full summary.";
-          break;
+    const copilotPayload: Record<string, unknown> = {
+      orgId,
+      userId,
+      slackUserId,
+      slackTeamId: teamId,
+      channelId: channel,
+      threadTs,
+      messageTs: event.ts,
+      text: cleanText,
+      botToken,
+      source: 'app_mention',
+    };
 
-        case 'prep_meeting':
-          responseText = `Got it — prepping you for your ${result.intent.meetingName ? `meeting with ${result.intent.meetingName}` : 'next meeting'}. Check your DM shortly.`;
-          break;
-
-        case 'follow_up': {
-          const target = result.intent.contactName || result.intent.dealName || 'your contact';
-          responseText = `Drafting a follow-up for *${target}*... I'll send you a preview via DM for approval.`;
-          break;
-        }
-
-        case 'deal_summary': {
-          const dealName = result.intent.dealName || 'your deal';
-          // Search for the deal
-          const { data: deals } = await supabase
-            .from('deals')
-            .select('id, title, value, stage, close_date, health_status')
-            .eq('owner_id', userId)
-            .ilike('title', `%${result.intent.dealName}%`)
-            .limit(3);
-
-          if (deals && deals.length === 1) {
-            const d = deals[0];
-            responseText = `*${d.title}*\nStage: ${d.stage} | Value: ${d.value || 'N/A'} | Health: ${d.health_status || 'unknown'}\n<${APP_URL}/deals/${d.id}|View in app>`;
-          } else if (deals && deals.length > 1) {
-            const list = deals.map(d => `• *${d.title}* — ${d.stage}`).join('\n');
-            responseText = `Found ${deals.length} deals matching "${dealName}":\n${list}\n\nBe more specific or use \`/sixty deal [name]\`.`;
-          } else {
-            responseText = `I couldn't find a deal matching "${dealName}". Try \`/sixty deal [name]\`.`;
-          }
-          break;
-        }
-
-        case 'add_to_campaign': {
-          responseText = await handleAddToCampaign(supabase, orgId, userId, result.intent);
-          break;
-        }
-
-        case 'find_contacts': {
-          responseText = await handleFindContacts(supabase, orgId, userId, result.intent);
-          break;
-        }
-
-        case 'focus':
-          responseText = "Analyzing your priorities... Check your DM for today's focus items.";
-          break;
-
-        default:
-          responseText = buildCapabilityList();
-      }
+    // Attach pre-resolved intent when a slash subcommand was detected
+    if (slashResult) {
+      copilotPayload.preResolvedIntent = slashResult.intent;
     }
 
-    // Respond in-thread
-    await postSlackMessage(botToken, channel, threadTs, responseText);
+    const response = await fetch(copilotUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify(copilotPayload),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('[slack-events] slack-copilot invocation failed for mention:', response.status, errText);
+      await postSlackMessage(botToken, channel, threadTs,
+        "Sorry, I'm having trouble processing that right now. Please try again in a moment.");
+      await reactions.error();
+      success = false;
+    } else {
+      await reactions.done();
+    }
   } catch (err) {
-    console.error('[slack-events] Error handling app_mention:', err);
-    success = false;
+    console.error('[slack-events] Error invoking slack-copilot for mention:', err);
     await postSlackMessage(botToken, channel, threadTs,
-      'Sorry, something went wrong. Please try again or use `/sixty help`.');
+      "Something went wrong. Please try again or use `/sixty help`.");
+    await reactions.error();
+    success = false;
   }
 
   // SLACK-028: Log analytics
@@ -634,13 +614,209 @@ async function handleAppMention(
       user_id: userId,
       org_id: orgId,
       command_type: 'app_mention',
-      intent: result.intent?.type || 'unknown',
+      intent: 'copilot',
       raw_text: text.substring(0, 500),
       response_time_ms: responseTimeMs,
       success,
     });
   } catch {
     // Non-critical
+  }
+}
+
+/**
+ * SLK-012: Unfurl app.use60.com links with rich deal cards.
+ * When someone pastes a deal URL in Slack, this renders an inline preview
+ * with the deal title, stage, value, health, and close date.
+ */
+async function handleLinkShared(
+  supabase: ReturnType<typeof createClient>,
+  event: {
+    type: string;
+    channel?: string;
+    message_ts?: string;
+    links?: Array<{ url: string; domain: string }>;
+    [key: string]: unknown;
+  },
+  teamId: string
+) {
+  if (!event.links || !event.channel || !event.message_ts) return;
+
+  // Get org settings
+  const { data: orgSettings } = await supabase
+    .from('slack_org_settings')
+    .select('org_id, bot_access_token')
+    .eq('slack_team_id', teamId)
+    .eq('is_connected', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (!orgSettings?.bot_access_token) return;
+
+  const botToken = orgSettings.bot_access_token;
+  const orgId = orgSettings.org_id;
+  const unfurls: Record<string, unknown> = {};
+
+  for (const link of event.links) {
+    // Only unfurl app.use60.com deal links
+    const dealMatch = link.url.match(/app\.use60\.com\/deals\/([a-f0-9-]+)/);
+    if (!dealMatch) continue;
+
+    const dealId = dealMatch[1];
+
+    // Fetch deal data
+    const { data: deal } = await supabase
+      .from('deals')
+      .select('id, title, stage, value, health_status, close_date, owner_id')
+      .eq('id', dealId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (!deal) continue;
+
+    // Build unfurl blocks
+    const valueText = deal.value
+      ? new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(deal.value)
+      : 'N/A';
+
+    const fields = [
+      { type: 'mrkdwn', text: `*Stage*\n${deal.stage || 'Unknown'}` },
+      { type: 'mrkdwn', text: `*Value*\n${valueText}` },
+    ];
+
+    if (deal.health_status) {
+      fields.push({ type: 'mrkdwn', text: `*Health*\n${deal.health_status}` });
+    }
+
+    if (deal.close_date) {
+      const closeDate = new Date(deal.close_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      fields.push({ type: 'mrkdwn', text: `*Close Date*\n${closeDate}` });
+    }
+
+    unfurls[link.url] = {
+      blocks: [
+        { type: 'header', text: { type: 'plain_text', text: deal.title || 'Deal', emoji: true } },
+        { type: 'section', fields: fields.slice(0, 4) },
+      ],
+    };
+  }
+
+  if (Object.keys(unfurls).length === 0) return;
+
+  // Send unfurl (fire-and-forget)
+  try {
+    await fetch('https://slack.com/api/chat.unfurl', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: event.channel,
+        ts: event.message_ts,
+        unfurls,
+      }),
+    });
+  } catch (err) {
+    console.error('[slack-events] Error unfurling link:', err);
+  }
+}
+
+/**
+ * SLK-011: Proactive entity detection in channel messages.
+ * When someone mentions a known company/contact in a channel, reply with context.
+ * Rate-limited to 1 lookup per channel per 5 minutes to avoid spam.
+ */
+async function handleChannelEntityDetection(
+  supabase: ReturnType<typeof createClient>,
+  event: {
+    type: string;
+    user?: string;
+    channel?: string;
+    text?: string;
+    ts?: string;
+    thread_ts?: string;
+    channel_type?: string;
+    bot_id?: string;
+    subtype?: string;
+    [key: string]: unknown;
+  },
+  teamId: string
+) {
+  const channel = event.channel;
+  const text = event.text || '';
+  const threadTs = event.thread_ts || event.ts;
+
+  // Only for channel messages (not DMs, not bot messages)
+  if (!channel || event.channel_type === 'im' || event.bot_id || event.subtype) {
+    return;
+  }
+
+  // Rate limit: 1 entity lookup per channel per 5 minutes
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const { count: recentDetections } = await supabase
+    .from('slack_command_analytics')
+    .select('id', { count: 'exact', head: true })
+    .eq('command_type', 'entity_detection')
+    .eq('raw_text', channel)
+    .gte('created_at', fiveMinutesAgo);
+
+  if ((recentDetections || 0) >= 1) {
+    return; // Rate limited
+  }
+
+  // Resolve org
+  const { data: orgSettings } = await supabase
+    .from('slack_org_settings')
+    .select('org_id, bot_access_token')
+    .eq('slack_team_id', teamId)
+    .eq('is_connected', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (!orgSettings?.bot_access_token) return;
+
+  const botToken = orgSettings.bot_access_token;
+  const orgId = orgSettings.org_id;
+  const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://app.use60.com';
+
+  // Search for matching deals by company name in the message text
+  // Strip Slack markup and only check if text is 3+ characters to avoid false positives
+  const words = text.replace(/<[^>]+>/g, '').trim();
+
+  if (words.length < 3) return;
+
+  // Search deals (higher value signal) — only act on a single unique match
+  const { data: deals } = await supabase
+    .from('deals')
+    .select('id, title, stage, value, health_status')
+    .eq('org_id', orgId)
+    .or(`title.ilike.%${words.slice(0, 50)}%`)
+    .limit(2); // Fetch 2 so we can detect ambiguity
+
+  if (deals && deals.length === 1) {
+    const d = deals[0];
+    const valueText = d.value
+      ? ` · ${new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(d.value)}`
+      : '';
+    const contextLine = `*${d.title}* — ${d.stage}${valueText} · <${appUrl}/deals/${d.id}|View Deal>`;
+
+    await postSlackMessage(botToken, channel, threadTs, contextLine);
+
+    // Log for rate limiting
+    try {
+      await supabase.from('slack_command_analytics').insert({
+        user_id: null,
+        org_id: orgId,
+        command_type: 'entity_detection',
+        intent: 'deal_match',
+        raw_text: channel, // Use channel as the rate limit key
+        response_time_ms: 0,
+        success: true,
+      });
+    } catch {
+      // Non-critical
+    }
   }
 }
 

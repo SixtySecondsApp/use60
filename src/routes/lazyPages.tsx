@@ -50,6 +50,7 @@ export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/Ag
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
 export const MultiAgentResearchDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentResearchDemoPage'));
 export const DemoPrepBriefing = lazyWithRetry(() => import('@/pages/platform/DemoPrepBriefing'));
+export const DemoConversationalCopilot = lazyWithRetry(() => import('@/pages/platform/DemoConversationalCopilot'));
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
 export const AgentAbilitiesPage = lazyWithRetry(() => import('@/pages/platform/AgentAbilitiesPage'));
 export const AgentDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentDemoPage'));

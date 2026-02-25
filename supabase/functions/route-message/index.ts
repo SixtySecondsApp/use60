@@ -1,657 +1,568 @@
-/// <reference path="../deno.d.ts" />
-
 /**
- * route-message — Unified Routing Edge Function
+ * route-message — Unified routing pipeline for intent classification (CC-003)
  *
- * Runs the 5-step routing pipeline server-side and returns a routing decision:
- *   1. Intent Classification  — short-circuit for greetings/help/chit-chat
- *   2. Sequence Triggers      — org skills with category 'agent-sequence' (threshold 0.7)
- *   3. Skill Triggers         — individual org skills (threshold 0.5)
- *   4. Semantic Fallback      — cosine similarity on skill embeddings (threshold 0.6)
- *   5. General Fallthrough    — route: 'general', confidence: 0.0
+ * Multi-step routing pipeline:
+ *   - Default path: Intent Classification → Sequence Triggers → Skill Triggers → Semantic Fallback → General
+ *   - Slack conversational path: `source: 'slack_conversational'` → classifySlackConversational()
  *
  * POST /route-message
- * Body: {
- *   message:  string,
- *   source:   'web_copilot' | 'slack_copilot' | 'fleet_agent',
- *   org_id:   string,
- *   user_id:  string,
- *   context?: Record<string, unknown>
- * }
+ * Body (default path):
+ *   { message: string; user_id: string; org_id: string; context?: Record<string, unknown> }
  *
- * Response: {
- *   route:          string,           // skill_key or 'general'
- *   skill_key?:     string,
- *   confidence:     number,
- *   model_override?: string,
- *   matched_by:     'sequence_trigger' | 'skill_trigger' | 'semantic' | 'general',
- *   trace_id:       string,
- *   duration_ms:    number
- * }
+ * Body (slack_conversational path):
+ *   { source: 'slack_conversational'; message: string; thread_summary?: string; user_id: string; org_id: string }
  */
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
-import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
-import { createLogger } from '../_shared/logger.ts';
+import {
+  getCorsHeaders,
+  handleCorsPreflightRequest,
+  jsonResponse,
+  errorResponse,
+} from '../_shared/corsHelper.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
+
+// =============================================================================
+// Constants — Slack conversational intent taxonomy
+// =============================================================================
+
+const SLACK_CONVERSATIONAL_INTENTS = `
+QUERY INTENTS (answer with data):
+- deal_query: Questions about a specific deal (stage, value, status, trajectory)
+- contact_query: Questions about a person (last interaction, relationship, engagement)
+- pipeline_query: Pipeline overview, coverage, targets, stage breakdown
+- history_query: What happened in past meetings/interactions, deal narrative
+- metrics_query: Activity counts, meeting numbers, performance stats
+- risk_query: At-risk deals, stale deals, ghosting signals
+- competitive_query: Competitor mentions, win rates, positioning
+- coaching_query: Objection handling advice, sales techniques, patterns
+
+ACTION INTENTS (do something):
+- draft_email: Write/compose an email or follow-up
+- draft_check_in: Write check-ins for stale/inactive deals (batch mode)
+- update_crm: Change deal stage, update fields
+- create_task: Create a reminder or task
+- trigger_prep: Generate meeting preparation brief
+- trigger_enrichment: Research/enrich a contact or company
+- schedule_meeting: Find time, book a meeting
+
+META INTENTS:
+- help: What can you do, show commands
+- feedback: Positive/negative feedback about the AI
+- clarification_needed: Message is too ambiguous to classify
+- general: Doesn't fit other categories
+`;
+
+const SLACK_INTENT_PROMPT = `You are classifying a Slack message from a sales rep talking to their AI sales assistant.
+
+Message: "{message}"
+Thread context: {thread_summary}
+
+Available intents:
+${SLACK_CONVERSATIONAL_INTENTS}
+
+Return JSON only:
+{
+  "intent": "<intent_type>",
+  "confidence": 0.0-1.0,
+  "entities": {
+    "deal_name": "<if mentioned>",
+    "contact_name": "<if mentioned>",
+    "company_name": "<if mentioned>",
+    "time_reference": "<if mentioned, e.g. 'last week', 'Q2'>",
+    "action_type": "<if action requested>"
+  },
+  "requires_clarification": false,
+  "clarification_question": null
+}
+
+Rules:
+- If the message references an entity but multiple matches likely exist, set requires_clarification=true
+- If "my 2pm meeting" → resolve from calendar context, don't ask
+- Thread context should inform intent: "Draft that email" in a deal thread = draft_email for that deal
+- Time references should be resolved: "this week" = current week dates, "Q2" = Apr-Jun
+- Confidence >= 0.8 for clear intent, 0.5-0.8 for probable, < 0.5 for ambiguous`;
 
 // =============================================================================
 // Types
 // =============================================================================
 
-interface RequestBody {
+type SlackConversationalIntentType =
+  | 'deal_query'
+  | 'contact_query'
+  | 'pipeline_query'
+  | 'history_query'
+  | 'metrics_query'
+  | 'risk_query'
+  | 'competitive_query'
+  | 'coaching_query'
+  | 'draft_email'
+  | 'draft_check_in'
+  | 'update_crm'
+  | 'create_task'
+  | 'trigger_prep'
+  | 'trigger_enrichment'
+  | 'schedule_meeting'
+  | 'help'
+  | 'feedback'
+  | 'clarification_needed'
+  | 'general';
+
+interface SlackConversationalEntities {
+  deal_name?: string;
+  contact_name?: string;
+  company_name?: string;
+  time_reference?: string;
+  action_type?: string;
+}
+
+interface SlackConversationalResult {
+  intent: SlackConversationalIntentType;
+  confidence: number;
+  entities: SlackConversationalEntities;
+  requires_clarification: boolean;
+  clarification_question: string | null;
+}
+
+interface SlackConversationalRequest {
+  source: 'slack_conversational';
   message: string;
-  source: 'web_copilot' | 'slack_copilot' | 'fleet_agent';
-  org_id: string;
+  thread_summary?: string;
   user_id: string;
+  org_id: string;
+}
+
+interface DefaultRouteRequest {
+  message: string;
+  user_id: string;
+  org_id: string;
   context?: Record<string, unknown>;
 }
 
-interface RouteResponse {
-  route: string;
-  skill_key?: string;
-  confidence: number;
-  model_override?: string;
-  matched_by: 'sequence_trigger' | 'skill_trigger' | 'semantic' | 'general' | 'cache';
-  trace_id: string;
-  duration_ms: number;
+type RouteMessageRequest = SlackConversationalRequest | DefaultRouteRequest;
+
+// =============================================================================
+// Slack Conversational Classification
+// =============================================================================
+
+/**
+ * Regex-based fallback for Slack conversational intent classification.
+ * Used when the AI call fails or no API key is available.
+ */
+function classifySlackWithRegex(message: string): SlackConversationalResult {
+  const lower = message.toLowerCase().trim();
+  const entities: SlackConversationalEntities = {};
+
+  // Help
+  if (/^(?:help|what can you do|\?|commands?|capabilities)/i.test(lower)) {
+    return { intent: 'help', confidence: 0.9, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Feedback (positive or negative)
+  if (/(?:good job|well done|nice work|wrong|that'?s? (?:wrong|incorrect|bad)|not right)/i.test(lower)) {
+    return { intent: 'feedback', confidence: 0.8, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Draft email / follow-up
+  if (/(?:draft|write|compose|send)\s+(?:a\s+)?(?:follow[\s-]?up|email|check[\s-]?in|message)/i.test(lower)) {
+    const nameMatch = message.match(/(?:for|to|with)\s+([A-Z][a-zA-Z\s]+?)(?:\s+at|\s+about|\?|$)/);
+    if (nameMatch) entities.contact_name = nameMatch[1].trim();
+    return { intent: 'draft_email', confidence: 0.85, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Draft check-in (batch / stale deals)
+  if (/(?:check[\s-]?in|check in)\s+(?:on\s+)?(?:all|stale|cold|inactive|dead)/i.test(lower)) {
+    return { intent: 'draft_check_in', confidence: 0.85, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Pipeline query
+  if (/(?:pipeline|forecast|quota|coverage|targets?|stage\s+breakdown)/i.test(lower)) {
+    return { intent: 'pipeline_query', confidence: 0.8, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Risk query
+  if (/(?:at[\s-]?risk|stale\s+deals?|ghosting|slipping|no\s+response|gone\s+dark)/i.test(lower)) {
+    return { intent: 'risk_query', confidence: 0.8, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Metrics query
+  if (/(?:how many|activity|activities|meeting count|calls?\s+made|emails?\s+sent|stats?|numbers?)/i.test(lower)) {
+    return { intent: 'metrics_query', confidence: 0.75, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // History query
+  if (/(?:what happened|last (?:meeting|call|email|touch)|when did|history|narrative|timeline)/i.test(lower)) {
+    const nameMatch = message.match(/(?:with|to|for|about)\s+([A-Z][a-zA-Z\s]+?)(?:\?|$|\.)/);
+    if (nameMatch) entities.contact_name = nameMatch[1].trim();
+    return { intent: 'history_query', confidence: 0.75, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Deal query
+  if (/(?:what(?:'s| is)\s+(?:the\s+)?status|how\s+is|tell\s+me\s+about|update\s+on)\s+(?:the\s+)?(?:deal|opp|opportunity)/i.test(lower)) {
+    const nameMatch = message.match(/(?:the|my|with|for|about)\s+([A-Z][a-zA-Z\s]+?)(?:\s+deal|\s+opp|\?|$)/);
+    if (nameMatch) entities.deal_name = nameMatch[1].trim();
+    return { intent: 'deal_query', confidence: 0.75, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Contact query
+  if (/(?:who is|tell me about|what do we know about|info on)\s/i.test(lower)) {
+    const nameMatch = message.match(/(?:about|on|is|for)\s+([A-Z][a-zA-Z\s]+?)(?:\?|$|\.)/);
+    if (nameMatch) entities.contact_name = nameMatch[1].trim();
+    return { intent: 'contact_query', confidence: 0.7, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Competitive query
+  if (/(?:competitor|compete|vs\.?|versus|against|positioning|battlecard|win\s+rate)/i.test(lower)) {
+    return { intent: 'competitive_query', confidence: 0.75, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Coaching query
+  if (/(?:how (?:should|do|can) I|advice|tip|handle\s+(?:the\s+)?objection|improve|coaching)/i.test(lower)) {
+    return { intent: 'coaching_query', confidence: 0.7, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Update CRM
+  if (/(?:update|change|move|set)\s+(?:the\s+)?(?:deal|stage|field|crm)/i.test(lower)) {
+    return { intent: 'update_crm', confidence: 0.75, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Create task
+  if (/(?:create|add|remind me|set\s+a)\s+(?:a\s+)?(?:task|reminder|todo|action\s+item)/i.test(lower)) {
+    return { intent: 'create_task', confidence: 0.8, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Trigger meeting prep
+  if (/(?:prep|prepare|brief)\s+(?:me\s+)?(?:for|for\s+my)?/i.test(lower)) {
+    return { intent: 'trigger_prep', confidence: 0.8, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Trigger enrichment
+  if (/(?:enrich|research|find\s+(?:info|details?|data)\s+(?:on|about))/i.test(lower)) {
+    return { intent: 'trigger_enrichment', confidence: 0.75, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Schedule meeting
+  if (/(?:schedule|book|set\s+up)\s+(?:a\s+)?(?:meeting|call|demo)/i.test(lower)) {
+    return { intent: 'schedule_meeting', confidence: 0.8, entities, requires_clarification: false, clarification_question: null };
+  }
+
+  // Default
+  return { intent: 'general', confidence: 0.3, entities, requires_clarification: false, clarification_question: null };
 }
 
-interface SkillTrigger {
-  pattern: string;
-  confidence?: number;
-  examples?: string[];
-}
-
-interface SkillFrontmatter {
-  name?: string;
-  description?: string;
-  triggers?: (string | SkillTrigger)[];
-  keywords?: string[];
-}
-
-interface OrgSkillRow {
-  skill_key: string;
-  category: string;
-  frontmatter: SkillFrontmatter;
-  embedding?: number[] | null;
-  is_enabled: boolean;
-}
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-const SEQUENCE_CONFIDENCE_THRESHOLD = 0.7;
-const INDIVIDUAL_CONFIDENCE_THRESHOLD = 0.5;
-const SEMANTIC_SIMILARITY_THRESHOLD = 0.6;
-
-// Patterns that indicate general/chit-chat intent — skip skill routing entirely
-const GENERAL_INTENT_PATTERNS = [
-  /^(hi|hello|hey|howdy|greetings?)\b/i,
-  /^(good\s+(morning|afternoon|evening|day))\b/i,
-  /^(what can you (do|help)|how (do|can) (i|you)|what are (you|your)|who are you)\b/i,
-  /^(help|support|assist|guide|tutorial)\s*\??$/i,
-  /^(thanks?|thank you|cheers|great|awesome|perfect|ok(ay)?|got it|sounds good)\s*\.?\s*$/i,
-  /^(yes|no|sure|ok|nope|yep|yeah|nah)\s*\.?\s*$/i,
-];
-
-// =============================================================================
-// Intent Classification (Step 1)
-// =============================================================================
-
-function isGeneralIntent(message: string): boolean {
-  const trimmed = message.trim();
-  return GENERAL_INTENT_PATTERNS.some((re) => re.test(trimmed));
-}
-
-// =============================================================================
-// Trigger Matching Helpers
-// =============================================================================
-
-function normalizeTriggers(
-  triggers: (string | SkillTrigger)[] | undefined
-): SkillTrigger[] {
-  if (!triggers) return [];
-  return triggers.map((t) =>
-    typeof t === 'string' ? { pattern: t, confidence: 0.75 } : t
-  );
+interface SlackClassificationResponse {
+  result: SlackConversationalResult;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 /**
- * Score how well `message` matches a skill's triggers, keywords, and description.
- * Returns the best confidence found (0–1) and the matched term.
+ * Classify a Slack conversational message using Claude Haiku.
+ * Falls back to regex classification if the AI call fails.
  */
-function scoreSkill(
+async function classifySlackConversational(
   message: string,
-  frontmatter: SkillFrontmatter
-): { confidence: number; matchedTrigger?: string } {
-  const msgLower = message.toLowerCase();
-  const words = msgLower.split(/\s+/);
+  threadSummary: string,
+  apiKey: string,
+): Promise<SlackClassificationResponse> {
+  const prompt = SLACK_INTENT_PROMPT
+    .replace('{message}', message)
+    .replace('{thread_summary}', threadSummary || 'None');
 
-  let bestConfidence = 0;
-  let matchedTrigger: string | undefined;
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 512,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
 
-  // Triggers (highest priority)
-  const triggers = normalizeTriggers(frontmatter?.triggers);
-  for (const trigger of triggers) {
-    const patternLower = trigger.pattern.toLowerCase();
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      console.error('[route-message] Anthropic API error:', response.status, errText);
+      return { result: classifySlackWithRegex(message), inputTokens: 0, outputTokens: 0 };
+    }
 
-    if (msgLower.includes(patternLower)) {
-      const confidence = trigger.confidence ?? 0.8;
-      if (confidence > bestConfidence) {
-        bestConfidence = confidence;
-        matchedTrigger = trigger.pattern;
+    const data = await response.json();
+    const text: string = data.content?.[0]?.text || '';
+    const inputTokens: number = data.usage?.input_tokens || 0;
+    const outputTokens: number = data.usage?.output_tokens || 0;
+
+    // Extract JSON — handle code fences and surrounding text
+    let jsonText = text.trim();
+    const codeFenceMatch = jsonText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+    if (codeFenceMatch) jsonText = codeFenceMatch[1].trim();
+    const jsonObjectMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (jsonObjectMatch) jsonText = jsonObjectMatch[0];
+
+    const parsed = JSON.parse(jsonText);
+
+    const result: SlackConversationalResult = {
+      intent: (parsed.intent as SlackConversationalIntentType) || 'general',
+      confidence: Math.min(1, Math.max(0, typeof parsed.confidence === 'number' ? parsed.confidence : 0.5)),
+      entities: {
+        deal_name: parsed.entities?.deal_name || undefined,
+        contact_name: parsed.entities?.contact_name || undefined,
+        company_name: parsed.entities?.company_name || undefined,
+        time_reference: parsed.entities?.time_reference || undefined,
+        action_type: parsed.entities?.action_type || undefined,
+      },
+      requires_clarification: Boolean(parsed.requires_clarification),
+      clarification_question: parsed.clarification_question || null,
+    };
+
+    // Strip undefined entity keys to keep the response clean
+    for (const key of Object.keys(result.entities) as Array<keyof SlackConversationalEntities>) {
+      if (result.entities[key] === undefined) {
+        delete result.entities[key];
       }
     }
 
-    if (trigger.examples) {
-      for (const example of trigger.examples) {
-        if (msgLower.includes(example.toLowerCase())) {
-          const confidence = (trigger.confidence ?? 0.8) * 0.9;
-          if (confidence > bestConfidence) {
-            bestConfidence = confidence;
-            matchedTrigger = example;
+    return { result, inputTokens, outputTokens };
+  } catch (err) {
+    console.error('[route-message] Failed to parse AI classification response, falling back to regex:', err);
+    return { result: classifySlackWithRegex(message), inputTokens: 0, outputTokens: 0 };
+  }
+}
+
+// =============================================================================
+// Default routing pipeline — Intent Classification → Sequence/Skill/Semantic/General
+// =============================================================================
+
+type DefaultIntentType =
+  | 'sequence_trigger'
+  | 'skill_trigger'
+  | 'semantic_match'
+  | 'general';
+
+interface DefaultRouteResult {
+  intent: DefaultIntentType;
+  confidence: number;
+  matched_id?: string;
+  matched_name?: string;
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Main routing pipeline for non-slack-conversational messages.
+ *
+ * Steps:
+ *   1. Sequence trigger matching (keyword / regex patterns from DB)
+ *   2. Skill trigger matching (keyword / regex patterns from DB)
+ *   3. Semantic fallback (embedding cosine similarity, if supported)
+ *   4. General fallthrough
+ */
+async function runDefaultRoutingPipeline(
+  message: string,
+  userId: string,
+  orgId: string,
+  supabase: ReturnType<typeof createClient>,
+  context?: Record<string, unknown>,
+): Promise<DefaultRouteResult> {
+  const lower = message.toLowerCase().trim();
+
+  // ── Step 1: Sequence trigger matching ──────────────────────────────────────
+  try {
+    const { data: sequences } = await supabase
+      .from('sequences')
+      .select('id, name, trigger_keywords')
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .not('trigger_keywords', 'is', null)
+      .limit(50);
+
+    if (sequences && sequences.length > 0) {
+      for (const seq of sequences) {
+        const keywords: string[] = Array.isArray(seq.trigger_keywords)
+          ? seq.trigger_keywords
+          : [];
+        for (const kw of keywords) {
+          if (typeof kw === 'string' && lower.includes(kw.toLowerCase())) {
+            return {
+              intent: 'sequence_trigger',
+              confidence: 0.85,
+              matched_id: seq.id,
+              matched_name: seq.name,
+            };
           }
         }
       }
     }
+  } catch (err) {
+    // Non-fatal — continue pipeline
+    console.warn('[route-message] Sequence trigger check failed:', err);
   }
 
-  // Keywords (medium priority)
-  const keywords = frontmatter?.keywords;
-  if (keywords && bestConfidence < 0.5) {
-    const keywordMatches = keywords.filter((kw) =>
-      words.includes(kw.toLowerCase())
-    );
-    if (keywordMatches.length > 0) {
-      const keywordConfidence = Math.min(0.6, keywordMatches.length * 0.2);
-      if (keywordConfidence > bestConfidence) {
-        bestConfidence = keywordConfidence;
-        matchedTrigger = keywordMatches[0];
+  // ── Step 2: Skill trigger matching ─────────────────────────────────────────
+  try {
+    const { data: skills } = await supabase
+      .from('organization_skills')
+      .select('id, name, trigger_keywords')
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .not('trigger_keywords', 'is', null)
+      .limit(100);
+
+    if (skills && skills.length > 0) {
+      for (const skill of skills) {
+        const keywords: string[] = Array.isArray(skill.trigger_keywords)
+          ? skill.trigger_keywords
+          : [];
+        for (const kw of keywords) {
+          if (typeof kw === 'string' && lower.includes(kw.toLowerCase())) {
+            return {
+              intent: 'skill_trigger',
+              confidence: 0.8,
+              matched_id: skill.id,
+              matched_name: skill.name,
+            };
+          }
+        }
       }
     }
+  } catch (err) {
+    // Non-fatal — continue pipeline
+    console.warn('[route-message] Skill trigger check failed:', err);
   }
 
-  // Description word overlap (lowest priority fallback)
-  const description = frontmatter?.description;
-  if (description && bestConfidence < 0.4) {
-    const descLower = description.toLowerCase();
-    const descMatches = words.filter(
-      (word) => word.length > 3 && descLower.includes(word)
-    );
-    if (descMatches.length >= 2) {
-      const descConfidence = Math.min(0.45, descMatches.length * 0.1);
-      if (descConfidence > bestConfidence) {
-        bestConfidence = descConfidence;
-        matchedTrigger = `description match: ${descMatches.slice(0, 2).join(', ')}`;
-      }
-    }
-  }
+  // ── Step 3: Semantic fallback ───────────────────────────────────────────────
+  // Placeholder: embedding-based similarity matching can be wired here.
+  // For now this step is a no-op and falls through to general.
 
-  return { confidence: bestConfidence, matchedTrigger };
-}
-
-// =============================================================================
-// Cache Helpers
-// =============================================================================
-
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
-
-async function computeCacheKey(message: string, org_id: string, source: string): Promise<string> {
-  const raw = `${message}|${org_id}|${source}`;
-  const encoded = new TextEncoder().encode(raw);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-  return hex.slice(0, 32);
-}
-
-async function getCachedRoute(
-  client: ReturnType<typeof createClient>,
-  hashKey: string
-): Promise<RouteResponse | null> {
-  try {
-    const { data, error } = await client
-      .from('routing_cache')
-      .select('response, expires_at')
-      .eq('hash_key', hashKey)
-      .maybeSingle();
-
-    if (error || !data) return null;
-    if (new Date(data.expires_at) <= new Date()) return null;
-    return data.response as RouteResponse;
-  } catch {
-    return null;
-  }
-}
-
-async function setCachedRoute(
-  client: ReturnType<typeof createClient>,
-  hashKey: string,
-  response: RouteResponse
-): Promise<void> {
-  try {
-    const expiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString();
-    await client.from('routing_cache').upsert(
-      { hash_key: hashKey, response, expires_at: expiresAt },
-      { onConflict: 'hash_key' }
-    );
-  } catch {
-    // Non-fatal — cache write failures must never break the response
-  }
-}
-
-// =============================================================================
-// Semantic Similarity Helper (Step 4)
-// =============================================================================
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0;
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? 0 : dot / denom;
-}
-
-/**
- * Generate an embedding for the message using OpenAI text-embedding-3-small.
- * Returns null if embedding generation fails (semantic step is skipped gracefully).
- */
-async function embedMessage(message: string): Promise<number[] | null> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey) return null;
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: message,
-      }),
-    });
-
-    if (!res.ok) return null;
-    const json = await res.json() as { data: Array<{ embedding: number[] }> };
-    return json.data?.[0]?.embedding ?? null;
-  } catch {
-    return null;
-  }
+  // ── Step 4: General fallthrough ────────────────────────────────────────────
+  return { intent: 'general', confidence: 0.3, context };
 }
 
 // =============================================================================
 // Main Handler
 // =============================================================================
 
-serve(async (req: Request) => {
-  // CORS preflight
-  const preflight = handleCorsPreflightRequest(req);
-  if (preflight) return preflight;
-
-  const corsHeaders = getCorsHeaders(req);
-
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  let body: RequestBody;
-  try {
-    body = await req.json() as RequestBody;
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  const { message, source, org_id, user_id, context } = body;
-
-  if (!message || !org_id || !user_id || !source) {
-    return new Response(
-      JSON.stringify({ error: 'Missing required fields: message, source, org_id, user_id' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  const startMs = Date.now();
-  const logger = createLogger('route-message', { userId: user_id, orgId: org_id });
-  const traceId = logger.trace_id;
-
-  logger.info('routing.start', { source, message_length: message.length });
-
-  // Auth — validate JWT from Authorization header
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-  const authHeader = req.headers.get('Authorization');
-  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader ?? '' } },
-    auth: { persistSession: false },
-  });
-
-  const { data: { user }, error: authError } = await userClient.auth.getUser();
-  if (authError || !user) {
-    logger.warn('routing.auth.failed', { error: authError?.message });
-    await logger.flush();
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  // Service-role client for skill fetching and log writes
-  const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
-
-  // =========================================================================
-  // Cache Check — before routing pipeline
-  // =========================================================================
-  const cacheKey = await computeCacheKey(message, org_id, source);
-  const cached = await getCachedRoute(serviceClient, cacheKey);
-  if (cached) {
-    logger.info('routing.cache.hit', { hash_key: cacheKey });
-    const cacheResult: RouteResponse = {
-      ...cached,
-      matched_by: 'cache',
-      trace_id: traceId,
-      duration_ms: Date.now() - startMs,
-    };
-    await logger.flush();
-    return new Response(JSON.stringify(cacheResult), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  let result: RouteResponse;
+Deno.serve(async (req: Request) => {
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) return preflightResponse;
 
   try {
-    // =========================================================================
-    // Step 1 — Intent Classification (greetings, chit-chat, help)
-    // =========================================================================
-    if (isGeneralIntent(message)) {
-      logger.info('routing.general_intent', { matched_by: 'intent_classification' });
-      result = {
-        route: 'general',
-        confidence: 1.0,
-        matched_by: 'general',
-        trace_id: traceId,
-        duration_ms: Date.now() - startMs,
-      };
-      await Promise.all([
-        logRoutingDecision(serviceClient, { user_id, org_id, source, message, result, context }),
-        setCachedRoute(serviceClient, cacheKey, result),
-      ]);
-      await logger.flush();
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (req.method !== 'POST') {
+      return errorResponse('Method not allowed', req, 405);
     }
 
-    // =========================================================================
-    // Fetch org skills filtered by namespace for this source
-    // Mapping: web_copilot → copilot+shared, slack_copilot → slack+shared,
-    //          fleet_agent → fleet+shared  (enforced server-side by the RPC)
-    // =========================================================================
-    const skillsFetchSpan = logger.createSpan('skills.fetch');
-    const { data: allSkills, error: skillsError } = await serviceClient
-      .rpc('get_organization_skills_for_agent', { p_org_id: org_id, p_source: source }) as {
-        data: OrgSkillRow[] | null;
-        error: { message: string } | null;
-      };
+    const body: RouteMessageRequest = await req.json();
 
-    skillsFetchSpan.stop({ count: allSkills?.length ?? 0, error: skillsError?.message });
-
-    if (skillsError || !allSkills) {
-      logger.warn('routing.skills.fetch_failed', { error: skillsError?.message });
-      // Fall through to general rather than failing the request
-      result = {
-        route: 'general',
-        confidence: 0.0,
-        matched_by: 'general',
-        trace_id: traceId,
-        duration_ms: Date.now() - startMs,
-      };
-      await Promise.all([
-        logRoutingDecision(serviceClient, { user_id, org_id, source, message, result, context }),
-        setCachedRoute(serviceClient, cacheKey, result),
-      ]);
-      await logger.flush();
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // Basic validation
+    if (!body.message || !body.user_id || !body.org_id) {
+      return errorResponse('Missing required fields: message, user_id, org_id', req, 400);
     }
 
-    // =========================================================================
-    // Step 2 — Sequence Triggers (agent-sequence category, threshold 0.7)
-    // =========================================================================
-    const sequences = allSkills.filter((s) => s.category === 'agent-sequence' && s.is_enabled);
-    let bestSequenceConfidence = 0;
-    let bestSequenceSkill: OrgSkillRow | null = null;
-    let bestSequenceTrigger: string | undefined;
+    // Auth
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return errorResponse('Missing Authorization header', req, 401);
+    }
 
-    for (const seq of sequences) {
-      const { confidence, matchedTrigger } = scoreSkill(message, seq.frontmatter);
-      if (confidence > bestSequenceConfidence) {
-        bestSequenceConfidence = confidence;
-        bestSequenceSkill = seq;
-        bestSequenceTrigger = matchedTrigger;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return errorResponse('Server configuration error', req, 500);
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const token = authHeader.replace('Bearer ', '');
+    const isServiceRole = token === supabaseServiceKey;
+
+    let userId: string;
+    let orgId: string;
+
+    if (isServiceRole) {
+      userId = body.user_id;
+      orgId = body.org_id;
+    } else {
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) {
+        return errorResponse('Unauthorized', req, 401);
       }
-    }
+      userId = user.id;
 
-    if (bestSequenceSkill && bestSequenceConfidence >= SEQUENCE_CONFIDENCE_THRESHOLD) {
-      logger.info('routing.matched.sequence', {
-        skill_key: bestSequenceSkill.skill_key,
-        confidence: bestSequenceConfidence,
-        matched_trigger: bestSequenceTrigger,
-      });
-      result = {
-        route: bestSequenceSkill.skill_key,
-        skill_key: bestSequenceSkill.skill_key,
-        confidence: bestSequenceConfidence,
-        matched_by: 'sequence_trigger',
-        trace_id: traceId,
-        duration_ms: Date.now() - startMs,
-      };
-      await Promise.all([
-        logRoutingDecision(serviceClient, { user_id, org_id, source, message, result, context }),
-        setCachedRoute(serviceClient, cacheKey, result),
-      ]);
-      await logger.flush();
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // =========================================================================
-    // Step 3 — Skill Triggers (individual skills, threshold 0.5)
-    // =========================================================================
-    const individualSkills = allSkills.filter(
-      (s) => s.category !== 'agent-sequence' && s.category !== 'hitl' && s.is_enabled
-    );
-
-    let bestSkillConfidence = 0;
-    let bestSkill: OrgSkillRow | null = null;
-    let bestSkillTrigger: string | undefined;
-
-    for (const skill of individualSkills) {
-      const { confidence, matchedTrigger } = scoreSkill(message, skill.frontmatter);
-      if (confidence > bestSkillConfidence) {
-        bestSkillConfidence = confidence;
-        bestSkill = skill;
-        bestSkillTrigger = matchedTrigger;
+      // Verify the requested user_id matches the authenticated user
+      if (body.user_id !== userId) {
+        return errorResponse('user_id mismatch', req, 403);
       }
+
+      // Verify org membership
+      const { data: membership } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', userId)
+        .eq('org_id', body.org_id)
+        .maybeSingle();
+
+      if (!membership) {
+        return errorResponse('User not a member of the specified organization', req, 403);
+      }
+      orgId = membership.org_id;
     }
 
-    if (bestSkill && bestSkillConfidence >= INDIVIDUAL_CONFIDENCE_THRESHOLD) {
-      logger.info('routing.matched.skill', {
-        skill_key: bestSkill.skill_key,
-        confidence: bestSkillConfidence,
-        matched_trigger: bestSkillTrigger,
-      });
-      result = {
-        route: bestSkill.skill_key,
-        skill_key: bestSkill.skill_key,
-        confidence: bestSkillConfidence,
-        matched_by: 'skill_trigger',
-        trace_id: traceId,
-        duration_ms: Date.now() - startMs,
-      };
-      await Promise.all([
-        logRoutingDecision(serviceClient, { user_id, org_id, source, message, result, context }),
-        setCachedRoute(serviceClient, cacheKey, result),
-      ]);
-      await logger.flush();
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    // ── Slack conversational path ─────────────────────────────────────────────
+    if (body.source === 'slack_conversational') {
+      const slackBody = body as SlackConversationalRequest;
 
-    // =========================================================================
-    // Step 4 — Semantic Fallback (cosine similarity on skill embeddings)
-    // =========================================================================
-    const semanticSpan = logger.createSpan('routing.semantic');
-    try {
-      const msgEmbedding = await embedMessage(message);
+      const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+      if (!anthropicKey) {
+        // No key — fall straight to regex classification without error
+        console.warn('[route-message] ANTHROPIC_API_KEY not set; using regex fallback for slack_conversational');
+        const result = classifySlackWithRegex(slackBody.message);
+        return jsonResponse({ source: 'slack_conversational', ...result }, req);
+      }
 
-      if (msgEmbedding) {
-        // All skills (sequences + individual) that have embeddings
-        const skillsWithEmbeddings = allSkills.filter(
-          (s) => s.is_enabled && Array.isArray(s.embedding) && s.embedding!.length > 0
+      const { result, inputTokens, outputTokens } = await classifySlackConversational(
+        slackBody.message,
+        slackBody.thread_summary || '',
+        anthropicKey,
+      );
+
+      // Best-effort cost tracking — non-fatal if it fails
+      try {
+        await logAICostEvent(
+          supabase,
+          userId,
+          orgId,
+          'anthropic',
+          'claude-haiku-4-5-20251001',
+          inputTokens,
+          outputTokens,
+          'route-message/slack_conversational',
+          { intent: result.intent },
         );
-
-        let bestSimilarity = 0;
-        let bestSemanticSkill: OrgSkillRow | null = null;
-
-        for (const skill of skillsWithEmbeddings) {
-          const similarity = cosineSimilarity(msgEmbedding, skill.embedding!);
-          if (similarity > bestSimilarity) {
-            bestSimilarity = similarity;
-            bestSemanticSkill = skill;
-          }
-        }
-
-        semanticSpan.stop({
-          candidates: skillsWithEmbeddings.length,
-          best_similarity: bestSimilarity,
-          matched: bestSemanticSkill?.skill_key,
-        });
-
-        if (bestSemanticSkill && bestSimilarity >= SEMANTIC_SIMILARITY_THRESHOLD) {
-          logger.info('routing.matched.semantic', {
-            skill_key: bestSemanticSkill.skill_key,
-            similarity: bestSimilarity,
-          });
-          result = {
-            route: bestSemanticSkill.skill_key,
-            skill_key: bestSemanticSkill.skill_key,
-            confidence: bestSimilarity,
-            matched_by: 'semantic',
-            trace_id: traceId,
-            duration_ms: Date.now() - startMs,
-          };
-          await Promise.all([
-            logRoutingDecision(serviceClient, { user_id, org_id, source, message, result, context }),
-            setCachedRoute(serviceClient, cacheKey, result),
-          ]);
-          await logger.flush();
-          return new Response(JSON.stringify(result), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-      } else {
-        semanticSpan.stop({ skipped: true, reason: 'no_embedding_generated' });
+      } catch {
+        // Non-critical
       }
-    } catch (semanticErr) {
-      semanticSpan.stop({ error: String(semanticErr) });
-      logger.warn('routing.semantic.error', { error: String(semanticErr) });
-      // Non-fatal — fall through to general
+
+      return jsonResponse({ source: 'slack_conversational', ...result }, req);
     }
 
-    // =========================================================================
-    // Step 5 — General Fallthrough
-    // =========================================================================
-    logger.info('routing.general_fallthrough', {
-      best_sequence_confidence: bestSequenceConfidence,
-      best_skill_confidence: bestSkillConfidence,
-    });
-    result = {
-      route: 'general',
-      confidence: 0.0,
-      matched_by: 'general',
-      trace_id: traceId,
-      duration_ms: Date.now() - startMs,
-    };
-    await Promise.all([
-      logRoutingDecision(serviceClient, { user_id, org_id, source, message, result, context }),
-      setCachedRoute(serviceClient, cacheKey, result),
-    ]);
-  } catch (err) {
-    logger.error('routing.unhandled_error', err);
-    result = {
-      route: 'general',
-      confidence: 0.0,
-      matched_by: 'general',
-      trace_id: traceId,
-      duration_ms: Date.now() - startMs,
-    };
-  }
+    // ── Default routing pipeline ──────────────────────────────────────────────
+    const defaultBody = body as DefaultRouteRequest;
+    const result = await runDefaultRoutingPipeline(
+      defaultBody.message,
+      userId,
+      orgId,
+      supabase,
+      defaultBody.context,
+    );
 
-  await logger.flush();
-  return new Response(JSON.stringify(result), {
-    status: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
+    return jsonResponse({ source: 'default', ...result }, req);
+  } catch (error) {
+    console.error('[route-message] Error:', error);
+    return errorResponse(
+      error instanceof Error ? error.message : 'Internal server error',
+      req, 500,
+    );
+  }
 });
-
-// =============================================================================
-// Logging Helper
-// =============================================================================
-
-async function logRoutingDecision(
-  client: ReturnType<typeof createClient>,
-  params: {
-    user_id: string;
-    org_id: string;
-    source: string;
-    message: string;
-    result: RouteResponse;
-    context?: Record<string, unknown>;
-  }
-): Promise<void> {
-  try {
-    await client.from('copilot_routing_logs').insert({
-      user_id: params.user_id,
-      org_id: params.org_id,
-      source: params.source,
-      message_snippet: params.message.slice(0, 200),
-      selected_skill_key: params.result.skill_key ?? null,
-      confidence: params.result.confidence,
-      matched_by: params.result.matched_by,
-      trace_id: params.result.trace_id,
-      duration_ms: params.result.duration_ms,
-    });
-  } catch {
-    // Non-fatal — routing log failures must never break the response
-  }
-}

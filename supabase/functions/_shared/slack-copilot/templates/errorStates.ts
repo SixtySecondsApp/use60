@@ -72,6 +72,26 @@ export function featureNotAvailableResponse(feature: string): SlackBlock[] {
 }
 
 /**
+ * Credit warning — user is approaching their daily AI budget limit.
+ */
+export function creditWarningResponse(creditsUsed: number, dailyLimit: number): SlackBlock[] {
+  const pct = Math.round((creditsUsed / dailyLimit) * 100);
+  return [
+    section(`⚠️ You've used ${pct}% of your daily AI budget (${creditsUsed.toFixed(1)}/${dailyLimit} credits). I can still answer questions, but I'll use simpler lookups where possible.`),
+  ];
+}
+
+/**
+ * Credit exhausted — user has reached their daily AI budget.
+ * Cheap queries (deal status, pipeline, metrics) still work.
+ */
+export function creditExhaustedResponse(): SlackBlock[] {
+  return [
+    section(`⚠️ You've reached your daily AI budget. Simple lookups (deal status, pipeline, metrics) still work. RAG-powered queries and email drafting will resume tomorrow.`),
+  ];
+}
+
+/**
  * Help command — lists available conversational queries.
  */
 export function helpResponse(): SlackBlock[] {

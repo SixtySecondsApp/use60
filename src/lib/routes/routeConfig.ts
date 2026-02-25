@@ -403,6 +403,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     order: 56,
     badge: 'New',
   },
+  {
+    path: '/platform/demo/conversational-copilot',
+    access: 'platformAdmin',
+    label: 'Conversational Copilot Demo',
+    icon: Bot,
+    showInNav: false,
+    navSection: 'platform',
+    order: 57,
+    badge: 'New',
+  },
 
   // ========== Settings Section (Tier 1: All Users) ==========
   {

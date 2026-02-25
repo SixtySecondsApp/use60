@@ -1,0 +1,959 @@
+{
+  "project": {
+    "name": "Conversational Copilot \u2014 Natural Language in Slack",
+    "prdId": "PRD-CC-001",
+    "description": "Transform Slack from notification channel to conversational sales colleague. Extended intent taxonomy, entity resolution with disambiguation, RAG-powered history/coaching handlers, multi-turn action flows, /60 slash commands, demo screen, and analytics.",
+    "createdAt": "2026-02-25T00:00:00Z"
+  },
+  "features": [
+    {
+      "id": "intent-entity",
+      "name": "Intent Taxonomy + Entity Resolution",
+      "status": "complete",
+      "phase": 1,
+      "prd": "PRD-CC-001 \u00a7 3-4"
+    },
+    {
+      "id": "core-handlers",
+      "name": "Core Query Handlers (DB-only)",
+      "status": "complete",
+      "phase": 1,
+      "prd": "PRD-CC-001 \u00a7 5.1-5.3, 5.7"
+    },
+    {
+      "id": "thread-memory",
+      "name": "Thread Memory + Multi-Turn",
+      "status": "complete",
+      "phase": 1,
+      "prd": "PRD-CC-001 \u00a7 6"
+    },
+    {
+      "id": "rag-handlers",
+      "name": "RAG-Powered Handlers",
+      "status": "complete",
+      "phase": 2,
+      "prd": "PRD-CC-001 \u00a7 5.4-5.6"
+    },
+    {
+      "id": "actions",
+      "name": "Action Execution from Conversation",
+      "status": "complete",
+      "phase": 2,
+      "prd": "PRD-CC-001 \u00a7 5.5, 5.7"
+    },
+    {
+      "id": "slash-commands",
+      "name": "/60 Slash Commands",
+      "status": "complete",
+      "phase": 2,
+      "prd": "PRD-CC-001 \u00a7 9"
+    },
+    {
+      "id": "demo-screen",
+      "name": "Conversational Playground Demo",
+      "status": "complete",
+      "phase": 3,
+      "prd": "PRD-CC-001 \u00a7 11"
+    },
+    {
+      "id": "polish",
+      "name": "Analytics + Credit Governance + Polish",
+      "status": "complete",
+      "phase": 3,
+      "prd": "PRD-CC-001 \u00a7 10, 12, 13"
+    }
+  ],
+  "stories": [
+    {
+      "id": "CC-001",
+      "feature": "intent-entity",
+      "title": "Extend intent taxonomy from 8 to 20 types with confidence routing",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/slack-copilot/types.ts",
+          "supabase/functions/_shared/slack-copilot/intentClassifier.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "CC-003",
+        "CC-004",
+        "CC-005",
+        "CC-006",
+        "CC-010",
+        "CC-011",
+        "CC-012"
+      ],
+      "parallelWith": [
+        "CC-002"
+      ],
+      "acceptance": [
+        "types.ts CopilotIntentType expanded to 20 intents: deal_query, contact_query, pipeline_query, history_query, metrics_query, risk_query, competitive_query, coaching_query, draft_email, draft_check_in, update_crm, create_task, trigger_prep, trigger_enrichment, schedule_meeting, help, feedback, clarification_needed, general",
+        "ExtractedEntities updated with time_reference (string), action_type expanded with draft_check_in, update_crm, trigger_prep, trigger_enrichment",
+        "intentClassifier.ts regex patterns updated for all 20 intents",
+        "Confidence routing: >=0.8 direct execute, 0.5-0.8 execute with clarification prompt, <0.5 ask for clarification"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/types.ts",
+        "supabase/functions/_shared/slack-copilot/intentClassifier.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-002",
+      "feature": "intent-entity",
+      "title": "Upgrade entity resolver with fuzzy matching and disambiguation UI",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/slackEntityResolver.ts",
+          "supabase/functions/_shared/slack-copilot/types.ts"
+        ],
+        "schema": [
+          "deals",
+          "contacts"
+        ]
+      },
+      "blocks": [
+        "CC-003",
+        "CC-004",
+        "CC-005",
+        "CC-006"
+      ],
+      "parallelWith": [
+        "CC-001"
+      ],
+      "acceptance": [
+        "entityResolver.ts exports resolveEntities() that handles deal, contact, company, and meeting resolution",
+        "Single match (confidence 1.0) returned directly; multiple matches return alternatives with disambiguation Block Kit buttons",
+        "Thread context active_deal_id/active_contact_id used to disambiguate within threads",
+        "@deal:slug and @contact:slug syntax parsed before fuzzy matching for power users",
+        "Fuzzy matching uses ILIKE with trigram similarity fallback (extends existing slackEntityResolver.ts patterns)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/entityResolver.ts",
+        "supabase/functions/_shared/slackEntityResolver.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-003",
+      "feature": "intent-entity",
+      "title": "Upgrade route-message with Slack conversational source and full taxonomy",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "CC-001"
+        ],
+        "files": [
+          "supabase/functions/route-message/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "CC-008"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "route-message accepts source: 'slack_conversational' parameter",
+        "SLACK_INTENT_PROMPT added with full 20-intent classification returning JSON with intent, confidence, entities, requires_clarification",
+        "Thread context (summary of last 5 turns) passed to classifier for multi-turn disambiguation",
+        "Time references ('this week', 'last quarter', 'Q2') resolved to ISO date ranges in entities"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/route-message/index.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-004",
+      "feature": "core-handlers",
+      "title": "Upgrade deal_query handler with rich summary and trajectory",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "CC-001",
+          "CC-002"
+        ],
+        "files": [
+          "supabase/functions/_shared/slack-copilot/handlers/dealQueryHandler.ts"
+        ],
+        "schema": [
+          "deals",
+          "activities",
+          "contacts",
+          "tasks"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-005",
+        "CC-006"
+      ],
+      "acceptance": [
+        "Deal summary includes: value, stage, days in stage, close date, probability",
+        "Key contacts listed with last contact date, response time, attendance flags",
+        "Open items section with overdue commitments highlighted",
+        "Action buttons: Draft check-in, View in 60, Open in HubSpot",
+        "Single deal response + multi-deal disambiguation (existing) + at-risk filter (existing) all preserved"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/dealQueryHandler.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-005",
+      "feature": "core-handlers",
+      "title": "Upgrade contact_query and metrics_query handlers",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "CC-001",
+          "CC-002"
+        ],
+        "files": [
+          "supabase/functions/_shared/slack-copilot/handlers/contactQueryHandler.ts"
+        ],
+        "schema": [
+          "contacts",
+          "meetings",
+          "activities"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-004",
+        "CC-006"
+      ],
+      "acceptance": [
+        "Contact summary includes: name, title, company, last interaction date, last email, relationship strength estimate",
+        "FROM YOUR LAST CONVERSATION section with key discussion points (from activities/meetings)",
+        "metrics_query handler created: meeting count, email count, deal stage changes for given time range",
+        "Action buttons: Draft email, View contact, View deal"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/contactQueryHandler.ts",
+        "supabase/functions/_shared/slack-copilot/handlers/metricsQueryHandler.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-006",
+      "feature": "core-handlers",
+      "title": "Upgrade pipeline_query and risk_query handlers with stage breakdown",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "CC-001",
+          "CC-002"
+        ],
+        "files": [
+          "supabase/functions/_shared/slack-copilot/handlers/pipelineQueryHandler.ts"
+        ],
+        "schema": [
+          "deals"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-004",
+        "CC-005"
+      ],
+      "acceptance": [
+        "Pipeline summary includes: target, weighted pipeline, coverage ratio, stage breakdown with deal counts and weighted values",
+        "Risk section: stale deals, long-in-stage deals, conversion gap analysis",
+        "risk_query handler: top 5 at-risk deals with risk signals, days stale, recommended action",
+        "Action buttons: Show at-risk deals, Draft check-ins for stale deals, View pipeline"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/pipelineQueryHandler.ts",
+        "supabase/functions/_shared/slack-copilot/handlers/riskQueryHandler.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-007",
+      "feature": "thread-memory",
+      "title": "Extend slack_copilot_threads with entity tracking and turn history",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "slack_copilot_threads"
+        ]
+      },
+      "blocks": [
+        "CC-008"
+      ],
+      "parallelWith": [
+        "CC-001",
+        "CC-002"
+      ],
+      "acceptance": [
+        "Migration adds: active_deal_id UUID, active_contact_id UUID, active_company_id UUID, turns JSONB DEFAULT '[]', loaded_context JSONB DEFAULT '{}', intents_used TEXT[] DEFAULT '{}', actions_taken TEXT[] DEFAULT '{}', credits_consumed NUMERIC(10,4) DEFAULT 0",
+        "Index on (user_id, last_message_at DESC) WHERE last_message_at > NOW() - INTERVAL '24 hours'",
+        "slack_copilot_analytics table created with: org_id, user_id, thread_ts, intent, entities JSONB, confidence, data_sources_used, credits_consumed, response_time_ms, model_used, action_taken, user_feedback",
+        "Indexes on (user_id, created_at DESC) and (intent, created_at DESC)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260225200001_conversational_copilot_schema.sql"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-008",
+      "feature": "thread-memory",
+      "title": "Upgrade threadMemory.ts with multi-turn context and entity persistence",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "CC-007",
+          "CC-003"
+        ],
+        "files": [
+          "supabase/functions/_shared/slack-copilot/threadMemory.ts"
+        ],
+        "schema": [
+          "slack_copilot_threads"
+        ]
+      },
+      "blocks": [
+        "CC-009"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "saveMessage() persists intent and resolved entities per turn in the turns JSONB array (last 20 messages)",
+        "updateActiveEntities() sets active_deal_id/active_contact_id/active_company_id on thread after entity resolution",
+        "Context switch detection: when new entity doesn't match active entity, clear loaded_context and update active entity",
+        "Thread lifecycle: 30min dormant mark, 24hr expiry cleanup (can be cron or lazy-loaded check)",
+        "Cross-channel bridge: writes to conversation_context after entity resolution (existing pattern, ensure it fires)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/threadMemory.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-009",
+      "feature": "thread-memory",
+      "title": "Wire upgraded orchestrator into slack-copilot main entry point",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": [
+          "CC-008",
+          "CC-004",
+          "CC-005",
+          "CC-006"
+        ],
+        "files": [
+          "supabase/functions/slack-copilot/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "CC-010",
+        "CC-011",
+        "CC-012",
+        "CC-013"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "slack-copilot/index.ts updated flow: detect mention/DM \u2192 load thread \u2192 resolve entities (CC-002) \u2192 classify intent (CC-003) \u2192 confidence routing \u2192 assemble context \u2192 route to handler \u2192 format response \u2192 post to Slack \u2192 persist thread state \u2192 log analytics",
+        "Entity disambiguation inserts Block Kit buttons and pauses handler execution until user selects",
+        "Confidence routing logic applied: high confidence \u2192 direct, medium \u2192 execute with clarification, low \u2192 ask",
+        "All 20 intent types routed to correct handler (new handlers return HandlerResult)",
+        "Credits tracked per query in slack_copilot_analytics"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/slack-copilot/index.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-010",
+      "feature": "rag-handlers",
+      "title": "Build history_query handler with RAG-powered deal narratives",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": [
+          "CC-009"
+        ],
+        "files": [
+          "supabase/functions/_shared/memory/ragClient.ts",
+          "supabase/functions/_shared/meeting-prep/ragQueries.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "CC-013"
+      ],
+      "parallelWith": [
+        "CC-011"
+      ],
+      "acceptance": [
+        "history_query handler queries RAG with conversation_summary, commitments, objections, prospect_priorities scoped to deal/contact",
+        "Assembles MEETING ARC narrative: chronological meeting summaries with key quotes and outcomes",
+        "WHY THEY WENT DARK section for stale deals: surfaces last known blocker from transcripts",
+        "Graceful fallback to structured DB data (activities + meetings) when RAG returns empty",
+        "Response time target: <8s including RAG queries"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/historyQueryHandler.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-011",
+      "feature": "rag-handlers",
+      "title": "Build coaching_query handler with cross-deal pattern analysis",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": [
+          "CC-009"
+        ],
+        "files": [
+          "supabase/functions/_shared/memory/ragClient.ts",
+          "supabase/functions/_shared/slack-copilot/handlers/coachingQueryHandler.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-010"
+      ],
+      "acceptance": [
+        "coaching_query handler searches RAG across all rep meetings for the objection/topic mentioned",
+        "FROM YOUR WON DEALS section: examples where similar objection was overcome with specific techniques",
+        "FROM YOUR LOST DEALS section: examples where objection wasn't addressed and contributed to loss",
+        "PATTERNS section: synthesized tactics ranked by effectiveness",
+        "Falls back to general coaching advice from AI when RAG returns insufficient results"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/coachingQueryHandler.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-012",
+      "feature": "rag-handlers",
+      "title": "Build competitive_query handler with RAG competitor mentions",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": [
+          "CC-009"
+        ],
+        "files": [
+          "supabase/functions/_shared/memory/ragClient.ts",
+          "supabase/functions/_shared/slack-copilot/handlers/competitiveQueryHandler.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-010",
+        "CC-011"
+      ],
+      "acceptance": [
+        "competitive_query searches RAG for competitor_mentions across all meetings",
+        "Lists which deals mention which competitors with frequency and context snippets",
+        "Win rate against each competitor calculated from deal outcomes",
+        "Battlecard-style strengths/weaknesses summary per competitor",
+        "Action buttons: Draft competitive positioning, Show all mentions"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/competitiveQueryHandler.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-013",
+      "feature": "actions",
+      "title": "Build draft_email and draft_check_in handlers with RAG context",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": [
+          "CC-009",
+          "CC-010"
+        ],
+        "files": [
+          "supabase/functions/_shared/slack-copilot/handlers/actionHandler.ts",
+          "supabase/functions/_shared/memory/ragClient.ts"
+        ],
+        "schema": [
+          "slack_pending_actions"
+        ]
+      },
+      "blocks": [
+        "CC-014"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "draft_email loads deal history via RAG (reuses history_query RAG results from thread loaded_context if available)",
+        "Email composed by Sonnet with rep writing style profile and contact tone calibration",
+        "Context used section shown below draft: which RAG sources contributed, specific quotes referenced",
+        "draft_check_in handles batch mode: 'draft check-ins for stale deals' generates multiple previews sequentially",
+        "All drafts show [Send] [Edit] [Regenerate] [Skip] buttons via slack_pending_actions HITL flow"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/handlers/actionHandler.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-014",
+      "feature": "actions",
+      "title": "Wire action execution: send email, create task, update CRM from Slack",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": {
+        "stories": [
+          "CC-013"
+        ],
+        "files": [
+          "supabase/functions/slack-interactive/index.ts",
+          "supabase/functions/slack-copilot-actions/index.ts"
+        ],
+        "schema": [
+          "slack_pending_actions"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-015"
+      ],
+      "acceptance": [
+        "Send button on email draft calls email-send edge function via HITL confirmation flow (existing slack-copilot-actions pattern)",
+        "Create task button inserts into tasks table with assigned_to = user_id",
+        "update_crm intent: parses 'move Acme to Negotiation' \u2192 updates deal stage via Supabase + HubSpot sync",
+        "All actions logged in thread actions_taken array and slack_copilot_analytics",
+        "Multi-turn action flow: 'send it and do one for CloudBase too' resolves from thread context"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-copilot-actions/index.ts",
+        "supabase/functions/_shared/slack-copilot/actionExecutor.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-015",
+      "feature": "slash-commands",
+      "title": "Implement /60 slash command routing with 8 subcommands",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": {
+        "stories": [
+          "CC-009"
+        ],
+        "files": [
+          "supabase/functions/slack-events/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-014"
+      ],
+      "acceptance": [
+        "/60 pipeline \u2192 pipeline_query handler, /60 risks \u2192 risk_query handler, /60 prep \u2192 trigger_prep handler",
+        "/60 stale \u2192 risk_query handler filtered to no-activity deals, /60 draft [name] \u2192 draft_email with pre-resolved entity",
+        "/60 coaching \u2192 coaching_query handler, /60 metrics \u2192 metrics_query handler, /60 help \u2192 help response with all commands listed",
+        "Slash commands bypass intent classification (intent is explicit from subcommand)",
+        "Arguments after subcommand parsed as entity names and passed to handler"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/slack-events/index.ts",
+        "supabase/functions/_shared/slack-copilot/slashCommands.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-016",
+      "feature": "intent-entity",
+      "title": "Upgrade context assembler with intent-to-data-source mapping",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "CC-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/slack-copilot/contextAssembler.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "CC-009"
+      ],
+      "parallelWith": [
+        "CC-002",
+        "CC-007"
+      ],
+      "acceptance": [
+        "INTENT_DATA_SOURCES map covers all 20 intents with supabase, hubspot, rag, dealMemory data source configs",
+        "RAG loading is conditional per intent: history_query/coaching_query/competitive_query/draft_email always load RAG; deal_query loads RAG only if 3+ meetings exist",
+        "Token budget per intent enforced (history_query: 4000, draft_email: 3500, metrics_query: 1500, etc.)",
+        "Model selection per intent: Haiku for classification/metrics, Sonnet for summaries/drafts, respecting existing model router"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/contextAssembler.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-017",
+      "feature": "demo-screen",
+      "title": "Build conversational-copilot edge function for demo/web queries",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": {
+        "stories": [
+          "CC-009",
+          "CC-010",
+          "CC-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "CC-018"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "POST /conversational-copilot accepts { message, session_id, org_id, user_id }",
+        "Uses same intent classification, entity resolution, context assembly, and response generation as Slack copilot",
+        "Returns { response: { markdown, intent, confidence, entities_resolved, data_sources_used, credits_consumed, generation_time_ms, model_used }, session: { turn_count, total_credits } }",
+        "Session state stored in memory or DB keyed by session_id for multi-turn (reuses thread memory with channel='demo')",
+        "JWT-protected, deployed with --no-verify-jwt on staging"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/conversational-copilot/index.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-018",
+      "feature": "demo-screen",
+      "title": "Build conversational playground React page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": {
+        "stories": [
+          "CC-017"
+        ],
+        "files": [
+          "src/lib/routes/routeConfig.ts",
+          "src/routes/lazyPages.tsx",
+          "src/App.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "CC-019"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Page at /platform/demo/conversational-copilot with Slack-style chat UI",
+        "Suggested queries shown as clickable chips: 'What's happening with [deal]?', 'Draft a check-in for stale deals', etc.",
+        "Multi-turn conversation rendered as threaded messages with 60 branding",
+        "Action buttons rendered inline (Send, Edit, Regenerate, Skip) with click handlers calling edge function",
+        "Data sources indicator showing which sources were queried (Supabase, HubSpot, RAG, Writing Style)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/platform/DemoConversationalCopilot.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/routes/lazyPages.tsx"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-019",
+      "feature": "demo-screen",
+      "title": "Add session metrics display and Slack CTA to demo page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": {
+        "stories": [
+          "CC-018"
+        ],
+        "files": [
+          "src/pages/platform/DemoConversationalCopilot.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-020"
+      ],
+      "acceptance": [
+        "Session metadata panel: turn count, total credits consumed, avg response time, models used",
+        "Per-response metadata: intent classified, confidence, entities resolved, data sources hit, generation time",
+        "Connect to Slack CTA button at bottom linking to Slack integration setup",
+        "Copy as markdown button for any response"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/platform/DemoConversationalCopilot.tsx"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-020",
+      "feature": "polish",
+      "title": "Credit governance with throttling and budget warnings",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": {
+        "stories": [
+          "CC-009"
+        ],
+        "files": [
+          "supabase/functions/_shared/slack-copilot/rateLimiter.ts"
+        ],
+        "schema": [
+          "slack_copilot_analytics"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-019",
+        "CC-021"
+      ],
+      "acceptance": [
+        "Per-intent credit costs enforced: 0.1-0.3 for simple lookups, 0.8-2.0 for RAG/drafts (using creditBudgetService if available)",
+        "85% budget warning shown in Slack when user approaches daily limit",
+        "100% budget: simple DB queries still work, RAG/drafts paused with upgrade CTA",
+        "Model downgrade: when budget >80%, prefer Haiku over Sonnet where possible"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/rateLimiter.ts",
+        "supabase/functions/_shared/slack-copilot/templates/errorStates.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-021",
+      "feature": "polish",
+      "title": "Analytics logging and response time benchmarking",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": {
+        "stories": [
+          "CC-009",
+          "CC-007"
+        ],
+        "files": [],
+        "schema": [
+          "slack_copilot_analytics"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CC-019",
+        "CC-020"
+      ],
+      "acceptance": [
+        "Every query logged to slack_copilot_analytics: intent, confidence, entities, data_sources_used, credits_consumed, response_time_ms, model_used",
+        "Action events logged with action_taken field when user clicks Send/Create/Update buttons",
+        "User feedback (thumbs up/down) captured via Block Kit buttons and stored in user_feedback column",
+        "Response time assertions: simple <3s, RAG <8s, drafts <10s \u2014 logged and alertable"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/slack-copilot/analytics.ts",
+        "supabase/functions/slack-copilot/index.ts"
+      ],
+      "completedAt": "2026-02-25T19:30:00Z"
+    },
+    {
+      "id": "CC-022",
+      "feature": "polish",
+      "title": "Deploy to staging and manual QA across all 20 intent types",
+      "type": "test",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": {
+        "stories": [
+          "CC-009",
+          "CC-010",
+          "CC-011",
+          "CC-012",
+          "CC-013",
+          "CC-014",
+          "CC-015",
+          "CC-017",
+          "CC-018"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "All modified edge functions deployed to staging (caerqjzvuerejfrdtygb) with --no-verify-jwt",
+        "Migration applied to staging database",
+        "50 test queries across all 20 intent types verified: deal, contact, pipeline, history, metrics, risk, competitive, coaching, draft_email, draft_check_in, update_crm, create_task, trigger_prep, help, general, plus disambiguation and multi-turn",
+        "Response time targets met: simple <3s, RAG <8s, drafts <10s",
+        "Demo screen functional at /platform/demo/conversational-copilot with multi-turn conversation"
+      ],
+      "estimatedMinutes": 30,
+      "files": []
+    }
+  ],
+  "execution": {
+    "totalStories": 22,
+    "completedStories": 21,
+    "currentFeature": "intent-entity",
+    "lastUpdated": "2026-02-25T19:30:00Z",
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": [
+          "CC-001",
+          "CC-002",
+          "CC-007",
+          "CC-016"
+        ],
+        "description": "Foundation: intent types, entity resolver, schema migration, context assembler"
+      },
+      {
+        "group": 2,
+        "stories": [
+          "CC-003"
+        ],
+        "description": "Route-message upgrade with full taxonomy"
+      },
+      {
+        "group": 3,
+        "stories": [
+          "CC-004",
+          "CC-005",
+          "CC-006",
+          "CC-008"
+        ],
+        "description": "Core handlers + thread memory upgrade"
+      },
+      {
+        "group": 4,
+        "stories": [
+          "CC-009"
+        ],
+        "description": "Wire orchestrator into slack-copilot entry point"
+      },
+      {
+        "group": 5,
+        "stories": [
+          "CC-010",
+          "CC-011",
+          "CC-012"
+        ],
+        "description": "RAG-powered handlers: history, coaching, competitive"
+      },
+      {
+        "group": 6,
+        "stories": [
+          "CC-013"
+        ],
+        "description": "Draft email/check-in handlers with RAG context"
+      },
+      {
+        "group": 7,
+        "stories": [
+          "CC-014",
+          "CC-015"
+        ],
+        "description": "Action execution + slash commands"
+      },
+      {
+        "group": 8,
+        "stories": [
+          "CC-017"
+        ],
+        "description": "Demo edge function"
+      },
+      {
+        "group": 9,
+        "stories": [
+          "CC-018"
+        ],
+        "description": "Demo React page"
+      },
+      {
+        "group": 10,
+        "stories": [
+          "CC-019",
+          "CC-020",
+          "CC-021"
+        ],
+        "description": "Session metrics, credit governance, analytics"
+      },
+      {
+        "group": 11,
+        "stories": [
+          "CC-022"
+        ],
+        "description": "Staging deploy + manual QA"
+      }
+    ],
+    "estimatedTotalMinutes": 535,
+    "estimatedWithParallel": "18-22 hours"
+  }
+}
