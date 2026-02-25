@@ -256,6 +256,7 @@ export function buildReturnMeetingSlackBlocks(
   meetingTime: string,
   meetingNumber: number,
   companyName: string,
+  meetingId?: string | null,
 ): any[] {
   const blocks: any[] = [];
 
@@ -381,6 +382,53 @@ export function buildReturnMeetingSlackBlocks(
         type: 'mrkdwn',
         text: truncate(`*COMPETITIVE CONTEXT*\n${briefing.competitive_context}`, 2800),
       },
+    });
+  }
+
+  // Action buttons
+  if (meetingId) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Draft Booking Confirmation' },
+          action_id: 'prep_briefing::booking_confirm',
+          value: meetingId,
+          style: 'primary',
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Ask a Question' },
+          action_id: 'prep_briefing::ask_question',
+          value: meetingId,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Remind Me Before' },
+          action_id: 'prep_briefing::remind_before',
+          value: meetingId,
+        },
+      ],
+    });
+    // Feedback row
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: ':thumbsup: Helpful' },
+          action_id: 'prep_briefing::feedback_up',
+          value: meetingId,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: ':thumbsdown: Not Helpful' },
+          action_id: 'prep_briefing::feedback_down',
+          value: meetingId,
+        },
+      ],
     });
   }
 
@@ -559,6 +607,30 @@ export function buildFirstMeetingSlackBlocks(
           type: 'button',
           text: { type: 'plain_text', text: 'Ask a Question' },
           action_id: 'prep_briefing::ask_question',
+          value: meetingId,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Remind Me Before' },
+          action_id: 'prep_briefing::remind_before',
+          value: meetingId,
+        },
+      ],
+    });
+    // Feedback row
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: ':thumbsup: Helpful' },
+          action_id: 'prep_briefing::feedback_up',
+          value: meetingId,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: ':thumbsdown: Not Helpful' },
+          action_id: 'prep_briefing::feedback_down',
           value: meetingId,
         },
       ],

@@ -659,6 +659,7 @@ serve(async (req: Request) => {
                 meetingTime,
                 meetingNumber,
                 companyName,
+                meeting_id,
               )
             : buildFirstMeetingSlackBlocks(briefing, meetingTitle, meetingTime, companyName, researchResults, meeting_id);
 

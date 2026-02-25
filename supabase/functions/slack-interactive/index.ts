@@ -42,7 +42,7 @@ import { handleSupportAction } from './handlers/support.ts';
 import { handleAutonomyAction } from './handlers/autonomy.ts';
 import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
 import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
-import { handlePrepBriefingAction, handlePrepBriefingAskSubmission } from './handlers/prepBriefing.ts';
+import { handlePrepBriefingAction, handlePrepBriefingAskSubmission, handlePrepBriefingFeedbackSubmission } from './handlers/prepBriefing.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -8391,6 +8391,12 @@ serve(async (req) => {
           // Fire-and-forget — Slack requires immediate 200 ack for view submissions
           handlePrepBriefingAskSubmission(payload).catch(err =>
             console.error('[PrepBriefing ask] Submission handler error:', err),
+          );
+          return new Response('', { status: 200, headers: corsHeaders });
+        }
+        if (payload.view?.callback_id === 'prep_briefing_feedback_modal') {
+          handlePrepBriefingFeedbackSubmission(payload).catch(err =>
+            console.error('[PrepBriefing feedback] Submission handler error:', err),
           );
           return new Response('', { status: 200, headers: corsHeaders });
         }

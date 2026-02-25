@@ -3,7 +3,7 @@
 // Supports both manual trigger and cron-based proactive delivery
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { buildMeetingPrepMessage, type MeetingPrepData } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole, verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
@@ -955,6 +955,398 @@ async function processMeetingPrep(
   }
 }
 
+/**
+ * Send a lightweight 30-min heads-up DM before a meeting.
+ * The full briefing arrives at the 10-min mark.
+ */
+async function send30MinHeadsUp(
+  supabase: ReturnType<typeof createClient>,
+  meeting: CalendarEvent
+): Promise<void> {
+  try {
+    const slackConfig = await getSlackConfig(supabase, meeting.org_id);
+    if (!slackConfig) return;
+
+    const userProfile = await getUserProfile(supabase, meeting.user_id);
+    if (!userProfile) return;
+
+    const slackUserId = await getSlackUserId(supabase, meeting.org_id, meeting.user_id);
+    if (!slackUserId) return;
+
+    // Try to find a company for context
+    const contacts = await getContactsByEmail(supabase, meeting.attendee_emails || []);
+    let company: Company | null = null;
+    if (contacts.length > 0) {
+      company = await getCompanyForContact(supabase, contacts[0].id);
+    }
+
+    const meetingTime = new Date(meeting.start_time).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const blocks: unknown[] = [
+      {
+        type: 'header',
+        text: { type: 'plain_text', text: 'Meeting in 30 minutes', emoji: false },
+      },
+      {
+        type: 'context',
+        elements: [
+          { type: 'mrkdwn', text: `*${meeting.title}* at ${meetingTime}` },
+        ],
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: 'Your full briefing will arrive in ~20 min. Here\u2019s a quick heads up:',
+        },
+      },
+    ];
+
+    if (company) {
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Company:* ${company.name}${company.industry ? ` | ${company.industry}` : ''}`,
+        },
+      });
+    }
+
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Get Full Briefing Now', emoji: false },
+          action_id: 'prep_briefing::trigger_early',
+          value: meeting.id,
+          style: 'primary',
+        },
+      ],
+    });
+
+    const result = await sendSlackDM(slackConfig.botToken, slackUserId, {
+      blocks,
+      text: `Meeting in 30 minutes: ${meeting.title}`,
+    });
+
+    if (result.ok) {
+      await supabase.from('slack_notifications_sent').insert({
+        org_id: meeting.org_id,
+        feature: 'meeting_prep_30min',
+        entity_type: 'prep',
+        entity_id: meeting.id,
+        recipient_type: 'user',
+        recipient_id: slackUserId,
+        slack_ts: result.ts,
+        slack_channel_id: slackUserId,
+      });
+      console.log(`[slack-meeting-prep] 30-min heads-up sent for "${meeting.title}"`);
+    } else {
+      console.error(`[slack-meeting-prep] 30-min heads-up failed for "${meeting.title}":`, result.error);
+    }
+  } catch (error) {
+    console.error(`[slack-meeting-prep] Error sending 30-min heads-up for "${meeting.title}":`, error);
+  }
+}
+
+/**
+ * Resurface snoozed prep briefings whose snooze window has elapsed.
+ */
+async function resurfaceSnoozedBriefings(
+  supabase: ReturnType<typeof createClient>
+): Promise<void> {
+  try {
+    const { data: snoozedItems, error } = await supabase
+      .from('slack_snoozed_items')
+      .select('id, org_id, user_id, entity_id, entity_type, original_context, snooze_until')
+      .eq('entity_type', 'prep_briefing')
+      .lte('snooze_until', new Date().toISOString())
+      .is('resurfaced_at', null);
+
+    if (error) {
+      console.error('[slack-meeting-prep] Error fetching snoozed items:', error);
+      return;
+    }
+    if (!snoozedItems || snoozedItems.length === 0) return;
+
+    console.log(`[slack-meeting-prep] Resurfacing ${snoozedItems.length} snoozed briefings`);
+
+    for (const item of snoozedItems) {
+      try {
+        const slackConfig = await getSlackConfig(supabase, item.org_id);
+        if (!slackConfig) continue;
+
+        const slackUserId = await getSlackUserId(supabase, item.org_id, item.user_id);
+        if (!slackUserId) continue;
+
+        const ctx = (item.original_context || {}) as Record<string, unknown>;
+        const meetingTitle = (ctx.meetingTitle as string) || 'Upcoming meeting';
+        const meetingTime = (ctx.meetingTime as string) || '';
+
+        // Try to get meeting URL from calendar_events
+        let meetingUrl: string | undefined;
+        if (item.entity_id) {
+          const { data: calEvent } = await supabase
+            .from('calendar_events')
+            .select('meeting_url')
+            .eq('id', item.entity_id)
+            .maybeSingle();
+          meetingUrl = calEvent?.meeting_url || undefined;
+        }
+
+        const blocks: unknown[] = [
+          {
+            type: 'header',
+            text: { type: 'plain_text', text: 'Reminder: Meeting coming up', emoji: false },
+          },
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `*${meetingTitle}*${meetingTime ? ` at ${meetingTime}` : ''}`,
+              },
+            ],
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: 'Your meeting is starting soon. Here are the key points:',
+            },
+          },
+        ];
+
+        const actionElements: unknown[] = [];
+        if (meetingUrl) {
+          actionElements.push({
+            type: 'button',
+            text: { type: 'plain_text', text: 'Join Meeting', emoji: false },
+            url: meetingUrl,
+            action_id: 'prep_briefing::join_meeting',
+          });
+        }
+        actionElements.push({
+          type: 'button',
+          text: { type: 'plain_text', text: 'View Full Briefing', emoji: false },
+          url: `${appUrl}/calendar`,
+          action_id: 'prep_briefing::view_briefing',
+        });
+
+        blocks.push({ type: 'actions', elements: actionElements });
+
+        const result = await sendSlackDM(slackConfig.botToken, slackUserId, {
+          blocks,
+          text: `Reminder: ${meetingTitle} is coming up`,
+        });
+
+        if (result.ok) {
+          await supabase
+            .from('slack_snoozed_items')
+            .update({ resurfaced_at: new Date().toISOString() })
+            .eq('id', item.id);
+          console.log(`[slack-meeting-prep] Resurfaced snoozed briefing for "${meetingTitle}"`);
+        }
+      } catch (innerErr) {
+        console.error(`[slack-meeting-prep] Error resurfacing snoozed item ${item.id}:`, innerErr);
+      }
+    }
+  } catch (error) {
+    console.error('[slack-meeting-prep] Error in resurfaceSnoozedBriefings:', error);
+  }
+}
+
+/**
+ * Check for meetings that ended ~1 hour ago with no recording.
+ * Sends a post-meeting check-in via Slack DM.
+ */
+async function checkPostMeetingRecordings(
+  supabase: ReturnType<typeof createClient>
+): Promise<void> {
+  try {
+    const now = new Date();
+    // Meetings that started 60-75 min ago (should have ended by now)
+    const windowStart = new Date(now.getTime() - 75 * 60 * 1000);
+    const windowEnd = new Date(now.getTime() - 60 * 60 * 1000);
+
+    const personalDomains = new Set([
+      'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.uk',
+      'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com',
+      'icloud.com', 'me.com', 'mac.com', 'aol.com',
+      'protonmail.com', 'proton.me', 'fastmail.com',
+      'btinternet.com', 'sky.com', 'virginmedia.com',
+      'msn.com', 'mail.com', 'zoho.com',
+    ]);
+
+    const { data: recentMeetings, error } = await supabase
+      .from('calendar_events')
+      .select('id, title, start_time, user_id, attendees, meeting_url, org_id')
+      .gte('start_time', windowStart.toISOString())
+      .lte('start_time', windowEnd.toISOString());
+
+    if (error) {
+      console.error('[slack-meeting-prep] Error fetching post-meeting events:', error);
+      return;
+    }
+    if (!recentMeetings || recentMeetings.length === 0) return;
+
+    // Filter to external meetings only (same logic as getUpcomingMeetings)
+    const externalMeetings = recentMeetings
+      .map((row: any) => ({
+        ...row,
+        attendee_emails: extractAttendeeEmails(row.attendees),
+      }))
+      .filter((row: any) => {
+        if (!row.attendee_emails || row.attendee_emails.length <= 1) return false;
+        const selfEmail = row.attendee_emails.find((e: string) => e.includes('@sixtyseconds.'));
+        const selfDomain = selfEmail?.split('@')[1]?.toLowerCase() || '';
+        const businessAttendees = row.attendee_emails.filter((email: string) => {
+          const domain = email.split('@')[1]?.toLowerCase() || '';
+          return !personalDomains.has(domain) && domain !== selfDomain;
+        });
+        return businessAttendees.length > 0;
+      }) as CalendarEvent[];
+
+    if (externalMeetings.length === 0) return;
+
+    console.log(`[slack-meeting-prep] Checking ${externalMeetings.length} meetings for post-meeting follow-up`);
+
+    for (const meeting of externalMeetings) {
+      try {
+        // Check if already sent
+        const { data: existing } = await supabase
+          .from('slack_notifications_sent')
+          .select('id')
+          .eq('org_id', meeting.org_id)
+          .eq('feature', 'post_meeting_check')
+          .eq('entity_id', meeting.id)
+          .limit(1);
+
+        if (existing && existing.length > 0) continue;
+
+        // Check if a recording exists via the meetings table
+        const { data: meetingRecord } = await supabase
+          .from('meetings')
+          .select('id, recording_url')
+          .eq('calendar_event_id', meeting.id)
+          .maybeSingle();
+
+        let hasRecording = !!meetingRecord?.recording_url;
+
+        // Also check the recordings table if we found a meeting row
+        if (!hasRecording && meetingRecord) {
+          const { data: recording } = await supabase
+            .from('recordings')
+            .select('id')
+            .eq('meeting_id', meetingRecord.id)
+            .limit(1);
+          hasRecording = !!(recording && recording.length > 0);
+        }
+
+        // If there IS a recording, skip — no need to ask
+        if (hasRecording) continue;
+
+        // No recording found — send check-in
+        const slackConfig = await getSlackConfig(supabase, meeting.org_id);
+        if (!slackConfig) continue;
+
+        const slackUserId = await getSlackUserId(supabase, meeting.org_id, meeting.user_id);
+        if (!slackUserId) continue;
+
+        const meetingTime = new Date(meeting.start_time).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+
+        const blocks: unknown[] = [
+          {
+            type: 'header',
+            text: { type: 'plain_text', text: 'How did your meeting go?', emoji: false },
+          },
+          {
+            type: 'context',
+            elements: [
+              { type: 'mrkdwn', text: `*${meeting.title}* at ${meetingTime}` },
+            ],
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: 'I noticed there\u2019s no recording for this meeting. How did it go?',
+            },
+          },
+          {
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: 'Went Well', emoji: false },
+                action_id: 'prep_briefing::post_meeting_went_well',
+                value: meeting.id,
+                style: 'primary',
+              },
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: 'No-Show', emoji: false },
+                action_id: 'prep_briefing::post_meeting_no_show',
+                value: meeting.id,
+              },
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: 'They Cancelled', emoji: false },
+                action_id: 'prep_briefing::post_meeting_cancelled',
+                value: meeting.id,
+              },
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: 'Technical Issue', emoji: false },
+                action_id: 'prep_briefing::post_meeting_technical_issue',
+                value: meeting.id,
+              },
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: 'Forgot to Record', emoji: false },
+                action_id: 'prep_briefing::post_meeting_forgot_to_record',
+                value: meeting.id,
+              },
+            ],
+          },
+        ];
+
+        const result = await sendSlackDM(slackConfig.botToken, slackUserId, {
+          blocks,
+          text: `How did your meeting go? ${meeting.title}`,
+        });
+
+        if (result.ok) {
+          await supabase.from('slack_notifications_sent').insert({
+            org_id: meeting.org_id,
+            feature: 'post_meeting_check',
+            entity_type: 'prep',
+            entity_id: meeting.id,
+            recipient_type: 'user',
+            recipient_id: slackUserId,
+            slack_ts: result.ts,
+            slack_channel_id: slackUserId,
+          });
+          console.log(`[slack-meeting-prep] Post-meeting check sent for "${meeting.title}"`);
+        }
+      } catch (innerErr) {
+        console.error(`[slack-meeting-prep] Error processing post-meeting for "${meeting.title}":`, innerErr);
+      }
+    }
+  } catch (error) {
+    console.error('[slack-meeting-prep] Error in checkPostMeetingRecordings:', error);
+  }
+}
+
 serve(async (req) => {
   const corsPreflightResponse = handleCorsPreflightRequest(req);
   if (corsPreflightResponse) return corsPreflightResponse;
@@ -1061,29 +1453,64 @@ serve(async (req) => {
       meetings = await getUpcomingMeetings(supabase, targetOrgId || undefined, minutesBefore, 4);
     }
 
-    if (meetings.length === 0) {
-      return new Response(
-        JSON.stringify({ success: true, message: 'No meetings found to process' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    // Process 10-min meetings (the existing pass)
+    let results: Array<{ success: boolean; error?: string }> = [];
+    if (meetings.length > 0) {
+      results = await Promise.all(
+        meetings.map((meeting) => processMeetingPrep(supabase, meeting, isTest))
       );
+
+      const successCount = results.filter((r) => r.success).length;
+      const failedCount = results.filter((r) => !r.success).length;
+      console.log(`Meeting prep sent: ${successCount} success, ${failedCount} failed`);
     }
 
-    // Process each meeting
-    const results = await Promise.all(
-      meetings.map((meeting) => processMeetingPrep(supabase, meeting, isTest))
-    );
+    // --- 30-min-before early delivery ---
+    if (!targetEventId && !targetMeetingId) {
+      // Check for meetings 25-35 min from now (30-min window)
+      const earlyMeetings = await getUpcomingMeetings(supabase, targetOrgId || undefined, 30, 5);
 
-    const successCount = results.filter((r) => r.success).length;
-    const failedCount = results.filter((r) => !r.success).length;
+      // Filter out any already sent (using 'meeting_prep_30min' feature key)
+      const newEarlyMeetings: CalendarEvent[] = [];
+      for (const m of earlyMeetings) {
+        const { data: existing } = await supabase
+          .from('slack_notifications_sent')
+          .select('id')
+          .eq('org_id', m.org_id)
+          .eq('feature', 'meeting_prep_30min')
+          .eq('entity_id', m.id)
+          .limit(1);
 
-    console.log(`Meeting prep sent: ${successCount} success, ${failedCount} failed`);
+        if (!existing || existing.length === 0) {
+          newEarlyMeetings.push(m);
+        }
+      }
+
+      if (newEarlyMeetings.length > 0) {
+        console.log(`[slack-meeting-prep] Processing ${newEarlyMeetings.length} meetings for 30-min-before delivery`);
+        for (const meeting of newEarlyMeetings) {
+          // Send a lightweight heads-up (not the full prep — that comes at 10 min)
+          await send30MinHeadsUp(supabase, meeting);
+        }
+      }
+    }
+
+    // --- Resurface snoozed prep briefings ---
+    if (!targetEventId && !targetMeetingId) {
+      await resurfaceSnoozedBriefings(supabase);
+    }
+
+    // --- Post-meeting follow-up (1 hour after ended meetings) ---
+    if (!targetEventId && !targetMeetingId) {
+      await checkPostMeetingRecordings(supabase);
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
         processed: meetings.length,
-        successCount,
-        failedCount,
+        successCount: results.filter((r) => r.success).length,
+        failedCount: results.filter((r) => !r.success).length,
         results,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
