@@ -194,27 +194,42 @@ export function useMeetingBaaSCalendar() {
 
   // Disconnect calendar from MeetingBaaS
   const disconnectMutation = useMutation({
-    mutationFn: async (calendarId: string) => {
+    mutationFn: async (_calendarId: string) => {
       if (!userId) throw new Error('Not authenticated');
 
-      // Mark as inactive in our database
-      const { error } = await supabase
-        .from('meetingbaas_calendars')
-        .update({
-          is_active: false,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', calendarId)
-        .eq('user_id', userId);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        throw new Error('No access token available. Please log in again.');
+      }
 
-      if (error) throw error;
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
+      const functionUrl = `${supabaseUrl}/functions/v1/meetingbaas-disconnect-calendar`;
 
-      // TODO: Call MeetingBaaS API to delete the calendar connection
-      // This would require adding a delete endpoint to the edge function
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Failed to disconnect calendar');
+      }
+
+      return result;
     },
     onSuccess: () => {
-      toast.success('Calendar disconnected from MeetingBaaS');
+      toast.success('Calendar disconnected', {
+        description: 'Bot scheduling has been stopped. You can reconnect at any time.',
+      });
       queryClient.invalidateQueries({ queryKey: meetingBaaSKeys.calendars(userId || '') });
+      queryClient.invalidateQueries({ queryKey: meetingBaaSKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['notetaker'] });
     },
     onError: (error) => {
       toast.error('Failed to disconnect calendar', {

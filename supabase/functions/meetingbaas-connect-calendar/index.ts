@@ -371,12 +371,13 @@ serve(async (req) => {
       }, req, 400);
     }
 
-    // Check if calendar already connected to MeetingBaaS
+    // Check if calendar already connected to MeetingBaaS (only active ones)
     const { data: existingConnection } = await supabase
       .from('meetingbaas_calendars')
       .select('id, meetingbaas_calendar_id')
       .eq('user_id', effectiveUserId)
       .eq('raw_calendar_id', calendar_id)
+      .eq('is_active', true)
       .maybeSingle();
 
     if (existingConnection?.meetingbaas_calendar_id) {
