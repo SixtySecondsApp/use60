@@ -95,6 +95,7 @@ export interface ComposeInput {
   senderFirstName: string;
   senderLastName?: string;
   orgName?: string;
+  regenerateGuidance?: string;
 }
 
 // ============================================================================
@@ -431,7 +432,7 @@ ${historicalBlock}
 9. No bullet-point dumps. Write as a real email with natural paragraphs. Action items may be formatted as a brief list but should not dominate the email.
 10. End with something specific and forward-looking that advances the relationship or deal.
 
-CRITICAL: The email must sound human. No AI tells — no "Certainly!", no "I hope this email finds you well", no "As per our discussion", no "Please do not hesitate." Write like a sharp, caring human who has their notes in front of them.
+CRITICAL: The email must sound human. No AI tells — no "Certainly!", no "I hope this email finds you well", no "As per our discussion", no "Please do not hesitate." Write like a sharp, caring human who has their notes in front of them. Never use em dashes (—) anywhere in the email. Use commas, periods, or rewrite the sentence instead.
 
 OUTPUT FORMAT: Return only a JSON object with this structure (no explanation, no markdown wrapper):
 {"subject": "...", "body": "..."}`;
@@ -453,6 +454,10 @@ OUTPUT FORMAT: Return only a JSON object with this structure (no explanation, no
     ? `\nDeal: ${deal.name ?? 'Unnamed deal'}${deal.stage ? ` (${deal.stage})` : ''}${deal.value != null ? ` — £${deal.value.toLocaleString()}` : ''}`
     : '';
 
+  const guidanceBlock = input.regenerateGuidance
+    ? `\n\nREGENERATION GUIDANCE (the user wants you to rewrite the email with these specific instructions):\n${input.regenerateGuidance}`
+    : '';
+
   const userMessage = `Today's date: ${today}
 Sender: ${senderFullName}${orgName ? ` at ${orgName}` : ''}
 Meeting: ${meeting.title}
@@ -464,7 +469,7 @@ ${keyQuotesText}
 
 ACTION ITEMS FROM TODAY:
 ${actionItemsText}
-${transcriptExcerpt}
+${transcriptExcerpt}${guidanceBlock}
 
 Write the follow-up email. Return only the JSON object.`;
 
@@ -560,7 +565,7 @@ ${writingStyleBlock}
 6. No filler openings. Do not start with "It was great to meet you." Start with something specific.
 7. No bullet-point walls. One short list for action items if needed, the rest in prose.
 
-CRITICAL: Sound like a real person who found the conversation genuinely useful. No AI tells.
+CRITICAL: Sound like a real person who found the conversation genuinely useful. No AI tells. Never use em dashes (—) anywhere in the email.
 
 OUTPUT FORMAT: Return only a JSON object with this structure (no explanation, no markdown wrapper):
 {"subject": "...", "body": "..."}`;
@@ -582,6 +587,10 @@ OUTPUT FORMAT: Return only a JSON object with this structure (no explanation, no
     ? `\nDeal: ${deal.name ?? 'Unnamed deal'}${deal.stage ? ` (${deal.stage})` : ''}${deal.value != null ? ` — £${deal.value.toLocaleString()}` : ''}`
     : '';
 
+  const guidanceBlock = input.regenerateGuidance
+    ? `\n\nREGENERATION GUIDANCE (the user wants you to rewrite the email with these specific instructions):\n${input.regenerateGuidance}`
+    : '';
+
   const userMessage = `Today's date: ${today}
 Sender: ${senderFullName}${orgName ? ` at ${orgName}` : ''}
 Meeting: ${meeting.title}
@@ -593,7 +602,7 @@ ${keyQuotesText}
 
 ACTION ITEMS FROM TODAY:
 ${actionItemsText}
-${transcriptExcerpt}
+${transcriptExcerpt}${guidanceBlock}
 
 Write the first-meeting follow-up email. Return only the JSON object.`;
 

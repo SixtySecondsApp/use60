@@ -25,7 +25,10 @@ async function insertRowsAndCells(
 
   const { data: insertedRows, error: rowError } = await svc
     .from('dynamic_table_rows')
-    .insert(rows.map(r => ({ ...r, table_id: tableId })))
+    .upsert(
+      rows.map(r => ({ ...r, table_id: tableId })),
+      { onConflict: 'table_id,source_id', ignoreDuplicates: true }
+    )
     .select('id');
 
   if (rowError) throw new Error(`Failed to insert rows: ${rowError.message}`);

@@ -31,6 +31,7 @@ import {
   composeReturnMeetingFollowUp,
   composeFirstMeetingFollowUp,
 } from '../_shared/follow-up/composer.ts';
+import { sendSlackDM } from '../_shared/proactive/deliverySlack.ts';
 
 // ============================================================================
 // Constants
@@ -38,6 +39,50 @@ import {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/**
+ * Extract key topics from meeting summary text.
+ * Simple keyword extraction — looks for capitalized phrases, product names, and common topic markers.
+ */
+function extractKeyTopics(summary: string): string[] {
+  if (!summary || summary.length < 20) return [];
+  // Split into sentences and take the first noun phrase of each as a "topic"
+  const sentences = summary.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  const topics: string[] = [];
+  for (const sentence of sentences.slice(0, 8)) {
+    // Look for phrases after common topic markers
+    const match = sentence.match(/(?:discussed|covered|talked about|reviewed|mentioned|explored|addressed)\s+(.{5,60}?)(?:[,.]|$)/i);
+    if (match) {
+      topics.push(match[1].trim().replace(/^(?:the|a|an)\s+/i, ''));
+    }
+  }
+  // Deduplicate and limit
+  return [...new Set(topics)].slice(0, 5);
+}
+
+/**
+ * Extract buying signals from meeting summary text.
+ * Looks for budget mentions, timeline confirmations, stakeholder buy-in, next step commitments.
+ */
+function extractBuyingSignals(summary: string): string[] {
+  if (!summary || summary.length < 20) return [];
+  const signals: string[] = [];
+  const lower = summary.toLowerCase();
+
+  if (/budget|pricing|cost|invest|spend|\$|£|€/.test(lower)) signals.push('Budget discussion');
+  if (/timeline|deadline|by\s+(q[1-4]|january|february|march|april|may|june|july|august|september|october|november|december)/i.test(lower)) signals.push('Timeline mentioned');
+  if (/pilot|trial|poc|proof of concept/.test(lower)) signals.push('Pilot/trial interest');
+  if (/next\s*step|follow[\s-]*up|schedule|book|calendar/.test(lower)) signals.push('Next steps committed');
+  if (/decision[\s-]*maker|stakeholder|leadership|board|ceo|cto|vp|director/.test(lower)) signals.push('Stakeholder involvement');
+  if (/contract|agreement|proposal|quote|sow|statement of work/.test(lower)) signals.push('Commercial progression');
+  if (/competitor|alternative|other\s+vendor|also\s+looking/.test(lower)) signals.push('Competitive evaluation');
+
+  return signals;
+}
 
 // ============================================================================
 // Entry point
@@ -215,10 +260,17 @@ async function handleGenerateFollowUp(
   corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const body = await req.json().catch(() => ({}));
-  const { meeting_id, include_comparison, delivery } = body as {
+  const { meeting_id, include_comparison, delivery, regenerate_guidance, cached_rag_context } = body as {
     meeting_id?: string;
     include_comparison?: boolean;
     delivery?: string;
+    regenerate_guidance?: string;
+    cached_rag_context?: {
+      hasHistory: boolean;
+      meetingNumber: number;
+      sections: Record<string, { chunks: unknown[] }>;
+      queryCredits: number;
+    };
   };
 
   if (!meeting_id) {
@@ -247,11 +299,24 @@ async function handleGenerateFollowUp(
 
   const stream = new ReadableStream({
     async start(controller) {
-      const sendEvent = (event: string, data: unknown) => {
+      const stepTimers = new Map<string, number>();
+      const sendEvent = (event: string, data: Record<string, unknown>) => {
+        if (event === 'step' && data.id) {
+          if (data.status === 'running') {
+            stepTimers.set(data.id as string, Date.now());
+          } else if (data.status === 'complete' || data.status === 'skipped') {
+            const startTime = stepTimers.get(data.id as string);
+            if (startTime) {
+              data.durationMs = Date.now() - startTime;
+            }
+          }
+        }
         controller.enqueue(
           encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
         );
       };
+
+      const warnings: Array<{ severity: 'info' | 'warn'; message: string }> = [];
 
       try {
         // ----------------------------------------------------------------
@@ -261,7 +326,7 @@ async function handleGenerateFollowUp(
 
         const { data: meeting } = await supabase
           .from('meetings')
-          .select('id, title, created_at, duration_minutes, company_id, org_id, owner_user_id, transcript_text, summary')
+          .select('id, title, created_at, duration_minutes, company_id, org_id, owner_user_id, transcript_text, summary, sentiment_score, summary_oneliner')
           .eq('id', meeting_id)
           .single();
 
@@ -290,24 +355,34 @@ async function handleGenerateFollowUp(
 
         const { data: actionItems } = await supabase
           .from('meeting_action_items')
-          .select('description, assignee_name, due_date, status')
+          .select('title, assignee_name, deadline_at, completed')
           .eq('meeting_id', meeting_id);
 
+        const sentimentScore = typeof meeting.sentiment_score === 'number' ? meeting.sentiment_score as number : null;
         const analysis = {
           summary: (meeting.summary as string | null) ?? 'No summary available',
           actionItems: (actionItems ?? []).map((ai: {
-            description: string | null;
+            title: string | null;
             assignee_name: string | null;
           }) => ({
-            task: ai.description ?? '',
+            task: ai.title ?? '',
             suggestedOwner: ai.assignee_name ?? undefined,
           })),
+          sentiment: sentimentScore !== null
+            ? (sentimentScore > 0.5 ? 'positive' : sentimentScore < -0.5 ? 'challenging' : 'neutral')
+            : undefined,
+          keyTopics: extractKeyTopics((meeting.summary as string | null) ?? ''),
+          buyingSignals: extractBuyingSignals((meeting.summary as string | null) ?? ''),
         };
+
+        if (!sentimentScore && sentimentScore !== 0) {
+          warnings.push({ severity: 'info', message: 'No sentiment score — email tone is not calibrated to meeting mood' });
+        }
 
         sendEvent('step', {
           id: 'load_analysis',
           status: 'complete',
-          label: `${analysis.actionItems.length} action items found`,
+          label: `${analysis.actionItems.length} action items, ${analysis.keyTopics?.length || 0} topics, ${analysis.buyingSignals?.length || 0} signals`,
           detail: `${analysis.actionItems.length} action items`,
         });
 
@@ -330,41 +405,51 @@ async function handleGenerateFollowUp(
         let primaryAttendee: { name: string | null; email: string | null } | undefined =
           extAttendees?.[0];
 
-        // 2. Fallback: meeting_contacts → contacts table
+        // 2. Fallback: meeting_contacts → contacts (two separate queries to avoid join hangs)
         if (!primaryAttendee?.email) {
-          const { data: meetingContacts } = await supabase
+          const { data: mcRows } = await supabase
             .from('meeting_contacts')
-            .select('contacts(id, first_name, last_name, email)')
+            .select('contact_id')
             .eq('meeting_id', meeting_id)
-            .limit(1);
-          const contact = (meetingContacts?.[0] as any)?.contacts as
-            | { first_name: string | null; last_name: string | null; email: string | null }
-            | undefined;
-          if (contact?.email) {
-            primaryAttendee = {
-              name: [contact.first_name, contact.last_name].filter(Boolean).join(' ') || null,
-              email: contact.email,
-            };
+            .limit(3);
+          if (mcRows && mcRows.length > 0) {
+            const contactIds = (mcRows as Array<{ contact_id: string }>).map((r) => r.contact_id);
+            const { data: contactRows } = await supabase
+              .from('contacts')
+              .select('first_name, last_name, email')
+              .in('id', contactIds)
+              .not('email', 'is', null)
+              .limit(1);
+            const c = contactRows?.[0] as { first_name: string | null; last_name: string | null; email: string | null } | undefined;
+            if (c?.email) {
+              primaryAttendee = {
+                name: [c.first_name, c.last_name].filter(Boolean).join(' ') || null,
+                email: c.email,
+              };
+            }
           }
         }
 
-        // 3. Fallback: any attendee who isn't the owner
+        // 3. Fallback: any non-rep attendee in meeting_attendees
         if (!primaryAttendee?.email) {
           const { data: anyAttendees } = await supabase
             .from('meeting_attendees')
             .select('name, email')
             .eq('meeting_id', meeting_id)
             .neq('email', '');
-          const nonOwner = anyAttendees?.find(
+          const nonOwner = (anyAttendees ?? []).find(
             (a: { email: string | null }) => a.email && !a.email?.endsWith('@sixtyseconds.video')
-          ) ?? anyAttendees?.[0];
+          ) ?? (anyAttendees ?? [])[0];
           if (nonOwner?.email) primaryAttendee = nonOwner;
         }
 
+        // 4. Soft fallback: continue with placeholder so generation still works in the demo
         if (!primaryAttendee?.email) {
-          sendEvent('error', { message: 'No attendees found for this meeting' });
-          controller.close();
-          return;
+          primaryAttendee = { name: 'your prospect', email: 'prospect@example.com' };
+        }
+
+        if (primaryAttendee?.email === 'prospect@example.com') {
+          warnings.push({ severity: 'warn', message: 'No attendee found — using placeholder recipient' });
         }
 
         let companyName: string | undefined;
@@ -409,7 +494,7 @@ async function handleGenerateFollowUp(
         });
 
         // ----------------------------------------------------------------
-        // Step 5: RAG queries (return meetings only)
+        // Step 5: RAG queries (return meetings only) — skip if cached
         // ----------------------------------------------------------------
         let followUpContext: {
           hasHistory: boolean;
@@ -418,7 +503,16 @@ async function handleGenerateFollowUp(
           queryCredits: number;
         } | null = null;
 
-        if (!meetingHistory.isFirstMeeting) {
+        if (cached_rag_context) {
+          // Regeneration path: reuse cached context from first generation
+          followUpContext = cached_rag_context;
+          sendEvent('step', {
+            id: 'rag_queries',
+            status: 'complete',
+            label: 'Using cached RAG context (regeneration)',
+            detail: `${Object.keys(cached_rag_context.sections).length}/6 queries (cached)`,
+          });
+        } else if (!meetingHistory.isFirstMeeting) {
           sendEvent('step', {
             id: 'rag_queries',
             status: 'running',
@@ -439,6 +533,16 @@ async function handleGenerateFollowUp(
           );
 
           const sectionsReturned = Object.keys(followUpContext.sections).length;
+
+          if (followUpContext) {
+            const totalQueries = 6;
+            const returnedQueries = Object.keys(followUpContext.sections).length;
+            if (returnedQueries < totalQueries && returnedQueries > 0) {
+              warnings.push({ severity: 'info', message: `RAG returned ${returnedQueries}/${totalQueries} query categories` });
+            } else if (returnedQueries === 0 && !meetingHistory.isFirstMeeting) {
+              warnings.push({ severity: 'warn', message: 'RAG returned no historical context despite prior meetings existing' });
+            }
+          }
 
           sendEvent('step', {
             id: 'rag_queries',
@@ -463,20 +567,53 @@ async function handleGenerateFollowUp(
           label: 'Loading rep writing style',
         });
 
-        const { data: styleData } = await supabase
-          .from('writing_styles')
-          .select('metadata')
+        const { data: styleRow } = await supabase
+          .from('user_writing_styles')
+          .select('name, tone_description, style_metadata')
           .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(1)
+          .eq('is_default', true)
           .maybeSingle();
 
-        const writingStyle = (styleData?.metadata as Record<string, unknown> | null) ?? null;
+        // Also load words_to_avoid from tone settings
+        const { data: toneSettings } = await supabase
+          .from('user_tone_settings')
+          .select('words_to_avoid')
+          .eq('user_id', userId)
+          .eq('content_type', 'email')
+          .maybeSingle();
+
+        let writingStyle = null;
+        if (styleRow) {
+          const meta = (styleRow as any).style_metadata || {};
+          // style_metadata stores values both flat (older saves) and nested under tone/vocabulary/greetings_signoffs
+          const tone = meta.tone || {};
+          const vocabulary = meta.vocabulary || {};
+          const greetingsSignoffs = meta.greetings_signoffs || {};
+          writingStyle = {
+            name: (styleRow as any).name || 'Default',
+            toneDescription: (styleRow as any).tone_description || '',
+            formality: tone.formality ?? meta.formality ?? 3,
+            directness: tone.directness ?? meta.directness ?? 3,
+            warmth: tone.warmth ?? meta.warmth ?? 3,
+            commonPhrases: Array.isArray(vocabulary.common_phrases) ? vocabulary.common_phrases
+              : Array.isArray(meta.common_phrases) ? meta.common_phrases : [],
+            signoffs: Array.isArray(greetingsSignoffs.signoffs) ? greetingsSignoffs.signoffs
+              : Array.isArray(meta.signoffs) ? meta.signoffs : [],
+            wordsToAvoid: Array.isArray((toneSettings as any)?.words_to_avoid)
+              ? (toneSettings as any).words_to_avoid : [],
+          };
+        }
+
+        if (!writingStyle) {
+          warnings.push({ severity: 'warn', message: 'No writing style found — email uses default tone' });
+        }
 
         sendEvent('step', {
           id: 'writing_style',
           status: writingStyle ? 'complete' : 'skipped',
-          label: writingStyle ? 'Writing style loaded' : 'No writing style available',
+          label: writingStyle
+            ? `Style loaded: ${(writingStyle as any).name}`
+            : 'No writing style available',
         });
 
         // ----------------------------------------------------------------
@@ -520,6 +657,7 @@ async function handleGenerateFollowUp(
           senderFirstName: (userProfile?.first_name as string | null) ?? 'Team',
           senderLastName: (userProfile?.last_name as string | null) ?? undefined,
           orgName: (org?.name as string | null) ?? undefined,
+          regenerateGuidance: regenerate_guidance ?? undefined,
         };
 
         let email: { to: string; subject: string; body: string; wordCount: number };
@@ -564,13 +702,129 @@ async function handleGenerateFollowUp(
         }
 
         // ----------------------------------------------------------------
+        // Step 10: Slack delivery (optional)
+        // ----------------------------------------------------------------
+        let slackSent = false;
+        if (delivery === 'slack') {
+          sendEvent('step', { id: 'slack_delivery', status: 'running', label: 'Sending to Slack for approval' });
+
+          // Get bot token from org settings
+          const { data: slackOrg } = await supabase
+            .from('slack_org_settings')
+            .select('bot_access_token')
+            .eq('org_id', meeting.org_id as string)
+            .eq('is_connected', true)
+            .maybeSingle();
+
+          // Get Slack user ID from mappings
+          const { data: slackMapping } = await supabase
+            .from('slack_user_mappings')
+            .select('slack_user_id')
+            .eq('sixty_user_id', userId)
+            .maybeSingle();
+
+          if (slackOrg?.bot_access_token && slackMapping?.slack_user_id) {
+            const truncatedBody = email.body.length > 2500
+              ? email.body.slice(0, 2497) + '...'
+              : email.body;
+
+            const blocks = [
+              {
+                type: 'header',
+                text: { type: 'plain_text', text: 'Follow-Up Email Ready for Review', emoji: true },
+              },
+              { type: 'divider' },
+              {
+                type: 'section',
+                fields: [
+                  { type: 'mrkdwn', text: `*To:*\n${email.to}` },
+                  { type: 'mrkdwn', text: `*Subject:*\n${email.subject}` },
+                ],
+              },
+              { type: 'divider' },
+              {
+                type: 'section',
+                text: { type: 'mrkdwn', text: truncatedBody },
+              },
+              { type: 'divider' },
+              {
+                type: 'actions',
+                elements: [
+                  {
+                    type: 'button',
+                    text: { type: 'plain_text', text: 'Approve & Send', emoji: true },
+                    style: 'primary',
+                    action_id: 'followup_approve',
+                    value: JSON.stringify({ meeting_id, to: email.to, subject: email.subject }),
+                  },
+                  {
+                    type: 'button',
+                    text: { type: 'plain_text', text: 'Edit in App', emoji: true },
+                    action_id: 'followup_edit',
+                    value: meeting_id,
+                  },
+                  {
+                    type: 'button',
+                    text: { type: 'plain_text', text: 'Dismiss', emoji: true },
+                    action_id: 'followup_dismiss',
+                    value: meeting_id,
+                  },
+                ],
+              },
+            ];
+
+            const slackResult = await sendSlackDM({
+              botToken: slackOrg.bot_access_token as string,
+              slackUserId: slackMapping.slack_user_id as string,
+              blocks,
+              text: `Follow-up email ready for ${email.to}: ${email.subject}`,
+            });
+
+            slackSent = slackResult.success;
+            sendEvent('step', {
+              id: 'slack_delivery',
+              status: slackSent ? 'complete' : 'failed',
+              label: slackSent ? 'Sent to Slack DM' : `Slack delivery failed: ${slackResult.error || 'Unknown'}`,
+            });
+          } else {
+            sendEvent('step', {
+              id: 'slack_delivery',
+              status: 'failed',
+              label: !slackOrg?.bot_access_token
+                ? 'Slack not connected for this org'
+                : 'No Slack user mapping found',
+            });
+          }
+        }
+
+        // ----------------------------------------------------------------
         // Final result event
         // ----------------------------------------------------------------
         const sectionsReturned = followUpContext
           ? Object.keys(followUpContext.sections).length
           : 0;
 
+        // Build RAG summary with actual findings (not just counts)
+        const ragSummary: Record<string, string[]> = {};
+        if (followUpContext?.hasHistory) {
+          for (const [sectionId, sectionResult] of Object.entries(followUpContext.sections)) {
+            const chunks = (sectionResult as any)?.chunks;
+            if (Array.isArray(chunks) && chunks.length > 0) {
+              // Take first 2 chunks, truncate to 120 chars each
+              ragSummary[sectionId] = chunks.slice(0, 2).map(
+                (c: any) => {
+                  const text = typeof c.text === 'string' ? c.text.trim() : String(c);
+                  return text.length > 120 ? text.slice(0, 117) + '...' : text;
+                }
+              );
+            }
+          }
+        }
+
         const result = {
+          isRegeneration: !!regenerate_guidance,
+          slackSent: delivery === 'slack' ? slackSent : undefined,
+          cachedRagContext: followUpContext ?? undefined,
           email: {
             to: email.to,
             subject: email.subject,
@@ -587,6 +841,7 @@ async function handleGenerateFollowUp(
               commercialSignals: !!followUpContext?.sections?.['commercial_history'],
               stakeholderChanges: !!followUpContext?.sections?.['stakeholder_context'],
               writingStyle: !!writingStyle,
+              ragSummary,
             },
             metadata: {
               meetingNumber: meetingHistory.priorMeetingCount + 1,
@@ -597,6 +852,7 @@ async function handleGenerateFollowUp(
               modelUsed: 'claude-sonnet-4-20250514',
             },
           },
+          warnings: warnings.length > 0 ? warnings : undefined,
         };
 
         sendEvent('result', result);

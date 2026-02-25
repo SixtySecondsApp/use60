@@ -8302,6 +8302,71 @@ serve(async (req) => {
           });
         }
 
+        // =====================================================================
+        // FUV2-005: Follow-up email action handlers
+        // Actions: followup_approve, followup_edit, followup_dismiss
+        // =====================================================================
+        if (action.action_id === 'followup_dismiss') {
+          console.log('[Follow-Up] Dismiss:', action.value);
+          if (payload.response_url) {
+            const confirmation = buildActionConfirmation({
+              action: 'dismissed',
+              slackUserId: payload.user.id,
+              timestamp: new Date().toISOString(),
+              entitySummary: 'Follow-up email',
+            });
+            await updateMessage(payload.response_url, confirmation.blocks);
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (action.action_id === 'followup_edit') {
+          const meetingId = action.value;
+          console.log('[Follow-Up] Edit in app, meeting_id:', meetingId);
+          const editUrl = `${appUrl}/platform/follow-up-demo?meeting_id=${meetingId}`;
+          if (payload.response_url) {
+            const blocks = [
+              section(`*Opening in app...* Edit your follow-up email before sending.`),
+              section(`<${editUrl}|Open Follow-Up Editor>`),
+              contextBlock([`Requested by <@${payload.user.id}> at ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`]),
+            ];
+            await updateMessage(payload.response_url, blocks);
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (action.action_id === 'followup_approve') {
+          let approveData: { meeting_id?: string; to?: string; subject?: string } = {};
+          try {
+            approveData = JSON.parse(action.value || '{}');
+          } catch {
+            approveData = {};
+          }
+          console.log('[Follow-Up] Approve:', approveData);
+          if (payload.response_url) {
+            const confirmation = buildActionConfirmation({
+              action: 'approved',
+              slackUserId: payload.user.id,
+              timestamp: new Date().toISOString(),
+              entitySummary: approveData.subject
+                ? `Follow-up to ${approveData.to}: ${approveData.subject}`
+                : 'Follow-up email',
+              detail: 'Email sending will be available once email-send-as-rep is integrated.',
+            });
+            await updateMessage(payload.response_url, confirmation.blocks);
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         // Unknown action - just acknowledge
         console.log('Unknown action_id:', action.action_id);
         return new Response(JSON.stringify({ ok: true }), {

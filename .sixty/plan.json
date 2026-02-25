@@ -8,617 +8,233 @@
       "styling": "tailwind"
     }
   },
-  "feature": "command-centre-evolution",
-  "consultReport": ".sixty/consult/command-centre-evolution.md",
-  "createdAt": "2026-02-25",
+  "features": [
+    {
+      "id": "command-centre-evolution",
+      "name": "Command Centre Evolution",
+      "status": "complete",
+      "createdAt": "2026-02-25"
+    },
+    {
+      "id": "followup-email-v2",
+      "name": "Follow-Up Email v2 — Quality + Demo Polish",
+      "status": "complete",
+      "consultReport": ".sixty/consult/followup-email-v2.md",
+      "createdAt": "2026-02-25"
+    }
+  ],
   "stories": [
     {
-      "id": "CC-001",
-      "feature": "command-centre-evolution",
-      "title": "Add command_centre_items to Supabase Realtime publication and hub",
-      "type": "schema+frontend",
+      "id": "FUV2-001",
+      "feature": "followup-email-v2",
+      "title": "Enrich analysis object with sentiment, key topics, and buying signals",
+      "type": "backend",
       "status": "complete",
       "priority": 1,
       "acceptance": [
-        "Migration adds command_centre_items to supabase_realtime publication with REPLICA IDENTITY FULL",
-        "useRealtimeHub high-priority channel subscribes to command_centre_items filtered by user_id",
-        "TABLE_GROUPS.high array includes 'command_centre_items'",
-        "useCommandCentreItemsQuery invalidates cache on Realtime callback instead of staleTime polling",
-        "staleTime increased to 5 minutes (Realtime handles freshness)"
+        "Meeting SELECT in generate-follow-up/index.ts includes sentiment_score, sentiment_reasoning, and summary_oneliner",
+        "Analysis object populates sentiment field from sentiment_score: positive (>0.5), neutral (-0.5 to 0.5), challenging (<-0.5)",
+        "Key topics extracted from summary via simple keyword extraction and populated in analysis.keyTopics",
+        "Buying signals extracted from summary (budget mentions, timeline confirmations, stakeholder buy-in) populated in analysis.buyingSignals",
+        "Composer prompt receives populated sentiment, keyTopics, and buyingSignals instead of empty defaults"
       ],
       "estimatedMinutes": 15,
-      "actualMinutes": null,
+      "actualMinutes": 12,
       "files": [
-        "supabase/migrations/20260225000001_cc_items_realtime.sql",
-        "src/lib/hooks/useRealtimeHub.ts",
-        "src/lib/hooks/useCommandCentreItemsQuery.ts"
+        "supabase/functions/generate-follow-up/index.ts"
       ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-004",
-        "CC-005",
-        "CC-009"
-      ],
-      "parallelWith": [
-        "CC-002",
-        "CC-003"
-      ],
-      "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["FUV2-002", "FUV2-008"],
+      "parallelWith": ["FUV2-003", "FUV2-006"],
+      "startedAt": "2026-02-25T15:10:00Z",
+      "completedAt": "2026-02-25T15:22:00Z"
     },
     {
-      "id": "CC-002",
-      "feature": "command-centre-evolution",
-      "title": "Add slack_message_ts, slack_channel_id, and auto_send_preferences columns",
-      "type": "schema",
+      "id": "FUV2-002",
+      "feature": "followup-email-v2",
+      "title": "Add regenerate-with-guidance flow (backend + frontend)",
+      "type": "fullstack",
       "status": "complete",
       "priority": 2,
       "acceptance": [
-        "Migration adds slack_message_ts TEXT and slack_channel_id TEXT to command_centre_items",
-        "Migration adds auto_send_types JSONB column to user_settings with default empty object",
-        "Index on (slack_message_ts) WHERE slack_message_ts IS NOT NULL for Slack sync lookups",
-        "Existing data unaffected — all new columns are nullable"
+        "POST endpoint accepts optional regenerate_guidance string and cached_rag_context object",
+        "When guidance provided, re-composes email with same RAG context plus user instructions appended to prompt",
+        "Frontend shows text input modal when Regenerate button is clicked",
+        "Regenerated email replaces previous result with a 'Regenerated' badge",
+        "No re-query of RAG — uses cached context from first generation (saves credits and time)"
       ],
-      "estimatedMinutes": 10,
-      "actualMinutes": null,
+      "estimatedMinutes": 25,
+      "actualMinutes": 18,
       "files": [
-        "supabase/migrations/20260225000002_cc_slack_sync_columns.sql"
+        "supabase/functions/generate-follow-up/index.ts",
+        "supabase/functions/_shared/follow-up/composer.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-010",
-        "CC-011"
-      ],
-      "parallelWith": [
-        "CC-001",
-        "CC-003"
-      ],
-      "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
+      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["FUV2-004"],
+      "startedAt": "2026-02-25T16:00:00Z",
+      "completedAt": "2026-02-25T16:18:00Z"
     },
     {
-      "id": "CC-003",
-      "feature": "command-centre-evolution",
-      "title": "Replace client-side getStats with server-side RPC",
-      "type": "backend+frontend",
+      "id": "FUV2-003",
+      "feature": "followup-email-v2",
+      "title": "Render email as styled preview with subject header and signature",
+      "type": "frontend",
       "status": "complete",
       "priority": 3,
       "acceptance": [
-        "New RPC get_cc_stats(p_user_id UUID) returns counts grouped by status in a single query",
-        "Returns: total_active, needs_review, auto_completed_today, pending_approval count",
-        "useCommandCentreStatsQuery calls the RPC instead of fetching all rows and counting in JS",
-        "Stats query invalidated by Realtime callback alongside items query"
+        "Email result renders in a Card with email-client styling: To field, bold subject line, body with proper paragraphs",
+        "Signature (sender name) rendered in muted text below body, visually separated",
+        "Markdown-style formatting (bold with **, bullet lists) parsed and rendered as HTML",
+        "Links in email body rendered as clickable blue text",
+        "Word count shown below email in muted text"
       ],
       "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "actualMinutes": 15,
       "files": [
-        "supabase/migrations/20260225000003_cc_stats_rpc.sql",
-        "src/lib/services/commandCentreItemsService.ts",
-        "src/lib/hooks/useCommandCentreItemsQuery.ts"
+        "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-005"
-      ],
-      "parallelWith": [
-        "CC-001",
-        "CC-002"
-      ],
-      "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["FUV2-004"],
+      "parallelWith": ["FUV2-001", "FUV2-006"],
+      "startedAt": "2026-02-25T15:10:00Z",
+      "completedAt": "2026-02-25T15:25:00Z"
     },
     {
-      "id": "CC-004",
-      "feature": "command-centre-evolution",
-      "title": "Build compression layout with feed + side panel split",
+      "id": "FUV2-004",
+      "feature": "followup-email-v2",
+      "title": "Add inline email editor with edit/preview toggle",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
       "acceptance": [
-        "CommandCentre page uses a flex layout: feed area (flex-1) + panel area (w-[460px]) when panel is open",
-        "Feed compresses smoothly when panel opens (CSS transition, not Sheet overlay)",
-        "Panel slides in from right with 200ms ease-out animation",
-        "Closing panel returns feed to full width with matching transition",
-        "Panel area uses !top-16 !h-[calc(100vh-4rem)] to respect fixed top bar",
-        "Replaces current Sheet-based CCItemDetailPanel with inline panel component"
+        "Edit button on email preview switches to editable textarea for body and input for subject",
+        "Preview button returns to styled read-only view with edited content",
+        "Edited content persists in state — Copy button copies edited version",
+        "Cancel button reverts to original generated content",
+        "Edit state does not re-trigger generation"
       ],
-      "estimatedMinutes": 30,
-      "actualMinutes": null,
+      "estimatedMinutes": 20,
+      "actualMinutes": 12,
       "files": [
-        "src/pages/platform/CommandCentre.tsx",
-        "src/components/commandCentre/CCDetailPanel.tsx"
+        "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": {
-        "stories": [
-          "CC-001"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-006",
-        "CC-007",
-        "CC-008",
-        "CC-013"
-      ],
-      "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "dependencies": { "stories": ["FUV2-003"], "files": [], "schema": [] },
+      "blocks": ["FUV2-005"],
+      "parallelWith": ["FUV2-002"],
+      "startedAt": "2026-02-25T16:20:00Z",
+      "completedAt": "2026-02-25T16:32:00Z"
     },
     {
-      "id": "CC-005",
-      "feature": "command-centre-evolution",
-      "title": "Build unified feed with left-border severity and filter bar",
-      "type": "frontend",
+      "id": "FUV2-005",
+      "feature": "followup-email-v2",
+      "title": "Add Send to Slack approval button with preview block",
+      "type": "fullstack",
       "status": "complete",
       "priority": 5,
       "acceptance": [
-        "CCItemCard renders left border: blue (needs approval), amber (critical/high urgency), green (auto_resolved/completed), grey (informational)",
-        "Border derived from existing status + urgency + drafted_action fields — no new DB columns",
-        "Filter bar replaces 5 tabs: All (default) | Needs You (badge count) | Deals | Signals",
-        "Needs You badge count persists across all filters",
-        "All filter shows pending items pinned to top, then chronological",
-        "Filter state preserved when opening/closing side panel"
+        "Send to Slack button on demo page calls generate-follow-up with delivery='slack'",
+        "Backend formats email as Slack Block Kit message with approve/edit/dismiss buttons",
+        "Sends to user's Slack DM channel via slack-events bot",
+        "UI shows confirmation toast: 'Sent to Slack for approval'",
+        "If Slack not connected, button is disabled with tooltip explaining setup"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": null,
+      "actualMinutes": 20,
       "files": [
-        "src/pages/platform/CommandCentre.tsx",
-        "src/components/commandCentre/CCItemCard.tsx",
-        "src/components/commandCentre/CCFilterBar.tsx"
+        "supabase/functions/generate-follow-up/index.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": {
-        "stories": [
-          "CC-001",
-          "CC-003"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-009"
-      ],
+      "dependencies": { "stories": ["FUV2-004"], "files": [], "schema": [] },
+      "blocks": [],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-02-25T16:35:00Z",
+      "completedAt": "2026-02-25T16:55:00Z"
     },
     {
-      "id": "CC-006",
-      "feature": "command-centre-evolution",
-      "title": "Build status bar with live counts and latest agent action",
+      "id": "FUV2-006",
+      "feature": "followup-email-v2",
+      "title": "Show actual RAG findings in context breakdown, not just counts",
       "type": "frontend",
       "status": "complete",
       "priority": 6,
       "acceptance": [
-        "Compact bar fixed above feed: copilot active indicator (pulsing green dot), actions today count, pending review count",
-        "Latest agent action shown: source_agent + title of most recent item, updated via Realtime",
-        "Clicking pending count filters to Needs You",
-        "Counts sourced from the server-side stats RPC, invalidated by Realtime",
-        "Falls back to 'All caught up' when no pending items"
+        "Context breakdown expands to show actual findings: commitment text, concern keywords, commercial mentions",
+        "Each context category is collapsible with a chevron toggle",
+        "Collapsed state shows count badge, expanded shows 2-3 line summaries per category",
+        "Empty categories hidden (not shown as '0 found')",
+        "Backend SSE result event includes ragSummary object with category labels and snippet text"
       ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "estimatedMinutes": 15,
+      "actualMinutes": 12,
       "files": [
-        "src/components/commandCentre/CCStatusBar.tsx",
-        "src/pages/platform/CommandCentre.tsx"
+        "supabase/functions/generate-follow-up/index.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": {
-        "stories": [
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
+      "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": [
-        "CC-007"
-      ],
-      "startedAt": null,
-      "completedAt": null
+      "parallelWith": ["FUV2-001", "FUV2-003"],
+      "startedAt": "2026-02-25T15:30:00Z",
+      "completedAt": "2026-02-25T15:42:00Z"
     },
     {
-      "id": "CC-007",
-      "feature": "command-centre-evolution",
-      "title": "Build human+AI attribution pattern on feed cards",
-      "type": "frontend",
+      "id": "FUV2-007",
+      "feature": "followup-email-v2",
+      "title": "Add step timing display and total generation time",
+      "type": "fullstack",
       "status": "complete",
       "priority": 7,
       "acceptance": [
-        "Card shows agent avatar (28px icon derived from source_agent) for all items",
-        "Items needing review show user avatar (28px) alongside agent avatar with blue dot indicator",
-        "Approved items show user avatar with green checkmark overlay, card reduces opacity",
-        "Dismissed items fade out with brief animation, accessible via 'Show dismissed' toggle",
-        "Agent name shown in metadata line below description"
+        "Each SSE step event includes durationMs field calculated from step start to complete",
+        "Frontend displays duration next to each completed step: 'Loading attendees (0.3s)'",
+        "Total generation time shown below all steps after completion",
+        "Steps that were skipped show 'skipped' instead of a duration",
+        "Running steps show elapsed time counter updating every 500ms"
       ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
+      "estimatedMinutes": 15,
+      "actualMinutes": 10,
       "files": [
-        "src/components/commandCentre/CCItemCard.tsx",
-        "src/components/commandCentre/CCAttribution.tsx"
+        "supabase/functions/generate-follow-up/index.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": {
-        "stories": [
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
+      "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": [
-        "CC-006"
-      ],
-      "startedAt": null,
-      "completedAt": null
+      "parallelWith": ["FUV2-008"],
+      "startedAt": "2026-02-25T15:30:00Z",
+      "completedAt": "2026-02-25T15:40:00Z"
     },
     {
-      "id": "CC-008",
-      "feature": "command-centre-evolution",
-      "title": "Build email preview panel with TipTap read-only and edit modes",
-      "type": "frontend",
+      "id": "FUV2-008",
+      "feature": "followup-email-v2",
+      "title": "Add quality degradation warnings in generation metadata",
+      "type": "backend",
       "status": "complete",
       "priority": 8,
       "acceptance": [
-        "When drafted_action.type === 'send_email', detail panel renders email-specific layout",
-        "Preview mode (default): To, Subject displayed above TipTap in editable={false} mode rendering body HTML",
-        "Edit button switches TipTap to editable={true}, Subject becomes editable input, full toolbar appears",
-        "Email renders as recipient would see it — proper formatting, links, paragraphs",
-        "Agent reasoning section below preview: why this email, confidence score, source event",
-        "Reuses existing TipTapEditor component from src/components/email/TipTapEditor.tsx"
+        "SSE result event includes warnings array listing what degraded: missing writing style, no sentiment, RAG partial results, placeholder attendee",
+        "Each warning has a severity (info/warn) and human-readable message",
+        "Frontend renders warnings as amber badges below the context breakdown",
+        "Warnings are informational only — generation still completes",
+        "No warnings shown when all data sources returned successfully"
       ],
-      "estimatedMinutes": 30,
+      "estimatedMinutes": 10,
       "actualMinutes": null,
       "files": [
-        "src/components/commandCentre/panels/CCEmailPanel.tsx",
-        "src/components/commandCentre/CCDetailPanel.tsx"
+        "supabase/functions/generate-follow-up/index.ts",
+        "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": {
-        "stories": [
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-009"
-      ],
-      "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-009",
-      "feature": "command-centre-evolution",
-      "title": "Wire Approve & Send to email-send-as-rep with undo window",
-      "type": "frontend+backend",
-      "status": "complete",
-      "priority": 9,
-      "acceptance": [
-        "Approve & Send button in email panel calls email-send-as-rep edge function with drafted_action payload",
-        "5-second undo window shown after approval (reuse useUndoSend pattern from EmailComposerEnhanced)",
-        "If user edits before approving, edited content is saved to drafted_action then sent",
-        "On successful send: item status transitions to completed, Realtime updates feed",
-        "On send failure: toast error, item stays in ready state, user can retry",
-        "Approve without send (for non-email items) continues to work as before"
-      ],
-      "estimatedMinutes": 25,
-      "actualMinutes": null,
-      "files": [
-        "src/components/commandCentre/panels/CCEmailPanel.tsx",
-        "src/lib/services/commandCentreItemsService.ts",
-        "src/lib/hooks/useCommandCentreItemsQuery.ts"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-001",
-          "CC-005",
-          "CC-008"
-        ],
-        "files": [],
-        "schema": []
-      },
+      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-010",
-      "feature": "command-centre-evolution",
-      "title": "Add deep link routing and auto-open panel from URL params",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 10,
-      "acceptance": [
-        "URL /command-centre?item={id} auto-opens detail panel for that item on page load",
-        "URL /command-centre?filter=needs-you opens with Needs You filter active",
-        "URL /command-centre?filter=deals&item={id} opens deals filter with specific item panel",
-        "If item ID not found in current feed, fetches it directly via getItemById",
-        "URL params update when user opens/closes panel or changes filter (browser back works)"
-      ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": [
-        "src/pages/platform/CommandCentre.tsx"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-002"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [
-        "CC-011"
-      ],
-      "parallelWith": [
-        "CC-004"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-011",
-      "feature": "command-centre-evolution",
-      "title": "Wire Slack deep links and bi-directional status sync",
-      "type": "backend",
-      "status": "complete",
-      "priority": 11,
-      "acceptance": [
-        "buildCommandCentreDigest View button URL changes from /command-centre to /command-centre?item={id}",
-        "All CC Slack action buttons (cc_approve, cc_dismiss) write slack_message_ts + slack_channel_id to the CC item",
-        "When user approves/dismisses in web UI, edge function calls Slack chat.update to replace action buttons with confirmation",
-        "Slack message shows 'Approved by {name}' or 'Dismissed' after web action",
-        "When user acts in Slack, Realtime pushes update to web — card de-emphasises in real-time"
-      ],
-      "estimatedMinutes": 30,
-      "actualMinutes": null,
-      "files": [
-        "supabase/functions/_shared/slackBlocks.ts",
-        "supabase/functions/slack-interactive/index.ts",
-        "supabase/functions/cc-action-sync/index.ts"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-002",
-          "CC-010"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-012",
-      "feature": "command-centre-evolution",
-      "title": "Build auto-send preferences UI and gate in approval flow",
-      "type": "frontend+backend",
-      "status": "complete",
-      "priority": 12,
-      "acceptance": [
-        "Settings page section: 'Copilot Auto-Send' with toggles per action type (follow_up, meeting_prep, etc.)",
-        "All toggles default to OFF — every action requires manual approval initially",
-        "Preferences stored in user_settings.preferences.auto_send_types as {type: boolean} map",
-        "cc-auto-execute checks auto_send_types before executing — skips if type not enabled",
-        "When auto-executed, feed item shows green border with 'Auto-sent — undo within 24h' label"
-      ],
-      "estimatedMinutes": 25,
-      "actualMinutes": null,
-      "files": [
-        "src/components/settings/AutoSendPreferences.tsx",
-        "supabase/functions/cc-auto-execute/index.ts",
-        "src/lib/services/commandCentreItemsService.ts"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-002"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-004",
-        "CC-010"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-013",
-      "feature": "command-centre-evolution",
-      "title": "Build typed detail panels for CRM diff, deal health, and signals",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 13,
-      "acceptance": [
-        "CRM Update panel: before/after diff table, confidence bar, source event, View in HubSpot / Undo actions",
-        "Deal Health panel: large health score with trend arrow, factor breakdown bars (champion, timeline, competitive, budget), recommended action",
-        "Signal panel: severity badge (high/medium/low), evidence text, signal history timeline, contextual action button",
-        "Panel type auto-detected from item_type and rendered via panel registry pattern"
-      ],
-      "estimatedMinutes": 30,
-      "actualMinutes": null,
-      "files": [
-        "src/components/commandCentre/panels/CCCrmDiffPanel.tsx",
-        "src/components/commandCentre/panels/CCDealHealthPanel.tsx",
-        "src/components/commandCentre/panels/CCSignalPanel.tsx",
-        "src/components/commandCentre/CCDetailPanel.tsx"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-008"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-014",
-      "feature": "command-centre-evolution",
-      "title": "Add empty states for all filter views",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 14,
-      "acceptance": [
-        "First load (no items): 'Your copilot is warming up' with Connect Calendar / Set up HubSpot CTAs",
-        "Filtered no matches: 'All clear — no [deals/signals] need your attention. Your copilot is handling things.'",
-        "All caught up (no pending): 'All caught up — your copilot handled {count} actions today'",
-        "Each empty state uses Lucide icons, not emoji"
-      ],
-      "estimatedMinutes": 15,
-      "actualMinutes": null,
-      "files": [
-        "src/components/commandCentre/CCEmptyState.tsx",
-        "src/pages/platform/CommandCentre.tsx"
-      ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-001",
-        "CC-002",
-        "CC-003"
-      ],
-      "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
-    },
-    {
-      "id": "CC-015",
-      "feature": "command-centre-evolution",
-      "title": "Add keyboard navigation and batch review shortcuts",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 15,
-      "acceptance": [
-        "j/k navigates between feed items (visual highlight moves, side panel updates if open)",
-        "Enter opens/closes side panel for highlighted item",
-        "a approves highlighted item (with 5s undo for emails)",
-        "d dismisses highlighted item",
-        "e opens edit mode in side panel (for email items, activates TipTap edit)",
-        "Shortcuts only active when CommandCentre page is focused, not when typing in inputs"
-      ],
-      "estimatedMinutes": 25,
-      "actualMinutes": null,
-      "files": [
-        "src/pages/platform/CommandCentre.tsx",
-        "src/lib/hooks/useCommandCentreKeyboard.ts"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-005",
-          "CC-004"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-013"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-016",
-      "feature": "command-centre-evolution",
-      "title": "Add entrance animations and real-time feed transitions",
-      "type": "frontend",
-      "status": "complete",
-      "priority": 16,
-      "acceptance": [
-        "New Realtime items slide in at top of feed with subtle entrance animation (200ms ease-out)",
-        "Approved items reduce opacity with 300ms transition, shift below pending items",
-        "Dismissed items fade out with 200ms animation",
-        "Filter switch is instant (client-side filter on loaded data, < 100ms)",
-        "Status bar counts animate on change (number counter transition)"
-      ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": [
-        "src/pages/platform/CommandCentre.tsx",
-        "src/components/commandCentre/CCItemCard.tsx",
-        "src/components/commandCentre/CCStatusBar.tsx"
-      ],
-      "dependencies": {
-        "stories": [
-          "CC-005",
-          "CC-006"
-        ],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-015"
-      ],
-      "startedAt": null,
-      "completedAt": null
-    },
-    {
-      "id": "CC-017",
-      "feature": "command-centre-evolution",
-      "title": "Fix CCItem TypeScript interface and missing CC undo edge function",
-      "type": "backend+frontend",
-      "status": "complete",
-      "priority": 17,
-      "acceptance": [
-        "CCItem interface in commandCentreItemsService.ts includes enrichment_context, confidence_factors, priority_factors, enriched_at, parent_item_id",
-        "CC_ITEM_COLUMNS select list updated to include all missing columns",
-        "Create supabase/functions/cc-undo/index.ts wrapping existing undoExecution.ts shared module",
-        "Snooze sets status to 'open' with due_date (not leaving item in ready state)",
-        "Existing TypeScript casts in CCItemDetailPanel replaced with proper typed access"
-      ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": [
-        "src/lib/services/commandCentreItemsService.ts",
-        "supabase/functions/cc-undo/index.ts",
-        "src/components/commandCentre/CCItemDetailPanel.tsx"
-      ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": []
-      },
-      "blocks": [],
-      "parallelWith": [
-        "CC-001",
-        "CC-002",
-        "CC-003",
-        "CC-014"
-      ],
-      "startedAt": null,
-      "completedAt": "2026-02-25T11:30:06.683Z"
+      "parallelWith": ["FUV2-007"],
+      "startedAt": "2026-02-25T15:30:00Z",
+      "completedAt": "2026-02-25T15:40:00Z"
     }
   ],
   "execution": {
-    "totalStories": 17,
-    "completedStories": 17,
-    "currentFeature": "command-centre-evolution",
-    "lastUpdated": "2026-02-25T11:30:06.683Z"
+    "totalStories": 8,
+    "completedStories": 8,
+    "currentFeature": "followup-email-v2",
+    "lastUpdated": "2026-02-25T15:00:00Z"
   }
 }

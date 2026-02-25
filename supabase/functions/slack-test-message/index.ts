@@ -393,6 +393,61 @@ function buildEmailReplyAlertBlocks(message: ProactiveSimMessage): any[] {
   return blocks;
 }
 
+function buildCompactNotificationBlocks(): any[] {
+  const APP_URL = 'https://app.use60.com';
+  return [
+    {
+      type: 'context',
+      elements: [
+        { type: 'mrkdwn', text: `*Acme Corp* moved to Negotiation · <${APP_URL}/deals/demo-deal|View Deal>` },
+      ],
+    },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: '_Compact notification — this is what lower-priority updates look like_' }] },
+  ];
+}
+
+function buildSilentThreadBlocks(msg: ProactiveSimMessage): any[] {
+  return [
+    {
+      type: 'context',
+      elements: [
+        { type: 'mrkdwn', text: `*Signal*: ${msg.summary}` },
+      ],
+    },
+  ];
+}
+
+function buildWeeklyScorecardBlocks(): any[] {
+  const APP_URL = 'https://app.use60.com';
+  return [
+    { type: 'header', text: { type: 'plain_text', text: 'Your Week with 60', emoji: true } },
+    {
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: '*Emails Drafted*\n12 (8 approved)' },
+        { type: 'mrkdwn', text: '*Meetings Prepped*\n5' },
+        { type: 'mrkdwn', text: '*Deals Flagged*\n3' },
+        { type: 'mrkdwn', text: '*Estimated Time Saved*\n~2.4 hours' },
+      ],
+    },
+    { type: 'divider' },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: '47 total interactions this week' }] },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'View Full Report', emoji: true },
+          url: `${APP_URL}/dashboard`,
+          action_id: 'weekly_scorecard_view_report',
+          style: 'primary',
+        },
+      ],
+    },
+    { type: 'context', elements: [{ type: 'mrkdwn', text: '_Weekly Scorecard Simulator_' }] },
+  ];
+}
+
 function sampleMorningBrief(): ProactiveSimMessage {
   return {
     title: 'Here’s what matters today',
@@ -455,6 +510,30 @@ function sampleEmailReplyAlert(): ProactiveSimMessage {
         },
       },
     ],
+  };
+}
+
+function sampleCompactNotification(): ProactiveSimMessage {
+  return {
+    title: 'Compact notification',
+    summary: 'Acme Corp moved to Negotiation',
+    blocks: [],
+  };
+}
+
+function sampleSilentThreadSignal(): ProactiveSimMessage {
+  return {
+    title: 'Daily signal',
+    summary: 'Account signal: TechStart visited pricing page 3x today',
+    blocks: [],
+  };
+}
+
+function sampleWeeklyScorecard(): ProactiveSimMessage {
+  return {
+    title: 'Your Week with 60',
+    summary: '12 emails drafted, 5 meetings prepped',
+    blocks: [],
   };
 }
 
@@ -622,7 +701,10 @@ serve(async (req) => {
       action === 'preview_stale_deal_alert' ||
       action === 'send_stale_deal_alert_dm' ||
       action === 'preview_email_reply_alert' ||
-      action === 'send_email_reply_alert_dm'
+      action === 'send_email_reply_alert_dm' ||
+      action === 'send_compact_notification_dm' ||
+      action === 'send_silent_thread_dm' ||
+      action === 'send_weekly_scorecard_dm'
     ) {
       if (auth.mode !== 'user' || !auth.userId) {
         return new Response(JSON.stringify({ error: 'User auth required for proactive simulator actions' }), {
@@ -660,6 +742,18 @@ serve(async (req) => {
         msg = sampleStaleDealAlert(dealId);
         blocks = buildStaleDealAlertBlocks(msg);
         text = '⏳ Stale deal alert';
+      } else if (action === 'send_compact_notification_dm') {
+        msg = sampleCompactNotification();
+        blocks = buildCompactNotificationBlocks();
+        text = 'Acme Corp moved to Negotiation';
+      } else if (action === 'send_silent_thread_dm') {
+        msg = sampleSilentThreadSignal();
+        blocks = buildSilentThreadBlocks(msg);
+        text = msg.summary;
+      } else if (action === 'send_weekly_scorecard_dm') {
+        msg = sampleWeeklyScorecard();
+        blocks = buildWeeklyScorecardBlocks();
+        text = 'Your Week with 60 — 12 emails drafted, 5 meetings prepped';
       } else {
         msg = sampleEmailReplyAlert();
         blocks = buildEmailReplyAlertBlocks(msg);
@@ -679,6 +773,57 @@ serve(async (req) => {
       }
 
       const dmChannelId = await openDm(botToken, slackUserId);
+
+      // Silent thread: post a root message first, then reply in that thread
+      if (action === 'send_silent_thread_dm') {
+        const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const rootResult = await postMessageWithBlocks(botToken, dmChannelId, `Signals — ${today}`, [
+          { type: 'context', elements: [{ type: 'mrkdwn', text: `*Signals — ${today}*` }] },
+        ]);
+        if (!rootResult.ok) {
+          return new Response(JSON.stringify({ success: false, error: rootResult.error || 'Slack API error posting root thread' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Post the signal as a thread reply
+        const threadTs = rootResult.ts;
+        const threadReplyRes = await fetch('https://slack.com/api/chat.postMessage', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${botToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: dmChannelId,
+            text,
+            blocks: blocks as any[],
+            thread_ts: threadTs,
+          }),
+        });
+        const threadReply = await threadReplyRes.json();
+        if (!threadReply.ok) {
+          return new Response(JSON.stringify({ success: false, error: threadReply.error || 'Slack API error posting thread reply' }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            channelId: rootResult.channel,
+            ts: rootResult.ts,
+            threadReplyTs: threadReply.ts,
+            message: msg,
+            blocks,
+            blocks_prompt: PROACTIVE_SIM_BLOCKS_PROMPT,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       const result = await postMessageWithBlocks(botToken, dmChannelId, text, blocks as any[]);
       if (!result.ok) {
         return new Response(JSON.stringify({ success: false, error: result.error || 'Slack API error' }), {
