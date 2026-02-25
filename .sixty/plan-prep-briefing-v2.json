@@ -161,7 +161,7 @@
       "feature": "all",
       "title": "Deploy all changed functions + commit",
       "type": "deploy",
-      "status": "in_progress",
+      "status": "complete",
       "priority": 9,
       "dependencies": { "stories": ["CTX-002", "TIM-001", "SNZ-002", "POST-002", "FB-001"] },
       "acceptance": [
@@ -176,7 +176,7 @@
   ],
   "execution": {
     "totalStories": 9,
-    "completedStories": 8,
+    "completedStories": 9,
     "lastUpdated": "2026-02-25T23:00:00Z"
   }
 }
