@@ -42,6 +42,7 @@ import { handleSupportAction } from './handlers/support.ts';
 import { handleAutonomyAction } from './handlers/autonomy.ts';
 import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
 import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
+import { handlePrepBriefingAction } from './handlers/prepBriefing.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -7810,6 +7811,48 @@ serve(async (req) => {
                 text: result.error || 'Failed to process support action',
               });
             }
+          }
+
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // PREP: Pre-meeting briefing quick actions (prep_briefing::*)
+        // =====================================================================
+        if (action.action_id.startsWith('prep_briefing::')) {
+          console.log('[PrepBriefing] Processing action:', action.action_id);
+          const actionSuffix = action.action_id.split('::')[1]; // e.g. 'booking_confirm'
+          const meetingId = action.value;
+          const result = await handlePrepBriefingAction(
+            actionSuffix,
+            payload.user.id,
+            meetingId,
+            payload.trigger_id,
+            {
+              channelId: payload.channel?.id,
+              messageTs: payload.message?.ts,
+              teamId: payload.team?.id,
+            },
+          );
+
+          if (payload.response_url) {
+            await sendEphemeral(payload.response_url, {
+              text: result.success ? result.responseText : (result.error || 'Action failed'),
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: result.success
+                      ? `:white_check_mark: ${result.responseText}`
+                      : `:x: ${result.error || 'Action failed'}`,
+                  },
+                },
+              ],
+            });
           }
 
           return new Response(JSON.stringify({ ok: true }), {

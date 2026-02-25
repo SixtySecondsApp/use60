@@ -24,6 +24,7 @@ export interface AttendeeResearch {
   company: string | null;
   linkedin_url: string | null;
   background: string | null;
+  profile_image_url?: string | null;
   /** Raw Apify LinkedIn profile if available — passed straight to Gemini */
   _apifyProfile?: Record<string, unknown>;
 }
@@ -364,6 +365,7 @@ Return ONLY a JSON object:
   const resultAttendees: AttendeeResearch[] = attendees.map(att => {
     const found = ((parsed?.attendees || []) as AttendeeResearch[])
       .find(a => a.email === att.email);
+    const apifyProf = apifyProfiles.get(att.email);
     return {
       email: att.email,
       name: found?.name || att.name || att.email,
@@ -371,6 +373,7 @@ Return ONLY a JSON object:
       company: found?.company || null,
       linkedin_url: found?.linkedin_url || null,
       background: found?.background || null,
+      profile_image_url: (apifyProf?.profileImage ?? apifyProf?.imgUrl ?? null) as string | null,
     };
   });
 
