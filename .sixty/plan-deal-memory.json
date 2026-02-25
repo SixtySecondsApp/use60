@@ -1,0 +1,439 @@
+{
+  "feature": {
+    "id": "deal-memory",
+    "name": "Deal Memory — The Institutional Knowledge Graph",
+    "status": "complete",
+    "prd": "PRD-DM-001",
+    "description": "Structured action layer on top of the Intelligence RAG system. Captures commitments, stakeholder maps, risk flags, sentiment trajectories as typed events. Provides hybrid context loading (structured DB + RAG depth) for all agents. Powers commitment tracking, relationship decay, snapshot generation, and compound risk detection.",
+    "createdAt": "2026-02-25T00:00:00Z",
+    "dependencies": {
+      "completed": [
+        "Phase 5: Knowledge & Memory (PRD-16, PRD-17, PRD-18) — contact_graph, competitive_mentions, pipeline_patterns",
+        "Agent Configuration Engine — agent_config_defaults, resolve_agent_config",
+        "Fleet Orchestrator — fleet_event_routes, sequence chaining",
+        "Deal Risk Scorer — deal_risk_scores, agent-deal-risk-batch",
+        "Meeting Intelligence — meeting-intelligence-search (RAG API)",
+        "Cost Tracking — costTracking.ts, creditPacks.ts"
+      ],
+      "existingInfrastructure": [
+        "meeting-intelligence-search edge function — RAG search with filters (sentiment, date, company, contact, owner)",
+        "agentRunner.ts — standardized execution with retry, credit tracking, telemetry",
+        "costTracking.ts — credit system (1 credit ≈ $0.10), getOrgIntelligenceTier(), auto top-up",
+        "agentConfig.ts — 3-layer config resolution (defaults → org → user)",
+        "agent-deal-risk-batch — batch risk scoring with signal classification",
+        "relationship_health_scores + contact_engagement_patterns tables",
+        "contact_graph + contact_company_history tables (from Phase 5)",
+        "competitive_mentions + competitor_profiles tables (from Phase 5)",
+        "copilot_memory table (7-day retention conversational memory)",
+        "deal_signal_temperature table (temperature 0-100, trend, top signals)",
+        "42 orchestrator adapters in _shared/orchestrator/adapters/",
+        "_shared/proactive/ delivery subsystem for Slack"
+      ]
+    }
+  },
+
+  "stories": [
+    {
+      "id": "DM-001",
+      "feature": "deal-memory",
+      "title": "Create deal_memory_events table with event taxonomy and indexes",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations"] },
+      "blocks": ["DM-003", "DM-004", "DM-005", "DM-006", "DM-007"],
+      "parallelWith": ["DM-002"],
+      "acceptance": [
+        "deal_memory_events table created with all columns per PRD: id, org_id (FK organizations), deal_id (text), event_type, event_category, source_type, source_id, source_timestamp, summary, detail (jsonb), verbatim_quote, speaker, confidence (float), salience, is_active, superseded_by (self-ref), contact_ids (text[]), extracted_by, model_used, credit_cost, created_at, updated_at",
+        "Four indexes: idx_dme_deal_timeline (org_id, deal_id, source_timestamp DESC WHERE is_active), idx_dme_deal_category (org_id, deal_id, event_category, source_timestamp DESC WHERE is_active), idx_dme_org_type (org_id, event_type, source_timestamp DESC WHERE is_active), idx_dme_contacts GIN (contact_ids WHERE is_active)",
+        "RLS enabled: users access their org's events via org_id IN (SELECT org_id FROM user_org_memberships WHERE user_id = auth.uid()), service_role has full access",
+        "updated_at trigger via moddatetime or equivalent"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD000001_deal_memory_events.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-002",
+      "feature": "deal-memory",
+      "title": "Create deal_memory_snapshots table",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations"] },
+      "blocks": ["DM-009", "DM-010"],
+      "parallelWith": ["DM-001"],
+      "acceptance": [
+        "deal_memory_snapshots table created: id, org_id (FK organizations), deal_id (text), narrative (text), key_facts (jsonb), stakeholder_map (jsonb), risk_assessment (jsonb), sentiment_trajectory (jsonb), open_commitments (jsonb default '[]'), events_included_through (timestamptz), event_count (int), generated_by (text), model_used (text), created_at",
+        "Index: idx_dms_deal_latest (org_id, deal_id, created_at DESC)",
+        "RLS: org-isolated via user_org_memberships, service_role full access"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD000002_deal_memory_snapshots.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-003",
+      "feature": "deal-memory",
+      "title": "Create _shared/memory/types.ts and _shared/memory/taxonomy.ts",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["DM-001"], "files": [], "schema": ["deal_memory_events"] },
+      "blocks": ["DM-004", "DM-005", "DM-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "types.ts exports all TypeScript interfaces: DealMemoryEvent, DealMemorySnapshot, ContactMemory, RepMemory, EventFilters, ContextOptions, DealContext, Commitment, Stakeholder, RiskFactor, RAGResult, RAGFilters",
+        "taxonomy.ts exports EVENT_TYPES map with event_type → { category, detail_schema, description } for all 18 event types from PRD (commitment_made through risk_flag)",
+        "taxonomy.ts exports validateEventDetail(eventType, detail) function that validates JSONB detail against the type's schema",
+        "taxonomy.ts exports EVENT_CATEGORIES array and isValidEventType() guard"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/memory/types.ts",
+        "supabase/functions/_shared/memory/taxonomy.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-004",
+      "feature": "deal-memory",
+      "title": "Build _shared/memory/ragClient.ts — Intelligence RAG API wrapper",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["DM-003"], "files": ["supabase/functions/meeting-intelligence-search/index.ts"], "schema": [] },
+      "blocks": ["DM-005", "DM-006", "DM-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "ragClient.ts wraps the meeting-intelligence-search edge function via server-to-server fetch (service role key)",
+        "Supports query interface: query(question, filters: { deal_id?, meeting_id?, contact_id?, date_from?, date_to?, owner_user_id? }) returning RAGResult[] with answer, sources, relevance scores",
+        "Token budget management: accepts maxTokens param, truncates response to fit budget",
+        "Credit cost tracking: logs RAG query costs via existing costTracking.ts",
+        "Circuit breaker: after 3 consecutive failures, returns empty results for 60s (agents degrade to structured-only)",
+        "Caching: deduplicates identical queries within same agent execution via in-memory Map"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/memory/ragClient.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-005",
+      "feature": "deal-memory",
+      "title": "Build _shared/memory/writer.ts — RAG-assisted event extraction",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["DM-003", "DM-004"], "files": [], "schema": ["deal_memory_events"] },
+      "blocks": ["DM-007", "DM-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "writer.ts exports extractEventsFromMeeting(meetingId, dealId, orgId, supabaseClient) → DealMemoryEvent[]",
+        "Runs targeted RAG queries per event category (commitments, objections, competitive, stakeholders, commercial, sentiment) — 6 categories, ~10 queries total",
+        "Structures RAG chunks into typed events using Claude Sonnet with category-specific prompts",
+        "Deduplication: loads recent events for the deal, passes to structuring prompt to prevent duplicates",
+        "Supersession: detects when new events replace old ones (e.g. new close date), sets superseded_by and is_active=false on old event",
+        "Confidence gate: only writes events with confidence >= 0.7 (configurable via agent config)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/memory/writer.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-006",
+      "feature": "deal-memory",
+      "title": "Build _shared/memory/reader.ts — hybrid context loading",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["DM-003", "DM-004"], "files": [], "schema": ["deal_memory_events", "deal_memory_snapshots"] },
+      "blocks": ["DM-008", "DM-009", "DM-010"],
+      "parallelWith": ["DM-005"],
+      "acceptance": [
+        "reader.ts exports DealMemoryReader interface with: getDealContext(), getEvents(), getOpenCommitments(), getOverdueCommitments(), getStakeholderMap(), getRiskFactors(), queryDealHistory(), getContactHistory()",
+        "getDealContext(dealId, opts) loads snapshot + recent events + commitments + stakeholders + risks from Supabase (<50ms), optionally queries RAG for conversational depth",
+        "Token budget management: structured data gets 40% of budget, RAG depth gets remainder; generates default RAG questions from snapshot if none provided",
+        "Agent-specific context profiles configurable: token budget, RAG depth flag, event category filters",
+        "All structured queries use explicit column selection (never select('*'))"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/memory/reader.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-007",
+      "feature": "deal-memory",
+      "title": "Integrate memory writer into post-meeting-intel pipeline",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["DM-005"], "files": ["supabase/functions/slack-post-meeting/index.ts"], "schema": ["deal_memory_events"] },
+      "blocks": ["DM-011"],
+      "parallelWith": ["DM-008"],
+      "acceptance": [
+        "After meeting transcript processing, writer.extractEventsFromMeeting() is called to populate deal_memory_events",
+        "Events are written as a batch upsert (not individual inserts) for performance",
+        "If meeting has no associated deal_id, extraction is skipped (no orphan events)",
+        "Credit cost of extraction logged via costTracking.ts with source='agent_automated'",
+        "Fleet event route: meeting_completed → memory writer extraction (after existing post-meeting analysis)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-post-meeting/index.ts",
+        "supabase/migrations/YYYYMMDD000003_deal_memory_fleet_routes.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-008",
+      "feature": "deal-memory",
+      "title": "Integrate memory reader into pre-meeting prep and follow-up agents",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["DM-006"], "files": [], "schema": ["deal_memory_events"] },
+      "blocks": ["DM-011"],
+      "parallelWith": ["DM-007"],
+      "acceptance": [
+        "preMeeting.ts adapter loads deal context via reader.getDealContext() with tokenBudget=3500, includeRAGDepth=true — adds deal narrative, stakeholder map, open commitments to briefing",
+        "Follow-up drafter loads deal context with tokenBudget=2500, includeRAGDepth=true — references prior conversations and open commitments in email drafts",
+        "Deal risk scorer reads structured events (no RAG depth) — detects compound patterns: competitor mentioned 3+ times, close date pushed 2+ times, stakeholder disengagement",
+        "Morning briefing reads snapshot key facts + overdue commitments (tokenBudget=800, no RAG depth)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts",
+        "supabase/functions/_shared/orchestrator/adapters/morningBriefing.ts",
+        "supabase/functions/agent-deal-risk-batch/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-009",
+      "feature": "deal-memory",
+      "title": "Build _shared/memory/snapshot.ts and snapshot generation edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": ["DM-004", "DM-005", "DM-006"], "files": [], "schema": ["deal_memory_events", "deal_memory_snapshots"] },
+      "blocks": ["DM-011"],
+      "parallelWith": ["DM-010"],
+      "acceptance": [
+        "snapshot.ts exports generateSnapshot(dealId, orgId, supabaseClient) → DealMemorySnapshot",
+        "Loads all structured events + queries RAG for narrative depth (3 targeted questions: deal story, relationship dynamics, recurring topics)",
+        "Synthesises into: narrative (3-5 paragraphs), key_facts, stakeholder_map, risk_assessment (0.0-1.0), sentiment_trajectory, open_commitments",
+        "Trigger conditions checked: 15+ new events since last snapshot, 7+ days since last snapshot with new events, stage change detected, on-demand flag",
+        "memory-snapshot-generator edge function created: accepts dealId or runs batch for all deals needing refresh"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/memory/snapshot.ts",
+        "supabase/functions/memory-snapshot-generator/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-010",
+      "feature": "deal-memory",
+      "title": "Build _shared/memory/commitments.ts and commitment tracker edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": ["DM-006"], "files": [], "schema": ["deal_memory_events"] },
+      "blocks": ["DM-011"],
+      "parallelWith": ["DM-009"],
+      "acceptance": [
+        "commitments.ts exports: getOpenCommitments(dealId), getOverdueCommitments(orgId), markCommitmentFulfilled(eventId), markCommitmentBroken(eventId)",
+        "memory-commitment-tracker edge function: runs daily via cron, queries all pending commitments with deadline < NOW(), checks for matching fulfilled events, writes commitment_broken events for unmatched, generates risk_flag events",
+        "Slack notification for overdue commitments: 'You committed to sending a proposal to Sarah by Friday — this is now 2 days overdue. [Mark as done] [Extend deadline]'",
+        "Fleet event route: daily cron → memory-commitment-tracker"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/memory/commitments.ts",
+        "supabase/functions/memory-commitment-tracker/index.ts",
+        "supabase/migrations/YYYYMMDD000004_commitment_tracker_cron.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-011",
+      "feature": "deal-memory",
+      "title": "Create contact_memory and rep_memory tables with decay logic",
+      "type": "schema",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": { "stories": ["DM-007", "DM-008", "DM-009", "DM-010"], "files": [], "schema": [] },
+      "blocks": ["DM-012", "DM-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "contact_memory table created per PRD: org_id, contact_id, communication_style (jsonb), decision_style (jsonb), interests (jsonb), buying_role_history (jsonb), relationship_strength (float 0-1), engagement counters, summary, UNIQUE(org_id, contact_id)",
+        "rep_memory table created per PRD: org_id, user_id (FK users), approval_stats (jsonb), autonomy_profile (jsonb), coaching metrics (floats), win/loss patterns (jsonb), UNIQUE(org_id, user_id)",
+        "RLS: contact_memory org-isolated; rep_memory visible to self + admins/managers",
+        "Indexes: contact_memory (org_id, contact_id), (org_id, last_interaction_at DESC); rep_memory (org_id, user_id)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/YYYYMMDD000005_contact_rep_memory.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-012",
+      "feature": "deal-memory",
+      "title": "Build _shared/memory/contacts.ts, reps.ts, and decay.ts",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": { "stories": ["DM-011"], "files": [], "schema": ["contact_memory", "rep_memory"] },
+      "blocks": ["DM-013"],
+      "parallelWith": [],
+      "acceptance": [
+        "contacts.ts exports: updateContactFromEvent(event), getContactProfile(contactId, orgId), boostEngagement(contactId, eventType) — writes observations from deal memory events to contact_memory",
+        "reps.ts exports: updateRepFromApproval(userId, actionType, outcome), getRepPatterns(userId, dateRange) — tracks approval stats and coaching metrics",
+        "decay.ts exports: runRelationshipDecay(orgId) — weekly decay of contact_memory.relationship_strength per PRD rates (no decay <7d, 0.98 <14d, 0.95 <30d, 0.90 <60d, 0.85 >60d), floor at 0.1",
+        "Engagement boosts: meeting +0.15, email_received +0.08, email_sent +0.03, positive_sentiment +0.05, negative_sentiment -0.05",
+        "Weekly cron migration for decay function"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/memory/contacts.ts",
+        "supabase/functions/_shared/memory/reps.ts",
+        "supabase/functions/_shared/memory/decay.ts",
+        "supabase/migrations/YYYYMMDD000006_relationship_decay_cron.sql"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "DM-013",
+      "feature": "deal-memory",
+      "title": "Build backfill pipeline and deploy all Deal Memory to staging",
+      "type": "test",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": { "stories": ["DM-012"], "files": [], "schema": ["deal_memory_events", "deal_memory_snapshots", "contact_memory", "rep_memory"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "memory-backfill edge function: queries RAG API for all active deals, runs extraction pipeline, generates initial snapshots — batched to process 10 deals at a time with 2s delay between batches",
+        "All 4 new edge functions deployed to staging with --no-verify-jwt: memory-snapshot-generator, memory-commitment-tracker, memory-backfill, plus fleet route updates",
+        "All 6 migrations applied to staging without errors",
+        "E2E verification: trigger post-meeting processing for a test meeting → deal_memory_events populated → reader.getDealContext() returns structured context → snapshot generated within trigger conditions",
+        "Performance: structured context loading <50ms, hybrid context loading <2s (measured via agentRunner telemetry)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/memory-backfill/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 13,
+    "completedStories": 13,
+    "estimatedHours": "6-8 hours (with parallel execution)",
+    "parallelGroups": [
+      { "group": 1, "stories": ["DM-001", "DM-002"], "description": "Schema: deal_memory_events + deal_memory_snapshots tables (parallel)" },
+      { "group": 2, "stories": ["DM-003"], "description": "Foundation: TypeScript types + event taxonomy" },
+      { "group": 3, "stories": ["DM-004"], "description": "Core: RAG client wrapper around meeting-intelligence-search" },
+      { "group": 4, "stories": ["DM-005", "DM-006"], "description": "Core: Memory writer (extraction) + Memory reader (context loading) — parallel after RAG client" },
+      { "group": 5, "stories": ["DM-007", "DM-008"], "description": "Integration: Wire writer into post-meeting + Wire reader into agents (parallel)" },
+      { "group": 6, "stories": ["DM-009", "DM-010"], "description": "Advanced: Snapshot generation + Commitment tracking (parallel)" },
+      { "group": 7, "stories": ["DM-011"], "description": "Schema: contact_memory + rep_memory tables" },
+      { "group": 8, "stories": ["DM-012"], "description": "Modules: contacts.ts + reps.ts + decay.ts" },
+      { "group": 9, "stories": ["DM-013"], "description": "Deploy: Backfill pipeline + staging deployment + E2E verification" }
+    ]
+  },
+
+  "architectureNotes": {
+    "designDecisions": [
+      "RAG-ASSISTED extraction, not raw transcript parsing — the Intelligence system already has embeddings, so we query the RAG API with targeted questions per event category rather than feeding full transcripts. This cuts extraction input tokens by ~50% and leverages existing infrastructure.",
+      "TWO-TIER context loading — structured events from Supabase (<50ms, free) + optional RAG depth (~500-2000ms, costs credits). Most agents use structured-only; only follow-up drafters and pre-meeting prep need RAG depth.",
+      "SNAPSHOTS as cached synthesis — pre-computed narrative + key facts + stakeholder map that agents can read in a single DB query. Regenerated on event threshold (15+), time threshold (7d), or stage change. Avoids repeated RAG queries for the same deal context.",
+      "COMMITMENT lifecycle as first-class subsystem — commitment_made → pending → fulfilled/broken with dedicated daily cron tracker and Slack notifications. Most impactful agent behaviour for user trust.",
+      "CONTACT + REP memory deferred to Phase 4 (DM-011/012) — focus Phase 1-3 on deal-level intelligence that directly improves agent outputs. Contact/rep memory is enhancement, not prerequisite.",
+      "BUILD ON Phase 5 infrastructure — contact_graph, competitive_mentions, relationship_health_scores all exist. Deal Memory adds the deal-scoped event layer that ties these together with temporal tracking and commitment states."
+    ],
+    "existingCodeToModify": [
+      "slack-post-meeting/index.ts — add memory writer call after transcript processing",
+      "preMeeting.ts adapter — load deal context via memory reader (snapshot + RAG depth)",
+      "morningBriefing.ts adapter — add overdue commitments section",
+      "agent-deal-risk-batch/index.ts — read structured events for compound risk patterns"
+    ],
+    "newEdgeFunctions": [
+      "memory-snapshot-generator — generate/refresh deal snapshots (DM-009)",
+      "memory-commitment-tracker — daily commitment deadline check + Slack alerts (DM-010)",
+      "memory-backfill — retroactive population from RAG for existing deals (DM-013)"
+    ],
+    "newSharedModules": [
+      "_shared/memory/types.ts — all TypeScript interfaces (DM-003)",
+      "_shared/memory/taxonomy.ts — event type definitions and validation (DM-003)",
+      "_shared/memory/ragClient.ts — Intelligence RAG API wrapper with circuit breaker (DM-004)",
+      "_shared/memory/writer.ts — RAG-assisted event extraction pipeline (DM-005)",
+      "_shared/memory/reader.ts — hybrid context loading for agents (DM-006)",
+      "_shared/memory/snapshot.ts — dual-source snapshot generation (DM-009)",
+      "_shared/memory/commitments.ts — commitment lifecycle tracking (DM-010)",
+      "_shared/memory/contacts.ts — contact memory read/write (DM-012)",
+      "_shared/memory/reps.ts — rep memory read/write (DM-012)",
+      "_shared/memory/decay.ts — relationship strength decay logic (DM-012)"
+    ],
+    "newTables": [
+      "deal_memory_events — core event store with typed events, confidence scoring, supersession chain (DM-001)",
+      "deal_memory_snapshots — AI-generated deal briefings combining structured events + RAG (DM-002)",
+      "contact_memory — persistent contact intelligence with relationship strength decay (DM-011)",
+      "rep_memory — rep patterns, approval stats, coaching metrics (DM-011)"
+    ],
+    "reusePatterns": [
+      "agentRunner.ts for all new edge functions — standardized execution, retry, credit tracking",
+      "costTracking.ts for RAG query and extraction credit costs",
+      "getCorsHeaders(req) from _shared/corsHelper.ts for all new edge functions",
+      "Fleet event routes pattern from Phase 5 (20260223000002_relationship_graph_fleet_routes.sql)",
+      "Slack Block Kit delivery via _shared/proactive/ subsystem for commitment alerts",
+      "Batch processing pattern from agent-deal-risk-batch for commitment tracker and backfill",
+      "Circuit breaker pattern from agent-deal-risk-batch for RAG client resilience"
+    ],
+    "creditCostEstimate": {
+      "perMeetingExtraction": "0.3-0.7 credits (RAG queries + Claude Sonnet structuring)",
+      "perSnapshotGeneration": "0.5-1.0 credits (RAG narrative queries + Claude Sonnet synthesis)",
+      "perDealPerMonth": "3-5 credits (assuming 2-4 meetings + 2 snapshots + RAG-depth reads)",
+      "backfill200Deals": "~100 credits total (0.5 credits/deal for RAG queries + structuring)"
+    }
+  }
+}
