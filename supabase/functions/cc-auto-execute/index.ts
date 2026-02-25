@@ -243,6 +243,14 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
+      // Fetch auto_send_types for this user (once per user, not per item)
+      const { data: userSettings } = await supabase
+        .from('user_settings')
+        .select('auto_send_types')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const autoSendTypes = (userSettings?.auto_send_types as Record<string, boolean>) ?? {};
+
       // Load rate limit state for this user
       const rateLimits = await getRateLimitState(supabase, userId);
 
@@ -266,6 +274,13 @@ Deno.serve(async (req: Request) => {
         if (isExternal && rateLimits.externalToday >= 3) {
           allResults.push({ id: item.id, action: 'rate_limited', reason: 'daily_external_limit' });
           totalSkippedRateLimit++;
+          continue;
+        }
+
+        // Check if this action type is enabled for auto-send
+        const draftedActionType = item.drafted_action?.type;
+        if (draftedActionType && !autoSendTypes[draftedActionType]) {
+          allResults.push({ id: item.id, action: 'skipped', reason: 'auto_send_disabled' });
           continue;
         }
 
