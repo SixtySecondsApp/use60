@@ -206,18 +206,34 @@ export function buildFirstMeetingPrompt(input: FirstMeetingInput): string {
 
   sections.push('---');
   sections.push('');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
+  sections.push('ABOUT THE SELLER — 60 / use60.com');
+  sections.push(
+    '60 is an AI sales copilot that automates everything either side of the sales call: pre-meeting research and briefings, post-call follow-up emails, CRM updates, deal tracking, and proactive pipeline nudges. The rep focuses on conversations. 60 handles the admin.',
+  );
+  sections.push('Best fit customers:');
+  sections.push('  - Sales teams of 2-100 reps managing their own pipeline (deal velocity, follow-through, context retention)');
+  sections.push('  - Companies with distributed sales forces — agents, brokers, consultants, franchisees — where each person carries their own book of business');
+  sections.push('  - B2B or B2C companies with a human sales motion (not pure self-serve)');
+  sections.push('  - Industries: Insurance, financial services, professional services, SaaS, real estate');
+  sections.push('Key pain points solved: post-call admin, inconsistent follow-up, lost context between meetings, reps missing signals in deals');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
   sections.push('Generate a first-meeting brief in JSON format with:');
   sections.push(
     '1. attendees: array of { name, title, background } — background is 1-2 sentences: who this person is and why it matters for this call. If background data is not available, use null.',
   );
   sections.push(
-    '2. company_snapshot: 2-3 sentences — what the company does, who they serve, and one signal about ICP fit. Be specific, not generic.',
+    '2. company_snapshot: 2-3 sentences — what the company does, who they serve, and one signal about fit. Be specific, not generic.',
   );
   sections.push(
     '3. discovery_questions: array of exactly 3 questions — short and punchy (max 15 words each, one sentence). Personalise each to the attendee\'s role or the company\'s situation. No preamble, no sub-questions.',
   );
   sections.push(
-    '4. deal_context: { source, existing_deal: boolean, suggested_deal_stage }',
+    '4. strategic_fit: { rating: "strong"|"moderate"|"weak"|"unlikely", headline: "one sentence on the overall fit", end_user: "who at this company would actually use 60 day-to-day — be specific", economic_buyer: "who owns the budget and is the person you\'re meeting the right one", deal_type: "SMB/Mid-Market/Enterprise + 1 sentence on expected complexity or cycle", watch_out: "one specific risk or misalignment to be aware of" }',
   );
   sections.push('5. executive_summary: 1-2 sentence overview for the Slack header');
   sections.push('');
@@ -461,6 +477,32 @@ export function buildFirstMeetingSlackBlocks(
     blocks.push({ type: 'divider' });
   }
 
+  // Strategic fit
+  const sf = briefing.strategic_fit;
+  if (sf) {
+    const ratingEmoji: Record<string, string> = {
+      strong: ':large_green_circle:',
+      moderate: ':large_yellow_circle:',
+      weak: ':large_orange_circle:',
+      unlikely: ':red_circle:',
+    };
+    const emoji = ratingEmoji[sf.rating] ?? ':white_circle:';
+    const ratingLabel = sf.rating ? sf.rating.charAt(0).toUpperCase() + sf.rating.slice(1) : 'Unknown';
+
+    let fitText = `*STRATEGIC FIT*\n${emoji} *${ratingLabel}* — ${sf.headline || ''}\n`;
+    if (sf.end_user) fitText += `\n*End user:* ${sf.end_user}`;
+    if (sf.economic_buyer) fitText += `\n*Economic buyer:* ${sf.economic_buyer}`;
+    if (sf.deal_type) fitText += `\n*Deal type:* ${sf.deal_type}`;
+    if (sf.watch_out) fitText += `\n\n:warning: *Watch out:* ${sf.watch_out}`;
+
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: truncate(fitText, 2800) },
+    });
+    blocks.push({ type: 'divider' });
+  }
+
   // Discovery questions
   if (briefing.discovery_questions?.length > 0) {
     let questionsText = '*ASK THEM*\n';
@@ -595,6 +637,18 @@ export function buildFirstMeetingMarkdown(
     if (meta.length > 0) lines.push(meta.join('  |  '));
     if (researchCo?.linkedin_url) lines.push(`[Company LinkedIn](${researchCo.linkedin_url})`);
     if (researchCo?.recent_news) lines.push(`**Recent:** ${researchCo.recent_news}`);
+    lines.push('');
+  }
+
+  const sf = briefing.strategic_fit;
+  if (sf) {
+    lines.push('## Strategic Fit');
+    const ratingLabel = sf.rating ? sf.rating.charAt(0).toUpperCase() + sf.rating.slice(1) : '';
+    lines.push(`**${ratingLabel}** — ${sf.headline || ''}`);
+    if (sf.end_user) lines.push(`- **End user:** ${sf.end_user}`);
+    if (sf.economic_buyer) lines.push(`- **Economic buyer:** ${sf.economic_buyer}`);
+    if (sf.deal_type) lines.push(`- **Deal type:** ${sf.deal_type}`);
+    if (sf.watch_out) lines.push(`- **Watch out:** ${sf.watch_out}`);
     lines.push('');
   }
 

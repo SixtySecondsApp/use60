@@ -83,6 +83,14 @@ function extractLinkedInUrl(results: Array<{ url: string }>): string | null {
   return null;
 }
 
+/** Extract the first linkedin.com/company/... URL from Exa results */
+function extractCompanyLinkedInUrl(results: Array<{ url: string }>): string | null {
+  for (const r of results) {
+    if (r.url.includes('linkedin.com/company/')) return r.url;
+  }
+  return null;
+}
+
 /** Combine Exa results into a single text block */
 function flattenResults(results: Array<{ title: string; url: string; text: string }>): string {
   return results.map(r => `[${r.title}] (${r.url})\n${r.text}`).join('\n\n---\n\n');
@@ -187,8 +195,10 @@ export async function researchAttendees(
   // ---- Phase 1 + 3 in parallel: Exa person searches + company searches ----
   // Phase 1: find LinkedIn URLs per person
   const exaPersonResults = new Map<string, Array<{ title: string; url: string; text: string }>>();
-  // Phase 3: company context
+  // Phase 3a: company context (general)
   const exaCompanyResults = new Map<string, string>();
+  // Phase 3b: company LinkedIn URL (targeted search)
+  const companyLinkedInUrls = new Map<string, string | null>();
 
   const exaSearches: Promise<void>[] = [];
 
@@ -210,6 +220,7 @@ export async function researchAttendees(
   }
 
   for (const domain of domainSet) {
+    // General company context search
     const query = `${domain} company overview products services what they do`;
     exaSearches.push(
       exaSearch(query, exaKey, 3, 1200)
@@ -218,6 +229,13 @@ export async function researchAttendees(
           console.warn(`[attendeeResearcher] Exa company search failed for ${domain}:`, err);
           exaCompanyResults.set(domain, '');
         }),
+    );
+
+    // Targeted LinkedIn company page search
+    exaSearches.push(
+      exaSearch(`${domain} linkedin.com/company`, exaKey, 3, 200)
+        .then(r => { companyLinkedInUrls.set(domain, extractCompanyLinkedInUrl(r)); })
+        .catch(() => { companyLinkedInUrls.set(domain, null); }),
     );
   }
 
@@ -259,6 +277,7 @@ export async function researchAttendees(
     const exaResults = exaPersonResults.get(att.email) || [];
     const domain = att.email.split('@')[1] || '';
     const companyContext = exaCompanyResults.get(domain) || '';
+    const companyLinkedIn = companyLinkedInUrls.get(domain) || null;
 
     if (apifyProfile) {
       // Full Apify profile — give Gemini the structured data directly
@@ -271,7 +290,7 @@ ${JSON.stringify({
   companyName: apifyProfile.companyName,
   companyIndustry: apifyProfile.companyIndustry,
   companySize: apifyProfile.companySize,
-  companyLinkedInUrl: apifyProfile.companyLinkedInUrl || apifyProfile.companyUrl || null,
+  companyLinkedInUrl: apifyProfile.companyLinkedInUrl || apifyProfile.companyUrl || companyLinkedIn || null,
   about: typeof apifyProfile.about === 'string' ? apifyProfile.about?.slice(0, 500) : null,
   addressWithCountry: apifyProfile.addressWithCountry,
   linkedinUrl: apifyProfile.linkedinUrl,
@@ -288,7 +307,8 @@ ${JSON.stringify({
 }, null, 2)}
 
 Company (${domain}) web context:
-${companyContext || '(none)'}`;
+${companyContext || '(none)'}
+${companyLinkedIn ? `Company LinkedIn: ${companyLinkedIn}` : ''}`;
     } else {
       // No Apify — use Exa search snippets
       return `PERSON: ${att.name || att.email} (${att.email})
@@ -296,7 +316,8 @@ Exa web search results:
 ${flattenResults(exaResults) || '(no results)'}
 
 Company (${domain}) web context:
-${companyContext || '(none)'}`;
+${companyContext || '(none)'}
+${companyLinkedIn ? `Company LinkedIn: ${companyLinkedIn}` : ''}`;
     }
   }).join('\n\n========\n\n');
 
@@ -364,7 +385,8 @@ Return ONLY a JSON object:
       employee_count: found?.employee_count || null,
       funding: found?.funding || null,
       recent_news: found?.recent_news || null,
-      linkedin_url: found?.linkedin_url || null,
+      // Prefer Gemini-extracted URL, fall back to direct Exa result
+      linkedin_url: found?.linkedin_url || companyLinkedInUrls.get(domain) || null,
     };
   });
 
