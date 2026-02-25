@@ -43,7 +43,7 @@ export async function detectMeetingHistory(
     .select('id, title, start_time, attendees, is_internal')
     .eq('user_id', userId)
     .lt('start_time', cutoffDate)
-    .neq('is_internal', true) // Only external meetings
+    .or('is_internal.eq.false,is_internal.is.null') // Only external meetings
     .order('start_time', { ascending: false })
     .limit(100); // Look back up to 100 meetings
 

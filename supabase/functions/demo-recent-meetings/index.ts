@@ -40,8 +40,8 @@ serve(async (req: Request) => {
 
     // Get org_id for the user
     const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
+      .from('organization_memberships')
+      .select('org_id')
       .eq('user_id', user.id)
       .limit(1)
       .maybeSingle();
@@ -58,7 +58,7 @@ serve(async (req: Request) => {
       .from('calendar_events')
       .select('id, title, start_time, end_time, attendees, attendees_count, is_internal, meeting_type')
       .eq('user_id', user.id)
-      .neq('is_internal', true)
+      .or('is_internal.eq.false,is_internal.is.null')
       .order('start_time', { ascending: false })
       .limit(limit);
 

@@ -1183,7 +1183,7 @@ export const generateBriefingAdapter: SkillAdapter = {
       let dealMemoryContext = '';
       if (enrichAttendeesOutput?.deal?.id) {
         try {
-          const ragClient = createRAGClient();
+          const ragClient = createRAGClient(state.event.org_id);
           const reader = createDealMemoryReader(supabase, ragClient);
 
           const dealContext = await reader.getDealContext(
@@ -1273,7 +1273,7 @@ export const generateBriefingAdapter: SkillAdapter = {
 
           // If this is a return meeting, fire the 8 targeted RAG queries
           if (meetingHistory.isReturnMeeting && meetingHistory.priorMeetingCount > 0) {
-            const ragClient = createPrepRAGClient();
+            const ragClient = createPrepRAGClient(state.event.org_id);
             // Use the primary contact's ID for scoping
             const primaryContactId = enrichAttendeesOutput?.attendees?.find(
               (a: any) => a.is_known_contact && !a.is_internal

@@ -46,7 +46,6 @@ serve(async (req: Request) => {
       serviceKey,
     );
 
-    const ragClient = createRAGClient();
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
 
     // ---- Parse request body ----------------------------------------------
@@ -57,6 +56,8 @@ serve(async (req: Request) => {
       batch?: boolean;
       on_demand?: boolean;
     };
+
+    const ragClient = createRAGClient(org_id ?? '');
 
     // ---- Batch mode -------------------------------------------------------
     if (batch && org_id) {

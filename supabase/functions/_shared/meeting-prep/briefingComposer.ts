@@ -323,8 +323,9 @@ export function buildReturnMeetingSlackBlocks(
   // Suggested agenda
   if (briefing.suggested_agenda?.length > 0) {
     let agendaText = '*SUGGESTED AGENDA*\n';
-    briefing.suggested_agenda.forEach((item: string, i: number) => {
-      agendaText += `${i + 1}. ${item}\n`;
+    briefing.suggested_agenda.forEach((item: unknown, i: number) => {
+      const text = typeof item === 'string' ? item : (item as any)?.item || (item as any)?.text || (item as any)?.action || JSON.stringify(item);
+      agendaText += `${i + 1}. ${text}\n`;
     });
     blocks.push({
       type: 'section',
@@ -503,8 +504,9 @@ export function buildReturnMeetingMarkdown(
 
   if (briefing.suggested_agenda?.length > 0) {
     lines.push('## Suggested Agenda');
-    briefing.suggested_agenda.forEach((item: string, i: number) => {
-      lines.push(`${i + 1}. ${item}`);
+    briefing.suggested_agenda.forEach((item: unknown, i: number) => {
+      const text = typeof item === 'string' ? item : (item as any)?.item || (item as any)?.text || (item as any)?.action || JSON.stringify(item);
+      lines.push(`${i + 1}. ${text}`);
     });
     lines.push('');
   }

@@ -218,13 +218,13 @@ serve(async (req: Request) => {
 
     // ---- Org membership -----------------------------------------------------
     const { data: membership } = await supabase
-      .from('organization_members')
-      .select('organization_id')
+      .from('organization_memberships')
+      .select('org_id')
       .eq('user_id', user.id)
       .limit(1)
       .maybeSingle();
 
-    const orgId: string | null = membership?.organization_id ?? null;
+    const orgId: string | null = membership?.org_id ?? null;
     if (!orgId) {
       return new Response(JSON.stringify({ error: 'No organization found' }), {
         status: 400,
@@ -309,7 +309,7 @@ serve(async (req: Request) => {
             );
 
             try {
-              const ragClient = createRAGClient();
+              const ragClient = createRAGClient(orgId);
               // Pass null for contactId — we don't resolve the primary contact
               // for the demo flow. Queries will be scoped by owner_user_id only.
               historicalContext = await getHistoricalContext(

@@ -149,7 +149,7 @@ async function queryWithTimeout(
  * @param ownerUserId        The rep's user ID — used to further scope results.
  *                           May be null to search across the whole org.
  * @param ragClient          Pre-constructed RAGClient instance. Callers should
- *                           create this once via createRAGClient() and reuse it
+ *                           create this once via createRAGClient(orgId) and reuse it
  *                           so the circuit breaker and cache are shared.
  * @param attendeeEmails     Optional list of external attendee emails. If more
  *                           than MAX_ATTENDEES_FOR_RAG (8) are provided, only

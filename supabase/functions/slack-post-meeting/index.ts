@@ -819,7 +819,7 @@ serve(async (req) => {
     if (dealId) {
       const memoryAnthropicKey = Deno.env.get('ANTHROPIC_API_KEY') || '';
       if (memoryAnthropicKey) {
-        const ragClient = createRAGClient();
+        const ragClient = createRAGClient(effectiveOrgId);
         extractEventsFromMeeting({
           meetingId: meeting.id,
           dealId,
