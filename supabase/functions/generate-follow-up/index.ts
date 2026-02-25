@@ -91,29 +91,68 @@ async function handleRecentMeetings(
       return errorResponse('No org found', req, 400);
     }
 
-    // Get last 10 external meetings with a transcript
-    const { data: meetings } = await supabase
+    // Get last 20 meetings owned by this user — any with a transcript or summary
+    const { data: meetingsWithTranscript } = await supabase
       .from('meetings')
-      .select('id, title, created_at, duration_minutes, company_id, transcript_text')
+      .select('id, title, created_at, duration_minutes, company_id, transcript_text, summary')
       .eq('owner_user_id', authContext.userId)
       .eq('org_id', membership.org_id)
       .not('transcript_text', 'is', null)
       .order('created_at', { ascending: false })
+      .limit(20);
+
+    // Also grab meetings with just a summary (no raw transcript stored)
+    const { data: meetingsWithSummary } = await supabase
+      .from('meetings')
+      .select('id, title, created_at, duration_minutes, company_id, transcript_text, summary')
+      .eq('owner_user_id', authContext.userId)
+      .eq('org_id', membership.org_id)
+      .is('transcript_text', null)
+      .not('summary', 'is', null)
+      .order('created_at', { ascending: false })
       .limit(10);
+
+    // Merge and deduplicate, transcript-first
+    const seenIds = new Set<string>();
+    const meetings: typeof meetingsWithTranscript = [];
+    for (const m of [...(meetingsWithTranscript || []), ...(meetingsWithSummary || [])]) {
+      if (!seenIds.has(m.id)) { seenIds.add(m.id); meetings.push(m); }
+    }
+    meetings.sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
 
     // Enrich each meeting with attendees, company name, and meeting number
     const enrichedMeetings = [];
 
-    for (const mtg of (meetings || [])) {
-      // Get external attendees only
-      const { data: attendees } = await supabase
+    for (const mtg of meetings.slice(0, 10)) {
+      // Get all attendees — prefer external flag, fall back to all non-empty emails
+      const { data: allAttendees } = await supabase
         .from('meeting_attendees')
         .select('name, email, is_external')
-        .eq('meeting_id', mtg.id)
-        .eq('is_external', true);
+        .eq('meeting_id', mtg.id);
 
-      // Skip internal-only meetings
-      if (!attendees || attendees.length === 0) continue;
+      const externalAttendees = (allAttendees || []).filter((a: { is_external: boolean }) => a.is_external);
+      let attendees: Array<{ name: string | null; email: string | null }> =
+        externalAttendees.length > 0
+          ? externalAttendees
+          : (allAttendees || []).filter((a: { email: string | null }) => !!a.email);
+
+      // Fallback: meeting_contacts → contacts table
+      if (attendees.length === 0) {
+        const { data: mc } = await supabase
+          .from('meeting_contacts')
+          .select('contacts(first_name, last_name, email)')
+          .eq('meeting_id', mtg.id)
+          .limit(3);
+        attendees = (mc || [])
+          .map((row: any) => row.contacts)
+          .filter((c: any) => c?.email)
+          .map((c: any) => ({
+            name: [c.first_name, c.last_name].filter(Boolean).join(' ') || null,
+            email: c.email,
+          }));
+      }
 
       // Resolve company name
       let companyName: string | null = null;
@@ -281,18 +320,49 @@ async function handleGenerateFollowUp(
           label: 'Loading attendees',
         });
 
-        const { data: attendees } = await supabase
+        // 1. Try meeting_attendees (is_external = true)
+        const { data: extAttendees } = await supabase
           .from('meeting_attendees')
           .select('name, email, is_external')
           .eq('meeting_id', meeting_id)
           .eq('is_external', true);
 
-        const primaryAttendee = attendees?.[0] as
-          | { name: string | null; email: string | null }
-          | undefined;
+        let primaryAttendee: { name: string | null; email: string | null } | undefined =
+          extAttendees?.[0];
+
+        // 2. Fallback: meeting_contacts → contacts table
+        if (!primaryAttendee?.email) {
+          const { data: meetingContacts } = await supabase
+            .from('meeting_contacts')
+            .select('contacts(id, first_name, last_name, email)')
+            .eq('meeting_id', meeting_id)
+            .limit(1);
+          const contact = (meetingContacts?.[0] as any)?.contacts as
+            | { first_name: string | null; last_name: string | null; email: string | null }
+            | undefined;
+          if (contact?.email) {
+            primaryAttendee = {
+              name: [contact.first_name, contact.last_name].filter(Boolean).join(' ') || null,
+              email: contact.email,
+            };
+          }
+        }
+
+        // 3. Fallback: any attendee who isn't the owner
+        if (!primaryAttendee?.email) {
+          const { data: anyAttendees } = await supabase
+            .from('meeting_attendees')
+            .select('name, email')
+            .eq('meeting_id', meeting_id)
+            .neq('email', '');
+          const nonOwner = anyAttendees?.find(
+            (a: { email: string | null }) => a.email && !a.email?.endsWith('@sixtyseconds.video')
+          ) ?? anyAttendees?.[0];
+          if (nonOwner?.email) primaryAttendee = nonOwner;
+        }
 
         if (!primaryAttendee?.email) {
-          sendEvent('error', { message: 'No external attendees found' });
+          sendEvent('error', { message: 'No attendees found for this meeting' });
           controller.close();
           return;
         }
