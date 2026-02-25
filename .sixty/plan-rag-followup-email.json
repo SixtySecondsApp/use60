@@ -1,0 +1,695 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind"
+    }
+  },
+  "feature": "rag-followup-email",
+  "prd": "PRD-FU-001",
+  "prdDependency": "PRD-PMP-002 (shared RAG client + history detector)",
+  "description": "RAG-Enhanced Post-Meeting Follow-Up Email \u2014 from meeting summary to relationship-aware communication",
+  "createdAt": "2026-02-25",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "RAG-Enhanced Follow-Up Core",
+      "status": "complete",
+      "effort": "3-4 days",
+      "description": "Add RAG context to follow-up email composition in slack-post-meeting"
+    },
+    {
+      "id": "phase-2",
+      "name": "Demo Screen + Comparison",
+      "status": "complete",
+      "effort": "4-5 days",
+      "description": "Live demo page with side-by-side comparison and SSE streaming"
+    },
+    {
+      "id": "phase-3",
+      "name": "Multi-Recipient + Regeneration",
+      "status": "complete",
+      "effort": "2-3 days",
+      "description": "Multi-recipient handling, Slack regeneration flow, edge cases, quality review"
+    }
+  ],
+  "stories": [
+    {
+      "id": "FU-001",
+      "feature": "rag-followup-email",
+      "phase": "phase-1",
+      "title": "Create shared RAG client module with circuit breaker",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "_shared/rag/ragClient.ts created with query(), batchQuery(), and circuit breaker",
+        "RAG_API_URL and RAG_API_KEY read from env vars",
+        "Circuit breaker opens after 3 consecutive failures, auto-resets after 30s",
+        "Timeout of 8s per query with AbortController",
+        "Returns typed RAGResult with chunks[], source metadata, and token count"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/rag/ragClient.ts",
+        "supabase/functions/_shared/rag/types.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FU-003",
+        "FU-004"
+      ],
+      "parallelWith": [
+        "FU-002"
+      ],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Shared with PRD-PMP-002. If PMP-002 ships first, this story is already done. Build it to be reusable for both prep and follow-up flows."
+    },
+    {
+      "id": "FU-002",
+      "feature": "rag-followup-email",
+      "phase": "phase-1",
+      "title": "Create history detector for first-vs-return meeting classification",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "_shared/rag/historyDetector.ts created with detectMeetingHistory()",
+        "Queries meetings table for prior meetings with same company_id + org_id",
+        "Excludes current meeting_id from count",
+        "Returns { isFirstMeeting, priorMeetingCount, lastMeetingDate }",
+        "Uses maybeSingle() pattern \u2014 handles zero results gracefully"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/rag/historyDetector.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "meetings"
+        ]
+      },
+      "blocks": [
+        "FU-004"
+      ],
+      "parallelWith": [
+        "FU-001"
+      ],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Shared with PRD-PMP-002. Query on company_id not contact_id \u2014 same company, different contacts still counts as return meeting."
+    },
+    {
+      "id": "FU-003",
+      "feature": "rag-followup-email",
+      "phase": "phase-1",
+      "title": "Define follow-up RAG queries and context builder",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "_shared/follow-up/ragQueries.ts defines 6 query definitions (4 required, 2 nice_to_have)",
+        "getFollowUpContext() executes queries in parallel via Promise.allSettled",
+        "exclude_meeting_id filter prevents current transcript from RAG results",
+        "Returns FollowUpContext with hasHistory, meetingNumber, sections map, queryCredits",
+        "Graceful degradation \u2014 if RAG unavailable, returns { hasHistory: false }"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/follow-up/ragQueries.ts",
+        "supabase/functions/_shared/follow-up/types.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/rag/ragClient.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "FU-004"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "6 queries: prior_commitments, prospect_concerns, their_words, deal_trajectory, commercial_history, stakeholder_context. Max 400 tokens each for required, 300 for nice_to_have."
+    },
+    {
+      "id": "FU-004",
+      "feature": "rag-followup-email",
+      "phase": "phase-1",
+      "title": "Create follow-up email composer with return-meeting and first-meeting prompts",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "_shared/follow-up/composer.ts with composeReturnMeetingFollowUp() and composeFirstMeetingFollowUp()",
+        "Return-meeting prompt weaves RAG context: prior commitments, prospect concerns, their words, deal trajectory",
+        "First-meeting prompt focuses on specific listening reference + concrete next steps",
+        "Subject line generation prompt produces specific, <50 char subjects",
+        "Both prompts enforce word limits (250 return, 200 first) and ban AI tells",
+        "Uses Claude Sonnet for composition quality (upgrade from current Haiku)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/follow-up/composer.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-001",
+          "FU-002",
+          "FU-003"
+        ],
+        "files": [
+          "supabase/functions/_shared/rag/ragClient.ts",
+          "supabase/functions/_shared/rag/historyDetector.ts",
+          "supabase/functions/_shared/follow-up/ragQueries.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "FU-005"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "The heart of the feature. Return-meeting prompt from PRD section 4. First-meeting prompt is a quality upgrade of current generateFollowUpDraft(). Subject line prompt from PRD section 7."
+    },
+    {
+      "id": "FU-005",
+      "feature": "rag-followup-email",
+      "phase": "phase-1",
+      "title": "Integrate RAG into slack-post-meeting generateFollowUpDraft flow",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "slack-post-meeting imports historyDetector, ragQueries, and composer",
+        "Before composing, checks meeting history via detectMeetingHistory()",
+        "If return meeting, queries RAG via getFollowUpContext() then calls composeReturnMeetingFollowUp()",
+        "If first meeting, calls composeFirstMeetingFollowUp() (upgraded prompt, no RAG)",
+        "Existing generateFollowUpDraft() replaced with new composer \u2014 same function signature for callers",
+        "If RAG fails or circuit breaker is open, falls back to first-meeting prompt (no regression)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-post-meeting/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/follow-up/composer.ts",
+          "supabase/functions/_shared/rag/historyDetector.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "FU-006"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Surgical change to existing 1170-line function. Replace generateFollowUpDraft() call site \u2014 don't rewrite the whole function. Keep trigger, analysis, Slack delivery, HITL approval all unchanged."
+    },
+    {
+      "id": "FU-006",
+      "feature": "rag-followup-email",
+      "phase": "phase-1",
+      "title": "Add context badge to Slack HITL approval message",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "buildHITLApprovalMessage() receives context_used metadata",
+        "Approval message shows tree of sources: transcript, prior meetings count, commitments found, deal context, writing style",
+        "Context badge renders as Slack mrkdwn section above the email preview",
+        "Credits shown in footer of approval message",
+        "First meetings show simplified badge (transcript + deal context only)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/slack-post-meeting/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-005"
+        ],
+        "files": [
+          "supabase/functions/_shared/slackBlocks.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Extends existing buildHITLApprovalMessage in slackBlocks.ts. Context badge uses tree-style mrkdwn (\u251c\u2500 \u2705). Credits in context footer block."
+    },
+    {
+      "id": "FU-007",
+      "feature": "rag-followup-email",
+      "phase": "phase-1",
+      "title": "Add credit tracking for RAG-enhanced follow-up generation",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "RAG queries tracked via logFlatRateCostEvent with feature_key 'followup_rag_queries'",
+        "Sonnet composition tracked via logAICostEvent with actual token counts",
+        "Subject line generation tracked separately",
+        "Total credits per follow-up logged: 0.6-0.9 (first) or 0.9-1.3 (return)",
+        "Budget cap checked before RAG queries (fail-open to transcript-only if over budget)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-post-meeting/index.ts",
+        "supabase/functions/_shared/follow-up/composer.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-005"
+        ],
+        "files": [
+          "supabase/functions/_shared/costTracking.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FU-006"
+      ],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Uses existing costTracking.ts patterns: logAICostEvent for Anthropic, logFlatRateCostEvent for RAG. checkBudgetCap before RAG queries."
+    },
+    {
+      "id": "FU-008",
+      "feature": "rag-followup-email",
+      "phase": "phase-2",
+      "title": "Create generate-follow-up edge function with SSE streaming",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "supabase/functions/generate-follow-up/index.ts created with POST handler",
+        "Accepts meeting_id, delivery (preview|slack), include_comparison, org_id, user_id",
+        "Streams generation steps as SSE events (step_start, step_complete, step_skip)",
+        "Returns final DemoFollowUpResponse with email, context_used, metadata, steps",
+        "If include_comparison=true, generates both RAG-enhanced and transcript-only versions",
+        "JWT-protected with org membership check"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/generate-follow-up/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/follow-up/composer.ts",
+          "supabase/functions/_shared/follow-up/ragQueries.ts",
+          "supabase/functions/_shared/rag/ragClient.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "FU-009"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "SSE pattern: write step events as text/event-stream. StepTracker class manages step lifecycle. Comparison generates the same email twice \u2014 once with RAG, once without. Reuses existing getCorsHeaders(req)."
+    },
+    {
+      "id": "FU-009",
+      "feature": "rag-followup-email",
+      "phase": "phase-2",
+      "title": "Build recent-meetings API endpoint for demo dropdown",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "Endpoint returns last 10 external meetings for user with transcript available",
+        "Each meeting includes: id, title, date, duration, attendee names, company, meeting_number",
+        "Filters out internal-only meetings (no external attendees)",
+        "Filters out meetings without transcript (nothing to compose from)",
+        "meeting_number calculated per company (how many times we've met this company)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/generate-follow-up/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-008"
+        ],
+        "files": [],
+        "schema": [
+          "meetings"
+        ]
+      },
+      "blocks": [
+        "FU-010"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Can be a GET handler on the same generate-follow-up function (method routing). Or reuse PRD-PMP-002 recent-meetings endpoint if it exists. meeting_number requires subquery counting prior meetings per company."
+    },
+    {
+      "id": "FU-010",
+      "feature": "rag-followup-email",
+      "phase": "phase-2",
+      "title": "Build demo page \u2014 meeting selector, generate button, progress streaming",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "New page at /platform/demo/follow-up-email (or extend agent-simulator)",
+        "Meeting dropdown lists last 10 external meetings with attendee, company, duration, meeting number",
+        "Delivery toggle: Preview (default) or Send to Slack",
+        "Generate button triggers SSE stream from generate-follow-up endpoint",
+        "Progress steps render in real-time with timing and checkmarks",
+        "Disabled state during generation with loading indicator"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/platform/FollowUpDemoPage.tsx",
+        "src/routes.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-008",
+          "FU-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FU-011",
+        "FU-012"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Follow sixty-design-system patterns. Use Lucide icons. SSE consumption via EventSource or fetch with ReadableStream. Route added to platform routes group."
+    },
+    {
+      "id": "FU-011",
+      "feature": "rag-followup-email",
+      "phase": "phase-2",
+      "title": "Build email preview component with context breakdown",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "Email rendered in email-style card: To, Subject, Body with proper formatting",
+        "Context breakdown section shows tree of sources used with counts",
+        "Metadata footer: word count, credits, generation time, model",
+        "Action buttons: Send to Slack, Copy email, Regenerate with edits",
+        "Copy email uses clipboard API with toast confirmation"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/platform/FollowUpDemoPage.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-010"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FU-012"
+      ],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Keep in same page file unless it gets too large. Email body may contain markdown \u2014 render with basic formatting. Context tree mirrors the Slack badge format."
+    },
+    {
+      "id": "FU-012",
+      "feature": "rag-followup-email",
+      "phase": "phase-2",
+      "title": "Build comparison view \u2014 side-by-side with and without history",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "'Show without history' toggle triggers comparison generation",
+        "Side-by-side layout: transcript-only (left) vs RAG-enhanced (right)",
+        "Labels: 'Without History' and 'With Relationship Context'",
+        "Comparison only available for return meetings (toggle hidden for first meetings)",
+        "Responsive \u2014 stacks vertically on mobile"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/platform/FollowUpDemoPage.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-010"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FU-011"
+      ],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "The demo killer feature. Comparison triggers a second API call with include_comparison=true. If body_without_history is null (first meeting), don't show toggle."
+    },
+    {
+      "id": "FU-013",
+      "feature": "rag-followup-email",
+      "phase": "phase-3",
+      "title": "Add multi-recipient handling with primary + CC logic",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "acceptance": [
+        "Meeting attendees classified as primary contact (deal primary or first external) and CC list",
+        "1 external: single email to them",
+        "2-3 external: email to primary, CC others",
+        "4+ external: email to primary, CC all others",
+        "HITL approval shows To and CC fields in Slack preview",
+        "hitl-send-followup-email passes CC to email-send-as-rep"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-post-meeting/index.ts",
+        "supabase/functions/_shared/follow-up/composer.ts",
+        "supabase/functions/hitl-send-followup-email/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-005"
+        ],
+        "files": [
+          "supabase/functions/hitl-send-followup-email/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FU-014"
+      ],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Primary contact detection: deal.primary_contact_id from HubSpot context, or first external attendee. CC derived from remaining attendees. 'Send separate emails' is a future extension \u2014 not in V1."
+    },
+    {
+      "id": "FU-014",
+      "feature": "rag-followup-email",
+      "phase": "phase-3",
+      "title": "Add Slack regeneration flow with guidance text input",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "acceptance": [
+        "Regenerate button in Slack approval message opens modal with text input",
+        "User types guidance (e.g. 'shorter, drop the James comment, add webinar P.S.')",
+        "Recomposition uses same RAG context (cached in hitl_pending_approvals metadata) + guidance",
+        "New email replaces previous in Slack thread \u2014 same approval buttons",
+        "No additional RAG query cost \u2014 only recomposition credits charged"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-interactive/handlers/hitl.ts",
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/_shared/follow-up/composer.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-006"
+        ],
+        "files": [
+          "supabase/functions/slack-interactive/handlers/hitl.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FU-013"
+      ],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "RAG context cached as JSON in hitl_pending_approvals.metadata. Regeneration reads cached context + adds user guidance to prompt. Uses Slack modal (views.open) for text input, not inline message."
+    },
+    {
+      "id": "FU-015",
+      "feature": "rag-followup-email",
+      "phase": "phase-3",
+      "title": "Handle edge cases \u2014 no transcript, no deal, internal meetings, no-shows",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "acceptance": [
+        "Meetings without transcript: skip follow-up generation entirely (log warning)",
+        "Meetings without deal_id: compose from transcript + contact context only (no deal RAG filters)",
+        "Internal-only meetings (no external attendees): skip follow-up generation",
+        "Cancelled/no-show meetings: skip follow-up (detect via duration <2 min or status)",
+        "Each edge case logged with clear reason for skip"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/slack-post-meeting/index.ts",
+        "supabase/functions/generate-follow-up/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FU-005",
+          "FU-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-02-25T15:30:00.000Z",
+      "completedAt": "2026-02-25T15:30:00.000Z",
+      "notes": "Most edge cases are guards at the top of the follow-up composition path. Internal meeting detection: check if all attendees are org members (same email domain or in org_members table)."
+    }
+  ],
+  "execution": {
+    "totalStories": 15,
+    "completedStories": 15,
+    "currentPhase": "complete",
+    "lastUpdated": "2026-02-25T15:30:00.000Z",
+    "parallelGroups": [
+      {
+        "phase": "phase-1",
+        "groups": [
+          [
+            "FU-001",
+            "FU-002"
+          ],
+          [
+            "FU-003"
+          ],
+          [
+            "FU-004"
+          ],
+          [
+            "FU-005"
+          ],
+          [
+            "FU-006",
+            "FU-007"
+          ]
+        ]
+      },
+      {
+        "phase": "phase-2",
+        "groups": [
+          [
+            "FU-008"
+          ],
+          [
+            "FU-009"
+          ],
+          [
+            "FU-010"
+          ],
+          [
+            "FU-011",
+            "FU-012"
+          ]
+        ]
+      },
+      {
+        "phase": "phase-3",
+        "groups": [
+          [
+            "FU-013",
+            "FU-014"
+          ],
+          [
+            "FU-015"
+          ]
+        ]
+      }
+    ]
+  },
+  "keyDecisions": [
+    {
+      "decision": "Claude Sonnet for composition, not Haiku",
+      "reason": "Follow-up email is buyer-facing \u2014 quality matters more than cost. Current Haiku produces generic output. Sonnet handles nuance, tone calibration, and natural language weaving significantly better.",
+      "impact": "~0.3 additional credits per email vs Haiku"
+    },
+    {
+      "decision": "RAG context cached in hitl_pending_approvals.metadata",
+      "reason": "Regeneration should not re-query RAG (expensive, same results). Cache the context on first generation so regeneration only costs recomposition credits.",
+      "impact": "Slightly larger metadata column, but saves 0.3-0.5 credits per regeneration"
+    },
+    {
+      "decision": "exclude_meeting_id filter on all RAG queries",
+      "reason": "Today's transcript is already available from process-recording. Including it in RAG results would double-count and create weird self-references in the email.",
+      "impact": "Requires RAG API to support exclusion filter"
+    },
+    {
+      "decision": "Company-level history detection, not contact-level",
+      "reason": "Meeting #5 with a different person at the same company should still reference the deal arc. The relationship is with the company, not just one contact.",
+      "impact": "Broader RAG queries return results from all meetings with the company"
+    },
+    {
+      "decision": "No auto-send \u2014 always HITL approval",
+      "reason": "This email goes to the buyer. It must be right. The rep's trust builds over time as they see consistent quality, but V1 always gates on approval.",
+      "impact": "Zero risk of embarrassing automated emails"
+    }
+  ]
+}

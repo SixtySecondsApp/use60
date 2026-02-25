@@ -63,6 +63,7 @@ export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailS
 export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));
 export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
 export const OpsWebhookDemo = lazyWithRetry(() => import('@/pages/demo/OpsWebhookDemo'));
+export const FollowUpDemoPage = lazyWithRetry(() => import('@/pages/platform/FollowUpDemoPage'));
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
 export const PipelineSettings = lazyWithRetry(() => import('@/pages/admin/PipelineSettings'));

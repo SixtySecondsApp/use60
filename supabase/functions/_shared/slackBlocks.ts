@@ -1241,6 +1241,14 @@ export interface HITLApprovalData {
     meetingId?: string;
     confidence?: number;
   };
+  contextBadge?: {
+    transcript: boolean;
+    priorMeetings: number;
+    commitmentsTracked: number;
+    dealContext: boolean;
+    writingStyle: boolean;
+    credits?: number;
+  };
   expiresAt?: string;
   appUrl: string;
 }
@@ -1346,6 +1354,35 @@ export const buildHITLApprovalMessage = (data: HITLApprovalData): SlackMessage =
     }
   }
 
+  // Context badge — show what context sources the AI used (FU-006)
+  if (data.contextBadge) {
+    const badge = data.contextBadge;
+    const badgeLines: string[] = [];
+
+    badgeLines.push('*Context used:*');
+    badgeLines.push(`├─ Today's transcript ${badge.transcript ? '✅' : '—'}`);
+
+    if (badge.priorMeetings > 0) {
+      badgeLines.push(`├─ ${badge.priorMeetings} prior meeting${badge.priorMeetings === 1 ? '' : 's'} via RAG ✅`);
+    }
+
+    if (badge.commitmentsTracked > 0) {
+      badgeLines.push(`├─ ${badge.commitmentsTracked} open commitment${badge.commitmentsTracked === 1 ? '' : 's'} tracked ✅`);
+    }
+
+    if (badge.dealContext) {
+      badgeLines.push(`├─ Deal context ✅`);
+    }
+
+    badgeLines.push(`└─ Rep writing style ${badge.writingStyle ? 'applied ✅' : '—'}`);
+
+    blocks.push(section(safeMrkdwn(badgeLines.join('\n'))));
+
+    if (badge.credits != null) {
+      blocks.push(context([safeContextMrkdwn(`Credits: ${badge.credits.toFixed(1)}`)]));
+    }
+  }
+
   blocks.push(divider());
 
   // Content preview based on resource type
@@ -1403,6 +1440,12 @@ export const buildHITLApprovalMessage = (data: HITLApprovalData): SlackMessage =
         text: { type: 'plain_text', text: safeButtonText('Reject'), emoji: true },
         style: 'danger',
         action_id: `reject::${data.resourceType}::${data.approvalId}`,
+        value: safeButtonValue(callbackValue),
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Regenerate'), emoji: true },
+        action_id: `regenerate::${data.resourceType}::${data.approvalId}`,
         value: safeButtonValue(callbackValue),
       },
     ],
