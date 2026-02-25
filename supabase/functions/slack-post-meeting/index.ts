@@ -1093,13 +1093,14 @@ serve(async (req) => {
             if (!meetingHistory.isFirstMeeting) {
               // Return meeting — use RAG-enhanced composer
               console.log('[slack-post-meeting] RAG path: return meeting detected, priorMeetingCount:', meetingHistory.priorMeetingCount);
-              const ragClient = createRAGClient();
+              const ragClient = createRAGClient({ orgId: effectiveOrgId, supabase });
               const followUpContext = await getFollowUpContext(
                 (deal as any)?.id || null,
                 [], // contact IDs — not easily available here
                 meeting.id,
                 meetingHistory.priorMeetingCount + 1, // current meeting is +1
                 ragClient,
+                meeting.company_id || null,
               );
               ragContextForMetadata = followUpContext;
 

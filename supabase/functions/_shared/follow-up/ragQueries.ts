@@ -91,6 +91,7 @@ export const FOLLOWUP_RAG_QUERIES: FollowUpRAGQuery[] = [
  * @param currentMeetingId  - Meeting UUID excluded from RAG results
  * @param meetingNumber     - Sequential position of this meeting (1 = first)
  * @param ragClient         - Shared RAG client instance from createRAGClient()
+ * @param companyId         - Company UUID to scope RAG results to this company
  * @returns                 - Assembled FollowUpContext; never throws
  */
 export async function getFollowUpContext(
@@ -99,6 +100,7 @@ export async function getFollowUpContext(
   currentMeetingId: string,
   meetingNumber: number,
   ragClient: { query: (options: { query: string; filters?: Record<string, unknown>; maxTokens?: number }) => Promise<RAGResult> },
+  companyId?: string | null,
 ): Promise<FollowUpContext> {
   // ------------------------------------------------------------------
   // Build shared filters — only include non-null / non-empty values
@@ -114,6 +116,10 @@ export async function getFollowUpContext(
 
   if (contactIds.length > 0) {
     filters['contact_ids'] = contactIds;
+  }
+
+  if (companyId) {
+    filters['company_id'] = companyId;
   }
 
   // ------------------------------------------------------------------

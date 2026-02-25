@@ -355,14 +355,18 @@ async function handleGenerateFollowUp(
             label: `Querying history across ${meetingHistory.priorMeetingCount} meetings`,
           });
 
-          const ragClient = createRAGClient();
+          const ragClient = createRAGClient({
+            orgId: meeting.org_id as string,
+            supabase,
+          });
 
           followUpContext = await getFollowUpContext(
-            null, // deal_id — not available at this call site; filter by meeting only
-            [],   // contact_ids — omitted for the same reason
+            null, // deal_id — not available at this call site
+            [],   // contact_ids — omitted
             meeting_id,
             meetingHistory.priorMeetingCount + 1,
             ragClient,
+            meeting.company_id as string | null,
           );
 
           const sectionsReturned = Object.keys(followUpContext.sections).length;
