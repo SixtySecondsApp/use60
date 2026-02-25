@@ -124,13 +124,22 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
 
   const handleClick = () => {
     try {
-      if (metricKey) {
-        navigate(`/settings/goals?metric=${metricKey}`);
-      } else if (type) {
+      if (type) {
         setFilters({ type, dateRange });
         if (onNavigateToActivity) {
           onNavigateToActivity();
         }
+      }
+    } catch (error) {
+      logger.error('Navigation error:', error);
+    }
+  };
+
+  const handleGoalClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (metricKey) {
+        navigate(`/settings/goals?metric=${metricKey}`);
       }
     } catch (error) {
       logger.error('Navigation error:', error);
@@ -381,7 +390,12 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
             <span>Progress</span>
             {target > 0
               ? <span className="font-medium">{Math.round((value / target) * 100)}%</span>
-              : <span className="font-medium text-[#64748B]/60 dark:text-gray-500">Set goal →</span>
+              : <button
+                  onClick={handleGoalClick}
+                  className="font-medium text-[#64748B]/60 dark:text-gray-500 hover:text-[#64748B] dark:hover:text-gray-300 transition-colors"
+                >
+                  Set goal →
+                </button>
             }
           </div>
         </div>
