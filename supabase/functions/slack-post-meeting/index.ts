@@ -12,6 +12,8 @@ import {
 } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
 import { loadProactiveContext, type ProactiveContext } from '../_shared/proactive/orgContext.ts';
+import { extractEventsFromMeeting } from '../_shared/memory/writer.ts';
+import { createRAGClient } from '../_shared/memory/ragClient.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -811,6 +813,26 @@ serve(async (req) => {
       company_id: meeting.company_id || null,
       deal,
     });
+
+    // Fire-and-forget deal memory extraction — runs in background, does not block Slack delivery
+    const dealId = (deal as { id?: string } | undefined)?.id;
+    if (dealId) {
+      const memoryAnthropicKey = Deno.env.get('ANTHROPIC_API_KEY') || '';
+      if (memoryAnthropicKey) {
+        const ragClient = createRAGClient();
+        extractEventsFromMeeting({
+          meetingId: meeting.id,
+          dealId,
+          orgId: effectiveOrgId,
+          supabase,
+          ragClient,
+          anthropicApiKey: memoryAnthropicKey,
+          extractedBy: 'slack-post-meeting',
+        }).catch((err) => {
+          console.error('[slack-post-meeting] Deal memory extraction failed (non-blocking):', err);
+        });
+      }
+    }
 
     // Build Slack message
     const debriefData: MeetingDebriefData = {

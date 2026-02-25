@@ -12,6 +12,8 @@
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { getServiceClient, enrichContactContext } from './contextEnrichment.ts';
 import { logAICostEvent, extractAnthropicUsage, extractGeminiUsage } from '../../costTracking.ts';
+import { createDealMemoryReader } from '../../memory/reader.ts';
+import { createRAGClient } from '../../memory/ragClient.ts';
 
 // =============================================================================
 // Adapter 1: Enrich Attendees
@@ -1167,6 +1169,73 @@ export const generateBriefingAdapter: SkillAdapter = {
         riskSignals = signals || [];
       }
 
+      // Load deal memory context for richer briefing
+      let dealMemoryContext = '';
+      if (enrichAttendeesOutput?.deal?.id) {
+        try {
+          const ragClient = createRAGClient();
+          const reader = createDealMemoryReader(supabase, ragClient);
+
+          const dealContext = await reader.getDealContext(
+            enrichAttendeesOutput.deal.id,
+            state.event.org_id,
+            {
+              tokenBudget: 3500,
+              includeRAGDepth: true,
+              ragQuestions: [
+                `Previous conversations with attendees of this meeting`,
+                `Open topics and unresolved concerns from recent meetings`,
+              ],
+            },
+          );
+
+          // Build context string for the AI prompt
+          const memoryParts: string[] = [];
+
+          if (dealContext.snapshot?.narrative) {
+            memoryParts.push(`DEAL NARRATIVE:\n${dealContext.snapshot.narrative}`);
+          }
+
+          if (dealContext.openCommitments.length > 0) {
+            memoryParts.push(
+              `OPEN COMMITMENTS:\n${dealContext.openCommitments
+                .map((c) => `- ${c.action} (${c.owner}, deadline: ${c.deadline || 'none'})`)
+                .join('\n')}`,
+            );
+          }
+
+          if (dealContext.stakeholderMap.length > 0) {
+            memoryParts.push(
+              `STAKEHOLDER MAP:\n${dealContext.stakeholderMap
+                .map((s) => `- ${s.name}: ${s.role} (${s.engagement_level})`)
+                .join('\n')}`,
+            );
+          }
+
+          if (dealContext.riskFactors.length > 0) {
+            memoryParts.push(
+              `RISK FACTORS:\n${dealContext.riskFactors
+                .map((r) => `- [${r.severity}] ${r.detail}`)
+                .join('\n')}`,
+            );
+          }
+
+          if (dealContext.ragContext?.length) {
+            const ragInsights = dealContext.ragContext
+              .filter((r) => r.answer.trim())
+              .map((r) => r.answer)
+              .join('\n');
+            if (ragInsights) {
+              memoryParts.push(`CONVERSATION INSIGHTS:\n${ragInsights}`);
+            }
+          }
+
+          dealMemoryContext = memoryParts.join('\n\n');
+        } catch (err) {
+          console.error('[preMeeting] Deal memory context loading failed (non-blocking):', err);
+        }
+      }
+
       // Build prompt
       const promptSections: string[] = [];
 
@@ -1352,6 +1421,12 @@ export const generateBriefingAdapter: SkillAdapter = {
             promptSections.push(`  ${signal.description}`);
           }
         }
+        promptSections.push('');
+      }
+
+      // Deal memory (institutional knowledge from past meetings and events)
+      if (dealMemoryContext) {
+        promptSections.push(`\n## Deal Memory (Institutional Knowledge)\n${dealMemoryContext}`);
         promptSections.push('');
       }
 
