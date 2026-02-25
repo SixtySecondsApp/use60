@@ -8,7 +8,6 @@
  *      (deal closed, contact responded externally)
  *   2. Re-score ALL open items using the prioritisation engine
  *      (priority_score, priority_factors, urgency updated in batches)
- *   3. Delete conversation_context entries older than 14 days (XCHAN-002)
  *
  * Service role client is used intentionally — this processes items across
  * all users and orgs. No user-scoped operation is appropriate here.
@@ -32,7 +31,6 @@ import {
   type DealContext,
 } from '../_shared/commandCentre/prioritisation.ts';
 import type { CommandCentreItem } from '../_shared/commandCentre/types.ts';
-import { createLogger } from '../_shared/logger.ts';
 
 // ============================================================================
 // Constants
@@ -67,7 +65,6 @@ interface CleanupStats {
   stale_checked: number;
   auto_resolved: number;
   re_scored: number;
-  context_entries_deleted: number;
   errors: number;
 }
 
@@ -423,32 +420,6 @@ async function runRescoring(
 }
 
 // ============================================================================
-// Phase 3: Delete conversation_context entries older than 14 days (XCHAN-002)
-// ============================================================================
-
-async function runContextCleanup(
-  supabase: ReturnType<typeof createClient>,
-  stats: CleanupStats,
-  logger: ReturnType<typeof createLogger>,
-): Promise<void> {
-  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-
-  const { error, count } = await supabase
-    .from('conversation_context')
-    .delete({ count: 'exact' })
-    .lt('last_updated', cutoff);
-
-  if (error) {
-    logger.error('context_cleanup.failed', error, { cutoff });
-    stats.errors++;
-  } else {
-    const deleted = count ?? 0;
-    stats.context_entries_deleted += deleted;
-    logger.info('context_cleanup.complete', { deleted, cutoff });
-  }
-}
-
-// ============================================================================
 // Main Handler
 // ============================================================================
 
@@ -456,13 +427,10 @@ serve(async (req) => {
   const corsPreflightResponse = handleCorsPreflightRequest(req);
   if (corsPreflightResponse) return corsPreflightResponse;
 
-  const logger = createLogger('cc-daily-cleanup');
-
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    await logger.flush();
     return errorResponse('Missing Supabase environment variables', req, 500);
   }
 
@@ -477,7 +445,6 @@ serve(async (req) => {
     stale_checked: 0,
     auto_resolved: 0,
     re_scored: 0,
-    context_entries_deleted: 0,
     errors: 0,
   };
 
@@ -488,11 +455,7 @@ serve(async (req) => {
     // Phase 2: Re-score ALL open items (including fresh ones updated by phase 1)
     await runRescoring(supabase, stats);
 
-    // Phase 3: Delete conversation_context entries older than 14 days (XCHAN-002)
-    await runContextCleanup(supabase, stats, logger);
-
-    logger.info('cleanup.complete', { ...stats });
-    await logger.flush();
+    console.log('[cc-daily-cleanup] Cleanup complete:', stats);
 
     return jsonResponse(
       {
@@ -504,8 +467,7 @@ serve(async (req) => {
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error('cleanup.unhandled_error', err);
-    await logger.flush();
+    console.error('[cc-daily-cleanup] Unhandled error:', message);
     return errorResponse(`Cleanup failed: ${message}`, req, 500);
   }
 });

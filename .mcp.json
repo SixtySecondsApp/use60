@@ -16,13 +16,6 @@
         "-y",
         "playwriter@latest"
       ]
-    },
-    "rive": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@rive-mcp/server-core"
-      ]
     }
   }
 }

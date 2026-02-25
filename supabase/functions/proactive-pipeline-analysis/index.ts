@@ -566,29 +566,14 @@ async function sendPipelineNotifications(
 
   for (const summary of summaries) {
     try {
-      // Get org-level Slack bot token from slack_org_settings
-      const { data: slackOrg } = await supabase
-        .from('slack_org_settings')
-        .select('bot_access_token')
-        .eq('org_id', summary.organizationId)
-        .eq('is_connected', true)
+      const { data: slackAuth } = await supabase
+        .from('slack_auth')
+        .select('access_token, channel_id')
+        .eq('user_id', summary.userId)
         .maybeSingle();
 
-      if (!slackOrg?.bot_access_token) {
-        console.log(`[Pipeline] Org ${summary.organizationId} has no Slack connected, skipping`);
-        continue;
-      }
-
-      // Get user's Slack user ID from slack_user_mappings to DM them
-      const { data: slackMapping } = await supabase
-        .from('slack_user_mappings')
-        .select('slack_user_id')
-        .eq('sixty_user_id', summary.userId)
-        .eq('org_id', summary.organizationId)
-        .maybeSingle();
-
-      if (!slackMapping?.slack_user_id) {
-        console.log(`[Pipeline] User ${summary.userId} has no Slack mapping, skipping`);
+      if (!slackAuth?.access_token) {
+        console.log(`[Pipeline] User ${summary.userId} has no Slack connected, skipping`);
         continue;
       }
 
@@ -632,15 +617,14 @@ async function sendPipelineNotifications(
 
       const message = buildEnhancedMorningBriefMessage(briefingData);
 
-      // Send DM to user's Slack user ID (Slack will open/reuse the DM channel)
       const slackResponse = await fetch('https://slack.com/api/chat.postMessage', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${slackOrg.bot_access_token}`,
+          'Authorization': `Bearer ${slackAuth.access_token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          channel: slackMapping.slack_user_id,
+          channel: slackAuth.channel_id || summary.userId,
           blocks: message.blocks,
           text: message.text || `Pipeline Pulse: ${summary.insights.length} items need your attention`,
         }),

@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, Moon } from 'lucide-react';
+import { GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AgentActivityFeed } from './agent/AgentActivityFeed';
 import { useAgentActivityUnreadCount } from '@/hooks/useAgentActivity';
@@ -86,17 +86,15 @@ export function AgentActivityBell() {
         <button
           onClick={handleToggle}
           className={cn(
-            'relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-all duration-200',
-            'hover:bg-gray-50 dark:hover:bg-gray-800/30',
-            isOpen && 'bg-gray-100 dark:bg-gray-800/50'
+            'relative p-2 rounded-lg transition-all duration-200',
+            'hover:bg-gray-50 dark:hover:bg-gray-800/30 hover:scale-110',
+            isOpen && 'bg-gray-100 dark:bg-gray-800/50 scale-110'
           )}
           aria-label="Agent Activity"
           aria-expanded={isOpen}
           title="Agent Activity Feed"
         >
-          <Bot className="w-4 h-4 text-gray-700 dark:text-gray-400 transition-colors" />
-          {/* Status dot: green = active, gray = quiet */}
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <GraduationCap className="w-5 h-5 text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors" />
 
           {/* Unread Count Badge */}
           <AnimatePresence>

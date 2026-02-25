@@ -53,7 +53,6 @@ export const DemoPrepBriefing = lazyWithRetry(() => import('@/pages/platform/Dem
 export const DemoConversationalCopilot = lazyWithRetry(() => import('@/pages/platform/DemoConversationalCopilot'));
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
 export const AgentAbilitiesPage = lazyWithRetry(() => import('@/pages/platform/AgentAbilitiesPage'));
-export const AgentDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentDemoPage'));
 export const OrchestratorDashboard = lazyWithRetry(() => import('@/pages/platform/OrchestratorDashboard'));
 export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));

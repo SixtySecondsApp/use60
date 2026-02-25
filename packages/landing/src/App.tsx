@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { MeetingsLandingV4 } from './pages/MeetingsLandingV4';
-import { LandingPage } from './pages/LandingPage';
 import  WaitlistLanding  from './pages/WaitlistLanding';
 import EarlyAccessLanding from './pages/EarlyAccessLanding';
 import LeaderboardLookup from './pages/LeaderboardLookup';
@@ -22,10 +21,6 @@ import HeroV5BPreview from './pages/HeroV5BPreview';
 import HeroV6Preview from './pages/HeroV6Preview';
 import HeroV7Preview from './pages/HeroV7Preview';
 import HeroV8Preview from './pages/HeroV8Preview';
-import HeroV9Preview from './pages/HeroV9Preview';
-import HeroV10Preview from './pages/HeroV10Preview';
-import DemoExperience from './demo/DemoExperience';
-import DemoExperienceV2 from './demo-v2/DemoExperience';
 import { getAppUrl } from './lib/utils/siteUrl';
 import { trackPageView } from './lib/pageViewTracker';
 
@@ -72,16 +67,11 @@ function App() {
         <Route path="/hero-v6" element={<HeroV6Preview />} />
         <Route path="/hero-v7" element={<HeroV7Preview />} />
         <Route path="/hero-v8" element={<HeroV8Preview />} />
-        <Route path="/hero-v9" element={<HeroV9Preview />} />
-        <Route path="/hero-v10" element={<HeroV10Preview />} />
-        <Route path="/demo" element={<DemoExperience />} />
-        <Route path="/demo-v2" element={<DemoExperienceV2 />} />
         {/* Redirect auth routes to app domain */}
         <Route path="/auth/*" element={<RedirectToApp />} />
         <Route path="/login" element={<RedirectToApp />} />
         <Route path="/signup" element={<RedirectToApp />} />
-        <Route path="/v4" element={<MeetingsLandingV4 />} />
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<MeetingsLandingV4 />} />
       </Routes>
     </BrowserRouter>
   );

@@ -219,7 +219,7 @@ export function CCStatsPanel({ items, stats, statsLoading, onUndo, pendingIds }:
 
   // Use server stats when available, fall back to derived
   const totalActive =
-    stats != null ? stats.total_active : derivedStats.totalActive;
+    stats != null ? stats.total_open + stats.total_ready : derivedStats.totalActive;
   const autoCompletedToday =
     stats?.auto_completed_today ?? derivedStats.autoExecToday.length;
 

@@ -15,7 +15,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
-import { shouldSendNotification, recordNotificationSent } from '../_shared/proactive/dedupe.ts';
 
 // ============================================================================
 // Types
@@ -31,7 +30,6 @@ interface UpcomingMeeting {
   meeting_url?: string;
   user_id: string;
   external_id?: string;
-  description?: string | null;
   // IMP-001: classification columns
   is_internal?: boolean | null;
   meeting_type?: string | null;
@@ -69,15 +67,6 @@ const PERSONAL_TITLE_PATTERNS = [
   /\b(focus time|do not disturb|busy|out of office)\b/i,
 ];
 
-// Titles that indicate a task/reminder disguised as a calendar event — skip silently
-const TASK_TITLE_PATTERNS = [
-  /\b(send|submit|pay|post)\s+(payroll|invoice|report|court fee|taxes|expenses|timesheet)\b/i,
-  /\b(pay|renew|cancel|terminate)\s+(court|subscription|contract|insurance|license|fee)\b/i,
-  /\b(book|schedule)\s+(travel|flight|hotel|appointment|car)\b/i,
-  /\b(pick up|drop off|collect|deliver)\b/i,
-  /\b(reminder|todo|to-do|task)\b[:\s]/i,
-];
-
 // Meeting titles that are clearly business-related — always prep
 const BUSINESS_TITLE_PATTERNS = [
   /\b(demo|discovery|proposal|negotiation|pricing|pitch|close|renewal|qbr)\b/i,
@@ -87,30 +76,14 @@ const BUSINESS_TITLE_PATTERNS = [
   /\b(board|investor|advisory|partner)\b/i,
 ];
 
-// Personal email domains — attendees with company domains are likely business contacts
-const PERSONAL_EMAIL_DOMAINS = new Set([
-  'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com',
-  'me.com', 'aol.com', 'live.com', 'msn.com', 'protonmail.com',
-  'mail.com', 'yandex.com', 'zoho.com', 'gmx.com', 'fastmail.com',
-]);
-
-// Scheduling tools in event description = booked via sales/business scheduling
-const SCHEDULING_TOOL_PATTERNS = [
-  /savvycal/i, /calendly/i, /hubspot.*meeting/i,
-  /chili\s*piper/i, /acuity/i, /cal\.com/i, /zcal/i,
-];
-
 /**
  * Classify whether a meeting is likely business-related.
- * Uses multiple signals to minimize "unknown" — defaults toward business
- * for external meetings with any business signal.
  * Returns: 'business' | 'personal' | 'unknown'
  */
 function classifyMeetingRelevance(
   title: string,
   hasKnownContacts: boolean,
-  hasDeal: boolean,
-  meeting: UpcomingMeeting
+  hasDeal: boolean
 ): 'business' | 'personal' | 'unknown' {
   // If there's an active deal, it's business
   if (hasDeal) return 'business';
@@ -124,41 +97,7 @@ function classifyMeetingRelevance(
   // If attendees are in our CRM, likely business
   if (hasKnownContacts) return 'business';
 
-  // ── Smart signals (reduce "unknown") ──────────────────────────────────
-
-  // Has a video conference URL → real meeting, not a reminder/blocker
-  if (meeting.meeting_url) {
-    return 'business';
-  }
-
-  // Any attendee has a company email domain (not gmail/hotmail/etc)
-  const attendeeEmails = (meeting.attendees || [])
-    .filter((a: any) => a?.email && !a.self)
-    .map((a: any) => (a.email as string)?.toLowerCase())
-    .filter(Boolean);
-
-  const hasBusinessEmail = attendeeEmails.some((email: string) => {
-    const domain = email.split('@')[1];
-    return domain && !PERSONAL_EMAIL_DOMAINS.has(domain);
-  });
-
-  if (hasBusinessEmail) {
-    return 'business';
-  }
-
-  // Booked via scheduling tool (SavvyCal, Calendly, etc.) → business
-  const descText = meeting.description || '';
-  if (SCHEDULING_TOOL_PATTERNS.some(p => p.test(descText) || p.test(title))) {
-    return 'business';
-  }
-
-  // External meeting with attendees → default to business
-  // (internal meetings are routed separately, so this catches cross-company meetings)
-  if (meeting.is_internal === false && attendeeEmails.length > 0) {
-    return 'business';
-  }
-
-  // Truly unknown: no video URL, all emails personal/missing, no scheduling tool
+  // Can't tell — ask the user
   return 'unknown';
 }
 
@@ -180,7 +119,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { action = 'check_and_prep', userId, organizationId, meetingId, skipRelevanceCheck } = body;
+    const { action = 'check_and_prep', userId, organizationId } = body;
 
     let response;
 
@@ -193,7 +132,7 @@ serve(async (req) => {
       case 'prep_single':
         // Prep a specific meeting
         if (!userId) throw new Error('userId required');
-        response = await prepMeetingsForUser(supabase, userId, organizationId, meetingId, skipRelevanceCheck);
+        response = await prepMeetingsForUser(supabase, userId, organizationId);
         break;
 
       default:
@@ -229,38 +168,29 @@ async function checkAndPrepAllUsers(supabase: any): Promise<{
   const windowStart = new Date(now.getTime() + MIN_LEAD_TIME_MINUTES * 60 * 1000);
   const windowEnd = new Date(now.getTime() + PREP_WINDOW_MINUTES * 60 * 1000);
 
-  // Find all calendar events in the prep window with 2+ attendees (real meetings only)
+  // Find all calendar events in the prep window with 2+ attendees
   const { data: meetings, error: meetingsError } = await supabase
     .from('calendar_events')
     .select(
       'id, title, start_time, end_time, attendees, attendees_count, ' +
-      'meeting_url, user_id, external_id, is_internal, meeting_type, description'
+      'meeting_url, user_id, external_id, is_internal, meeting_type'
     )
     .gte('start_time', windowStart.toISOString())
     .lte('start_time', windowEnd.toISOString())
-    .gt('attendees_count', 1) // Hard gate: must have 2+ attendees (excludes solo tasks/reminders)
+    .gt('attendees_count', 1) // Real meetings only
     .order('start_time');
 
   if (meetingsError) {
     throw new Error(`Failed to fetch meetings: ${meetingsError.message}`);
   }
 
-  // Filter out task-like calendar events by title (e.g. "Send Payroll", "Pay court fee")
-  let effectiveMeetings = (meetings || []).filter((m: UpcomingMeeting) => {
-    if (TASK_TITLE_PATTERNS.some(p => p.test(m.title))) {
-      console.log(`[MeetingPrep] Skipping task-like event: "${m.title}"`);
-      return false;
-    }
-    return true;
-  });
-
-  console.log(`[MeetingPrep] Found ${effectiveMeetings.length} meetings in prep window`);
+  console.log(`[MeetingPrep] Found ${meetings?.length || 0} meetings in prep window`);
 
   const results: MeetingPrepResult[] = [];
   const userMeetings = new Map<string, UpcomingMeeting[]>();
 
   // Group meetings by user
-  for (const meeting of effectiveMeetings) {
+  for (const meeting of meetings || []) {
     const userId = meeting.user_id;
     if (!userMeetings.has(userId)) {
       userMeetings.set(userId, []);
@@ -297,58 +227,30 @@ async function checkAndPrepAllUsers(supabase: any): Promise<{
 async function prepMeetingsForUser(
   supabase: any,
   userId: string,
-  organizationId?: string,
-  meetingId?: string,
-  skipRelevanceCheck?: boolean
+  organizationId?: string
 ): Promise<{ success: boolean; results: MeetingPrepResult[] }> {
-  let effectiveMeetings: UpcomingMeeting[];
+  const now = new Date();
+  const windowStart = new Date(now.getTime() + MIN_LEAD_TIME_MINUTES * 60 * 1000);
+  const windowEnd = new Date(now.getTime() + PREP_WINDOW_MINUTES * 60 * 1000);
 
-  if (meetingId) {
-    // Fetch a specific meeting by ID (e.g. user confirmed via Slack button)
-    const { data: meetings, error } = await supabase
-      .from('calendar_events')
-      .select(
-        'id, title, start_time, end_time, attendees, attendees_count, ' +
-        'meeting_url, user_id, external_id, is_internal, meeting_type, description'
-      )
-      .eq('id', meetingId)
-      .eq('user_id', userId);
+  // Find this user's upcoming meetings
+  const { data: meetings, error } = await supabase
+    .from('calendar_events')
+    .select(
+      'id, title, start_time, end_time, attendees, attendees_count, ' +
+      'meeting_url, user_id, external_id, is_internal, meeting_type'
+    )
+    .eq('user_id', userId)
+    .gte('start_time', windowStart.toISOString())
+    .lte('start_time', windowEnd.toISOString())
+    .gt('attendees_count', 1)
+    .order('start_time');
 
-    if (error) {
-      throw new Error(`Failed to fetch meeting: ${error.message}`);
-    }
-
-    effectiveMeetings = meetings || [];
-  } else {
-    // Default: find upcoming meetings in the prep window
-    const now = new Date();
-    const windowStart = new Date(now.getTime() + MIN_LEAD_TIME_MINUTES * 60 * 1000);
-    const windowEnd = new Date(now.getTime() + PREP_WINDOW_MINUTES * 60 * 1000);
-
-    const { data: meetings, error } = await supabase
-      .from('calendar_events')
-      .select(
-        'id, title, start_time, end_time, attendees, attendees_count, ' +
-        'meeting_url, user_id, external_id, is_internal, meeting_type, description'
-      )
-      .eq('user_id', userId)
-      .gte('start_time', windowStart.toISOString())
-      .lte('start_time', windowEnd.toISOString())
-      .order('start_time');
-
-    if (error) {
-      throw new Error(`Failed to fetch meetings: ${error.message}`);
-    }
-
-    // Filter to real meetings with 2+ attendees, excluding task-like events
-    effectiveMeetings = (meetings || []).filter((m: UpcomingMeeting) => {
-      if (m.attendees_count !== null && m.attendees_count !== undefined && m.attendees_count <= 1) return false;
-      if (TASK_TITLE_PATTERNS.some(p => p.test(m.title))) return false;
-      return true;
-    });
+  if (error) {
+    throw new Error(`Failed to fetch meetings: ${error.message}`);
   }
 
-  const results = await prepMeetingsForUserInternal(supabase, userId, effectiveMeetings, skipRelevanceCheck);
+  const results = await prepMeetingsForUserInternal(supabase, userId, meetings || []);
 
   return { success: true, results };
 }
@@ -356,8 +258,7 @@ async function prepMeetingsForUser(
 async function prepMeetingsForUserInternal(
   supabase: any,
   userId: string,
-  meetings: UpcomingMeeting[],
-  skipRelevanceCheck = false
+  meetings: UpcomingMeeting[]
 ): Promise<MeetingPrepResult[]> {
   const results: MeetingPrepResult[] = [];
 
@@ -377,7 +278,7 @@ async function prepMeetingsForUserInternal(
         continue;
       }
 
-      // Get org_id for the user (needed for internal meeting check, orchestrator, and dedup)
+      // Get org_id for the user (needed for internal meeting check and orchestrator)
       const { data: membership } = await supabase
         .from('organization_memberships')
         .select('org_id')
@@ -386,16 +287,6 @@ async function prepMeetingsForUserInternal(
         .maybeSingle();
 
       const orgId = membership?.org_id;
-
-      // Cross-dedup: skip if meeting_prep was already sent for this meeting (e.g. from morning brief)
-      if (orgId) {
-        const canSend = await shouldSendNotification(supabase, 'meeting_prep', orgId, userId, meeting.id);
-        if (!canSend) {
-          console.log(`[MeetingPrep] Already sent prep for meeting "${meeting.title}", skipping`);
-          results.push({ meetingId: meeting.id, title: meeting.title, prepGenerated: false, slackNotified: false });
-          continue;
-        }
-      }
 
       // ── IMP-006: Internal meeting routing ──────────────────────────────────
       // If the event is classified as internal (is_internal = true), check
@@ -491,33 +382,30 @@ async function prepMeetingsForUserInternal(
       // ── END: Internal meeting routing ──────────────────────────────────────
 
       // Check business relevance before generating external meeting prep
-      // Skip when user already confirmed via Slack button (skipRelevanceCheck=true)
-      if (!skipRelevanceCheck) {
-        const { hasKnownContacts, hasDeal } = await quickRelevanceCheck(supabase, meeting);
-        const relevance = classifyMeetingRelevance(meeting.title, hasKnownContacts, hasDeal, meeting);
+      const { hasKnownContacts, hasDeal } = await quickRelevanceCheck(supabase, meeting);
+      const relevance = classifyMeetingRelevance(meeting.title, hasKnownContacts, hasDeal);
 
-        if (relevance === 'personal') {
-          console.log(`[MeetingPrep] Skipping personal meeting: ${meeting.title}`);
-          results.push({
-            meetingId: meeting.id,
-            title: meeting.title,
-            prepGenerated: false,
-            slackNotified: false,
-          });
-          continue;
-        }
+      if (relevance === 'personal') {
+        console.log(`[MeetingPrep] Skipping personal meeting: ${meeting.title}`);
+        results.push({
+          meetingId: meeting.id,
+          title: meeting.title,
+          prepGenerated: false,
+          slackNotified: false,
+        });
+        continue;
+      }
 
-        if (relevance === 'unknown') {
-          console.log(`[MeetingPrep] Unknown relevance, asking user: ${meeting.title}`);
-          const asked = await sendRelevanceQuestion(supabase, userId, meeting, orgId);
-          results.push({
-            meetingId: meeting.id,
-            title: meeting.title,
-            prepGenerated: false,
-            slackNotified: asked,
-          });
-          continue;
-        }
+      if (relevance === 'unknown') {
+        console.log(`[MeetingPrep] Unknown relevance, asking user: ${meeting.title}`);
+        const asked = await sendRelevanceQuestion(supabase, userId, meeting);
+        results.push({
+          meetingId: meeting.id,
+          title: meeting.title,
+          prepGenerated: false,
+          slackNotified: asked,
+        });
+        continue;
       }
 
       // Feature flag: use orchestrator if enabled (safe rollout)
@@ -576,7 +464,7 @@ async function prepMeetingsForUserInternal(
       // Send Slack notification
       let slackNotified = false;
       if (prepResult.success) {
-        slackNotified = await sendPrepNotification(supabase, userId, meeting, prepResult.brief, orgId || prepResult.organizationId);
+        slackNotified = await sendPrepNotification(supabase, userId, meeting, prepResult.brief);
       }
 
       // Log engagement event
@@ -678,34 +566,16 @@ async function quickRelevanceCheck(
 async function sendRelevanceQuestion(
   supabase: any,
   userId: string,
-  meeting: UpcomingMeeting,
-  orgId?: string
+  meeting: UpcomingMeeting
 ): Promise<boolean> {
   try {
-    if (!orgId) {
-      console.log(`[MeetingPrep] No org_id for user ${userId}, cannot send relevance question`);
-      return false;
-    }
-
-    // Get org-level Slack bot token
-    const { data: slackOrg } = await supabase
-      .from('slack_org_settings')
-      .select('bot_access_token')
-      .eq('org_id', orgId)
-      .eq('is_connected', true)
+    const { data: slackAuth } = await supabase
+      .from('slack_auth')
+      .select('access_token, channel_id')
+      .eq('user_id', userId)
       .maybeSingle();
 
-    if (!slackOrg?.bot_access_token) return false;
-
-    // Get user's Slack user ID for DM
-    const { data: slackMapping } = await supabase
-      .from('slack_user_mappings')
-      .select('slack_user_id')
-      .eq('sixty_user_id', userId)
-      .eq('org_id', orgId)
-      .maybeSingle();
-
-    if (!slackMapping?.slack_user_id) return false;
+    if (!slackAuth?.access_token) return false;
 
     const startTime = new Date(meeting.start_time);
     const timeStr = startTime.toLocaleTimeString('en-US', {
@@ -719,7 +589,7 @@ async function sendRelevanceQuestion(
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `You have *${meeting.title}* at ${timeStr}. Want me to research the attendees and prepare a brief?`,
+          text: `Research brief ready for *${meeting.title}* at ${timeStr}. 3 talking points prepared.`,
         },
       },
       {
@@ -730,13 +600,13 @@ async function sendRelevanceQuestion(
             text: { type: 'plain_text', text: 'Yes, prep this meeting', emoji: true },
             style: 'primary',
             action_id: 'meeting_prep_confirm',
-            value: JSON.stringify({ meeting_id: meeting.id, user_id: userId, org_id: orgId }),
+            value: JSON.stringify({ meeting_id: meeting.id, user_id: userId }),
           },
           {
             type: 'button',
-            text: { type: 'plain_text', text: 'Skip', emoji: true },
+            text: { type: 'plain_text', text: 'No thanks, skip it', emoji: true },
             action_id: 'meeting_prep_skip',
-            value: JSON.stringify({ meeting_id: meeting.id }),
+            value: meeting.id,
           },
         ],
       },
@@ -744,7 +614,7 @@ async function sendRelevanceQuestion(
         type: 'context',
         elements: [{
           type: 'mrkdwn',
-          text: "_I wasn't sure if this is a sales meeting. Let me know and I'll remember for next time._",
+          text: "_I wasn't sure if this is a work meeting. Let me know and I'll remember for next time._",
         }],
       },
     ];
@@ -752,15 +622,13 @@ async function sendRelevanceQuestion(
     const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${slackOrg.bot_access_token}`,
+        'Authorization': `Bearer ${slackAuth.access_token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        channel: slackMapping.slack_user_id,
+        channel: slackAuth.channel_id || userId,
         blocks,
         text: `Should I prep for "${meeting.title}"?`,
-        unfurl_links: false,
-        unfurl_media: false,
       }),
     });
 
@@ -869,36 +737,17 @@ async function sendPrepNotification(
   supabase: any,
   userId: string,
   meeting: UpcomingMeeting,
-  brief?: string,
-  orgId?: string
+  brief?: string
 ): Promise<boolean> {
   try {
-    if (!orgId) {
-      console.log(`[MeetingPrep] No org_id for user ${userId}, cannot send prep notification`);
-      return false;
-    }
-
-    // Get org-level Slack bot token
-    const { data: slackOrg } = await supabase
-      .from('slack_org_settings')
-      .select('bot_access_token')
-      .eq('org_id', orgId)
-      .eq('is_connected', true)
+    // Check if user has Slack connected
+    const { data: slackAuth } = await supabase
+      .from('slack_auth')
+      .select('access_token, channel_id')
+      .eq('user_id', userId)
       .maybeSingle();
 
-    if (!slackOrg?.bot_access_token) {
-      return false;
-    }
-
-    // Get user's Slack user ID for DM
-    const { data: slackMapping } = await supabase
-      .from('slack_user_mappings')
-      .select('slack_user_id')
-      .eq('sixty_user_id', userId)
-      .eq('org_id', orgId)
-      .maybeSingle();
-
-    if (!slackMapping?.slack_user_id) {
+    if (!slackAuth?.access_token) {
       return false;
     }
 
@@ -980,19 +829,17 @@ async function sendPrepNotification(
       }],
     });
 
-    // Send DM to user's Slack user ID
+    // Send to Slack
     const response = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${slackOrg.bot_access_token}`,
+        'Authorization': `Bearer ${slackAuth.access_token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        channel: slackMapping.slack_user_id,
+        channel: slackAuth.channel_id || userId,
         blocks,
         text: `Meeting prep ready: ${meeting.title}`,
-        unfurl_links: false,
-        unfurl_media: false,
       }),
     });
 

@@ -407,11 +407,9 @@ STEP 3 — Write one cold email using what you found. Rules:
 - Open with something specific about THEM (role, company, recent news)
 - One clear ask
 - Human tone, not a template
-- NEVER use em dashes (—) or en dashes (–). Use a hyphen (-), a full stop, or restructure the sentence instead.
 ${signOffInstruction}
 
-IMPORTANT: Output ONLY the final email. Start directly with "Subject:" — no preamble, no explanation, no commentary before or after the email.
-If you lack personalization data, do NOT ask the user for details. Instead, offer a specific next step YOU can take, like "If you want me to personalise this further, I can take a look at their LinkedIn profile and rewrite it with more context."`;
+IMPORTANT: Output ONLY the final email. Start directly with "Subject:" — no preamble, no explanation, no commentary before or after the email.`;
 
 
     try {
@@ -659,7 +657,7 @@ If you lack personalization data, do NOT ask the user for details. Instead, offe
             Write Your First Cold Email
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Give me a real prospect — I'll deploy my research team and craft a personalized email.
+            Enter a real prospect — our AI team will research them and craft a personalized email.
           </p>
         </div>
       </div>
@@ -790,10 +788,10 @@ If you lack personalization data, do NOT ask the user for details. Instead, offe
                   <Brain className="w-4 h-4 text-indigo-500 animate-pulse" />
                 )}
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {phase === 'deploying' && 'Deploying my research team...'}
+                  {phase === 'deploying' && 'Deploying research agents...'}
                   {phase === 'researching' && `Researching ${prospectName} at ${prospectCompany}...`}
-                  {phase === 'synthesizing' && 'Synthesizing what I found...'}
-                  {phase === 'writing' && 'Writing your email now...'}
+                  {phase === 'synthesizing' && 'Synthesizing research findings...'}
+                  {phase === 'writing' && 'Composing personalized email...'}
                 </span>
               </div>
               <span className="text-[10px] font-medium text-indigo-500 bg-indigo-100 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">

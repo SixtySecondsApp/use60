@@ -62,16 +62,6 @@
     .pill[data-f="slackcopilot"].act { background: #4338ca; }
     .pill[data-f="demo"].act       { background: #a16207; }
     .pill[data-f="credits"].act    { background: #e11d48; }
-    .pill[data-f="v2infra"].act    { background: #0d9488; }
-    .pill[data-f="v2obs"].act      { background: #0891b2; }
-    .pill[data-f="v2model"].act    { background: #7c3aed; }
-    .pill[data-f="v2route"].act    { background: #2563eb; }
-    .pill[data-f="v2skill"].act    { background: #0369a1; }
-    .pill[data-f="v2memory"].act   { background: #059669; }
-    .pill[data-f="v2retry"].act    { background: #d97706; }
-    .pill[data-f="v2bp"].act       { background: #dc2626; }
-    .pill[data-f="v2dedup"].act    { background: #9333ea; }
-    .pill[data-f="v2xchan"].act    { background: #4338ca; }
 
     .card { background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px; overflow: hidden; }
     .cbar { padding: 10px 14px; border-bottom: 1px solid var(--bdr); background: var(--surf2); display: flex; align-items: center; gap: 7px; }
@@ -140,15 +130,9 @@
     .show-v2 .tab.v2-only { display: flex; }
     .show-v2 .pill.v2-only { display: flex; }
     .show-v2 .fv.v2-only.vis { display: block; }
-    /* Fix specificity: .show-v2 .v2-only (0,2,0) was overriding .tp (0,1,0) and .fv (0,1,0),
-       making all V2 panels/views visible simultaneously. These rules at (0,4,0) restore proper toggling. */
-    .show-v2 .tp.v2-only:not(.act) { display: none; }
-    .show-v2 .fv.v2-only:not(.vis) { display: none; }
     /* V2 Only mode — hide V1 content */
     body.v2-exclusive .v1-content { display: none !important; }
     body.v2-exclusive .tp.v1-content { display: none !important; }
-    body.v2-exclusive .tp.v2-only:not(.act) { display: none !important; }
-    body.v2-exclusive .fv.v2-only:not(.vis) { display: none !important; }
     body.hl-v2 .v2-card { box-shadow: 0 0 0 2px #22c55e, 0 0 20px rgba(34,197,94,.2); }
     body.hl-v2 .v2-badge { animation: v2pulse 1.5s ease-in-out infinite; }
     body.hl-v2 .v2-row { background: rgba(34,197,94,.06); }
@@ -170,7 +154,7 @@
     <button class="ver-btn" onclick="setVer('v2only',this)">V2 Only</button>
   </div>
   <button class="hl-btn" id="hl-btn" onclick="toggleHL()"><span style="font-size:9px">&#9679;</span> Highlight V2</button>
-  <div class="hbg">V2 Architecture</div>
+  <div class="hbg">feat/always_on branch</div>
 </header>
 
 <div class="tabs">
@@ -182,7 +166,6 @@
   <div class="tab v2-only" data-tab="autonomy"  onclick="switchTab('autonomy')" ><span class="td"></span>Autonomy System <span class="v2-badge">V2</span></div>
   <div class="tab v2-only" data-tab="proactive" onclick="switchTab('proactive')"><span class="td"></span>Proactive Agents <span class="v2-badge">V2</span></div>
   <div class="tab v2-only" data-tab="credits"   onclick="switchTab('credits')"  ><span class="td"></span>Credit Governance <span class="v2-badge">V2</span></div>
-  <div class="tab v2-only" data-tab="v2infra"   onclick="switchTab('v2infra')"  ><span class="td"></span>V2 Infrastructure <span class="v2-badge">V2</span></div>
 </div>
 
 <main>
@@ -207,7 +190,6 @@
     <div class="pill v2-only" data-f="slackcopilot" onclick="showF('slackcopilot')">Slack Copilot <span class="v2-badge">V2</span></div>
     <div class="pill v2-only" data-f="demo"         onclick="showF('demo')"        >Demo Experience <span class="v2-badge">V2</span></div>
     <div class="pill v2-only" data-f="credits"      onclick="showF('credits')"     >Credit Governance <span class="v2-badge">V2</span></div>
-    <div class="pill v2-only" data-f="v2infra"      onclick="showF('v2infra')"     >V2 Infrastructure <span class="v2-badge">V2</span></div>
   </div>
 
   <div id="fv-overview" class="fv vis v1-content">
@@ -315,19 +297,11 @@
     </div>
   </div>
 
-  <div id="fv-v2infra" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#0d9488">V2 Infrastructure <span class="v2-badge">V2</span></div><div><div class="fvt">10 Foundational Workstreams — 35 Stories</div><div class="fvd">Observability, Model Router, Unified Routing, Skill Versioning, Adaptive Memory, Fleet Retry, Backpressure, Dedup, Cross-Channel, Fleet Health</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-infrastructure.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2i',-0.15)">-</button><span class="zp" id="v2i-pct">100%</span><button class="zb" onclick="zD('v2i',0.15)">+</button><button class="zb" onclick="rD('v2i')">R</button><button class="fsb" onclick="openFS('v2i','V2 Infrastructure')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2i-body"><div class="dstage" id="v2i-stage"><div id="v2i-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-  </div>
-
   <div class="legend">
     <div><div class="lgt">Arrows</div><div class="lgi"><div class="lgc" style="background:#e2e8f0"></div>Solid - direct data flow</div><div class="lgi"><div class="lgc" style="background:#64748b"></div>Dashed - integration or optional</div></div>
     <div><div class="lgt">DB columns</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>meetings - owner_user_id</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>deals and contacts - owner_id</div></div>
     <div><div class="lgt">Security</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>Copilot convos - user-private only</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>AI keys - user_settings, never VITE_</div></div>
     <div><div class="lgt">V2 Credits</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>All AI calls metered via creditLedger</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>Fleet agents throttled by budget</div></div>
-    <div><div class="lgt">V2 Infrastructure</div><div class="lgi"><div class="lgc" style="background:#0d9488"></div>10 workstreams, 35 stories</div><div class="lgi"><div class="lgc" style="background:#0d9488"></div>11 migrations, 3 shared modules</div><div class="lgi"><div class="lgc" style="background:#0d9488"></div>4 new edge functions, 8 slack skills</div></div>
   </div>
 </div>
 
@@ -435,7 +409,7 @@
       <tbody>
         <tr class="v2-row"><td>autonomyResolver.ts</td><td><span class="b bp">engine</span></td><td>Resolves effective policy: user, org, preset, default (5-min cache)</td></tr>
         <tr class="v2-row"><td>promotionEngine.ts</td><td><span class="b bg">engine</span></td><td>Evaluates trust signals for tier promotion (474 lines)</td></tr>
-        <tr class="v2-row"><td>demotionHandler.ts</td><td><span class="b by">engine</span></td><td>Demotes on violations like undo frequency, safety nets, cooldowns</td></tr>
+        <tr class="v2-row"><td>demotionEngine.ts</td><td><span class="b by">engine</span></td><td>Demotes on violations like undo frequency (491 lines)</td></tr>
         <tr class="v2-row"><td>autonomy-promotion-notify</td><td><span class="b bb">edge fn</span></td><td>Slack notification when agent earns a new tier</td></tr>
         <tr class="v2-row"><td>autonomy_policies</td><td><span class="b bx">table</span></td><td>Per-action-type policy storage with presets</td></tr>
       </tbody>
@@ -455,12 +429,12 @@
     <table class="kt">
       <thead><tr><th>Agent</th><th>Trigger</th><th>Purpose</th></tr></thead>
       <tbody>
-        <tr class="v2-row"><td>slack-morning-brief</td><td><span class="b bb">cron 7am</span></td><td>Pipeline analysis, fleet routes, priority actions for the day</td></tr>
+        <tr class="v2-row"><td>agent-morning-briefing</td><td><span class="b bb">cron 7am</span></td><td>Pipeline analysis, fleet routes, priority actions for the day</td></tr>
         <tr class="v2-row"><td>agent-eod-synthesis</td><td><span class="b bb">cron 6pm</span></td><td>Day scorecard, deal health, relationship scoring, overnight plan</td></tr>
         <tr class="v2-row"><td>proactive-meeting-prep</td><td><span class="b by">event</span></td><td>Type-specific prep (1:1, QBR, pipeline review, standup)</td></tr>
         <tr class="v2-row"><td>agent-deal-risk</td><td><span class="b bb">cron</span></td><td>Temperature scoring, risk factor detection, automated alerts</td></tr>
         <tr class="v2-row"><td>agent-reengagement</td><td><span class="b bb">cron</span></td><td>At-risk contact detection, Apollo/Apify signals, cooldown enforcement</td></tr>
-        <tr class="v2-row"><td>coaching-analysis</td><td><span class="b by">event</span></td><td>Post-meeting coaching insights, skill progression tracking</td></tr>
+        <tr class="v2-row"><td>agent-coaching</td><td><span class="b by">event</span></td><td>Post-meeting coaching insights, skill progression tracking</td></tr>
         <tr class="v2-row"><td>agent-competitive-intel</td><td><span class="b bb">cron</span></td><td>Competitor monitoring, battlecard generation, Slack alerts</td></tr>
         <tr class="v2-row"><td>agent-email-signals</td><td><span class="b by">event</span></td><td>Email activity signal extraction, classification, recommendations</td></tr>
       </tbody>
@@ -486,180 +460,8 @@
         <tr class="v2-row"><td>modelRouter.ts</td><td><span class="b bb">router</span></td><td>Routes to cheapest capable model per task type (Haiku for triage, Sonnet for drafts)</td></tr>
         <tr class="v2-row"><td>credit_ledger</td><td><span class="b bx">table</span></td><td>Append-only log: user_id, org_id, provider, model, tokens_in, tokens_out, cost_usd, source_agent</td></tr>
         <tr class="v2-row"><td>credit_budgets</td><td><span class="b bx">table</span></td><td>Budget configs: user or org scope, daily_limit_usd, monthly_limit_usd, alert_pct</td></tr>
-        <tr class="v2-row"><td>get-credit-usage-summary</td><td><span class="b bb">cron</span></td><td>Credit usage summary for fast dashboard queries</td></tr>
-        <tr class="v2-row"><td>check-credit-alerts</td><td><span class="b by">trigger</span></td><td>Slack alert when user or org hits 80% / 100% of budget</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- TAB 9: V2 Infrastructure -->
-<div id="tab-v2infra" class="tp v2-only">
-  <div class="stl">V2 Infrastructure Foundations <span class="v2-badge">V2</span></div>
-  <div class="sds">10 foundational workstreams (35 stories) providing observability, intelligent model routing, unified message routing, skill versioning with namespaces, adaptive memory with 3-tier compaction, fleet retry with DLQ, backpressure with priority queues, entity deduplication, cross-channel continuity, and fleet health monitoring.</div>
-  <div class="pills">
-    <div class="pill act v2-only" data-f="v2obs"   onclick="showV2Sub('v2obs')"  >Observability</div>
-    <div class="pill v2-only" data-f="v2model" onclick="showV2Sub('v2model')">Model Router</div>
-    <div class="pill v2-only" data-f="v2route" onclick="showV2Sub('v2route')">Unified Routing</div>
-    <div class="pill v2-only" data-f="v2skill" onclick="showV2Sub('v2skill')">Skill Versioning</div>
-    <div class="pill v2-only" data-f="v2memory" onclick="showV2Sub('v2memory')">Adaptive Memory</div>
-    <div class="pill v2-only" data-f="v2retry" onclick="showV2Sub('v2retry')">Fleet Retry</div>
-    <div class="pill v2-only" data-f="v2bp"    onclick="showV2Sub('v2bp')"   >Backpressure</div>
-    <div class="pill v2-only" data-f="v2dedup" onclick="showV2Sub('v2dedup')">Deduplication</div>
-    <div class="pill v2-only" data-f="v2xchan" onclick="showV2Sub('v2xchan')">Cross-Channel</div>
-  </div>
-
-  <div id="v2sub-v2obs" class="v2sub vis" style="margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#0891b2">Observability</div><div><div class="fvt">Structured Logging, Distributed Tracing, Fleet Health</div><div class="fvd">system_logs table, logger.ts shared module, logs-cleanup cron, agent_executions tracking, fleet-health monitoring with Slack alerts</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-observability.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2obs',-0.15)">-</button><span class="zp" id="v2obs-pct">100%</span><button class="zb" onclick="zD('v2obs',0.15)">+</button><button class="zb" onclick="rD('v2obs')">R</button><button class="fsb" onclick="openFS('v2obs','Observability')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2obs-body"><div class="dstage" id="v2obs-stage"><div id="v2obs-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>system_logs</td><td><span class="b by">table</span></td><td>Structured log storage with trace_id, span_id, parent_span_id for distributed tracing. 9 indexes, GIN on metadata.</td></tr>
-        <tr class="v2-row"><td>_shared/logger.ts</td><td><span class="b bg">shared</span></td><td>createLogger(service) — batched writes (5 per flush), nested spans via span.child(), console fallback when no service key</td></tr>
-        <tr class="v2-row"><td>logs-cleanup</td><td><span class="b bb">cron</span></td><td>Nightly retention: debug=30d, info/warn=90d, error=365d. Self-dogfoods logger with nested spans.</td></tr>
-        <tr class="v2-row"><td>agent_executions</td><td><span class="b by">table</span></td><td>20-column execution tracking: trace_id, agent_name, status, tokens, credits, model_id, model_was_fallback</td></tr>
-        <tr class="v2-row"><td>fleet-health</td><td><span class="b bb">cron</span></td><td>5-min cron checking 6 agent cadences. Health: healthy/warning/critical/stale. Slack alerts via webhook.</td></tr>
-        <tr class="v2-row"><td>fleet_health_snapshots</td><td><span class="b by">table</span></td><td>Point-in-time snapshots per agent: failure_rate_24h, avg_duration_ms, credits_consumed_24h, alerts_fired</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2model" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#7c3aed">Model Router</div><div><div class="fvt">Intelligent Model Resolution with Circuit Breaker</div><div class="fvd">model_config table, 3 intelligence tiers x 5 features, circuit breaker with half-open probe, credit deduction and budget enforcement</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-model-router.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2mdl',-0.15)">-</button><span class="zp" id="v2mdl-pct">100%</span><button class="zb" onclick="zD('v2mdl',0.15)">+</button><button class="zb" onclick="rD('v2mdl')">R</button><button class="fsb" onclick="openFS('v2mdl','Model Router')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2mdl-body"><div class="dstage" id="v2mdl-stage"><div id="v2mdl-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>model_config</td><td><span class="b by">table</span></td><td>15 primary models (3 tiers x 5 features) + 6 cross-tier fallbacks. Partial unique index WHERE is_primary=true.</td></tr>
-        <tr class="v2-row"><td>model_health</td><td><span class="b by">table</span></td><td>Circuit breaker state: failure_count, last_failure_at, circuit_state (closed/open/half_open), cooldown_until</td></tr>
-        <tr class="v2-row"><td>_shared/modelRouter.ts</td><td><span class="b bg">shared</span></td><td>resolveModel() — tier lookup, circuit check, fallback chain. recordSuccess/recordFailure for circuit state.</td></tr>
-        <tr class="v2-row"><td>checkBudget()</td><td><span class="b bp">function</span></td><td>Pre-flight credit check with -10 grace threshold. Returns boolean.</td></tr>
-        <tr class="v2-row"><td>deductCredits()</td><td><span class="b bp">function</span></td><td>Post-call deduction via existing deduct_credits RPC. Logs to credit_transactions.</td></tr>
-        <tr class="v2-row"><td>checkAgentBudget()</td><td><span class="b by">guard</span></td><td>Per-run budget limits per agent name: FLEET_AGENT_BUDGETS constant.</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2route" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#2563eb">Unified Routing</div><div><div class="fvt">Server-Side Message Routing with Cache</div><div class="fvd">route-message edge function with 5-step pipeline, SHA-256 routing cache, migrated web/slack/fleet copilots</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-unified-routing.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2rt',-0.15)">-</button><span class="zp" id="v2rt-pct">100%</span><button class="zb" onclick="zD('v2rt',0.15)">+</button><button class="zb" onclick="rD('v2rt')">R</button><button class="fsb" onclick="openFS('v2rt','Unified Routing')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2rt-body"><div class="dstage" id="v2rt-stage"><div id="v2rt-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>route-message</td><td><span class="b bp">edge fn</span></td><td>5-step pipeline: intent classify, sequence triggers (0.7+), skill triggers (0.5+), semantic fallback (0.6+), general</td></tr>
-        <tr class="v2-row"><td>routing_cache</td><td><span class="b by">table</span></td><td>SHA-256 hash key, JSONB response, 2-min TTL. Avoids redundant AI classification calls.</td></tr>
-        <tr class="v2-row"><td>CopilotContext.tsx</td><td><span class="b bb">frontend</span></td><td>Calls route-message with source: web_copilot before AI call, passes routingContext downstream</td></tr>
-        <tr class="v2-row"><td>slack-copilot</td><td><span class="b bb">edge fn</span></td><td>classifyViaRouteMessage() replaces inline intent classifier. Source: slack_copilot</td></tr>
-        <tr class="v2-row"><td>agent-orchestrator</td><td><span class="b bb">edge fn</span></td><td>routeFleetMessage() calls route-message with source: fleet_agent for fleet routing</td></tr>
-        <tr class="v2-row"><td>copilotRoutingService.ts</td><td><span class="b bx">deprecated</span></td><td>All exports marked @deprecated with JSDoc migration guide to route-message</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2skill" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#0369a1">Skill Versioning</div><div><div class="fvt">Namespaced Skills with Version Pinning</div><div class="fvd">4 namespaces (copilot/fleet/slack/shared), version management, 8 new slack-namespaced skills, namespace-filtered RPC</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-skill-versioning.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2sk',-0.15)">-</button><span class="zp" id="v2sk-pct">100%</span><button class="zb" onclick="zD('v2sk',0.15)">+</button><button class="zb" onclick="rD('v2sk')">R</button><button class="fsb" onclick="openFS('v2sk','Skill Versioning')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2sk-body"><div class="dstage" id="v2sk-stage"><div id="v2sk-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>platform_skills (new cols)</td><td><span class="b by">migration</span></td><td>namespace (copilot/fleet/slack/shared), source, is_current, changelog, deprecated_at</td></tr>
-        <tr class="v2-row"><td>organization_skills (new cols)</td><td><span class="b by">migration</span></td><td>pinned_version, source, namespace_override for per-org version control</td></tr>
-        <tr class="v2-row"><td>get_organization_skills_for_agent</td><td><span class="b bp">RPC</span></td><td>Updated with p_source parameter. Maps: web_copilot->copilot+shared, slack->slack+shared, fleet->fleet+shared</td></tr>
-        <tr class="v2-row"><td>sync-skills.ts</td><td><span class="b bb">CLI</span></td><td>--deprecate flag, version incrementing with is_current management, namespace/source field sync</td></tr>
-        <tr class="v2-row"><td>8 slack skills</td><td><span class="b bg">skills</span></td><td>slack-deal-query, slack-contact-query, slack-pipeline-query, slack-history-query, slack-coaching-query, slack-competitive-query, slack-actions-query, slack-general-query</td></tr>
-        <tr class="v2-row"><td>SkillDetailView.tsx</td><td><span class="b bb">frontend</span></td><td>Read-only namespace badge and version badge display in skill detail panel</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2memory" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#059669">Adaptive Memory</div><div><div class="fvt">3-Tier Compaction with Cross-Channel Context</div><div class="fvd">conversation_context table, dynamic compaction thresholds, verbatim/summarised/entity-facts tiers, cross-channel reads/writes</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-adaptive-memory.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2mem',-0.15)">-</button><span class="zp" id="v2mem-pct">100%</span><button class="zb" onclick="zD('v2mem',0.15)">+</button><button class="zb" onclick="rD('v2mem')">R</button><button class="fsb" onclick="openFS('v2mem','Adaptive Memory')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2mem-body"><div class="dstage" id="v2mem-stage"><div id="v2mem-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>conversation_context</td><td><span class="b by">table</span></td><td>Cross-channel memory: user_id, channel (web/slack/fleet), entity_type, entity_id, context_summary, expires_at</td></tr>
-        <tr class="v2-row"><td>getCompactionThreshold()</td><td><span class="b bp">function</span></td><td>Dynamic thresholds: ~137k tokens for Claude, ~737k for Gemini. Scales to model context window.</td></tr>
-        <tr class="v2-row"><td>compactWithTiers()</td><td><span class="b bp">function</span></td><td>Tier 1: verbatim (last 20 messages). Tier 2: AI-summarised (7 days). Tier 3: entity facts from copilotMemoryService</td></tr>
-        <tr class="v2-row"><td>copilot-autonomous</td><td><span class="b bb">edge fn</span></td><td>fetchConversationContext() reads last 7 days, injects top 3 blocks. trackEntityMentions() writes after 3+ mentions.</td></tr>
-        <tr class="v2-row"><td>storeEntityFacts()</td><td><span class="b bg">service</span></td><td>Tier 3 memory storage with source provenance in copilotMemoryService</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2retry" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#d97706">Fleet Retry</div><div><div class="fvt">Agent Execution Wrapper with DLQ</div><div class="fvd">agentRunner.ts with typed retry policies, agent_dead_letters table, daily DLQ retry cron, integrated into all fleet agents</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-fleet-retry.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2ret',-0.15)">-</button><span class="zp" id="v2ret-pct">100%</span><button class="zb" onclick="zD('v2ret',0.15)">+</button><button class="zb" onclick="rD('v2ret')">R</button><button class="fsb" onclick="openFS('v2ret','Fleet Retry')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2ret-body"><div class="dstage" id="v2ret-stage"><div id="v2ret-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>_shared/agentRunner.ts</td><td><span class="b bg">shared</span></td><td>runAgent(config, executor) — typed retry policies: transient=2x exponential, context_exceeded=1x, validation=0x</td></tr>
-        <tr class="v2-row"><td>agent_dead_letters</td><td><span class="b by">table</span></td><td>DLQ for permanently failed executions. Tracks agent_name, error, retry_count, original payload.</td></tr>
-        <tr class="v2-row"><td>agent-dead-letter-retry</td><td><span class="b bb">cron</span></td><td>Daily cron processing up to 20 DLQ entries. Re-fires through agent-orchestrator. Max 3 retries.</td></tr>
-        <tr class="v2-row"><td>agent-deal-risk-batch</td><td><span class="b bx">wrapped</span></td><td>Wrapped with runAgent() for automatic retry and telemetry</td></tr>
-        <tr class="v2-row"><td>agent-pipeline-snapshot</td><td><span class="b bx">wrapped</span></td><td>Both cron-all and single-user paths wrapped with runAgent()</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2bp" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#dc2626">Backpressure</div><div><div class="fvt">Priority Queues with Rate Limiting</div><div class="fvd">P0-P3 queue priorities, semaphore concurrency control (max 5), batch processing mode for bulk events</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-backpressure.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2bpr',-0.15)">-</button><span class="zp" id="v2bpr-pct">100%</span><button class="zb" onclick="zD('v2bpr',0.15)">+</button><button class="zb" onclick="rD('v2bpr')">R</button><button class="fsb" onclick="openFS('v2bpr','Backpressure')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2bpr-body"><div class="dstage" id="v2bpr-stage"><div id="v2bpr-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>command_centre_items (new cols)</td><td><span class="b by">migration</span></td><td>queue_priority (0-3, default 2), queued_at, processing_started_at, processing_attempts. Composite index for dequeue.</td></tr>
-        <tr class="v2-row"><td>RateLimiter</td><td><span class="b bp">class</span></td><td>Per-org rate limiting in cc-enrich. Configurable window and max requests.</td></tr>
-        <tr class="v2-row"><td>Semaphore</td><td><span class="b bp">class</span></td><td>Max 5 concurrent enrichment operations. Prevents resource exhaustion.</td></tr>
-        <tr class="v2-row"><td>Batch mode</td><td><span class="b bg">feature</span></td><td>Activates when queue depth > 20. Prefetches CRM/calendar data for the batch to reduce per-item queries.</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2dedup" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#9333ea">Deduplication</div><div><div class="fvt">Entity-Level Dedup with Evidence Merging</div><div class="fvd">Pre-enrichment and post-scoring dedup, confidence aggregation formula, merge window management, threshold re-check</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-deduplication.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2ded',-0.15)">-</button><span class="zp" id="v2ded-pct">100%</span><button class="zb" onclick="zD('v2ded',0.15)">+</button><button class="zb" onclick="rD('v2ded')">R</button><button class="fsb" onclick="openFS('v2ded','Deduplication')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2ded-body"><div class="dstage" id="v2ded-stage"><div id="v2ded-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>command_centre_items (dedup cols)</td><td><span class="b by">migration</span></td><td>dedup_key, merge_group_id, is_primary, merged_evidence (JSONB), merged_confidence, contributing_agents, merge_window_expires</td></tr>
-        <tr class="v2-row"><td>runPreEnrichmentDedup()</td><td><span class="b bp">function</span></td><td>4-hour merge window. Aggregation: 1 - product(1-confidence_i), capped at 0.95</td></tr>
-        <tr class="v2-row"><td>recheckMergeGroupThreshold()</td><td><span class="b bp">function</span></td><td>Post-scoring recalculation of merged confidence. Promotes to approved at 0.7</td></tr>
-        <tr class="v2-row"><td>cc-enrich</td><td><span class="b bb">edge fn</span></td><td>Pre-enrichment dedup before expensive context loading</td></tr>
-        <tr class="v2-row"><td>cc-prioritise</td><td><span class="b bb">edge fn</span></td><td>Post-scoring dedup re-check after confidence scoring</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2xchan" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#4338ca">Cross-Channel</div><div><div class="fvt">Session Continuity Across Web, Slack, and Fleet</div><div class="fvd">Slack thread context extraction, fleet agent context writes, 14-day cleanup, conversation_context bridging all channels</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-cross-channel.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2xch',-0.15)">-</button><span class="zp" id="v2xch-pct">100%</span><button class="zb" onclick="zD('v2xch',0.15)">+</button><button class="zb" onclick="rD('v2xch')">R</button><button class="fsb" onclick="openFS('v2xch','Cross-Channel')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2xch-body"><div class="dstage" id="v2xch-stage"><div id="v2xch-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>threadMemory.ts</td><td><span class="b bg">shared</span></td><td>Slack thread context extraction. Triggers at 10+ messages or 15+ min gap. AI-summarised via Anthropic API.</td></tr>
-        <tr class="v2-row"><td>cc-enrich (XCHAN-002)</td><td><span class="b bb">edge fn</span></td><td>Fleet agent writes context to conversation_context after enrichment completes</td></tr>
-        <tr class="v2-row"><td>copilot-autonomous (MEM-004)</td><td><span class="b bb">edge fn</span></td><td>Reads last 7 days of conversation_context, injects top 3 blocks into system prompt</td></tr>
-        <tr class="v2-row"><td>cc-daily-cleanup</td><td><span class="b bb">cron</span></td><td>Phase 3: runContextCleanup() deletes conversation_context entries older than 14 days</td></tr>
+        <tr class="v2-row"><td>credit-usage-rollup</td><td><span class="b bb">cron</span></td><td>Hourly rollup into credit_usage_daily for fast dashboard queries</td></tr>
+        <tr class="v2-row"><td>credit-budget-alert</td><td><span class="b by">trigger</span></td><td>Slack alert when user or org hits 80% / 100% of budget</td></tr>
       </tbody>
     </table>
   </div>
@@ -787,7 +589,7 @@ ov: [
   '        EOD["EOD Synthesis"]',
   '        IMP["Meeting Prep"]',
   '        DRK["Deal Risk"]',
-  '        REENG["Re-Engagement"]',
+  '        REG["Re-Engagement"]',
   '        COC["Coaching"]',
   '        CCI["Competitive Intel"]',
   '        ESG["Email Signals"]',
@@ -805,14 +607,6 @@ ov: [
   '        MROUTE["Model Router\\ncheapest capable model"]',
   '        CLGR --> CBGT --> FTHR',
   '    end',
-  '    subgraph V2INFRA["V2 Infrastructure"]',
-  '        SLOG["system_logs\\nstructured logging"]',
-  '        MROUTER["modelRouter.ts\\ncircuit breaker + fallback"]',
-  '        RMSG["route-message\\n5-step unified routing"]',
-  '        ARUN["agentRunner.ts\\nretry + DLQ"]',
-  '        CCTX["conversation_context\\ncross-channel memory"]',
-  '        FHEALTH["fleet-health\\n5-min monitoring"]',
-  '    end',
   '    FLEET -->|items| CCQ',
   '    CCA -->|auto| DC',
   '    CCA -->|notify| ASM',
@@ -823,14 +617,7 @@ ov: [
   '    CCE -.->|metered| CLGR',
   '    SCV -.->|metered| CLGR',
   '    FTHR -.->|throttle| FLEET',
-  '    MROUTE -.->|route| AIP',
-  '    MROUTER -.->|model resolution| AEF',
-  '    MROUTER -.->|model resolution| AC',
-  '    RMSG -.->|routing| ROUTE',
-  '    ARUN -.->|wraps| FLEET',
-  '    CCTX -.->|cross-channel| AUTO',
-  '    FHEALTH -.->|monitors| FLEET',
-  '    SLOG -.->|logs| SB'
+  '    MROUTE -.->|route| AIP'
 ].join('\n'),
 
 fe: [
@@ -908,7 +695,7 @@ cp: [
   '    end',
   '    subgraph MEM["Memory and Sessions"]',
   '        CM["copilotMemoryService\\nstore recall extract"]',
-  '        CS["copilotSessionService\\ncompact at 80k tokens\\n⚠ V2: 3-tier adaptive compaction"]',
+  '        CS["copilotSessionService\\ncompact at 80k tokens"]',
   '    end',
   '    MSG --> CTX',
   '    CTX -->|autonomous on| ROUTING',
@@ -1358,7 +1145,7 @@ au: [
   '    end',
   '    subgraph DEMO["Demotion Engine"]',
   '        VIO["Violations\\nfrequent undo rejections"]',
-  '        DE["demotionHandler.ts\\nauto-downgrade"]',
+  '        DE["demotionEngine.ts\\nauto-downgrade"]',
   '        VIO --> DE -->|tier down| TIERS',
   '    end',
   '    subgraph ANALYTICS["Autonomy Analytics"]',
@@ -1427,7 +1214,7 @@ sc: [
   '        TH["Thread detection\\nreply vs new thread"]',
   '        EV --> TH',
   '    end',
-  '    subgraph COPILOT["slack-copilot edge function — V1"]',
+  '    subgraph COPILOT["slack-copilot edge function"]',
   '        IC["Intent Classifier\\n8 query types"]',
   '        D1["Deals handler"]',
   '        D2["Contacts handler"]',
@@ -1446,11 +1233,6 @@ sc: [
   '        IC --> D7',
   '        IC --> D8',
   '    end',
-  '    subgraph COPILOTV2["V2: route-message + slack skills"]',
-  '        RM2["route-message\\n5-step unified pipeline"]',
-  '        SK2["8 slack-namespaced skills\\nslack-deal-query slack-contact-query\\nslack-pipeline-query etc."]',
-  '        RM2 --> SK2',
-  '    end',
   '    subgraph MEM["Thread Memory"]',
   '        TM["slack_copilot_threads\\ncontext per thread\\n180 line service"]',
   '    end',
@@ -1461,11 +1243,8 @@ sc: [
   '    end',
   '    USR --> EVENTS',
   '    TH --> COPILOT',
-  '    TH -.->|V2| COPILOTV2',
   '    MEM --> COPILOT',
-  '    MEM -.-> COPILOTV2',
   '    COPILOT -->|Block Kit response| USR',
-  '    COPILOTV2 -.->|Block Kit response| USR',
   '    USR -->|button click| INTER'
 ].join('\n'),
 
@@ -1672,11 +1451,11 @@ cg: [
   '    end',
   '    subgraph GUARD["Circuit Breakers"]',
   '        FT["fleetThrottle.ts\\npause non-critical at 80%"]',
-  '        AL["check-credit-alerts\\nSlack at 80% and 100%"]',
+  '        AL["credit-budget-alert\\nSlack at 80% and 100%"]',
   '        KB["Hard kill at 100%\\nonly critical paths proceed"]',
   '    end',
   '    subgraph VIS["Visibility"]',
-  '        RU["get-credit-usage-summary\\ncredit dashboard"]',
+  '        RU["credit-usage-rollup\\nhourly cron"]',
   '        DASH["Usage Dashboard\\nper agent per model\\ndaily monthly trends"]',
   '        RU --> DASH',
   '    end',
@@ -1717,414 +1496,6 @@ cgd: [
   '        end',
   '        Router-->>Agent: AI response',
   '    end'
-].join('\n')
-
-// ── V2 Infrastructure Foundation Diagrams ─────────────────────
-
-,v2i: [
-  'flowchart TB',
-  '    subgraph OBS["Observability Layer"]',
-  '        SL["system_logs\\ntrace_id span_id parent_span_id"]',
-  '        LG["logger.ts\\nbatched writes nested spans"]',
-  '        LC["logs-cleanup\\n30d/90d/365d retention"]',
-  '        AE["agent_executions\\n20-col execution tracking"]',
-  '        FH["fleet-health\\n5-min cron Slack alerts"]',
-  '        FHS["fleet_health_snapshots"]',
-  '        LG -->|writes| SL',
-  '        LC -->|prunes| SL',
-  '        AE --> FH --> FHS',
-  '    end',
-  '    subgraph MODEL["Model Router"]',
-  '        MC["model_config\\n15 primary + 6 fallback"]',
-  '        MH["model_health\\ncircuit breaker state"]',
-  '        MR["modelRouter.ts\\nresolveModel + deductCredits"]',
-  '        MC --> MR',
-  '        MH --> MR',
-  '    end',
-  '    subgraph ROUTE["Unified Routing"]',
-  '        RM["route-message\\n5-step pipeline"]',
-  '        RCACHE["routing_cache\\nSHA-256 key 2-min TTL"]',
-  '        RM --> RCACHE',
-  '    end',
-  '    subgraph SKILL["Skill Versioning"]',
-  '        NS["4 namespaces\\ncopilot fleet slack shared"]',
-  '        VER["Version pinning\\nis_current changelog"]',
-  '        SK8["8 slack-namespaced skills"]',
-  '        NS --> VER',
-  '    end',
-  '    subgraph MEM["Adaptive Memory"]',
-  '        CCTX["conversation_context\\ncross-channel memory"]',
-  '        T1M["Tier 1 Verbatim\\nlast 20 messages"]',
-  '        T2M["Tier 2 Summarised\\n7-day window"]',
-  '        T3M["Tier 3 Entity Facts\\nfrom copilotMemoryService"]',
-  '        T1M --> T2M --> T3M',
-  '    end',
-  '    subgraph RETRY["Fleet Retry"]',
-  '        AR["agentRunner.ts\\ntyped retry policies"]',
-  '        DLQ["agent_dead_letters\\nDLQ table"]',
-  '        DLC["agent-dead-letter-retry\\ndaily cron max 20"]',
-  '        AR -->|permanent fail| DLQ',
-  '        DLC -->|reprocess| DLQ',
-  '    end',
-  '    subgraph BP["Backpressure"]',
-  '        PQ["Priority Queues P0-P3"]',
-  '        RL["RateLimiter\\nper-org limits"]',
-  '        SEM["Semaphore\\nmax 5 concurrent"]',
-  '        BATCH["Batch Mode\\nqueue depth > 20"]',
-  '        PQ --> RL --> SEM',
-  '    end',
-  '    subgraph DEDUP["Deduplication"]',
-  '        PRE["Pre-enrichment dedup\\n4-hour merge window"]',
-  '        POST["Post-scoring recheck\\nthreshold at 0.7"]',
-  '        CONF["Confidence aggregation\\n1-prod 1-ci capped 0.95"]',
-  '        PRE --> CONF --> POST',
-  '    end',
-  '    subgraph XCHAN["Cross-Channel"]',
-  '        TM["threadMemory.ts\\nSlack thread extraction"]',
-  '        FW["Fleet context writes\\ncc-enrich"]',
-  '        CR["Context reads\\ncopilot-autonomous"]',
-  '        TM --> CCTX',
-  '        FW --> CCTX',
-  '        CCTX --> CR',
-  '    end',
-  '    subgraph CONSUMERS["Consumers"]',
-  '        CA["copilot-autonomous"]',
-  '        AC["api-copilot"]',
-  '        AO["agent-orchestrator"]',
-  '        SC["slack-copilot"]',
-  '        CE["cc-enrich"]',
-  '        CP["cc-prioritise"]',
-  '    end',
-  '    LG -.->|all services| CONSUMERS',
-  '    MR -.->|model resolution| CONSUMERS',
-  '    RM -.->|routing| CA',
-  '    RM -.->|routing| SC',
-  '    RM -.->|routing| AO',
-  '    AR -.->|wraps| AO',
-  '    BP -.->|controls| CE',
-  '    DEDUP -.->|dedup| CE',
-  '    DEDUP -.->|recheck| CP',
-  '    XCHAN -.->|context| CA'
-].join('\n'),
-
-v2obs: [
-  'flowchart TD',
-  '    subgraph LOGGER["_shared/logger.ts"]',
-  '        CL["createLogger service options"]',
-  '        SP["span = logger.createSpan action"]',
-  '        CH["child = span.child action"]',
-  '        FL["Auto-flush every 2s or 5 logs"]',
-  '        CL --> SP --> CH',
-  '        CL --> FL',
-  '    end',
-  '    subgraph STORAGE["system_logs Table"]',
-  '        COL["trace_id span_id parent_span_id\\nservice action level\\nuser_id org_id agent_name\\nduration_ms metadata error_message"]',
-  '        IDX["9 indexes including\\nGIN on metadata\\npartial on nullable columns"]',
-  '    end',
-  '    subgraph CLEANUP["logs-cleanup Cron"]',
-  '        D30["debug: 30 days"]',
-  '        D90["info warn: 90 days"]',
-  '        D365["error: 365 days"]',
-  '    end',
-  '    subgraph EXEC["agent_executions Table"]',
-  '        ECOL["trace_id agent_name execution_type\\nstarted_at completed_at status\\nitems_emitted items_processed\\nmodel_id model_was_fallback\\ntokens_consumed credits_consumed"]',
-  '    end',
-  '    subgraph HEALTH["fleet-health Cron - 5 min"]',
-  '        CHECK["6 agent cadence checks"]',
-  '        STATUS["healthy warning critical stale"]',
-  '        SNAP["fleet_health_snapshots\\nfailure_rate avg_duration credits"]',
-  '        ALERT["Slack webhook alert\\nSLACK_PLATFORM_OPS_WEBHOOK"]',
-  '        CHECK --> STATUS',
-  '        STATUS -->|critical or stale| ALERT',
-  '        STATUS --> SNAP',
-  '    end',
-  '    FL -->|batch insert| STORAGE',
-  '    CLEANUP -->|nightly prune| STORAGE',
-  '    EXEC --> HEALTH'
-].join('\n'),
-
-v2mdl: [
-  'flowchart TD',
-  '    REQ(["AI Call Request\\nfeature + intelligence_tier"])  ',
-  '    subgraph RESOLVE["resolveModel"]',
-  '        TIER["Tier lookup\\nlow medium high"]',
-  '        FEAT["Feature lookup\\ncopilot fleet_agent recording\\nembedding enrichment"]',
-  '        PRIMARY["Primary model lookup\\nmodel_config WHERE is_primary"]',
-  '        TIER --> FEAT --> PRIMARY',
-  '    end',
-  '    subgraph CIRCUIT["Circuit Breaker"]',
-  '        MHEALTH["model_health table"]',
-  '        CLOSED["CLOSED\\nnormal operation"]',
-  '        OPEN["OPEN\\n3 failures in 5min\\nskip to fallback"]',
-  '        HALFOPEN["HALF-OPEN\\nprobe after cooldown"]',
-  '        CLOSED -->|3 failures| OPEN',
-  '        OPEN -->|cooldown expires| HALFOPEN',
-  '        HALFOPEN -->|success| CLOSED',
-  '        HALFOPEN -->|fail| OPEN',
-  '    end',
-  '    subgraph FALLBACK["Fallback Chain"]',
-  '        F1["Same-tier alternative"]',
-  '        F2["Cross-tier fallback\\ngemini-2.5-flash"]',
-  '        F3["Error: no models available"]',
-  '        F1 -->|unavailable| F2',
-  '        F2 -->|unavailable| F3',
-  '    end',
-  '    subgraph BUDGET["Budget Enforcement"]',
-  '        CHK["checkBudget\\ncredit balance > -10 grace"]',
-  '        DED["deductCredits\\nvia deduct_credits RPC"]',
-  '        AGT["checkAgentBudget\\nFLEET_AGENT_BUDGETS constant"]',
-  '    end',
-  '    REQ --> RESOLVE',
-  '    PRIMARY --> CIRCUIT',
-  '    CIRCUIT -->|open| FALLBACK',
-  '    CIRCUIT -->|closed| BUDGET',
-  '    CHK -->|ok| API(["AI Provider API Call"])',
-  '    API --> DED',
-  '    API -->|success| REC["recordSuccess"]',
-  '    API -->|fail| RECF["recordFailure"]'
-].join('\n'),
-
-v2rt: [
-  'flowchart TD',
-  '    MSG(["User Message + Source"])  ',
-  '    subgraph SOURCES["Message Sources"]',
-  '        WEB["CopilotContext.tsx\\nsource: web_copilot"]',
-  '        SLK["slack-copilot\\nsource: slack_copilot"]',
-  '        FLT["agent-orchestrator\\nsource: fleet_agent"]',
-  '    end',
-  '    subgraph CACHE["Routing Cache"]',
-  '        HASH["SHA-256 hash key\\nmessage + source + org_id"]',
-  '        HIT["Cache HIT\\n< 2 min TTL"]',
-  '        MISS["Cache MISS"]',
-  '    end',
-  '    subgraph PIPELINE["5-Step Pipeline"]',
-  '        S1["1. Intent Classification\\nAI-based intent detection"]',
-  '        S2["2. Sequence Triggers\\nconfidence >= 0.7"]',
-  '        S3["3. Skill Triggers\\nconfidence >= 0.5"]',
-  '        S4["4. Semantic Fallback\\ncosine >= 0.6 pgvector"]',
-  '        S5["5. General\\nno skill matched"]',
-  '        S1 --> S2',
-  '        S2 -->|no match| S3',
-  '        S3 -->|no match| S4',
-  '        S4 -->|no match| S5',
-  '    end',
-  '    subgraph NSFILTER["Namespace Filtering"]',
-  '        NF["p_source parameter\\nweb -> copilot+shared\\nslack -> slack+shared\\nfleet -> fleet+shared"]',
-  '    end',
-  '    RESULT(["Routing Context\\nskill_key confidence source"])  ',
-  '    SOURCES --> MSG',
-  '    MSG --> CACHE',
-  '    HIT --> RESULT',
-  '    MISS --> PIPELINE',
-  '    NF --> PIPELINE',
-  '    PIPELINE --> RESULT'
-].join('\n'),
-
-v2sk: [
-  'flowchart TD',
-  '    subgraph BEFORE["Before: V1 Skills"]',
-  '        OLD["platform_skills\\nversion int default 1\\nno namespace no source"]',
-  '    end',
-  '    subgraph AFTER["After: V2 Skills"]',
-  '        subgraph PT["platform_skills - new columns"]',
-  '            NS["namespace\\ncopilot fleet slack shared"]',
-  '            SRC["source\\nplatform custom community"]',
-  '            IC["is_current boolean"]',
-  '            CHL["changelog JSONB"]',
-  '            DEP["deprecated_at timestamp"]',
-  '        end',
-  '        subgraph OT["organization_skills - new columns"]',
-  '            PV["pinned_version int"]',
-  '            OSRC["source text"]',
-  '            NSO["namespace_override text"]',
-  '        end',
-  '    end',
-  '    subgraph RPC["get_organization_skills_for_agent"]',
-  '        PSRC["p_source parameter"]',
-  '        MAP["Namespace mapping\\nweb_copilot: copilot + shared\\nslack_copilot: slack + shared\\nfleet_agent: fleet + shared"]',
-  '        PSRC --> MAP',
-  '    end',
-  '    subgraph SKILLS8["8 New Slack Skills"]',
-  '        S1["slack-deal-query"]',
-  '        S2["slack-contact-query"]',
-  '        S3["slack-pipeline-query"]',
-  '        S4["slack-history-query"]',
-  '        S5["slack-coaching-query"]',
-  '        S6["slack-competitive-query"]',
-  '        S7["slack-actions-query"]',
-  '        S8["slack-general-query"]',
-  '    end',
-  '    BEFORE -->|migration| AFTER',
-  '    AFTER --> RPC',
-  '    SKILLS8 -->|namespace: slack| PT'
-].join('\n'),
-
-v2mem: [
-  'flowchart TD',
-  '    subgraph CHANNELS["Channel Writers"]',
-  '        WEB["copilot-autonomous\\ntrackEntityMentions after 3+ refs"]',
-  '        SLK["threadMemory.ts\\nSlack thread extraction\\n10+ msgs or 15min gap"]',
-  '        FLT["cc-enrich\\nfleet context writes"]',
-  '    end',
-  '    subgraph CTX["conversation_context Table"]',
-  '        COL["user_id org_id channel\\nentity_type entity_id\\ncontext_summary\\nsource_agent_name metadata\\nexpires_at"]',
-  '        CHK["CHECK channel IN\\nweb_copilot slack_copilot fleet_agent"]',
-  '    end',
-  '    subgraph COMPACT["3-Tier Compaction"]',
-  '        T1["Tier 1: Verbatim\\nlast 20 messages preserved as-is"]',
-  '        T2["Tier 2: Summarised\\n7-day window\\nAI-condensed via Claude Haiku"]',
-  '        T3["Tier 3: Entity Facts\\ncopilotMemoryService\\nkey facts with source provenance"]',
-  '        T1 -->|older messages| T2',
-  '        T2 -->|oldest| T3',
-  '    end',
-  '    subgraph THRESHOLD["Dynamic Thresholds"]',
-  '        GCT["getCompactionThreshold modelId"]',
-  '        CLD["Claude ~137k tokens"]',
-  '        GMN["Gemini ~737k tokens"]',
-  '    end',
-  '    subgraph READERS["Channel Readers"]',
-  '        RD["copilot-autonomous\\nfetchConversationContext\\nlast 7 days top 3 blocks"]',
-  '    end',
-  '    subgraph CLEANUP["Cleanup"]',
-  '        CL["cc-daily-cleanup Phase 3\\nrunContextCleanup\\n14-day expiry"]',
-  '    end',
-  '    WEB --> CTX',
-  '    SLK --> CTX',
-  '    FLT --> CTX',
-  '    CTX --> RD',
-  '    THRESHOLD --> COMPACT',
-  '    CLEANUP -->|prune| CTX'
-].join('\n'),
-
-v2ret: [
-  'flowchart TD',
-  '    subgraph RUNNER["agentRunner.ts"]',
-  '        CFG["AgentConfig\\nagentName budgetLimit retryPolicy"]',
-  '        EXEC["AgentExecutor T\\nasync function returning T"]',
-  '        RUN["runAgent config executor"]',
-  '        CFG --> RUN',
-  '        EXEC --> RUN',
-  '    end',
-  '    subgraph POLICY["Retry Policies"]',
-  '        TR["transient\\n2 retries exponential backoff"]',
-  '        CTX["context_exceeded\\n1 retry"]',
-  '        MU["model_unavailable\\n1 retry"]',
-  '        VAL["validation\\n0 retries"]',
-  '        UNK["unknown\\n1 retry"]',
-  '    end',
-  '    subgraph OUTCOMES["Outcomes"]',
-  '        OK["Success\\nAgentResult with data"]',
-  '        PARTIAL["Partial\\nsome items processed"]',
-  '        DLQ["Dead Letter Queue\\nagent_dead_letters table"]',
-  '    end',
-  '    subgraph DLQRETRY["DLQ Retry Cron"]',
-  '        CRON["agent-dead-letter-retry\\ndaily max 20 entries"]',
-  '        ORCH["Re-fire via\\nagent-orchestrator"]',
-  '        MAX["Max 3 retries\\nthen manual investigation"]',
-  '        CRON --> ORCH',
-  '        CRON --> MAX',
-  '    end',
-  '    subgraph TRACKING["Execution Tracking"]',
-  '        INS["insertExecutionRecord\\nstatus: running"]',
-  '        UPD["updateExecutionRecord\\nstatus: completed/failed/partial"]',
-  '    end',
-  '    RUN -->|success| OK',
-  '    RUN -->|partial| PARTIAL',
-  '    RUN -->|permanent fail| DLQ',
-  '    RUN --> POLICY',
-  '    RUN --> TRACKING',
-  '    DLQ --> DLQRETRY'
-].join('\n'),
-
-v2bpr: [
-  'flowchart TD',
-  '    subgraph QUEUE["Priority Queue"]',
-  '        P0["P0 Critical\\nimmediate processing"]',
-  '        P1["P1 High\\nreal-time events"]',
-  '        P2["P2 Normal\\nstandard items default"]',
-  '        P3["P3 Low\\nbatch and background"]',
-  '        P0 --> P1 --> P2 --> P3',
-  '    end',
-  '    subgraph COLS["New Columns on command_centre_items"]',
-  '        QP["queue_priority int 0-3 default 2"]',
-  '        QA["queued_at timestamptz"]',
-  '        PS["processing_started_at timestamptz"]',
-  '        PA["processing_attempts int default 0"]',
-  '        IDX2["Composite index\\nqueue_priority queued_at"]',
-  '    end',
-  '    subgraph RATE["Rate Limiting"]',
-  '        RL["RateLimiter class\\nper-org configurable window"]',
-  '        SEM["Semaphore class\\nmax 5 concurrent operations"]',
-  '    end',
-  '    subgraph MODES["Processing Modes"]',
-  '        NORM["Normal Mode\\nprocess items individually"]',
-  '        BTCH["Batch Mode\\nqueue depth > 20\\nprefetch CRM + calendar data"]',
-  '    end',
-  '    subgraph ENRICH["cc-enrich Pipeline"]',
-  '        FETCH["Priority-based fetch\\nP0 first then P1 etc"]',
-  '        PROC["Process with\\nconcurrency control"]',
-  '        FETCH --> RATE --> PROC',
-  '    end',
-  '    QUEUE --> FETCH',
-  '    MODES --> ENRICH'
-].join('\n'),
-
-v2ded: [
-  'flowchart TD',
-  '    subgraph COLS2["Dedup Columns on command_centre_items"]',
-  '        DK["dedup_key text\\nentity-type + entity-id hash"]',
-  '        MG["merge_group_id uuid"]',
-  '        IP["is_primary boolean"]',
-  '        ME["merged_evidence jsonb"]',
-  '        MCF["merged_confidence numeric"]',
-  '        CA["contributing_agents text array"]',
-  '        MW["merge_window_expires timestamptz"]',
-  '    end',
-  '    subgraph PRE["Pre-Enrichment Dedup - cc-enrich"]',
-  '        MATCH["Match by dedup_key\\nsame entity same type"]',
-  '        WINDOW["4-hour merge window"]',
-  '        MERGE["Merge evidence from\\nmultiple source agents"]',
-  '        MATCH --> WINDOW --> MERGE',
-  '    end',
-  '    subgraph FORMULA["Confidence Aggregation"]',
-  '        AGG["merged_confidence =\\n1 - product of 1 - confidence_i\\ncapped at 0.95"]',
-  '    end',
-  '    subgraph POST["Post-Scoring Recheck - cc-prioritise"]',
-  '        RECALC["recheckMergeGroupThreshold"]',
-  '        PROMOTE["Promote to approved\\nif merged_confidence >= 0.7"]',
-  '        RECALC --> PROMOTE',
-  '    end',
-  '    COLS2 --> PRE',
-  '    MERGE --> FORMULA',
-  '    FORMULA --> POST'
-].join('\n'),
-
-v2xch: [
-  'flowchart LR',
-  '    subgraph SLACK["Slack Channel"]',
-  '        USR["User messages in thread"]',
-  '        TM["threadMemory.ts\\nextract when 10+ msgs\\nor 15min gap"]',
-  '        AI["AI Summary via\\nAnthropic API"]',
-  '        USR --> TM --> AI',
-  '    end',
-  '    subgraph CTX2["conversation_context"]',
-  '        ROW["user_id org_id channel\\nentity_type entity_id\\ncontext_summary\\nsource_agent_name"]',
-  '    end',
-  '    subgraph FLEET["Fleet Agents"]',
-  '        ENR["cc-enrich\\nwrites fleet context\\nafter enrichment"]',
-  '    end',
-  '    subgraph COPILOT["copilot-autonomous"]',
-  '        READ["fetchConversationContext\\nlast 7 days all channels\\ntop 3 by relevance"]',
-  '        INJECT["Inject into system prompt\\ncross-channel context block"]',
-  '        READ --> INJECT',
-  '    end',
-  '    subgraph CLEAN["cc-daily-cleanup"]',
-  '        PHASE3["Phase 3 runContextCleanup\\ndelete where expires_at < now\\n14-day default"]',
-  '    end',
-  '    AI -->|slack_copilot| CTX2',
-  '    ENR -->|fleet_agent| CTX2',
-  '    CTX2 --> READ',
-  '    CLEAN -->|prune| CTX2'
 ].join('\n')
 
 }; // end DIAGRAMS
@@ -2191,7 +1562,7 @@ function showF(f) {
 
 // ── Zoom / pan ─────────────────────────────────────────────────
 var DS = {};
-['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd','v2i','v2obs','v2mdl','v2rt','v2sk','v2mem','v2ret','v2bpr','v2ded','v2xch'].forEach(function(k){ DS[k]={s:1,tx:0,ty:0}; });
+['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd'].forEach(function(k){ DS[k]={s:1,tx:0,ty:0}; });
 
 function applyT(k) {
   var d = DS[k], st = document.getElementById(k+'-stage');
@@ -2204,7 +1575,7 @@ function applyT(k) {
 function zD(k, delta) { DS[k].s = Math.min(4, Math.max(0.2, DS[k].s + delta)); applyT(k); }
 function rD(k) { DS[k]={s:1,tx:0,ty:0}; applyT(k); }
 
-['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd','v2i','v2obs','v2mdl','v2rt','v2sk','v2mem','v2ret','v2bpr','v2ded','v2xch'].forEach(function(k) {
+['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd'].forEach(function(k) {
   var el = document.getElementById(k+'-body');
   if (!el) return;
   el.addEventListener('wheel', function(e) {
@@ -2309,19 +1680,6 @@ function toggleHL() {
     document.body.classList.add('hl-v2');
     btn.classList.add('act');
   }
-}
-
-// ── V2 Infra sub-pill switching ────────────────────────────────
-function showV2Sub(f) {
-  // Toggle pills in v2infra tab
-  var tab = document.getElementById('tab-v2infra');
-  if (!tab) return;
-  tab.querySelectorAll('.pill').forEach(function(p){ p.classList.remove('act'); });
-  var pill = tab.querySelector('[data-f="'+f+'"]');
-  if (pill) pill.classList.add('act');
-  tab.querySelectorAll('.v2sub').forEach(function(v){ v.style.display = 'none'; v.classList.remove('vis'); });
-  var sub = document.getElementById('v2sub-'+f);
-  if (sub) { sub.style.display = 'block'; sub.classList.add('vis'); }
 }
 
 // Default to V2 on load

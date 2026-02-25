@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseSkillFile, estimateTokens, VALID_NAMESPACES, VALID_SOURCES } from './lib/skillParser.js';
+import { parseSkillFile, estimateTokens } from './lib/skillParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,21 +144,7 @@ async function main() {
         warns.push('Content template is very short or empty');
       }
 
-      // 7. Namespace validation
-      if (!(VALID_NAMESPACES as readonly string[]).includes(record.namespace)) {
-        issues.push(
-          `Invalid namespace "${record.namespace}". Must be one of: ${VALID_NAMESPACES.join(', ')}`
-        );
-      }
-
-      // 8. Source validation
-      if (!(VALID_SOURCES as readonly string[]).includes(record.source)) {
-        issues.push(
-          `Invalid source "${record.source}". Must be one of: ${VALID_SOURCES.join(', ')}`
-        );
-      }
-
-      // 9. command_centre validation
+      // 7. command_centre validation
       const commandCentre = fm.command_centre as Record<string, unknown> | undefined;
       if (commandCentre !== undefined) {
         if (typeof commandCentre !== 'object' || commandCentre === null) {

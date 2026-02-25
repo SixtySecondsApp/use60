@@ -531,7 +531,6 @@ export async function getSkillWithFolders(skillId: string): Promise<SkillWithFol
     id: skill.id,
     skill_key: skill.skill_key,
     category: skill.category,
-    namespace: skill.namespace ?? 'shared',
     frontmatter: skill.frontmatter,
     content_template: skill.content_template,
     version: skill.version,
