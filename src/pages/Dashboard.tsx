@@ -22,6 +22,7 @@ import {
   LineChart,
   Grid3X3,
   Sparkles,
+  Bot,
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 import { PendingJoinRequestBanner } from '@/components/PendingJoinRequestBanner';
@@ -37,6 +38,7 @@ import { ActivationChecklist } from '@/components/dashboard/ActivationChecklist'
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 const LazyActivityLog = lazy(() => import('@/pages/ActivityLog'));
+const LazyAgentDashboardTab = lazy(() => import('@/components/dashboard/AgentDashboardTab'));
 const LazySalesFunnel = lazy(() => import('@/pages/SalesFunnel'));
 const LazyHeatmap = lazy(() => import('@/pages/Heatmap'));
 const LazyLeadAnalytics = lazy(() => import('@/components/leads/LeadAnalyticsCard').then(m => ({ default: m.LeadAnalyticsCard })));
@@ -122,13 +124,22 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
 
   const handleClick = () => {
     try {
-      if (metricKey) {
-        navigate(`/settings/goals?metric=${metricKey}`);
-      } else if (type) {
+      if (type) {
         setFilters({ type, dateRange });
         if (onNavigateToActivity) {
           onNavigateToActivity();
         }
+      }
+    } catch (error) {
+      logger.error('Navigation error:', error);
+    }
+  };
+
+  const handleGoalClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (metricKey) {
+        navigate(`/settings/goals?metric=${metricKey}`);
       }
     } catch (error) {
       logger.error('Navigation error:', error);
@@ -379,7 +390,12 @@ const MetricCard = React.memo(({ title, value, target, trend, icon: Icon, type, 
             <span>Progress</span>
             {target > 0
               ? <span className="font-medium">{Math.round((value / target) * 100)}%</span>
-              : <span className="font-medium text-[#64748B]/60 dark:text-gray-500">Set goal →</span>
+              : <button
+                  onClick={handleGoalClick}
+                  className="font-medium text-[#64748B]/60 dark:text-gray-500 hover:text-[#64748B] dark:hover:text-gray-300 transition-colors"
+                >
+                  Set goal →
+                </button>
             }
           </div>
         </div>
@@ -730,6 +746,13 @@ export default function Dashboard() {
             Overview
           </TabsTrigger>
           <TabsTrigger
+            value="agent"
+            className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
+          >
+            <Bot className="w-4 h-4" />
+            AI Agent
+          </TabsTrigger>
+          <TabsTrigger
             value="activity"
             className="flex items-center gap-2 data-[state=active]:bg-emerald-600/10 dark:data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400"
           >
@@ -843,6 +866,37 @@ export default function Dashboard() {
 
       {/* Team Performance Section */}
       <TeamPerformanceSection dateRange={selectedMonthRange} period={dateFilter.period} />
+        </TabsContent>
+
+        <TabsContent value="agent">
+          <Suspense fallback={
+            <div className="space-y-4 pt-4">
+              <Skeleton className="h-20 w-full rounded-xl" />
+              <div className="flex flex-col lg:flex-row gap-6">
+                <div className="lg:w-3/5 space-y-3">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-xl p-4 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50">
+                      <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
+                      <div className="flex-1">
+                        <Skeleton className="h-4 w-40 mb-1.5" />
+                        <Skeleton className="h-3 w-56" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="lg:w-2/5 space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[0, 1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-20 rounded-xl" />
+                    ))}
+                  </div>
+                  <Skeleton className="h-40 rounded-xl" />
+                </div>
+              </div>
+            </div>
+          }>
+            <LazyAgentDashboardTab />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="activity">

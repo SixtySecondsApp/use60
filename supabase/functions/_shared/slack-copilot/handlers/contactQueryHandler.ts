@@ -22,7 +22,7 @@ export async function handleContactQuery(
   // Multiple matches — list them
   const lines = contacts.slice(0, 5).map((c) => {
     const name = `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Unknown';
-    return `• *${name}*${c.title ? ` — ${c.title}` : ''}${c.company ? ` at ${c.company}` : ''}`;
+    return `• ${appLink(`/contacts/${c.id}`, name)}${c.title ? ` — ${c.title}` : ''}${c.company ? ` at ${c.company}` : ''}`;
   });
 
   return {
@@ -57,7 +57,7 @@ function handleSingleContact(
   if (relatedDeals.length > 0) {
     blocks.push(divider());
     blocks.push(section('*Related Deals:*'));
-    const dealLines = relatedDeals.map((d) => `• *${d.title}* — ${d.stage}`);
+    const dealLines = relatedDeals.map((d) => `• ${appLink(`/deals/${d.id}`, d.title)} — ${d.stage}`);
     blocks.push(section(dealLines.join('\n')));
   }
 

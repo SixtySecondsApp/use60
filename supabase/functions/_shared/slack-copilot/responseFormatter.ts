@@ -49,11 +49,11 @@ export function context(texts: string[]): SlackBlock {
 
 export function riskBadge(level: string): string {
   switch (level?.toLowerCase()) {
-    case 'critical': return ':red_circle: Critical';
-    case 'high': return ':large_orange_circle: High';
-    case 'medium': return ':large_yellow_circle: Medium';
-    case 'low': return ':large_green_circle: Low';
-    default: return ':white_circle: Unknown';
+    case 'critical': return '*Critical*';
+    case 'high': return '*High*';
+    case 'medium': return '*Medium*';
+    case 'low': return 'Low';
+    default: return 'Unknown';
   }
 }
 

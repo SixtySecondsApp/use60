@@ -62,7 +62,7 @@ function handleLastInteraction(
       ? new Date(lastMeeting.start_time).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
       : 'Unknown date';
 
-    blocks.push(section(`*Last Meeting:* ${lastMeeting.title || 'Untitled'} — ${meetingDate}`));
+    blocks.push(section(`*Last Meeting:* ${appLink(`/meetings/${lastMeeting.id}`, lastMeeting.title || 'Untitled')} — ${meetingDate}`));
 
     if (lastMeeting.summary) {
       blocks.push(section(`_${truncate(lastMeeting.summary, 300)}_`));
@@ -103,7 +103,7 @@ function handleMeetingSchedule(meetings: QueryContext['meetings'], query: string
     const date = m.start_time
       ? new Date(m.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
       : 'TBD';
-    return `• *${m.title || 'Untitled'}* — ${date} (${m.attendees_count} attendees)`;
+    return `• ${appLink(`/meetings/${m.id}`, m.title || 'Untitled')} — ${date} (${m.attendees_count} attendees)`;
   });
 
   return {
@@ -126,7 +126,7 @@ function handleRecentActivity(
     if (m.start_time) {
       items.push({
         date: new Date(m.start_time),
-        text: `:calendar: *${m.title || 'Meeting'}* — ${new Date(m.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
+        text: `:calendar: ${appLink(`/meetings/${m.id}`, m.title || 'Meeting')} — ${new Date(m.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
       });
     }
   }
@@ -146,6 +146,8 @@ function handleRecentActivity(
 
   blocks.push(section('*Recent Activity (Past 7 Days):*'));
   blocks.push(section(items.slice(0, 8).map((i) => i.text).join('\n')));
+  blocks.push(divider());
+  blocks.push(context([`${appLink('/calendar', 'View Calendar')} | ${appLink('/activity', 'View All Activity')}`]));
 
   return { blocks };
 }

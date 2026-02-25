@@ -12,6 +12,12 @@ import {
 } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
 import { loadProactiveContext, type ProactiveContext } from '../_shared/proactive/orgContext.ts';
+import { createRAGClient } from '../_shared/rag/ragClient.ts';
+import { detectMeetingHistory } from '../_shared/rag/historyDetector.ts';
+import { getFollowUpContext } from '../_shared/follow-up/ragQueries.ts';
+import { composeReturnMeetingFollowUp, composeFirstMeetingFollowUp } from '../_shared/follow-up/composer.ts';
+import type { ComposeInput } from '../_shared/follow-up/composer.ts';
+import { logAICostEvent, logFlatRateCostEvent, checkBudgetCap } from '../_shared/costTracking.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1029,10 +1035,31 @@ serve(async (req) => {
     // HITL follow-up email approval (best-effort): DM owner with approve/edit/reject
     try {
       if (!isTest && meeting.owner_user_id) {
+        // Edge case guards (FU-015)
+        const hasTranscript = !!(meeting.transcript_text || meeting.summary);
+        const meetingDuration = meeting.duration_minutes || 0;
+        const isNoShow = meetingDuration < 2;
+
+        if (!hasTranscript) {
+          console.log('[slack-post-meeting] Skipping follow-up: no transcript available for meeting', meeting.id);
+          // Skip follow-up generation — no transcript to compose from
+        } else if (isNoShow) {
+          console.log('[slack-post-meeting] Skipping follow-up: meeting appears to be a no-show (duration < 2 min)', meeting.id);
+          // Skip follow-up generation — meeting was too short
+        } else {
         const ownerSlackId = await getSlackUserId(supabase, effectiveOrgId, meeting.owner_user_id);
         const externalAttendee = Array.isArray(meeting.meeting_attendees)
           ? (meeting.meeting_attendees as any[]).find((a) => a?.is_external && a?.email)
           : null;
+
+        // Determine CC list (all other external attendees)
+        const allExternalAttendees = Array.isArray(meeting.meeting_attendees)
+          ? (meeting.meeting_attendees as any[]).filter((a) => a?.is_external && a?.email)
+          : [];
+        const ccAttendees = allExternalAttendees.filter(
+          (a) => a.email !== externalAttendee?.email
+        );
+        const ccEmails = ccAttendees.map((a: any) => a.email).filter(Boolean);
 
         if (ownerSlackId && externalAttendee?.email) {
           // Load user writing style and org context for personalized email
@@ -1051,19 +1078,139 @@ serve(async (req) => {
             }
           } catch { /* non-fatal */ }
 
-          const draft = await generateFollowUpDraft({
-            meetingTitle: meeting.title || 'Meeting',
-            attendeeNameOrEmail: externalAttendee?.name || externalAttendee?.email,
-            summary: analysis.summary,
-            actionItems: (analysis.actionItems || []).map((a) => ({ task: a.task, dueInDays: a.dueInDays })),
-            context: proactiveContext,
-            companyName,
-            dealName: (deal as any)?.name,
-            dealStage: (deal as any)?.stage_id,
-            sentiment: analysis.sentiment,
-            keyQuotes: analysis.keyQuotes,
-            transcript: meeting.transcript_text?.substring(0, 3000),
-          });
+          // Detect if this is a return meeting
+          const meetingHistory = await detectMeetingHistory(
+            supabase,
+            meeting.id,
+            meeting.company_id || null,
+            effectiveOrgId,
+          );
+
+          let draft: { subject: string; body: string };
+          let ragContextForMetadata: any = null;
+
+          try {
+            if (!meetingHistory.isFirstMeeting) {
+              // Return meeting — use RAG-enhanced composer
+              console.log('[slack-post-meeting] RAG path: return meeting detected, priorMeetingCount:', meetingHistory.priorMeetingCount);
+              const ragClient = createRAGClient({ orgId: effectiveOrgId });
+              const followUpContext = await getFollowUpContext(
+                (deal as any)?.id || null,
+                [], // contact IDs — not easily available here
+                meeting.id,
+                meetingHistory.priorMeetingCount + 1, // current meeting is +1
+                ragClient,
+                meeting.company_id || null,
+              );
+              ragContextForMetadata = followUpContext;
+
+              const composeInput: ComposeInput = {
+                meeting: {
+                  id: meeting.id,
+                  title: meeting.title || 'Meeting',
+                  transcript: meeting.transcript_text?.substring(0, 3000),
+                },
+                analysis: {
+                  summary: analysis.summary,
+                  actionItems: (analysis.actionItems || []).map((a: any) => ({
+                    task: a.task,
+                    suggestedOwner: a.suggestedOwner,
+                    dueInDays: a.dueInDays,
+                  })),
+                  keyQuotes: analysis.keyQuotes,
+                  sentiment: analysis.sentiment,
+                },
+                recipient: {
+                  name: externalAttendee?.name || externalAttendee?.email,
+                  email: externalAttendee.email,
+                  companyName,
+                },
+                deal: deal ? {
+                  name: (deal as any)?.name,
+                  stage: (deal as any)?.stage_id,
+                  value: (deal as any)?.value,
+                } : null,
+                writingStyle: proactiveContext.writingStyle ? {
+                  toneDescription: proactiveContext.writingStyle.toneDescription,
+                  formality: proactiveContext.writingStyle.formality,
+                  directness: proactiveContext.writingStyle.directness,
+                  warmth: proactiveContext.writingStyle.warmth,
+                  commonPhrases: proactiveContext.writingStyle.commonPhrases,
+                  signoffs: proactiveContext.writingStyle.signoffs,
+                  wordsToAvoid: proactiveContext.toneSettings?.wordsToAvoid,
+                } : null,
+                senderFirstName: proactiveContext.user.firstName || 'there',
+                senderLastName: proactiveContext.user.lastName,
+                orgName: proactiveContext.org.name,
+              };
+
+              if (followUpContext.hasHistory) {
+                console.log('[slack-post-meeting] RAG path: composing return meeting follow-up with history');
+                const composed = await composeReturnMeetingFollowUp(composeInput, followUpContext);
+                draft = { subject: composed.subject, body: composed.body };
+              } else {
+                console.log('[slack-post-meeting] RAG path: return meeting but no RAG history found, using first-meeting composer');
+                const composed = await composeFirstMeetingFollowUp(composeInput);
+                draft = { subject: composed.subject, body: composed.body };
+              }
+            } else {
+              // First meeting — use the existing generateFollowUpDraft
+              console.log('[slack-post-meeting] RAG path: first meeting, using standard generateFollowUpDraft');
+              draft = await generateFollowUpDraft({
+                meetingTitle: meeting.title || 'Meeting',
+                attendeeNameOrEmail: externalAttendee?.name || externalAttendee?.email,
+                summary: analysis.summary,
+                actionItems: (analysis.actionItems || []).map((a: any) => ({ task: a.task, dueInDays: a.dueInDays })),
+                context: proactiveContext,
+                companyName,
+                dealName: (deal as any)?.name,
+                dealStage: (deal as any)?.stage_id,
+                sentiment: analysis.sentiment,
+                keyQuotes: analysis.keyQuotes,
+                transcript: meeting.transcript_text?.substring(0, 3000),
+              });
+            }
+          } catch (ragErr) {
+            console.warn('[slack-post-meeting] RAG-enhanced draft failed, falling back to generateFollowUpDraft:', (ragErr as any)?.message || ragErr);
+            draft = await generateFollowUpDraft({
+              meetingTitle: meeting.title || 'Meeting',
+              attendeeNameOrEmail: externalAttendee?.name || externalAttendee?.email,
+              summary: analysis.summary,
+              actionItems: (analysis.actionItems || []).map((a: any) => ({ task: a.task, dueInDays: a.dueInDays })),
+              context: proactiveContext,
+              companyName,
+              dealName: (deal as any)?.name,
+              dealStage: (deal as any)?.stage_id,
+              sentiment: analysis.sentiment,
+              keyQuotes: analysis.keyQuotes,
+              transcript: meeting.transcript_text?.substring(0, 3000),
+            });
+          }
+
+          // Track credits for follow-up generation (best-effort)
+          try {
+            if (ragContextForMetadata && ragContextForMetadata.queryCredits > 0) {
+              // RAG queries — flat rate per query batch
+              await logFlatRateCostEvent(
+                supabase,
+                meeting.owner_user_id,
+                effectiveOrgId,
+                'rag_api',
+                'follow-up-queries',
+                ragContextForMetadata.queryCredits,
+                'followup_rag_queries',
+                {
+                  meetingId: meeting.id,
+                  queriesReturned: Object.keys(ragContextForMetadata.sections).length,
+                  isReturnMeeting: true,
+                },
+              );
+            }
+            // The Sonnet composition cost is tracked inside composer.ts via the Anthropic API call
+            // We don't double-track it here — the API response usage is logged by the caller
+          } catch (creditErr) {
+            console.warn('[slack-post-meeting] Credit tracking failed (non-fatal):', (creditErr as any)?.message);
+          }
 
           const approvalId = crypto.randomUUID();
           const hitlData: HITLApprovalData = {
@@ -1075,6 +1222,7 @@ serve(async (req) => {
               recipientEmail: externalAttendee.email,
               subject: draft.subject,
               body: draft.body,
+              cc: ccEmails.length > 0 ? ccEmails : undefined,
             },
             context: {
               meetingTitle: meeting.title || undefined,
@@ -1082,6 +1230,20 @@ serve(async (req) => {
               contactName: externalAttendee?.name || externalAttendee?.email,
               dealName: (deal as any)?.name,
               dealId: (deal as any)?.id,
+            },
+            contextBadge: ragContextForMetadata ? {
+              transcript: true,
+              priorMeetings: meetingHistory.priorMeetingCount,
+              commitmentsTracked: ragContextForMetadata.sections?.prior_commitments?.chunks?.length || 0,
+              dealContext: !!deal,
+              writingStyle: !!proactiveContext.writingStyle,
+              credits: ragContextForMetadata.queryCredits || 0,
+            } : {
+              transcript: true,
+              priorMeetings: 0,
+              commitmentsTracked: 0,
+              dealContext: !!deal,
+              writingStyle: !!proactiveContext.writingStyle,
             },
             appUrl,
           };
@@ -1109,10 +1271,13 @@ serve(async (req) => {
                 orgId: effectiveOrgId,
                 meetingId: meeting.id,
                 userId: meeting.owner_user_id,
+                ragContext: ragContextForMetadata ? JSON.stringify(ragContextForMetadata) : null,
               },
               metadata: {
                 source: 'slack_post_meeting',
                 meetingTitle: meeting.title,
+                isReturnMeeting: !meetingHistory.isFirstMeeting,
+                priorMeetingCount: meetingHistory.priorMeetingCount,
               },
             });
 
@@ -1134,6 +1299,7 @@ serve(async (req) => {
             });
           }
         }
+        } // end else (hasTranscript && !isNoShow)
       }
     } catch (e) {
       console.warn('[slack-post-meeting] HITL follow-up setup failed:', (e as any)?.message || e);

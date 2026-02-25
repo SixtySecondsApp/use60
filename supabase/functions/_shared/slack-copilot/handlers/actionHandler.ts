@@ -2,16 +2,17 @@
 // Handles action requests: draft email, create task, schedule meeting (PRD-22, CONV-006)
 
 import type { ClassifiedIntent, QueryContext, HandlerResult } from '../types.ts';
-import { section, actions, divider, context } from '../responseFormatter.ts';
+import { section, actions, divider, context, appLink } from '../responseFormatter.ts';
 
 export async function handleActionRequest(
   intent: ClassifiedIntent,
   queryContext: QueryContext,
-  anthropicApiKey: string | null
+  anthropicApiKey: string | null,
+  modelId?: string
 ): Promise<HandlerResult> {
   switch (intent.entities.actionType) {
     case 'draft_email':
-      return handleDraftEmail(intent, queryContext, anthropicApiKey);
+      return handleDraftEmail(intent, queryContext, anthropicApiKey, modelId);
     case 'create_task':
       return handleCreateTask(intent, queryContext);
     case 'schedule_meeting':
@@ -26,9 +27,11 @@ export async function handleActionRequest(
 async function handleDraftEmail(
   intent: ClassifiedIntent,
   queryContext: QueryContext,
-  anthropicApiKey: string | null
+  anthropicApiKey: string | null,
+  modelId?: string
 ): Promise<HandlerResult> {
   const { deals, contacts, meetings } = queryContext;
+  const resolvedModelId = modelId ?? 'claude-haiku-4-5-20251001';
 
   // Find the most relevant deal or contact
   const deal = deals?.[0];
@@ -46,7 +49,7 @@ async function handleDraftEmail(
   // Generate draft with AI if available
   if (anthropicApiKey) {
     try {
-      const draft = await generateEmailDraft(intent, queryContext, anthropicApiKey);
+      const draft = await generateEmailDraft(intent, queryContext, anthropicApiKey, resolvedModelId);
       return {
         blocks: [
           section(`*Draft Follow-up for ${recipientName}:*`),
@@ -58,7 +61,10 @@ async function handleDraftEmail(
             { text: 'Edit', actionId: 'copilot_edit_draft', value: JSON.stringify({ draft, dealId: deal?.id }) },
             { text: 'Dismiss', actionId: 'copilot_dismiss', value: 'dismiss' },
           ]),
-          context(['I\'ll hold this draft until you approve. Reply with edits if you want changes.']),
+          context([
+            'I\'ll hold this draft until you approve. Reply with edits if you want changes.',
+            [deal ? appLink(`/deals/${deal.id}`, 'View Deal') : '', contact ? appLink(`/contacts/${contact.id}`, 'View Contact') : ''].filter(Boolean).join(' | '),
+          ].filter(Boolean) as string[]),
         ],
         pendingAction: {
           type: 'send_email',
@@ -75,7 +81,10 @@ async function handleDraftEmail(
     blocks: [
       section(`I'd draft a follow-up for *${recipientName}*, but I need the AI service to generate it.`),
       ...(lastMeeting?.summary ? [section(`Based on your last meeting: _${lastMeeting.summary.substring(0, 200)}_`)] : []),
-      context(['Try again in a moment, or draft it manually in the app.']),
+      context([
+        'Try again in a moment, or draft it manually in the app.',
+        [deal ? appLink(`/deals/${deal.id}`, 'View Deal') : '', contact ? appLink(`/contacts/${contact.id}`, 'View Contact') : ''].filter(Boolean).join(' | '),
+      ].filter(Boolean) as string[]),
     ],
   };
 }
@@ -83,7 +92,8 @@ async function handleDraftEmail(
 async function generateEmailDraft(
   intent: ClassifiedIntent,
   queryContext: QueryContext,
-  apiKey: string
+  apiKey: string,
+  modelId: string
 ): Promise<string> {
   const deal = queryContext.deals?.[0];
   const contact = queryContext.contacts?.[0];
@@ -104,7 +114,7 @@ async function generateEmailDraft(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: modelId,
       max_tokens: 500,
       system: `You are a sales email assistant. Write concise, professional follow-up emails. Today's date: ${today}. Keep emails under 150 words. Be warm but direct. Include a clear next step or CTA.`,
       messages: [{
@@ -127,6 +137,11 @@ function handleCreateTask(intent: ClassifiedIntent, queryContext: QueryContext):
   const taskMatch = rawQuery.match(/(?:create|add|make)\s+(?:a\s+)?task\s+(?:to\s+)?(.+)/i);
   const taskTitle = taskMatch ? taskMatch[1].replace(/\.$/, '').trim() : rawQuery;
 
+  const taskLinks = [
+    appLink('/tasks', 'View Tasks'),
+    deal ? appLink(`/deals/${deal.id}`, 'View Deal') : '',
+  ].filter(Boolean).join(' | ');
+
   return {
     blocks: [
       section(`*Create Task:*\n${taskTitle}${deal ? `\nDeal: ${deal.title}` : ''}`),
@@ -135,6 +150,7 @@ function handleCreateTask(intent: ClassifiedIntent, queryContext: QueryContext):
         { text: 'Edit First', actionId: 'copilot_edit_task', value: JSON.stringify({ title: taskTitle, dealId: deal?.id }) },
         { text: 'Cancel', actionId: 'copilot_dismiss', value: 'dismiss' },
       ]),
+      context([taskLinks]),
     ],
     pendingAction: {
       type: 'create_task',
@@ -152,7 +168,10 @@ function handleScheduleMeeting(_intent: ClassifiedIntent, queryContext: QueryCon
       section(contactName
         ? `Schedule a meeting with *${contactName}* in the app. Use /sixty calendar to check availability.`
         : "Meeting creation is in the app. Use /sixty calendar to check availability."),
-      context(['Use `/sixty calendar` to see your schedule, or ask me "show my meetings this week".']),
+      context([
+        'Use `/sixty calendar` to see your schedule, or ask me "show my meetings this week".',
+        [appLink('/calendar', 'View Calendar'), contact ? appLink(`/contacts/${contact.id}`, 'View Contact') : ''].filter(Boolean).join(' | '),
+      ]),
     ],
   };
 }

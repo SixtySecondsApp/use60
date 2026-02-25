@@ -65,6 +65,8 @@
   },
   "enabledMcpjsonServers": [
     "ai-dev-hub",
-    "playwriter"
-  ]
+    "playwriter",
+    "rive"
+  ],
+  "enableAllProjectMcpServers": true
 }

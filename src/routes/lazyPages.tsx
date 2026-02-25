@@ -48,8 +48,10 @@ export const CommandCentreWowDemo = lazyWithRetry(() => import('@/pages/platform
 export const CommitmentDetectionDemo = lazyWithRetry(() => import('@/pages/platform/CommitmentDetectionDemo'));
 export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/AgentTeamSettings'));
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
+export const MultiAgentResearchDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentResearchDemoPage'));
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
 export const AgentAbilitiesPage = lazyWithRetry(() => import('@/pages/platform/AgentAbilitiesPage'));
+export const AgentDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentDemoPage'));
 export const OrchestratorDashboard = lazyWithRetry(() => import('@/pages/platform/OrchestratorDashboard'));
 export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
@@ -61,6 +63,7 @@ export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailS
 export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));
 export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
 export const OpsWebhookDemo = lazyWithRetry(() => import('@/pages/demo/OpsWebhookDemo'));
+export const FollowUpDemoPage = lazyWithRetry(() => import('@/pages/platform/FollowUpDemoPage'));
 // Admin Configuration
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
 export const PipelineSettings = lazyWithRetry(() => import('@/pages/admin/PipelineSettings'));
