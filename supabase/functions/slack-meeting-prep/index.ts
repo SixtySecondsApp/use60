@@ -132,13 +132,26 @@ async function getUpcomingMeetings(
     return [];
   }
 
-  // Calendar noise patterns — skip personal events, birthdays, holidays, etc.
+  // Personal email domains — attendees from these are likely family/friends
+  const personalDomains = new Set([
+    'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.uk',
+    'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com',
+    'icloud.com', 'me.com', 'mac.com', 'aol.com',
+    'protonmail.com', 'proton.me', 'fastmail.com',
+    'btinternet.com', 'sky.com', 'virginmedia.com',
+    'msn.com', 'mail.com', 'zoho.com',
+  ]);
+
+  // Title patterns that indicate personal/non-sales calendar events
   const skipPatterns = [
     'birthday', 'bday', 'b-day',
     'holiday', 'bank holiday', 'public holiday',
     'out of office', 'ooo', 'vacation', 'pto',
-    'lunch', 'gym', 'dentist', 'doctor',
+    'lunch', 'gym', 'dentist', 'doctor', 'hospital', 'scan',
     'focus time', 'do not book', 'blocked',
+    'date night', 'anniversary', 'wedding',
+    'school run', 'nursery', 'childcare', 'nanny',
+    'vaccination', 'vet',
   ];
 
   // Convert attendees JSONB array to flat email list and filter out noise
@@ -156,6 +169,17 @@ async function getUpcomingMeetings(
       // Must have at least 1 attendee beyond the owner
       if (!row.attendee_emails || row.attendee_emails.length <= 1) {
         console.log(`[slack-meeting-prep] Skipping solo/no-attendee meeting: "${row.title}"`);
+        return false;
+      }
+      // All external attendees are personal email domains — not a prospect meeting
+      const selfEmail = row.attendee_emails.find((e: string) => e.includes('@sixtyseconds.'));
+      const selfDomain = selfEmail?.split('@')[1]?.toLowerCase() || '';
+      const businessAttendees = row.attendee_emails.filter((email: string) => {
+        const domain = email.split('@')[1]?.toLowerCase() || '';
+        return !personalDomains.has(domain) && domain !== selfDomain;
+      });
+      if (businessAttendees.length === 0) {
+        console.log(`[slack-meeting-prep] Skipping personal/internal meeting: "${row.title}"`);
         return false;
       }
       return true;

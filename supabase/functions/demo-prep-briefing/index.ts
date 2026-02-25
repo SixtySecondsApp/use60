@@ -97,6 +97,66 @@ class StepTrackerImpl {
   }
 }
 
+// ---- Meeting classification helpers -----------------------------------------
+
+/** Personal email domains — attendees from these are likely family/friends, not prospects. */
+const PERSONAL_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.uk',
+  'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com',
+  'icloud.com', 'me.com', 'mac.com', 'aol.com',
+  'protonmail.com', 'proton.me', 'fastmail.com',
+  'btinternet.com', 'sky.com', 'virginmedia.com',
+  'msn.com', 'mail.com', 'zoho.com',
+]);
+
+/** Title patterns that indicate personal/non-sales calendar events. */
+const SKIP_TITLE_PATTERNS = [
+  'birthday', 'bday', 'b-day',
+  'holiday', 'bank holiday', 'public holiday',
+  'out of office', 'ooo', 'vacation', 'pto',
+  'lunch', 'gym', 'dentist', 'doctor', 'hospital', 'scan',
+  'focus time', 'do not book', 'blocked',
+  'date night', 'anniversary', 'wedding',
+  'school run', 'nursery', 'childcare', 'nanny',
+  'vaccination', 'vet',
+];
+
+/**
+ * Determine if a meeting should be skipped for prep briefings.
+ * Returns a skip reason string, or null if the meeting is valid.
+ */
+function classifyMeetingSkip(
+  title: string,
+  externalAttendeeEmails: string[],
+  callerEmail: string,
+): string | null {
+  // No external attendees at all
+  if (externalAttendeeEmails.length === 0) {
+    return 'No external attendees';
+  }
+
+  // Title matches known personal/noise patterns
+  const titleLower = title.toLowerCase();
+  if (SKIP_TITLE_PATTERNS.some(p => titleLower.includes(p))) {
+    return 'Calendar event — not a sales meeting';
+  }
+
+  // All external attendees are personal email domains
+  // (e.g. only wife/friend on gmail — not a prospect meeting)
+  const callerDomain = callerEmail.split('@')[1]?.toLowerCase() || '';
+  const businessAttendees = externalAttendeeEmails.filter(email => {
+    const domain = email.split('@')[1]?.toLowerCase() || '';
+    // Skip personal domains and the caller's own org domain
+    return !PERSONAL_EMAIL_DOMAINS.has(domain) && domain !== callerDomain;
+  });
+
+  if (businessAttendees.length === 0) {
+    return 'No business attendees — personal or internal meeting';
+  }
+
+  return null; // Valid meeting, don't skip
+}
+
 // ---- Attendee parsing helpers -----------------------------------------------
 
 /**
@@ -312,22 +372,14 @@ serve(async (req: Request) => {
           );
 
           // Skip personal/internal meetings and calendar noise
-          const titleLower = (meeting.title || '').toLowerCase();
-          const skipPatterns = [
-            'birthday', 'bday', 'b-day',
-            'holiday', 'bank holiday', 'public holiday',
-            'out of office', 'ooo', 'vacation', 'pto',
-            'lunch', 'gym', 'dentist', 'doctor',
-            'focus time', 'do not book', 'blocked',
-          ];
-          const isCalendarNoise = skipPatterns.some(p => titleLower.includes(p));
-
-          if (externalAttendeeEmails.length === 0 || isCalendarNoise) {
-            const reason = isCalendarNoise
-              ? 'Calendar event — not a sales meeting'
-              : 'No external attendees';
-            tracker.fail('load_context', reason);
-            send(sseEvent({ type: 'error', message: `Skipped: ${reason}. Prep briefings are only generated for meetings with prospects or clients.` }));
+          const skipReason = classifyMeetingSkip(
+            meeting.title || '',
+            externalAttendeeEmails,
+            callerEmail,
+          );
+          if (skipReason) {
+            tracker.fail('load_context', skipReason);
+            send(sseEvent({ type: 'error', message: `Skipped: ${skipReason}. Prep briefings are only generated for meetings with prospects or clients.` }));
             controller.close();
             return;
           }
