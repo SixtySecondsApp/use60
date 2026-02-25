@@ -398,6 +398,7 @@ export function buildFirstMeetingSlackBlocks(
   meetingTime: string,
   companyName: string,
   researchResults?: ResearchResults | null,
+  meetingId?: string | null,
 ): any[] {
   const blocks: any[] = [];
 
@@ -422,23 +423,37 @@ export function buildFirstMeetingSlackBlocks(
 
   blocks.push({ type: 'divider' });
 
-  // Attendees — merge AI background with research LinkedIn URLs
+  // Attendees — one section block per attendee with optional profile image
   if (briefing.attendees?.length > 0) {
-    let attendeeText = "*WHO YOU'RE MEETING*\n";
-    for (const att of briefing.attendees) {
-      attendeeText += `• *${att.name}*${att.title ? ` — ${att.title}` : ''}\n`;
-      if (att.background) attendeeText += `  ${att.background}\n`;
-      // Prefer LinkedIn URL from research (more reliable than Claude extraction)
-      const researchAtt = researchResults?.attendees?.find(
-        a => a.name === att.name || a.email === att.email,
-      );
-      const linkedInUrl = researchAtt?.linkedin_url || att.linkedin_url;
-      if (linkedInUrl) attendeeText += `  <${linkedInUrl}|View LinkedIn>\n`;
-    }
     blocks.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: truncate(attendeeText, 2800) },
+      text: { type: 'mrkdwn', text: "*WHO YOU'RE MEETING*" },
     });
+    for (const att of briefing.attendees) {
+      // Prefer LinkedIn URL from research (more reliable than Claude extraction)
+      const researchAtt = researchResults?.attendees?.find(
+        (a: any) => a.name === att.name || a.email === att.email,
+      );
+      const linkedInUrl = researchAtt?.linkedin_url || att.linkedin_url;
+      const profileImageUrl = (researchAtt as any)?.profile_image_url || null;
+
+      let attText = `*${att.name}*${att.title ? ` — ${att.title}` : ''}\n`;
+      if (att.background) attText += att.background + '\n';
+      if (linkedInUrl) attText += `<${linkedInUrl}|View LinkedIn>`;
+
+      const attBlock: any = {
+        type: 'section',
+        text: { type: 'mrkdwn', text: truncate(attText.trim(), 2800) },
+      };
+      if (profileImageUrl) {
+        attBlock.accessory = {
+          type: 'image',
+          image_url: profileImageUrl,
+          alt_text: att.name || 'Profile photo',
+        };
+      }
+      blocks.push(attBlock);
+    }
     blocks.push({ type: 'divider' });
   }
 
@@ -467,13 +482,21 @@ export function buildFirstMeetingSlackBlocks(
       companyText += `\n*Recent:* ${researchCo.recent_news}\n`;
     }
 
-    blocks.push({
+    const companyBlock: any = {
       type: 'section',
       text: {
         type: 'mrkdwn',
         text: truncate(companyText, 2800),
       },
-    });
+    };
+    if (researchCo?.domain) {
+      companyBlock.accessory = {
+        type: 'image',
+        image_url: `https://img.logo.dev/${researchCo.domain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ&size=64&format=png`,
+        alt_text: companyName,
+      };
+    }
+    blocks.push(companyBlock);
     blocks.push({ type: 'divider' });
   }
 
@@ -512,6 +535,29 @@ export function buildFirstMeetingSlackBlocks(
     blocks.push({
       type: 'section',
       text: { type: 'mrkdwn', text: truncate(questionsText, 2800) },
+    });
+  }
+
+  // Action buttons
+  if (meetingId) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Send Booking Confirmation' },
+          action_id: 'prep_briefing::booking_confirm',
+          value: meetingId,
+          style: 'primary',
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Ask a Question' },
+          action_id: 'prep_briefing::ask_question',
+          value: meetingId,
+        },
+      ],
     });
   }
 

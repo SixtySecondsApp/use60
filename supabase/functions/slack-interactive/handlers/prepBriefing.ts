@@ -102,7 +102,8 @@ Requirements:
 - NO subject line prefix like "Re:" or "Subject:"
 
 Return ONLY a JSON object: { "subject": "...", "body": "..." }
-Subject should be short and direct. Body should be plain text with \\n for line breaks.`;
+Subject should be short and direct. Body should be plain text with \\n for line breaks.
+Use plain ASCII punctuation only: straight quotes, hyphens (not em-dashes), no smart quotes or Unicode characters.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -112,7 +113,7 @@ Subject should be short and direct. Body should be plain text with \\n for line 
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-4-6',
       max_tokens: 400,
       temperature: 0.4,
       messages: [{ role: 'user', content: prompt }],
@@ -138,6 +139,7 @@ async function sendEmail(
   to: string,
   subject: string,
   body: string,
+  draft = false,
 ): Promise<void> {
   const response = await fetch(
     `${supabaseUrl}/functions/v1/email-send-as-rep`,
@@ -148,7 +150,7 @@ async function sendEmail(
         Authorization: `Bearer ${supabaseServiceKey}`,
         apikey: supabaseServiceKey,
       },
-      body: JSON.stringify({ userId, org_id: orgId, to, subject, body }),
+      body: JSON.stringify({ userId, org_id: orgId, to, subject, body, draft }),
     },
   );
 
@@ -223,7 +225,7 @@ export async function handlePrepBriefingAction(
 
         try {
           const { subject, body } = await draftEmail(repFirstName, firstName, meetingTitle, meetingTime);
-          await sendEmail(repUserId, orgId, attendee.email, subject, body);
+          await sendEmail(repUserId, orgId, attendee.email, subject, body, true);
           sentCount++;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -243,7 +245,7 @@ export async function handlePrepBriefingAction(
       const names = externalAttendees.slice(0, 3).map(a => a.name.split(' ')[0]).join(', ');
       return {
         success: true,
-        responseText: `Booking confirmation sent to ${names} for ${meetingTime}.`,
+        responseText: `Email draft created for ${names} — open Gmail drafts to review and send.`,
       };
     }
 
