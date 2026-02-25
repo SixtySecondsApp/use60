@@ -17,6 +17,7 @@ import type {
   PrepBriefingResult,
 } from './types.ts';
 import type { RAGResult } from '../memory/types.ts';
+import type { ResearchResults } from './attendeeResearcher.ts';
 
 // ---- Prompt Templates -------------------------------------------------------
 
@@ -32,7 +33,10 @@ const FIRST_MEETING_SYSTEM_PROMPT =
 
 TONE: Direct, specific, punchy. Short sentences. The rep will read this on their phone between meetings. Every word must earn its place. No filler, no corporate language, no "it's important to note."
 
-CRITICAL: If any piece of information is not available from the research data, use null — do not write phrases like "unable to retrieve," "recommend checking LinkedIn," or any placeholder text. Silence is better than noise.`;
+CRITICAL RULES:
+- ONLY include attendees explicitly listed in the ATTENDEES section of the data. Never infer attendees from the meeting title or other context.
+- If any piece of information is not available from the research data, use null — do not write phrases like "unable to retrieve," "recommend checking LinkedIn," or any placeholder text. Silence is better than noise.
+- Do not fabricate details. Only use what is in the provided research.`;
 
 // ---- Interfaces for composer inputs -----------------------------------------
 
@@ -132,10 +136,10 @@ export function buildReturnMeetingPrompt(input: ReturnMeetingInput): string {
   sections.push('Generate a pre-meeting brief in JSON format with these sections:');
   sections.push('1. story_so_far: 3-4 sentence narrative of the deal arc');
   sections.push(
-    '2. attendees: array of { name, role, history, flags[] } — flags like "new", "returning_after_absence", "champion", "blocker"',
+    '2. attendees: array of { name, role, history, flags[], linkedin_url } — flags like "new", "returning_after_absence", "champion", "blocker". linkedin_url from research data or null.',
   );
   sections.push(
-    '   For attendees who are NEW (first time), include their title, background, and LinkedIn notes if available.',
+    '   For attendees who are NEW (first time), include their title, background, and LinkedIn URL if available.',
   );
   sections.push(
     '   For attendees who are RETURNING, include their meeting history and any known concerns.',
@@ -283,6 +287,7 @@ export function buildReturnMeetingSlackBlocks(
           : '';
       attendeeText += `• *${att.name}* — ${att.role || 'Unknown role'}${flags}\n`;
       if (att.history) attendeeText += `  ${att.history}\n`;
+      if (att.linkedin_url) attendeeText += `  <${att.linkedin_url}|LinkedIn>\n`;
     }
     blocks.push({
       type: 'section',
@@ -368,12 +373,15 @@ export function buildReturnMeetingSlackBlocks(
 
 /**
  * Build Slack blocks for a first-meeting briefing from parsed AI JSON response.
+ * Pass researchResults to render LinkedIn URLs and company metadata reliably
+ * from the structured research data rather than relying on Claude extraction.
  */
 export function buildFirstMeetingSlackBlocks(
   briefing: any,
   meetingTitle: string,
   meetingTime: string,
   companyName: string,
+  researchResults?: ResearchResults | null,
 ): any[] {
   const blocks: any[] = [];
 
@@ -398,12 +406,18 @@ export function buildFirstMeetingSlackBlocks(
 
   blocks.push({ type: 'divider' });
 
-  // Attendees
+  // Attendees — merge AI background with research LinkedIn URLs
   if (briefing.attendees?.length > 0) {
     let attendeeText = "*WHO YOU'RE MEETING*\n";
     for (const att of briefing.attendees) {
       attendeeText += `• *${att.name}*${att.title ? ` — ${att.title}` : ''}\n`;
       if (att.background) attendeeText += `  ${att.background}\n`;
+      // Prefer LinkedIn URL from research (more reliable than Claude extraction)
+      const researchAtt = researchResults?.attendees?.find(
+        a => a.name === att.name || a.email === att.email,
+      );
+      const linkedInUrl = researchAtt?.linkedin_url || att.linkedin_url;
+      if (linkedInUrl) attendeeText += `  <${linkedInUrl}|View LinkedIn>\n`;
     }
     blocks.push({
       type: 'section',
@@ -412,13 +426,36 @@ export function buildFirstMeetingSlackBlocks(
     blocks.push({ type: 'divider' });
   }
 
-  // Company snapshot
-  if (briefing.company_snapshot) {
+  // Company — what they do + structured metadata from research
+  const researchCo = researchResults?.companies?.[0];
+  const companySnapshot: string | null = briefing.company_snapshot ?? null;
+
+  if (companySnapshot || researchCo) {
+    let companyText = `*THE COMPANY*\n`;
+    if (companySnapshot) companyText += `${companySnapshot}\n`;
+
+    // Metadata row: industry | size | funding
+    const meta: string[] = [];
+    if (researchCo?.industry) meta.push(researchCo.industry);
+    if (researchCo?.employee_count) meta.push(`${researchCo.employee_count} employees`);
+    if (researchCo?.funding) meta.push(researchCo.funding);
+    if (meta.length > 0) companyText += `\n_${meta.join('  ·  ')}_\n`;
+
+    // Company LinkedIn
+    if (researchCo?.linkedin_url) {
+      companyText += `<${researchCo.linkedin_url}|View Company LinkedIn>\n`;
+    }
+
+    // Recent news
+    if (researchCo?.recent_news) {
+      companyText += `\n*Recent:* ${researchCo.recent_news}\n`;
+    }
+
     blocks.push({
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: truncate(`*THE COMPANY*\n${briefing.company_snapshot}`, 2800),
+        text: truncate(companyText, 2800),
       },
     });
     blocks.push({ type: 'divider' });
@@ -523,6 +560,7 @@ export function buildFirstMeetingMarkdown(
   briefing: any,
   meetingTitle: string,
   companyName: string,
+  researchResults?: ResearchResults | null,
 ): string {
   const lines: string[] = [];
 
@@ -535,13 +573,28 @@ export function buildFirstMeetingMarkdown(
     for (const att of briefing.attendees) {
       lines.push(`- **${att.name}**${att.title ? ` — ${att.title}` : ''}`);
       if (att.background) lines.push(`  ${att.background}`);
+      const researchAtt = researchResults?.attendees?.find(
+        a => a.name === att.name || a.email === att.email,
+      );
+      const linkedInUrl = researchAtt?.linkedin_url || att.linkedin_url;
+      if (linkedInUrl) lines.push(`  [LinkedIn](${linkedInUrl})`);
     }
     lines.push('');
   }
 
-  if (briefing.company_snapshot) {
+  const researchCo = researchResults?.companies?.[0];
+
+  if (briefing.company_snapshot || researchCo) {
     lines.push('## The Company');
-    lines.push(briefing.company_snapshot);
+    if (briefing.company_snapshot) lines.push(briefing.company_snapshot);
+
+    const meta: string[] = [];
+    if (researchCo?.industry) meta.push(`**Industry:** ${researchCo.industry}`);
+    if (researchCo?.employee_count) meta.push(`**Size:** ${researchCo.employee_count} employees`);
+    if (researchCo?.funding) meta.push(`**Funding:** ${researchCo.funding}`);
+    if (meta.length > 0) lines.push(meta.join('  |  '));
+    if (researchCo?.linkedin_url) lines.push(`[Company LinkedIn](${researchCo.linkedin_url})`);
+    if (researchCo?.recent_news) lines.push(`**Recent:** ${researchCo.recent_news}`);
     lines.push('');
   }
 

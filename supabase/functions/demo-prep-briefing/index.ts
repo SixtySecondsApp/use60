@@ -572,11 +572,11 @@ serve(async (req: Request) => {
                 meetingNumber,
                 companyName,
               )
-            : buildFirstMeetingSlackBlocks(briefing, meetingTitle, meetingTime, companyName);
+            : buildFirstMeetingSlackBlocks(briefing, meetingTitle, meetingTime, companyName, researchResults);
 
           const markdown = isReturn
             ? buildReturnMeetingMarkdown(briefing, meetingTitle, meetingNumber, companyName)
-            : buildFirstMeetingMarkdown(briefing, meetingTitle, companyName);
+            : buildFirstMeetingMarkdown(briefing, meetingTitle, companyName, researchResults);
 
           // ---- Step 5: Slack delivery (optional) ----------------------------
           if (delivery === 'slack') {

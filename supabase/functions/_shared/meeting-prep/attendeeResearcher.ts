@@ -32,9 +32,11 @@ export interface CompanyResearch {
   domain: string;
   name: string | null;
   what_they_do: string | null;
+  industry: string | null;
   employee_count: string | null;
   funding: string | null;
   recent_news: string | null;
+  linkedin_url: string | null;
 }
 
 export interface ResearchResults {
@@ -269,6 +271,7 @@ ${JSON.stringify({
   companyName: apifyProfile.companyName,
   companyIndustry: apifyProfile.companyIndustry,
   companySize: apifyProfile.companySize,
+  companyLinkedInUrl: apifyProfile.companyLinkedInUrl || apifyProfile.companyUrl || null,
   about: typeof apifyProfile.about === 'string' ? apifyProfile.about?.slice(0, 500) : null,
   addressWithCountry: apifyProfile.addressWithCountry,
   linkedinUrl: apifyProfile.linkedinUrl,
@@ -320,9 +323,11 @@ Return ONLY a JSON object:
       "domain": "exact domain",
       "name": "company name",
       "what_they_do": "1-2 sentences: what the company does, their product/service, who they sell to",
-      "employee_count": "approximate size e.g. '50-200' or '500+' or null",
-      "funding": "funding stage/amount if known or null",
-      "recent_news": "notable recent developments, partnerships, or growth signals, or null"
+      "industry": "industry category e.g. 'Insurance & Financial Services', 'SaaS / B2B Software', 'Healthcare', 'Consulting' or null",
+      "employee_count": "approximate size e.g. '50-200' or '5,000+' or null",
+      "funding": "funding stage or total raised e.g. 'Series B ($24M)', 'Public (NYSE: INTG)', 'Bootstrapped' or null",
+      "recent_news": "notable recent developments, partnerships, growth signals, or executive hires — or null",
+      "linkedin_url": "linkedin.com/company/... URL if found in the data, or null"
     }
   ]
 }`;
@@ -355,9 +360,11 @@ Return ONLY a JSON object:
       domain,
       name: found?.name || null,
       what_they_do: found?.what_they_do || null,
+      industry: found?.industry || null,
       employee_count: found?.employee_count || null,
       funding: found?.funding || null,
       recent_news: found?.recent_news || null,
+      linkedin_url: found?.linkedin_url || null,
     };
   });
 
@@ -395,9 +402,11 @@ export function formatResearchForPrompt(research: ResearchResults): string {
   for (const co of research.companies) {
     lines.push(`COMPANY: ${co.name || co.domain} (${co.domain})`);
     if (co.what_they_do) lines.push(`  What they do: ${co.what_they_do}`);
-    if (co.employee_count) lines.push(`  Size: ~${co.employee_count} employees`);
+    if (co.industry) lines.push(`  Industry: ${co.industry}`);
+    if (co.employee_count) lines.push(`  Size: ${co.employee_count} employees`);
     if (co.funding) lines.push(`  Funding: ${co.funding}`);
     if (co.recent_news) lines.push(`  Recent news: ${co.recent_news}`);
+    if (co.linkedin_url) lines.push(`  LinkedIn: ${co.linkedin_url}`);
     lines.push('');
   }
 
