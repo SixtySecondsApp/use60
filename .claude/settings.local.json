@@ -67,5 +67,6 @@
     "ai-dev-hub",
     "playwriter",
     "rive"
-  ]
+  ],
+  "enableAllProjectMcpServers": true
 }
