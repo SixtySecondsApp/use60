@@ -24,6 +24,13 @@ import {
   errorResponse,
 } from '../_shared/corsHelper.ts';
 import { getAuthContext } from '../_shared/edgeAuth.ts';
+import { detectMeetingHistory } from '../_shared/rag/historyDetector.ts';
+import { createRAGClient } from '../_shared/rag/ragClient.ts';
+import { getFollowUpContext } from '../_shared/follow-up/ragQueries.ts';
+import {
+  composeReturnMeetingFollowUp,
+  composeFirstMeetingFollowUp,
+} from '../_shared/follow-up/composer.ts';
 
 // ============================================================================
 // Constants
@@ -315,8 +322,6 @@ async function handleGenerateFollowUp(
           label: 'Checking meeting history',
         });
 
-        const { detectMeetingHistory } = await import('../_shared/rag/historyDetector.ts');
-
         const meetingHistory = await detectMeetingHistory(
           supabase,
           meeting_id,
@@ -349,9 +354,6 @@ async function handleGenerateFollowUp(
             status: 'running',
             label: `Querying history across ${meetingHistory.priorMeetingCount} meetings`,
           });
-
-          const { createRAGClient } = await import('../_shared/rag/ragClient.ts');
-          const { getFollowUpContext } = await import('../_shared/follow-up/ragQueries.ts');
 
           const ragClient = createRAGClient();
 
@@ -427,10 +429,6 @@ async function handleGenerateFollowUp(
           status: 'running',
           label: 'Composing follow-up email',
         });
-
-        const { composeReturnMeetingFollowUp, composeFirstMeetingFollowUp } = await import(
-          '../_shared/follow-up/composer.ts'
-        );
 
         const composeInput = {
           meeting: {
