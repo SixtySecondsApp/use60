@@ -311,6 +311,27 @@ serve(async (req: Request) => {
             `[demo-prep-briefing] Meeting "${meeting.title}" — ${attendeeEmails.length} attendee(s) (${externalAttendeeEmails.length} external)`,
           );
 
+          // Skip personal/internal meetings and calendar noise
+          const titleLower = (meeting.title || '').toLowerCase();
+          const skipPatterns = [
+            'birthday', 'bday', 'b-day',
+            'holiday', 'bank holiday', 'public holiday',
+            'out of office', 'ooo', 'vacation', 'pto',
+            'lunch', 'gym', 'dentist', 'doctor',
+            'focus time', 'do not book', 'blocked',
+          ];
+          const isCalendarNoise = skipPatterns.some(p => titleLower.includes(p));
+
+          if (externalAttendeeEmails.length === 0 || isCalendarNoise) {
+            const reason = isCalendarNoise
+              ? 'Calendar event — not a sales meeting'
+              : 'No external attendees';
+            tracker.fail('load_context', reason);
+            send(sseEvent({ type: 'error', message: `Skipped: ${reason}. Prep briefings are only generated for meetings with prospects or clients.` }));
+            controller.close();
+            return;
+          }
+
           // ---- Step 2: Check meeting history --------------------------------
           tracker.start('history_check', 'Checking meeting history');
 

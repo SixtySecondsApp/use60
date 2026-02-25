@@ -132,11 +132,34 @@ async function getUpcomingMeetings(
     return [];
   }
 
-  // Convert attendees JSONB array to flat email list
-  return (data || []).map((row: any) => ({
-    ...row,
-    attendee_emails: extractAttendeeEmails(row.attendees),
-  }));
+  // Calendar noise patterns — skip personal events, birthdays, holidays, etc.
+  const skipPatterns = [
+    'birthday', 'bday', 'b-day',
+    'holiday', 'bank holiday', 'public holiday',
+    'out of office', 'ooo', 'vacation', 'pto',
+    'lunch', 'gym', 'dentist', 'doctor',
+    'focus time', 'do not book', 'blocked',
+  ];
+
+  // Convert attendees JSONB array to flat email list and filter out noise
+  return (data || [])
+    .map((row: any) => ({
+      ...row,
+      attendee_emails: extractAttendeeEmails(row.attendees),
+    }))
+    .filter((row: any) => {
+      const titleLower = (row.title || '').toLowerCase();
+      if (skipPatterns.some(p => titleLower.includes(p))) {
+        console.log(`[slack-meeting-prep] Skipping calendar noise: "${row.title}"`);
+        return false;
+      }
+      // Must have at least 1 attendee beyond the owner
+      if (!row.attendee_emails || row.attendee_emails.length <= 1) {
+        console.log(`[slack-meeting-prep] Skipping solo/no-attendee meeting: "${row.title}"`);
+        return false;
+      }
+      return true;
+    });
 }
 
 /**
