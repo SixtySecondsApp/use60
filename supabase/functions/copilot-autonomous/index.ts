@@ -53,6 +53,7 @@ import { loadAgentTeamConfig, type AgentTeamConfig, type IntentClassification } 
 import { classifyIntent } from '../_shared/agentClassifier.ts';
 import { runSpecialist, type StreamWriter } from '../_shared/agentSpecialist.ts';
 import { getSpecialistConfig, getAgentDisplayInfo } from '../_shared/agentDefinitions.ts';
+import { recordSignal, type ApprovalSignal } from '../_shared/autopilot/signals.ts';
 
 // =============================================================================
 // Configuration
@@ -1955,6 +1956,88 @@ Combine these into a single, well-structured response that tells a coherent stor
 }
 
 // =============================================================================
+// HITL Signal Detection (AP-009)
+// =============================================================================
+
+/**
+ * Detect if a user message is a HITL confirm/cancel response to a pending
+ * copilot proposal, and return the appropriate ApprovalSignal.
+ *
+ * Detection rules:
+ *  - "confirm" / "yes" / "go ahead" / "do it" etc.  → 'approved'
+ *  - Same confirm keywords BUT message contains extra text that looks like
+ *    edits (substantive content beyond 50 chars after stripping the keyword)
+ *    → 'approved_edited'
+ *  - "cancel" / "no" / "don't" / "stop" / "reject" etc. → 'rejected'
+ *  - Returns null for any other message (not a HITL response)
+ */
+function detectHITLSignal(message: string): ApprovalSignal | null {
+  const normalized = message.trim().toLowerCase();
+
+  // --- Cancel / reject patterns ---
+  const cancelPatterns = [
+    /^cancel\b/,
+    /^no\b/,
+    /^nope\b/,
+    /^don'?t\b/,
+    /^do not\b/,
+    /^stop\b/,
+    /^reject\b/,
+    /^skip\b/,
+    /^abort\b/,
+    /^never mind\b/,
+    /^nevermind\b/,
+    /^discard\b/,
+    /^i don'?t (want|need)\b/,
+    /^not (now|needed)\b/,
+  ];
+
+  for (const pattern of cancelPatterns) {
+    if (pattern.test(normalized)) {
+      return 'rejected';
+    }
+  }
+
+  // --- Confirm patterns ---
+  const confirmPatterns = [
+    /^confirm\b/,
+    /^yes\b/,
+    /^yeah\b/,
+    /^yep\b/,
+    /^yup\b/,
+    /^ok\b/,
+    /^okay\b/,
+    /^sure\b/,
+    /^go ahead\b/,
+    /^do it\b/,
+    /^proceed\b/,
+    /^execute\b/,
+    /^approved\b/,
+    /^looks good\b/,
+    /^that'?s? (good|great|fine|correct|right)\b/,
+    /^perfect\b/,
+    /^sounds good\b/,
+  ];
+
+  for (const pattern of confirmPatterns) {
+    if (pattern.test(normalized)) {
+      // Check whether the rest of the message contains substantial edit content.
+      // Strip the matched keyword phrase and see what remains.
+      const remainder = normalized.replace(pattern, '').trim();
+      // Remove common filler words and punctuation
+      const editContent = remainder.replace(/^[,.\s!]+/, '').trim();
+      if (editContent.length > 50) {
+        // Non-trivial additional content — treat as approved with edits
+        return 'approved_edited';
+      }
+      return 'approved';
+    }
+  }
+
+  return null;
+}
+
+// =============================================================================
 // Main Handler
 // =============================================================================
 
@@ -2057,6 +2140,40 @@ serve(async (req: Request) => {
     const resolvedOrgForConfig = organizationId
       ? organizationId
       : await resolveOrgId(supabase, userId, null).catch(() => null);
+
+    // =========================================================================
+    // AP-009: HITL Signal Recording
+    // =========================================================================
+    // Detect if this message is a confirm/cancel response to a pending copilot
+    // proposal, and record the appropriate approval signal fire-and-forget.
+    // This runs before Claude processes the message so every HITL interaction
+    // is captured regardless of how Claude responds.
+    // Guard: only attempt HITL signal detection when there is actually a pending
+    // action in context. Without this guard, any message that starts with "yes",
+    // "confirm", etc. would generate a spurious 'approved' signal even on normal
+    // conversational queries like "yes, schedule a meeting for tomorrow."
+    const hasPendingAction = Boolean(context?.pending_action || context?.pending_action_type);
+
+    if (resolvedOrgForConfig && hasPendingAction) {
+      const hitlSignal = detectHITLSignal(message);
+      if (hitlSignal) {
+        // Extract action_type from context if the frontend passed it, otherwise default
+        const pendingActionType = typeof context?.pending_action_type === 'string'
+          ? context.pending_action_type
+          : 'copilot.action';
+
+        recordSignal(supabase, {
+          user_id: userId!, // non-null: guarded by the auth check above
+          org_id: resolvedOrgForConfig,
+          action_type: pendingActionType,
+          agent_name: 'copilot-autonomous',
+          signal: hitlSignal,
+          autonomy_tier_at_time: 'approve',
+        }).catch(() => {});
+
+        console.log(`[copilot-autonomous] AP-009: HITL signal recorded: ${hitlSignal} for action_type=${pendingActionType}`);
+      }
+    }
 
     // Check credit balance before proceeding
     if (resolvedOrgForConfig) {
