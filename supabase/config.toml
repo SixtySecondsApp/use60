@@ -186,6 +186,11 @@ verify_jwt = false
 [functions.meetingbaas-connect-calendar]
 verify_jwt = false
 
+# MeetingBaaS Disconnect Calendar - called from frontend with user JWT
+# We handle auth verification manually inside the function
+[functions.meetingbaas-disconnect-calendar]
+verify_jwt = false
+
 # Company logo fetcher - public utility function, no auth needed
 # Fetches logos from logo.dev and caches in S3
 [functions.fetch-company-logo]
