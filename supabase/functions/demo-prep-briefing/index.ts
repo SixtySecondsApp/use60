@@ -276,8 +276,15 @@ serve(async (req: Request) => {
           const attendeeEmails = extractAttendeeEmails(rawAttendees);
           const attendeeNames = extractAttendeeNames(rawAttendees);
 
+          // Exclude the user's own email so history detection only matches
+          // on external attendees, not on the rep themselves.
+          const userEmail = user.email?.toLowerCase() ?? '';
+          const externalAttendeeEmails = userEmail
+            ? attendeeEmails.filter(e => e !== userEmail)
+            : attendeeEmails;
+
           console.log(
-            `[demo-prep-briefing] Meeting "${meeting.title}" — ${attendeeEmails.length} attendee(s)`,
+            `[demo-prep-briefing] Meeting "${meeting.title}" — ${attendeeEmails.length} attendee(s) (${externalAttendeeEmails.length} external)`,
           );
 
           // ---- Step 2: Check meeting history --------------------------------
@@ -286,7 +293,7 @@ serve(async (req: Request) => {
           const meetingHistory = await detectMeetingHistory(
             supabase,
             meeting_id,
-            attendeeEmails,
+            externalAttendeeEmails,
             user.id,
             orgId,
           );

@@ -53,12 +53,14 @@ serve(async (req: Request) => {
       });
     }
 
-    // Query recent external meetings
+    // Query recent external meetings with actual attendees
     const { data: meetings, error: meetingsError } = await supabase
       .from('calendar_events')
       .select('id, title, start_time, end_time, attendees, attendees_count, is_internal, meeting_type')
       .eq('user_id', user.id)
       .or('is_internal.eq.false,is_internal.is.null')
+      .not('attendees', 'is', null)
+      .gt('attendees_count', 0)
       .order('start_time', { ascending: false })
       .limit(limit);
 
