@@ -321,3 +321,189 @@ export async function handlePrepBriefingAction(
       return { success: false, responseText: '', error: `Unknown action: ${actionSuffix}` };
   }
 }
+
+// ---- Ask Question submission handler ----------------------------------------
+
+export async function handlePrepBriefingAskSubmission(
+  payload: any,
+): Promise<void> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  // Parse modal private_metadata
+  let meetingId: string;
+  let channelId: string;
+  let messageTs: string;
+  try {
+    const meta = JSON.parse(payload.view?.private_metadata || '{}');
+    meetingId = meta.meetingId || '';
+    channelId = meta.channelId || '';
+    messageTs = meta.messageTs || '';
+  } catch {
+    console.error('[prepBriefing ask] Failed to parse private_metadata');
+    return;
+  }
+
+  if (!meetingId || !channelId) {
+    console.error('[prepBriefing ask] Missing meetingId or channelId');
+    return;
+  }
+
+  // Extract the question from view state
+  const question: string =
+    payload.view?.state?.values?.question_block?.question_input?.value || '';
+  if (!question.trim()) return;
+
+  // Resolve Slack user → rep
+  const slackUserId: string = payload.user?.id || '';
+  const teamId: string = payload.team?.id || payload.view?.team_id || '';
+
+  const { data: mapping } = await supabase
+    .from('slack_user_mappings')
+    .select('sixty_user_id, org_id')
+    .eq('slack_user_id', slackUserId)
+    .maybeSingle();
+
+  if (!mapping?.sixty_user_id) {
+    console.error('[prepBriefing ask] Could not resolve Slack user:', slackUserId);
+    return;
+  }
+
+  // Load meeting context
+  const { data: meeting } = await supabase
+    .from('calendar_events')
+    .select('title, company_name, deal_id')
+    .eq('id', meetingId)
+    .maybeSingle();
+
+  const companyName = meeting?.company_name || 'the company';
+  const dealId = meeting?.deal_id || null;
+
+  // Get bot token for posting back to Slack
+  const { data: orgSettings } = await supabase
+    .from('slack_org_settings')
+    .select('bot_access_token')
+    .eq('slack_team_id', teamId)
+    .eq('is_connected', true)
+    .maybeSingle();
+
+  const botToken = orgSettings?.bot_access_token as string | null;
+  if (!botToken) {
+    console.error('[prepBriefing ask] No bot token for team:', teamId);
+    return;
+  }
+
+  const exaKey = Deno.env.get('EXA_API_KEY');
+
+  // Parallel: Exa search + (placeholder for future RAG)
+  const exaSearchPromise = exaKey
+    ? fetch('https://api.exa.ai/search', {
+        method: 'POST',
+        headers: { 'x-api-key': exaKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `${companyName} ${question}`,
+          type: 'auto',
+          numResults: 5,
+          contents: { text: { maxCharacters: 1200 } },
+        }),
+      })
+        .then(r => r.json() as Promise<{ results?: Array<{ title?: string; url?: string; text?: string }> }>)
+        .catch(err => {
+          console.warn('[prepBriefing ask] Exa error:', err);
+          return { results: [] };
+        })
+    : Promise.resolve({ results: [] });
+
+  const [exaData] = await Promise.all([exaSearchPromise]);
+
+  const exaResults = (exaData.results || []).map(r => ({
+    title: r.title || '',
+    url: r.url || '',
+    snippet: (r.text || '').slice(0, 800),
+  }));
+
+  // Build context for Claude
+  const sourcesText = exaResults.length > 0
+    ? exaResults
+        .map((r, i) => `[${i + 1}] ${r.title}\n${r.snippet}\nSource: ${r.url}`)
+        .join('\n\n')
+    : 'No web search results available.';
+
+  const claudePrompt = `You are a sales intelligence assistant. A sales rep is asking a question about a prospect before a meeting.
+
+Company: ${companyName}
+Question: ${question}
+
+Web search context:
+${sourcesText}
+
+Answer the question concisely and directly — 2-4 sentences max. Only use information from the provided context. If the context doesn't answer the question, say so plainly. No filler phrases.`;
+
+  let answer = 'I could not find a clear answer to that question from available sources.';
+
+  if (anthropicKey) {
+    try {
+      const claudeResp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 400,
+          temperature: 0.3,
+          messages: [{ role: 'user', content: claudePrompt }],
+        }),
+      });
+
+      if (claudeResp.ok) {
+        const claudeData = await claudeResp.json() as { content?: Array<{ text?: string }> };
+        answer = claudeData.content?.[0]?.text?.trim() || answer;
+      }
+    } catch (err) {
+      console.error('[prepBriefing ask] Claude error:', err);
+    }
+  }
+
+  // Build source context line
+  const sourceContext = exaResults.length > 0
+    ? `Sources: ${exaResults.slice(0, 3).map((r, i) => `<${r.url}|[${i + 1}]>`).join(' ')}`
+    : 'No sources available';
+
+  // Post answer to the original Slack thread
+  const slackPostBody = {
+    channel: channelId,
+    thread_ts: messageTs,
+    blocks: [
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Q: ${question}*` },
+      },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: answer },
+      },
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: sourceContext }],
+      },
+    ],
+  };
+
+  const postResp = await fetch('https://slack.com/api/chat.postMessage', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${botToken}`,
+    },
+    body: JSON.stringify(slackPostBody),
+  });
+
+  const postResult = await postResp.json() as { ok: boolean; error?: string };
+  if (!postResult.ok) {
+    console.error('[prepBriefing ask] chat.postMessage failed:', postResult.error);
+  } else {
+    console.log('[prepBriefing ask] Answer posted to thread:', channelId, messageTs);
+  }
+}
