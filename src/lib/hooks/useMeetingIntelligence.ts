@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
+import { askMeeting } from '@/lib/services/meetingAnalyticsService';
 
 // Types for tables not yet in generated types
 interface OrgFileSearchStore {
@@ -564,7 +565,7 @@ export function useMeetingIntelligence(): UseMeetingIntelligenceReturn {
     };
   }, [user, fetchIndexStatus]);
 
-  // Search function with team filter support
+  // Search function — calls meeting-analytics (Railway pgvector + GPT-4o-mini)
   const search = useCallback(async (query: string, filters?: SearchFilters) => {
     if (!user) {
       setSearchError('Not authenticated');
@@ -580,23 +581,37 @@ export function useMeetingIntelligence(): UseMeetingIntelligenceReturn {
       setIsSearching(true);
       setSearchError(null);
 
-      const targetUserId = getTargetUserId();
+      const startTime = Date.now();
 
-      const response = await supabase.functions.invoke('meeting-intelligence-search', {
-        body: {
-          query: query.trim(),
-          filters: {
-            ...filters,
-            owner_user_id: targetUserId,
-          },
-        },
+      // Call meeting-analytics /api/search/ask (Railway-backed RAG)
+      const askResponse = await askMeeting({
+        question: query.trim(),
+        maxMeetings: 20,
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Search failed');
-      }
+      // Map meeting-analytics response to SearchResult format
+      const result: SearchResult = {
+        answer: askResponse.answer,
+        sources: (askResponse.sources || []).map((s) => ({
+          source_type: 'meeting' as const,
+          source_id: s.transcriptId,
+          title: s.transcriptTitle,
+          date: (s as any).date || '',
+          company_name: null,
+          owner_name: null,
+          relevance_snippet: s.text,
+          sentiment_score: null,
+          speaker_name: null,
+        })),
+        query_metadata: {
+          semantic_query: query.trim(),
+          filters_applied: filters || {},
+          meetings_searched: askResponse.meetingsAnalyzed || 0,
+          response_time_ms: Date.now() - startTime,
+        },
+      };
 
-      setResults(response.data as SearchResult);
+      setResults(result);
       saveRecentQuery(query.trim());
 
     } catch (error) {
@@ -606,7 +621,7 @@ export function useMeetingIntelligence(): UseMeetingIntelligenceReturn {
     } finally {
       setIsSearching(false);
     }
-  }, [user, getTargetUserId, saveRecentQuery]);
+  }, [user, saveRecentQuery]);
 
   // Trigger full index of all meetings (indexes ALL team meetings)
   const triggerFullIndex = useCallback(async () => {

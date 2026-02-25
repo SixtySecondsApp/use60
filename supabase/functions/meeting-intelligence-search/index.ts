@@ -1,8 +1,14 @@
 /**
- * Meeting Intelligence Search Edge Function
+ * @deprecated This edge function is DEPRECATED. Use `meeting-analytics/api/search/ask` instead.
  *
- * Provides hybrid semantic + structured search across user's meetings
- * using Google File Search API with Claude for query parsing.
+ * V1 Meeting Intelligence Search — Google Gemini File Search + Claude query parsing.
+ * Replaced by the Railway-backed meeting-analytics system (pgvector + OpenAI embeddings + GPT-4o-mini).
+ *
+ * All new search integrations should call `meeting-analytics/api/search/ask`.
+ * Frontend hooks have been migrated to use `meetingAnalyticsService.askMeeting()`.
+ *
+ * This function is kept for backwards compatibility but will be removed in a future release.
+ * Last active callers migrated: 2026-02-25
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
