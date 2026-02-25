@@ -16,6 +16,10 @@ import { getCorsHeaders } from '../_shared/corsHelper.ts';
 import { detectMeetingHistory } from '../_shared/meeting-prep/historyDetector.ts';
 import { getHistoricalContext, createRAGClient } from '../_shared/meeting-prep/ragQueries.ts';
 import {
+  researchAttendees,
+  formatResearchForPrompt,
+} from '../_shared/meeting-prep/attendeeResearcher.ts';
+import {
   buildReturnMeetingPrompt,
   buildReturnMeetingSlackBlocks,
   buildReturnMeetingMarkdown,
@@ -310,7 +314,59 @@ serve(async (req: Request) => {
               : 'First meeting with these attendees',
           );
 
-          // ---- Step 3: RAG queries (return meetings only) -------------------
+          // ---- Step 3: Research attendees + companies -----------------------
+          // Build list of attendees to research. For return meetings we still
+          // research everyone so the briefing has current info, but new-only
+          // attendees are most important.
+          const attendeesToResearch = externalAttendeeEmails.map((email, i) => ({
+            email,
+            name: externalAttendeeNames[i] || email,
+          }));
+
+          const exaKey = Deno.env.get('EXA_API_KEY') || '';
+          const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
+
+          // Get org Apify token if available
+          let apifyToken: string | null = null;
+          if (exaKey || geminiKey) {
+            try {
+              const { data: apifyCreds } = await supabase
+                .from('integration_credentials')
+                .select('credentials')
+                .eq('org_id', orgId)
+                .eq('provider', 'apify')
+                .maybeSingle();
+              apifyToken = (apifyCreds?.credentials as Record<string, string>)?.api_token || null;
+            } catch { /* no Apify creds — continue without */ }
+          }
+
+          let researchResults: Awaited<ReturnType<typeof researchAttendees>> | null = null;
+          let researchProfilesStr = '';
+
+          if (exaKey && geminiKey && attendeesToResearch.length > 0) {
+            const apifyLabel = apifyToken ? '+Apify' : '';
+            tracker.start('research', `Researching ${attendeesToResearch.length} attendee(s) via Exa${apifyLabel}+Gemini`);
+            try {
+              researchResults = await researchAttendees(
+                attendeesToResearch,
+                exaKey,
+                geminiKey,
+                apifyToken,
+              );
+              researchProfilesStr = formatResearchForPrompt(researchResults);
+              tracker.complete(
+                'research',
+                `${researchResults.source} — ${researchResults.attendees.length} attendee(s) profiled`,
+              );
+            } catch (err) {
+              console.warn('[demo-prep-briefing] Research step failed (continuing):', err);
+              tracker.fail('research', 'Research unavailable — briefing will use limited data');
+            }
+          } else {
+            tracker.skip('research', !exaKey ? 'EXA_API_KEY not configured' : 'No external attendees');
+          }
+
+          // ---- Step 4: RAG queries (return meetings only) -------------------
           type HistoricalCtx = Awaited<ReturnType<typeof getHistoricalContext>>;
           let historicalContext: HistoricalCtx | null = null;
 
@@ -360,10 +416,26 @@ serve(async (req: Request) => {
             minute: '2-digit',
           });
 
-          // Company name is simplified for the demo path — the cron-triggered
-          // flow resolves it from contacts/HubSpot. Here we fall back to a
-          // generic label so all downstream formatters still have a value.
-          const companyName = 'Company';
+          // Derive company name from research results or fall back to domain/generic
+          const primaryDomain = externalAttendeeEmails[0]?.split('@')[1] || '';
+          const researchedCompany = researchResults?.companies?.[0];
+          const companyName = researchedCompany?.name || primaryDomain || 'Company';
+
+          // Build rich attendee profiles for the prompt
+          const richAttendeeProfiles = researchProfilesStr ||
+            externalAttendeeNames.map((n) => `- ${n}`).join('\n') ||
+            '- No attendee information available';
+
+          // Build company context for the prompt
+          const companySnapshot = researchedCompany
+            ? [
+                researchedCompany.what_they_do,
+                researchedCompany.employee_count ? `~${researchedCompany.employee_count} employees` : null,
+                researchedCompany.funding ? `Funding: ${researchedCompany.funding}` : null,
+              ].filter(Boolean).join(' | ') || 'No company data available'
+            : 'No company data available';
+
+          const companyNews = researchedCompany?.recent_news || '';
 
           const isReturn =
             meetingHistory.isReturnMeeting &&
@@ -376,7 +448,6 @@ serve(async (req: Request) => {
           if (isReturn && historicalContext !== null) {
             systemPrompt = RETURN_MEETING_SYSTEM_PROMPT;
 
-            const attendeeProfilesStr = externalAttendeeNames.map((n) => `- ${n}`).join('\n');
             const attendeeComparisonStr =
               meetingHistory.attendeeHistory
                 .map((ah) =>
@@ -394,11 +465,11 @@ serve(async (req: Request) => {
               dealStage: null,
               daysInStage: null,
               dealAmount: null,
-              attendeeProfiles: attendeeProfilesStr,
+              attendeeProfiles: richAttendeeProfiles,
               attendeeComparison: attendeeComparisonStr,
               historicalContext,
               hubspotContext: '',
-              companyNews: '',
+              companyNews,
             });
           } else {
             systemPrompt = FIRST_MEETING_SYSTEM_PROMPT;
@@ -407,12 +478,11 @@ serve(async (req: Request) => {
               meetingTitle,
               meetingTime,
               companyName,
-              attendeeProfiles: externalAttendeeNames.map((n) => `- ${n}`).join('\n') ||
-                '- No attendee information available',
-              companySnapshot: 'No company data available for this meeting',
+              attendeeProfiles: richAttendeeProfiles,
+              companySnapshot,
               icpFitNotes: '',
               dealSource: null,
-              companyNews: '',
+              companyNews,
             });
           }
 
@@ -582,6 +652,8 @@ serve(async (req: Request) => {
                     ? Object.keys(historicalContext.sections).length
                     : 0,
                   attendees_enriched: externalAttendeeEmails.length,
+                  research_source: researchResults?.source ?? 'none',
+                  research_time_ms: researchResults?.durationMs ?? 0,
                   credits_consumed: creditsConsumed,
                   generation_time_ms: totalTime,
                   model_used: 'claude-haiku-4-5-20251001',
