@@ -1354,35 +1354,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         }
 
         logger.log('[CopilotContext] Routing to autonomous copilot mode');
-
-        // Call route-message for server-side routing before dispatching to AI
-        let autonomousRoutingContext: import('@/lib/hooks/useCopilotChat').RoutingContext | undefined;
-        try {
-          const routeStart = performance.now();
-          const { data: routeData, error: routeError } = await supabase.functions.invoke('route-message', {
-            body: {
-              message,
-              source: 'web_copilot',
-              org_id: activeOrgId,
-              user_id: context.userId,
-            },
-          });
-          const routeLatencyMs = Math.round(performance.now() - routeStart);
-          logger.log(`[CopilotContext] route-message latency: ${routeLatencyMs}ms`, routeData);
-          if (!routeError && routeData) {
-            autonomousRoutingContext = {
-              skill_key: routeData.skill_key,
-              confidence: routeData.confidence,
-              matched_by: routeData.matched_by,
-              latency_ms: routeLatencyMs,
-            };
-          }
-        } catch (routeErr) {
-          // Non-fatal: fall through to general AI routing if route-message fails
-          logger.warn('[CopilotContext] route-message failed, falling through:', routeErr);
-        }
-
-        await autonomousCopilot.sendMessage(enrichedMessage, { ...options, routingContext: autonomousRoutingContext });
+        await autonomousCopilot.sendMessage(enrichedMessage, options);
         return;
       }
 
@@ -1559,33 +1531,6 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
             });
           });
 
-          // Call route-message for server-side routing before dispatching to AI
-          let regularRoutingContext: { skill_key?: string; confidence?: number; matched_by?: string; latency_ms?: number } | undefined;
-          try {
-            const routeStart = performance.now();
-            const { data: routeData, error: routeError } = await supabase.functions.invoke('route-message', {
-              body: {
-                message,
-                source: 'web_copilot',
-                org_id: activeOrgId,
-                user_id: context.userId,
-              },
-            });
-            const routeLatencyMs = Math.round(performance.now() - routeStart);
-            logger.log(`[CopilotContext] route-message latency: ${routeLatencyMs}ms`, routeData);
-            if (!routeError && routeData) {
-              regularRoutingContext = {
-                skill_key: routeData.skill_key,
-                confidence: routeData.confidence,
-                matched_by: routeData.matched_by,
-                latency_ms: routeLatencyMs,
-              };
-            }
-          } catch (routeErr) {
-            // Non-fatal: fall through to general AI routing if route-message fails
-            logger.warn('[CopilotContext] route-message failed, falling through:', routeErr);
-          }
-
           // Format context for API
           const apiContext: CopilotContextType = {
             ...context,
@@ -1594,8 +1539,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
             contactId: context.contactId,
             dealIds: context.dealIds,
             orgId: context.orgId,
-            temporalContext: getTemporalContext(),
-            ...(regularRoutingContext ? { routingContext: regularRoutingContext } : {}),
+            temporalContext: getTemporalContext()
           };
 
           // Only send conversationId if it exists in the database

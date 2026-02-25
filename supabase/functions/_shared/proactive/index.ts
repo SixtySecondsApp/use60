@@ -11,4 +11,3 @@ export * from './deliveryInApp.ts';
 export * from './settings.ts';
 export * from './recipients.ts';
 export * from './orgContext.ts';
-export * from './triageRules.ts';

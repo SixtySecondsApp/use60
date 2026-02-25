@@ -105,8 +105,6 @@ serve(async (req) => {
       return errorResponse('Email draft missing recipient or body', req, 400);
     }
 
-    const cc = Array.isArray(content.cc) ? content.cc.filter((e: unknown) => typeof e === 'string' && (e as string).trim()) : [];
-
     // Send email via google-gmail edge function
     const gmailResp = await fetch(`${SUPABASE_URL}/functions/v1/google-gmail?action=send`, {
       method: 'POST',
@@ -120,7 +118,6 @@ serve(async (req) => {
         subject,
         body,
         isHtml: false,
-        ...(cc.length > 0 ? { cc: cc.join(',') } : {}),
       }),
     });
 

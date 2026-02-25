@@ -2,11 +2,11 @@
  * MultiAgentDemoPage
  *
  * Side-by-side race page that showcases single-agent vs multi-agent copilot.
- * User picks a sales scenario, clicks Run, and watches both paths execute in parallel.
+ * User picks a scenario, clicks Run, and watches both paths execute in parallel.
  * Demo mode uses client-side simulation — no database tables required.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Play, RotateCcw, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { BackToPlatform } from '@/components/platform/BackToPlatform';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useNavigate } from 'react-router-dom';
-import { ScenarioSelector, SALES_SCENARIOS } from '@/components/platform/demo/ScenarioSelector';
+import { ScenarioSelector, SCENARIOS } from '@/components/platform/demo/ScenarioSelector';
 import { RacePanel } from '@/components/platform/demo/RacePanel';
 import { MetricsComparison } from '@/components/platform/demo/MetricsComparison';
 import type { Scenario, PanelMetrics } from '@/components/platform/demo/types';
@@ -44,11 +44,9 @@ export default function MultiAgentDemoPage() {
 
   // Check if both done
   const bothDone = singleMetrics && multiMetrics;
-  useEffect(() => {
-    if (bothDone && raceState === 'running') {
-      setRaceState('complete');
-    }
-  }, [bothDone, raceState]);
+  if (bothDone && raceState === 'running') {
+    setRaceState('complete');
+  }
 
   const handleRun = () => {
     if (!selectedScenario) return;
@@ -108,7 +106,6 @@ export default function MultiAgentDemoPage() {
         </CardHeader>
         <CardContent>
           <ScenarioSelector
-            scenarios={SALES_SCENARIOS}
             selectedId={selectedScenario?.id ?? null}
             onSelect={setSelectedScenario}
             disabled={raceState === 'running'}

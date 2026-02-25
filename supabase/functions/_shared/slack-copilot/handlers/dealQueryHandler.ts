@@ -69,7 +69,6 @@ function handleSingleDeal(
   }
 
   blocks.push(divider());
-  blocks.push(context([appLink(`/deals/${deal.id}`, 'View Deal')]));
   blocks.push(actions([
     { text: 'Open in 60', actionId: 'copilot_open_deal', value: deal.id, style: 'primary' },
     { text: 'Draft Follow-up', actionId: 'copilot_draft_followup', value: deal.id },
@@ -83,7 +82,7 @@ function handleMultipleDeals(
   searchTerm: string
 ): HandlerResult {
   const lines = deals.slice(0, 5).map(
-    (d) => `• ${appLink(`/deals/${d.id}`, d.title)} — ${d.stage} | ${formatCurrency(d.value)}`
+    (d) => `• *${d.title}* — ${d.stage} | ${formatCurrency(d.value)}`
   );
 
   return {
@@ -124,11 +123,10 @@ function handleAtRiskDeals(queryContext: QueryContext): HandlerResult {
   for (const risk of highRisk) {
     const deal = deals?.find((d) => d.id === risk.deal_id);
     const dealTitle = deal?.title || 'Unknown Deal';
-    const dealLink = deal ? appLink(`/deals/${deal.id}`, dealTitle) : `*${dealTitle}*`;
     const topSignal = risk.top_signals[0] || 'No details';
 
     blocks.push(section(
-      `${riskBadge(risk.risk_level)} ${dealLink} (${risk.score}/100)\n_${topSignal}_`
+      `${riskBadge(risk.risk_level)} *${dealTitle}* (${risk.score}/100)\n_${topSignal}_`
     ));
   }
 
@@ -148,7 +146,7 @@ function handleDealOverview(
   const lines = topDeals.map((d) => {
     const risk = riskScores?.find((r) => r.deal_id === d.id);
     const badge = risk ? riskBadge(risk.risk_level) : '';
-    return `• ${appLink(`/deals/${d.id}`, d.title)} — ${d.stage} | ${formatCurrency(d.value)} ${badge}`;
+    return `• *${d.title}* — ${d.stage} | ${formatCurrency(d.value)} ${badge}`;
   });
 
   return {

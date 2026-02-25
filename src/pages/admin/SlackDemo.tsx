@@ -41,10 +41,6 @@ import {
   Send,
   Bot,
   Code2,
-  Layers,
-  AtSign,
-  Link2,
-  BarChart3,
 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase/clientV2';
@@ -463,33 +459,75 @@ export default function SlackDemo() {
     if (!user?.id) return;
     setDealsLoading(true);
     try {
-      // deals table: name (not title), stage_id FK, owner_id, clerk_org_id
-      const selectWithJoin = 'id, name, value, updated_at, company, deal_stages:stage_id(name)';
-      const selectFallback = 'id, name, value, updated_at, company, stage_id';
+      // NOTE: "deals" schema differs across environments.
+      // Newer schema: deals(id, title, stage, value, org_id, user_id, company_id -> companies)
+      // Legacy schema: deals(id, name, stage_id, value, owner_id, stage_id -> deal_stages)
 
-      const build = (selectStr: string) => {
-        let q: any = (supabase as any)
-          .from('deals')
-          .select(selectStr)
-          .order('updated_at', { ascending: false })
-          .limit(50)
-          .eq('owner_id', user.id);
-        return q;
+      const tryNewSchema = async (): Promise<DealPickerItem[] | null> => {
+        const baseSelect = 'id, title, stage, value, companies:company_id(name)';
+        const fallbackSelect = 'id, title, stage, value';
+
+        const build = (selectStr: string) => {
+          let q: any = (supabase as any)
+            .from('deals')
+            .select(selectStr)
+            .order('updated_at', { ascending: false })
+            .limit(50);
+
+          // Prefer org filter if available; fall back to user filter.
+          if (activeOrgId) q = q.eq('org_id', activeOrgId);
+          q = q.eq('user_id', user.id);
+          return q;
+        };
+
+        let { data, error }: any = await build(baseSelect);
+        if (error) ({ data, error } = (await build(fallbackSelect)) as any);
+        if (error) return null;
+
+        return ((data as any[]) || []).map((d) => ({
+          id: d.id,
+          title: d.title ?? null,
+          stage: d.stage ?? null,
+          value: d.value ?? null,
+          company: d.companies ? { name: d.companies?.name ?? null } : null,
+        })) as DealPickerItem[];
       };
 
-      let { data, error }: any = await build(selectWithJoin);
-      if (error) ({ data, error } = (await build(selectFallback)) as any);
-      if (error) throw error;
+      const tryLegacySchema = async (): Promise<DealPickerItem[]> => {
+        // Legacy: stage is a foreign key to deal_stages; company is stored on deal row.
+        const selectWithJoin = 'id, name, value, updated_at, company, deal_stages:stage_id(name)';
+        const selectFallback = 'id, name, value, updated_at, company, stage_id';
 
-      setRecentDeals(
-        ((data as any[]) || []).map((d) => ({
+        const build = (selectStr: string) => {
+          let q: any = (supabase as any)
+            .from('deals')
+            .select(selectStr)
+            .order('updated_at', { ascending: false })
+            .limit(50)
+            .eq('owner_id', user.id);
+          return q;
+        };
+
+        let { data, error }: any = await build(selectWithJoin);
+        if (error) ({ data, error } = (await build(selectFallback)) as any);
+        if (error) throw error;
+
+        return ((data as any[]) || []).map((d) => ({
           id: d.id,
           title: d.name ?? null,
           stage: d.deal_stages?.name ?? (d.stage_id ?? null),
           value: d.value ?? null,
           company: d.company ? { name: d.company } : null,
-        })) as DealPickerItem[],
-      );
+        })) as DealPickerItem[];
+      };
+
+      const newDeals = await tryNewSchema();
+      if (newDeals) {
+        setRecentDeals(newDeals);
+      } else {
+        const legacyDeals = await tryLegacySchema();
+        setRecentDeals(legacyDeals);
+      }
     } catch (e: any) {
       setRecentDeals([]);
       toast.error(e?.message || 'Failed to load deals');
@@ -960,105 +998,6 @@ export default function SlackDemo() {
       toast.error(e?.message || 'Failed to send email reply alert');
     } finally {
       setLoadingState('emailReply', false);
-    }
-  };
-
-  const testCompactNotificationDm = async () => {
-    if (!activeOrgId) {
-      toast.error('No organization selected');
-      return;
-    }
-    setLoadingState('compactNotification', true);
-    try {
-      const result = sendToSlack
-        ? await invokeFunction('slack-test-message', { orgId: activeOrgId, action: 'send_compact_notification_dm' })
-        : { success: true, skippedSlack: true };
-
-      setResult('compactNotification', {
-        success: result.success,
-        message: result.success ? 'Compact notification sent!' : result.error || 'Failed',
-        data: result,
-        timestamp: new Date(),
-      });
-
-      await createInAppMirror({
-        title: 'Compact notification (simulated)',
-        message: 'This is what lower-priority updates look like — a single line.',
-        category: 'deal',
-        entity_type: 'deal',
-        metadata: { source: 'proactive_simulator' },
-      });
-    } catch (e: any) {
-      setResult('compactNotification', { success: false, message: e?.message || 'Failed', data: e, timestamp: new Date() });
-      toast.error(e?.message || 'Failed to send compact notification');
-    } finally {
-      setLoadingState('compactNotification', false);
-    }
-  };
-
-  const testSilentThreadDm = async () => {
-    if (!activeOrgId) {
-      toast.error('No organization selected');
-      return;
-    }
-    setLoadingState('silentThread', true);
-    try {
-      const result = sendToSlack
-        ? await invokeFunction('slack-test-message', { orgId: activeOrgId, action: 'send_silent_thread_dm' })
-        : { success: true, skippedSlack: true };
-
-      setResult('silentThread', {
-        success: result.success,
-        message: result.success ? 'Signal posted to daily thread!' : result.error || 'Failed',
-        data: result,
-        timestamp: new Date(),
-      });
-
-      await createInAppMirror({
-        title: 'Silent thread signal (simulated)',
-        message: 'Low-priority signals accumulate in a daily thread instead of separate DMs.',
-        category: 'deal',
-        entity_type: 'deal',
-        metadata: { source: 'proactive_simulator' },
-      });
-    } catch (e: any) {
-      setResult('silentThread', { success: false, message: e?.message || 'Failed', data: e, timestamp: new Date() });
-      toast.error(e?.message || 'Failed to send silent thread signal');
-    } finally {
-      setLoadingState('silentThread', false);
-    }
-  };
-
-  const testWeeklyScorecardDm = async () => {
-    if (!activeOrgId) {
-      toast.error('No organization selected');
-      return;
-    }
-    setLoadingState('weeklyScorecard', true);
-    try {
-      const result = sendToSlack
-        ? await invokeFunction('slack-test-message', { orgId: activeOrgId, action: 'send_weekly_scorecard_dm' })
-        : { success: true, skippedSlack: true };
-
-      setResult('weeklyScorecard', {
-        success: result.success,
-        message: result.success ? 'Weekly scorecard sent!' : result.error || 'Failed',
-        data: result,
-        timestamp: new Date(),
-      });
-
-      await createInAppMirror({
-        title: 'Weekly agent scorecard (simulated)',
-        message: '12 emails drafted, 5 meetings prepped, ~2.4h saved this week.',
-        category: 'team',
-        entity_type: 'weekly_scorecard',
-        metadata: { source: 'proactive_simulator' },
-      });
-    } catch (e: any) {
-      setResult('weeklyScorecard', { success: false, message: e?.message || 'Failed', data: e, timestamp: new Date() });
-      toast.error(e?.message || 'Failed to send weekly scorecard');
-    } finally {
-      setLoadingState('weeklyScorecard', false);
     }
   };
 
@@ -1544,150 +1483,6 @@ export default function SlackDemo() {
             This is a sample alert. The production version will be driven by inbound email events/categorizations.
           </p>
         </TestCard>
-
-        {/* ─── New Slack Experience Features ─── */}
-        <Separator />
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">Slack Experience Overhaul</h2>
-          <p className="text-sm text-muted-foreground">
-            New features: notification tiers, @mention copilot, link unfurling, entity detection, weekly scorecard.
-          </p>
-        </div>
-
-        {/* Compact Notification Tier */}
-        <TestCard
-          title="Compact Notification (Tier 2)"
-          description="Single-line notification for lower-priority updates like stage changes and email replies."
-          icon={Layers}
-          onTest={testCompactNotificationDm}
-          isLoading={loading.compactNotification}
-          lastResult={results.compactNotification || null}
-        >
-          <p className="text-xs text-muted-foreground">
-            Instead of a full card, compact notifications show entity + action + deep link on one line.
-            Example: &quot;Acme Corp moved to Negotiation &middot; View Deal&quot;
-          </p>
-        </TestCard>
-
-        {/* Silent Thread Signal */}
-        <TestCard
-          title="Silent Thread Signal (Tier 3)"
-          description="Low-priority signals accumulate in a daily thread instead of separate DMs."
-          icon={Layers}
-          onTest={testSilentThreadDm}
-          isLoading={loading.silentThread}
-          lastResult={results.silentThread || null}
-        >
-          <p className="text-xs text-muted-foreground">
-            Creates a &quot;Signals — [date]&quot; thread in your DM. Subsequent signals post as replies.
-            This keeps your DM clean while still capturing every insight.
-          </p>
-        </TestCard>
-
-        {/* Weekly Agent Scorecard */}
-        <TestCard
-          title="Weekly Agent Scorecard"
-          description="End-of-week summary showing emails drafted, meetings prepped, deals flagged, and time saved."
-          icon={BarChart3}
-          onTest={testWeeklyScorecardDm}
-          isLoading={loading.weeklyScorecard}
-          lastResult={results.weeklyScorecard || null}
-        >
-          <p className="text-xs text-muted-foreground">
-            Uses sample data. In production, this runs as a Friday cron job with real aggregated stats.
-          </p>
-        </TestCard>
-
-        {/* @Mention Copilot (info card) */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <AtSign className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-base">@Mention Copilot</CardTitle>
-                <CardDescription className="text-sm">@mention the bot in any channel to ask questions or request work.</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm">
-              The bot now responds to @mentions with the full copilot pipeline (same as DMs). It adds a waiting reaction, processes the request, then marks done with a checkmark.
-            </p>
-            <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
-              <p className="font-medium">How to test:</p>
-              <ol className="list-decimal list-inside text-muted-foreground space-y-1">
-                <li>Go to any Slack channel where the 60 bot is a member</li>
-                <li>Type <code className="bg-muted px-1 rounded">@60 what deals are at risk?</code></li>
-                <li>Watch the hourglass reaction appear, then get replaced with a checkmark</li>
-                <li>The bot replies in-thread with a Block Kit response + deep links</li>
-              </ol>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Link Unfurling (info card) */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Link2 className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-base">Link Unfurling</CardTitle>
-                <CardDescription className="text-sm">Paste an app.use60.com deal URL and see it expand into a rich card.</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm">
-              When you paste an <code className="bg-muted px-1 rounded">app.use60.com/deals/[id]</code> link in any channel, the bot automatically unfurls it as a rich deal card showing name, stage, value, and health.
-            </p>
-            <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
-              <p className="font-medium">How to test:</p>
-              <ol className="list-decimal list-inside text-muted-foreground space-y-1">
-                <li>Copy a deal URL from the app (e.g. from the deals page)</li>
-                <li>Paste it in any Slack channel where the bot is present</li>
-                <li>The link should expand into a formatted deal summary card</li>
-              </ol>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Note: Slack must have the bot&apos;s app registered for link unfurling on the app.use60.com domain.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Entity Detection (info card) */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Activity className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-base">Entity Detection</CardTitle>
-                <CardDescription className="text-sm">Mention a deal name in a channel and get automatic context.</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm">
-              When someone mentions a known deal name in a channel, the bot replies in-thread with a one-line context summary and a View Deal link. Rate-limited to 1 per channel per 5 minutes.
-            </p>
-            <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1">
-              <p className="font-medium">How to test:</p>
-              <ol className="list-decimal list-inside text-muted-foreground space-y-1">
-                <li>Create a deal in 60 (or use an existing one)</li>
-                <li>In a Slack channel where the bot is present, mention the deal by name</li>
-                <li>The bot should reply in-thread with the deal stage, value, and a deep link</li>
-              </ol>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Only triggers for exact deal title matches. Rate-limited to avoid channel spam.
-            </p>
-          </CardContent>
-        </Card>
 
         {/* Deal Room */}
         <TestCard

@@ -40,28 +40,17 @@ interface AgentActivityFeedProps {
 }
 
 // Map sequence types to icons and colors
-const SEQUENCE_TYPE_CONFIG: Record<string, { Icon: typeof Video; color: string; label: string; category: string }> = {
-  meeting_ended: { Icon: Video, color: 'blue', label: 'Meeting Debrief', category: 'meetings' },
-  pre_meeting_90min: { Icon: Clock, color: 'purple', label: 'Meeting Prep', category: 'meetings' },
-  deal_risk_scan: { Icon: AlertTriangle, color: 'amber', label: 'Deal Risk', category: 'deals' },
-  stale_deal_revival: { Icon: RefreshCw, color: 'emerald', label: 'Deal Revival', category: 'deals' },
-  coaching_weekly: { Icon: GraduationCap, color: 'indigo', label: 'Coaching', category: 'admin' },
-  campaign_daily_check: { Icon: Mail, color: 'rose', label: 'Campaign Check', category: 'outreach' },
-  email_received: { Icon: Inbox, color: 'cyan', label: 'Email Signal', category: 'outreach' },
-  proposal_generation: { Icon: FileText, color: 'violet', label: 'Proposal', category: 'deals' },
-  calendar_find_times: { Icon: Calendar, color: 'teal', label: 'Scheduling', category: 'meetings' },
-  morning_briefing: { Icon: Calendar, color: 'blue', label: 'Morning Briefing', category: 'admin' },
-  agent_notification: { Icon: FileText, color: 'gray', label: 'Notification', category: 'admin' },
-  sequence_cost_rollup: { Icon: FileText, color: 'gray', label: 'Cost Rollup', category: 'admin' },
+const SEQUENCE_TYPE_CONFIG: Record<string, { Icon: typeof Video; color: string }> = {
+  meeting_ended: { Icon: Video, color: 'blue' },
+  pre_meeting_90min: { Icon: Clock, color: 'purple' },
+  deal_risk_scan: { Icon: AlertTriangle, color: 'amber' },
+  stale_deal_revival: { Icon: RefreshCw, color: 'emerald' },
+  coaching_weekly: { Icon: GraduationCap, color: 'indigo' },
+  campaign_daily_check: { Icon: Mail, color: 'rose' },
+  email_received: { Icon: Inbox, color: 'cyan' },
+  proposal_generation: { Icon: FileText, color: 'violet' },
+  calendar_find_times: { Icon: Calendar, color: 'teal' },
 };
-
-const FILTER_OPTIONS = [
-  { key: 'all', label: 'All' },
-  { key: 'meetings', label: 'Meetings' },
-  { key: 'deals', label: 'Deals' },
-  { key: 'outreach', label: 'Outreach' },
-  { key: 'admin', label: 'Admin' },
-] as const;
 
 // Get icon and color for a sequence type
 function getSequenceConfig(sequenceType: string) {
@@ -126,7 +115,6 @@ function formatSequenceType(sequenceType: string): string {
 export function AgentActivityFeed({ onClose }: AgentActivityFeedProps) {
   const activeOrgId = useActiveOrgId();
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-  const [activeFilter, setActiveFilter] = useState<string>('all');
 
   // Fetch activity feed with infinite query
   const {
@@ -148,14 +136,8 @@ export function AgentActivityFeed({ onClose }: AgentActivityFeedProps) {
   const markAsRead = useMarkAgentActivityRead();
   const markAllAsRead = useMarkAllAgentActivityRead();
 
-  // Flatten pages into single array and apply filter
-  const allActivities = data?.pages.flat() || [];
-  const activities = activeFilter === 'all'
-    ? allActivities
-    : allActivities.filter((a) => {
-        const config = SEQUENCE_TYPE_CONFIG[a.sequence_type];
-        return config?.category === activeFilter;
-      });
+  // Flatten pages into single array
+  const activities = data?.pages.flat() || [];
 
   // Handle item click (mark as read + expand)
   const handleItemClick = async (activity: AgentActivity) => {
@@ -235,24 +217,6 @@ export function AgentActivityFeed({ onClose }: AgentActivityFeedProps) {
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="px-4 sm:px-5 py-2 border-b border-gray-200 dark:border-gray-800 flex gap-1 overflow-x-auto">
-        {FILTER_OPTIONS.map((filter) => (
-          <button
-            key={filter.key}
-            onClick={() => setActiveFilter(filter.key)}
-            className={cn(
-              'px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
-              activeFilter === filter.key
-                ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-            )}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
-
       {/* Activity List */}
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
@@ -270,10 +234,10 @@ export function AgentActivityFeed({ onClose }: AgentActivityFeedProps) {
           <div className="flex flex-col items-center justify-center py-12 px-4">
             <BellOff className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-3" />
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-              {activeFilter === 'all' ? 'No agent activity yet' : `No ${activeFilter} activity`}
+              No agent activity yet
             </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-1 max-w-[240px]">
-              Your AI agent is monitoring your deals, meetings, and pipeline. Activity will appear here as it works.
+            <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-1">
+              Your AI teammate's actions will appear here
             </p>
           </div>
         ) : (

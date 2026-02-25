@@ -643,51 +643,11 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   // -----------------------------------------------------------------------
 
   if (isLoading) {
-    const skeletonRows = 12;
-    const skeletonCols = visibleColumns.length > 0 ? visibleColumns.slice(0, 8) : Array.from({ length: 5 }, (_, i) => ({ id: `sk-${i}`, width: 160 }));
     return (
-      <div className="rounded-xl border border-gray-800 bg-gray-950 overflow-hidden w-full min-w-0">
-        <div className="overflow-hidden" style={{ maxHeight: 'var(--ops-table-max-height, calc(100vh - 220px))' }}>
-          <div style={{ minWidth: '100%' }}>
-            {/* Skeleton header */}
-            <div className="flex border-b border-gray-800 bg-gray-900/95" style={{ height: HEADER_HEIGHT }}>
-              <div className="flex items-center justify-center border-r border-gray-800 shrink-0" style={{ width: CHECKBOX_COL_WIDTH, minWidth: CHECKBOX_COL_WIDTH }}>
-                <div className="w-4 h-4 rounded bg-gray-800" />
-              </div>
-              {skeletonCols.map((col: any) => (
-                <div
-                  key={col.id}
-                  className="flex items-center px-3 border-r border-gray-800 shrink-0"
-                  style={{ width: col.width || 160, minWidth: col.width || 160 }}
-                >
-                  <div className="h-3 w-16 rounded bg-gray-800 animate-pulse" />
-                </div>
-              ))}
-            </div>
-            {/* Skeleton rows */}
-            {Array.from({ length: skeletonRows }).map((_, rowIdx) => (
-              <div key={rowIdx} className="flex border-b border-gray-800/50" style={{ height: ROW_HEIGHT }}>
-                <div className="flex items-center justify-center border-r border-gray-800/50 shrink-0" style={{ width: CHECKBOX_COL_WIDTH, minWidth: CHECKBOX_COL_WIDTH }}>
-                  <div className="w-4 h-4 rounded bg-gray-800/60" />
-                </div>
-                {skeletonCols.map((col: any, colIdx: number) => (
-                  <div
-                    key={col.id}
-                    className="flex items-center px-2 border-r border-gray-800/50 shrink-0"
-                    style={{ width: col.width || 160, minWidth: col.width || 160 }}
-                  >
-                    <div
-                      className="h-3 rounded bg-gray-800/60 animate-pulse"
-                      style={{
-                        width: `${45 + ((rowIdx * 7 + colIdx * 13) % 40)}%`,
-                        animationDelay: `${(rowIdx * 50 + colIdx * 30) % 600}ms`,
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
+      <div className="flex items-center justify-center h-64 bg-gray-950 rounded-xl border border-gray-800">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
+          <span className="text-sm text-gray-400">Loading table...</span>
         </div>
       </div>
     );
@@ -768,7 +728,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
           {/* ---- BODY (virtualised) ---- */}
           <div
             style={{
-              height: rowVirtualizer.getTotalSize() + ROW_HEIGHT * 2,
+              height: rowVirtualizer.getTotalSize(),
               position: 'relative',
             }}
           >

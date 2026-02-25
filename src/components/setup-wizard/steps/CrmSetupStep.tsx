@@ -57,7 +57,7 @@ export function CrmSetupStep() {
             Connect Your CRM
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Connect your pipeline so I can track deal health and flag risks.
+            Sync your deals and contacts for pipeline intelligence and meeting context.
           </p>
         </div>
       </div>

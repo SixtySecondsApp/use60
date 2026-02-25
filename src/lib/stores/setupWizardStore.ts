@@ -6,11 +6,11 @@ export type SetupStep = 'calendar' | 'notetaker' | 'crm' | 'followups' | 'test';
 export const SETUP_STEPS: SetupStep[] = ['calendar', 'notetaker', 'crm', 'followups', 'test'];
 
 export const STEP_META: Record<SetupStep, { label: string; description: string }> = {
-  calendar: { label: 'Connect your calendar', description: 'So I can prep you for meetings' },
-  notetaker: { label: 'Enable meeting recording', description: 'So I can join and take notes' },
-  crm: { label: 'Connect your pipeline', description: 'So I can monitor your deals' },
-  followups: { label: 'Learn your writing style', description: 'So my emails sound like you' },
-  test: { label: 'See me in action', description: 'Watch me research and write a cold email' },
+  calendar: { label: 'Connect Calendar', description: 'Sync your calendar to auto-prepare for meetings' },
+  notetaker: { label: 'Enable AI Notetaker', description: 'Record and transcribe your meetings automatically' },
+  crm: { label: 'Connect CRM', description: 'Sync your deals and contacts with HubSpot or Attio' },
+  followups: { label: 'Configure Follow-ups', description: 'Set your default follow-up email preferences' },
+  test: { label: 'Run Your First Test', description: 'Try out the AI copilot with a quick action' },
 };
 
 export interface StepStatus {

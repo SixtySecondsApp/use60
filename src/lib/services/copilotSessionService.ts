@@ -23,45 +23,14 @@ import type {
 // Constants
 // =============================================================================
 
-/** Known model max context sizes in tokens */
-const MODEL_MAX_CONTEXT: Record<string, number> = {
-  'claude-haiku-4-5': 200000,
-  'claude-sonnet-4-6': 200000,
-  'claude-opus-4-6': 200000,
-  'gemini-2.5-flash': 1000000,
-};
-
-/** Default max context when model is unknown */
-const DEFAULT_MAX_CONTEXT = 200000;
-
-/**
- * Calculate compaction threshold for a given model.
- * Formula reserves buffers for system prompt (4096), response (8192),
- * and tool definitions (4096), then uses 75% of remaining capacity.
- */
-export function getCompactionThreshold(modelId: string): number {
-  const maxContext = MODEL_MAX_CONTEXT[modelId] ?? DEFAULT_MAX_CONTEXT;
-  return Math.floor((maxContext - 4096 - 8192 - 4096) * 0.75);
-}
-
-/** Token threshold to trigger compaction (legacy fallback, prefer getCompactionThreshold) */
-export const COMPACTION_THRESHOLD = getCompactionThreshold('claude-haiku-4-5');
+/** Token threshold to trigger compaction */
+export const COMPACTION_THRESHOLD = 80000;
 
 /** Target token count after compaction */
 export const TARGET_CONTEXT_SIZE = 20000;
 
 /** Minimum messages to keep uncompacted */
 export const MIN_RECENT_MESSAGES = 10;
-
-// ---------------------------------------------------------------------------
-// Three-tier compaction constants
-// ---------------------------------------------------------------------------
-
-/** Number of most-recent messages always kept verbatim (Tier 1) */
-export const TIER1_VERBATIM_COUNT = 20;
-
-/** Age threshold in days beyond which messages are demoted to Tier 3 (entity facts) */
-export const TIER3_AGE_DAYS = 7;
 
 /** Default compaction configuration */
 export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
@@ -307,11 +276,9 @@ export class CopilotSessionService {
   // ===========================================================================
 
   /**
-   * Check if a conversation needs compaction.
-   * When modelId is provided the threshold is computed dynamically;
-   * otherwise falls back to the configured (or default 80k) threshold.
+   * Check if a conversation needs compaction
    */
-  async needsCompaction(conversationId: string, modelId?: string): Promise<boolean> {
+  async needsCompaction(conversationId: string): Promise<boolean> {
     const { data } = await this.supabase
       .from('copilot_conversations')
       .select('total_tokens_estimate')
@@ -319,8 +286,7 @@ export class CopilotSessionService {
       .single();
 
     if (!data) return false;
-    const threshold = modelId ? getCompactionThreshold(modelId) : this.config.compactionThreshold;
-    return data.total_tokens_estimate > threshold;
+    return data.total_tokens_estimate > this.config.compactionThreshold;
   }
 
   /**
@@ -542,163 +508,6 @@ export class CopilotSessionService {
         error: error instanceof Error ? error.message : String(error),
       };
     }
-  }
-
-  // ===========================================================================
-  // Three-Tier Compaction
-  // ===========================================================================
-
-  /**
-   * Three-tier semantic compaction. Runs ASYNCHRONOUSLY — call without await
-   * so it never adds user-visible latency. Falls back to the original single-
-   * tier compactSession() if anything goes wrong.
-   *
-   * Tier 1 — Last TIER1_VERBATIM_COUNT messages: kept verbatim, untouched.
-   * Tier 2 — Older messages within the past TIER3_AGE_DAYS days: summarised
-   *           via a lightweight AI call (decisions, actions, deal stages,
-   *           entities, preferences).
-   * Tier 3 — Messages older than TIER3_AGE_DAYS days: reduced to structured
-   *           entity-relationship facts stored in copilot_memories.
-   */
-  async compactWithTiers(
-    conversationId: string,
-    userId: string,
-    anthropicClient: { messages: { create: (params: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }> } },
-    memoryService: { extractMemories: (messages: CopilotMessage[], client: unknown, model: string) => Promise<Array<{ category: string; subject: string; content: string; confidence: number }>>; linkMemoriesToEntities: (userId: string, memories: unknown[]) => Promise<unknown[]>; storeMemories: (memories: unknown[]) => Promise<unknown[]> },
-    model: string = 'claude-haiku-4-5'
-  ): Promise<CompactionResult> {
-    try {
-      const messages = await this.loadAllMessages(conversationId);
-
-      if (messages.length === 0) {
-        return { success: true, summarizedCount: 0, memoriesExtracted: 0, tokensBefore: 0, tokensAfter: 0 };
-      }
-
-      const tokensBefore = messages.reduce((sum, msg) => sum + estimateMessageTokens(msg), 0);
-      const now = Date.now();
-      const tier3Cutoff = now - TIER3_AGE_DAYS * 24 * 60 * 60 * 1000;
-
-      // Partition messages into tiers (messages are already in chronological order)
-      const tier1Start = Math.max(0, messages.length - TIER1_VERBATIM_COUNT);
-      const tier1Messages = messages.slice(tier1Start); // keep verbatim
-      const olderMessages = messages.slice(0, tier1Start);
-
-      const tier2Messages = olderMessages.filter(
-        (m) => new Date(m.created_at).getTime() >= tier3Cutoff
-      );
-      const tier3Messages = olderMessages.filter(
-        (m) => new Date(m.created_at).getTime() < tier3Cutoff
-      );
-
-      // Nothing old enough to compact — nothing to do
-      if (tier2Messages.length === 0 && tier3Messages.length === 0) {
-        return { success: true, summarizedCount: 0, memoriesExtracted: 0, tokensBefore, tokensAfter: tokensBefore };
-      }
-
-      let totalSummarized = 0;
-      let totalMemoriesExtracted = 0;
-      let summaryId: string | undefined;
-
-      // -----------------------------------------------------------------------
-      // Tier 3: convert old messages to structured entity-relationship facts
-      // -----------------------------------------------------------------------
-      if (tier3Messages.length > 0) {
-        const extractedMemories = await memoryService.extractMemories(tier3Messages, anthropicClient, model);
-        const linkedMemories = await memoryService.linkMemoriesToEntities(userId, extractedMemories);
-        await memoryService.storeMemories(linkedMemories);
-        totalMemoriesExtracted += extractedMemories.length;
-
-        // Mark tier3 messages compacted
-        await this.markCompacted(tier3Messages.map((m) => m.id));
-        totalSummarized += tier3Messages.length;
-      }
-
-      // -----------------------------------------------------------------------
-      // Tier 2: summarise recent-but-not-verbatim messages
-      // -----------------------------------------------------------------------
-      if (tier2Messages.length > 0) {
-        const tier2Summary = await this.generateTier2Summary(tier2Messages, anthropicClient, model);
-        const keyPoints = this.extractKeyPoints(tier2Summary);
-
-        const tokensAfterTier2 = tier1Messages.reduce((sum, msg) => sum + estimateMessageTokens(msg), 0);
-        const summaryRecord = await this.storeSummary(
-          conversationId,
-          userId,
-          tier2Summary,
-          keyPoints,
-          tier2Messages,
-          tokensBefore,
-          tokensAfterTier2 + estimateTokens(tier2Summary)
-        );
-        summaryId = summaryRecord.id;
-
-        // Extract memories from tier 2 as well
-        const tier2Memories = await memoryService.extractMemories(tier2Messages, anthropicClient, model);
-        const linked2 = await memoryService.linkMemoriesToEntities(userId, tier2Memories);
-        await memoryService.storeMemories(linked2);
-        totalMemoriesExtracted += tier2Memories.length;
-
-        await this.markCompacted(tier2Messages.map((m) => m.id));
-        totalSummarized += tier2Messages.length;
-      }
-
-      // Update conversation metadata
-      await this.updateTokenEstimate(conversationId);
-      await this.updateLastCompaction(conversationId);
-
-      const tokensAfter = tier1Messages.reduce((sum, msg) => sum + estimateMessageTokens(msg), 0);
-
-      return {
-        success: true,
-        summarizedCount: totalSummarized,
-        memoriesExtracted: totalMemoriesExtracted,
-        tokensBefore,
-        tokensAfter,
-        summaryId,
-      };
-    } catch (error) {
-      console.error('[CopilotSessionService] compactWithTiers error, falling back:', error);
-      // Fall back to the original single-tier compaction
-      return this.compactSession(conversationId, userId, anthropicClient, memoryService, model);
-    }
-  }
-
-  /**
-   * Generate a Tier 2 summary that captures decisions, action items, deal
-   * stage changes, entities mentioned, and user preferences.
-   */
-  private async generateTier2Summary(
-    messages: CopilotMessage[],
-    anthropicClient: { messages: { create: (params: unknown) => Promise<{ content: Array<{ type: string; text?: string }> }> } },
-    model: string
-  ): Promise<string> {
-    const conversationText = messages
-      .map((m) => `[${m.role}]: ${m.content}`)
-      .join('\n\n');
-
-    const response = await anthropicClient.messages.create({
-      model,
-      max_tokens: 1024,
-      system: `You are summarising a sales assistant conversation for compact storage.
-Produce a structured summary under these headings (omit any that are empty):
-
-**Decisions & Conclusions**: Key decisions reached or conclusions drawn.
-**Actions & Follow-ups**: Specific actions committed, tasks created, emails sent or scheduled.
-**Deal Stage Changes**: Any pipeline changes, stage movements, or deal updates mentioned.
-**Entities**: People, companies, and deals referenced (name and role/context).
-**User Preferences**: Communication preferences, report formats, or working-style notes.
-
-Be concise — aim for under 400 words total. Only include information that would genuinely help continue the conversation.`,
-      messages: [
-        {
-          role: 'user',
-          content: `Summarise this conversation segment:\n\n${conversationText}`,
-        },
-      ],
-    });
-
-    const textContent = response.content.find((c) => c.type === 'text');
-    return textContent?.text || '';
   }
 
   /**

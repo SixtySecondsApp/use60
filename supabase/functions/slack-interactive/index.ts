@@ -46,7 +46,7 @@ import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const slackSigningSecret = Deno.env.get('SLACK_SIGNING_SECRET');
-const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://app.use60.com';
+const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://use60.com';
 
 interface SlackUser {
   id: string;
@@ -248,7 +248,7 @@ async function postToChannel(
     body: JSON.stringify({
       channel: channelId,
       blocks: message.blocks,
-      text: message.text, unfurl_links: false, unfurl_media: false,
+      text: message.text,
     }),
   });
 }
@@ -869,7 +869,7 @@ Return JSON: { "subject": "...", "body": "..." }`;
         body: JSON.stringify({
           channel: dmChannelId,
           blocks: hitlBlocks,
-          text: `Follow-up draft ready for ${recipientName || 'your contact'}`, unfurl_links: false, unfurl_media: false,
+          text: `Follow-up draft ready for ${recipientName || 'your contact'}`,
         }),
       });
     }
@@ -4312,7 +4312,7 @@ async function handleDraftReplySubmission(
     body: JSON.stringify({
       channel: meta.channelId,
       thread_ts: meta.threadTs, // Reply in thread
-      text: replyText, unfurl_links: false, unfurl_media: false,
+      text: replyText,
       blocks: [
         {
           type: 'section',
@@ -7443,7 +7443,7 @@ async function handleImpSendPreread(
         body: JSON.stringify({
           channel: openDm.channel.id,
           blocks: prereadMsg.blocks,
-          text: prereadMsg.text, unfurl_links: false, unfurl_media: false,
+          text: prereadMsg.text,
         }),
       });
 
@@ -7465,137 +7465,6 @@ async function handleImpSendPreread(
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-}
-
-// ============================================================================
-// CC-011: Command Centre HITL action handlers
-// Format: cc_approve::{item_id}, cc_dismiss::{item_id}
-// Writes slack_message_ts + slack_channel_id to command_centre_items for
-// bi-directional status sync.
-// ============================================================================
-
-async function handleCCApprove(
-  supabase: ReturnType<typeof createClient>,
-  payload: InteractivePayload,
-  action: SlackAction,
-  corsHeaders: Record<string, string>,
-): Promise<Response> {
-  const parts = action.action_id.split('::');
-  const itemId = parts[1];
-
-  if (!itemId) {
-    console.error('[CC-011] cc_approve: missing item_id in action_id:', action.action_id);
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  // Update status to approved
-  const { error: statusError } = await supabase
-    .from('command_centre_items')
-    .update({ status: 'approved' })
-    .eq('id', itemId);
-
-  if (statusError) {
-    console.error('[CC-011] cc_approve: failed to update status:', statusError);
-  }
-
-  // Store Slack message reference for bi-directional sync
-  if (payload.message?.ts && payload.channel?.id) {
-    const { error: syncError } = await supabase
-      .from('command_centre_items')
-      .update({
-        slack_message_ts: payload.message.ts,
-        slack_channel_id: payload.channel.id,
-      })
-      .eq('id', itemId);
-
-    if (syncError) {
-      console.error('[CC-011] cc_approve: failed to store slack ref:', syncError);
-    }
-  }
-
-  // Acknowledge to Slack with ephemeral confirmation
-  if (payload.response_url) {
-    await fetch(payload.response_url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        response_type: 'ephemeral',
-        text: 'Item approved.',
-        replace_original: false,
-      }),
-    });
-  }
-
-  console.log(`[CC-011] Approved CC item ${itemId} via Slack`);
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
-
-async function handleCCDismiss(
-  supabase: ReturnType<typeof createClient>,
-  payload: InteractivePayload,
-  action: SlackAction,
-  corsHeaders: Record<string, string>,
-): Promise<Response> {
-  const parts = action.action_id.split('::');
-  const itemId = parts[1];
-
-  if (!itemId) {
-    console.error('[CC-011] cc_dismiss: missing item_id in action_id:', action.action_id);
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  // Update status to dismissed
-  const { error: statusError } = await supabase
-    .from('command_centre_items')
-    .update({ status: 'dismissed', resolved_at: new Date().toISOString() })
-    .eq('id', itemId);
-
-  if (statusError) {
-    console.error('[CC-011] cc_dismiss: failed to update status:', statusError);
-  }
-
-  // Store Slack message reference for bi-directional sync
-  if (payload.message?.ts && payload.channel?.id) {
-    const { error: syncError } = await supabase
-      .from('command_centre_items')
-      .update({
-        slack_message_ts: payload.message.ts,
-        slack_channel_id: payload.channel.id,
-      })
-      .eq('id', itemId);
-
-    if (syncError) {
-      console.error('[CC-011] cc_dismiss: failed to store slack ref:', syncError);
-    }
-  }
-
-  // Acknowledge to Slack with ephemeral confirmation
-  if (payload.response_url) {
-    await fetch(payload.response_url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        response_type: 'ephemeral',
-        text: 'Item dismissed.',
-        replace_original: false,
-      }),
-    });
-  }
-
-  console.log(`[CC-011] Dismissed CC item ${itemId} via Slack`);
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
 }
 
 serve(async (req) => {
@@ -7998,7 +7867,6 @@ serve(async (req) => {
           'run_sequence_', 'confirm_', 'dismiss_',
           'get_more_info', 'view_brief', 'draft_email_',
           'proactive_', 'copilot_',
-          'task_action_', 'meeting_prep_confirm', 'meeting_prep_skip',
         ];
         const isProactiveAction = proactiveActionPrefixes.some(
           prefix => action.action_id === prefix || action.action_id.startsWith(prefix)
@@ -8280,91 +8148,6 @@ serve(async (req) => {
         } else if (action.action_id === 'eod_add_task') {
           // Open the add-task modal (reuse existing modal handler)
           return handleOpenAddTaskModal(supabase, payload);
-        }
-
-        // =====================================================================
-        // CC-011: Command Centre HITL action handlers
-        // Format: cc_approve::{item_id}, cc_dismiss::{item_id}
-        // =====================================================================
-        if (action.action_id.startsWith('cc_approve::')) {
-          return handleCCApprove(supabase, payload, action, corsHeaders);
-        } else if (action.action_id.startsWith('cc_dismiss::')) {
-          return handleCCDismiss(supabase, payload, action, corsHeaders);
-        } else if (action.action_id.startsWith('cc_view::') ||
-                   action.action_id.startsWith('cc_edit::') ||
-                   action.action_id.startsWith('cc_snooze::') ||
-                   action.action_id === 'cc_open_command_centre' ||
-                   action.action_id === 'cc_show_all_normal') {
-          // URL-based buttons — Slack handles the navigation, just acknowledge
-          return new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
-        // =====================================================================
-        // FUV2-005: Follow-up email action handlers
-        // Actions: followup_approve, followup_edit, followup_dismiss
-        // =====================================================================
-        if (action.action_id === 'followup_dismiss') {
-          console.log('[Follow-Up] Dismiss:', action.value);
-          if (payload.response_url) {
-            const confirmation = buildActionConfirmation({
-              action: 'dismissed',
-              slackUserId: payload.user.id,
-              timestamp: new Date().toISOString(),
-              entitySummary: 'Follow-up email',
-            });
-            await updateMessage(payload.response_url, confirmation.blocks);
-          }
-          return new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
-        if (action.action_id === 'followup_edit') {
-          const meetingId = action.value;
-          console.log('[Follow-Up] Edit in app, meeting_id:', meetingId);
-          const editUrl = `${appUrl}/platform/follow-up-demo?meeting_id=${meetingId}`;
-          if (payload.response_url) {
-            const blocks = [
-              section(`*Opening in app...* Edit your follow-up email before sending.`),
-              section(`<${editUrl}|Open Follow-Up Editor>`),
-              contextBlock([`Requested by <@${payload.user.id}> at ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`]),
-            ];
-            await updateMessage(payload.response_url, blocks);
-          }
-          return new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
-        if (action.action_id === 'followup_approve') {
-          let approveData: { meeting_id?: string; to?: string; subject?: string } = {};
-          try {
-            approveData = JSON.parse(action.value || '{}');
-          } catch {
-            approveData = {};
-          }
-          console.log('[Follow-Up] Approve:', approveData);
-          if (payload.response_url) {
-            const confirmation = buildActionConfirmation({
-              action: 'approved',
-              slackUserId: payload.user.id,
-              timestamp: new Date().toISOString(),
-              entitySummary: approveData.subject
-                ? `Follow-up to ${approveData.to}: ${approveData.subject}`
-                : 'Follow-up email',
-              detail: 'Email sending will be available once email-send-as-rep is integrated.',
-            });
-            await updateMessage(payload.response_url, confirmation.blocks);
-          }
-          return new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
         }
 
         // Unknown action - just acknowledge

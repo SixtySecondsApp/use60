@@ -287,18 +287,18 @@ Create visually stunning, interactive Slack messages that drive engagement and a
 }
 ```
 
-## Typography-First Visual Design
+## Emoji Patterns for Sales Bots
 
-No emoji in messages. Use clean typography and text labels:
+Use consistent emoji for instant recognition:
 
-| Need | Pattern | Example |
-|------|---------|---------|
-| Severity | Bold text labels | `*Critical*`, `*High*`, `*Medium*`, `Low` |
-| Score bars | Unicode block chars | `████████░░ 80%` |
-| Trends | Text deltas | `+3%`, `-2%`, `flat` |
-| List items | Bullet points | `• Item one` |
-| Status | Plain text | `Active`, `At Risk`, `Stale (14 days)` |
-| Emphasis | Bold/italic mrkdwn | `*Deal Name*`, `_context note_` |
+| Category | Emoji | Use For |
+|----------|-------|---------|
+| Urgency | 🔥 🚨 ⚡ | Hot leads, urgent actions |
+| Success | 🎉 ✅ 🏆 💰 | Wins, completions, revenue |
+| Warning | ⚠️ 🟡 ⏰ | At-risk deals, deadlines |
+| Status | 🟢 🟡 🔴 | Health indicators |
+| Actions | 📞 📧 📅 📋 | Call, email, meeting, notes |
+| Data | 📊 📈 💹 | Reports, analytics, trends |
 
 ## Slack Block Kit Limits (CRITICAL)
 
@@ -327,15 +327,14 @@ No emoji in messages. Use clean typography and text labels:
 
 ## Common Mistakes to Avoid
 
-- **Too many blocks** - Keep under 10 blocks total
-- **Wall of text** - Break into scannable chunks
-- **No clear action** - Always include at least one button
-- **Missing context** - Include who/when/why metadata
-- **Emoji in messages** - Use text labels and bold instead
-- **Button text too long** - Max 24 characters recommended
-- **Value + URL on same button** - Slack may reject this
-- **Exceeding character limits** - Truncate long text before building blocks
-- **Missing deep links** - Every notification referencing a deal/contact/meeting must include a link footer
+❌ **Too many blocks** - Keep under 10 blocks total
+❌ **Wall of text** - Break into scannable chunks
+❌ **No clear action** - Always include at least one button
+❌ **Missing context** - Include who/when/why metadata
+❌ **Inconsistent emoji** - Stick to your emoji vocabulary
+❌ **Button text too long** - Max 24 characters recommended
+❌ **Value + URL on same button** - Slack may reject this
+❌ **Exceeding character limits** - Truncate long text before building blocks
 
 ## Our Implementation
 

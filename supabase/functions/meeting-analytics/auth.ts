@@ -33,17 +33,11 @@ export async function extractAuthContext(req: Request): Promise<AuthContext | nu
 
   if (!supabaseUrl || !serviceRoleKey) return null;
 
-  // Service role (server-to-server, e.g. pg_net sync, RAG client)
-  // Also accepts x-edge-function-secret header for inter-function calls
-  const edgeFunctionSecret = Deno.env.get('EDGE_FUNCTION_SECRET');
-  const internalSecret = req.headers.get('x-edge-function-secret')?.trim();
-  const isEdgeFunctionCall = edgeFunctionSecret && internalSecret && internalSecret === edgeFunctionSecret;
-
-  if (token === serviceRoleKey || isEdgeFunctionCall) {
-    const requestedOrgId = req.headers.get('X-Org-Id')?.trim();
+  // Service role (server-to-server, e.g. pg_net sync)
+  if (token === serviceRoleKey) {
     return {
       userId: '',
-      orgId: requestedOrgId || '',
+      orgId: '',
       isServiceRole: true,
     };
   }

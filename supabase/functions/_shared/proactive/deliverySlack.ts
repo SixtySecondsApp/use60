@@ -1,50 +1,11 @@
 /**
  * Slack Delivery for Proactive Notifications
- *
+ * 
  * Handles sending Slack DMs and channel messages with safe block rendering.
  */
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { ProactiveNotificationPayload } from './types.ts';
-import { buildCompactNotification } from '../slackBlocks.ts';
-
-// =============================================================================
-// SLK-014: Notification Tier Routing
-// =============================================================================
-
-export type NotificationTier = 'full_card' | 'compact' | 'silent_thread';
-
-const NOTIFICATION_TIER_MAP: Record<string, NotificationTier> = {
-  // Full card — needs user action or is high-impact
-  'hitl_approval': 'full_card',
-  'meeting_prep': 'full_card',
-  'meeting_briefing': 'full_card',
-  'meeting_debrief': 'full_card',
-  'deal_won': 'full_card',
-  'deal_lost': 'full_card',
-  'morning_brief': 'full_card',
-  'follow_up_draft': 'full_card',
-  'eod_synthesis': 'full_card',
-
-  // Compact — FYI, no action needed
-  'deal_stage_change': 'compact',
-  'email_reply': 'compact',
-  'task_completed': 'compact',
-  'deal_activity': 'compact',
-  'win_probability_change': 'compact',
-  'crm_update': 'compact',
-
-  // Silent thread — low-priority, accumulated daily
-  'account_signal': 'silent_thread',
-  'coaching_micro': 'silent_thread',
-  'coaching_weekly': 'silent_thread',
-  'reengagement': 'silent_thread',
-  'stale_deal': 'silent_thread',
-};
-
-export function getNotificationTier(notificationType: string): NotificationTier {
-  return NOTIFICATION_TIER_MAP[notificationType] || 'full_card';
-}
 
 interface SlackDeliveryOptions {
   botToken: string;
@@ -89,8 +50,6 @@ export async function sendSlackDM(
     const messagePayload: any = {
       channel: channelId,
       text: text || 'Notification from use60',
-      unfurl_links: false,
-      unfurl_media: false,
     };
 
     if (blocks && blocks.length > 0) {
@@ -288,113 +247,11 @@ export async function deliverToSlack(
     };
   }
 
-  // AOA-006: Load agent persona for voice injection
-  const persona = await loadAgentPersona(supabase, payload.recipientUserId);
-  const agentName = persona?.agent_name || 'Sixty';
-
-  // SLK-014: Determine notification tier and route accordingly
-  const tier = getNotificationTier(payload.type);
-  console.log(`[proactive/deliverySlack] Tier for "${payload.type}": ${tier}`);
-
-  // --- Silent thread tier (SLK-016) ---
-  if (tier === 'silent_thread') {
-    try {
-      // Open DM channel to get channel ID
-      const openDmResponse = await fetch('https://slack.com/api/conversations.open', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${botToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ users: payload.recipientSlackUserId }),
-      });
-      const openDmData = await openDmResponse.json();
-
-      if (!openDmData.ok || !openDmData.channel?.id) {
-        return { sent: false, error: `Failed to open DM for silent thread: ${openDmData.error || 'Unknown error'}` };
-      }
-
-      const signalMessage = `[${agentName}] ${payload.message || payload.title || 'Signal'}`;
-      await sendSilentThreadNotification(
-        botToken,
-        openDmData.channel.id,
-        payload.recipientUserId,
-        signalMessage,
-        supabase,
-      );
-
-      return { sent: true, channelId: openDmData.channel.id };
-    } catch (err) {
-      console.error('[proactive/deliverySlack] Silent thread error:', err);
-      return { sent: false, error: err instanceof Error ? err.message : 'Silent thread error' };
-    }
-  }
-
-  // --- Compact tier (SLK-015) ---
-  if (tier === 'compact') {
-    const compactData = {
-      type: payload.type,
-      entityName: payload.title || 'Update',
-      action: payload.message || '',
-      appUrl: 'https://app.use60.com',
-      dealId: payload.metadata?.dealId as string | undefined,
-      contactId: payload.metadata?.contactId as string | undefined,
-      meetingId: payload.metadata?.meetingId as string | undefined,
-    };
-    const compactMessage = buildCompactNotification(compactData);
-
-    const personalizedBlocks = injectPersonaHeader(compactMessage.blocks, agentName);
-    const personalizedText = `[${agentName}] ${compactMessage.text}`;
-
-    const result = await sendSlackDM({
-      botToken,
-      slackUserId: payload.recipientSlackUserId,
-      blocks: personalizedBlocks,
-      text: personalizedText,
-    });
-
-    let interactionId: string | undefined;
-    if (result.success) {
-      try {
-        const { data, error } = await supabase.rpc('record_notification_interaction', {
-          p_user_id: payload.recipientUserId,
-          p_org_id: payload.orgId,
-          p_notification_type: payload.type,
-          p_delivered_via: 'slack_dm',
-        });
-        if (error) {
-          console.error('[proactive/deliverySlack] Error recording interaction:', error);
-        } else {
-          interactionId = data as string;
-        }
-      } catch (err) {
-        console.error('[proactive/deliverySlack] Error recording interaction:', err);
-      }
-    }
-
-    return {
-      sent: result.success,
-      channelId: result.channelId,
-      ts: result.ts,
-      error: result.error,
-      interactionId,
-    };
-  }
-
-  // --- Full card tier (default) ---
-  // Inject persona name prefix into message text
-  const personalizedText = `[${agentName}] ${payload.message || 'Notification'}`;
-
-  // Inject persona header into blocks if present
-  const personalizedBlocks = payload.blocks
-    ? injectPersonaHeader(payload.blocks, agentName)
-    : undefined;
-
   const result = await sendSlackDM({
     botToken,
     slackUserId: payload.recipientSlackUserId,
-    blocks: personalizedBlocks || payload.blocks,
-    text: personalizedText,
+    blocks: payload.blocks,
+    text: payload.message,
   });
 
   // Record notification interaction for Smart Engagement Algorithm
@@ -425,168 +282,4 @@ export async function deliverToSlack(
     error: result.error,
     interactionId,
   };
-}
-
-/**
- * AOA-006: Load agent persona for a user (with defaults fallback)
- */
-async function loadAgentPersona(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<{ agent_name: string; tone: string } | null> {
-  try {
-    const { data } = await supabase
-      .from('agent_persona')
-      .select('agent_name, tone')
-      .eq('user_id', userId)
-      .maybeSingle();
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * AOA-006: Inject agent persona name into Slack Block Kit blocks.
- * Adds a context block at the top with the agent's name if the first block isn't already a context.
- */
-function injectPersonaHeader(blocks: any[], agentName: string): any[] {
-  if (!blocks || blocks.length === 0) return blocks;
-
-  // Don't double-inject if first block is already a context with the agent name
-  if (blocks[0]?.type === 'context' && JSON.stringify(blocks[0]).includes(agentName)) {
-    return blocks;
-  }
-
-  const personaContext = {
-    type: 'context',
-    elements: [
-      {
-        type: 'mrkdwn',
-        text: `*${agentName}* | Your AI Sales Agent`,
-      },
-    ],
-  };
-
-  return [personaContext, ...blocks];
-}
-
-// =============================================================================
-// SLK-016: Silent Thread Daily Accumulator
-// =============================================================================
-
-/**
- * Send a low-priority notification as a reply in a daily digest thread.
- * Creates the thread on first signal of the day, accumulates subsequent
- * signals as replies within the same thread.
- */
-export async function sendSilentThreadNotification(
-  botToken: string,
-  channelId: string,
-  userId: string,
-  message: string,
-  supabase: SupabaseClient,
-): Promise<void> {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
-  // Check if we already have a daily thread for this user
-  const { data: existingThread } = await supabase
-    .from('slack_notifications_sent')
-    .select('slack_ts, metadata')
-    .eq('recipient_id', userId)
-    .eq('feature', 'daily_signal_thread')
-    .gte('sent_at', `${today}T00:00:00Z`)
-    .order('sent_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (existingThread?.slack_ts) {
-    // Append to existing thread
-    try {
-      await fetch('https://slack.com/api/chat.postMessage', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${botToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: channelId,
-          thread_ts: existingThread.slack_ts,
-          text: message,
-        }),
-      });
-
-      // Update thread root message count
-      const count = ((existingThread.metadata as Record<string, number>)?.signal_count || 1) + 1;
-      const dateLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-
-      await fetch('https://slack.com/api/chat.update', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${botToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: channelId,
-          ts: existingThread.slack_ts,
-          text: `Signals — ${dateLabel} (${count} today)`,
-        }),
-      });
-
-      // Update metadata with new count
-      await supabase
-        .from('slack_notifications_sent')
-        .update({ metadata: { signal_count: count } })
-        .eq('slack_ts', existingThread.slack_ts);
-
-    } catch (err) {
-      console.error('[deliverySlack] Error appending to signal thread:', err);
-    }
-  } else {
-    // Create new daily thread
-    try {
-      const dateLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-      const threadRes = await fetch('https://slack.com/api/chat.postMessage', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${botToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: channelId,
-          text: `Signals — ${dateLabel}`,
-        }),
-      });
-
-      const threadData = await threadRes.json();
-
-      if (threadData.ok && threadData.ts) {
-        // Record the thread root
-        await supabase.from('slack_notifications_sent').insert({
-          recipient_id: userId,
-          feature: 'daily_signal_thread',
-          slack_ts: threadData.ts,
-          slack_channel_id: channelId,
-          sent_at: new Date().toISOString(),
-          metadata: { signal_count: 1 },
-        });
-
-        // Post the first signal as a thread reply
-        await fetch('https://slack.com/api/chat.postMessage', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${botToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            channel: channelId,
-            thread_ts: threadData.ts,
-            text: message,
-          }),
-        });
-      }
-    } catch (err) {
-      console.error('[deliverySlack] Error creating signal thread:', err);
-    }
-  }
 }
