@@ -7,7 +7,7 @@
 -- Note: pg_cron extension must be enabled. If it doesn't exist, this migration
 -- is documentation-only — the function can be triggered via fleet orchestrator instead.
 
-DO $$
+DO $outer$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
     -- Remove existing job if any
@@ -18,7 +18,7 @@ BEGIN
     PERFORM cron.schedule(
       'deal-memory-commitment-tracker',
       '0 8 * * *',
-      $$
+      $cron$
         SELECT net.http_post(
           url := current_setting('app.supabase_url') || '/functions/v1/memory-commitment-tracker',
           headers := jsonb_build_object(
@@ -27,11 +27,11 @@ BEGIN
           ),
           body := '{}'::jsonb
         );
-      $$
+      $cron$
     );
 
     RAISE NOTICE 'Scheduled deal-memory-commitment-tracker cron job (daily 8am UTC)';
   ELSE
     RAISE NOTICE 'pg_cron not available — commitment tracker will be triggered via fleet orchestrator';
   END IF;
-END $$;
+END $outer$;
