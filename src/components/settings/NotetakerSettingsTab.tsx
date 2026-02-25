@@ -65,6 +65,7 @@ import {
   ExternalLink,
   Loader2,
   Link2,
+  Unlink,
   Pencil,
   ChevronUp,
   ChevronDown,
@@ -220,7 +221,9 @@ export const NotetakerSettingsTab: React.FC = () => {
     primaryCalendar: meetingBaaSCalendar,
     isLoading: meetingBaaSLoading,
     isConnecting: meetingBaaSConnecting,
+    isDisconnecting: meetingBaaSDisconnecting,
     connect: connectMeetingBaaSCalendar,
+    disconnect: disconnectMeetingBaaSCalendar,
     refetch: refetchMeetingBaaSCalendar,
   } = useMeetingBaaSCalendar()
 
@@ -242,6 +245,7 @@ export const NotetakerSettingsTab: React.FC = () => {
   const [joinAllMeetings, setJoinAllMeetings] = useState(true)
   const [selectedCalendarId, setSelectedCalendarId] = useState('primary')
   const [saving, setSaving] = useState(false)
+  const [showDisconnectDialog, setShowDisconnectDialog] = useState(false)
 
   // Rule Modal state (shared between add and edit)
   const [showRuleModal, setShowRuleModal] = useState(false)
@@ -1103,9 +1107,20 @@ export const NotetakerSettingsTab: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                <Badge variant="default" className="bg-emerald-600">
-                  Active
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="default" className="bg-emerald-600">
+                    Active
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    onClick={() => setShowDisconnectDialog(true)}
+                  >
+                    <Unlink className="h-4 w-4 mr-1" />
+                    Disconnect
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1154,6 +1169,64 @@ export const NotetakerSettingsTab: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Disconnect Confirmation Dialog */}
+            <Dialog open={showDisconnectDialog} onOpenChange={setShowDisconnectDialog}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Disconnect Bot Calendar Sync</DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to disconnect your calendar from bot scheduling?
+                    The 60 Notetaker will stop automatically joining your meetings.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 py-4">
+                  <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+                    <div className="text-sm text-amber-700 dark:text-amber-300">
+                      <p className="font-medium">What happens when you disconnect:</p>
+                      <ul className="mt-1 space-y-1 text-amber-600/80 dark:text-amber-400/80">
+                        <li>- Bot scheduling for future meetings will stop</li>
+                        <li>- Auto-recording will be disabled</li>
+                        <li>- Existing recordings will not be affected</li>
+                        <li>- You can reconnect at any time</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDisconnectDialog(false)}
+                    disabled={meetingBaaSDisconnecting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={async () => {
+                      try {
+                        await disconnectMeetingBaaSCalendar(meetingBaaSCalendar?.id || '')
+                        setShowDisconnectDialog(false)
+                      } catch (error) {
+                        console.error('[NotetakerSettingsTab] Disconnect error:', error)
+                      }
+                    }}
+                    disabled={meetingBaaSDisconnecting}
+                    className="gap-2"
+                  >
+                    {meetingBaaSDisconnecting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Disconnecting...
+                      </>
+                    ) : (
+                      'Disconnect Calendar'
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </CardContent>
         </Card>
       </motion.div>

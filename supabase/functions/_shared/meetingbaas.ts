@@ -213,12 +213,16 @@ export class MeetingBaaSClient {
     }
 
     try {
+      const headers: Record<string, string> = {
+        'x-meeting-baas-api-key': this.apiKey,
+      };
+      if (body) {
+        headers['Content-Type'] = 'application/json';
+      }
+
       const response = await fetch(url, {
         method,
-        headers: {
-          'x-meeting-baas-api-key': this.apiKey,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
       });
 
@@ -282,6 +286,16 @@ export class MeetingBaaSClient {
     error?: MeetingBaaSError;
   }> {
     return this.request('DELETE', `/v2/bots/${botId}`);
+  }
+
+  /**
+   * Delete a calendar connection (stops all bot scheduling)
+   */
+  async deleteCalendar(calendarId: string): Promise<{
+    data?: { success: boolean };
+    error?: MeetingBaaSError;
+  }> {
+    return this.request('DELETE', `/v2/calendars/${calendarId}`);
   }
 
   /**
