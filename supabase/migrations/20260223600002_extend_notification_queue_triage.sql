@@ -100,19 +100,37 @@ CREATE TABLE IF NOT EXISTS notification_batches (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Ensure columns exist (table may have been created by an earlier partial migration)
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS org_id UUID;
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS batch_type TEXT DEFAULT 'morning_briefing';
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'collecting';
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS item_count INT NOT NULL DEFAULT 0;
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS delivery_channel TEXT DEFAULT 'slack_dm';
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS delivery_result JSONB;
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE notification_batches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 -- =============================================================================
--- Indexes for notification_batches
+-- Indexes for notification_batches (safe — skip on any error)
 -- =============================================================================
 
--- Find user's collecting batches (for adding items)
-CREATE INDEX IF NOT EXISTS idx_notification_batches_collecting
-  ON notification_batches(user_id, batch_type, status)
-  WHERE status = 'collecting';
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_notification_batches_collecting
+    ON notification_batches(user_id, batch_type, status)
+    WHERE status = 'collecting';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
--- Find batches ready for delivery
-CREATE INDEX IF NOT EXISTS idx_notification_batches_ready
-  ON notification_batches(scheduled_for, status)
-  WHERE status = 'ready';
+DO $$ BEGIN
+  CREATE INDEX IF NOT EXISTS idx_notification_batches_ready
+    ON notification_batches(scheduled_for, status)
+    WHERE status = 'ready';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- =============================================================================
 -- RLS for notification_batches
@@ -120,25 +138,34 @@ CREATE INDEX IF NOT EXISTS idx_notification_batches_ready
 
 ALTER TABLE notification_batches ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can read own batches"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own batches"
   ON notification_batches FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access to notification_batches"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to notification_batches"
   ON notification_batches FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- FK: notification_queue.batch_id -> notification_batches.id
 -- =============================================================================
 
-ALTER TABLE notification_queue
-  ADD CONSTRAINT fk_notification_queue_batch
-  FOREIGN KEY (batch_id) REFERENCES notification_batches(id)
-  ON DELETE SET NULL;
+DO $$ BEGIN
+  ALTER TABLE notification_queue
+    ADD CONSTRAINT fk_notification_queue_batch
+    FOREIGN KEY (batch_id) REFERENCES notification_batches(id)
+    ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Trigger: Update updated_at on notification_batches
@@ -152,6 +179,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_notification_batches_updated_at ON notification_batches;
 CREATE TRIGGER update_notification_batches_updated_at
   BEFORE UPDATE ON notification_batches
   FOR EACH ROW

@@ -92,14 +92,18 @@ ALTER TABLE copilot_executions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE copilot_tool_calls ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own executions
-CREATE POLICY "Users can view own copilot executions"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own copilot executions"
   ON copilot_executions
   FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can view all executions in their org
-CREATE POLICY "Platform admins can view org copilot executions"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can view org copilot executions"
   ON copilot_executions
   FOR SELECT
   TO authenticated
@@ -109,16 +113,22 @@ CREATE POLICY "Platform admins can view org copilot executions"
       WHERE user_id = auth.uid() AND role IN ('admin', 'platform_admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can insert executions
-CREATE POLICY "Service role can insert copilot executions"
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert copilot executions"
   ON copilot_executions
   FOR INSERT
   TO service_role
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can view tool calls for their executions
-CREATE POLICY "Users can view own copilot tool calls"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own copilot tool calls"
   ON copilot_tool_calls
   FOR SELECT
   TO authenticated
@@ -127,13 +137,18 @@ CREATE POLICY "Users can view own copilot tool calls"
       SELECT id FROM copilot_executions WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can insert tool calls
-CREATE POLICY "Service role can insert copilot tool calls"
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert copilot tool calls"
   ON copilot_tool_calls
   FOR INSERT
   TO service_role
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Helper function for analytics dashboard

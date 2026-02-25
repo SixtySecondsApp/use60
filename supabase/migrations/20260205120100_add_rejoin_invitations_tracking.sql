@@ -32,13 +32,17 @@ ON public.rejoin_invitations(user_id, status);
 ALTER TABLE public.rejoin_invitations ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policy: Users can view their own invitations
-CREATE POLICY "Users can view own rejoin invitations"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own rejoin invitations"
 ON public.rejoin_invitations
 FOR SELECT
 USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policy: Org admins can view all invitations for their org
-CREATE POLICY "Org admins can view org rejoin invitations"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can view org rejoin invitations"
 ON public.rejoin_invitations
 FOR SELECT
 USING (
@@ -50,9 +54,12 @@ USING (
       AND member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policy: Org admins can insert rejoin invitations
-CREATE POLICY "Org admins can create rejoin invitations"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can create rejoin invitations"
 ON public.rejoin_invitations
 FOR INSERT
 WITH CHECK (
@@ -65,6 +72,8 @@ WITH CHECK (
       AND member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comment
 COMMENT ON TABLE public.rejoin_invitations IS 'Tracks admin-sent rejoin invitations for auto-approval';

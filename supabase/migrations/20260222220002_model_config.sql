@@ -158,20 +158,27 @@ ALTER TABLE public.model_health  ENABLE ROW LEVEL SECURITY;
 
 -- model_config policies
 DROP POLICY IF EXISTS "model_config_authenticated_read" ON public.model_config;
-CREATE POLICY "model_config_authenticated_read"
+DO $$ BEGIN
+  CREATE POLICY "model_config_authenticated_read"
   ON public.model_config FOR SELECT
   TO authenticated
   USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "model_config_service_all" ON public.model_config;
-CREATE POLICY "model_config_service_all"
+DO $$ BEGIN
+  CREATE POLICY "model_config_service_all"
   ON public.model_config FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "model_config_admin_update" ON public.model_config;
-CREATE POLICY "model_config_admin_update"
+DO $$ BEGIN
+  CREATE POLICY "model_config_admin_update"
   ON public.model_config FOR UPDATE
   TO authenticated
   USING (
@@ -188,20 +195,28 @@ CREATE POLICY "model_config_admin_update"
         AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- model_health policies
 DROP POLICY IF EXISTS "model_health_authenticated_read" ON public.model_health;
-CREATE POLICY "model_health_authenticated_read"
+DO $$ BEGIN
+  CREATE POLICY "model_health_authenticated_read"
   ON public.model_health FOR SELECT
   TO authenticated
   USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "model_health_service_all" ON public.model_health;
-CREATE POLICY "model_health_service_all"
+DO $$ BEGIN
+  CREATE POLICY "model_health_service_all"
   ON public.model_health FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 6. Grants

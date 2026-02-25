@@ -21,7 +21,8 @@
 
 -- Allow unauthenticated users to look up invitations by token
 -- This enables magic link acceptance without requiring authentication first
-CREATE POLICY "Allow public token lookup for invitation acceptance"
+DO $$ BEGIN
+  CREATE POLICY "Allow public token lookup for invitation acceptance"
 ON organization_invitations
 FOR SELECT
 TO public
@@ -31,6 +32,8 @@ USING (
   -- Only return invitations that haven't expired
   AND expires_at > NOW()
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comment explaining the policy
 COMMENT ON POLICY "Allow public token lookup for invitation acceptance"

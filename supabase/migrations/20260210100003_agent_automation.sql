@@ -51,41 +51,56 @@ CREATE INDEX IF NOT EXISTS idx_agent_triggers_active ON agent_triggers(is_active
 ALTER TABLE agent_schedules ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access
-CREATE POLICY "Service role full access to agent_schedules"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_schedules"
   ON agent_schedules
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org members can read their own org's schedules
-CREATE POLICY "Org members can view agent_schedules"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view agent_schedules"
   ON agent_schedules
   FOR SELECT
   TO authenticated
   USING (can_access_org_data(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can insert schedules
-CREATE POLICY "Org admins can insert agent_schedules"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can insert agent_schedules"
   ON agent_schedules
   FOR INSERT
   TO authenticated
   WITH CHECK (can_admin_org(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can update schedules
-CREATE POLICY "Org admins can update agent_schedules"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update agent_schedules"
   ON agent_schedules
   FOR UPDATE
   TO authenticated
   USING (can_admin_org(organization_id))
   WITH CHECK (can_admin_org(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can delete schedules
-CREATE POLICY "Org admins can delete agent_schedules"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can delete agent_schedules"
   ON agent_schedules
   FOR DELETE
   TO authenticated
   USING (can_admin_org(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Row Level Security — agent_triggers
@@ -94,41 +109,56 @@ CREATE POLICY "Org admins can delete agent_schedules"
 ALTER TABLE agent_triggers ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access
-CREATE POLICY "Service role full access to agent_triggers"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_triggers"
   ON agent_triggers
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org members can read their own org's triggers
-CREATE POLICY "Org members can view agent_triggers"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view agent_triggers"
   ON agent_triggers
   FOR SELECT
   TO authenticated
   USING (can_access_org_data(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can insert triggers
-CREATE POLICY "Org admins can insert agent_triggers"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can insert agent_triggers"
   ON agent_triggers
   FOR INSERT
   TO authenticated
   WITH CHECK (can_admin_org(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can update triggers
-CREATE POLICY "Org admins can update agent_triggers"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update agent_triggers"
   ON agent_triggers
   FOR UPDATE
   TO authenticated
   USING (can_admin_org(organization_id))
   WITH CHECK (can_admin_org(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can delete triggers
-CREATE POLICY "Org admins can delete agent_triggers"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can delete agent_triggers"
   ON agent_triggers
   FOR DELETE
   TO authenticated
   USING (can_admin_org(organization_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Auto-update updated_at triggers

@@ -144,9 +144,12 @@ COMMENT ON COLUMN public.attio_sync_history.snapshot IS
 ALTER TABLE public.dynamic_tables
   DROP CONSTRAINT IF EXISTS dynamic_tables_source_type_check;
 
-ALTER TABLE public.dynamic_tables
+DO $$ BEGIN
+  ALTER TABLE public.dynamic_tables
   ADD CONSTRAINT dynamic_tables_source_type_check
   CHECK (source_type IN ('manual', 'apollo', 'csv', 'copilot', 'hubspot', 'ops_table', 'attio'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Step 8: Add 'attio_property' to column_type CHECK + attio_property_name column
@@ -155,7 +158,8 @@ ALTER TABLE public.dynamic_tables
 ALTER TABLE public.dynamic_table_columns
   DROP CONSTRAINT IF EXISTS dynamic_table_columns_column_type_check;
 
-ALTER TABLE public.dynamic_table_columns
+DO $$ BEGIN
+  ALTER TABLE public.dynamic_table_columns
   ADD CONSTRAINT dynamic_table_columns_column_type_check
   CHECK (column_type IN (
     'text', 'email', 'url', 'number', 'boolean', 'enrichment',
@@ -163,6 +167,8 @@ ALTER TABLE public.dynamic_table_columns
     'dropdown', 'tags', 'phone', 'checkbox', 'formula',
     'integration', 'action', 'hubspot_property', 'attio_property'
   )) NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE public.dynamic_table_columns
   ADD COLUMN IF NOT EXISTS attio_property_name TEXT DEFAULT NULL;
@@ -202,45 +208,67 @@ ALTER TABLE public.attio_sync_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attio_sync_history ENABLE ROW LEVEL SECURITY;
 
 -- attio_org_integrations: org members can read, admins can write
-CREATE POLICY "attio_org_integrations_select"
+DO $$ BEGIN
+  CREATE POLICY "attio_org_integrations_select"
   ON public.attio_org_integrations FOR SELECT
   USING (is_service_role() OR can_access_org_data(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "attio_org_integrations_admin_all"
+DO $$ BEGIN
+  CREATE POLICY "attio_org_integrations_admin_all"
   ON public.attio_org_integrations
   USING (is_service_role() OR can_admin_org(org_id))
   WITH CHECK (is_service_role() OR can_admin_org(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- attio_org_credentials: service role ONLY
-CREATE POLICY "attio_org_credentials_service_all"
+DO $$ BEGIN
+  CREATE POLICY "attio_org_credentials_service_all"
   ON public.attio_org_credentials
   USING (is_service_role())
   WITH CHECK (is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- attio_oauth_states: service role ONLY
-CREATE POLICY "attio_oauth_states_service_all"
+DO $$ BEGIN
+  CREATE POLICY "attio_oauth_states_service_all"
   ON public.attio_oauth_states
   USING (is_service_role())
   WITH CHECK (is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- attio_settings: org members can read, admins can write
-CREATE POLICY "attio_settings_select"
+DO $$ BEGIN
+  CREATE POLICY "attio_settings_select"
   ON public.attio_settings FOR SELECT
   USING (is_service_role() OR can_access_org_data(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "attio_settings_admin_all"
+DO $$ BEGIN
+  CREATE POLICY "attio_settings_admin_all"
   ON public.attio_settings
   USING (is_service_role() OR can_admin_org(org_id))
   WITH CHECK (is_service_role() OR can_admin_org(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- attio_sync_queue: service role ONLY
-CREATE POLICY "attio_sync_queue_service_all"
+DO $$ BEGIN
+  CREATE POLICY "attio_sync_queue_service_all"
   ON public.attio_sync_queue
   USING (is_service_role())
   WITH CHECK (is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- attio_sync_history: org members can view via table access
-CREATE POLICY "attio_sync_history_select"
+DO $$ BEGIN
+  CREATE POLICY "attio_sync_history_select"
   ON public.attio_sync_history FOR SELECT
   USING (
     table_id IN (
@@ -251,11 +279,16 @@ CREATE POLICY "attio_sync_history_select"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "attio_sync_history_service_all"
+DO $$ BEGIN
+  CREATE POLICY "attio_sync_history_service_all"
   ON public.attio_sync_history
   USING (is_service_role())
   WITH CHECK (is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Step 12: Indexes

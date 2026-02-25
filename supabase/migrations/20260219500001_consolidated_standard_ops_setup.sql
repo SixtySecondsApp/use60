@@ -142,12 +142,15 @@ ALTER TABLE public.dynamic_tables
 ALTER TABLE public.dynamic_tables
   DROP CONSTRAINT IF EXISTS dynamic_tables_source_type_check;
 
-ALTER TABLE public.dynamic_tables
+DO $$ BEGIN
+  ALTER TABLE public.dynamic_tables
   ADD CONSTRAINT dynamic_tables_source_type_check
   CHECK (source_type IN (
     'manual', 'apollo', 'csv', 'copilot',
     'hubspot', 'attio', 'ops_table', 'standard'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add system/locked/source columns to dynamic_table_columns
 ALTER TABLE public.dynamic_table_columns

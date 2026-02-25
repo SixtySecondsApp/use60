@@ -80,21 +80,30 @@ ALTER TABLE sequence_jobs ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own jobs
 DROP POLICY IF EXISTS "Users can view own sequence jobs" ON sequence_jobs;
-CREATE POLICY "Users can view own sequence jobs"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own sequence jobs"
   ON sequence_jobs FOR SELECT
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can create jobs
 DROP POLICY IF EXISTS "Users can create sequence jobs" ON sequence_jobs;
-CREATE POLICY "Users can create sequence jobs"
+DO $$ BEGIN
+  CREATE POLICY "Users can create sequence jobs"
   ON sequence_jobs FOR INSERT
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own jobs
 DROP POLICY IF EXISTS "Users can update own sequence jobs" ON sequence_jobs;
-CREATE POLICY "Users can update own sequence jobs"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own sequence jobs"
   ON sequence_jobs FOR UPDATE
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Trigger: Auto-update updated_at

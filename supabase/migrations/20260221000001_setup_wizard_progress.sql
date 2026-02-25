@@ -38,9 +38,12 @@ CREATE INDEX IF NOT EXISTS idx_setup_wizard_user_org
 
 ALTER TABLE setup_wizard_progress ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users manage own setup wizard progress"
+DO $$ BEGIN
+  CREATE POLICY "Users manage own setup wizard progress"
   ON setup_wizard_progress FOR ALL
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RPC: Complete a setup wizard step, award credits idempotently
 CREATE OR REPLACE FUNCTION complete_setup_wizard_step(

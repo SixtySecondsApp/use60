@@ -10,7 +10,8 @@
 ALTER TABLE public.dynamic_table_columns
   DROP CONSTRAINT IF EXISTS dynamic_table_columns_column_type_check;
 
-ALTER TABLE public.dynamic_table_columns
+DO $$ BEGIN
+  ALTER TABLE public.dynamic_table_columns
   ADD CONSTRAINT dynamic_table_columns_column_type_check
   CHECK (column_type IN (
     'text', 'email', 'url', 'number', 'boolean', 'enrichment',
@@ -19,6 +20,8 @@ ALTER TABLE public.dynamic_table_columns
     'integration', 'action', 'button',
     'hubspot_property', 'apollo_property'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Step 2: Add apollo_property_name column

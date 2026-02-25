@@ -32,15 +32,19 @@ CREATE INDEX IF NOT EXISTS idx_agent_routing_log_created_at ON agent_routing_log
 ALTER TABLE agent_routing_log ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access
-CREATE POLICY "Service role full access to agent_routing_log"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_routing_log"
   ON agent_routing_log
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can view routing logs for their own executions
-CREATE POLICY "Users can view own agent routing logs"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own agent routing logs"
   ON agent_routing_log
   FOR SELECT
   TO authenticated
@@ -49,9 +53,12 @@ CREATE POLICY "Users can view own agent routing logs"
       SELECT id FROM copilot_executions WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can view all routing logs in their org
-CREATE POLICY "Platform admins can view org agent routing logs"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can view org agent routing logs"
   ON agent_routing_log
   FOR SELECT
   TO authenticated
@@ -64,6 +71,8 @@ CREATE POLICY "Platform admins can view org agent routing logs"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Notify PostgREST to reload schema
 NOTIFY pgrst, 'reload schema';

@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS public.org_settings (
 ALTER TABLE public.org_settings ENABLE ROW LEVEL SECURITY;
 
 -- Org members can view their org's settings
-CREATE POLICY "org_settings_select" ON public.org_settings
+DO $$ BEGIN
+  CREATE POLICY "org_settings_select" ON public.org_settings
   FOR SELECT
   USING (
     org_id IN (
@@ -57,9 +58,12 @@ CREATE POLICY "org_settings_select" ON public.org_settings
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only org admins can update settings
-CREATE POLICY "org_settings_update" ON public.org_settings
+DO $$ BEGIN
+  CREATE POLICY "org_settings_update" ON public.org_settings
   FOR UPDATE
   USING (
     org_id IN (
@@ -71,6 +75,8 @@ CREATE POLICY "org_settings_update" ON public.org_settings
     -- Enforce copilot_sharing ALWAYS remains false
     enable_copilot_sharing = false
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Create default settings for existing orgs
 INSERT INTO public.org_settings (org_id, enable_crm_sharing, enable_meeting_sharing, enable_task_sharing, enable_activity_sharing, enable_email_sharing)
@@ -229,29 +235,41 @@ DROP POLICY IF EXISTS "meetings_delete" ON public.meetings;
 -- Copilot conversations are ALWAYS user-private, regardless of org settings
 -- This prevents "perception attacks" where attackers manipulate AI context
 
-CREATE POLICY "copilot_conversations_select_v2" ON public.copilot_conversations
+DO $$ BEGIN
+  CREATE POLICY "copilot_conversations_select_v2" ON public.copilot_conversations
   FOR SELECT
   USING (
     user_id = auth.uid() -- User can only see their own conversations
     -- Service role explicitly NOT included here - use user-scoped client!
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "copilot_conversations_insert_v2" ON public.copilot_conversations
+DO $$ BEGIN
+  CREATE POLICY "copilot_conversations_insert_v2" ON public.copilot_conversations
   FOR INSERT
   WITH CHECK (
     user_id = auth.uid() -- User can only create their own conversations
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "copilot_conversations_update_v2" ON public.copilot_conversations
+DO $$ BEGIN
+  CREATE POLICY "copilot_conversations_update_v2" ON public.copilot_conversations
   FOR UPDATE
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "copilot_conversations_delete_v2" ON public.copilot_conversations
+DO $$ BEGIN
+  CREATE POLICY "copilot_conversations_delete_v2" ON public.copilot_conversations
   FOR DELETE
   USING (
     user_id = auth.uid() -- User can only delete their own conversations
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON POLICY "copilot_conversations_select_v2" ON public.copilot_conversations IS
   'SECURITY: Copilot conversations contain strategic intelligence and MUST remain strictly user-private. No org sharing, no admin access. Service role NOT allowed - use user-scoped client.';
@@ -260,7 +278,8 @@ COMMENT ON POLICY "copilot_conversations_select_v2" ON public.copilot_conversati
 -- PART 5: CONTACTS - DYNAMIC RLS BASED ON ORG SETTINGS
 -- =====================================================================
 
-CREATE POLICY "contacts_select_v2" ON public.contacts
+DO $$ BEGIN
+  CREATE POLICY "contacts_select_v2" ON public.contacts
   FOR SELECT
   USING (
     -- Own records
@@ -283,8 +302,11 @@ CREATE POLICY "contacts_select_v2" ON public.contacts
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "contacts_insert_v2" ON public.contacts
+DO $$ BEGIN
+  CREATE POLICY "contacts_insert_v2" ON public.contacts
   FOR INSERT
   WITH CHECK (
     -- Must be authenticated
@@ -292,26 +314,35 @@ CREATE POLICY "contacts_insert_v2" ON public.contacts
     -- Owner must be self (prevent impersonation)
     AND (owner_id = auth.uid() OR owner_id IS NULL)
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "contacts_update_v2" ON public.contacts
+DO $$ BEGIN
+  CREATE POLICY "contacts_update_v2" ON public.contacts
   FOR UPDATE
   USING (
     owner_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "contacts_delete_v2" ON public.contacts
+DO $$ BEGIN
+  CREATE POLICY "contacts_delete_v2" ON public.contacts
   FOR DELETE
   USING (
     owner_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- PART 6: DEALS - DYNAMIC RLS BASED ON ORG SETTINGS
 -- =====================================================================
 
-CREATE POLICY "deals_select_v2" ON public.deals
+DO $$ BEGIN
+  CREATE POLICY "deals_select_v2" ON public.deals
   FOR SELECT
   USING (
     -- Own records
@@ -334,8 +365,11 @@ CREATE POLICY "deals_select_v2" ON public.deals
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deals_insert_v2" ON public.deals
+DO $$ BEGIN
+  CREATE POLICY "deals_insert_v2" ON public.deals
   FOR INSERT
   WITH CHECK (
     -- Must be authenticated
@@ -343,26 +377,35 @@ CREATE POLICY "deals_insert_v2" ON public.deals
     -- Owner must be self
     AND owner_id = auth.uid()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deals_update_v2" ON public.deals
+DO $$ BEGIN
+  CREATE POLICY "deals_update_v2" ON public.deals
   FOR UPDATE
   USING (
     owner_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deals_delete_v2" ON public.deals
+DO $$ BEGIN
+  CREATE POLICY "deals_delete_v2" ON public.deals
   FOR DELETE
   USING (
     owner_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- PART 7: MEETINGS - DYNAMIC RLS BASED ON ORG SETTINGS
 -- =====================================================================
 
-CREATE POLICY "meetings_select_v2" ON public.meetings
+DO $$ BEGIN
+  CREATE POLICY "meetings_select_v2" ON public.meetings
   FOR SELECT
   USING (
     -- Own records
@@ -380,8 +423,11 @@ CREATE POLICY "meetings_select_v2" ON public.meetings
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meetings_insert_v2" ON public.meetings
+DO $$ BEGIN
+  CREATE POLICY "meetings_insert_v2" ON public.meetings
   FOR INSERT
   WITH CHECK (
     -- Must be authenticated
@@ -397,20 +443,28 @@ CREATE POLICY "meetings_insert_v2" ON public.meetings
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meetings_update_v2" ON public.meetings
+DO $$ BEGIN
+  CREATE POLICY "meetings_update_v2" ON public.meetings
   FOR UPDATE
   USING (
     owner_user_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meetings_delete_v2" ON public.meetings
+DO $$ BEGIN
+  CREATE POLICY "meetings_delete_v2" ON public.meetings
   FOR DELETE
   USING (
     owner_user_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- PART 8: TASKS - DYNAMIC RLS (DEFAULT: PRIVATE)
@@ -418,7 +472,8 @@ CREATE POLICY "meetings_delete_v2" ON public.meetings
 
 -- Note: Tasks default to private unless org explicitly enables sharing
 
-CREATE POLICY "tasks_select_v2" ON public.tasks
+DO $$ BEGIN
+  CREATE POLICY "tasks_select_v2" ON public.tasks
   FOR SELECT
   USING (
     -- Own records (check owner_id, created_by, or assigned_to)
@@ -441,27 +496,38 @@ CREATE POLICY "tasks_select_v2" ON public.tasks
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "tasks_insert_v2" ON public.tasks
+DO $$ BEGIN
+  CREATE POLICY "tasks_insert_v2" ON public.tasks
   FOR INSERT
   WITH CHECK (
     auth.uid() IS NOT NULL
     AND (created_by = auth.uid() OR assigned_to = auth.uid())
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "tasks_update_v2" ON public.tasks
+DO $$ BEGIN
+  CREATE POLICY "tasks_update_v2" ON public.tasks
   FOR UPDATE
   USING (
     (owner_id = auth.uid() OR created_by = auth.uid() OR assigned_to = auth.uid())
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "tasks_delete_v2" ON public.tasks
+DO $$ BEGIN
+  CREATE POLICY "tasks_delete_v2" ON public.tasks
   FOR DELETE
   USING (
     (owner_id = auth.uid() OR created_by = auth.uid() OR assigned_to = auth.uid())
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- PART 9: EMAILS - DYNAMIC RLS (DEFAULT: PRIVATE)
@@ -469,7 +535,8 @@ CREATE POLICY "tasks_delete_v2" ON public.tasks
 
 -- Note: Emails default to private unless org explicitly enables sharing
 
-CREATE POLICY "emails_select_v2" ON public.emails
+DO $$ BEGIN
+  CREATE POLICY "emails_select_v2" ON public.emails
   FOR SELECT
   USING (
     -- Own records
@@ -492,33 +559,45 @@ CREATE POLICY "emails_select_v2" ON public.emails
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "emails_insert_v2" ON public.emails
+DO $$ BEGIN
+  CREATE POLICY "emails_insert_v2" ON public.emails
   FOR INSERT
   WITH CHECK (
     auth.uid() IS NOT NULL
     AND user_id = auth.uid()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "emails_update_v2" ON public.emails
+DO $$ BEGIN
+  CREATE POLICY "emails_update_v2" ON public.emails
   FOR UPDATE
   USING (
     user_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "emails_delete_v2" ON public.emails
+DO $$ BEGIN
+  CREATE POLICY "emails_delete_v2" ON public.emails
   FOR DELETE
   USING (
     user_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- PART 10: ACTIVITIES - DYNAMIC RLS
 -- =====================================================================
 
-CREATE POLICY "activities_select_v2" ON public.activities
+DO $$ BEGIN
+  CREATE POLICY "activities_select_v2" ON public.activities
   FOR SELECT
   USING (
     -- Own records
@@ -538,33 +617,45 @@ CREATE POLICY "activities_select_v2" ON public.activities
         )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "activities_insert_v2" ON public.activities
+DO $$ BEGIN
+  CREATE POLICY "activities_insert_v2" ON public.activities
   FOR INSERT
   WITH CHECK (
     auth.uid() IS NOT NULL
     AND user_id = auth.uid()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "activities_update_v2" ON public.activities
+DO $$ BEGIN
+  CREATE POLICY "activities_update_v2" ON public.activities
   FOR UPDATE
   USING (
     user_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "activities_delete_v2" ON public.activities
+DO $$ BEGIN
+  CREATE POLICY "activities_delete_v2" ON public.activities
   FOR DELETE
   USING (
     user_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- PART 11: CALENDAR EVENTS - DYNAMIC RLS
 -- =====================================================================
 
-CREATE POLICY "calendar_events_select_v2" ON public.calendar_events
+DO $$ BEGIN
+  CREATE POLICY "calendar_events_select_v2" ON public.calendar_events
   FOR SELECT
   USING (
     -- Own records
@@ -581,8 +672,11 @@ CREATE POLICY "calendar_events_select_v2" ON public.calendar_events
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "calendar_events_insert_v2" ON public.calendar_events
+DO $$ BEGIN
+  CREATE POLICY "calendar_events_insert_v2" ON public.calendar_events
   FOR INSERT
   WITH CHECK (
     auth.uid() IS NOT NULL
@@ -595,20 +689,28 @@ CREATE POLICY "calendar_events_insert_v2" ON public.calendar_events
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "calendar_events_update_v2" ON public.calendar_events
+DO $$ BEGIN
+  CREATE POLICY "calendar_events_update_v2" ON public.calendar_events
   FOR UPDATE
   USING (
     user_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "calendar_events_delete_v2" ON public.calendar_events
+DO $$ BEGIN
+  CREATE POLICY "calendar_events_delete_v2" ON public.calendar_events
   FOR DELETE
   USING (
     user_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- PART 12: LEADS - ORG-LEVEL (SHARED BY DEFAULT)
@@ -616,7 +718,8 @@ CREATE POLICY "calendar_events_delete_v2" ON public.calendar_events
 
 -- Leads are org-level by design (SavvyCal bookings, team collaboration)
 
-CREATE POLICY "leads_select_v2" ON public.leads
+DO $$ BEGIN
+  CREATE POLICY "leads_select_v2" ON public.leads
   FOR SELECT
   USING (
     -- Own leads
@@ -636,27 +739,38 @@ CREATE POLICY "leads_select_v2" ON public.leads
         )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "leads_insert_v2" ON public.leads
+DO $$ BEGIN
+  CREATE POLICY "leads_insert_v2" ON public.leads
   FOR INSERT
   WITH CHECK (
     auth.uid() IS NOT NULL
     AND (owner_id = auth.uid() OR created_by = auth.uid())
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "leads_update_v2" ON public.leads
+DO $$ BEGIN
+  CREATE POLICY "leads_update_v2" ON public.leads
   FOR UPDATE
   USING (
     owner_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "leads_delete_v2" ON public.leads
+DO $$ BEGIN
+  CREATE POLICY "leads_delete_v2" ON public.leads
   FOR DELETE
   USING (
     owner_id = auth.uid()
     OR is_org_admin()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- PART 13: SECURITY AUDIT TABLE
@@ -696,7 +810,8 @@ CREATE TABLE IF NOT EXISTS public.security_audit_log (
 ALTER TABLE public.security_audit_log ENABLE ROW LEVEL SECURITY;
 
 -- Only org admins can view audit logs
-CREATE POLICY "security_audit_log_select" ON public.security_audit_log
+DO $$ BEGIN
+  CREATE POLICY "security_audit_log_select" ON public.security_audit_log
   FOR SELECT
   USING (
     org_id IN (
@@ -704,6 +819,8 @@ CREATE POLICY "security_audit_log_select" ON public.security_audit_log
       WHERE om.user_id = auth.uid() AND om.role = 'admin'
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Create index for fast audit queries
 CREATE INDEX IF NOT EXISTS idx_security_audit_log_org_severity

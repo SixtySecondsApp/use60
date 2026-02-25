@@ -61,7 +61,8 @@ CREATE TRIGGER trigger_update_agent_columns_updated_at
 ALTER TABLE public.agent_columns ENABLE ROW LEVEL SECURITY;
 
 -- Users can view agent columns in their org
-CREATE POLICY "Users can view org agent columns"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org agent columns"
   ON public.agent_columns
   FOR SELECT
   USING (
@@ -70,9 +71,12 @@ CREATE POLICY "Users can view org agent columns"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can create agent columns in their org's tables
-CREATE POLICY "Users can create agent columns in org tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can create agent columns in org tables"
   ON public.agent_columns
   FOR INSERT
   WITH CHECK (
@@ -88,9 +92,12 @@ CREATE POLICY "Users can create agent columns in org tables"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update agent columns in their org
-CREATE POLICY "Users can update org agent columns"
+DO $$ BEGIN
+  CREATE POLICY "Users can update org agent columns"
   ON public.agent_columns
   FOR UPDATE
   USING (
@@ -99,9 +106,12 @@ CREATE POLICY "Users can update org agent columns"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can delete agent columns in their org
-CREATE POLICY "Users can delete org agent columns"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete org agent columns"
   ON public.agent_columns
   FOR DELETE
   USING (
@@ -110,12 +120,15 @@ CREATE POLICY "Users can delete org agent columns"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Admin full access
 -- =============================================================================
 
-CREATE POLICY "Admins have full access to agent columns"
+DO $$ BEGIN
+  CREATE POLICY "Admins have full access to agent columns"
   ON public.agent_columns
   FOR ALL
   USING (
@@ -126,6 +139,8 @@ CREATE POLICY "Admins have full access to agent columns"
         AND role = 'admin'
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Service role policies (for edge functions)

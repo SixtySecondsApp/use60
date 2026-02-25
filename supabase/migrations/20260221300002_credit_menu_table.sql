@@ -174,30 +174,42 @@ ALTER TABLE price_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- credit_menu: authenticated users read active entries; platform admins read/write all
 DROP POLICY IF EXISTS "credit_menu_read_active" ON credit_menu;
-CREATE POLICY "credit_menu_read_active"
+DO $$ BEGIN
+  CREATE POLICY "credit_menu_read_active"
   ON credit_menu FOR SELECT
   TO authenticated
   USING (is_active = true AND deleted_at IS NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "credit_menu_admin_all" ON credit_menu;
-CREATE POLICY "credit_menu_admin_all"
+DO $$ BEGIN
+  CREATE POLICY "credit_menu_admin_all"
   ON credit_menu FOR ALL
   TO service_role
   USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- credit_menu_history: admins only via service_role
 DROP POLICY IF EXISTS "credit_menu_history_admin" ON credit_menu_history;
-CREATE POLICY "credit_menu_history_admin"
+DO $$ BEGIN
+  CREATE POLICY "credit_menu_history_admin"
   ON credit_menu_history FOR SELECT
   TO service_role
   USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- price_snapshots: service_role only
 DROP POLICY IF EXISTS "price_snapshots_service" ON price_snapshots;
-CREATE POLICY "price_snapshots_service"
+DO $$ BEGIN
+  CREATE POLICY "price_snapshots_service"
   ON price_snapshots FOR ALL
   TO service_role
   USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- Seed Data — migrated from creditPacks.ts ACTION_CREDIT_COSTS

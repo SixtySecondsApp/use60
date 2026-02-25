@@ -10,7 +10,8 @@
 ALTER TABLE public.dynamic_table_columns
   DROP CONSTRAINT IF EXISTS dynamic_table_columns_column_type_check;
 
-ALTER TABLE public.dynamic_table_columns
+DO $$ BEGIN
+  ALTER TABLE public.dynamic_table_columns
   ADD CONSTRAINT dynamic_table_columns_column_type_check
   CHECK (column_type IN (
     'text', 'email', 'url', 'number', 'boolean', 'enrichment',
@@ -18,6 +19,8 @@ ALTER TABLE public.dynamic_table_columns
     'dropdown', 'tags', 'phone', 'checkbox', 'formula',
     'integration', 'action'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Step 2: Integration column metadata
@@ -73,7 +76,8 @@ COMMENT ON TABLE public.integration_credentials IS 'Org-scoped integration API c
 ALTER TABLE public.integration_credentials ENABLE ROW LEVEL SECURITY;
 
 -- Org members can view credentials
-CREATE POLICY "Users can view org integration credentials"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org integration credentials"
   ON public.integration_credentials
   FOR SELECT
   USING (
@@ -82,6 +86,8 @@ CREATE POLICY "Users can view org integration credentials"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only admins can manage credentials (via service role or admin check)
 DO $$

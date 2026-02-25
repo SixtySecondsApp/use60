@@ -45,29 +45,41 @@ CREATE INDEX IF NOT EXISTS idx_pipeline_snapshots_org_user
 ALTER TABLE pipeline_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own snapshots
-CREATE POLICY "Users can read own pipeline_snapshots"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own pipeline_snapshots"
 ON pipeline_snapshots FOR SELECT
 TO authenticated
 USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert/update their own snapshots
-CREATE POLICY "Users can upsert own pipeline_snapshots"
+DO $$ BEGIN
+  CREATE POLICY "Users can upsert own pipeline_snapshots"
 ON pipeline_snapshots FOR INSERT
 TO authenticated
 WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own pipeline_snapshots"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own pipeline_snapshots"
 ON pipeline_snapshots FOR UPDATE
 TO authenticated
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access (cron, orchestrator)
-CREATE POLICY "Service role full access to pipeline_snapshots"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to pipeline_snapshots"
 ON pipeline_snapshots FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- Trigger: keep updated_at current

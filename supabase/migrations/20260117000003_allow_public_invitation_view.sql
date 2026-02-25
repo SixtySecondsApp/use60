@@ -7,6 +7,9 @@ DROP POLICY IF EXISTS "Anyone can view invitations by valid token" ON "public"."
 DROP POLICY IF EXISTS "Allow public invitation view by token" ON "public"."organization_invitations";
 
 -- Create permissive policy for SELECT - allows public access
-CREATE POLICY "Allow public invitation view by token" ON "public"."organization_invitations"
+DO $$ BEGIN
+  CREATE POLICY "Allow public invitation view by token" ON "public"."organization_invitations"
 FOR SELECT
 USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

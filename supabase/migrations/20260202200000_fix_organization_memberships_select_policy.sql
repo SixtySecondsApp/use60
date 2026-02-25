@@ -5,10 +5,13 @@
 DROP POLICY IF EXISTS "organization_memberships_select" ON "public"."organization_memberships";
 
 -- Updated policy: Members can see all members in their organization, and platform admins can see all
-CREATE POLICY "organization_memberships_select" ON "public"."organization_memberships"
+DO $$ BEGIN
+  CREATE POLICY "organization_memberships_select" ON "public"."organization_memberships"
   FOR SELECT
   USING (
     "public"."is_service_role"()
     OR "app_auth"."is_admin"()
     OR ("public"."get_org_role"("auth"."uid"(), "org_id") = ANY (ARRAY['owner'::"text", 'admin'::"text", 'member'::"text", 'readonly'::"text"]))
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

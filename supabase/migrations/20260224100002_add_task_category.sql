@@ -10,9 +10,12 @@ ALTER TABLE tasks
   ADD COLUMN IF NOT EXISTS task_category TEXT DEFAULT 'rep_action';
 
 -- Add constraint for valid values
-ALTER TABLE tasks
+DO $$ BEGIN
+  ALTER TABLE tasks
   ADD CONSTRAINT tasks_task_category_check
   CHECK (task_category IN ('rep_action', 'prospect_action', 'admin', 'internal'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Index for filtered queries (proactive-task-analysis queries by assigned_to + status + task_category)
 CREATE INDEX IF NOT EXISTS idx_tasks_category_filter

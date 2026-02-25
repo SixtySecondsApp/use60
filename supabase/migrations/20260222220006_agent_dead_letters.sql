@@ -28,15 +28,19 @@ CREATE INDEX IF NOT EXISTS idx_agent_dead_letters_unresolved
 ALTER TABLE agent_dead_letters ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Service role has full access to agent_dead_letters" ON agent_dead_letters;
-CREATE POLICY "Service role has full access to agent_dead_letters"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to agent_dead_letters"
   ON agent_dead_letters
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Platform admins can read agent_dead_letters" ON agent_dead_letters;
-CREATE POLICY "Platform admins can read agent_dead_letters"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can read agent_dead_letters"
   ON agent_dead_letters
   FOR SELECT
   TO authenticated
@@ -47,6 +51,8 @@ CREATE POLICY "Platform admins can read agent_dead_letters"
         AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Comments
 COMMENT ON TABLE agent_dead_letters IS 'Dead Letter Queue for failed agent executions — stores failures for review, retry, and debugging';

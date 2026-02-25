@@ -58,17 +58,23 @@ CREATE INDEX IF NOT EXISTS idx_dme_contacts
 ALTER TABLE deal_memory_events ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "org_members_select_deal_memory_events" ON deal_memory_events;
-CREATE POLICY "org_members_select_deal_memory_events"
+DO $$ BEGIN
+  CREATE POLICY "org_members_select_deal_memory_events"
   ON deal_memory_events FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "service_role_all_deal_memory_events" ON deal_memory_events;
-CREATE POLICY "service_role_all_deal_memory_events"
+DO $$ BEGIN
+  CREATE POLICY "service_role_all_deal_memory_events"
   ON deal_memory_events FOR ALL
   TO service_role
   USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- updated_at trigger
@@ -79,6 +85,7 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$;
 
+DROP TRIGGER IF EXISTS deal_memory_events_updated_at ON deal_memory_events;
 DROP TRIGGER IF EXISTS deal_memory_events_updated_at ON deal_memory_events;
 CREATE TRIGGER deal_memory_events_updated_at
   BEFORE UPDATE ON deal_memory_events

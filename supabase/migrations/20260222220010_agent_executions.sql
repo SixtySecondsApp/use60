@@ -90,23 +90,30 @@ ALTER TABLE public.agent_executions ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full write access (edge functions record executions)
 DROP POLICY IF EXISTS "service_role_insert_agent_executions" ON public.agent_executions;
-CREATE POLICY "service_role_insert_agent_executions"
+DO $$ BEGIN
+  CREATE POLICY "service_role_insert_agent_executions"
   ON public.agent_executions
   FOR INSERT
   TO service_role
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "service_role_update_agent_executions" ON public.agent_executions;
-CREATE POLICY "service_role_update_agent_executions"
+DO $$ BEGIN
+  CREATE POLICY "service_role_update_agent_executions"
   ON public.agent_executions
   FOR UPDATE
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org members can view executions belonging to their organisation
 DROP POLICY IF EXISTS "org_members_select_agent_executions" ON public.agent_executions;
-CREATE POLICY "org_members_select_agent_executions"
+DO $$ BEGIN
+  CREATE POLICY "org_members_select_agent_executions"
   ON public.agent_executions
   FOR SELECT
   TO authenticated
@@ -119,6 +126,8 @@ CREATE POLICY "org_members_select_agent_executions"
         AND user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- 5. GRANTS

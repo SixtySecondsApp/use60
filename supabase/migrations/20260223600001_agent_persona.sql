@@ -55,27 +55,39 @@ CREATE INDEX IF NOT EXISTS idx_agent_persona_org
 
 ALTER TABLE agent_persona ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can read own persona"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own persona"
   ON agent_persona FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own persona"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own persona"
   ON agent_persona FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own persona"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own persona"
   ON agent_persona FOR UPDATE
   TO authenticated
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access to agent_persona"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_persona"
   ON agent_persona FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Trigger: Update updated_at on row changes
@@ -89,6 +101,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_agent_persona_updated_at ON agent_persona;
 CREATE TRIGGER update_agent_persona_updated_at
   BEFORE UPDATE ON agent_persona
   FOR EACH ROW

@@ -39,22 +39,31 @@ CREATE INDEX IF NOT EXISTS idx_copilot_routing_logs_sequence ON copilot_routing_
 ALTER TABLE copilot_routing_logs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view own routing logs" ON copilot_routing_logs;
-CREATE POLICY "Users can view own routing logs"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own routing logs"
   ON copilot_routing_logs FOR SELECT
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Admins can view all routing logs" ON copilot_routing_logs;
-CREATE POLICY "Admins can view all routing logs"
+DO $$ BEGIN
+  CREATE POLICY "Admins can view all routing logs"
   ON copilot_routing_logs FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can insert logs
 DROP POLICY IF EXISTS "Service can insert routing logs" ON copilot_routing_logs;
-CREATE POLICY "Service can insert routing logs"
+DO $$ BEGIN
+  CREATE POLICY "Service can insert routing logs"
   ON copilot_routing_logs FOR INSERT
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Function: Get routing analytics

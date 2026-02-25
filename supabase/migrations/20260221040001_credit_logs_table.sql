@@ -132,38 +132,50 @@ ALTER TABLE credit_log_summaries ENABLE ROW LEVEL SECURITY;
 
 -- Authenticated users can read their own logs within the last 30 days
 DROP POLICY IF EXISTS "Users can read own credit_logs (30 days)" ON credit_logs;
-CREATE POLICY "Users can read own credit_logs (30 days)"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own credit_logs (30 days)"
   ON credit_logs FOR SELECT
   TO authenticated
   USING (
     user_id = auth.uid()
     AND created_at > NOW() - INTERVAL '30 days'
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has unrestricted access (for edge functions and purge jobs)
 DROP POLICY IF EXISTS "Service role has full access to credit_logs" ON credit_logs;
-CREATE POLICY "Service role has full access to credit_logs"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to credit_logs"
   ON credit_logs FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- --- credit_log_summaries ---
 
 -- Authenticated users can read their own summaries (all months)
 DROP POLICY IF EXISTS "Users can read own credit_log_summaries" ON credit_log_summaries;
-CREATE POLICY "Users can read own credit_log_summaries"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own credit_log_summaries"
   ON credit_log_summaries FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has unrestricted access
 DROP POLICY IF EXISTS "Service role has full access to credit_log_summaries" ON credit_log_summaries;
-CREATE POLICY "Service role has full access to credit_log_summaries"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to credit_log_summaries"
   ON credit_log_summaries FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 6. RPC get_user_credit_logs — user-scoped log retrieval (max 30 days)

@@ -76,14 +76,18 @@ ALTER TABLE docs_ai_proposals ENABLE ROW LEVEL SECURITY;
 -- RLS Policies for docs_articles
 
 -- All authenticated users can read published articles
-CREATE POLICY "Users can read published articles"
+DO $$ BEGIN
+  CREATE POLICY "Users can read published articles"
   ON docs_articles FOR SELECT
   USING (
     auth.role() = 'authenticated' AND published = true
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners can read all articles (including drafts)
-CREATE POLICY "Admins can read all articles"
+DO $$ BEGIN
+  CREATE POLICY "Admins can read all articles"
   ON docs_articles FOR SELECT
   USING (
     EXISTS (
@@ -92,9 +96,12 @@ CREATE POLICY "Admins can read all articles"
       AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners can insert articles
-CREATE POLICY "Admins can insert articles"
+DO $$ BEGIN
+  CREATE POLICY "Admins can insert articles"
   ON docs_articles FOR INSERT
   WITH CHECK (
     EXISTS (
@@ -103,9 +110,12 @@ CREATE POLICY "Admins can insert articles"
       AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners can update articles
-CREATE POLICY "Admins can update articles"
+DO $$ BEGIN
+  CREATE POLICY "Admins can update articles"
   ON docs_articles FOR UPDATE
   USING (
     EXISTS (
@@ -114,9 +124,12 @@ CREATE POLICY "Admins can update articles"
       AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners can delete articles
-CREATE POLICY "Admins can delete articles"
+DO $$ BEGIN
+  CREATE POLICY "Admins can delete articles"
   ON docs_articles FOR DELETE
   USING (
     EXISTS (
@@ -125,11 +138,14 @@ CREATE POLICY "Admins can delete articles"
       AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policies for docs_versions
 
 -- Authenticated users can read versions for published articles
-CREATE POLICY "Users can read versions for published articles"
+DO $$ BEGIN
+  CREATE POLICY "Users can read versions for published articles"
   ON docs_versions FOR SELECT
   USING (
     EXISTS (
@@ -138,9 +154,12 @@ CREATE POLICY "Users can read versions for published articles"
       AND docs_articles.published = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Admins can read all versions
-CREATE POLICY "Admins can read all versions"
+DO $$ BEGIN
+  CREATE POLICY "Admins can read all versions"
   ON docs_versions FOR SELECT
   USING (
     EXISTS (
@@ -149,9 +168,12 @@ CREATE POLICY "Admins can read all versions"
       AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Admins can insert versions
-CREATE POLICY "Admins can insert versions"
+DO $$ BEGIN
+  CREATE POLICY "Admins can insert versions"
   ON docs_versions FOR INSERT
   WITH CHECK (
     EXISTS (
@@ -160,33 +182,48 @@ CREATE POLICY "Admins can insert versions"
       AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policies for docs_feedback
 
 -- Users can read all feedback (for aggregation)
-CREATE POLICY "Users can read feedback"
+DO $$ BEGIN
+  CREATE POLICY "Users can read feedback"
   ON docs_feedback FOR SELECT
   USING (auth.role() = 'authenticated');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert their own feedback
-CREATE POLICY "Users can insert feedback"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert feedback"
   ON docs_feedback FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own feedback
-CREATE POLICY "Users can update their own feedback"
+DO $$ BEGIN
+  CREATE POLICY "Users can update their own feedback"
   ON docs_feedback FOR UPDATE
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can delete their own feedback
-CREATE POLICY "Users can delete their own feedback"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete their own feedback"
   ON docs_feedback FOR DELETE
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policies for docs_ai_proposals
 
 -- Admins can read all proposals
-CREATE POLICY "Admins can read proposals"
+DO $$ BEGIN
+  CREATE POLICY "Admins can read proposals"
   ON docs_ai_proposals FOR SELECT
   USING (
     EXISTS (
@@ -195,14 +232,20 @@ CREATE POLICY "Admins can read proposals"
       AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can insert proposals (from AI)
-CREATE POLICY "Service can insert proposals"
+DO $$ BEGIN
+  CREATE POLICY "Service can insert proposals"
   ON docs_ai_proposals FOR INSERT
-  WITH CHECK (true); -- Service role bypasses RLS anyway
+  WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$; -- Service role bypasses RLS anyway
 
 -- Admins can update proposals (approve/reject)
-CREATE POLICY "Admins can update proposals"
+DO $$ BEGIN
+  CREATE POLICY "Admins can update proposals"
   ON docs_ai_proposals FOR UPDATE
   USING (
     EXISTS (
@@ -211,6 +254,8 @@ CREATE POLICY "Admins can update proposals"
       AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Trigger to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_docs_articles_updated_at()

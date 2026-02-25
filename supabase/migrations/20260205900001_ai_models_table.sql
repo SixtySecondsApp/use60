@@ -94,13 +94,17 @@ ALTER TABLE ai_models ENABLE ROW LEVEL SECURITY;
 
 -- Everyone can read available models
 DROP POLICY IF EXISTS "Anyone can read available ai_models" ON ai_models;
-CREATE POLICY "Anyone can read available ai_models"
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read available ai_models"
   ON ai_models FOR SELECT
   USING (auth.role() = 'authenticated');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only platform admins can modify
 DROP POLICY IF EXISTS "Platform admins can manage ai_models" ON ai_models;
-CREATE POLICY "Platform admins can manage ai_models"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can manage ai_models"
   ON ai_models FOR ALL
   USING (
     EXISTS (
@@ -109,6 +113,8 @@ CREATE POLICY "Platform admins can manage ai_models"
       AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- Seed Data - Initial Models

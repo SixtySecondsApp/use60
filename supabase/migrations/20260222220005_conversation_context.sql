@@ -43,41 +43,56 @@ ALTER TABLE public.conversation_context ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own rows
 DROP POLICY IF EXISTS "conversation_context_select_own" ON public.conversation_context;
-CREATE POLICY "conversation_context_select_own"
+DO $$ BEGIN
+  CREATE POLICY "conversation_context_select_own"
   ON public.conversation_context
   FOR SELECT
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert their own rows
 DROP POLICY IF EXISTS "conversation_context_insert_own" ON public.conversation_context;
-CREATE POLICY "conversation_context_insert_own"
+DO $$ BEGIN
+  CREATE POLICY "conversation_context_insert_own"
   ON public.conversation_context
   FOR INSERT
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own rows
 DROP POLICY IF EXISTS "conversation_context_update_own" ON public.conversation_context;
-CREATE POLICY "conversation_context_update_own"
+DO $$ BEGIN
+  CREATE POLICY "conversation_context_update_own"
   ON public.conversation_context
   FOR UPDATE
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can delete their own rows
 DROP POLICY IF EXISTS "conversation_context_delete_own" ON public.conversation_context;
-CREATE POLICY "conversation_context_delete_own"
+DO $$ BEGIN
+  CREATE POLICY "conversation_context_delete_own"
   ON public.conversation_context
   FOR DELETE
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role bypass (full access, no RLS restriction)
 DROP POLICY IF EXISTS "conversation_context_service_role_all" ON public.conversation_context;
-CREATE POLICY "conversation_context_service_role_all"
+DO $$ BEGIN
+  CREATE POLICY "conversation_context_service_role_all"
   ON public.conversation_context
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 4. Comments

@@ -35,7 +35,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public';
 
 DROP POLICY IF EXISTS "organization_memberships_select" ON "public"."organization_memberships";
 
-CREATE POLICY "organization_memberships_select" ON "public"."organization_memberships"
+DO $$ BEGIN
+  CREATE POLICY "organization_memberships_select" ON "public"."organization_memberships"
 FOR SELECT
 USING (
   "public"."is_service_role"()
@@ -43,6 +44,8 @@ USING (
   OR ("public"."get_org_role"("auth"."uid"(), "org_id") = ANY (ARRAY['owner'::"text", 'admin'::"text", 'member'::"text", 'readonly'::"text"]))
   OR ("user_id" = "auth"."uid"())  -- Users can see their own membership
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Step 3: Add comment documenting the policy
 COMMENT ON POLICY "organization_memberships_select" ON "public"."organization_memberships" IS

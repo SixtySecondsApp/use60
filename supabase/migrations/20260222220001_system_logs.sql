@@ -72,15 +72,19 @@ ALTER TABLE system_logs ENABLE ROW LEVEL SECURITY;
 
 -- Service role can insert logs (edge functions write observability data)
 DROP POLICY IF EXISTS "service_role_insert_system_logs" ON system_logs;
-CREATE POLICY "service_role_insert_system_logs"
+DO $$ BEGIN
+  CREATE POLICY "service_role_insert_system_logs"
   ON system_logs
   FOR INSERT
   TO service_role
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org members can select logs belonging to their organisation
 DROP POLICY IF EXISTS "org_members_select_system_logs" ON system_logs;
-CREATE POLICY "org_members_select_system_logs"
+DO $$ BEGIN
+  CREATE POLICY "org_members_select_system_logs"
   ON system_logs
   FOR SELECT
   TO authenticated
@@ -93,10 +97,13 @@ CREATE POLICY "org_members_select_system_logs"
         AND user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can select all logs
 DROP POLICY IF EXISTS "platform_admins_select_all_system_logs" ON system_logs;
-CREATE POLICY "platform_admins_select_all_system_logs"
+DO $$ BEGIN
+  CREATE POLICY "platform_admins_select_all_system_logs"
   ON system_logs
   FOR SELECT
   TO authenticated
@@ -108,6 +115,8 @@ CREATE POLICY "platform_admins_select_all_system_logs"
         AND is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- 4. COMMENTS

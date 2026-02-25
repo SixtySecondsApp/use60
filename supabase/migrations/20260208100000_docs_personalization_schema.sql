@@ -30,7 +30,8 @@ CREATE INDEX IF NOT EXISTS idx_docs_personalization_context_org
 ALTER TABLE docs_personalization_context ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their org's personalization context
-CREATE POLICY "Users can read own org personalization context"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own org personalization context"
   ON docs_personalization_context FOR SELECT
   USING (
     EXISTS (
@@ -39,9 +40,12 @@ CREATE POLICY "Users can read own org personalization context"
       AND organization_memberships.org_id = docs_personalization_context.org_id
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Admins can manage personalization context
-CREATE POLICY "Admins can manage personalization context"
+DO $$ BEGIN
+  CREATE POLICY "Admins can manage personalization context"
   ON docs_personalization_context FOR ALL
   USING (
     EXISTS (
@@ -51,6 +55,8 @@ CREATE POLICY "Admins can manage personalization context"
       AND organization_memberships.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Auto-update updated_at
 CREATE OR REPLACE FUNCTION update_docs_personalization_context_updated_at()

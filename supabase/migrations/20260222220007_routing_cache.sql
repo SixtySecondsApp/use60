@@ -20,14 +20,20 @@ CREATE INDEX IF NOT EXISTS routing_cache_expires_at_idx ON routing_cache (expire
 ALTER TABLE routing_cache ENABLE ROW LEVEL SECURITY;
 
 -- Service role can do everything (used by edge function via service client)
-CREATE POLICY "service_role_all" ON routing_cache
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "service_role_all" ON routing_cache
+    FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Authenticated users can read cache entries (read-only; writes are service-role only)
-CREATE POLICY "authenticated_read" ON routing_cache
-  FOR SELECT
-  TO authenticated
-  USING (true);
+DO $$ BEGIN
+  CREATE POLICY "authenticated_read" ON routing_cache
+    FOR SELECT
+    TO authenticated
+    USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

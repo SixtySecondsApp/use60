@@ -6,9 +6,12 @@ ALTER TABLE recordings
 DROP CONSTRAINT IF EXISTS recordings_status_check;
 
 -- Add the updated constraint with 'transcribing' status
-ALTER TABLE recordings
+DO $$ BEGIN
+  ALTER TABLE recordings
 ADD CONSTRAINT recordings_status_check
 CHECK (status = ANY (ARRAY['pending', 'bot_joining', 'recording', 'processing', 'transcribing', 'ready', 'failed']));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update comment to document the new status
 COMMENT ON COLUMN recordings.status IS

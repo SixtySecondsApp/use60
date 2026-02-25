@@ -76,16 +76,20 @@ ALTER TABLE public.fleet_health_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full write access (edge function writes snapshots)
 DROP POLICY IF EXISTS "service_role_all_fleet_health_snapshots" ON public.fleet_health_snapshots;
-CREATE POLICY "service_role_all_fleet_health_snapshots"
+DO $$ BEGIN
+  CREATE POLICY "service_role_all_fleet_health_snapshots"
   ON public.fleet_health_snapshots
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can read all snapshots
 DROP POLICY IF EXISTS "admins_select_fleet_health_snapshots" ON public.fleet_health_snapshots;
-CREATE POLICY "admins_select_fleet_health_snapshots"
+DO $$ BEGIN
+  CREATE POLICY "admins_select_fleet_health_snapshots"
   ON public.fleet_health_snapshots
   FOR SELECT
   TO authenticated
@@ -96,6 +100,8 @@ CREATE POLICY "admins_select_fleet_health_snapshots"
         AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- 5. GRANTS

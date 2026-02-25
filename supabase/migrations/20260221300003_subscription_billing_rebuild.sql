@@ -161,9 +161,12 @@ ALTER TABLE organization_subscriptions
 ALTER TABLE organization_subscriptions
   DROP CONSTRAINT IF EXISTS organization_subscriptions_status_check;
 
-ALTER TABLE organization_subscriptions
+DO $$ BEGIN
+  ALTER TABLE organization_subscriptions
   ADD CONSTRAINT organization_subscriptions_status_check
   CHECK (status IN ('active', 'trialing', 'past_due', 'canceled', 'paused', 'expired'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 7. Add subscription/onboarding credit columns to org_credit_balance

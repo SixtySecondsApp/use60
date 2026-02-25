@@ -134,34 +134,46 @@ ALTER TABLE skill_folders ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can read folders for active skills
 DROP POLICY IF EXISTS "Anyone can read skill folders" ON skill_folders;
-CREATE POLICY "Anyone can read skill folders"
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read skill folders"
   ON skill_folders FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM platform_skills ps
     WHERE ps.id = skill_id AND ps.is_active = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only platform admins can manage folders
 DROP POLICY IF EXISTS "Only platform admins can insert skill folders" ON skill_folders;
-CREATE POLICY "Only platform admins can insert skill folders"
+DO $$ BEGIN
+  CREATE POLICY "Only platform admins can insert skill folders"
   ON skill_folders FOR INSERT
   WITH CHECK (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Only platform admins can update skill folders" ON skill_folders;
-CREATE POLICY "Only platform admins can update skill folders"
+DO $$ BEGIN
+  CREATE POLICY "Only platform admins can update skill folders"
   ON skill_folders FOR UPDATE
   USING (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Only platform admins can delete skill folders" ON skill_folders;
-CREATE POLICY "Only platform admins can delete skill folders"
+DO $$ BEGIN
+  CREATE POLICY "Only platform admins can delete skill folders"
   ON skill_folders FOR DELETE
   USING (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- RLS Policies for skill_documents
@@ -171,34 +183,46 @@ ALTER TABLE skill_documents ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can read documents for active skills
 DROP POLICY IF EXISTS "Anyone can read skill documents" ON skill_documents;
-CREATE POLICY "Anyone can read skill documents"
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read skill documents"
   ON skill_documents FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM platform_skills ps
     WHERE ps.id = skill_id AND ps.is_active = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only platform admins can manage documents
 DROP POLICY IF EXISTS "Only platform admins can insert skill documents" ON skill_documents;
-CREATE POLICY "Only platform admins can insert skill documents"
+DO $$ BEGIN
+  CREATE POLICY "Only platform admins can insert skill documents"
   ON skill_documents FOR INSERT
   WITH CHECK (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Only platform admins can update skill documents" ON skill_documents;
-CREATE POLICY "Only platform admins can update skill documents"
+DO $$ BEGIN
+  CREATE POLICY "Only platform admins can update skill documents"
   ON skill_documents FOR UPDATE
   USING (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Only platform admins can delete skill documents" ON skill_documents;
-CREATE POLICY "Only platform admins can delete skill documents"
+DO $$ BEGIN
+  CREATE POLICY "Only platform admins can delete skill documents"
   ON skill_documents FOR DELETE
   USING (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- RLS Policies for skill_references
@@ -208,16 +232,22 @@ ALTER TABLE skill_references ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can read references
 DROP POLICY IF EXISTS "Anyone can read skill references" ON skill_references;
-CREATE POLICY "Anyone can read skill references"
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read skill references"
   ON skill_references FOR SELECT
   USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role manages references (created via triggers/functions)
 DROP POLICY IF EXISTS "Service role can manage skill references" ON skill_references;
-CREATE POLICY "Service role can manage skill references"
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage skill references"
   ON skill_references FOR ALL
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Triggers: Auto-update updated_at

@@ -32,7 +32,8 @@ ON public.invite_attempts(invited_email, attempted_at DESC);
 ALTER TABLE public.invite_attempts ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policy: Org admins can view their org's invite attempts
-CREATE POLICY "Org admins can view org invite attempts"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can view org invite attempts"
 ON public.invite_attempts
 FOR SELECT
 USING (
@@ -44,6 +45,8 @@ USING (
       AND member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policy: Service role can insert invite attempts (for API tracking)
 -- This allows the invite-user API to track all attempts

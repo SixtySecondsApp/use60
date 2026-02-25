@@ -6,7 +6,8 @@ ALTER TABLE public.deal_health_alerts
 DROP CONSTRAINT IF EXISTS deal_health_alerts_alert_type_check;
 
 -- Add updated constraint with new alert types
-ALTER TABLE public.deal_health_alerts
+DO $$ BEGIN
+  ALTER TABLE public.deal_health_alerts
 ADD CONSTRAINT deal_health_alerts_alert_type_check
 CHECK (alert_type = ANY (ARRAY[
   'stage_stall'::text,
@@ -21,6 +22,8 @@ CHECK (alert_type = ANY (ARRAY[
   'close_date_risk'::text,     -- NEW: close date approaching with low health
   'sentiment_decline'::text    -- NEW: declining sentiment trend
 ]));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON CONSTRAINT deal_health_alerts_alert_type_check ON public.deal_health_alerts IS
   'Pipeline Intelligence alert types: health_drop, ghost_risk, no_activity, stage_stall, sentiment_decline, close_date_risk';
