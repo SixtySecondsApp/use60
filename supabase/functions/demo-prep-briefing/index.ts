@@ -276,12 +276,17 @@ serve(async (req: Request) => {
           const attendeeEmails = extractAttendeeEmails(rawAttendees);
           const attendeeNames = extractAttendeeNames(rawAttendees);
 
-          // Exclude the user's own email so history detection only matches
-          // on external attendees, not on the rep themselves.
+          // Exclude the user's own email/name from external attendee lists.
+          // attendeeEmails and attendeeNames are parallel arrays (same index = same person).
+          // This prevents the rep appearing in "Who You're Meeting" and inflating
+          // the prior-meeting count with their own calendar history.
           const userEmail = user.email?.toLowerCase() ?? '';
           const externalAttendeeEmails = userEmail
             ? attendeeEmails.filter(e => e !== userEmail)
             : attendeeEmails;
+          const externalAttendeeNames = userEmail
+            ? attendeeNames.filter((_, i) => attendeeEmails[i] !== userEmail)
+            : attendeeNames;
 
           console.log(
             `[demo-prep-briefing] Meeting "${meeting.title}" — ${attendeeEmails.length} attendee(s) (${externalAttendeeEmails.length} external)`,
@@ -371,7 +376,7 @@ serve(async (req: Request) => {
           if (isReturn && historicalContext !== null) {
             systemPrompt = RETURN_MEETING_SYSTEM_PROMPT;
 
-            const attendeeProfilesStr = attendeeNames.map((n) => `- ${n}`).join('\n');
+            const attendeeProfilesStr = externalAttendeeNames.map((n) => `- ${n}`).join('\n');
             const attendeeComparisonStr =
               meetingHistory.attendeeHistory
                 .map((ah) =>
@@ -402,7 +407,7 @@ serve(async (req: Request) => {
               meetingTitle,
               meetingTime,
               companyName,
-              attendeeProfiles: attendeeNames.map((n) => `- ${n}`).join('\n') ||
+              attendeeProfiles: externalAttendeeNames.map((n) => `- ${n}`).join('\n') ||
                 '- No attendee information available',
               companySnapshot: 'No company data available for this meeting',
               icpFitNotes: '',
@@ -480,7 +485,7 @@ serve(async (req: Request) => {
               story_so_far: isReturn
                 ? 'Previous meetings were detected but AI synthesis is unavailable.'
                 : null,
-              attendees: attendeeNames.map((n) => ({ name: n })),
+              attendees: externalAttendeeNames.map((n) => ({ name: n })),
             };
           }
 
@@ -576,7 +581,7 @@ serve(async (req: Request) => {
                   rag_queries_returned: historicalContext !== null
                     ? Object.keys(historicalContext.sections).length
                     : 0,
-                  attendees_enriched: attendeeEmails.length,
+                  attendees_enriched: externalAttendeeEmails.length,
                   credits_consumed: creditsConsumed,
                   generation_time_ms: totalTime,
                   model_used: 'claude-haiku-4-5-20251001',
