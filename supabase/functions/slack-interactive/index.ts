@@ -7821,39 +7821,70 @@ serve(async (req) => {
 
         // =====================================================================
         // PREP: Pre-meeting briefing quick actions (prep_briefing::*)
+        // Return 200 immediately, process async, post result via response_url.
         // =====================================================================
         if (action.action_id.startsWith('prep_briefing::')) {
           console.log('[PrepBriefing] Processing action:', action.action_id);
-          const actionSuffix = action.action_id.split('::')[1]; // e.g. 'booking_confirm'
+          const actionSuffix = action.action_id.split('::')[1];
           const meetingId = action.value;
-          const result = await handlePrepBriefingAction(
-            actionSuffix,
-            payload.user.id,
-            meetingId,
-            payload.trigger_id,
-            {
-              channelId: payload.channel?.id,
-              messageTs: payload.message?.ts,
-              teamId: payload.team?.id,
-            },
-          );
+          const responseUrl = payload.response_url;
 
-          if (payload.response_url) {
-            await sendEphemeral(payload.response_url, {
-              text: result.success ? result.responseText : (result.error || 'Action failed'),
-              blocks: [
+          // Fire-and-forget — do heavy work after returning 200 to Slack
+          const asyncWork = async () => {
+            try {
+              // Send immediate "working on it" indicator
+              if (responseUrl) {
+                await sendEphemeral(responseUrl, {
+                  text: 'Working on it...',
+                  blocks: [{
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: ':hourglass_flowing_sand: Working on it...' },
+                  }],
+                });
+              }
+
+              const result = await handlePrepBriefingAction(
+                actionSuffix,
+                payload.user.id,
+                meetingId,
+                payload.trigger_id,
                 {
-                  type: 'section',
-                  text: {
-                    type: 'mrkdwn',
-                    text: result.success
-                      ? `:white_check_mark: ${result.responseText}`
-                      : `:x: ${result.error || 'Action failed'}`,
-                  },
+                  channelId: payload.channel?.id,
+                  messageTs: payload.message?.ts,
+                  teamId: payload.team?.id,
                 },
-              ],
-            });
-          }
+              );
+
+              if (responseUrl) {
+                await sendEphemeral(responseUrl, {
+                  text: result.success ? result.responseText : (result.error || 'Action failed'),
+                  blocks: [{
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: result.success
+                        ? `:white_check_mark: ${result.responseText}`
+                        : `:x: ${result.error || 'Action failed'}`,
+                    },
+                  }],
+                });
+              }
+            } catch (err) {
+              console.error('[PrepBriefing] Async error:', err);
+              if (responseUrl) {
+                await sendEphemeral(responseUrl, {
+                  text: 'Something went wrong',
+                  blocks: [{
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: `:x: ${err instanceof Error ? err.message : 'Something went wrong'}` },
+                  }],
+                }).catch(() => {});
+              }
+            }
+          };
+
+          // Don't await — let it run after we return 200
+          asyncWork().catch(err => console.error('[PrepBriefing] Unhandled:', err));
 
           return new Response(JSON.stringify({ ok: true }), {
             status: 200,

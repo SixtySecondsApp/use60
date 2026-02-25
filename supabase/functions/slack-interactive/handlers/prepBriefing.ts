@@ -88,7 +88,7 @@ async function draftEmail(
   const prompt = `Write a short, warm booking confirmation email from a sales rep to a prospect.
 
 Context:
-- Rep name: ${repName}
+- Rep first name: ${repName}
 - Prospect first name: ${attendeeFirstName}
 - Meeting: ${meetingTitle}
 - When: ${meetingTime}
@@ -98,12 +98,12 @@ Requirements:
 - Confirm the meeting is in the diary
 - Express genuine enthusiasm for the conversation (specific to context if possible)
 - Ask them to let you know in advance if they can't make it
-- Sign off with just the rep's first name
+- Sign off with just the rep's first name: ${repName}
 - NO subject line prefix like "Re:" or "Subject:"
 
 Return ONLY a JSON object: { "subject": "...", "body": "..." }
 Subject should be short and direct. Body should be plain text with \\n for line breaks.
-Use plain ASCII punctuation only: straight quotes, hyphens (not em-dashes), no smart quotes or Unicode characters.`;
+Do NOT use em-dashes, smart quotes, or Unicode characters. Use plain hyphens and straight quotes only.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -113,8 +113,8 @@ Use plain ASCII punctuation only: straight quotes, hyphens (not em-dashes), no s
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 400,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 800,
       temperature: 0.4,
       messages: [{ role: 'user', content: prompt }],
     }),
@@ -188,13 +188,12 @@ export async function handlePrepBriefingAction(
   // Load rep profile
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, email')
+    .select('first_name, last_name, email')
     .eq('id', repUserId)
     .maybeSingle();
 
-  const repName = profile?.full_name || 'The Team';
+  const repFirstName = profile?.first_name || 'The team';
   const repEmail = profile?.email || '';
-  const repFirstName = repName.split(' ')[0];
 
   // Load meeting
   const { data: meeting } = await supabase
