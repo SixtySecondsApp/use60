@@ -62,7 +62,7 @@
       "blocks": [],
       "acceptance": [
         "Pass 'copilot-autonomous' as sourceAgent arg to logAICostEvent() call at ~line 2496 in copilot-autonomous/index.ts",
-        "Deploy to staging: npx supabase functions deploy copilot-autonomous --project-ref caerqjzvuerejfrdtygb --no-verify-jwt",
+        "Deploy to staging (STAGING ONLY): npx supabase functions deploy copilot-autonomous --project-ref caerqjzvuerejfrdtygb --no-verify-jwt — NEVER use --no-verify-jwt for production",
         "Verify: after a copilot chat, query ai_cost_events WHERE source_agent = 'copilot-autonomous' returns rows"
       ],
       "estimatedMinutes": 10,
@@ -161,7 +161,7 @@
       "creditBudgetService must fail open (return allowed:true) on DB error — never block UI on monitoring failure",
       "All 33 existing logAICostEvent() callers must remain unchanged — sourceAgent param goes at the end",
       "autonomousExecutor.ts is NOT the live production copilot path (copilot-autonomous edge fn is) — but is used by Skill Test Console and future direct callers",
-      "Deploy edge functions to staging with --no-verify-jwt (ES256 JWT issue)"
+      "Deploy edge functions to staging with --no-verify-jwt (ES256 JWT issue — staging only, never production)"
     ]
   }
 }

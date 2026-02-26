@@ -10,7 +10,7 @@
  * - Token budget awareness for efficient context management
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { loadPrompt, interpolateVariables } from './promptLoader.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');

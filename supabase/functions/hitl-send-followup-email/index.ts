@@ -453,7 +453,13 @@ ${pricingHtml}
         pickString(content.recipient) ||
         pickString(content.to);
       subject = pickString(content.subject) || 'Following up';
-      body = pickString(content.body) || '';
+      const rawBody = pickString(content.body) || '';
+      // Convert plain-text newlines to HTML paragraphs for proper email rendering
+      body = rawBody
+        .split(/\n{2,}/)
+        .map((para: string) => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+        .join('\n');
+      isHtmlOverride = true;
     }
 
     if (!to || !body) {

@@ -13,7 +13,7 @@
 
 ## Session Log
 
-<!-- Stories log as they complete, newest first -->
+<!-- Stories log as they complete, oldest first -->
 
 ### 2026-02-26 — EMAIL-001 ✅
 **Story**: Add Slack HITL approval step to meeting_ended Wave 3

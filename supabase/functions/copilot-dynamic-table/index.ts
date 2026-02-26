@@ -1083,9 +1083,10 @@ serve(async (req) => {
       if (!title) return ''
       let normalized = title.toLowerCase().trim()
       normalized = normalized.replace(/\s*\([^)]*\)\s*/g, ' ')
+      const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       for (const [full, abbrevs] of Object.entries(TITLE_ABBREVIATIONS)) {
         for (const abbrev of abbrevs) {
-          const pattern = new RegExp(`\\b${abbrev.replace(/\./g, '\\.')}\\b`, 'gi')
+          const pattern = new RegExp(`\\b${escapeRegExp(abbrev)}\\b`, 'gi')
           normalized = normalized.replace(pattern, full)
         }
       }

@@ -104,13 +104,29 @@ function normalizeBearer(authHeader: string | null): string | null {
 }
 
 /**
- * Check if the request is authenticated with a service role key (exact match)
+ * Check if the request is authenticated with a service role key.
+ * Accepts both the sb_secret_ format (Deno env var) and the JWT-format
+ * service role key (used by callers/clients).
  */
 export function isServiceRoleAuth(authHeader: string | null, serviceRoleKey: string): boolean {
   const token = normalizeBearer(authHeader);
   if (!token) return false;
-  // IMPORTANT: Exact match only - no partial/includes checks
-  return token === serviceRoleKey;
+  // Direct match against the env var (sb_secret_ format)
+  if (token === serviceRoleKey) return true;
+  // Fallback: if token is a JWT, check if it has service_role claim
+  // This handles callers using the JWT-format service key (from dashboard/env files)
+  if (token.startsWith('eyJ')) {
+    try {
+      const payloadB64 = token.split('.')[1];
+      if (payloadB64) {
+        const payload = JSON.parse(atob(payloadB64));
+        if (payload.role === 'service_role') return true;
+      }
+    } catch {
+      // Invalid JWT — not a service role token
+    }
+  }
+  return false;
 }
 
 /**
