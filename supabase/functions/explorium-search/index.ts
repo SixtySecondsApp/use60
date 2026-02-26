@@ -439,7 +439,9 @@ serve(async (req) => {
     // ---------------------------------------------------------------------------
 
     if (action === 'stats') {
-      const totalCount = (data.total_count as number)
+      // Explorium stats API returns `total_results` (not total_count/count/total)
+      const totalCount = (data.total_results as number)
+        ?? (data.total_count as number)
         ?? (data.count as number)
         ?? (data.total as number)
         ?? 0
@@ -459,7 +461,10 @@ serve(async (req) => {
     // ---------------------------------------------------------------------------
 
     const rawItems = (data.data || data.results || data.businesses || data.prospects || []) as Record<string, unknown>[]
-    const totalCount = (data.total_count as number) ?? (data.total as number) ?? rawItems.length
+    const totalCount = (data.total_results as number)
+      ?? (data.total_count as number)
+      ?? (data.total as number)
+      ?? rawItems.length
     const page = (params.page ?? 1)
     const perPage = Math.min(params.per_page ?? 25, 500)
     const totalPages = perPage > 0 ? Math.ceil(totalCount / perPage) : 1
