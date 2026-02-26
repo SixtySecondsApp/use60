@@ -20,6 +20,22 @@ interface SimilarOrg {
   similarity_score: number;
 }
 
+/**
+ * BUG A fix: When matchSearchTerm is a raw domain (e.g. "sixtyseconds.video"),
+ * strip the TLD and capitalize the first letter to produce a presentable org name.
+ */
+function formatDomainAsOrgName(domain: string): string {
+  // Strip everything from the last dot onward (TLD)
+  const withoutTld = domain.replace(/\.[^.]+$/, '');
+  // Capitalize first letter
+  return withoutTld.charAt(0).toUpperCase() + withoutTld.slice(1);
+}
+
+/** Returns true if the value looks like a domain (contains "." and no spaces) */
+function looksLikeDomain(value: string): boolean {
+  return value.includes('.') && !value.includes(' ');
+}
+
 export function OrganizationSelectionStep() {
   const [similarOrgs, setSimilarOrgs] = useState<SimilarOrg[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,11 +49,25 @@ export function OrganizationSelectionStep() {
     similarOrganizations: preFetchedOrgs,
     matchSearchTerm,
     submitJoinRequest,
-    createNewOrganization
+    createNewOrganization,
+    setStep
   } = useOnboardingV2Store();
 
   // Use pre-fetched orgs if available, fall back to manual data search
-  const companyName = manualData?.company_name || matchSearchTerm || '';
+  const rawCompanyName = manualData?.company_name || matchSearchTerm || '';
+
+  // BUG A: If the name looks like a raw domain, format it into a proper name
+  const companyName = rawCompanyName && looksLikeDomain(rawCompanyName)
+    ? formatDomainAsOrgName(rawCompanyName)
+    : rawCompanyName;
+
+  // BUG B: Guard — redirect to website_input if companyName is empty
+  useEffect(() => {
+    if (!rawCompanyName) {
+      console.warn('[OrganizationSelectionStep] No companyName available, redirecting to website_input');
+      setStep('website_input');
+    }
+  }, [rawCompanyName, setStep]);
 
   useEffect(() => {
     // If we have pre-fetched orgs, use them sorted by confidence

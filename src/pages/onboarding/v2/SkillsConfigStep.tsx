@@ -42,6 +42,7 @@ const MAX_TEXTAREA_LENGTH = 2000;
 const MAX_TAG_LENGTH = 100;
 const MAX_ITEM_LENGTH = 500;
 const MAX_ITEMS = 10;
+const MAX_OBJECTION_WORDS = 50;
 
 // Sanitize input to prevent injection attacks
 const sanitizeInput = (input: string): string => {
@@ -99,6 +100,8 @@ export function SkillsConfigStep() {
         const success = await saveAllSkills(organizationId);
         if (success) {
           setStep('complete');
+        } else {
+          toast.error('Failed to save skills. Please try again.');
         }
       } else {
         setStep('complete');
@@ -192,6 +195,7 @@ export function SkillsConfigStep() {
                   }
                   placeholder="Add qualification criterion"
                   disabled={(activeConfig.criteria?.length ?? 0) >= MAX_ITEMS}
+                  maxLength={MAX_TAG_LENGTH}
                 />
                 {(activeConfig.criteria?.length ?? 0) >= MAX_ITEMS && (
                   <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
@@ -235,6 +239,7 @@ export function SkillsConfigStep() {
                   }
                   placeholder="Add disqualifier"
                   disabled={(activeConfig.disqualifiers?.length ?? 0) >= MAX_ITEMS}
+                  maxLength={MAX_TAG_LENGTH}
                 />
                 {(activeConfig.disqualifiers?.length ?? 0) >= MAX_ITEMS && (
                   <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
@@ -269,6 +274,9 @@ export function SkillsConfigStep() {
                   maxLength={MAX_TEXTAREA_LENGTH}
                   className="w-full p-3 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none h-24 text-sm bg-gray-800 border-gray-700 text-white border"
                 />
+                <span className="absolute bottom-2 left-3 text-xs text-gray-500">
+                  {(q || '').length}/{MAX_TEXTAREA_LENGTH}
+                </span>
                 <button
                   onClick={() =>
                     updateSkillConfig('lead_enrichment', {
@@ -472,9 +480,13 @@ export function SkillsConfigStep() {
                     <input
                       value={obj.trigger}
                       onChange={(e) => {
-                        if (e.target.value.length <= MAX_ITEM_LENGTH) {
+                        const words = e.target.value.split(/\s+/).filter(Boolean);
+                        const truncated = words.length > MAX_OBJECTION_WORDS
+                          ? words.slice(0, MAX_OBJECTION_WORDS).join(' ')
+                          : e.target.value;
+                        if (truncated.length <= MAX_ITEM_LENGTH) {
                           const newObjections = [...(activeConfig.objections || [])];
-                          newObjections[i] = { ...obj, trigger: sanitizeInput(e.target.value) };
+                          newObjections[i] = { ...obj, trigger: sanitizeInput(truncated) };
                           updateSkillConfig('objection_handling', { objections: newObjections });
                         }
                       }}
@@ -482,19 +494,27 @@ export function SkillsConfigStep() {
                       placeholder="Enter objection (e.g., Price is too high)"
                       className="flex-1 text-sm font-medium bg-transparent outline-none text-gray-200 placeholder-gray-500"
                     />
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      {obj.trigger.split(/\s+/).filter(Boolean).length}/{MAX_OBJECTION_WORDS} words
+                    </span>
                   </div>
-                  <textarea
-                    value={obj.response}
-                    onChange={(e) => {
-                      if (e.target.value.length <= MAX_TEXTAREA_LENGTH) {
-                        const newObjections = [...(activeConfig.objections || [])];
-                        newObjections[i] = { ...obj, response: sanitizeInput(e.target.value) };
-                        updateSkillConfig('objection_handling', { objections: newObjections });
-                      }
-                    }}
-                    maxLength={MAX_TEXTAREA_LENGTH}
-                    className="w-full p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none h-40 text-sm bg-gray-900 border-gray-700 text-white border"
-                  />
+                  <div className="relative">
+                    <textarea
+                      value={obj.response}
+                      onChange={(e) => {
+                        if (e.target.value.length <= MAX_TEXTAREA_LENGTH) {
+                          const newObjections = [...(activeConfig.objections || [])];
+                          newObjections[i] = { ...obj, response: sanitizeInput(e.target.value) };
+                          updateSkillConfig('objection_handling', { objections: newObjections });
+                        }
+                      }}
+                      maxLength={MAX_TEXTAREA_LENGTH}
+                      className="w-full p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none h-40 text-sm bg-gray-900 border-gray-700 text-white border"
+                    />
+                    <span className="absolute bottom-2 right-3 text-xs text-gray-500">
+                      {(obj.response || '').length}/{MAX_TEXTAREA_LENGTH}
+                    </span>
+                  </div>
                 </div>
               )
             )}
@@ -601,6 +621,7 @@ export function SkillsConfigStep() {
                   }
                   placeholder="Add buying signal"
                   disabled={(activeConfig.buyingSignals?.length ?? 0) >= MAX_ITEMS}
+                  maxLength={MAX_TAG_LENGTH}
                 />
                 {(activeConfig.buyingSignals?.length ?? 0) >= MAX_ITEMS && (
                   <p className="text-xs text-amber-500 mt-1">Maximum {MAX_ITEMS} items reached</p>
@@ -707,7 +728,25 @@ export function SkillsConfigStep() {
               return (
                 <button
                   key={skill.id}
-                  onClick={() => setCurrentSkillIndex(index)}
+                  onClick={() => {
+                    // OLH-009: Auto-mark previous tabs when jumping forward
+                    if (index > currentSkillIndex) {
+                      setSkillStatuses(prev => {
+                        const updated = { ...prev };
+                        for (let i = currentSkillIndex; i < index; i++) {
+                          if (updated[SKILLS[i].id] === 'pending') {
+                            const config = skillConfigs[SKILLS[i].id];
+                            const hasData = config && Object.values(config).some(v =>
+                              Array.isArray(v) ? v.length > 0 : typeof v === 'string' ? v.trim().length > 0 : !!v
+                            );
+                            updated[SKILLS[i].id] = hasData ? 'configured' : 'skipped';
+                          }
+                        }
+                        return updated;
+                      });
+                    }
+                    setCurrentSkillIndex(index);
+                  }}
                   className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-t-lg transition-all border-b-2 -mb-px ${
                     isActive
                       ? 'bg-gray-800 text-white border-violet-500'
