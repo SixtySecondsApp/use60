@@ -99,7 +99,7 @@ DO $$ BEGIN
       FROM public.organization_memberships om
       WHERE om.org_id = autopilot_org_settings.org_id
         AND om.user_id = auth.uid()
-        AND om.status = 'active'
+        AND om.member_status = 'active'
     )
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
@@ -117,7 +117,7 @@ DO $$ BEGIN
       WHERE om.org_id = autopilot_org_settings.org_id
         AND om.user_id = auth.uid()
         AND om.role IN ('owner', 'admin')
-        AND om.status = 'active'
+        AND om.member_status = 'active'
     )
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
@@ -135,7 +135,7 @@ DO $$ BEGIN
       WHERE om.org_id = autopilot_org_settings.org_id
         AND om.user_id = auth.uid()
         AND om.role IN ('owner', 'admin')
-        AND om.status = 'active'
+        AND om.member_status = 'active'
     )
   )
   WITH CHECK (
@@ -145,7 +145,7 @@ DO $$ BEGIN
       WHERE om.org_id = autopilot_org_settings.org_id
         AND om.user_id = auth.uid()
         AND om.role IN ('owner', 'admin')
-        AND om.status = 'active'
+        AND om.member_status = 'active'
     )
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
@@ -163,7 +163,7 @@ DO $$ BEGIN
       WHERE om.org_id = autopilot_org_settings.org_id
         AND om.user_id = auth.uid()
         AND om.role IN ('owner', 'admin')
-        AND om.status = 'active'
+        AND om.member_status = 'active'
     )
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
