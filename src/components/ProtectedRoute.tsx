@@ -327,9 +327,10 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
           .from('organizations')
           .select('is_active, name')
           .eq('id', activeOrgId)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
+        if (!org) return; // Org doesn't exist (deleted or not yet created during onboarding)
 
         logger.log('[ProtectedRoute] Organization active status:', org?.is_active);
         setIsOrgActive(org?.is_active ?? true);

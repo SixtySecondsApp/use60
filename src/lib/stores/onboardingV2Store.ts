@@ -521,11 +521,22 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         let fuzzyMatches: any[] = [];
 
         // Strategy 1: Exact match by company_domain (OLH-005: use SECURITY DEFINER RPC to bypass RLS)
-        const { data: exactMatchResults } = await supabase.rpc('find_organization_by_domain', {
+        // Fallback to direct query if RPC not yet deployed
+        let exactMatch: any = null;
+        const { data: exactMatchResults, error: rpcError } = await supabase.rpc('find_organization_by_domain', {
           p_domain: domain,
         });
-
-        const exactMatch = exactMatchResults?.[0] || null;
+        if (rpcError && (rpcError.code === '42883' || rpcError.message?.includes('404'))) {
+          // RPC not deployed yet — fallback to direct query
+          const { data: fallbackResults } = await supabase
+            .from('organizations')
+            .select('id, name, company_domain')
+            .eq('company_domain', domain)
+            .limit(1);
+          exactMatch = fallbackResults?.[0] || null;
+        } else {
+          exactMatch = exactMatchResults?.[0] || null;
+        }
         if (exactMatch) {
           hasExactMatch = true;
           exactMatchOrg = exactMatch;
@@ -705,11 +716,21 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       let existingOrg = null;
 
       // Strategy 1: Exact match by company_domain (OLH-005: use SECURITY DEFINER RPC to bypass RLS)
-      const { data: exactMatchResults } = await supabase.rpc('find_organization_by_domain', {
+      // Fallback to direct query if RPC not yet deployed
+      const { data: exactMatchResults, error: rpcError } = await supabase.rpc('find_organization_by_domain', {
         p_domain: domain,
       });
-
-      existingOrg = exactMatchResults?.[0] || null;
+      if (rpcError && (rpcError.code === '42883' || rpcError.message?.includes('404'))) {
+        // RPC not deployed yet — fallback to direct query
+        const { data: fallbackResults } = await supabase
+          .from('organizations')
+          .select('id, name, company_domain')
+          .eq('company_domain', domain)
+          .limit(1);
+        existingOrg = fallbackResults?.[0] || null;
+      } else {
+        existingOrg = exactMatchResults?.[0] || null;
+      }
 
       // Strategy 2: If no exact match, try fuzzy domain matching RPC
       let multipleMatches = false;
