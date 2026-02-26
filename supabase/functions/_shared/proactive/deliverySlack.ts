@@ -12,6 +12,8 @@ interface SlackDeliveryOptions {
   slackUserId: string;
   blocks?: any[];
   text?: string;
+  icon_url?: string;
+  username?: string;
 }
 
 /**
@@ -20,7 +22,7 @@ interface SlackDeliveryOptions {
 export async function sendSlackDM(
   options: SlackDeliveryOptions
 ): Promise<{ success: boolean; channelId?: string; ts?: string; error?: string }> {
-  const { botToken, slackUserId, blocks, text } = options;
+  const { botToken, slackUserId, blocks, text, icon_url, username } = options;
 
   try {
     // Open DM channel
@@ -51,6 +53,9 @@ export async function sendSlackDM(
       channel: channelId,
       text: text || 'Notification from use60',
     };
+
+    if (icon_url) messagePayload.icon_url = icon_url;
+    if (username) messagePayload.username = username;
 
     if (blocks && blocks.length > 0) {
       // Validate and truncate blocks if needed
