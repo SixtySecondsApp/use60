@@ -46,15 +46,27 @@ type SearchType = 'business_search' | 'prospect_search';
 // Constants
 // ---------------------------------------------------------------------------
 
+// These are exact Google Business Category values accepted by the Explorium API
 const BUSINESS_INDUSTRIES = [
-  'Software',
+  'Software Company',
   'Financial Services',
-  'Healthcare',
-  'Manufacturing',
+  'Medical center',
+  'Manufacturer',
   'Retail',
-  'Professional Services',
+  'Legal services',
   'Education',
-  'Media',
+  'Accounting',
+  'Marketing agency',
+  'Real Estate',
+  'Insurance',
+  'Investment management',
+  'Construction company',
+  'Pharmaceutical company',
+  'Media company',
+  'Professional Services',
+  'Bank',
+  'Hotel',
+  'Restaurant',
 ];
 
 const EMPLOYEE_RANGES = [
@@ -68,14 +80,16 @@ const EMPLOYEE_RANGES = [
   '10001+',
 ];
 
+// Exact enum values accepted by the Explorium company_revenue filter
 const REVENUE_RANGES = [
   '0-500K',
   '500K-1M',
   '1M-5M',
   '5M-10M',
-  '10M-50M',
-  '50M-100M',
-  '100M-500M',
+  '10M-25M',
+  '25M-75M',
+  '75M-200M',
+  '200M-500M',
   '500M-1B',
   '1B-10B',
 ];
@@ -84,7 +98,7 @@ const REVENUE_RANGES = [
 // track the values separately in state so the API receives the right values.
 const SENIORITY_DISPLAY: { label: string; values: string[] }[] = [
   { label: 'Owner/Founder', values: ['owner', 'founder'] },
-  { label: 'C-Suite', values: ['c_suite'] },
+  { label: 'C-Suite', values: ['c-suite'] },
   { label: 'VP', values: ['vp'] },
   { label: 'Director', values: ['director'] },
   { label: 'Manager', values: ['manager'] },
