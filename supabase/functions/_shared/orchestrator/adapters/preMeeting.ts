@@ -1866,6 +1866,7 @@ export const deliverSlackBriefingAdapter: SkillAdapter = {
             meetingTime,
             briefing._meetingNumber || 2,
             briefing._companyName || enrichAttendeesOutput?.company?.name || 'Company',
+            meetingId,
           );
 
           // Add deep link action button for the deal, if available
