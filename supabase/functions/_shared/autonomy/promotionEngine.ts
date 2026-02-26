@@ -72,6 +72,48 @@ function nextTier(tier: string): string | null {
   }
 }
 
+/** Numeric rank for each autonomy tier — used for ceiling comparisons. */
+const TIER_RANK: Record<string, number> = {
+  'disabled': 0,
+  'suggest': 1,
+  'approve': 2,
+  'auto': 3,
+}
+
+/**
+ * Checks whether the org admin has set a ceiling that would block this
+ * promotion.
+ *
+ * @returns true if the promotion is BLOCKED by a ceiling (should not proceed)
+ * @returns false if the promotion is ALLOWED (no ceiling, or ceiling is high enough)
+ */
+export async function checkManagerCeiling(
+  supabase: SupabaseClient,
+  orgId: string,
+  actionType: string,
+  toTier: string,
+): Promise<boolean> {
+  const { data: setting, error } = await supabase
+    .from('autopilot_org_settings')
+    .select('max_tier, enabled')
+    .eq('org_id', orgId)
+    .eq('action_type', actionType)
+    .eq('enabled', true)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[autonomy/promotionEngine] checkManagerCeiling fetch error:', error)
+    // Fail open — don't block promotions on a DB error
+    return false
+  }
+
+  // No ceiling configured for this (org, action_type)
+  if (!setting) return false
+
+  // Block if the target tier exceeds the configured ceiling
+  return (TIER_RANK[toTier] ?? 0) > (TIER_RANK[setting.max_tier] ?? 3)
+}
+
 // =============================================================================
 // Core API
 // =============================================================================
@@ -197,6 +239,15 @@ export async function evaluatePromotionEligibility(
 
   // Guard: policy-level never_promote
   if (threshold.never_promote) return null
+
+  // -------------------------------------------------------------------------
+  // Step 2.5 — Check manager ceiling
+  // -------------------------------------------------------------------------
+  const ceilingBlocked = await checkManagerCeiling(supabase, orgId, actionType, toTier)
+  if (ceilingBlocked) {
+    console.log(`[autonomy/promotionEngine] Promotion blocked by manager ceiling: org=${orgId} action=${actionType} to=${toTier}`)
+    return null
+  }
 
   // -------------------------------------------------------------------------
   // Step 3 — Evaluate numeric criteria

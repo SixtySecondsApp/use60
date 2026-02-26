@@ -7598,9 +7598,13 @@ serve(async (req) => {
         }
 
         // =====================================================================
-        // AP-016: Route autopilot promotion actions (autopilot_promote_*)
+        // AP-016/AP-017: Route autopilot promotion + demotion actions
+        // (autopilot_promote_* | autopilot_demotion_*)
         // =====================================================================
-        if (action.action_id.startsWith('autopilot_promote_')) {
+        if (
+          action.action_id.startsWith('autopilot_promote_') ||
+          action.action_id.startsWith('autopilot_demotion_')
+        ) {
           console.log('[AutopilotPromotion] Processing action:', action.action_id);
           await handleAutopilotPromotion(supabase, payload, action.action_id, action);
           return new Response(JSON.stringify({ ok: true }), {

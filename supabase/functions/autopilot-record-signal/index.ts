@@ -25,6 +25,10 @@ import {
   isRubberStamp,
 } from '../_shared/autopilot/signals.ts'
 import { recalculateUserConfidence } from '../_shared/autopilot/confidence.ts'
+import {
+  evaluateDemotionTriggers,
+  executeDemotion,
+} from '../_shared/autopilot/demotionEngine.ts'
 
 // =============================================================================
 // Environment
@@ -220,7 +224,22 @@ serve(async (req: Request) => {
     })
 
     // -------------------------------------------------------------------------
-    // 7. Return success
+    // 7. Fire-and-forget demotion evaluation (only for undo signals)
+    // -------------------------------------------------------------------------
+    if (signal === 'undone' || signal === 'auto_undone') {
+      evaluateDemotionTriggers(serviceClient, userId, orgId, action_type)
+        .then(async (result) => {
+          if (result.triggered && result.severity) {
+            await executeDemotion(serviceClient, userId, orgId, action_type, result.severity, result)
+          }
+        })
+        .catch((err) => {
+          console.error('[autopilot-record-signal] demotion evaluation error:', err)
+        })
+    }
+
+    // -------------------------------------------------------------------------
+    // 8. Return success
     // -------------------------------------------------------------------------
     return jsonResponse(
       {

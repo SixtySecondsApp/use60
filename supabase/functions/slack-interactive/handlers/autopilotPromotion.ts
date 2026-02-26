@@ -22,6 +22,7 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { recordPromotionEvent } from '../../_shared/autonomy/promotionEngine.ts'
 import { updateRepMemory } from '../../_shared/autopilot/confidence.ts'
+import { executeDemotion } from '../../_shared/autopilot/demotionEngine.ts'
 
 // =============================================================================
 // Types
@@ -75,6 +76,16 @@ interface PickValue {
     to_tier: string
     confidence_score?: number
   }>
+}
+
+interface DemotionRevertValue {
+  user_id: string
+  action_type: string
+}
+
+interface DemotionKeepValue {
+  user_id: string
+  action_type: string
 }
 
 // =============================================================================
@@ -485,13 +496,105 @@ async function handleAutopilotPromotePick(
   }
 }
 
+/**
+ * autopilot_demotion_revert — rep clicks "Revert to approval mode" from the
+ * warning Slack message. Executes a severity='warn' demotion (14-day cooldown,
+ * +10 extra_required_signals) and updates the Slack message.
+ * Value: { user_id, action_type }
+ */
+async function handleAutopilotDemotionRevert(
+  supabase: SupabaseClient,
+  payload: InteractivePayload,
+  action: SlackAction,
+): Promise<void> {
+  let parsed: DemotionRevertValue
+  try {
+    parsed = JSON.parse(action.value)
+  } catch {
+    console.error('[autopilotPromotion] demotion_revert: failed to parse value:', action.value)
+    return
+  }
+
+  const { user_id, action_type } = parsed
+  if (!user_id || !action_type) {
+    console.error('[autopilotPromotion] demotion_revert: missing required fields in value')
+    return
+  }
+
+  // Fetch org_id for the demotion call
+  const { data: existing } = await supabase
+    .from('autopilot_confidence')
+    .select('org_id')
+    .eq('user_id', user_id)
+    .eq('action_type', action_type)
+    .maybeSingle()
+
+  const org_id: string = existing?.org_id ?? ''
+
+  if (!org_id) {
+    console.error('[autopilotPromotion] demotion_revert: could not resolve org_id for user:', user_id)
+    return
+  }
+
+  // Execute demotion with severity='warn' (user-initiated revert from warning)
+  await executeDemotion(supabase, user_id, org_id, action_type, 'warn', {
+    triggered: true,
+    severity: 'warn',
+    trigger_name: 'user_revert',
+    trigger_reason: 'User chose to revert to approval mode via Slack warning message',
+  })
+
+  // Update the Slack message to confirm
+  if (payload.response_url) {
+    const label = displayName(action_type)
+    await updateSlackMessage(
+      payload.response_url,
+      `Reverted *${label}* to approval mode. I'll monitor and re-propose when your track record recovers.`,
+    )
+  }
+}
+
+/**
+ * autopilot_demotion_keep — rep clicks "Keep auto — I'll be more careful" from
+ * the warning Slack message. No demotion is applied; just confirms the choice.
+ * Value: { user_id, action_type }
+ */
+async function handleAutopilotDemotionKeep(
+  payload: InteractivePayload,
+  action: SlackAction,
+): Promise<void> {
+  let parsed: DemotionKeepValue
+  try {
+    parsed = JSON.parse(action.value)
+  } catch {
+    console.error('[autopilotPromotion] demotion_keep: failed to parse value:', action.value)
+    return
+  }
+
+  const { action_type } = parsed
+  if (!action_type) {
+    console.error('[autopilotPromotion] demotion_keep: missing action_type in value')
+    return
+  }
+
+  // Update the Slack message to confirm
+  if (payload.response_url) {
+    const label = displayName(action_type)
+    await updateSlackMessage(
+      payload.response_url,
+      `Keeping *${label}* on auto. I'll keep monitoring.`,
+    )
+  }
+}
+
 // =============================================================================
 // Public dispatcher
 // =============================================================================
 
 /**
- * Dispatches `autopilot_promote_*` button clicks to the appropriate handler.
- * All errors are caught and logged — never re-thrown to the caller.
+ * Dispatches `autopilot_promote_*` and `autopilot_demotion_*` button clicks
+ * to the appropriate handler. All errors are caught and logged — never
+ * re-thrown to the caller.
  */
 export async function handleAutopilotPromotion(
   supabase: SupabaseClient,
@@ -515,6 +618,12 @@ export async function handleAutopilotPromotion(
         break
       case 'autopilot_promote_pick':
         await handleAutopilotPromotePick(payload)
+        break
+      case 'autopilot_demotion_revert':
+        await handleAutopilotDemotionRevert(supabase, payload, action)
+        break
+      case 'autopilot_demotion_keep':
+        await handleAutopilotDemotionKeep(payload, action)
         break
       default:
         console.warn('[autopilotPromotion] Unknown action_id:', actionId)
