@@ -350,10 +350,10 @@ serve(async (req) => {
     let payload: Record<string, unknown>
 
     if (action === 'stats') {
-      // For stats we need to know which entity type to count — default to business
-      // The caller should pass the same filters they would for the actual search.
-      // We infer from presence of prospect-specific fields.
-      const isProspectStats = !!(
+      // For stats we need to know which entity type to count — default to business.
+      // The caller can pass `entity_type` explicitly; otherwise we infer from filter fields.
+      const entityType = (params as Record<string, unknown>).entity_type as string | undefined
+      const isProspectStats = entityType === 'prospect_search' || !!(
         params.job_title ||
         params.seniorities?.length ||
         params.departments?.length ||
@@ -365,6 +365,15 @@ serve(async (req) => {
       )
       endpoint = resolved.endpoint
       payload = resolved.payload
+
+      // Explorium stats endpoint returns 400 for empty filters — short-circuit early
+      const payloadFilters = payload.filters as Record<string, unknown>
+      if (!payloadFilters || Object.keys(payloadFilters).length === 0) {
+        return new Response(
+          JSON.stringify({ total_count: null, action: 'stats', credits_consumed: 0 }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        )
+      }
     } else if (action === 'prospect_search') {
       endpoint = 'prospects'
       payload = buildProspectPayload(params)
@@ -407,12 +416,29 @@ serve(async (req) => {
         let exploriumErrorMsg = ''
         try {
           const parsed = JSON.parse(errorBody)
-          exploriumErrorMsg = parsed.message || parsed.error || parsed.detail || ''
-        } catch { /* raw text */ }
+          // FastAPI/Pydantic validation errors come as { detail: [{loc, msg, type}...] }
+          // Coerce any non-string value to a readable string before using in template literal
+          const rawMsg = parsed.message || parsed.error || parsed.detail
+          if (rawMsg === undefined || rawMsg === null) {
+            exploriumErrorMsg = errorBody
+          } else if (typeof rawMsg === 'string') {
+            exploriumErrorMsg = rawMsg
+          } else if (Array.isArray(rawMsg)) {
+            exploriumErrorMsg = rawMsg
+              .map((e: Record<string, unknown>) => {
+                const loc = Array.isArray(e.loc) ? (e.loc as string[]).join('.') : String(e.loc ?? '')
+                const msg = String(e.msg || e.message || JSON.stringify(e))
+                return loc ? `${loc}: ${msg}` : msg
+              })
+              .join('; ')
+          } else {
+            exploriumErrorMsg = JSON.stringify(rawMsg)
+          }
+        } catch { exploriumErrorMsg = errorBody }
 
         return new Response(
           JSON.stringify({
-            error: `Invalid parameters: ${exploriumErrorMsg || errorBody}`,
+            error: `Invalid parameters: ${exploriumErrorMsg}`,
             code: 'INVALID_PARAMS',
             details: errorBody,
             payload_sent: payload,

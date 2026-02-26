@@ -553,6 +553,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
         photoUrl: (apollo?.photo_url as string) || undefined,
         companyDomain: (org?.primary_domain as string)
           || (sd.company_domain as string)
+          || (sd.domain as string)
           || undefined,
         companyLinkedinUrl: (org?.linkedin_url as string) || undefined,
       };

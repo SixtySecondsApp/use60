@@ -433,7 +433,7 @@ serve(async (req) => {
       )
     }
 
-    const { source = 'apollo', action, query_description, search_params, table_name: requestedTableName, target_table_id, auto_enrich } = body
+    const { source = 'apollo', action, query_description, search_params, table_name: requestedTableName, target_table_id, auto_enrich, per_page: bodyPerPage } = body
 
     // ---------------------------------------------------------------
     // AI Ark branch — separate flow for AI Ark data source
@@ -727,7 +727,7 @@ serve(async (req) => {
       const explSearchBody: Record<string, unknown> = {
         action: searchAction,
         page: (search_params.page as number) || 1,
-        per_page: (search_params.per_page as number) || 25,
+        per_page: (bodyPerPage as number) || (search_params.per_page as number) || 25,
         preview_mode: false,
         ...(isBusinessSearch ? {
           industries: search_params.industries,
@@ -763,7 +763,12 @@ serve(async (req) => {
         try {
           const parsed = JSON.parse(errorBody)
           return new Response(
-            JSON.stringify({ error: parsed.error || 'Explorium search failed', code: parsed.code }),
+            JSON.stringify({
+              error: parsed.error || 'Explorium search failed',
+              code: parsed.code,
+              details: parsed.details,
+              payload_sent: parsed.payload_sent,
+            }),
             { status: explResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         } catch {

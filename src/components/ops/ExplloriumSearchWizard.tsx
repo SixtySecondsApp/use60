@@ -145,19 +145,19 @@ function TagInput({ tags, onTagsChange, placeholder = 'Type and press Enter', cl
 
   return (
     <div
-      className={`min-h-[40px] flex flex-wrap gap-1.5 rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-1.5 cursor-text focus-within:border-teal-500/60 focus-within:ring-1 focus-within:ring-teal-500/20 transition-all ${className}`}
+      className={`min-h-[40px] flex flex-wrap gap-1.5 rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-1.5 cursor-text focus-within:border-brand-teal/60 focus-within:ring-1 focus-within:ring-brand-teal/20 transition-all ${className}`}
       onClick={() => inputRef.current?.focus()}
     >
       {tags.map((tag) => (
         <span
           key={tag}
-          className="inline-flex items-center gap-1 rounded-md bg-teal-500/10 border border-teal-500/25 px-2 py-0.5 text-xs text-teal-300 font-medium"
+          className="inline-flex items-center gap-1 rounded-md bg-brand-teal/10 border border-brand-teal/25 px-2 py-0.5 text-xs text-brand-teal/80 font-medium"
         >
           {tag}
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); removeTag(tag); }}
-            className="text-teal-500/60 hover:text-teal-300 transition-colors"
+            className="text-brand-teal/60 hover:text-brand-teal/80 transition-colors"
           >
             <X className="w-3 h-3" />
           </button>
@@ -217,7 +217,7 @@ function CheckboxGroup({ label, options, selected, onSelectedChange }: CheckboxG
               onClick={() => toggle(opt.value)}
               className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-all ${
                 active
-                  ? 'bg-teal-500/15 border-teal-500/50 text-teal-300 shadow-[0_0_8px_rgba(20,184,166,0.15)]'
+                  ? 'bg-brand-teal/15 border-brand-teal/50 text-brand-teal/80 shadow-[0_0_8px_rgba(3,173,156,0.15)]'
                   : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
               }`}
             >
@@ -269,7 +269,7 @@ function SeniorityGroup({ selected, onSelectedChange }: SeniorityGroupProps) {
               onClick={() => toggleGroup(group.values)}
               className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-all ${
                 active
-                  ? 'bg-teal-500/15 border-teal-500/50 text-teal-300 shadow-[0_0_8px_rgba(20,184,166,0.15)]'
+                  ? 'bg-brand-teal/15 border-brand-teal/50 text-brand-teal/80 shadow-[0_0_8px_rgba(3,173,156,0.15)]'
                   : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
               }`}
             >
@@ -306,12 +306,12 @@ function StepIndicator({ current, labels }: StepIndicatorProps) {
               key={idx}
               className={`flex-1 h-0.5 rounded-full transition-all duration-500 ${
                 isDone
-                  ? 'bg-teal-500'
+                  ? 'bg-brand-teal'
                   : isActive
-                  ? 'bg-teal-400'
+                  ? 'bg-brand-teal/90'
                   : 'bg-zinc-800'
               }`}
-              style={isActive ? { boxShadow: '0 0 6px rgba(20,184,166,0.6)' } : undefined}
+              style={isActive ? { boxShadow: '0 0 6px rgba(3,173,156,0.6)' } : undefined}
             />
           );
         })}
@@ -327,7 +327,7 @@ function StepIndicator({ current, labels }: StepIndicatorProps) {
               <span
                 className={`text-[10px] font-semibold transition-colors ${
                   isActive
-                    ? 'text-teal-400'
+                    ? 'text-brand-teal'
                     : isDone
                     ? 'text-zinc-500'
                     : 'text-zinc-700'
@@ -335,7 +335,7 @@ function StepIndicator({ current, labels }: StepIndicatorProps) {
               >
                 {isDone ? (
                   <span className="inline-flex items-center gap-1">
-                    <Check className="w-2.5 h-2.5 text-teal-600" />
+                    <Check className="w-2.5 h-2.5 text-brand-teal" />
                     {label}
                   </span>
                 ) : (
@@ -417,8 +417,9 @@ export function ExplloriumSearchWizard({
     explloriumSearchService
       .getStats({ action: searchType, filters })
       .then(({ total_count }) => setStatsCount(total_count))
-      .catch(() => {
+      .catch((err: unknown) => {
         // Non-blocking — swallow silently; UI shows "Unable to get count"
+        console.warn('[ExplloriumSearchWizard] Stats fetch failed:', err)
       })
       .finally(() => setStatsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -617,14 +618,14 @@ export function ExplloriumSearchWizard({
         {/* ------------------------------------------------------------------ */}
         <div className="relative px-6 pt-5 pb-4 border-b border-zinc-800/60 shrink-0">
           {/* Teal accent bar at top */}
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-500/0 via-teal-500 to-teal-500/0" />
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-brand-teal/0 via-brand-teal to-brand-teal/0" />
 
           <DialogHeader className="space-y-0">
             <div className="flex items-center gap-3 mb-3">
               {/* Explorium badge */}
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-500/10 border border-teal-500/20">
-                  <Database className="w-3.5 h-3.5 text-teal-400" />
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-teal/10 border border-brand-teal/20">
+                  <Database className="w-3.5 h-3.5 text-brand-teal" />
                 </div>
                 <div>
                   <DialogTitle className="text-[13px] font-semibold text-white leading-none">
@@ -671,14 +672,14 @@ export function ExplloriumSearchWizard({
                   onClick={() => setSearchType('business_search')}
                   className={`group relative flex flex-col items-start gap-4 rounded-xl border p-5 text-left transition-all duration-200 ${
                     searchType === 'business_search'
-                      ? 'border-teal-500/50 bg-teal-500/[0.06]'
+                      ? 'border-brand-teal/50 bg-brand-teal/[0.06]'
                       : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/70'
                   }`}
-                  style={searchType === 'business_search' ? { boxShadow: '0 0 20px rgba(20,184,166,0.08), inset 0 0 20px rgba(20,184,166,0.03)' } : undefined}
+                  style={searchType === 'business_search' ? { boxShadow: '0 0 20px rgba(3,173,156,0.08), inset 0 0 20px rgba(3,173,156,0.03)' } : undefined}
                 >
                   {/* Selected indicator */}
                   {searchType === 'business_search' && (
-                    <div className="absolute top-3.5 right-3.5 flex h-4 w-4 items-center justify-center rounded-full bg-teal-500">
+                    <div className="absolute top-3.5 right-3.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand-teal">
                       <Check className="w-2.5 h-2.5 text-black" strokeWidth={3} />
                     </div>
                   )}
@@ -686,10 +687,10 @@ export function ExplloriumSearchWizard({
                   {/* Icon */}
                   <div className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
                     searchType === 'business_search'
-                      ? 'bg-teal-500/15 border border-teal-500/20'
+                      ? 'bg-brand-teal/15 border border-brand-teal/20'
                       : 'bg-zinc-800 border border-zinc-700/50 group-hover:bg-zinc-750'
                   }`}>
-                    <Building2 className={`w-5 h-5 transition-colors ${searchType === 'business_search' ? 'text-teal-400' : 'text-zinc-500'}`} />
+                    <Building2 className={`w-5 h-5 transition-colors ${searchType === 'business_search' ? 'text-brand-teal' : 'text-zinc-500'}`} />
                   </div>
 
                   <div className="space-y-1.5">
@@ -720,23 +721,23 @@ export function ExplloriumSearchWizard({
                   onClick={() => setSearchType('prospect_search')}
                   className={`group relative flex flex-col items-start gap-4 rounded-xl border p-5 text-left transition-all duration-200 ${
                     searchType === 'prospect_search'
-                      ? 'border-teal-500/50 bg-teal-500/[0.06]'
+                      ? 'border-brand-teal/50 bg-brand-teal/[0.06]'
                       : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/70'
                   }`}
-                  style={searchType === 'prospect_search' ? { boxShadow: '0 0 20px rgba(20,184,166,0.08), inset 0 0 20px rgba(20,184,166,0.03)' } : undefined}
+                  style={searchType === 'prospect_search' ? { boxShadow: '0 0 20px rgba(3,173,156,0.08), inset 0 0 20px rgba(3,173,156,0.03)' } : undefined}
                 >
                   {searchType === 'prospect_search' && (
-                    <div className="absolute top-3.5 right-3.5 flex h-4 w-4 items-center justify-center rounded-full bg-teal-500">
+                    <div className="absolute top-3.5 right-3.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand-teal">
                       <Check className="w-2.5 h-2.5 text-black" strokeWidth={3} />
                     </div>
                   )}
 
                   <div className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
                     searchType === 'prospect_search'
-                      ? 'bg-teal-500/15 border border-teal-500/20'
+                      ? 'bg-brand-teal/15 border border-brand-teal/20'
                       : 'bg-zinc-800 border border-zinc-700/50 group-hover:bg-zinc-750'
                   }`}>
-                    <Users className={`w-5 h-5 transition-colors ${searchType === 'prospect_search' ? 'text-teal-400' : 'text-zinc-500'}`} />
+                    <Users className={`w-5 h-5 transition-colors ${searchType === 'prospect_search' ? 'text-brand-teal' : 'text-zinc-500'}`} />
                   </div>
 
                   <div className="space-y-1.5">
@@ -791,7 +792,7 @@ export function ExplloriumSearchWizard({
                             key={industry}
                             type="button"
                             onClick={() => setBizIndustries([...bizIndustries, industry])}
-                            className="rounded-full border border-zinc-800 bg-zinc-900/60 px-2.5 py-0.5 text-[10px] text-zinc-500 hover:border-teal-500/30 hover:text-teal-400 hover:bg-teal-500/5 transition-all"
+                            className="rounded-full border border-zinc-800 bg-zinc-900/60 px-2.5 py-0.5 text-[10px] text-zinc-500 hover:border-brand-teal/30 hover:text-brand-teal hover:bg-brand-teal/5 transition-all"
                           >
                             + {industry}
                           </button>
@@ -874,7 +875,7 @@ export function ExplloriumSearchWizard({
                         onChange={(e) => setBizDomains(e.target.value)}
                         placeholder={'acme.com\nexample.io\nstartup.co'}
                         rows={3}
-                        className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 resize-none transition-all"
+                        className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-brand-teal/60 focus:ring-1 focus:ring-brand-teal/20 resize-none transition-all"
                       />
                     </div>
 
@@ -890,7 +891,7 @@ export function ExplloriumSearchWizard({
                         max={500}
                         value={bizLimit}
                         onChange={(e) => setBizLimit(Math.min(500, Math.max(1, Number(e.target.value))))}
-                        className="w-20 rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-1.5 text-sm text-white text-center outline-none focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 transition-all"
+                        className="w-20 rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-1.5 text-sm text-white text-center outline-none focus:border-brand-teal/60 focus:ring-1 focus:ring-brand-teal/20 transition-all"
                       />
                     </div>
                   </FilterSection>
@@ -908,7 +909,7 @@ export function ExplloriumSearchWizard({
                         value={prospectJobTitle}
                         onChange={(e) => setProspectJobTitle(e.target.value)}
                         placeholder="e.g. VP of Sales, Head of Marketing"
-                        className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 transition-all"
+                        className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-brand-teal/60 focus:ring-1 focus:ring-brand-teal/20 transition-all"
                       />
                       <div className="flex items-center gap-2 mt-2.5">
                         <Switch
@@ -984,7 +985,7 @@ export function ExplloriumSearchWizard({
                         onChange={(e) =>
                           setProspectLimit(Math.min(500, Math.max(1, Number(e.target.value))))
                         }
-                        className="w-20 rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-1.5 text-sm text-white text-center outline-none focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 transition-all"
+                        className="w-20 rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-1.5 text-sm text-white text-center outline-none focus:border-brand-teal/60 focus:ring-1 focus:ring-brand-teal/20 transition-all"
                       />
                     </div>
                   </FilterSection>
@@ -1013,14 +1014,14 @@ export function ExplloriumSearchWizard({
                 <div className="relative px-5 py-5 text-center">
                   {statsLoading ? (
                     <div className="flex flex-col items-center gap-2 py-2">
-                      <Loader2 className="w-5 h-5 animate-spin text-teal-500" />
+                      <Loader2 className="w-5 h-5 animate-spin text-brand-teal" />
                       <p className="text-xs text-zinc-500">Counting matches across 80M+ records...</p>
                     </div>
                   ) : statsCount !== null ? (
                     <>
                       <div
                         className="text-4xl font-bold text-white tabular-nums tracking-tight"
-                        style={{ textShadow: '0 0 30px rgba(20,184,166,0.3)' }}
+                        style={{ textShadow: '0 0 30px rgba(3,173,156,0.3)' }}
                       >
                         ~{statsCount.toLocaleString()}
                       </div>
@@ -1046,11 +1047,11 @@ export function ExplloriumSearchWizard({
                 </div>
 
                 {/* CRM exclusion */}
-                <div className="flex items-center gap-2.5 rounded-lg border border-teal-500/15 bg-teal-500/[0.04] px-3.5 py-3">
-                  <Shield className="w-3.5 h-3.5 text-teal-500/70 shrink-0" />
+                <div className="flex items-center gap-2.5 rounded-lg border border-brand-teal/15 bg-brand-teal/[0.04] px-3.5 py-3">
+                  <Shield className="w-3.5 h-3.5 text-brand-teal/70 shrink-0" />
                   <div>
                     <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">CRM</p>
-                    <p className="text-xs text-teal-300/90 font-semibold mt-0.5">Exclusion active</p>
+                    <p className="text-xs text-brand-teal/80 font-semibold mt-0.5">Exclusion active</p>
                   </div>
                 </div>
               </div>
@@ -1087,7 +1088,7 @@ export function ExplloriumSearchWizard({
                         </span>
                       ))}
                       {bizIntentTopics.map((t) => (
-                        <span key={t} className="inline-flex items-center gap-1 rounded-full bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 text-[10px] text-teal-400">
+                        <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-teal/10 border border-brand-teal/20 px-2 py-0.5 text-[10px] text-brand-teal">
                           <Zap className="w-2.5 h-2.5" />{t}
                         </span>
                       ))}
@@ -1134,7 +1135,7 @@ export function ExplloriumSearchWizard({
                         </span>
                       ))}
                       {prospectHasEmail && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 text-[10px] text-teal-400">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-brand-teal/10 border border-brand-teal/20 px-2 py-0.5 text-[10px] text-brand-teal">
                           <Check className="w-2.5 h-2.5" />verified email
                         </span>
                       )}
@@ -1156,7 +1157,7 @@ export function ExplloriumSearchWizard({
                   value={tableName}
                   onChange={(e) => setTableName(e.target.value)}
                   placeholder="Auto-generated from search criteria"
-                  className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 transition-all"
+                  className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-brand-teal/60 focus:ring-1 focus:ring-brand-teal/20 transition-all"
                 />
               </div>
             </div>
@@ -1188,8 +1189,8 @@ export function ExplloriumSearchWizard({
               type="button"
               onClick={() => setStep((s) => (s + 1) as 2 | 3)}
               disabled={step === 2 && !canProceedFromStep2}
-              className="flex items-center gap-1.5 rounded-lg bg-teal-500 px-4 py-2 text-xs font-semibold text-black transition-all hover:bg-teal-400 disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ boxShadow: '0 0 16px rgba(20,184,166,0.3)' }}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-teal px-4 py-2 text-xs font-semibold text-black transition-all hover:bg-brand-teal/90 disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{ boxShadow: '0 0 16px rgba(3,173,156,0.3)' }}
             >
               Continue
               <ArrowRight className="w-3.5 h-3.5" />
@@ -1199,8 +1200,8 @@ export function ExplloriumSearchWizard({
               type="button"
               onClick={handleCreateTable}
               disabled={isCreating}
-              className="flex items-center gap-2 rounded-lg bg-teal-500 px-5 py-2 text-xs font-semibold text-black transition-all hover:bg-teal-400 disabled:opacity-50"
-              style={{ boxShadow: isCreating ? 'none' : '0 0 16px rgba(20,184,166,0.3)' }}
+              className="flex items-center gap-2 rounded-lg bg-brand-teal px-5 py-2 text-xs font-semibold text-black transition-all hover:bg-brand-teal/90 disabled:opacity-50"
+              style={{ boxShadow: isCreating ? 'none' : '0 0 16px rgba(3,173,156,0.3)' }}
             >
               {isCreating ? (
                 <>

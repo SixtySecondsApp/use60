@@ -1,0 +1,823 @@
+{
+  "project": {
+    "name": "use60 — Autopilot Engine",
+    "prdId": "PRD-AP-001",
+    "description": "Confidence-Gated Progressive Autonomy — the system that learns to do more so the rep doesn't have to",
+    "estimatedWeeks": "4-5",
+    "createdAt": "2026-02-25T00:00:00Z"
+  },
+
+  "foundation": {
+    "note": "The V2 autonomy system is substantially built. This plan upgrades and extends it.",
+    "existing": [
+      "autonomy_policies, approval_statistics, autonomy_promotion_queue, autonomy_audit_log, autonomy_cooldowns, autonomy_policy_ceilings tables",
+      "_shared/orchestrator/autonomyAnalytics.ts — basic approval/rejection counts, meetsPromotionCriteria, shouldDemote",
+      "_shared/orchestrator/promotionEngine.ts — evaluatePromotions, applyPromotion, rejectPromotion, runDailyEvaluation",
+      "_shared/orchestrator/demotionHandler.ts — handleDemotion (rejection rate >15%), isInCooldown, evaluateDemotions",
+      "_shared/orchestrator/adapters/autonomyTracker.ts — aggregateApprovalStats, checkAndNotifyPromotionCandidates",
+      "supabase/functions/autonomy-promotion-notify/index.ts — promotion Slack DM sender",
+      "slack-interactive/handlers/autonomy.ts + autonomyPromotion.ts — button handlers",
+      "src/pages/settings/AutonomySettingsPage.tsx + AutonomyActionCard, AutonomyProgressionDashboard, ManagerAutonomyControls components",
+      "useAutonomyAnalytics.ts, useManagerAutonomy.ts hooks"
+    ],
+    "gaps": [
+      "No per-signal table (only aggregate daily counts) — need autopilot_signals",
+      "No time-decayed confidence score — only raw approval rate — need autopilot_confidence",
+      "No clean_approval_rate vs approved_edited distinction",
+      "No rubber-stamp detection (response time < 2s)",
+      "Single global threshold — no per-action-type risk-based thresholds",
+      "Org-level policies only — PRD requires per-USER confidence tracking",
+      "Basic demotion (rejection rate) — no severity levels or undo_rate monitoring",
+      "No time saved calculation",
+      "No rep_memory integration",
+      "No demo simulator"
+    ]
+  },
+
+  "feature": {
+    "id": "autopilot-engine",
+    "name": "Autopilot Engine",
+    "status": "pending",
+    "prdId": "PRD-AP-001"
+  },
+
+  "stories": [
+
+    {
+      "id": "AP-001",
+      "phase": 1,
+      "title": "Migration: autopilot_signals table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "schema": [] },
+      "blocks": ["AP-003", "AP-004", "AP-007", "AP-008", "AP-009", "AP-033"],
+      "parallelWith": ["AP-002"],
+      "acceptance": [
+        "autopilot_signals table created with all columns: id, org_id, user_id, action_type, agent_name, signal, edit_distance, edit_fields, time_to_respond_ms, confidence_at_proposal, deal_id, contact_id, meeting_id, autonomy_tier_at_time, created_at",
+        "Indexes: idx_signals_user_action (user_id, action_type, created_at DESC), idx_signals_org, idx_signals_recent (partial on last 90 days)",
+        "RLS: users read own signals; admins read org-wide; service role inserts",
+        "Migration is idempotent (CREATE TABLE IF NOT EXISTS)"
+      ],
+      "files": ["supabase/migrations/TIMESTAMP_autopilot_signals.sql"],
+      "estimatedMinutes": 15
+    },
+
+    {
+      "id": "AP-002",
+      "phase": 1,
+      "title": "Migration: autopilot_confidence table",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "schema": [] },
+      "blocks": ["AP-003", "AP-005"],
+      "parallelWith": ["AP-001"],
+      "acceptance": [
+        "autopilot_confidence table created: id, org_id, user_id, action_type, score, approval_rate, clean_approval_rate, edit_rate, rejection_rate, undo_rate, total_signals, total_approved, total_rejected, total_undone, last_30_score, last_30_signals (jsonb), avg_response_time_ms, first_signal_at, last_signal_at, days_active, current_tier, promotion_eligible, cooldown_until, never_promote, updated_at",
+        "UNIQUE constraint on (user_id, action_type)",
+        "Index idx_confidence_eligible (org_id, promotion_eligible) WHERE promotion_eligible = TRUE",
+        "RLS: users read own confidence; admins read org-wide; service role full access"
+      ],
+      "files": ["supabase/migrations/TIMESTAMP_autopilot_confidence.sql"],
+      "estimatedMinutes": 15
+    },
+
+    {
+      "id": "AP-003",
+      "phase": 1,
+      "title": "Migration: autopilot_events and autopilot_thresholds tables",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["AP-001", "AP-002"], "schema": [] },
+      "blocks": ["AP-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "autopilot_events table: id, org_id, user_id, action_type, event_type (promotion_proposed/accepted/declined/never/demotion_warning/demotion_auto/demotion_emergency/manual_override), from_tier, to_tier, confidence_score, approval_stats (jsonb), threshold_config (jsonb), trigger_reason, cooldown_until, created_at — indexes on (user_id, created_at), (org_id, created_at)",
+        "autopilot_thresholds table: id, org_id (nullable=platform default), action_type, from_tier, to_tier, min_signals, min_clean_approval_rate, max_rejection_rate, max_undo_rate, min_days_active, min_confidence_score, last_n_clean, enabled, never_promote, requires_admin_approval, created_at, updated_at — UNIQUE on (COALESCE(org_id, uuid_nil), action_type, from_tier, to_tier)",
+        "Both tables have RLS: admins read/write org rows; service role full access"
+      ],
+      "files": ["supabase/migrations/TIMESTAMP_autopilot_events_thresholds.sql"],
+      "estimatedMinutes": 15
+    },
+
+    {
+      "id": "AP-004",
+      "phase": 1,
+      "title": "Shared: _shared/autopilot/signals.ts — signal types, weights, recordSignal()",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["AP-001"], "schema": ["autopilot_signals"] },
+      "blocks": ["AP-005", "AP-007", "AP-008", "AP-009", "AP-010", "AP-012", "AP-033"],
+      "parallelWith": [],
+      "acceptance": [
+        "ApprovalSignal type exported: approved | approved_edited | rejected | expired | undone | auto_executed | auto_undone",
+        "SIGNAL_WEIGHTS const exported with correct values (+1.0, +0.3, -1.0, -0.2, -2.0, +0.1, -3.0)",
+        "ApprovalEvent interface exported with all fields from PRD",
+        "recordSignal(supabase, event) async function inserts to autopilot_signals, returns void",
+        "Rubber-stamp flag: if time_to_respond_ms < 2000 and signal === 'approved', set a metadata flag; these don't count toward clean_approval_rate",
+        "File uses esm.sh/@supabase/supabase-js@2.43.4 pinned import"
+      ],
+      "files": ["supabase/functions/_shared/autopilot/signals.ts"],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-005",
+      "phase": 1,
+      "title": "Shared: _shared/autopilot/confidence.ts — time-decayed score calculation",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AP-002", "AP-004"], "schema": ["autopilot_confidence", "autopilot_signals"] },
+      "blocks": ["AP-010", "AP-011", "AP-013", "AP-019", "AP-027"],
+      "parallelWith": [],
+      "acceptance": [
+        "calculateConfidence(events: ApprovalEvent[]): number — exponential decay half-life 30 days, normalised 0-1, sample factor for <10 signals",
+        "buildConfidenceScore(events) returns full ConfidenceScore interface with all rates/counts",
+        "recalculateUserConfidence(supabase, userId, orgId, actionType) fetches last 90d signals, computes score, upserts autopilot_confidence — returns updated record",
+        "Excludes rubber-stamped approvals (time_to_respond < 2s) from clean_approval_rate",
+        "Calculates days_active as count of distinct days with at least one signal",
+        "Sets promotion_eligible = true when last_30_score > 0.7 (pre-filter for cron efficiency)"
+      ],
+      "files": ["supabase/functions/_shared/autopilot/confidence.ts"],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-006",
+      "phase": 1,
+      "title": "Migration seed: platform default autopilot_thresholds for all 22 action types",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AP-003"], "schema": ["autopilot_thresholds"] },
+      "blocks": ["AP-014", "AP-015"],
+      "parallelWith": [],
+      "acceptance": [
+        "Inserts platform defaults (org_id = NULL) for all 22 TRACKABLE_ACTIONS from PRD section 3.4",
+        "Low-risk group (crm.note_add, crm.activity_log, task.create): min_signals=15-20, min_clean_approval_rate=0.85-0.90, last_n_clean=10",
+        "Medium-risk group (crm.deal_field_update, crm.next_steps_update, email.follow_up_send): min_signals=25-30, min_days_active=14",
+        "High-risk group (crm.deal_stage_change, email.send, crm.deal_amount_change): min_signals=40-50, min_clean_approval_rate=0.95, min_days_active=30",
+        "Never-promote group (sequence.start, calendar.create_event): never_promote=true",
+        "INSERT ... ON CONFLICT DO NOTHING so prod data is not overwritten"
+      ],
+      "files": ["supabase/migrations/TIMESTAMP_autopilot_thresholds_seed.sql"],
+      "estimatedMinutes": 15
+    },
+
+    {
+      "id": "AP-007",
+      "phase": 1,
+      "title": "Instrument slack-interactive HITL handler to record autopilot signals",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AP-004"], "schema": ["autopilot_signals"] },
+      "blocks": ["AP-033"],
+      "parallelWith": ["AP-008", "AP-009"],
+      "acceptance": [
+        "handlers/hitl.ts imports and calls recordSignal() after each approve/reject/edit response",
+        "Maps HITL action_type strings to the PRD action type naming convention (e.g. 'crm_field_update' → 'crm.deal_field_update')",
+        "Records time_to_respond_ms from action timestamp to resolution timestamp",
+        "Records edit_distance when signal is approved_edited (character diff of before/after JSON)",
+        "Records autonomy_tier_at_time by reading current policy via autonomyResolver",
+        "recordSignal call is non-blocking (fire-and-forget with catch)"
+      ],
+      "files": ["supabase/functions/slack-interactive/handlers/hitl.ts"],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-008",
+      "phase": 1,
+      "title": "Instrument autonomyPromotion handler to record undo signals",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AP-004"], "schema": ["autopilot_signals"] },
+      "blocks": ["AP-033"],
+      "parallelWith": ["AP-007", "AP-009"],
+      "acceptance": [
+        "When a rep undoes an auto-executed action, records signal='auto_undone' with action_type and user_id",
+        "When rep uses undo on a recently-approved action, records signal='undone'",
+        "Looks up original signal record to compute time from auto-execution to undo",
+        "After recording undo signal, triggers async confidence recalculation (non-blocking)"
+      ],
+      "files": ["supabase/functions/slack-interactive/handlers/autonomyPromotion.ts"],
+      "estimatedMinutes": 15
+    },
+
+    {
+      "id": "AP-009",
+      "phase": 1,
+      "title": "Instrument copilot-autonomous HITL confirmations to record signals",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AP-004"], "schema": ["autopilot_signals"] },
+      "blocks": ["AP-033"],
+      "parallelWith": ["AP-007", "AP-008"],
+      "acceptance": [
+        "When copilot pending_action is confirmed (is_simulation: false), records signal='approved' or 'approved_edited'",
+        "When user says 'cancel' or rejects a pending_action, records signal='rejected'",
+        "When pending_action expires without response, records signal='expired'",
+        "Integration point: CopilotContext.tsx sendMessage() confirm/cancel flow, or the action execution path in autonomousExecutor.ts",
+        "Non-blocking recordSignal() call"
+      ],
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts",
+        "src/lib/copilot/agent/autonomousExecutor.ts"
+      ],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-010",
+      "phase": 1,
+      "title": "Edge function: autopilot-record-signal (HTTP endpoint for frontend signals)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["AP-004", "AP-005"], "schema": ["autopilot_signals", "autopilot_confidence"] },
+      "blocks": ["AP-012", "AP-022"],
+      "parallelWith": [],
+      "acceptance": [
+        "POST /autopilot-record-signal — JWT-authenticated, records signal + triggers confidence recalculation",
+        "Accepts: { action_type, signal, edit_distance?, time_to_respond_ms?, deal_id?, contact_id?, meeting_id? }",
+        "Validates signal type against allowed enum; rejects invalid values with 400",
+        "Calls recordSignal() then recalculateUserConfidence() asynchronously (fire-and-forget)",
+        "Uses getCorsHeaders(req) from _shared/corsHelper.ts",
+        "Deployed to staging with --no-verify-jwt; validates JWT internally"
+      ],
+      "files": ["supabase/functions/autopilot-record-signal/index.ts"],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-011",
+      "phase": 1,
+      "title": "DB trigger: auto-recalculate confidence on new signal insert",
+      "type": "schema",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["AP-005"], "schema": ["autopilot_signals", "autopilot_confidence"] },
+      "blocks": [],
+      "parallelWith": ["AP-012"],
+      "acceptance": [
+        "Postgres trigger AFTER INSERT ON autopilot_signals calls pg_net.http_post to invoke autopilot-record-signal (or a lightweight plpgsql recalculation)",
+        "Alternative: use a Supabase Realtime subscription in the edge function — document chosen approach",
+        "Confidence recalculation is idempotent (safe to run multiple times)",
+        "Trigger is non-blocking — does not fail the original signal insert if recalculation fails"
+      ],
+      "files": ["supabase/migrations/TIMESTAMP_autopilot_confidence_trigger.sql"],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-012",
+      "phase": 1,
+      "title": "Edge function: autopilot-backfill (import hitl_pending_approvals history)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["AP-004", "AP-010"] },
+      "blocks": [],
+      "parallelWith": ["AP-011"],
+      "acceptance": [
+        "One-time admin edge function: reads hitl_pending_approvals (status=approved/rejected/auto_executed), maps to ApprovalEvent format, inserts to autopilot_signals with is_backfill=true metadata",
+        "Backfill signals are flagged — first promotion proposal from backfill-only data requires manual confirmation (not auto-queued)",
+        "Idempotent: checks if signal already exists for the source row before inserting",
+        "Processes in batches of 500; logs progress",
+        "Protected: requires admin role in Authorization header"
+      ],
+      "files": ["supabase/functions/autopilot-backfill/index.ts"],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-013",
+      "phase": 2,
+      "title": "Upgrade autonomyAnalytics.ts — per-user stats, clean_approval_rate, undo_rate from autopilot_confidence",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["AP-005"], "schema": ["autopilot_confidence"] },
+      "blocks": ["AP-014", "AP-019"],
+      "parallelWith": [],
+      "acceptance": [
+        "New function getUserConfidenceScores(supabase, userId, orgId): Promise<ConfidenceScore[]> reads from autopilot_confidence",
+        "Existing getAutonomyAnalytics() updated to aggregate from autopilot_confidence (not just crm_approval_queue) — backwards compatible",
+        "New ActionAnalytics interface extends to include clean_approval_rate and undo_rate",
+        "meetsPromotionCriteria() updated to accept per-action-type threshold from autopilot_thresholds table instead of single DEFAULT_THRESHOLDS constant",
+        "getPromotionThresholds(supabase, orgId, actionType) helper: reads org override first, falls back to platform default"
+      ],
+      "files": ["supabase/functions/_shared/orchestrator/autonomyAnalytics.ts"],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-014",
+      "phase": 2,
+      "title": "Edge function: autopilot-evaluate (daily cron — per-user evaluation)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["AP-005", "AP-006", "AP-013"] },
+      "blocks": ["AP-016", "AP-017"],
+      "parallelWith": ["AP-015"],
+      "acceptance": [
+        "New edge function (cron-triggered daily) that iterates all orgs → all users → all action_types",
+        "For each user × action_type: reads autopilot_confidence, checks autopilot_thresholds, skips if on cooldown/never_promote/manager_ceiling",
+        "Collects PromotionCandidates per user, inserts to autopilot_promotion_queue (or extends autonomy_promotion_queue with user_id)",
+        "Batches candidates per user — max one Slack proposal per user per week",
+        "Logs to autopilot_events with event_type='promotion_proposed'",
+        "Performance target: <30s for 100 active users"
+      ],
+      "files": ["supabase/functions/autopilot-evaluate/index.ts"],
+      "estimatedMinutes": 30
+    },
+
+    {
+      "id": "AP-015",
+      "phase": 2,
+      "title": "Upgrade promotionEngine.ts — use per-action-type thresholds from autopilot_thresholds",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["AP-005", "AP-006"] },
+      "blocks": ["AP-016"],
+      "parallelWith": ["AP-014"],
+      "acceptance": [
+        "checkPromotionEligibility() reads threshold from autopilot_thresholds (org override → platform default) instead of DEFAULT_THRESHOLDS constant",
+        "Adds clean_approval_rate check from autopilot_confidence",
+        "Adds last_n_clean check: verifies the N most recent signals are all clean approvals",
+        "Adds min_confidence_score check against computed confidence score",
+        "never_promote flag checked from autopilot_confidence.never_promote (user-level) and autopilot_thresholds.never_promote (admin-level)",
+        "applyPromotion() logs to autopilot_events in addition to existing autonomy_audit_log"
+      ],
+      "files": ["supabase/functions/_shared/orchestrator/promotionEngine.ts"],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-016",
+      "phase": 2,
+      "title": "Build rich Slack promotion proposal message with full scorecard",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["AP-015"] },
+      "blocks": ["AP-017", "AP-018"],
+      "parallelWith": [],
+      "acceptance": [
+        "buildAutopilotPromotionMessage({ userId, orgId, candidates }) returns Slack Block Kit blocks with scorecard",
+        "Scorecard includes: total signals, clean approval count/rate, edit count, rejection count, undo count, days active, confidence score",
+        "Three action buttons: autonomy_promotion_approve, autonomy_promotion_snooze (30 days), autonomy_promotion_never",
+        "Value payload includes: { promotion_id, org_id, action_type, user_id }",
+        "Message copy matches PRD section 4.3 tone: positive framing, explains the safeguards (daily digest, 1-hour undo)"
+      ],
+      "files": ["supabase/functions/_shared/slackBlocks.ts"],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-017",
+      "phase": 2,
+      "title": "Batch promotion Slack messages — multiple upgrades in one message",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["AP-016"] },
+      "blocks": [],
+      "parallelWith": ["AP-018"],
+      "acceptance": [
+        "When a user has 2+ promotion candidates, builds a single batch message listing all with stats",
+        "'Auto-approve all N' button + 'Pick which ones' button that sends individual messages",
+        "Batch message button value includes array of { promotion_id, action_type }",
+        "Max 5 promotions per batch message — if more, send up to two messages spaced by 1 day",
+        "autopilot-evaluate handles batching logic and sends correct message type"
+      ],
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/autopilot-evaluate/index.ts"
+      ],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-018",
+      "phase": 2,
+      "title": "Upgrade autonomyPromotion Slack handler — add 'never' action, per-user promotions",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["AP-016"] },
+      "blocks": [],
+      "parallelWith": ["AP-017"],
+      "acceptance": [
+        "Handles new action_id: autonomy_promotion_never — sets autopilot_confidence.never_promote=true for user × action_type",
+        "applyPromotion() now updates user-level autonomy_policies (user_id=resolved_user) not just org-level",
+        "Records to autopilot_events: promotion_accepted / promotion_declined / promotion_never",
+        "After 'never': response message matches PRD copy: 'Understood — I'll always ask...'",
+        "Handles batch approve: accepts array of promotion_ids in action value"
+      ],
+      "files": ["supabase/functions/slack-interactive/handlers/autonomyPromotion.ts"],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-019",
+      "phase": 2,
+      "title": "Upgrade demotionHandler.ts — severity levels (warn/demote/emergency), undo_rate monitoring",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["AP-005", "AP-013"] },
+      "blocks": ["AP-020", "AP-021"],
+      "parallelWith": [],
+      "acceptance": [
+        "DemotionTrigger evaluation: warn (undo_rate > 10% in 7d, min 5 actions), demote (undo_rate > 8% in 14d, min 10 actions), emergency (3+ undos in 3d)",
+        "email.send emergency rule: 1 undo of auto-sent email = immediate revert to 'approve'",
+        "Severity-based cooldown: warn=14d, demote=30d, emergency=60d",
+        "Severity recorded in autopilot_events as event_type: demotion_warning / demotion_auto / demotion_emergency",
+        "evaluateDemotions() reads from autopilot_confidence.undo_rate (not just rejection_count)",
+        "Cooldown boost: after demotion, sets extra_required_signals in autopilot_confidence (warn=+10, demote=+15, emergency=+25)"
+      ],
+      "files": ["supabase/functions/_shared/orchestrator/demotionHandler.ts"],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-020",
+      "phase": 2,
+      "title": "Demotion severity Slack messages (warn vs demote vs emergency)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["AP-019"] },
+      "blocks": [],
+      "parallelWith": ["AP-021"],
+      "acceptance": [
+        "buildAutopilotDemotionWarning() — warn message with [Revert to approval] [Keep auto] buttons, positive framing",
+        "buildAutopilotDemotionAuto() — demote message explaining undo rate, cooldown duration",
+        "buildAutopilotDemotionEmergency() — emergency message for email.send or undo spike, immediate and definitive",
+        "All messages addressed to the individual rep (not just admin) via their Slack DM",
+        "Message copy matches PRD section 5.2 tone: empathetic, explains what happened"
+      ],
+      "files": ["supabase/functions/_shared/slackBlocks.ts"],
+      "estimatedMinutes": 15
+    },
+
+    {
+      "id": "AP-021",
+      "phase": 2,
+      "title": "Cooldown boost system — extra required signals after demotion by severity",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["AP-019"] },
+      "blocks": [],
+      "parallelWith": ["AP-020"],
+      "acceptance": [
+        "autopilot_confidence gains column extra_required_signals (default 0)",
+        "After demotion, extra_required_signals set per severity: warn=10, demote=15, emergency=25",
+        "meetsPromotionCriteria() adds extra_required_signals to min_signals when checking eligibility",
+        "Extra signals are cleared when the user naturally exceeds the boosted threshold",
+        "Admin can clear extra_required_signals manually via ManagerAutonomyControls"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/demotionHandler.ts",
+        "supabase/functions/_shared/autopilot/confidence.ts",
+        "supabase/migrations/TIMESTAMP_autopilot_confidence_extra_signals.sql"
+      ],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-022",
+      "phase": 3,
+      "title": "Frontend hook: useAutopilotDashboard — per-user confidence scores, autonomy %, time saved",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["AP-010"] },
+      "blocks": ["AP-023", "AP-024", "AP-025", "AP-026", "AP-028", "AP-031", "AP-032"],
+      "parallelWith": [],
+      "acceptance": [
+        "useAutopilotDashboard(userId?, orgId?) returns: confidenceScores[], autonomyScore (0-100), timeSavedThisWeek, timeSavedThisMonth, promotionCandidates[], demotionEvents[]",
+        "autonomyScore = weighted average of current_tier across all action_types (auto=100%, approve=50%, suggest=25%, disabled=0%)",
+        "timeSaved calculation uses ACTION_TIME_ESTIMATES constants from PRD section 10.1 — auto tier = full time, approve tier = 70%",
+        "Uses React Query with 5min stale time; reads from autopilot_confidence table via supabase client",
+        "Handles missing data gracefully (new user with 0 signals shows 0% autonomy)"
+      ],
+      "files": ["src/lib/hooks/useAutopilotDashboard.ts"],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-023",
+      "phase": 3,
+      "title": "Upgrade AutonomyActionCard — clean_approval_rate, progress to next tier, last_n_clean tracking",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["AP-022"] },
+      "blocks": ["AP-028"],
+      "parallelWith": ["AP-024", "AP-025", "AP-026"],
+      "acceptance": [
+        "Card shows current tier with colour coding: green=auto, yellow=approve, red=suggest/disabled",
+        "Shows clean approval rate (approved without edit / total)",
+        "Shows progress toward next tier: '28/30 clean — 2 more to qualify'",
+        "Shows last_n_clean status: 'last 10 approvals all clean' or 'last 10: 8 clean, 2 edits'",
+        "Eligible badge with notification bell icon when promotion_eligible=true",
+        "Locked badge (Lock icon) for never_promote or manager ceiling actions",
+        "No emoji — all icons from lucide-react"
+      ],
+      "files": ["src/components/settings/AutonomyActionCard.tsx"],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-024",
+      "phase": 3,
+      "title": "Upgrade AutonomyProgressionDashboard — autonomy % score, time saved, progression chart",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["AP-022"] },
+      "blocks": ["AP-028"],
+      "parallelWith": ["AP-023", "AP-025", "AP-026"],
+      "acceptance": [
+        "Hero metric: autonomy % as large progress bar with percentage label",
+        "Sub-metric: 'X hours/week saved by autonomous actions'",
+        "Action type list grouped by category (CRM Operations, Communication, Task Management, etc.)",
+        "Grouped display matches PRD section 8.1 wireframe — tree-style with category headers",
+        "useAutopilotDashboard hook provides data",
+        "No emoji — Lucide icons only"
+      ],
+      "files": ["src/components/settings/AutonomyProgressionDashboard.tsx"],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-025",
+      "phase": 3,
+      "title": "Upgrade ManagerAutonomyControls — team autonomy scores, time saved totals, per-rep view",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["AP-022"] },
+      "blocks": ["AP-028"],
+      "parallelWith": ["AP-023", "AP-024", "AP-026"],
+      "acceptance": [
+        "Table of team members with autonomy % progress bar, time saved/week, days active",
+        "Team total time saved (sum of all reps)",
+        "Manager ceiling controls for each action type (dropdown: disabled/suggest/approve/auto/no ceiling)",
+        "Ceiling dropdowns update autonomy_policy_ceilings table on change",
+        "Checkbox: 'Require admin approval for high-risk promotions'",
+        "Export autonomy report button (CSV of all team members' stats)"
+      ],
+      "files": ["src/components/settings/ManagerAutonomyControls.tsx"],
+      "estimatedMinutes": 25
+    },
+
+    {
+      "id": "AP-026",
+      "phase": 3,
+      "title": "New component: AutonomyProgressionChart — time-series autonomy % chart",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["AP-022"] },
+      "blocks": ["AP-028"],
+      "parallelWith": ["AP-023", "AP-024", "AP-025"],
+      "acceptance": [
+        "Line chart (recharts LineChart) of autonomy % over time per team member",
+        "X-axis: days since onboarding (Day 1 → current), Y-axis: 0-100%",
+        "Each rep gets a distinct line colour",
+        "Steps in line correspond to promotion acceptances; dips to demotions",
+        "Tooltip shows rep name, date, event (promoted/demoted + action_type)",
+        "Data sourced from autopilot_events filtered to promotion_accepted/demotion_auto/demotion_emergency"
+      ],
+      "files": ["src/components/settings/AutonomyProgressionChart.tsx"],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-027",
+      "phase": 3,
+      "title": "Rep memory integration — update rep_memory.approval_stats after confidence recalculation",
+      "type": "backend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["AP-005"] },
+      "blocks": [],
+      "parallelWith": ["AP-022"],
+      "acceptance": [
+        "updateRepMemory(supabase, userId, orgId) reads all autopilot_confidence rows for user, builds approval_stats and autonomy_profile maps, upserts to rep_memory table",
+        "Called asynchronously (non-blocking) after each recalculateUserConfidence() call",
+        "approval_stats format: { [action_type]: { level: string, confidence: number } }",
+        "autonomy_profile format: { [action_type]: { level: string, score: number } }",
+        "Graceful: if rep_memory table doesn't exist, logs warning and returns (don't break signal recording)"
+      ],
+      "files": ["supabase/functions/_shared/autopilot/confidence.ts"],
+      "estimatedMinutes": 15
+    },
+
+    {
+      "id": "AP-028",
+      "phase": 3,
+      "title": "Wire up AutonomySettingsPage with new dashboard sections",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "dependencies": { "stories": ["AP-022", "AP-023", "AP-024", "AP-025", "AP-026"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Settings page shows: autonomy %, time saved/week, per-action card grid (AutonomyActionCard), progression chart (AutonomyProgressionChart)",
+        "Manager view (admin-only section) shows ManagerAutonomyControls + AutonomyProgressionChart with all team members",
+        "Tab or section structure: 'Your Autonomy' | 'Team Autonomy' (admin only)",
+        "AutonomyPromotionBanner shown when promotion_eligible actions exist",
+        "History link navigates to filtered autopilot_events view (modal or separate page)",
+        "Page uses existing SettingsPageWrapper pattern"
+      ],
+      "files": ["src/pages/settings/AutonomySettingsPage.tsx"],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-029",
+      "phase": 4,
+      "title": "New component: AutonomySimulator — animated 90-day progression for demo",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 12,
+      "dependencies": { "stories": [] },
+      "blocks": ["AP-030"],
+      "parallelWith": ["AP-031", "AP-032"],
+      "acceptance": [
+        "Scrubber (Day 1 to Day 90) with auto-play animation at 3s per simulated week",
+        "At each day: shows autonomy %, time saved, list of AUTO/APPROVE/SUGGEST actions",
+        "Simulated promotion events appear as toast/notification: 'You've approved 20 task creations...'",
+        "Interactive: rep can click [Accept] or [Not yet] on simulated promotion proposals",
+        "Projected end state section: 'Day 90 — 72% autonomous, 5.1 hrs/week saved'",
+        "'Use my real data instead' button shown to logged-in users",
+        "[Start free trial] CTA for logged-out visitors",
+        "All icons Lucide React, no emoji"
+      ],
+      "files": ["src/components/platform/AutonomySimulator.tsx"],
+      "estimatedMinutes": 30
+    },
+
+    {
+      "id": "AP-030",
+      "phase": 4,
+      "title": "Demo page: /platform/demo/autonomy",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["AP-029"] },
+      "blocks": [],
+      "parallelWith": ["AP-033"],
+      "acceptance": [
+        "Route /platform/demo/autonomy renders AutonomySimulator with simulated data by default",
+        "When user is logged in and has autopilot_confidence data, 'Use my real data' toggle fetches real scores",
+        "Page has hero section: title, value prop text, then the simulator below",
+        "Route added to src/App.tsx or equivalent router config",
+        "Page is publicly accessible (no auth required for simulation mode)",
+        "Meta title and description set for SEO"
+      ],
+      "files": [
+        "src/pages/platform/AutonomyDemoPage.tsx",
+        "src/App.tsx"
+      ],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-031",
+      "phase": 4,
+      "title": "Copilot skill: autonomy-report (answers 'how autonomous am I?')",
+      "type": "skill",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["AP-022"] },
+      "blocks": [],
+      "parallelWith": ["AP-029", "AP-032"],
+      "acceptance": [
+        "skills/atomic/autonomy-report/SKILL.md created with correct frontmatter (triggers, description, schema)",
+        "Triggers: 'how autonomous am I', 'my autonomy score', 'what can you do automatically', 'autonomy status'",
+        "Skill reads from autopilot_confidence via execute_action, formats as structured response",
+        "Response includes: autonomy %, breakdown by action type, time saved this month, any pending promotion candidates",
+        "In-context promotion nudge: if candidates exist, surfaces '[Upgrade X now?]' action button",
+        "Skill validated with npm run validate-skills"
+      ],
+      "files": ["skills/atomic/autonomy-report/SKILL.md"],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-032",
+      "phase": 4,
+      "title": "In-context promotion nudge in copilot responses (milestone nth clean approval)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "dependencies": { "stories": ["AP-022"] },
+      "blocks": [],
+      "parallelWith": ["AP-029", "AP-031"],
+      "acceptance": [
+        "After recordSignal() resolves with signal='approved', check if this is a milestone (15th, 20th, 25th, 30th clean approval for an action_type)",
+        "If milestone and action_type is promotion_eligible, append a nudge to the current copilot response",
+        "Nudge copy matches PRD section 9: 'By the way, that's your 30th clean CRM note update...'",
+        "Nudge includes [Yes, go auto] [Not yet] [Never] action buttons rendered in copilot UI",
+        "Max one in-context nudge per session (don't spam every message)",
+        "Clicking buttons calls autopilot-record-signal with appropriate response"
+      ],
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts",
+        "src/lib/copilot/agent/autonomousExecutor.ts"
+      ],
+      "estimatedMinutes": 20
+    },
+
+    {
+      "id": "AP-033",
+      "phase": 4,
+      "title": "Rubber-stamp detection hardening + performance benchmarks",
+      "type": "backend",
+      "status": "pending",
+      "priority": 14,
+      "dependencies": { "stories": ["AP-004", "AP-007", "AP-008"] },
+      "blocks": [],
+      "parallelWith": ["AP-030"],
+      "acceptance": [
+        "Approvals with time_to_respond_ms < 2000 are flagged: rubber_stamp=true in autopilot_signals",
+        "buildConfidenceScore() excludes rubber-stamped approvals from clean_approval_rate calculation",
+        "Signal recording p95 < 50ms (verified by adding timing logs and checking)",
+        "Confidence recalculation p95 < 200ms (verify via timing logs)",
+        "autopilot-evaluate cron completes in < 30s for 100 active users (add timing assertions)",
+        "Add test: AP-033 test in src/pages/settings/__tests__/ verifying rubber-stamp exclusion logic"
+      ],
+      "files": [
+        "supabase/functions/_shared/autopilot/signals.ts",
+        "supabase/functions/_shared/autopilot/confidence.ts"
+      ],
+      "estimatedMinutes": 25
+    }
+
+  ],
+
+  "execution": {
+    "totalStories": 33,
+    "completedStories": 0,
+    "phases": [
+      {
+        "phase": 1,
+        "name": "Signal Recording + Confidence Model",
+        "stories": ["AP-001", "AP-002", "AP-003", "AP-004", "AP-005", "AP-006", "AP-007", "AP-008", "AP-009", "AP-010", "AP-011", "AP-012"],
+        "estimatedDays": "6-8"
+      },
+      {
+        "phase": 2,
+        "name": "Promotion Engine + Slack Proposals",
+        "stories": ["AP-013", "AP-014", "AP-015", "AP-016", "AP-017", "AP-018", "AP-019", "AP-020", "AP-021"],
+        "estimatedDays": "8-10"
+      },
+      {
+        "phase": 3,
+        "name": "Dashboard + Analytics",
+        "stories": ["AP-022", "AP-023", "AP-024", "AP-025", "AP-026", "AP-027", "AP-028"],
+        "estimatedDays": "5-7"
+      },
+      {
+        "phase": 4,
+        "name": "Demo Screen + Polish",
+        "stories": ["AP-029", "AP-030", "AP-031", "AP-032", "AP-033"],
+        "estimatedDays": "5-7"
+      }
+    ],
+    "parallelGroups": [
+      { "group": "Phase 1 Day 1", "stories": ["AP-001", "AP-002"] },
+      { "group": "Phase 1 Day 2", "stories": ["AP-003", "AP-004"] },
+      { "group": "Phase 1 Day 3", "stories": ["AP-005", "AP-006"] },
+      { "group": "Phase 1 Day 4", "stories": ["AP-007", "AP-008", "AP-009"] },
+      { "group": "Phase 1 Day 5", "stories": ["AP-010", "AP-011", "AP-012"] },
+      { "group": "Phase 2 Day 1", "stories": ["AP-013"] },
+      { "group": "Phase 2 Day 2", "stories": ["AP-014", "AP-015"] },
+      { "group": "Phase 2 Day 3", "stories": ["AP-016"] },
+      { "group": "Phase 2 Day 4", "stories": ["AP-017", "AP-018", "AP-019"] },
+      { "group": "Phase 2 Day 5", "stories": ["AP-020", "AP-021"] },
+      { "group": "Phase 3 Day 1", "stories": ["AP-022", "AP-027"] },
+      { "group": "Phase 3 Day 2", "stories": ["AP-023", "AP-024", "AP-025", "AP-026"] },
+      { "group": "Phase 3 Day 3", "stories": ["AP-028"] },
+      { "group": "Phase 4 Day 1", "stories": ["AP-029", "AP-031", "AP-032"] },
+      { "group": "Phase 4 Day 2", "stories": ["AP-030", "AP-033"] }
+    ],
+    "lastUpdated": "2026-02-25T00:00:00Z"
+  }
+}
