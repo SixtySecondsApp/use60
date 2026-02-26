@@ -2502,7 +2502,9 @@ serve(async (req: Request) => {
                 finalMessage.usage.input_tokens,
                 finalMessage.usage.output_tokens,
                 'copilot_autonomous',
-                { request_type: 'copilot_autonomous' }
+                { request_type: 'copilot_autonomous' },
+                undefined,
+                'copilot-autonomous'
               );
             }
 
