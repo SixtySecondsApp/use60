@@ -48,7 +48,6 @@ export const CommandCentreWowDemo = lazyWithRetry(() => import('@/pages/platform
 export const CommitmentDetectionDemo = lazyWithRetry(() => import('@/pages/platform/CommitmentDetectionDemo'));
 export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/AgentTeamSettings'));
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
-export const MultiAgentResearchDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentResearchDemoPage'));
 export const DemoPrepBriefing = lazyWithRetry(() => import('@/pages/platform/DemoPrepBriefing'));
 export const DemoConversationalCopilot = lazyWithRetry(() => import('@/pages/platform/DemoConversationalCopilot'));
 export const AutonomyDemoPage = lazyWithRetry(() => import('@/pages/platform/AutonomyDemoPage'));
