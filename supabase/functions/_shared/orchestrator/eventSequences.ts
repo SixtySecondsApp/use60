@@ -124,14 +124,8 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['extract-action-items', 'detect-intents'],
     },
-    {
-      skill: 'draft-followup-email',
-      requires_context: ['tier1', 'tier2'],
-      requires_approval: false,
-      criticality: 'best-effort',
-      available: true,
-      depends_on: ['extract-action-items', 'detect-intents', 'extract-pricing-discussion'],
-    },
+    // Note: draft-followup-email and email-draft-approval removed from automatic sequence.
+    // Email drafting is now on-demand via the "Draft Follow-up" button on the Slack debrief card.
     // Wave 3: CAL-002 — Slack HITL DM with top 3 slot options; pauses sequence for rep approval
     {
       skill: 'calendar-slot-approval',
@@ -140,15 +134,6 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       criticality: 'best-effort',
       available: true,
       depends_on: ['detect-scheduling-intent'],
-    },
-    // Wave 3.5: HITL approval gate — pauses the sequence until the rep acts on the email draft
-    {
-      skill: 'email-draft-approval',
-      requires_context: ['tier1'],
-      requires_approval: true,
-      criticality: 'best-effort',
-      available: true,
-      depends_on: ['draft-followup-email'],
     },
     {
       skill: 'update-crm-from-meeting',
@@ -175,7 +160,7 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['extract-action-items'],
     },
-    // Wave 5: Slack summary after all substantive steps complete (including email-draft-approval gate)
+    // Wave 5: Slack summary after all substantive steps complete
     {
       skill: 'notify-slack-summary',
       requires_context: ['tier1'],

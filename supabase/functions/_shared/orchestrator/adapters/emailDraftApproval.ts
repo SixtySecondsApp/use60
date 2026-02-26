@@ -93,7 +93,7 @@ function actionsBlock(blockId: string, elements: unknown[]) {
 // Block Kit Message Builder
 // =============================================================================
 
-function buildEmailDraftApprovalBlocks(params: {
+export function buildEmailDraftApprovalBlocks(params: {
   approvalId: string;
   to: string;
   contactName: string;
@@ -108,7 +108,7 @@ function buildEmailDraftApprovalBlocks(params: {
   // Truncate body for Slack display — keep it readable, not overwhelming
   const displayBody = body.length > 1500 ? body.substring(0, 1500) + '\n...' : body;
 
-  const editUrl = `${appUrl}/meetings?approval=${approvalId}`;
+  const editUrl = `${appUrl}/admin/control-room?approval=${approvalId}`;
 
   return [
     header('Follow-up Email Ready for Review'),
@@ -125,8 +125,8 @@ function buildEmailDraftApprovalBlocks(params: {
     // Approve and Edit go in one block; Schedule and Skip each get their own block so that
     // reject::email_draft::{id} (shared by Schedule and Skip) is unique within its block.
     actionsBlock(`email_draft_approval_primary_${approvalId}`, [
-      button('Approve', `approve::email_draft::${approvalId}`, JSON.stringify({ approvalId }), 'primary'),
-      button('Edit in 60', `edit::email_draft::${approvalId}`, JSON.stringify({ approvalId }), undefined, editUrl),
+      button('Approve and Send', `approve::email_draft::${approvalId}`, JSON.stringify({ approvalId }), 'primary'),
+      button('Edit', `edit::email_draft::${approvalId}`, JSON.stringify({ approvalId })),
     ]),
     // Schedule: reject flow with subAction=schedule so future scheduling logic can distinguish it.
     // In its own block so reject::email_draft::{id} is unique within this block.
@@ -173,6 +173,12 @@ export const emailDraftApprovalAdapter: SkillAdapter = {
         body: string;
         ai_generated?: boolean;
       };
+
+      // Allow event payload to override recipient (e.g. for testing or manual triggers)
+      const recipientOverride = state.event.payload.recipient_email as string | undefined;
+      if (recipientOverride) {
+        draft.to = recipientOverride;
+      }
 
       const contactName = (emailOutput.contact_name as string) || draft.to;
       const meetingTitle = (state.event.payload.title as string) || 'Our meeting';
