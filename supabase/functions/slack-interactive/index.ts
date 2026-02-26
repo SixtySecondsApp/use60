@@ -42,6 +42,7 @@ import { handleSupportAction } from './handlers/support.ts';
 import { handleAutonomyAction } from './handlers/autonomy.ts';
 import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
 import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
+import { handleAutopilotPromotion } from './handlers/autopilotPromotion.ts';
 import { handlePrepBriefingAction, handlePrepBriefingAskSubmission, handlePrepBriefingFeedbackSubmission } from './handlers/prepBriefing.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -7594,6 +7595,18 @@ serve(async (req) => {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
+        }
+
+        // =====================================================================
+        // AP-016: Route autopilot promotion actions (autopilot_promote_*)
+        // =====================================================================
+        if (action.action_id.startsWith('autopilot_promote_')) {
+          console.log('[AutopilotPromotion] Processing action:', action.action_id);
+          await handleAutopilotPromotion(supabase, payload, action.action_id, action);
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
 
         // =====================================================================

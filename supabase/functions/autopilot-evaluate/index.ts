@@ -29,9 +29,9 @@ import {
 } from '../_shared/corsHelper.ts'
 import {
   evaluatePromotionEligibility,
-  recordPromotionEvent,
   type PromotionCandidate,
 } from '../_shared/autonomy/promotionEngine.ts'
+import { sendPromotionProposal } from '../_shared/autopilot/promotionSlack.ts'
 
 // =============================================================================
 // Environment
@@ -137,52 +137,6 @@ async function resolveAuth(
   }
 
   return { isServiceRole: false, userId }
-}
-
-// =============================================================================
-// Proposal stub (AP-015 will replace with real Slack message)
-// =============================================================================
-
-/**
- * Stub for AP-015.
- *
- * Records a `promotion_proposed` event for every candidate belonging to this
- * user and logs what would be sent via Slack. AP-015 will replace this with
- * a real Slack message builder.
- *
- * Always returns `true` (success) so the caller can count proposals_sent.
- * Errors from `recordPromotionEvent` are swallowed — it is already fire-and-
- * forget safe internally.
- */
-async function sendPromotionProposal(
-  supabase: SupabaseClient,
-  userId: string,
-  orgId: string,
-  candidates: PromotionCandidate[],
-): Promise<boolean> {
-  // TODO AP-015: send real Slack message
-  // For now: record the event and return true
-  for (const candidate of candidates) {
-    await recordPromotionEvent(supabase, {
-      org_id: candidate.org_id,
-      user_id: candidate.user_id,
-      action_type: candidate.action_type,
-      event_type: 'promotion_proposed',
-      from_tier: candidate.from_tier,
-      to_tier: candidate.to_tier,
-      confidence_score: candidate.confidence_score,
-      approval_stats: candidate.approval_stats as Record<string, unknown>,
-      threshold_config: candidate.threshold_config as Record<string, unknown>,
-      trigger_reason: `Score ${candidate.confidence_score.toFixed(3)} meets threshold after ${candidate.approval_stats.total_signals} signals`,
-    }).catch(() => {})
-  }
-
-  console.log(
-    `[autopilot-evaluate] Would send proposal to user ${userId} (org ${orgId}) for ` +
-    `${candidates.length} action type(s): ${candidates.map((c) => c.action_type).join(', ')}`,
-  )
-
-  return true
 }
 
 // =============================================================================
