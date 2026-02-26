@@ -322,28 +322,13 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
     }
   }, [organizationId, domain, userEmail, setOrganizationId, setDomain, setUserEmail]);
 
-  // Alternative initialization path for business emails with domain check
-  useEffect(() => {
-    const initBusinessEmail = async () => {
-      if (userEmail && !isPersonalEmailDomain(userEmail)) {
-        // setUserEmail is now async and handles domain checking internally
-        await setUserEmail(userEmail);
-      }
-    };
-    initBusinessEmail();
-  }, [userEmail, setUserEmail]);
-
-  // Note: Organization existence checking is now handled exclusively in the store methods
-  // (setUserEmail and submitWebsite) to prevent race conditions and duplicate checks.
-  // This useEffect was removed to consolidate logic and eliminate conflicting behavior.
-
-  // Auto-start enrichment for corporate email path (if no existing org found)
-  useEffect(() => {
-    const effectiveDomain = storeDomain || domain;
-    if (currentStep === 'enrichment_loading' && effectiveDomain && !userEmail) {
-      startEnrichment(organizationId, effectiveDomain);
-    }
-  }, [currentStep, storeDomain, domain, organizationId, userEmail, startEnrichment]);
+  // Note: The duplicate setUserEmail useEffect for business emails was removed (OLH-003)
+  // to prevent double calls that could create duplicate join requests or race conditions.
+  // The useEffect above (line 313) already calls setUserEmail for all email types.
+  //
+  // The auto-start enrichment useEffect was also removed (OLH-003) because
+  // EnrichmentLoadingStep already handles startEnrichment in its own mount useEffect.
+  // Having both caused duplicate enrichment calls.
 
   // Handle "Resume" choice — apply saved state and continue
   const handleResume = () => {

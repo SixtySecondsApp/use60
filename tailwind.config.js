@@ -98,12 +98,22 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.7' },
         },
+        'slide-in-top': {
+          from: { opacity: '0', transform: 'translateY(-8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'count-flash': {
+          '0%': { opacity: '0', transform: 'translateY(-4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'shimmer': 'shimmer 2s infinite linear',
         'pulse-slow': 'pulse-slow 8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'slide-in-top': 'slide-in-top 0.2s ease-out both',
+        'count-flash': 'count-flash 0.2s ease-out both',
       },
       dropShadow: {
         'glow': [

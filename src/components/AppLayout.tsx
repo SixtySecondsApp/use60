@@ -395,7 +395,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       
       {/* Quick Add FAB - Only shown for admins in internal view */}
-      {location.pathname !== '/workflows' && location.pathname !== '/settings/demo' && !isViewingAsExternal && !isOpsFullscreen && isUserAdmin(userData) && (
+      {location.pathname !== '/workflows' && location.pathname !== '/platform/demo' && !isViewingAsExternal && !isOpsFullscreen && isUserAdmin(userData) && (
         <motion.button
           type="button"
           whileHover={{ scale: 1.05 }}
@@ -997,7 +997,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Settings and Logout at bottom */}
           <div className={cn(
             'mt-auto pt-6 border-t border-[#E2E8F0] dark:border-gray-800/50',
-            isCollapsed ? 'space-y-1' : 'space-y-0'
+            isCollapsed ? 'space-y-1' : 'space-y-1'
           )}>
             <SetupWizardSidebarIndicator isCollapsed={isCollapsed} />
             <Link
@@ -1005,8 +1005,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               className={cn(
                 'flex items-center transition-colors text-sm font-medium',
                 isCollapsed
-                  ? 'w-9 h-9 mx-auto rounded-xl justify-center mb-0'
-                  : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
+                  ? 'w-9 h-9 mx-auto rounded-xl justify-center'
+                  : 'w-full gap-3 px-2 py-2.5 rounded-xl',
                 location.pathname.startsWith('/settings')
                   ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                   : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
@@ -1032,8 +1032,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               className={cn(
                 'flex items-center transition-colors text-sm font-medium',
                 isCollapsed
-                  ? 'w-9 h-9 mx-auto rounded-xl justify-center mb-0'
-                  : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
+                  ? 'w-9 h-9 mx-auto rounded-xl justify-center'
+                  : 'w-full gap-3 px-2 py-2.5 rounded-xl',
                 location.pathname.startsWith('/support')
                   ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm dark:bg-[#37bd7e]/15 dark:text-white dark:border-[#37bd7e]/30'
                   : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
@@ -1061,8 +1061,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 className={cn(
                   'flex items-center transition-colors text-sm font-medium',
                   isCollapsed
-                    ? 'w-9 h-9 mx-auto rounded-xl justify-center mb-0'
-                    : 'w-full gap-3 px-2 py-2.5 rounded-xl mb-2',
+                    ? 'w-9 h-9 mx-auto rounded-xl justify-center'
+                    : 'w-full gap-3 px-2 py-2.5 rounded-xl',
                   location.pathname.startsWith('/platform')
                     ? 'bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-900/20 dark:text-white dark:border-purple-800/20'
                     : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'

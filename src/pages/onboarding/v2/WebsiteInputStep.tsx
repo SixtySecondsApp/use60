@@ -36,6 +36,7 @@ export function WebsiteInputStep({ organizationId: propOrgId }: WebsiteInputStep
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     organizationId: storeOrgId,
@@ -117,8 +118,17 @@ export function WebsiteInputStep({ organizationId: propOrgId }: WebsiteInputStep
     }
 
     setError(null);
-    setWebsiteUrl(trimmed);
-    await submitWebsite(organizationId);
+    setIsSubmitting(true);
+    try {
+      setWebsiteUrl(trimmed);
+      await submitWebsite(organizationId);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to submit website. Please try again.';
+      toast.error(errorMessage);
+      console.error('Website submission error:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleNoWebsite = () => {
@@ -191,7 +201,7 @@ export function WebsiteInputStep({ organizationId: propOrgId }: WebsiteInputStep
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       onClick={() => handleSelectOrg(org)}
-                      disabled={isJoining && selectedOrgId === org.id}
+                      disabled={isJoining}
                       className="w-full flex items-center justify-between p-4 rounded-lg border border-gray-700 bg-gray-800/50 hover:bg-gray-800 hover:border-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <div className="text-left">
@@ -271,11 +281,20 @@ export function WebsiteInputStep({ organizationId: propOrgId }: WebsiteInputStep
 
           <Button
             onClick={handleSubmitWebsite}
-            disabled={!websiteInput.trim()}
+            disabled={!websiteInput.trim() || isSubmitting}
             className="w-full bg-violet-600 hover:bg-violet-700 text-white py-4 text-base"
           >
-            Continue
-            <ArrowRight className="w-5 h-5 ml-2" />
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              <>
+                Continue
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </>
+            )}
           </Button>
         </div>
 

@@ -14,6 +14,7 @@ interface AddItemButtonProps {
   placeholder: string;
   className?: string;
   disabled?: boolean;
+  maxLength?: number;
 }
 
 export function AddItemButton({
@@ -21,6 +22,7 @@ export function AddItemButton({
   placeholder,
   className,
   disabled,
+  maxLength,
 }: AddItemButtonProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [value, setValue] = useState('');
@@ -60,12 +62,21 @@ export function AddItemButton({
           ref={inputRef}
           type="text"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            if (maxLength && e.target.value.length > maxLength) return;
+            setValue(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           onBlur={handleAdd}
           placeholder={placeholder}
+          maxLength={maxLength}
           className="flex-1 text-sm bg-transparent outline-none text-white placeholder-gray-500"
         />
+        {maxLength && (
+          <span className="text-xs text-gray-500 whitespace-nowrap">
+            {value.length}/{maxLength}
+          </span>
+        )}
       </div>
     );
   }

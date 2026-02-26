@@ -573,7 +573,7 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       {/* Quick action chips (separate section, overlay mode only) */}
       {showInput && mode === 'overlay' && (
         <div className="flex-shrink-0 px-5 py-3 border-t border-gray-800/50 bg-gray-900/50">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-custom">
             {quickActions.map((action) => (
               <button
                 key={action.id}

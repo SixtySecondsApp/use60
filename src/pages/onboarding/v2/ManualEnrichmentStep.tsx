@@ -17,9 +17,11 @@ import {
   Target,
   Sparkles,
   Check,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useOnboardingV2Store, ManualEnrichmentData } from '@/lib/stores/onboardingV2Store';
+import { toast } from 'sonner';
 
 const MAX_CHAR_SINGLE = 200;
 const MAX_CHAR_MULTI = 800;
@@ -95,6 +97,7 @@ export function ManualEnrichmentStep({ organizationId: propOrgId }: ManualEnrich
     competitors: '',
   });
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { organizationId: storeOrgId, setManualData, submitManualEnrichment, setStep } = useOnboardingV2Store();
 
@@ -129,7 +132,16 @@ export function ManualEnrichmentStep({ organizationId: propOrgId }: ManualEnrich
       };
 
       setManualData(manualData);
-      await submitManualEnrichment(organizationId);
+      setIsSubmitting(true);
+      try {
+        await submitManualEnrichment(organizationId);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to submit. Please try again.';
+        toast.error(errorMessage);
+        console.error('Manual enrichment submission error:', err);
+      } finally {
+        setIsSubmitting(false);
+      }
     } else {
       setCurrentIndex(currentIndex + 1);
     }
@@ -283,9 +295,15 @@ export function ManualEnrichmentStep({ organizationId: propOrgId }: ManualEnrich
 
             <Button
               onClick={handleNext}
+              disabled={isSubmitting}
               className="bg-violet-600 hover:bg-violet-700 text-white"
             >
-              {isLastQuestion ? (
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : isLastQuestion ? (
                 <>
                   <Check className="w-4 h-4 mr-2" />
                   Complete

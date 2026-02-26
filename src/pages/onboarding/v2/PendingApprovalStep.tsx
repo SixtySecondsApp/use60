@@ -166,87 +166,70 @@ export function PendingApprovalStep() {
       if (user?.id) {
         console.log('[PendingApprovalStep] Cleaning up placeholder organizations');
         try {
-          // Get user's profile to check their name
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('first_name')
-            .eq('id', user.id)
-            .maybeSingle();
-
           // Get all user's memberships where they are owner
           const { data: allMemberships } = await supabase
             .from('organization_memberships')
-            .select('org_id, role, organizations(id, name, created_by)')
+            .select('org_id, role, organizations(id, name, created_by, created_at)')
             .eq('user_id', user.id)
             .eq('role', 'owner');
 
           if (allMemberships && allMemberships.length > 0) {
-            // Define generic placeholder names
-            const firstName = profileData?.first_name || '';
-            const genericNames = [
-              'Test',
-              'test',
-              'My Organization',
-              'my organization',
-              `${firstName}'s Organization`,
-              `${firstName.toLowerCase()}'s organization`,
-            ];
+            const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
-            // Filter to find placeholder orgs
-            const placeholderOrgs = allMemberships.filter(m => {
-              const org = m.organizations;
-              return (
-                org &&
-                org.id !== membership.org_id && // Not the newly joined org
-                org.created_by === user.id && // User created it
-                genericNames.some(name =>
-                  org.name?.toLowerCase().includes(name.toLowerCase()) ||
-                  org.name === name
-                )
-              );
-            });
+            // Filter to find placeholder orgs using safe criteria (no name matching)
+            const placeholderOrgs: typeof allMemberships = [];
+            for (const m of allMemberships) {
+              const org = m.organizations as { id: string; name: string; created_by: string; created_at?: string } | null;
+              if (!org || org.id === membership.org_id) continue;
+              if (org.created_by !== user.id) continue;
+
+              // Check if org was created recently (within last 2 hours)
+              if (org.created_at && org.created_at < twoHoursAgo) continue;
+
+              // Check if org has enrichment data (real orgs will have enrichment)
+              const { data: enrichment } = await supabase
+                .from('organization_enrichment')
+                .select('id')
+                .eq('organization_id', org.id)
+                .maybeSingle();
+              if (enrichment) continue;
+
+              // Check if org has other members besides current user
+              const { data: otherMembersCheck } = await supabase
+                .from('organization_memberships')
+                .select('user_id')
+                .eq('org_id', org.id)
+                .neq('user_id', user.id)
+                .limit(1);
+              if (otherMembersCheck && otherMembersCheck.length > 0) continue;
+
+              placeholderOrgs.push(m);
+            }
 
             console.log('[PendingApprovalStep] Found', placeholderOrgs.length, 'placeholder orgs to cleanup');
 
-            // Delete placeholder orgs
+            // Delete placeholder orgs (already verified: no other members, no enrichment, recent, user-created)
             for (const placeholderMembership of placeholderOrgs) {
               const orgId = placeholderMembership.org_id;
-              const orgName = placeholderMembership.organizations?.name;
+              const orgName = (placeholderMembership.organizations as { name?: string } | null)?.name;
 
               console.log('[PendingApprovalStep] Deleting placeholder org:', orgName, orgId);
 
-              // Check if org has any other members
-              const { data: otherMembers, error: membersError } = await supabase
+              // Delete membership first
+              await supabase
                 .from('organization_memberships')
-                .select('user_id')
+                .delete()
                 .eq('org_id', orgId)
-                .neq('user_id', user.id);
+                .eq('user_id', user.id);
 
-              if (membersError) {
-                console.error('[PendingApprovalStep] Error checking org members:', membersError);
-                continue;
-              }
+              // Delete the organization
+              await supabase
+                .from('organizations')
+                .delete()
+                .eq('id', orgId)
+                .eq('created_by', user.id);
 
-              // Only delete if user is sole member
-              if (otherMembers && otherMembers.length === 0) {
-                // Delete membership first
-                await supabase
-                  .from('organization_memberships')
-                  .delete()
-                  .eq('org_id', orgId)
-                  .eq('user_id', user.id);
-
-                // Delete the organization
-                await supabase
-                  .from('organizations')
-                  .delete()
-                  .eq('id', orgId)
-                  .eq('created_by', user.id);
-
-                console.log('[PendingApprovalStep] Deleted placeholder org:', orgName);
-              } else {
-                console.log('[PendingApprovalStep] Skipping org with other members:', orgName);
-              }
+              console.log('[PendingApprovalStep] Deleted placeholder org:', orgName);
             }
           }
         } catch (cleanupError) {
@@ -308,11 +291,19 @@ export function PendingApprovalStep() {
     setChecking(true);
     try {
       // Step 1: Check organization_memberships FIRST (source of truth)
-      const { data: membership } = await supabase
+      // Scope to the pending org to avoid PGRST116 when user has multiple memberships
+      let membershipQuery = supabase
         .from('organization_memberships')
         .select('org_id, role, id')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .eq('user_id', user.id);
+
+      if (pendingJoinRequest?.orgId) {
+        membershipQuery = membershipQuery.eq('org_id', pendingJoinRequest.orgId);
+      } else {
+        membershipQuery = membershipQuery.limit(1);
+      }
+
+      const { data: membership } = await membershipQuery.maybeSingle();
 
       // If membership exists, user was approved - trigger dashboard flow
       if (membership) {
@@ -654,7 +645,7 @@ export function PendingApprovalStep() {
             <button
               onClick={() => setShowCancelDialog(true)}
               disabled={canceling || isLoadingDashboard || showApprovalSuccess}
-              className="w-full bg-violet-600 hover:bg-violet-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 mb-2 disabled:bg-gray-700 disabled:cursor-not-allowed"
+              className="w-full bg-transparent border border-red-500/50 text-red-400 hover:bg-red-500/10 font-medium py-3 px-4 rounded-lg transition-colors duration-200 mb-2 disabled:border-gray-700 disabled:text-gray-500 disabled:hover:bg-transparent disabled:cursor-not-allowed"
             >
               {canceling ? (
                 <>
