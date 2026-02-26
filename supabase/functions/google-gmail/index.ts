@@ -191,6 +191,10 @@ serve(async (req) => {
         response = await modifyEmail(accessToken, requestBody);
         break;
       
+      case 'draft':
+        response = await createDraft(accessToken, requestBody as SendEmailRequest);
+        break;
+
       case 'archive':
         if (!requestBody.messageId) {
           throw new Error('messageId is required for archive action');
@@ -324,19 +328,21 @@ serve(async (req) => {
         }
     }
 
-    // Log the successful operation
-    await supabase
-      .from('google_service_logs')
-      .insert({
-        integration_id: integration.id,
-        service: 'gmail',
-        action: action || 'list',
-        status: 'success',
-        request_data: { action, userId },
-        response_data: { success: true },
-      }).catch(() => {
-        // Non-critical
-      });
+    // Log the successful operation (non-critical)
+    try {
+      await supabase
+        .from('google_service_logs')
+        .insert({
+          integration_id: integration.id,
+          service: 'gmail',
+          action: action || 'list',
+          status: 'success',
+          request_data: { action, userId },
+          response_data: { success: true },
+        });
+    } catch {
+      // Non-critical
+    }
 
     return jsonResponse(response, req);
 
@@ -393,6 +399,115 @@ async function sendEmail(accessToken: string, request: SendEmailRequest): Promis
     success: true,
     messageId: data.id,
     threadId: data.threadId
+  };
+}
+
+/**
+ * Find the most recent Gmail thread with a given recipient email (FUV3-005).
+ * Returns threadId + Message-ID header for reply threading, or null if not found.
+ * Fails soft — returns null on any API error.
+ */
+async function findRecentThread(accessToken: string, recipientEmail: string): Promise<{ threadId: string; messageId: string } | null> {
+  try {
+    const query = encodeURIComponent(`to:${recipientEmail} OR from:${recipientEmail}`);
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=1`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data.messages?.length) return null;
+
+    // Get the message to extract threadId and Message-ID header
+    const msgResponse = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${data.messages[0].id}?format=metadata&metadataHeaders=Message-ID`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    if (!msgResponse.ok) return null;
+    const msgData = await msgResponse.json();
+
+    const messageIdHeader = msgData.payload?.headers?.find((h: any) => h.name === 'Message-ID')?.value;
+
+    return {
+      threadId: msgData.threadId,
+      messageId: messageIdHeader || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function createDraft(accessToken: string, request: SendEmailRequest & {
+  threadId?: string;
+  replyToMessageId?: string;
+  autoThread?: boolean;
+  recipientEmail?: string;
+}): Promise<any> {
+  // FUV3-005: Auto-detect existing thread if requested
+  let threadId = request.threadId;
+  let replyToMessageId = request.replyToMessageId;
+  let threadDetected = false;
+
+  if (request.autoThread && request.recipientEmail && !threadId) {
+    const existingThread = await findRecentThread(accessToken, request.recipientEmail);
+    if (existingThread) {
+      threadId = existingThread.threadId;
+      replyToMessageId = existingThread.messageId;
+      threadDetected = true;
+    }
+  }
+
+  const emailLines = [
+    `To: ${request.to}`,
+    `Subject: ${request.subject}`,
+    'Content-Type: text/html; charset=utf-8',
+  ];
+
+  // Add reply headers when threading into an existing conversation
+  if (replyToMessageId) {
+    emailLines.push(`In-Reply-To: ${replyToMessageId}`);
+    emailLines.push(`References: ${replyToMessageId}`);
+  }
+
+  emailLines.push('', request.body);
+
+  const emailMessage = emailLines.join('\r\n');
+
+  const encodedMessage = btoa(emailMessage)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  const messagePayload: Record<string, unknown> = { raw: encodedMessage };
+  if (threadId) {
+    messagePayload.threadId = threadId;
+  }
+
+  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: messagePayload,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(`Gmail API error: ${errorData.error?.message || 'Unknown error'}`);
+  }
+
+  const data = await response.json();
+  return {
+    success: true,
+    draftId: data.id,
+    messageId: data.message?.id,
+    threadId: data.message?.threadId,
+    threadDetected,
   };
 }
 

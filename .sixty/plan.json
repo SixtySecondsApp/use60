@@ -21,6 +21,12 @@
       "status": "complete",
       "consultReport": ".sixty/consult/followup-email-v2.md",
       "createdAt": "2026-02-25"
+    },
+    {
+      "id": "followup-email-v3",
+      "name": "Follow-Up Email v3 — Zero-Friction Delivery",
+      "status": "complete",
+      "createdAt": "2026-02-25"
     }
   ],
   "stories": [
@@ -229,12 +235,140 @@
       "parallelWith": ["FUV2-007"],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:40:00Z"
+    },
+    {
+      "id": "FUV3-001",
+      "feature": "followup-email-v3",
+      "title": "Add 'Open in Gmail' deep link to Slack confirmation after draft creation",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "followup_approve and followup_draft handlers in slack-interactive return draftId from google-gmail response",
+        "Confirmation message includes an 'Open in Gmail' button linking to https://mail.google.com/mail/u/0/#drafts?compose=<messageId>",
+        "generate-follow-up Slack delivery also includes a pre-emptive note: 'After approving, click Open in Gmail to send'",
+        "Link opens in browser (Slack external link button with url type)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 18,
+      "files": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/generate-follow-up/index.ts"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["FUV3-002", "FUV3-005"],
+      "startedAt": "2026-02-25T19:00:00Z",
+      "completedAt": "2026-02-25T19:18:00Z"
+    },
+    {
+      "id": "FUV3-002",
+      "feature": "followup-email-v3",
+      "title": "Auto-trigger follow-up generation after every meeting via slack-post-meeting",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "slack-post-meeting calls generate-follow-up with delivery='slack' after debrief analysis completes",
+        "Follow-up draft lands in user's Slack DM within 2 minutes of transcript indexing",
+        "Debrief message and follow-up draft are separate Slack messages (not combined)",
+        "Respects proactive notification policy (quiet hours, rate limits)",
+        "Skips auto-generation if meeting has no external attendees (internal meetings)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 20,
+      "files": [
+        "supabase/functions/slack-post-meeting/index.ts"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["FUV3-001", "FUV3-005"],
+      "startedAt": "2026-02-25T19:00:00Z",
+      "completedAt": "2026-02-25T19:20:00Z"
+    },
+    {
+      "id": "FUV3-003",
+      "feature": "followup-email-v3",
+      "title": "Replace 'Edit in App' with inline Slack modal for email editing",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "followup_edit action opens a Slack modal (views.open) pre-filled with subject, recipient, and email body",
+        "Modal uses plain_text_input blocks: single-line for To and Subject, multi-line for Body",
+        "On submit, modal calls google-gmail?action=draft with edited content and updates the original message with confirmation",
+        "Modal title shows 'Edit Follow-Up' with Save Draft and Cancel buttons",
+        "Original Slack message buttons replaced with confirmation after modal submit"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": 22,
+      "files": [
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "dependencies": { "stories": ["FUV3-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["FUV3-004"],
+      "startedAt": "2026-02-25T21:30:00Z",
+      "completedAt": "2026-02-25T21:52:00Z"
+    },
+    {
+      "id": "FUV3-004",
+      "feature": "followup-email-v3",
+      "title": "Add tone/length quick-adjust buttons to Slack follow-up message",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "Slack follow-up message includes a second action row with 4 buttons: Shorter, More Formal, More Casual, Add Next Steps",
+        "Each button calls generate-follow-up with regenerate_guidance set to the adjustment instruction and cached_rag_context from original",
+        "Slack message is replaced (chat.update) with regenerated email content and same action buttons",
+        "A small counter shows 'v2', 'v3' etc. after each regeneration in the message header",
+        "Quick-adjust buttons are compact (style: default) to not visually compete with primary approve/draft buttons"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 20,
+      "files": [
+        "supabase/functions/generate-follow-up/index.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "dependencies": { "stories": ["FUV3-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["FUV3-003"],
+      "startedAt": "2026-02-25T21:30:00Z",
+      "completedAt": "2026-02-25T21:50:00Z"
+    },
+    {
+      "id": "FUV3-005",
+      "feature": "followup-email-v3",
+      "title": "Create Gmail draft as reply-in-thread when prior thread exists with recipient",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "Before creating draft, query Gmail API for recent threads with recipient email (q: 'to:{email} OR from:{email}' maxResults: 1)",
+        "If thread found, create draft with threadId set and In-Reply-To/References headers from last message",
+        "If no thread found, create draft as new email (current behavior)",
+        "generate-follow-up SSE step 'compose' metadata includes threadDetected: boolean for frontend display",
+        "google-gmail draft action accepts optional threadId param and sets it on the draft message"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 22,
+      "files": [
+        "supabase/functions/google-gmail/index.ts",
+        "supabase/functions/generate-follow-up/index.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["FUV3-001", "FUV3-002"],
+      "startedAt": "2026-02-25T19:00:00Z",
+      "completedAt": "2026-02-25T19:22:00Z"
     }
   ],
   "execution": {
-    "totalStories": 8,
-    "completedStories": 8,
-    "currentFeature": "followup-email-v2",
-    "lastUpdated": "2026-02-25T15:00:00Z"
+    "totalStories": 13,
+    "completedStories": 13,
+    "currentFeature": "followup-email-v3",
+    "lastUpdated": "2026-02-25T18:00:00Z"
   }
 }

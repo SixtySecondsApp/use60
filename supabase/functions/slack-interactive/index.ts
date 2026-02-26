@@ -8323,17 +8323,148 @@ serve(async (req) => {
           });
         }
 
+        // FUV3-003: Open inline Slack modal for editing instead of redirecting to app
         if (action.action_id === 'followup_edit') {
           const meetingId = action.value;
-          console.log('[Follow-Up] Edit in app, meeting_id:', meetingId);
-          const editUrl = `${appUrl}/platform/follow-up-demo?meeting_id=${meetingId}`;
+          console.log('[Follow-Up] Edit modal, meeting_id:', meetingId);
+
+          const { data: slackOrg } = await supabase
+            .from('slack_org_settings')
+            .select('bot_access_token')
+            .eq('slack_team_id', payload.team?.id)
+            .eq('is_connected', true)
+            .maybeSingle();
+
+          if (slackOrg?.bot_access_token && payload.trigger_id) {
+            // Extract email data from original message blocks
+            const messageBlocks = payload.message?.blocks || [];
+            const fieldsBlock = messageBlocks.find((b: any) => b.type === 'section' && b.fields);
+            const toField = fieldsBlock?.fields?.[0]?.text?.replace('*To:*\n', '') || '';
+            const subjectField = fieldsBlock?.fields?.[1]?.text?.replace('*Subject:*\n', '') || '';
+            const bodyBlock = messageBlocks.find((b: any) => b.type === 'section' && b.text && !b.fields);
+            const bodyText = bodyBlock?.text?.text || '';
+
+            await fetch('https://slack.com/api/views.open', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${slackOrg.bot_access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                trigger_id: payload.trigger_id,
+                view: {
+                  type: 'modal',
+                  callback_id: 'followup_edit_modal',
+                  private_metadata: JSON.stringify({ meeting_id: meetingId, response_url: payload.response_url }),
+                  title: { type: 'plain_text', text: 'Edit Follow-Up' },
+                  submit: { type: 'plain_text', text: 'Save Draft' },
+                  close: { type: 'plain_text', text: 'Cancel' },
+                  blocks: [
+                    {
+                      type: 'input',
+                      block_id: 'to_block',
+                      label: { type: 'plain_text', text: 'To' },
+                      element: { type: 'plain_text_input', action_id: 'to_input', initial_value: toField },
+                    },
+                    {
+                      type: 'input',
+                      block_id: 'subject_block',
+                      label: { type: 'plain_text', text: 'Subject' },
+                      element: { type: 'plain_text_input', action_id: 'subject_input', initial_value: subjectField },
+                    },
+                    {
+                      type: 'input',
+                      block_id: 'body_block',
+                      label: { type: 'plain_text', text: 'Email Body' },
+                      element: { type: 'plain_text_input', action_id: 'body_input', multiline: true, initial_value: bodyText },
+                    },
+                  ],
+                },
+              }),
+            });
+          }
+
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // FUV3-001 + FUV3-005: Combined approve/draft handler with Open in Gmail link + auto-thread
+        if (action.action_id === 'followup_approve' || action.action_id === 'followup_draft') {
+          let emailData: { meeting_id?: string; to?: string; subject?: string; body?: string } = {};
+          try {
+            emailData = JSON.parse(action.value || '{}');
+          } catch {
+            emailData = {};
+          }
+          const isApprove = action.action_id === 'followup_approve';
+          console.log(`[Follow-Up] ${isApprove ? 'Approve' : 'Draft'}:`, { to: emailData.to, subject: emailData.subject });
+
+          // Resolve Slack user → Sixty user
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+          let draftSuccess = false;
+          let draftError = '';
+          let gmailMessageId = '';
+          let threadDetected = false;
+
+          if (ctx?.userId && emailData.to && emailData.subject && emailData.body) {
+            try {
+              const gmailRes = await fetch(`${supabaseUrl}/functions/v1/google-gmail`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${supabaseServiceKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  action: 'draft',
+                  userId: ctx.userId,
+                  to: emailData.to,
+                  subject: emailData.subject,
+                  body: emailData.body.replace(/\n/g, '<br>'),
+                  autoThread: true,
+                  recipientEmail: emailData.to,
+                }),
+              });
+              const gmailResult = await gmailRes.json();
+              draftSuccess = gmailResult?.success === true;
+              gmailMessageId = gmailResult?.messageId || '';
+              threadDetected = gmailResult?.threadDetected === true;
+              if (!draftSuccess) draftError = gmailResult?.error || 'Unknown error';
+            } catch (err) {
+              draftError = err instanceof Error ? err.message : 'Failed to create draft';
+            }
+          } else {
+            draftError = !ctx?.userId ? 'Slack user not linked to Sixty' : 'Missing email data';
+          }
+
           if (payload.response_url) {
-            const blocks = [
-              section(`*Opening in app...* Edit your follow-up email before sending.`),
-              section(`<${editUrl}|Open Follow-Up Editor>`),
-              contextBlock([`Requested by <@${payload.user.id}> at ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`]),
-            ];
-            await updateMessage(payload.response_url, blocks);
+            if (draftSuccess) {
+              const threadNote = threadDetected ? ' as reply in existing thread' : '';
+              const confirmBlocks = [
+                section(`*Draft created${threadNote}* by <@${payload.user.id}>`),
+                contextBlock([`To: ${emailData.to} | Subject: ${emailData.subject}`]),
+              ];
+              // FUV3-001: Add "Open in Gmail" button if we have a messageId
+              if (gmailMessageId) {
+                confirmBlocks.push({
+                  type: 'actions',
+                  elements: [{
+                    type: 'button',
+                    text: { type: 'plain_text', text: 'Open in Gmail', emoji: true },
+                    url: `https://mail.google.com/mail/u/0/#drafts?compose=${gmailMessageId}`,
+                    action_id: 'followup_open_gmail',
+                  }],
+                } as any);
+              }
+              await updateMessage(payload.response_url, confirmBlocks);
+            } else {
+              const blocks = [
+                section(`*Failed to create draft*\n${draftError}`),
+                contextBlock([`Requested by <@${payload.user.id}>`]),
+              ];
+              await updateMessage(payload.response_url, blocks);
+            }
           }
           return new Response(JSON.stringify({ ok: true }), {
             status: 200,
@@ -8341,26 +8472,81 @@ serve(async (req) => {
           });
         }
 
-        if (action.action_id === 'followup_approve') {
-          let approveData: { meeting_id?: string; to?: string; subject?: string } = {};
+        // FUV3-001: Acknowledge Open in Gmail button click (Slack sends interaction event for URL buttons)
+        if (action.action_id === 'followup_open_gmail') {
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
+        // FUV3-004: Follow-up quick-adjust buttons
+        // Actions: followup_adjust_shorter, followup_adjust_formal,
+        //          followup_adjust_casual, followup_adjust_nextsteps
+        // =====================================================================
+        if (action.action_id.startsWith('followup_adjust_')) {
+          const adjustmentMap: Record<string, string> = {
+            'followup_adjust_shorter': 'Make the email significantly shorter and more concise. Remove any unnecessary detail. Keep under 100 words.',
+            'followup_adjust_formal': 'Rewrite the email in a more formal, professional tone. Use business language.',
+            'followup_adjust_casual': 'Rewrite the email in a more casual, conversational tone. Make it sound natural and friendly.',
+            'followup_adjust_nextsteps': 'Add 2-3 concrete next steps with specific dates and owners. Make the CTA more actionable.',
+          };
+
+          let adjustData: { meeting_id?: string; version?: number } = {};
           try {
-            approveData = JSON.parse(action.value || '{}');
+            adjustData = JSON.parse(action.value || '{}');
           } catch {
-            approveData = {};
+            adjustData = {};
           }
-          console.log('[Follow-Up] Approve:', approveData);
-          if (payload.response_url) {
-            const confirmation = buildActionConfirmation({
-              action: 'approved',
-              slackUserId: payload.user.id,
-              timestamp: new Date().toISOString(),
-              entitySummary: approveData.subject
-                ? `Follow-up to ${approveData.to}: ${approveData.subject}`
-                : 'Follow-up email',
-              detail: 'Email sending will be available once email-send-as-rep is integrated.',
-            });
-            await updateMessage(payload.response_url, confirmation.blocks);
+
+          const guidance = adjustmentMap[action.action_id];
+          const adjustVersion = adjustData.version ?? 2;
+
+          console.log('[Follow-Up] Quick-adjust:', action.action_id, 'meeting_id:', adjustData.meeting_id, 'version:', adjustVersion);
+
+          if (adjustData.meeting_id && guidance) {
+            // Show "Regenerating..." in the current message immediately
+            if (payload.response_url) {
+              await fetch(payload.response_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  replace_original: true,
+                  blocks: [
+                    {
+                      type: 'section',
+                      text: {
+                        type: 'mrkdwn',
+                        text: `*Regenerating (v${adjustVersion})...* ${guidance.split('.')[0]}`,
+                      },
+                    },
+                  ],
+                }),
+              }).catch(err => console.warn('[Follow-Up] response_url update error:', err));
+            }
+
+            // Resolve the sixty user ID for the generate-follow-up call
+            const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+
+            // Fire-and-forget: generate-follow-up sends a new Slack DM with the adjusted email
+            fetch(`${supabaseUrl}/functions/v1/generate-follow-up`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseServiceKey}`,
+                ...(ctx?.userId ? { 'x-user-id': ctx.userId } : {}),
+              },
+              body: JSON.stringify({
+                meeting_id: adjustData.meeting_id,
+                regenerate_guidance: guidance,
+                delivery: 'slack',
+                version: adjustVersion,
+                ...(ctx?.userId ? { user_id: ctx.userId } : {}),
+              }),
+            }).catch(err => console.warn('[Follow-Up] Quick-adjust fire-and-forget error:', err));
           }
+
           return new Response(JSON.stringify({ ok: true }), {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -8429,6 +8615,64 @@ serve(async (req) => {
         }
         if (payload.view?.callback_id === 'edit_task_modal') {
           return handleEditTaskModalSubmission(supabase, payload);
+        }
+        // FUV3-003: Follow-up inline edit modal submission
+        if (payload.view?.callback_id === 'followup_edit_modal') {
+          const values = payload.view.state.values;
+          const to = values.to_block.to_input.value;
+          const subject = values.subject_block.subject_input.value;
+          const body = values.body_block.body_input.value;
+          const metadata = JSON.parse(payload.view.private_metadata || '{}');
+
+          const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+
+          if (ctx?.userId && to && subject && body) {
+            const gmailRes = await fetch(`${supabaseUrl}/functions/v1/google-gmail`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${supabaseServiceKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'draft',
+                userId: ctx.userId,
+                to,
+                subject,
+                body: body.replace(/\n/g, '<br>'),
+                autoThread: true,
+                recipientEmail: to,
+              }),
+            });
+            const gmailResult = await gmailRes.json();
+
+            if (metadata.response_url) {
+              const confirmBlocks = gmailResult?.success
+                ? [
+                    { type: 'section', text: { type: 'mrkdwn', text: `*Draft created (edited)* by <@${payload.user.id}>` } },
+                    { type: 'context', elements: [{ type: 'mrkdwn', text: `To: ${to} | Subject: ${subject}` }] },
+                    ...(gmailResult.messageId ? [{
+                      type: 'actions',
+                      elements: [{
+                        type: 'button',
+                        text: { type: 'plain_text', text: 'Open in Gmail' },
+                        url: `https://mail.google.com/mail/u/0/#drafts?compose=${gmailResult.messageId}`,
+                        action_id: 'followup_open_gmail',
+                      }],
+                    }] : []),
+                  ]
+                : [
+                    { type: 'section', text: { type: 'mrkdwn', text: `*Failed to create draft*\n${gmailResult?.error || 'Unknown error'}` } },
+                  ];
+
+              await fetch(metadata.response_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ replace_original: true, blocks: confirmBlocks }),
+              });
+            }
+          }
+
+          return new Response('', { status: 200, headers: corsHeaders });
         }
         return new Response('', { status: 200, headers: corsHeaders });
       }
