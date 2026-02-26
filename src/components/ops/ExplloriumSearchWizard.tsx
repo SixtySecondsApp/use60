@@ -6,21 +6,22 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import {
   Loader2,
   ArrowLeft,
   ArrowRight,
-  Search,
   Building2,
   Users,
   X,
   Database,
   Shield,
   Coins,
-  ChevronRight,
+  Check,
+  Zap,
+  Globe,
+  TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -130,19 +131,19 @@ function TagInput({ tags, onTagsChange, placeholder = 'Type and press Enter', cl
 
   return (
     <div
-      className={`min-h-[38px] flex flex-wrap gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 cursor-text focus-within:border-blue-500 transition-colors ${className}`}
+      className={`min-h-[40px] flex flex-wrap gap-1.5 rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-2.5 py-1.5 cursor-text focus-within:border-teal-500/60 focus-within:ring-1 focus-within:ring-teal-500/20 transition-all ${className}`}
       onClick={() => inputRef.current?.focus()}
     >
       {tags.map((tag) => (
         <span
           key={tag}
-          className="inline-flex items-center gap-1 rounded-md bg-zinc-700 px-2 py-0.5 text-xs text-zinc-200"
+          className="inline-flex items-center gap-1 rounded-md bg-teal-500/10 border border-teal-500/25 px-2 py-0.5 text-xs text-teal-300 font-medium"
         >
           {tag}
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); removeTag(tag); }}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="text-teal-500/60 hover:text-teal-300 transition-colors"
           >
             <X className="w-3 h-3" />
           </button>
@@ -163,7 +164,7 @@ function TagInput({ tags, onTagsChange, placeholder = 'Type and press Enter', cl
         }}
         onBlur={() => { if (inputValue.trim()) addTag(inputValue); }}
         placeholder={tags.length === 0 ? placeholder : ''}
-        className="flex-1 min-w-[120px] bg-transparent text-sm text-white outline-none placeholder:text-zinc-500"
+        className="flex-1 min-w-[120px] bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"
       />
     </div>
   );
@@ -191,7 +192,7 @@ function CheckboxGroup({ label, options, selected, onSelectedChange }: CheckboxG
 
   return (
     <div>
-      <p className="text-xs font-medium text-zinc-400 mb-2">{label}</p>
+      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {options.map((opt) => {
           const active = selected.includes(opt.value);
@@ -200,12 +201,13 @@ function CheckboxGroup({ label, options, selected, onSelectedChange }: CheckboxG
               key={opt.value}
               type="button"
               onClick={() => toggle(opt.value)}
-              className={`rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
+              className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-all ${
                 active
-                  ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300'
+                  ? 'bg-teal-500/15 border-teal-500/50 text-teal-300 shadow-[0_0_8px_rgba(20,184,166,0.15)]'
+                  : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
               }`}
             >
+              {active && <Check className="w-2.5 h-2.5 inline mr-1 opacity-70" />}
               {opt.label}
             </button>
           );
@@ -242,7 +244,7 @@ function SeniorityGroup({ selected, onSelectedChange }: SeniorityGroupProps) {
 
   return (
     <div>
-      <p className="text-xs font-medium text-zinc-400 mb-2">Seniority</p>
+      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">Seniority</p>
       <div className="flex flex-wrap gap-1.5">
         {SENIORITY_DISPLAY.map((group) => {
           const active = isGroupSelected(group.values);
@@ -251,12 +253,13 @@ function SeniorityGroup({ selected, onSelectedChange }: SeniorityGroupProps) {
               key={group.label}
               type="button"
               onClick={() => toggleGroup(group.values)}
-              className={`rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
+              className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-all ${
                 active
-                  ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300'
+                  ? 'bg-teal-500/15 border-teal-500/50 text-teal-300 shadow-[0_0_8px_rgba(20,184,166,0.15)]'
+                  : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
               }`}
             >
+              {active && <Check className="w-2.5 h-2.5 inline mr-1 opacity-70" />}
               {group.label}
             </button>
           );
@@ -267,46 +270,80 @@ function SeniorityGroup({ selected, onSelectedChange }: SeniorityGroupProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Step indicator
+// Step indicator — segmented progress bar style
 // ---------------------------------------------------------------------------
 
 interface StepIndicatorProps {
-  current: number; // 1-indexed
-  total: number;
+  current: number;
   labels: string[];
 }
 
-function StepIndicator({ current, total, labels }: StepIndicatorProps) {
+function StepIndicator({ current, labels }: StepIndicatorProps) {
   return (
-    <div className="flex items-center gap-2 mt-2">
-      {labels.map((label, idx) => {
-        const stepNum = idx + 1;
-        const isActive = current === stepNum;
-        const isDone = current > stepNum;
-        return (
-          <React.Fragment key={label}>
+    <div className="space-y-2 mt-1">
+      {/* Segmented bar */}
+      <div className="flex gap-1">
+        {labels.map((_, idx) => {
+          const stepNum = idx + 1;
+          const isDone = current > stepNum;
+          const isActive = current === stepNum;
+          return (
             <div
-              className={`flex items-center gap-1.5 text-xs font-medium ${
-                isActive ? 'text-blue-400' : isDone ? 'text-green-400' : 'text-zinc-500'
+              key={idx}
+              className={`flex-1 h-0.5 rounded-full transition-all duration-500 ${
+                isDone
+                  ? 'bg-teal-500'
+                  : isActive
+                  ? 'bg-teal-400'
+                  : 'bg-zinc-800'
               }`}
-            >
-              <div
-                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+              style={isActive ? { boxShadow: '0 0 6px rgba(20,184,166,0.6)' } : undefined}
+            />
+          );
+        })}
+      </div>
+      {/* Labels */}
+      <div className="flex">
+        {labels.map((label, idx) => {
+          const stepNum = idx + 1;
+          const isDone = current > stepNum;
+          const isActive = current === stepNum;
+          return (
+            <div key={label} className="flex-1 flex items-center gap-1.5">
+              <span
+                className={`text-[10px] font-semibold transition-colors ${
                   isActive
-                    ? 'bg-blue-500 text-white'
+                    ? 'text-teal-400'
                     : isDone
-                    ? 'bg-green-500/20 text-green-400 border border-green-500/40'
-                    : 'bg-zinc-700 text-zinc-400'
+                    ? 'text-zinc-500'
+                    : 'text-zinc-700'
                 }`}
               >
-                {stepNum}
-              </div>
-              {label}
+                {isDone ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Check className="w-2.5 h-2.5 text-teal-600" />
+                    {label}
+                  </span>
+                ) : (
+                  label
+                )}
+              </span>
             </div>
-            {idx < labels.length - 1 && <div className="flex-1 h-px bg-zinc-700" />}
-          </React.Fragment>
-        );
-      })}
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Filter section wrapper
+// ---------------------------------------------------------------------------
+
+function FilterSection({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border border-zinc-800/80 rounded-xl bg-zinc-900/40 p-4 space-y-4">
+      {children}
     </div>
   );
 }
@@ -548,19 +585,6 @@ export function ExplloriumSearchWizard({
   }
 
   // ---------------------------------------------------------------------------
-  // Step descriptions
-  // ---------------------------------------------------------------------------
-
-  const stepDescription =
-    step === 1
-      ? 'Choose what type of data you want to find'
-      : step === 2
-      ? searchType === 'business_search'
-        ? 'Narrow your company search with filters'
-        : 'Filter by role, seniority, and company size'
-      : 'Review your search before creating the table';
-
-  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -572,543 +596,612 @@ export function ExplloriumSearchWizard({
         onOpenChange(v);
       }}
     >
-      <DialogContent className="sm:max-w-2xl bg-zinc-900 border-zinc-700 text-white max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-2">
-            <Search className="w-5 h-5 text-violet-400" />
-            Explorium Search
-          </DialogTitle>
-          <DialogDescription className="text-zinc-400">{stepDescription}</DialogDescription>
-        </DialogHeader>
-
-        <StepIndicator
-          current={step}
-          total={3}
-          labels={['Search Type', 'Filters', 'Preview & Create']}
-        />
+      <DialogContent className="sm:max-w-2xl p-0 gap-0 overflow-hidden bg-[#0c0e12] border border-zinc-800/80 text-white max-h-[88vh] flex flex-col">
 
         {/* ------------------------------------------------------------------ */}
-        {/* Step 1: Search Type                                                 */}
+        {/* Header                                                              */}
         {/* ------------------------------------------------------------------ */}
-        {step === 1 && (
-          <div className="space-y-4 mt-4">
-            <div className="grid grid-cols-2 gap-3">
-              {/* Company Search */}
-              <button
-                type="button"
-                onClick={() => setSearchType('business_search')}
-                className={`relative flex flex-col items-start gap-3 rounded-xl border p-4 text-left transition-all ${
-                  searchType === 'business_search'
-                    ? 'border-violet-500 bg-violet-500/10 ring-1 ring-violet-500/30'
-                    : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
-                }`}
-              >
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-                    searchType === 'business_search'
-                      ? 'bg-violet-500/20 text-violet-400'
-                      : 'bg-zinc-700 text-zinc-400'
-                  }`}
-                >
-                  <Building2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className={`text-sm font-semibold ${searchType === 'business_search' ? 'text-white' : 'text-zinc-300'}`}>
-                    Company Search
-                  </p>
-                  <p className="mt-0.5 text-xs text-zinc-500 leading-snug">
-                    Find businesses by industry, size, revenue, and intent signals
-                  </p>
-                </div>
-                {searchType === 'business_search' && (
-                  <div className="absolute top-3 right-3 h-4 w-4 rounded-full bg-violet-500 flex items-center justify-center">
-                    <div className="h-1.5 w-1.5 rounded-full bg-white" />
-                  </div>
-                )}
-              </button>
+        <div className="relative px-6 pt-5 pb-4 border-b border-zinc-800/60 shrink-0">
+          {/* Teal accent bar at top */}
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-500/0 via-teal-500 to-teal-500/0" />
 
-              {/* People Search */}
-              <button
-                type="button"
-                onClick={() => setSearchType('prospect_search')}
-                className={`relative flex flex-col items-start gap-3 rounded-xl border p-4 text-left transition-all ${
-                  searchType === 'prospect_search'
-                    ? 'border-violet-500 bg-violet-500/10 ring-1 ring-violet-500/30'
-                    : 'border-zinc-700 bg-zinc-800/40 hover:border-zinc-600'
-                }`}
-              >
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-                    searchType === 'prospect_search'
-                      ? 'bg-violet-500/20 text-violet-400'
-                      : 'bg-zinc-700 text-zinc-400'
-                  }`}
-                >
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className={`text-sm font-semibold ${searchType === 'prospect_search' ? 'text-white' : 'text-zinc-300'}`}>
-                    People Search
-                  </p>
-                  <p className="mt-0.5 text-xs text-zinc-500 leading-snug">
-                    Find decision-makers by job title, seniority, and department
-                  </p>
-                </div>
-                {searchType === 'prospect_search' && (
-                  <div className="absolute top-3 right-3 h-4 w-4 rounded-full bg-violet-500 flex items-center justify-center">
-                    <div className="h-1.5 w-1.5 rounded-full bg-white" />
-                  </div>
-                )}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-end pt-2">
-              <Button
-                onClick={() => setStep(2)}
-                className="gap-2 bg-violet-600 hover:bg-violet-500 text-white"
-              >
-                Next
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------------ */}
-        {/* Step 2: Filters                                                     */}
-        {/* ------------------------------------------------------------------ */}
-        {step === 2 && (
-          <div className="space-y-5 mt-4">
-            {searchType === 'business_search' ? (
-              <>
-                {/* Industries */}
-                <div>
-                  <p className="text-xs font-medium text-zinc-400 mb-2">Industries</p>
-                  <TagInput
-                    tags={bizIndustries}
-                    onTagsChange={setBizIndustries}
-                    placeholder="Type industry and press Enter"
-                  />
-                  {/* Quick suggestions */}
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {BUSINESS_INDUSTRIES.filter((i) => !bizIndustries.includes(i)).map((industry) => (
-                      <button
-                        key={industry}
-                        type="button"
-                        onClick={() => setBizIndustries([...bizIndustries, industry])}
-                        className="rounded-full border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400 hover:border-zinc-500 hover:text-zinc-300 transition-colors"
-                      >
-                        + {industry}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Company Size */}
-                <CheckboxGroup
-                  label="Company Size"
-                  options={EMPLOYEE_RANGES.map((r) => ({ label: r, value: r }))}
-                  selected={bizEmployeeRanges}
-                  onSelectedChange={setBizEmployeeRanges}
-                />
-
-                {/* Revenue Range */}
-                <CheckboxGroup
-                  label="Revenue Range"
-                  options={REVENUE_RANGES.map((r) => ({ label: r, value: r }))}
-                  selected={bizRevenueRanges}
-                  onSelectedChange={setBizRevenueRanges}
-                />
-
-                {/* Country */}
-                <div>
-                  <p className="text-xs font-medium text-zinc-400 mb-2">Countries (ISO alpha-2)</p>
-                  <TagInput
-                    tags={bizCountries}
-                    onTagsChange={setBizCountries}
-                    placeholder="e.g. us, gb, de"
-                  />
-                </div>
-
-                {/* Technologies */}
-                <div>
-                  <p className="text-xs font-medium text-zinc-400 mb-2">Technologies</p>
-                  <TagInput
-                    tags={bizTechnologies}
-                    onTagsChange={setBizTechnologies}
-                    placeholder="e.g. Salesforce, HubSpot, AWS"
-                  />
-                </div>
-
-                {/* Intent Topics */}
-                <div>
-                  <p className="text-xs font-medium text-zinc-400 mb-2">Intent Topics (Bombora)</p>
-                  <TagInput
-                    tags={bizIntentTopics}
-                    onTagsChange={setBizIntentTopics}
-                    placeholder="e.g. CRM Software, Marketing Automation"
-                  />
-                </div>
-
-                {/* Is Public */}
-                <div className="flex items-center justify-between rounded-lg border border-zinc-700/60 bg-zinc-800/40 px-3.5 py-3">
-                  <div>
-                    <p className="text-sm text-zinc-300">Public companies only</p>
-                    <p className="text-xs text-zinc-500">Filter to publicly traded companies</p>
-                  </div>
-                  <Switch
-                    checked={bizIsPublic === true}
-                    onCheckedChange={(checked) => setBizIsPublic(checked ? true : undefined)}
-                  />
-                </div>
-
-                {/* Company Domains */}
-                <div>
-                  <p className="text-xs font-medium text-zinc-400 mb-2">
-                    Target Domains{' '}
-                    <span className="text-zinc-600 font-normal">(one per line)</span>
-                  </p>
-                  <textarea
-                    value={bizDomains}
-                    onChange={(e) => setBizDomains(e.target.value)}
-                    placeholder="acme.com&#10;example.io&#10;startup.co"
-                    rows={3}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-blue-500 resize-none"
-                  />
-                </div>
-
-                {/* Results limit */}
-                <div>
-                  <label className="text-xs font-medium text-zinc-400 mb-2 block">
-                    Results limit
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={500}
-                    value={bizLimit}
-                    onChange={(e) => setBizLimit(Math.min(500, Math.max(1, Number(e.target.value))))}
-                    className="w-28 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
-                  />
-                  <p className="mt-1 text-xs text-zinc-600">Max 500</p>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Job Title */}
-                <div>
-                  <label className="text-xs font-medium text-zinc-400 mb-2 block">
-                    Job Title
-                  </label>
-                  <input
-                    type="text"
-                    value={prospectJobTitle}
-                    onChange={(e) => setProspectJobTitle(e.target.value)}
-                    placeholder="e.g. VP of Sales, Head of Marketing"
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-blue-500"
-                  />
-                  <div className="flex items-center gap-2 mt-2">
-                    <Switch
-                      id="include-related"
-                      checked={prospectIncludeRelated}
-                      onCheckedChange={setProspectIncludeRelated}
-                    />
-                    <Label htmlFor="include-related" className="text-xs text-zinc-400 cursor-pointer">
-                      Include related titles
-                    </Label>
-                  </div>
-                </div>
-
-                {/* Seniority */}
-                <SeniorityGroup
-                  selected={prospectSeniorities}
-                  onSelectedChange={setProspectSeniorities}
-                />
-
-                {/* Department */}
-                <CheckboxGroup
-                  label="Department"
-                  options={DEPARTMENT_OPTIONS}
-                  selected={prospectDepartments}
-                  onSelectedChange={setProspectDepartments}
-                />
-
-                {/* Country */}
-                <div>
-                  <p className="text-xs font-medium text-zinc-400 mb-2">Countries (ISO alpha-2)</p>
-                  <TagInput
-                    tags={prospectCountries}
-                    onTagsChange={setProspectCountries}
-                    placeholder="e.g. us, gb, de"
-                  />
-                </div>
-
-                {/* Company Size */}
-                <CheckboxGroup
-                  label="Company Size"
-                  options={EMPLOYEE_RANGES.map((r) => ({ label: r, value: r }))}
-                  selected={prospectEmployeeRanges}
-                  onSelectedChange={setProspectEmployeeRanges}
-                />
-
-                {/* Has Email */}
-                <div className="flex items-center justify-between rounded-lg border border-zinc-700/60 bg-zinc-800/40 px-3.5 py-3">
-                  <div>
-                    <p className="text-sm text-zinc-300">Has email address</p>
-                    <p className="text-xs text-zinc-500">Only return prospects with verified email</p>
-                  </div>
-                  <Switch
-                    checked={prospectHasEmail}
-                    onCheckedChange={setProspectHasEmail}
-                  />
-                </div>
-
-                {/* Results limit */}
-                <div>
-                  <label className="text-xs font-medium text-zinc-400 mb-2 block">
-                    Results limit
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={500}
-                    value={prospectLimit}
-                    onChange={(e) =>
-                      setProspectLimit(Math.min(500, Math.max(1, Number(e.target.value))))
-                    }
-                    className="w-28 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
-                  />
-                  <p className="mt-1 text-xs text-zinc-600">Max 500</p>
-                </div>
-              </>
-            )}
-
-            {/* Actions */}
-            <div className="flex items-center justify-between pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setStep(1)}
-                className="gap-1.5 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </Button>
-              <Button
-                onClick={() => setStep(3)}
-                disabled={!canProceedFromStep2}
-                className="gap-2 bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50"
-              >
-                Next
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------------ */}
-        {/* Step 3: Preview & Create                                            */}
-        {/* ------------------------------------------------------------------ */}
-        {step === 3 && (
-          <div className="space-y-4 mt-4">
-            {/* Stats */}
-            <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/40 px-4 py-3.5">
+          <DialogHeader className="space-y-0">
+            <div className="flex items-center gap-3 mb-3">
+              {/* Explorium badge */}
               <div className="flex items-center gap-2">
-                {searchType === 'business_search' ? (
-                  <Building2 className="w-4 h-4 text-violet-400 shrink-0" />
-                ) : (
-                  <Users className="w-4 h-4 text-violet-400 shrink-0" />
-                )}
-                <span className="text-sm text-zinc-300">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-500/10 border border-teal-500/20">
+                  <Database className="w-3.5 h-3.5 text-teal-400" />
+                </div>
+                <div>
+                  <DialogTitle className="text-[13px] font-semibold text-white leading-none">
+                    Explorium
+                  </DialogTitle>
+                  <DialogDescription className="text-[10px] text-zinc-600 leading-none mt-0.5">
+                    80M+ companies · 200M+ prospects
+                  </DialogDescription>
+                </div>
+              </div>
+
+              <div className="flex-1" />
+
+              {/* Step label */}
+              <span className="text-[10px] font-medium text-zinc-600 tabular-nums">
+                Step {step} of 3
+              </span>
+            </div>
+
+            {/* Step indicator */}
+            <StepIndicator
+              current={step}
+              labels={['Search type', 'Filters', 'Preview & create']}
+            />
+          </DialogHeader>
+        </div>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Scrollable body                                                     */}
+        {/* ------------------------------------------------------------------ */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Step 1: Search Type                                               */}
+          {/* ---------------------------------------------------------------- */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <p className="text-xs text-zinc-500">Choose what type of data you want to find</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Company Search */}
+                <button
+                  type="button"
+                  onClick={() => setSearchType('business_search')}
+                  className={`group relative flex flex-col items-start gap-4 rounded-xl border p-5 text-left transition-all duration-200 ${
+                    searchType === 'business_search'
+                      ? 'border-teal-500/50 bg-teal-500/[0.06]'
+                      : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/70'
+                  }`}
+                  style={searchType === 'business_search' ? { boxShadow: '0 0 20px rgba(20,184,166,0.08), inset 0 0 20px rgba(20,184,166,0.03)' } : undefined}
+                >
+                  {/* Selected indicator */}
+                  {searchType === 'business_search' && (
+                    <div className="absolute top-3.5 right-3.5 flex h-4 w-4 items-center justify-center rounded-full bg-teal-500">
+                      <Check className="w-2.5 h-2.5 text-black" strokeWidth={3} />
+                    </div>
+                  )}
+
+                  {/* Icon */}
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                    searchType === 'business_search'
+                      ? 'bg-teal-500/15 border border-teal-500/20'
+                      : 'bg-zinc-800 border border-zinc-700/50 group-hover:bg-zinc-750'
+                  }`}>
+                    <Building2 className={`w-5 h-5 transition-colors ${searchType === 'business_search' ? 'text-teal-400' : 'text-zinc-500'}`} />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className={`text-sm font-semibold transition-colors ${searchType === 'business_search' ? 'text-white' : 'text-zinc-300'}`}>
+                      Company Search
+                    </p>
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      Find businesses by industry, size, revenue, and intent signals
+                    </p>
+                  </div>
+
+                  {/* Stats row */}
+                  <div className="flex items-center gap-3 pt-1 border-t border-zinc-800/60 w-full">
+                    <div className="flex items-center gap-1">
+                      <Globe className="w-3 h-3 text-zinc-600" />
+                      <span className="text-[10px] text-zinc-600">80M+ companies</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Zap className="w-3 h-3 text-zinc-600" />
+                      <span className="text-[10px] text-zinc-600">Intent signals</span>
+                    </div>
+                  </div>
+                </button>
+
+                {/* People Search */}
+                <button
+                  type="button"
+                  onClick={() => setSearchType('prospect_search')}
+                  className={`group relative flex flex-col items-start gap-4 rounded-xl border p-5 text-left transition-all duration-200 ${
+                    searchType === 'prospect_search'
+                      ? 'border-teal-500/50 bg-teal-500/[0.06]'
+                      : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/70'
+                  }`}
+                  style={searchType === 'prospect_search' ? { boxShadow: '0 0 20px rgba(20,184,166,0.08), inset 0 0 20px rgba(20,184,166,0.03)' } : undefined}
+                >
+                  {searchType === 'prospect_search' && (
+                    <div className="absolute top-3.5 right-3.5 flex h-4 w-4 items-center justify-center rounded-full bg-teal-500">
+                      <Check className="w-2.5 h-2.5 text-black" strokeWidth={3} />
+                    </div>
+                  )}
+
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                    searchType === 'prospect_search'
+                      ? 'bg-teal-500/15 border border-teal-500/20'
+                      : 'bg-zinc-800 border border-zinc-700/50 group-hover:bg-zinc-750'
+                  }`}>
+                    <Users className={`w-5 h-5 transition-colors ${searchType === 'prospect_search' ? 'text-teal-400' : 'text-zinc-500'}`} />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className={`text-sm font-semibold transition-colors ${searchType === 'prospect_search' ? 'text-white' : 'text-zinc-300'}`}>
+                      People Search
+                    </p>
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      Find decision-makers by job title, seniority, and department
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-1 border-t border-zinc-800/60 w-full">
+                    <div className="flex items-center gap-1">
+                      <Users className="w-3 h-3 text-zinc-600" />
+                      <span className="text-[10px] text-zinc-600">200M+ prospects</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3 text-zinc-600" />
+                      <span className="text-[10px] text-zinc-600">Verified emails</span>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Step 2: Filters                                                   */}
+          {/* ---------------------------------------------------------------- */}
+          {step === 2 && (
+            <div className="space-y-3">
+              <p className="text-xs text-zinc-500">
+                {searchType === 'business_search'
+                  ? 'Narrow your company search with filters'
+                  : 'Filter by role, seniority, and company size'}
+              </p>
+
+              {searchType === 'business_search' ? (
+                <>
+                  <FilterSection>
+                    {/* Industries */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">Industries</p>
+                      <TagInput
+                        tags={bizIndustries}
+                        onTagsChange={setBizIndustries}
+                        placeholder="Type industry and press Enter"
+                      />
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {BUSINESS_INDUSTRIES.filter((i) => !bizIndustries.includes(i)).map((industry) => (
+                          <button
+                            key={industry}
+                            type="button"
+                            onClick={() => setBizIndustries([...bizIndustries, industry])}
+                            className="rounded-full border border-zinc-800 bg-zinc-900/60 px-2.5 py-0.5 text-[10px] text-zinc-500 hover:border-teal-500/30 hover:text-teal-400 hover:bg-teal-500/5 transition-all"
+                          >
+                            + {industry}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Company Size */}
+                    <CheckboxGroup
+                      label="Company Size"
+                      options={EMPLOYEE_RANGES.map((r) => ({ label: r, value: r }))}
+                      selected={bizEmployeeRanges}
+                      onSelectedChange={setBizEmployeeRanges}
+                    />
+
+                    {/* Revenue Range */}
+                    <CheckboxGroup
+                      label="Revenue Range"
+                      options={REVENUE_RANGES.map((r) => ({ label: r, value: r }))}
+                      selected={bizRevenueRanges}
+                      onSelectedChange={setBizRevenueRanges}
+                    />
+                  </FilterSection>
+
+                  <FilterSection>
+                    {/* Country */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">Countries <span className="text-zinc-700 normal-case tracking-normal font-normal">(ISO alpha-2)</span></p>
+                      <TagInput
+                        tags={bizCountries}
+                        onTagsChange={setBizCountries}
+                        placeholder="e.g. us, gb, de"
+                      />
+                    </div>
+
+                    {/* Technologies */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">Technologies</p>
+                      <TagInput
+                        tags={bizTechnologies}
+                        onTagsChange={setBizTechnologies}
+                        placeholder="e.g. Salesforce, HubSpot, AWS"
+                      />
+                    </div>
+
+                    {/* Intent Topics */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">
+                        Intent Topics
+                        <span className="ml-1.5 text-zinc-700 normal-case tracking-normal font-normal">via Bombora</span>
+                      </p>
+                      <TagInput
+                        tags={bizIntentTopics}
+                        onTagsChange={setBizIntentTopics}
+                        placeholder="e.g. CRM Software, Marketing Automation"
+                      />
+                    </div>
+                  </FilterSection>
+
+                  <FilterSection>
+                    {/* Is Public */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-zinc-300">Public companies only</p>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">Filter to publicly traded companies</p>
+                      </div>
+                      <Switch
+                        checked={bizIsPublic === true}
+                        onCheckedChange={(checked) => setBizIsPublic(checked ? true : undefined)}
+                      />
+                    </div>
+
+                    {/* Company Domains */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">
+                        Target Domains <span className="text-zinc-700 normal-case tracking-normal font-normal">one per line</span>
+                      </p>
+                      <textarea
+                        value={bizDomains}
+                        onChange={(e) => setBizDomains(e.target.value)}
+                        placeholder={'acme.com\nexample.io\nstartup.co'}
+                        rows={3}
+                        className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 resize-none transition-all"
+                      />
+                    </div>
+
+                    {/* Results limit */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-zinc-300">Results limit</p>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">Maximum 500</p>
+                      </div>
+                      <input
+                        type="number"
+                        min={1}
+                        max={500}
+                        value={bizLimit}
+                        onChange={(e) => setBizLimit(Math.min(500, Math.max(1, Number(e.target.value))))}
+                        className="w-20 rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-1.5 text-sm text-white text-center outline-none focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 transition-all"
+                      />
+                    </div>
+                  </FilterSection>
+                </>
+              ) : (
+                <>
+                  <FilterSection>
+                    {/* Job Title */}
+                    <div>
+                      <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">
+                        Job Title
+                      </label>
+                      <input
+                        type="text"
+                        value={prospectJobTitle}
+                        onChange={(e) => setProspectJobTitle(e.target.value)}
+                        placeholder="e.g. VP of Sales, Head of Marketing"
+                        className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 transition-all"
+                      />
+                      <div className="flex items-center gap-2 mt-2.5">
+                        <Switch
+                          id="include-related"
+                          checked={prospectIncludeRelated}
+                          onCheckedChange={setProspectIncludeRelated}
+                        />
+                        <Label htmlFor="include-related" className="text-xs text-zinc-400 cursor-pointer font-normal">
+                          Include related titles
+                        </Label>
+                      </div>
+                    </div>
+
+                    {/* Seniority */}
+                    <SeniorityGroup
+                      selected={prospectSeniorities}
+                      onSelectedChange={setProspectSeniorities}
+                    />
+
+                    {/* Department */}
+                    <CheckboxGroup
+                      label="Department"
+                      options={DEPARTMENT_OPTIONS}
+                      selected={prospectDepartments}
+                      onSelectedChange={setProspectDepartments}
+                    />
+                  </FilterSection>
+
+                  <FilterSection>
+                    {/* Country */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-2">Countries <span className="text-zinc-700 normal-case tracking-normal font-normal">(ISO alpha-2)</span></p>
+                      <TagInput
+                        tags={prospectCountries}
+                        onTagsChange={setProspectCountries}
+                        placeholder="e.g. us, gb, de"
+                      />
+                    </div>
+
+                    {/* Company Size */}
+                    <CheckboxGroup
+                      label="Company Size"
+                      options={EMPLOYEE_RANGES.map((r) => ({ label: r, value: r }))}
+                      selected={prospectEmployeeRanges}
+                      onSelectedChange={setProspectEmployeeRanges}
+                    />
+                  </FilterSection>
+
+                  <FilterSection>
+                    {/* Has Email */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-zinc-300">Has email address</p>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">Only return prospects with verified email</p>
+                      </div>
+                      <Switch
+                        checked={prospectHasEmail}
+                        onCheckedChange={setProspectHasEmail}
+                      />
+                    </div>
+
+                    {/* Results limit */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-zinc-300">Results limit</p>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">Maximum 500</p>
+                      </div>
+                      <input
+                        type="number"
+                        min={1}
+                        max={500}
+                        value={prospectLimit}
+                        onChange={(e) =>
+                          setProspectLimit(Math.min(500, Math.max(1, Number(e.target.value))))
+                        }
+                        className="w-20 rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-1.5 text-sm text-white text-center outline-none focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 transition-all"
+                      />
+                    </div>
+                  </FilterSection>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Step 3: Preview & Create                                          */}
+          {/* ---------------------------------------------------------------- */}
+          {step === 3 && (
+            <div className="space-y-3">
+              <p className="text-xs text-zinc-500">Review your search before creating the table</p>
+
+              {/* Stats — hero card */}
+              <div className="relative rounded-xl border border-zinc-800/80 bg-zinc-900/50 overflow-hidden">
+                {/* Subtle grid pattern */}
+                <div
+                  className="absolute inset-0 opacity-[0.03]"
+                  style={{
+                    backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
+                    backgroundSize: '20px 20px',
+                  }}
+                />
+                <div className="relative px-5 py-5 text-center">
                   {statsLoading ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
-                      <span className="text-zinc-400">Counting matches...</span>
-                    </span>
+                    <div className="flex flex-col items-center gap-2 py-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-teal-500" />
+                      <p className="text-xs text-zinc-500">Counting matches across 80M+ records...</p>
+                    </div>
                   ) : statsCount !== null ? (
                     <>
-                      <span className="font-semibold text-white">
+                      <div
+                        className="text-4xl font-bold text-white tabular-nums tracking-tight"
+                        style={{ textShadow: '0 0 30px rgba(20,184,166,0.3)' }}
+                      >
                         ~{statsCount.toLocaleString()}
-                      </span>{' '}
-                      {searchType === 'business_search' ? 'companies' : 'people'} match your filters
+                      </div>
+                      <p className="text-sm text-zinc-500 mt-1">
+                        {searchType === 'business_search' ? 'companies' : 'prospects'} match your filters
+                      </p>
                     </>
                   ) : (
-                    <span className="text-zinc-500">Unable to get count</span>
+                    <p className="text-sm text-zinc-600 py-2">Unable to fetch count — search will proceed</p>
                   )}
-                </span>
+                </div>
+              </div>
+
+              {/* Info row */}
+              <div className="grid grid-cols-2 gap-2">
+                {/* Credit cost */}
+                <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/15 bg-amber-500/[0.04] px-3.5 py-3">
+                  <Coins className="w-3.5 h-3.5 text-amber-500/70 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">Cost</p>
+                    <p className="text-xs text-amber-300/90 font-semibold mt-0.5">2 platform credits</p>
+                  </div>
+                </div>
+
+                {/* CRM exclusion */}
+                <div className="flex items-center gap-2.5 rounded-lg border border-teal-500/15 bg-teal-500/[0.04] px-3.5 py-3">
+                  <Shield className="w-3.5 h-3.5 text-teal-500/70 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">CRM</p>
+                    <p className="text-xs text-teal-300/90 font-semibold mt-0.5">Exclusion active</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter summary */}
+              <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/30 px-4 py-3.5">
+                <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-2.5">Search summary</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {searchType === 'business_search' ? (
+                    <>
+                      {bizIndustries.map((i) => (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400">
+                          <Building2 className="w-2.5 h-2.5 text-zinc-600" />{i}
+                        </span>
+                      ))}
+                      {bizEmployeeRanges.map((r) => (
+                        <span key={r} className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400">
+                          {r} emp
+                        </span>
+                      ))}
+                      {bizRevenueRanges.map((r) => (
+                        <span key={r} className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400">
+                          ${r}
+                        </span>
+                      ))}
+                      {bizCountries.map((c) => (
+                        <span key={c} className="inline-flex items-center gap-1 rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400 uppercase">
+                          <Globe className="w-2.5 h-2.5 text-zinc-600" />{c}
+                        </span>
+                      ))}
+                      {bizTechnologies.map((t) => (
+                        <span key={t} className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400">
+                          {t}
+                        </span>
+                      ))}
+                      {bizIntentTopics.map((t) => (
+                        <span key={t} className="inline-flex items-center gap-1 rounded-full bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 text-[10px] text-teal-400">
+                          <Zap className="w-2.5 h-2.5" />{t}
+                        </span>
+                      ))}
+                      {bizIsPublic === true && (
+                        <span className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400">
+                          Public only
+                        </span>
+                      )}
+                      {bizDomains.trim() && bizDomains.split('\n').filter(Boolean).map((d) => (
+                        <span key={d} className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400 font-mono">
+                          {d}
+                        </span>
+                      ))}
+                      <span className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-500">
+                        limit {bizLimit}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      {prospectJobTitle.trim() && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400">
+                          <Users className="w-2.5 h-2.5 text-zinc-600" />{prospectJobTitle.trim()}
+                          {prospectIncludeRelated && <span className="text-zinc-600">+related</span>}
+                        </span>
+                      )}
+                      {SENIORITY_DISPLAY.filter((g) => g.values.some((v) => prospectSeniorities.includes(v))).map((g) => (
+                        <span key={g.label} className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400">
+                          {g.label}
+                        </span>
+                      ))}
+                      {DEPARTMENT_OPTIONS.filter((o) => prospectDepartments.includes(o.value)).map((o) => (
+                        <span key={o.value} className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400">
+                          {o.label}
+                        </span>
+                      ))}
+                      {prospectCountries.map((c) => (
+                        <span key={c} className="inline-flex items-center gap-1 rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400 uppercase">
+                          <Globe className="w-2.5 h-2.5 text-zinc-600" />{c}
+                        </span>
+                      ))}
+                      {prospectEmployeeRanges.map((r) => (
+                        <span key={r} className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-400">
+                          {r} emp
+                        </span>
+                      ))}
+                      {prospectHasEmail && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 text-[10px] text-teal-400">
+                          <Check className="w-2.5 h-2.5" />verified email
+                        </span>
+                      )}
+                      <span className="inline-flex items-center rounded-full bg-zinc-800 border border-zinc-700/50 px-2 py-0.5 text-[10px] text-zinc-500">
+                        limit {prospectLimit}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Table name */}
+              <div>
+                <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1.5">
+                  Table Name
+                </label>
+                <input
+                  type="text"
+                  value={tableName}
+                  onChange={(e) => setTableName(e.target.value)}
+                  placeholder="Auto-generated from search criteria"
+                  className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-teal-500/60 focus:ring-1 focus:ring-teal-500/20 transition-all"
+                />
               </div>
             </div>
+          )}
+        </div>
 
-            {/* Credit cost */}
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 flex items-start gap-2.5">
-              <Coins className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <p className="text-sm text-zinc-300">
-                This search will use{' '}
-                <span className="font-semibold text-amber-300">2 platform credits</span>
-              </p>
-            </div>
+        {/* ------------------------------------------------------------------ */}
+        {/* Footer navigation                                                   */}
+        {/* ------------------------------------------------------------------ */}
+        <div className="shrink-0 flex items-center justify-between px-6 py-4 border-t border-zinc-800/60 bg-zinc-950/40">
+          {/* Back */}
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}
+              disabled={isCreating}
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-40"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back
+            </button>
+          ) : (
+            <div />
+          )}
 
-            {/* CRM exclusion */}
-            <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-4 py-3 flex items-start gap-2.5">
-              <Shield className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
-              <p className="text-sm text-zinc-300">
-                CRM exclusion active — known accounts will be filtered out automatically
-              </p>
-            </div>
-
-            {/* Filter summary */}
-            <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/30 px-4 py-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Database className="w-3.5 h-3.5 text-zinc-400" />
-                <span className="text-xs font-medium text-zinc-400">Search summary</span>
-              </div>
-              <div className="space-y-1 text-xs text-zinc-500">
-                {searchType === 'business_search' ? (
-                  <>
-                    {bizIndustries.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Industries:</span>{' '}
-                        {bizIndustries.join(', ')}
-                      </p>
-                    )}
-                    {bizEmployeeRanges.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Size:</span>{' '}
-                        {bizEmployeeRanges.join(', ')}
-                      </p>
-                    )}
-                    {bizRevenueRanges.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Revenue:</span>{' '}
-                        {bizRevenueRanges.join(', ')}
-                      </p>
-                    )}
-                    {bizCountries.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Countries:</span>{' '}
-                        {bizCountries.join(', ')}
-                      </p>
-                    )}
-                    {bizTechnologies.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Technologies:</span>{' '}
-                        {bizTechnologies.join(', ')}
-                      </p>
-                    )}
-                    {bizIntentTopics.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Intent topics:</span>{' '}
-                        {bizIntentTopics.join(', ')}
-                      </p>
-                    )}
-                    {bizIsPublic === true && (
-                      <p>
-                        <span className="text-zinc-400">Public companies only</span>
-                      </p>
-                    )}
-                    {bizDomains.trim() && (
-                      <p>
-                        <span className="text-zinc-400">Target domains:</span>{' '}
-                        {bizDomains.split('\n').filter(Boolean).join(', ')}
-                      </p>
-                    )}
-                    <p>
-                      <span className="text-zinc-400">Limit:</span> {bizLimit} results
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    {prospectJobTitle.trim() && (
-                      <p>
-                        <span className="text-zinc-400">Job title:</span> {prospectJobTitle.trim()}
-                        {prospectIncludeRelated && (
-                          <span className="text-zinc-600"> + related titles</span>
-                        )}
-                      </p>
-                    )}
-                    {prospectSeniorities.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Seniority:</span>{' '}
-                        {SENIORITY_DISPLAY.filter((g) =>
-                          g.values.some((v) => prospectSeniorities.includes(v))
-                        )
-                          .map((g) => g.label)
-                          .join(', ')}
-                      </p>
-                    )}
-                    {prospectDepartments.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Departments:</span>{' '}
-                        {DEPARTMENT_OPTIONS.filter((o) =>
-                          prospectDepartments.includes(o.value)
-                        )
-                          .map((o) => o.label)
-                          .join(', ')}
-                      </p>
-                    )}
-                    {prospectCountries.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Countries:</span>{' '}
-                        {prospectCountries.join(', ')}
-                      </p>
-                    )}
-                    {prospectEmployeeRanges.length > 0 && (
-                      <p>
-                        <span className="text-zinc-400">Company size:</span>{' '}
-                        {prospectEmployeeRanges.join(', ')}
-                      </p>
-                    )}
-                    <p>
-                      <span className="text-zinc-400">Has email:</span>{' '}
-                      {prospectHasEmail ? 'Yes' : 'No'}
-                    </p>
-                    <p>
-                      <span className="text-zinc-400">Limit:</span> {prospectLimit} results
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Table name */}
-            <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                Table Name
-              </label>
-              <input
-                type="text"
-                value={tableName}
-                onChange={(e) => setTableName(e.target.value)}
-                placeholder="Auto-generated from search criteria"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-blue-500"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-between pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setStep(2)}
-                disabled={isCreating}
-                className="gap-1.5 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </Button>
-              <Button
-                onClick={handleCreateTable}
-                disabled={isCreating}
-                className="gap-2 bg-violet-600 hover:bg-violet-500 text-white"
-              >
-                {isCreating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Database className="w-4 h-4" />
-                )}
-                {isCreating ? 'Creating...' : 'Create Table'}
-              </Button>
-            </div>
-          </div>
-        )}
+          {/* Next / Create */}
+          {step < 3 ? (
+            <button
+              type="button"
+              onClick={() => setStep((s) => (s + 1) as 2 | 3)}
+              disabled={step === 2 && !canProceedFromStep2}
+              className="flex items-center gap-1.5 rounded-lg bg-teal-500 px-4 py-2 text-xs font-semibold text-black transition-all hover:bg-teal-400 disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{ boxShadow: '0 0 16px rgba(20,184,166,0.3)' }}
+            >
+              Continue
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCreateTable}
+              disabled={isCreating}
+              className="flex items-center gap-2 rounded-lg bg-teal-500 px-5 py-2 text-xs font-semibold text-black transition-all hover:bg-teal-400 disabled:opacity-50"
+              style={{ boxShadow: isCreating ? 'none' : '0 0 16px rgba(20,184,166,0.3)' }}
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Building table...
+                </>
+              ) : (
+                <>
+                  <Database className="w-3.5 h-3.5" />
+                  Create Table
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
