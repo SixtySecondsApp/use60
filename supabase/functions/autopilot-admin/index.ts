@@ -115,7 +115,7 @@ async function resolveAuth(
     .select('role')
     .eq('user_id', userId)
     .eq('org_id', orgId)
-    .eq('status', 'active')
+    .eq('member_status', 'active')
     .maybeSingle()
 
   if (membershipError) {

@@ -375,7 +375,7 @@ async function handlePost(req: Request): Promise<Response> {
     .from('organization_memberships')
     .select('org_id')
     .eq('user_id', userId)
-    .eq('status', 'active')
+    .eq('member_status', 'active')
     .limit(1)
     .maybeSingle()
 
