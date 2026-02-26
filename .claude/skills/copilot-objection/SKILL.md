@@ -1,16 +1,16 @@
 ---
 name: Copilot Objection
 description: |
-  Surface past objection handling and draft a response to a sales objection.
+  Surface past objection handling and draft a response to a sales objection using the ACE framework.
   Use when a user asks "/objection", "handle objection", "objection response", "how do I respond
   to [objection]", "they said [objection]", "overcome this objection", or "counter this pushback".
-  Searches meeting transcripts, CRM notes, and organizational playbooks for how similar objections
-  were handled in the past, then drafts a tailored response with proof points.
+  Searches meeting transcripts via RAG for past objection patterns, researches competitor claims
+  and proof points via web search, and synthesizes a tailored response grounded in real data.
   Requires a contact or deal entity plus the objection text.
   Do NOT use for general competitive analysis -- use competitor-intel for that.
 metadata:
   author: sixty-ai
-  version: "2"
+  version: "3"
   category: sales-ai
   skill_type: atomic
   is_active: true
@@ -81,12 +81,25 @@ metadata:
       description: "Previous instances of similar objections with how they were handled and outcome"
     - name: suggested_response
       type: string
-      description: "Tailored response script addressing this specific objection in context"
+      description: "Tailored ACE-framework response addressing this specific objection in context"
     - name: proof_points
       type: array
       description: "Supporting evidence: case studies, metrics, testimonials, and data points"
+    - name: objection_pattern
+      type: object
+      description: "Frequency, trend, and correlation with win/loss across all deals for this objection type"
+    - name: confidence_level
+      type: string
+      description: "high/medium/low based on data richness across all 5 layers"
+    - name: alternative_responses
+      type: array
+      description: "2 alternative response approaches for different buyer personas"
+    - name: follow_up_strategy
+      type: object
+      description: "What to do if the initial response doesn't land -- second move, escalation, channel switch"
   requires_capabilities:
     - crm
+    - web_search
   priority: high
   tags:
     - sales
@@ -94,6 +107,7 @@ metadata:
     - negotiation
     - coaching
     - pipeline
+    - rag
 ---
 
 ## Available Context & Tools
@@ -102,16 +116,74 @@ metadata:
 
 ## Instructions
 
-You are executing the /objection skill. Your job is to help a sales rep handle a prospect objection by surfacing how similar objections were handled in the past and drafting a tailored, confident response.
+You are executing the /objection skill. Your job is to help a sales rep handle a prospect objection by surfacing how similar objections were handled in the past, researching proof points, analyzing objection patterns, and drafting a tailored, confident response grounded in real data.
 
-## Data Gathering
+Consult `references/objection-playbooks.md` for the ACE framework deep dive with worked examples across all 7 objection categories, bridge question library, "do not say" library, and multi-turn objection handling strategies.
 
-1. **Parse the objection**: Classify the objection into a category (see Objection Taxonomy below)
-2. **Search meeting transcripts**: Look for similar objections across all past meetings -- extract how the rep handled them and the outcome
-3. **Search CRM notes**: Look for objection-related notes on deals in the same industry or segment
-4. **Fetch deal context**: `execute_action("get_deal", { id: deal_id })` -- stage, amount, competitive situation
-5. **Fetch contact context**: `execute_action("get_contact", { id: contact_id })` -- role, seniority, previous concerns
-6. **Fetch organization playbook**: Check Organization Context for objection handling frameworks, approved responses, and case studies
+Consult `references/proof-point-library.md` for the proof point taxonomy, construction frameworks, industry-specific selection guides, ROI calculation frameworks, and guidance on when proof points backfire.
+
+## The 5-Layer Intelligence Model
+
+Work through these layers in order. Each layer enriches the next.
+
+### Layer 1: Contact & Deal Context
+
+Collect core intelligence before anything else:
+
+1. **Parse the objection**: Classify into a category (see Objection Taxonomy below)
+2. **Fetch deal context**: `execute_action("get_deal", { id: deal_id })` -- stage, amount, competitive situation, close date
+3. **Fetch contact context**: `execute_action("get_contact", { id: contact_id })` -- role, seniority, previous concerns, communication style
+4. **Fetch recent activities**: Last 30 days of meetings, emails, calls involving this contact
+5. **Fetch organization playbook**: Check Organization Context for objection handling frameworks, approved responses, and case studies
+
+### Layer 2: Enrichment (Web Search)
+
+Expand beyond CRM with external intelligence relevant to the objection category:
+
+1. **Competitor claims** (for competition objections): `executeWebSearch("{competitor_name} vs {your_product} reviews comparison", 5)` -- find real claims to counter
+2. **Industry benchmarks** (for price objections): `executeWebSearch("{prospect_industry} {product_category} pricing benchmarks ROI", 3)` -- market-rate validation
+3. **Proof points** (all categories): `executeWebSearch("{your_product} customer results {prospect_industry}", 3)` -- case studies and testimonials
+4. **Market context** (for timing/need objections): `executeWebSearch("{prospect_industry} trends challenges 2025 2026", 3)` -- urgency signals
+
+Only run searches relevant to the objection category. Price objections need benchmarks. Competition objections need competitor intel. Do not run all four for every objection.
+
+### Layer 3: Historical Context (via RAG)
+
+Before drafting, search meeting transcripts for objection-specific intelligence:
+
+1. `"objections raised by {contact}"` -- past objections from this specific person
+2. `"objection about {category} from {company}"` -- similar objections from the same account
+3. `"how {category} objection was handled"` -- successful responses across all deals
+4. `"{competitor_name} mentioned by"` -- competitor claims surfaced in meetings (for competition objections)
+5. `"pricing concerns in {prospect_industry}"` -- industry-specific objection patterns
+
+Use RAG results to:
+- Surface how this exact contact has objected before (recurring patterns)
+- Find responses that led to won deals vs. lost deals
+- Quote specific language from past successful rebuttals
+- Identify whether this objection correlates with deal outcomes
+
+If RAG returns no results, proceed with CRM + web data and note the gap in `confidence_level`.
+
+### Layer 4: Intelligence Signals
+
+Analyze patterns across the data to detect:
+
+- **Objection frequency**: How often does this objection type appear across all deals? Is it trending up?
+- **Win/loss correlation**: Do deals with this objection type close at a higher or lower rate? What differentiates wins from losses?
+- **Contact pattern**: Has this contact raised this objection before? Is it a habitual concern or a new signal?
+- **Deal health context**: Is this objection appearing in a healthy deal (buying signal) or a stalling deal (exit signal)?
+- **Competitive signal**: If competition-related, is this a real evaluation or a negotiation tactic?
+
+Populate `objection_pattern` output with these findings.
+
+### Layer 5: Response Strategy (Synthesis)
+
+Synthesize all layers into the ACE response. Select the response approach from `references/objection-playbooks.md` based on:
+- Objection category (Layer 1)
+- External proof points available (Layer 2)
+- Past handling success/failure (Layer 3)
+- Pattern intelligence (Layer 4)
 
 ## Objection Taxonomy
 
@@ -129,10 +201,23 @@ Classify every objection into one of these categories:
 
 ## Output Structure
 
-### 1. Past Handling
+### 1. Objection Pattern Analysis
+
+Populate `objection_pattern`:
+```json
+{
+  "category": "price | timing | competition | authority | need | trust | status_quo",
+  "frequency": "How often this objection appears across all deals (e.g., '23% of deals')",
+  "trend": "increasing | stable | decreasing over last 90 days",
+  "win_rate_with_objection": "Win rate for deals where this objection was raised",
+  "win_rate_without": "Win rate for deals without this objection (comparison)",
+  "top_winning_response": "Summary of the response pattern that correlates with wins"
+}
+```
+
+### 2. Past Handling
 
 Search across meeting transcripts and CRM notes for similar objections. For each match:
-
 ```json
 {
   "date": "When the objection was raised",
@@ -145,52 +230,50 @@ Search across meeting transcripts and CRM notes for similar objections. For each
 }
 ```
 
-If no past handling is found, note: "No similar objections found in your meeting history. The response below is based on sales best practices and your Organization Context."
+If no past handling is found, note: "No similar objections found in your meeting history. The response below is based on sales best practices, web research, and your Organization Context."
 
-### 2. Suggested Response
+### 3. Suggested Response (ACE Framework)
 
-Draft a response using the ACE framework:
+Draft using the ACE framework. See `references/objection-playbooks.md` for category-specific worked examples.
 
-**A - Acknowledge** (1-2 sentences)
-- Validate the concern without agreeing with it
-- Show empathy and understanding
-- Never dismiss or minimize the objection
-- Example: "I completely understand the budget concern -- it's exactly the right question to ask at this stage."
+**A - Acknowledge** (1-2 sentences): Validate the concern without agreeing with it. Show empathy. Never dismiss.
 
-**C - Contextualize** (2-3 sentences)
-- Reframe the objection in terms of their stated goals and pain points
-- Use data, ROI calculations, or comparative analysis
-- Reference their own words from previous conversations
-- Example: "You mentioned your team spends 15 hours a week on manual reconciliation. At your average loaded cost, that's $180K annually. Our solution at $60K/year pays for itself in the first 4 months."
+**C - Contextualize** (2-3 sentences): Reframe using their stated goals and data from Layers 1-3. Reference their own words from transcripts. Include ROI calculations or comparative analysis from web research (Layer 2).
 
-**E - Evidence** (1-2 proof points)
-- Case study from a similar company or industry
-- Specific metric or outcome
-- Testimonial from a peer
-- Reference from Organization Context case studies and differentiators
+**E - Evidence** (1-2 proof points): Select from `references/proof-point-library.md`. Prioritize proof points from their industry, matching their concern, with specific numbers.
 
-Close with a **bridge question** that moves the conversation forward:
-- "If we could demonstrate [specific outcome] in a pilot, would that address your concern?"
-- "What would need to be true for the investment to make sense this quarter?"
-- "Would it help if I connected you with [similar customer] who had the same concern?"
+Close with a **bridge question** from `references/objection-playbooks.md` that moves the conversation forward.
 
-### 3. Proof Points
+### 4. Alternative Responses
 
-For each proof point:
+Populate `alternative_responses` with 2 alternatives:
+- **For analytical buyers**: Data-heavy, ROI-focused, comparison tables
+- **For relationship buyers**: Story-driven, peer testimonials, risk-reduction framing
+
+### 5. Follow-up Strategy
+
+Populate `follow_up_strategy`:
 ```json
 {
-  "type": "case_study | metric | testimonial | data_point | comparison",
-  "content": "The proof point content",
-  "source": "Where this comes from (Organization Context, CRM, public data)",
-  "relevance": "Why this matters for THIS specific objection"
+  "if_response_lands": "Next step to advance the deal",
+  "if_objection_persists": "Second-move strategy from references/objection-playbooks.md",
+  "escalation_trigger": "When to involve manager, reference customer, or technical expert",
+  "channel_switch": "When to move from email to call, or bring in a different stakeholder"
 }
 ```
 
-Prioritize proof points that:
-- Come from the same industry as the prospect
-- Address the exact concern raised (not tangential benefits)
-- Include specific numbers (percentages, dollar amounts, time saved)
-- Feature companies of similar size and stage
+### 6. Proof Points
+
+For each proof point, structure per `references/proof-point-library.md`:
+```json
+{
+  "type": "case_study | metric | testimonial | data_point | comparison | analyst_quote",
+  "content": "The proof point content",
+  "source": "Where this comes from (Organization Context, CRM, web search, public data)",
+  "relevance": "Why this matters for THIS specific objection",
+  "strength": "high | medium | low -- based on specificity and source credibility"
+}
+```
 
 ## Response Tone Guidelines
 
@@ -200,43 +283,45 @@ Prioritize proof points that:
 - **Be direct.** If the objection is valid (e.g., you genuinely lack a feature), acknowledge it honestly and position it.
 - **Be curious.** Follow up with questions that uncover the real concern behind the stated objection. The first objection is rarely the real one.
 
-## Category-Specific Frameworks
+## Confidence Level
 
-### Price Objections
-1. Isolate: "Is it the total investment, the payment structure, or something else?"
-2. Quantify the cost of inaction using their own data
-3. Compare to alternatives (including doing nothing)
-4. Offer phased approach or pilot if appropriate
+Set `confidence_level` based on data richness:
 
-### Timing Objections
-1. Understand the real constraint: is it bandwidth, budget cycle, or priority?
-2. Quantify the cost of delay per week/month
-3. Offer a low-effort starting point
-4. Align to their calendar (fiscal year, planning cycle)
+| Level | Criteria |
+|-------|----------|
+| **high** | CRM data + RAG transcript results + web research proof points + past handling with outcomes |
+| **medium** | CRM data present but RAG returned sparse results, or web search added context but no past handling found |
+| **low** | Sparse CRM data, no transcripts, no web research results. Response based on playbook templates only |
 
-### Competition Objections
-1. Never bash the competitor by name
-2. Focus on differentiators that matter to THIS prospect
-3. Use "and" not "but" -- "They do X well AND we also do Y which addresses your specific need for Z"
-4. Reference Organization Context competitors and differentiators
-
-### Status Quo Objections
-1. Acknowledge that change is hard and risky
-2. Quantify what status quo is actually costing them
-3. Show a phased adoption path that minimizes disruption
-4. Reference similar companies that made the transition successfully
+Always report honestly. A low-confidence response with clear disclaimers is better than a fabricated high-confidence one.
 
 ## Quality Checklist
 
 Before returning:
-- [ ] Objection is correctly categorized
-- [ ] Response uses the ACE framework (Acknowledge, Contextualize, Evidence)
+- [ ] Objection is correctly categorized with signal phrases identified
+- [ ] Response uses the full ACE framework (Acknowledge, Contextualize, Evidence)
 - [ ] Response references the prospect's specific situation, not generic handling
-- [ ] Proof points are relevant to their industry and concern
+- [ ] Proof points are relevant to their industry and concern, with source cited
 - [ ] Response ends with a bridge question that moves the conversation forward
 - [ ] Tone is empathetic and confident, not defensive
 - [ ] Past handling examples include outcomes (won/lost) for credibility
 - [ ] No competitor bashing -- only differentiation
+- [ ] Objection pattern analysis populated with frequency and trend data
+- [ ] Confidence level reflects actual data quality across all layers
+
+## Graceful Degradation
+
+When data is missing, degrade gracefully -- never block the response:
+
+| Missing Data | Fallback |
+|-------------|----------|
+| No RAG results | Use CRM notes + web research; set confidence to medium; note "first interaction or data gap" |
+| No deal linked | General category response; omit deal-specific framing; ask user to link a deal for tailored version |
+| No contact context | Skip persona-matching for alternatives; use category defaults from playbooks |
+| Web search fails | Proceed with CRM + RAG data only; note in output: "External research unavailable" |
+| No past handling found | Use playbook templates from references/; note "no historical data for this objection type" |
+| Objection is ambiguous | Ask user for the prospect's exact words before generating response |
+| Multiple categories detected | Classify primary and secondary; address primary in main response, secondary in alternatives |
 
 ## Error Handling
 
@@ -248,3 +333,6 @@ Generate a general response based on the objection category. Note: "Without deal
 
 ### Objection is actually a rejection
 If the objection signals a hard no (e.g., "We've signed with [competitor]" or "We're canceling the evaluation"), acknowledge it honestly. Do not try to overcome a closed decision. Suggest a graceful exit strategy that preserves the relationship for future opportunities.
+
+### Conflicting data
+If RAG transcripts contradict CRM data (e.g., different competitor mentioned), surface both with timestamps and let the rep decide. Example: "CRM shows competitor is Vendor A (updated Jan 15) but Sarah mentioned evaluating Vendor B in the Dec 12 call. Verify which is the active threat."

@@ -21,6 +21,13 @@
       "status": "complete",
       "consultReport": ".sixty/consult/followup-email-v2.md",
       "createdAt": "2026-02-25"
+    },
+    {
+      "id": "skill-gold-standard",
+      "name": "Skill Gold Standard Upgrade — Top 10 Sales Skills",
+      "status": "complete",
+      "consultReport": ".sixty/consult/skill-gold-standard-upgrade.md",
+      "createdAt": "2026-02-26"
     }
   ],
   "stories": [
@@ -229,12 +236,332 @@
       "parallelWith": ["FUV2-007"],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:40:00Z"
+    },
+    {
+      "id": "SGS-001",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-proposal: add references/, RAG integration, competitive context",
+      "type": "skill",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: deal + company enrichment + contact intel + interaction history (RAG) + pricing strategy",
+        "references/proposal-templates.md added with templates by deal stage (discovery, evaluation, negotiation, renewal) — annotated good vs bad examples",
+        "references/pricing-strategy.md added with 3-tier anchoring framework, discount guidelines, competitive pricing context",
+        "Instructions include RAG queries: 'pricing discussions with {company}', 'objections about cost from {contact}', 'ROI mentioned in meetings'",
+        "Output contract expanded: pricing_rationale, competitive_positioning, roi_metrics, personalization_signals fields added"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 6,
+      "files": [
+        ".claude/skills/copilot-proposal/SKILL.md",
+        ".claude/skills/copilot-proposal/references/proposal-templates.md",
+        ".claude/skills/copilot-proposal/references/pricing-strategy.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SGS-002", "SGS-003"],
+      "startedAt": "2026-02-26T10:00:00Z",
+      "completedAt": "2026-02-26T10:06:00Z"
+    },
+    {
+      "id": "SGS-002",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-followup: add references/, RAG transcript context, multi-threading",
+      "type": "skill",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: contact + deal context + meeting RAG (commitments, decisions, concerns) + activity signals + email strategy",
+        "references/followup-templates.md added with templates by type: post-discovery, post-demo, post-proposal, post-negotiation, re-engagement — with annotated examples",
+        "references/personalization-guide.md added with value-add strategies by deal stage, multi-threading guidance (when to switch contacts), send timing research",
+        "Instructions include RAG queries: 'commitments made to {contact}', 'concerns raised by {company}', 'next steps discussed'",
+        "Output contract expanded: rag_context_used, personalization_signals (min 3), multi_thread_suggestion, confidence_level fields added"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 6,
+      "files": [
+        ".claude/skills/copilot-followup/SKILL.md",
+        ".claude/skills/copilot-followup/references/followup-templates.md",
+        ".claude/skills/copilot-followup/references/personalization-guide.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SGS-001", "SGS-003"],
+      "startedAt": "2026-02-26T10:00:00Z",
+      "completedAt": "2026-02-26T10:06:00Z"
+    },
+    {
+      "id": "SGS-003",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-battlecard: add references/, web search enrichment, win theme framework",
+      "type": "skill",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: competitor profile + deal-specific positioning + web research (news, pricing, reviews) + RAG (competitor mentions in calls) + win strategy",
+        "references/battlecard-frameworks.md added with ABD response templates, feature comparison matrix format, pricing position guide, strength confidence levels",
+        "references/competitive-intel-guide.md added with web research methodology, review site extraction patterns, how to handle when competitor is actually stronger",
+        "Instructions include RAG queries: '{competitor} mentioned in meetings with {company}', 'competitive objections from {contact}'",
+        "Output contract expanded: evidence_confidence (high/medium/low per claim), timing_guidance (when to surface which win theme), deal_specific_angles"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 7,
+      "files": [
+        ".claude/skills/copilot-battlecard/SKILL.md",
+        ".claude/skills/copilot-battlecard/references/battlecard-frameworks.md",
+        ".claude/skills/copilot-battlecard/references/competitive-intel-guide.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SGS-001", "SGS-002"],
+      "startedAt": "2026-02-26T10:00:00Z",
+      "completedAt": "2026-02-26T10:07:00Z"
+    },
+    {
+      "id": "SGS-004",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-objection: add references/, RAG pattern matching, proof point library",
+      "type": "skill",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: objection classification + contact/deal context + RAG (how this objection was handled before) + competitive context + response strategy",
+        "references/objection-playbooks.md added with detailed playbooks for all 7 categories (Price, Timing, Competition, Status Quo, Authority, Need, Trust) — each with 3-5 response templates, bridge questions, proof points",
+        "references/response-patterns.md added with ACE framework deep dive, multi-turn handling (objection to your response), fake objection detection, when to concede vs push back",
+        "Instructions include RAG queries: 'objections from {contact}', 'how {objection_type} was resolved', 'proof points used for {industry}'",
+        "Output contract expanded: objection_category, confidence_this_is_real_concern, historical_success_rate, escalation_recommendation fields"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 8,
+      "files": [
+        ".claude/skills/copilot-objection/SKILL.md",
+        ".claude/skills/copilot-objection/references/objection-playbooks.md",
+        ".claude/skills/copilot-objection/references/proof-point-library.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SGS-005", "SGS-006"],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:38:00Z"
+    },
+    {
+      "id": "SGS-005",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-chase: add references/, silence-duration templates, multi-channel strategy",
+      "type": "skill",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: contact + deal health/ghost risk + RAG (last real conversation context) + activity decay signals + re-engagement strategy",
+        "references/chase-templates.md added with templates by silence duration (7-day, 14-day, 21-day, 30+ day) — each with 3 tone variants and annotated examples of great vs mediocre re-engagement emails",
+        "references/reengagement-playbook.md added with multi-channel escalation, pattern detection, value-add library by deal stage",
+        "Instructions include RAG queries: 'last substantive conversation with {contact}', 'commitments {contact} made', 'topics {contact} engaged with'",
+        "Output contract expanded: silence_analysis, channel_recommendation, multi_thread_option, rag_context_used, confidence_level, escalation_path"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 6,
+      "files": [
+        ".claude/skills/copilot-chase/SKILL.md",
+        ".claude/skills/copilot-chase/references/chase-templates.md",
+        ".claude/skills/copilot-chase/references/reengagement-playbook.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SGS-004", "SGS-006"],
+      "startedAt": "2026-02-26T10:10:00Z",
+      "completedAt": "2026-02-26T10:16:00Z"
+    },
+    {
+      "id": "SGS-006",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade sales-sequence: add RAG win/loss context, CRM history integration, adaptive timing",
+      "type": "skill",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: contact enrichment + company research + competitive angles + RAG (win/loss patterns by vertical) + sequence strategy",
+        "Existing references/ enhanced: frameworks.md updated with RAG-informed personalization section, cold-email-playbook.md updated with data-driven timing guidance",
+        "references/sequence-analytics.md added with performance benchmarks, adaptive timing logic (adjust Day X based on industry/seniority), A/B testing methodology with measurement criteria",
+        "Instructions include RAG queries: 'what worked for {industry} prospects', 'why we won/lost deals with {company_type}', 'objections from {seniority_level} contacts'",
+        "Output contract expanded: sequence_confidence, personalization_depth_score, competitive_angle_used, timing_rationale fields"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 5,
+      "files": [
+        ".claude/skills/sales-sequence/SKILL.md",
+        ".claude/skills/sales-sequence/references/win-loss-patterns.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SGS-004", "SGS-005"],
+      "startedAt": "2026-02-26T10:10:00Z",
+      "completedAt": "2026-02-26T10:15:00Z"
+    },
+    {
+      "id": "SGS-007",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade deal-next-best-actions: add worked examples, manager escalation logic, action dependencies",
+      "type": "skill",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: deal health + contact engagement + RAG (what actions moved similar deals) + competitive threats + capacity-aware strategy",
+        "references/action-library.md enhanced with worked CVHS score calculation examples, annotated real-world action sequences showing before/after deal movement",
+        "references/stage-playbooks.md enhanced with manager escalation decision tree, action dependency chains (do X before Y), tie-breaking logic for same-score actions",
+        "Instructions include RAG queries: 'what advanced deals at {stage}', 'actions that worked for {deal_size} deals', 'engagement patterns before deals closed'",
+        "Output contract expanded: action_dependencies, escalation_recommendation, historical_success_signal, rep_preference_adjustment fields"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 9,
+      "files": [
+        ".claude/skills/deal-next-best-actions/SKILL.md",
+        ".claude/skills/deal-next-best-actions/references/action-library.md",
+        ".claude/skills/deal-next-best-actions/references/stage-playbooks.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SGS-008", "SGS-009"],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:39:00Z"
+    },
+    {
+      "id": "SGS-008",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade lead-qualification: add web research, behavioral signals, enrichment chaining",
+      "type": "skill",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: lead data + company web research (funding, tech stack, hiring) + contact enrichment (AI Ark/Apollo) + CRM relationship history + qualification strategy",
+        "references/scoring-frameworks.md enhanced with web-research-informed scoring (tech stack match, funding stage, hiring signals), behavioral data integration guidance",
+        "references/icp-templates.md enhanced with vertical-specific ICP examples (SaaS, healthcare, fintech, agency), enrichment chaining workflow (lead → AI Ark → Apollo → score)",
+        "Instructions include web search queries: '{company} funding', '{company} tech stack', '{company} hiring' and enrichment tool calls for contact depth",
+        "Output contract expanded: enrichment_data_used, web_research_signals, tech_stack_match, funding_stage_fit, behavioral_score fields"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 8,
+      "files": [
+        ".claude/skills/lead-qualification/SKILL.md",
+        ".claude/skills/lead-qualification/references/scoring-frameworks.md",
+        ".claude/skills/lead-qualification/references/icp-templates.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SGS-007", "SGS-009"],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:38:00Z"
+    },
+    {
+      "id": "SGS-009",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade daily-focus-planner: add historical pattern analysis, action clustering, daily rhythm",
+      "type": "skill",
+      "status": "complete",
+      "priority": 9,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: pipeline health + contact staleness + RAG (what actions moved deals this week) + competitive threats + capacity-aware daily plan",
+        "references/focus-frameworks.md enhanced with Focusing Question deep dive, action clustering methodology (group calls, group emails, group research), recommended daily rhythm (morning = outbound, afternoon = follow-up)",
+        "references/capacity-guide.md enhanced with historical pattern learning (if rep ignores call actions, suggest emails), non-completion tracking, weekly trend analysis",
+        "Instructions include RAG queries: 'deals that advanced this week', 'actions completed vs skipped', 'engagement changes in last 7 days'",
+        "Output contract expanded: action_clusters, recommended_rhythm, pattern_insights, weekly_trend_comparison fields"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 8,
+      "files": [
+        ".claude/skills/daily-focus-planner/SKILL.md",
+        ".claude/skills/daily-focus-planner/references/focus-frameworks.md",
+        ".claude/skills/daily-focus-planner/references/capacity-guide.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SGS-007", "SGS-008"],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:38:00Z"
+    },
+    {
+      "id": "SGS-010",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade post-meeting-followup-pack-builder: add meeting outcome confidence, consistency checking",
+      "type": "skill",
+      "status": "complete",
+      "priority": 10,
+      "acceptance": [
+        "SKILL.md enhanced with meeting outcome confidence scoring (how certain are we about each decision/commitment extracted)",
+        "references/pack-templates.md enhanced with templates by meeting type (discovery, demo, negotiation, renewal) — currently generic",
+        "references/artifact-examples.md enhanced with cross-pack consistency checking (does this follow-up align with last meeting's follow-up?)",
+        "Instructions include RAG queries: 'previous follow-up packs for {company}', 'commitments tracking for {deal}' to ensure consistency across touchpoints",
+        "Output contract expanded: decision_confidence_scores, consistency_check (vs previous pack), stripped_down_option (when meeting lacked clear decisions)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 8,
+      "files": [
+        ".claude/skills/post-meeting-followup-pack-builder/SKILL.md",
+        ".claude/skills/post-meeting-followup-pack-builder/references/pack-templates.md",
+        ".claude/skills/post-meeting-followup-pack-builder/references/artifact-examples.md"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:38:00Z"
+    },
+    {
+      "id": "SGS-011",
+      "feature": "skill-gold-standard",
+      "title": "Validate all 10 upgraded skills pass sync-skills validation and token budgets",
+      "type": "validation",
+      "status": "complete",
+      "priority": 11,
+      "acceptance": [
+        "scripts/validate-skills.ts passes for all 10 upgraded skills (valid frontmatter, required fields, token budget under 5000)",
+        "scripts/sync-skills.ts --dry-run shows all 10 skills would sync successfully with references/ loaded",
+        "Each skill's references/ files are under individual file size limits and total combined skill+refs under token budget",
+        "No broken YAML frontmatter, no missing required fields, no orphaned references",
+        "Output contracts for all 10 skills have consistent structure (status, data, references, meta fields)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 3,
+      "files": [
+        "scripts/validate-skills.ts",
+        "scripts/sync-skills.ts"
+      ],
+      "dependencies": { "stories": ["SGS-001", "SGS-002", "SGS-003", "SGS-004", "SGS-005", "SGS-006", "SGS-007", "SGS-008", "SGS-009", "SGS-010"], "files": [], "schema": [] },
+      "blocks": ["SGS-012"],
+      "parallelWith": [],
+      "startedAt": "2026-02-26T11:00:00Z",
+      "completedAt": "2026-02-26T11:03:00Z"
+    },
+    {
+      "id": "SGS-012",
+      "feature": "skill-gold-standard",
+      "title": "Sync all 10 upgraded skills to organization_skills table with embeddings",
+      "type": "deployment",
+      "status": "complete",
+      "priority": 12,
+      "acceptance": [
+        "scripts/sync-skills.ts run successfully syncs all 10 skills to organization_skills table",
+        "All references/ documents loaded into skill_documents table with doc_type='reference'",
+        "Embeddings generated for all 10 updated skill descriptions via generate-embedding edge function",
+        "Semantic routing test: each skill routes correctly from natural language queries at confidence >= 0.6",
+        "Lazy-loading confirmed: autonomousExecutor loads metadata only at init, full content on first execution"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 3,
+      "files": [
+        "scripts/sync-skills.ts"
+      ],
+      "dependencies": { "stories": ["SGS-011"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-02-26T11:05:00Z",
+      "completedAt": "2026-02-26T11:08:00Z"
     }
   ],
   "execution": {
-    "totalStories": 8,
-    "completedStories": 8,
-    "currentFeature": "followup-email-v2",
-    "lastUpdated": "2026-02-25T15:00:00Z"
+    "totalStories": 20,
+    "completedStories": 20,
+    "currentFeature": "skill-gold-standard",
+    "lastUpdated": "2026-02-26T00:00:00Z"
   }
 }
