@@ -433,7 +433,8 @@ export async function logAICostEvent(
   outputTokens: number,
   feature?: string,
   metadata?: Record<string, unknown>,
-  logContext?: CreditLogContext
+  logContext?: CreditLogContext,
+  sourceAgent?: string
 ): Promise<void> {
   try {
     // If no orgId provided, try to get it from user
@@ -482,6 +483,7 @@ export async function logAICostEvent(
         provider_cost_usd: providerCostUsd,
         credits_charged: creditCost,
         metadata: metadata || null,
+        source_agent: sourceAgent || null,
       })
       .select('id')
       .single();
