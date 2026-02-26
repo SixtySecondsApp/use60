@@ -62,6 +62,7 @@
     .pill[data-f="slackcopilot"].act { background: #4338ca; }
     .pill[data-f="demo"].act       { background: #a16207; }
     .pill[data-f="credits"].act    { background: #e11d48; }
+    .pill[data-f="autopilot"].act  { background: #0e7490; }
 
     .card { background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px; overflow: hidden; }
     .cbar { padding: 10px 14px; border-bottom: 1px solid var(--bdr); background: var(--surf2); display: flex; align-items: center; gap: 7px; }
@@ -130,6 +131,9 @@
     .show-v2 .tab.v2-only { display: flex; }
     .show-v2 .pill.v2-only { display: flex; }
     .show-v2 .fv.v2-only.vis { display: block; }
+    /* Tab panels (.tp) must follow active-only visibility regardless of v2-only class */
+    .show-v2 .tp.v2-only { display: none; }
+    .show-v2 .tp.v2-only.act { display: block; }
     /* V2 Only mode — hide V1 content */
     body.v2-exclusive .v1-content { display: none !important; }
     body.v2-exclusive .tp.v1-content { display: none !important; }
@@ -154,7 +158,7 @@
     <button class="ver-btn" onclick="setVer('v2only',this)">V2 Only</button>
   </div>
   <button class="hl-btn" id="hl-btn" onclick="toggleHL()"><span style="font-size:9px">&#9679;</span> Highlight V2</button>
-  <div class="hbg">feat/always_on branch</div>
+  <div class="hbg">staging branch · Feb 2026</div>
 </header>
 
 <div class="tabs">
@@ -166,6 +170,7 @@
   <div class="tab v2-only" data-tab="autonomy"  onclick="switchTab('autonomy')" ><span class="td"></span>Autonomy System <span class="v2-badge">V2</span></div>
   <div class="tab v2-only" data-tab="proactive" onclick="switchTab('proactive')"><span class="td"></span>Proactive Agents <span class="v2-badge">V2</span></div>
   <div class="tab v2-only" data-tab="credits"   onclick="switchTab('credits')"  ><span class="td"></span>Credit Governance <span class="v2-badge">V2</span></div>
+  <div class="tab v2-only" data-tab="autopilot" onclick="switchTab('autopilot')"><span class="td"></span>Autopilot Engine <span class="v2-badge">V2</span></div>
 </div>
 
 <main>
@@ -190,6 +195,7 @@
     <div class="pill v2-only" data-f="slackcopilot" onclick="showF('slackcopilot')">Slack Copilot <span class="v2-badge">V2</span></div>
     <div class="pill v2-only" data-f="demo"         onclick="showF('demo')"        >Demo Experience <span class="v2-badge">V2</span></div>
     <div class="pill v2-only" data-f="credits"      onclick="showF('credits')"     >Credit Governance <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="autopilot"    onclick="showF('autopilot')"   >Autopilot Engine <span class="v2-badge">V2</span></div>
   </div>
 
   <div id="fv-overview" class="fv vis v1-content">
@@ -297,11 +303,20 @@
     </div>
   </div>
 
+
+  <div id="fv-autopilot" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#0e7490">Autopilot Engine <span class="v2-badge">V2</span></div><div><div class="fvt">Confidence-Gated Progressive Autonomy (PRD-AP-001)</div><div class="fvd">Signal learning loop: every approval builds confidence, earning autonomous tier upgrades over time</div></div></div>
+    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-overview.mermaid</span><div class="zc"><button class="zb" onclick="zD('apo',-0.15)">-</button><span class="zp" id="apo-pct">100%</span><button class="zb" onclick="zD('apo',0.15)">+</button><button class="zb" onclick="rD('apo')">R</button><button class="fsb" onclick="openFS('apo','Autopilot Engine Overview')">Fullscreen</button></div></div>
+      <div class="cbody" id="apo-body"><div class="dstage" id="apo-stage"><div id="apo-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
   <div class="legend">
     <div><div class="lgt">Arrows</div><div class="lgi"><div class="lgc" style="background:#e2e8f0"></div>Solid - direct data flow</div><div class="lgi"><div class="lgc" style="background:#64748b"></div>Dashed - integration or optional</div></div>
     <div><div class="lgt">DB columns</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>meetings - owner_user_id</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>deals and contacts - owner_id</div></div>
     <div><div class="lgt">Security</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>Copilot convos - user-private only</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>AI keys - user_settings, never VITE_</div></div>
     <div><div class="lgt">V2 Credits</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>All AI calls metered via creditLedger</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>Fleet agents throttled by budget</div></div>
+    <div><div class="lgt">Autopilot Engine</div><div class="lgi"><div class="lgc" style="background:#0e7490"></div>Signal weights +1.0 to -3.0 per interaction</div><div class="lgi"><div class="lgc" style="background:#0e7490"></div>15%→70% autonomous within 90 days</div></div>
   </div>
 </div>
 
@@ -408,10 +423,12 @@
       <thead><tr><th>Component</th><th>Role</th><th>Notes</th></tr></thead>
       <tbody>
         <tr class="v2-row"><td>autonomyResolver.ts</td><td><span class="b bp">engine</span></td><td>Resolves effective policy: user, org, preset, default (5-min cache)</td></tr>
-        <tr class="v2-row"><td>promotionEngine.ts</td><td><span class="b bg">engine</span></td><td>Evaluates trust signals for tier promotion (474 lines)</td></tr>
-        <tr class="v2-row"><td>demotionEngine.ts</td><td><span class="b by">engine</span></td><td>Demotes on violations like undo frequency (491 lines)</td></tr>
-        <tr class="v2-row"><td>autonomy-promotion-notify</td><td><span class="b bb">edge fn</span></td><td>Slack notification when agent earns a new tier</td></tr>
-        <tr class="v2-row"><td>autonomy_policies</td><td><span class="b bx">table</span></td><td>Per-action-type policy storage with presets</td></tr>
+        <tr class="v2-row"><td>promotionEngine.ts</td><td><span class="b bg">engine</span></td><td>7-step threshold check: confidence, cooldown, ceiling, numeric thresholds, streak guard</td></tr>
+        <tr class="v2-row"><td>demotionEngine.ts</td><td><span class="b by">engine</span></td><td>4-severity demotion: warn / demote / emergency. email.send reverts on any single undo.</td></tr>
+        <tr class="v2-row"><td>autopilot-evaluate</td><td><span class="b bb">cron</span></td><td>Daily: queries promotion_eligible=true, evaluates engine, sends batched Slack proposals</td></tr>
+        <tr class="v2-row"><td>autopilot-record-signal</td><td><span class="b bb">edge fn</span></td><td>Records every approval signal; fires confidence trigger; checks rubber-stamp (&lt;2s)</td></tr>
+        <tr class="v2-row"><td>autopilot_confidence</td><td><span class="b bx">table</span></td><td>Pre-computed scores: score, clean_approval_rate, promotion_eligible, cooldown_until</td></tr>
+        <tr class="v2-row"><td>autonomy_policies</td><td><span class="b bx">table</span></td><td>Per-action-type policy storage with presets — updated on promotion acceptance</td></tr>
       </tbody>
     </table>
   </div>
@@ -431,7 +448,7 @@
       <tbody>
         <tr class="v2-row"><td>agent-morning-briefing</td><td><span class="b bb">cron 7am</span></td><td>Pipeline analysis, fleet routes, priority actions for the day</td></tr>
         <tr class="v2-row"><td>agent-eod-synthesis</td><td><span class="b bb">cron 6pm</span></td><td>Day scorecard, deal health, relationship scoring, overnight plan</td></tr>
-        <tr class="v2-row"><td>proactive-meeting-prep</td><td><span class="b by">event</span></td><td>Type-specific prep (1:1, QBR, pipeline review, standup)</td></tr>
+        <tr class="v2-row"><td>proactive-meeting-prep</td><td><span class="b by">event</span></td><td>V2: 5-improvement briefing. RAG pipeline (PR #72): transcript search, stakeholder mapping, attendee enrichment, competitive signals. Filters personal emails + calendar noise.</td></tr>
         <tr class="v2-row"><td>agent-deal-risk</td><td><span class="b bb">cron</span></td><td>Temperature scoring, risk factor detection, automated alerts</td></tr>
         <tr class="v2-row"><td>agent-reengagement</td><td><span class="b bb">cron</span></td><td>At-risk contact detection, Apollo/Apify signals, cooldown enforcement</td></tr>
         <tr class="v2-row"><td>agent-coaching</td><td><span class="b by">event</span></td><td>Post-meeting coaching insights, skill progression tracking</td></tr>
@@ -462,6 +479,40 @@
         <tr class="v2-row"><td>credit_budgets</td><td><span class="b bx">table</span></td><td>Budget configs: user or org scope, daily_limit_usd, monthly_limit_usd, alert_pct</td></tr>
         <tr class="v2-row"><td>credit-usage-rollup</td><td><span class="b bb">cron</span></td><td>Hourly rollup into credit_usage_daily for fast dashboard queries</td></tr>
         <tr class="v2-row"><td>credit-budget-alert</td><td><span class="b by">trigger</span></td><td>Slack alert when user or org hits 80% / 100% of budget</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TAB 9: Autopilot Engine (V2) -->
+<div id="tab-autopilot" class="tp v2-only">
+  <div class="stl">Autopilot Engine <span class="v2-badge">V2</span></div>
+  <div class="sds">Confidence-gated progressive autonomy (PRD-AP-001). Every approval interaction trains a per-user, per-action confidence model. When thresholds are met the system proposes tier upgrades via Slack. Reps go from 15% to ~70% autonomous within 90 days.</div>
+  <div style="margin-top:20px">
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-engine.mermaid</span><div class="zc"><button class="zb" onclick="zD('ape',-0.15)">-</button><span class="zp" id="ape-pct">100%</span><button class="zb" onclick="zD('ape',0.15)">+</button><button class="zb" onclick="rD('ape')">R</button><button class="fsb" onclick="openFS('ape','Autopilot Engine')">Fullscreen</button></div></div>
+      <div class="cbody" id="ape-body"><div class="dstage" id="ape-stage"><div id="ape-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+    <table class="kt">
+      <thead><tr><th>Component</th><th>Role</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr class="v2-row"><td>autopilot-record-signal</td><td><span class="b bb">edge fn</span></td><td>POST: records signals, fires confidence trigger, checks rubber-stamp, queues nudge. GET: returns and clears pending nudge.</td></tr>
+        <tr class="v2-row"><td>autopilot-evaluate</td><td><span class="b bb">cron</span></td><td>Daily: queries all promotion_eligible=true rows, runs 7-step engine, batches proposals per user, resets flag on send.</td></tr>
+        <tr class="v2-row"><td>autopilot-admin</td><td><span class="b bp">admin</span></td><td>upsert_ceiling, remove_ceiling, get_team_confidence, force_eligible (QA). Admin/owner only.</td></tr>
+        <tr class="v2-row"><td>autopilot-backfill</td><td><span class="b bx">util</span></td><td>Imports historical approval data from slack_pending_actions into autopilot_signals. Idempotent via is_backfill flag.</td></tr>
+        <tr class="v2-row"><td>_shared/autopilot/signals.ts</td><td><span class="b bg">shared</span></td><td>Signal weights (+1.0 to -3.0), rubber-stamp thresholds per action type, isRubberStamp().</td></tr>
+        <tr class="v2-row"><td>_shared/autopilot/confidence.ts</td><td><span class="b bg">shared</span></td><td>calculateConfidence() with 30-day half-life decay, recalculateUserConfidence(), updateRepMemory().</td></tr>
+        <tr class="v2-row"><td>_shared/autonomy/promotionEngine.ts</td><td><span class="b bg">shared</span></td><td>evaluatePromotionEligibility(): 7 steps — confidence, never_promote, cooldown, tier, ceiling, numeric thresholds, streak guard.</td></tr>
+        <tr class="v2-row"><td>_shared/autopilot/demotionEngine.ts</td><td><span class="b by">shared</span></td><td>evaluateDemotionTriggers(): warn/demote/emergency severity. Emergency on any email.send undo. Auto-revert + Slack DM.</td></tr>
+        <tr class="v2-row"><td>autopilot_signals</td><td><span class="b bx">table</span></td><td>Append-only: user_id, action_type, signal, time_to_respond_ms, edit_distance, edit_fields, is_backfill.</td></tr>
+        <tr class="v2-row"><td>autopilot_confidence</td><td><span class="b bx">table</span></td><td>Pre-computed per (user, action_type): score, clean_approval_rate, promotion_eligible, cooldown_until, never_promote, rubber_stamp_count.</td></tr>
+        <tr class="v2-row"><td>autopilot_events</td><td><span class="b bx">table</span></td><td>Audit log: promotion_proposed, promotion_accepted, promotion_declined, demotion_auto, demotion_emergency, manual_override.</td></tr>
+        <tr class="v2-row"><td>autopilot_thresholds</td><td><span class="b bx">table</span></td><td>Per-action-type thresholds: min_signals, min_clean_approval_rate, max_undo_rate, min_days_active, last_n_clean. Org-customisable.</td></tr>
+        <tr class="v2-row"><td>autopilot_org_settings</td><td><span class="b bx">table</span></td><td>Manager ceilings: max_tier per action_type, enabled, allow_rep_override. Enforced before any promotion proposal.</td></tr>
+        <tr class="v2-row"><td>AutopilotDashboard</td><td><span class="b bp">UI</span></td><td>Per-action-type status cards, autonomy %, time saved calc (auto=full, approve=70%), cooldowns, promotion_eligible badges.</td></tr>
+        <tr class="v2-row"><td>AutonomySimulator</td><td><span class="b bp">UI</span></td><td>Animated 90-day progression demo at /platform/demo/autonomy. Recharts AreaChart, milestone proposal cards.</td></tr>
+        <tr class="v2-row"><td>AutopilotNudgeBanner</td><td><span class="b bp">UI</span></td><td>In-copilot slide-in banner. Polls GET /autopilot-record-signal every 30s, clears nudge on dismiss.</td></tr>
+        <tr class="v2-row"><td>autonomy-report skill</td><td><span class="b bg">skill</span></td><td>Copilot skill: "how autonomous am I?" — reads autopilot_confidence, formats autonomy report in chat.</td></tr>
       </tbody>
     </table>
   </div>
@@ -1496,7 +1547,98 @@ cgd: [
   '        end',
   '        Router-->>Agent: AI response',
   '    end'
-].join('\n')
+].join('\n'),
+
+
+apo: [
+  'flowchart LR',
+  '    subgraph LOOP["Signal Learning Loop"]',
+  '        A["Rep Response\napproved +1.0 / edited +0.3\nrejected -1.0 / undone -2.0\nauto_undone -3.0"]',
+  '        B["Rubber-stamp guard\nfast approvals excluded\nemail.send threshold 5000ms"]',
+  '        C["autopilot_confidence\ntime-decayed score\n30-day half-life"]',
+  '        D["promotion_eligible = true\nwhen score > 0.7\nAND signals >= 10"]',
+  '        A --> B --> C --> D',
+  '    end',
+  '    subgraph EVAL["Daily Evaluation"]',
+  '        E["autopilot-evaluate\ndaily cron"]',
+  '        F["promotionEngine.ts\n7-step threshold check\nmin signals, clean rate,\nstreak guard, ceiling"]',
+  '        G["Slack DM\nscorecard proposal"]',
+  '        E --> F --> G',
+  '    end',
+  '    subgraph RESPONSE["Rep Decision"]',
+  '        H["Yes go auto\n→ update autonomy_policies"]',
+  '        I["Not yet\n→ 30d cooldown"]',
+  '        J["Never\n→ permanent lock"]',
+  '        G --> H & I & J',
+  '    end',
+  '    subgraph DEMOTION["Auto-Demotion"]',
+  '        K["demotionEngine.ts\nundo spike detected"]',
+  '        L["Revert to approve tier\n+ Slack DM"]',
+  '        K --> L',
+  '    end',
+  '    D --> E',
+  '    H -->|"autonomous actions"| K',
+  '    L -->|"resets confidence"| C'
+].join("\n"),
+
+
+ape: [
+  'flowchart TD',
+  '    subgraph S1["1 — Signal Recording  autopilot-record-signal"]',
+  '        A1["Approval event\napproved / edited / rejected / expired\nundone / auto_executed / auto_undone"]',
+  '        A2["Rubber-stamp guard\ntime_to_respond < threshold = not clean\nemail.send 5000ms  stage change 3000ms  default 2000ms"]',
+  '        A3["autopilot_signals\nuser_id  org_id  action_type  signal\ntime_to_respond_ms  edit_distance\nedit_fields  autonomy_tier_at_time"]',
+  '        A1 --> A2 --> A3',
+  '    end',
+  '    subgraph S2["2 — Confidence Recalculation  DB trigger SECURITY DEFINER"]',
+  '        B1["refresh_autopilot_confidence()\nfires AFTER INSERT on autopilot_signals"]',
+  '        B2["calculateConfidence()\ntime-decay: pow(0.5, daysOld/30)\nnormalised to 0-1  sample factor"]',
+  '        B3["autopilot_confidence\nscore  clean_approval_rate  rejection_rate\nundo_rate  last_30_signals  days_active\nrubber_stamp_count  rubber_stamp_rate"]',
+  '        B4["promotion_eligible = TRUE\nwhen score > 0.7 AND total_signals >= 10"]',
+  '        B1 --> B2 --> B3 --> B4',
+  '    end',
+  '    subgraph S3["3 — Daily Evaluation  autopilot-evaluate cron"]',
+  '        C1["Query autopilot_confidence\nWHERE promotion_eligible = true"]',
+  '        C2["evaluatePromotionEligibility()\n7-step check per user-action pair"]',
+  '        C3["autopilot_thresholds\nmin_signals  min_clean_approval_rate\nmax_undo_rate  min_days_active\nlast_n_clean streak guard"]',
+  '        C4["autopilot_org_settings\nManager ceiling\nmax_tier per action_type"]',
+  '        C1 --> C2',
+  '        C2 --> C3',
+  '        C4 -->|caps max tier| C2',
+  '    end',
+  '    subgraph S4["4 — Promotion Proposal  sendPromotionProposal"]',
+  '        D1["Batch by user\nsingle Slack DM per user"]',
+  '        D2["Slack scorecard\nsignals  clean rate  confidence score\ndays active  action type"]',
+  '        D3["Yes go auto\nupdate autonomy_policies\neffective tier = auto"]',
+  '        D4["Not yet\ncooldown_until = now + 30d"]',
+  '        D5["Never\nnever_promote = true"]',
+  '        D1 --> D2 --> D3 & D4 & D5',
+  '    end',
+  '    subgraph S5["5 — Demotion Engine  evaluateDemotionTriggers"]',
+  '        E1["Post every auto-executed action"]',
+  '        E2["warn — undo rate > 10% in 7d"]',
+  '        E3["demote — sustained undo > 8% in 14d"]',
+  '        E4["emergency — 3+ undos in 3d\nemail.send — ANY single undo"]',
+  '        E5["Revert autonomy_policies\nboost extra_required_signals\nSlack DM to rep"]',
+  '        E1 --> E2 & E3 & E4',
+  '        E3 & E4 --> E5',
+  '    end',
+  '    subgraph S6["Dashboard   Controls"]',
+  '        F1["AutopilotDashboard\nper-action status  time saved"]',
+  '        F2["AutopilotNudgeBanner\nin-copilot nudge  30s poll"]',
+  '        F3["AutonomySimulator\n90-day demo at /platform/demo/autonomy"]',
+  '        F4["autopilot-admin\nupsert_ceiling  get_team_confidence"]',
+  '    end',
+  '    A3 --> B1',
+  '    B4 --> C1',
+  '    C2 -->|candidates| D1',
+  '    D3 -->|updates| POL["autonomy_policies"]',
+  '    POL -->|governs auto actions| E1',
+  '    E5 -->|reverts| POL',
+  '    B3 --> F1 & F2',
+  '    F4 --> C4'
+].join("\n")
+
 
 }; // end DIAGRAMS
 
@@ -1562,7 +1704,7 @@ function showF(f) {
 
 // ── Zoom / pan ─────────────────────────────────────────────────
 var DS = {};
-['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd'].forEach(function(k){ DS[k]={s:1,tx:0,ty:0}; });
+['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd','apo','ape'].forEach(function(k){ DS[k]={s:1,tx:0,ty:0}; });
 
 function applyT(k) {
   var d = DS[k], st = document.getElementById(k+'-stage');
@@ -1575,7 +1717,7 @@ function applyT(k) {
 function zD(k, delta) { DS[k].s = Math.min(4, Math.max(0.2, DS[k].s + delta)); applyT(k); }
 function rD(k) { DS[k]={s:1,tx:0,ty:0}; applyT(k); }
 
-['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd'].forEach(function(k) {
+['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd','apo','ape'].forEach(function(k) {
   var el = document.getElementById(k+'-body');
   if (!el) return;
   el.addEventListener('wheel', function(e) {
