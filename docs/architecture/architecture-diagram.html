@@ -4,49 +4,206 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>60 / Architecture Diagrams V2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <style>
     :root {
-      --bg: #0a0a0f; --surf: #111118; --surf2: #1a1a24;
-      --bdr: #2a2a3a; --acc: #6366f1; --acc2: #8b5cf6;
-      --txt: #e2e8f0; --mut: #64748b;
+      --bg: #0a0a0a;
+      --surf: #111111;
+      --surf2: #1a1a1a;
+      --surf3: #222222;
+      --bdr: #2a2a2a;
+      --bdr2: #333333;
+      --acc: #6366f1;
+      --acc2: #8b5cf6;
+      --txt: #ededed;
+      --txt2: #a0a0a0;
+      --txt3: #666666;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--txt); font-family: 'Inter', -apple-system, sans-serif; }
+    body {
+      background: var(--bg);
+      color: var(--txt);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
 
+    /* ── Header ── */
     header {
-      background: var(--surf); border-bottom: 1px solid var(--bdr);
-      padding: 15px 28px; display: flex; align-items: center; gap: 12px;
-      position: sticky; top: 0; z-index: 100;
+      background: var(--surf);
+      border-bottom: 1px solid var(--bdr);
+      height: 56px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
     .logo {
-      width: 32px; height: 32px; border-radius: 8px;
+      width: 28px; height: 28px; border-radius: 6px;
       background: linear-gradient(135deg, var(--acc), var(--acc2));
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 14px; color: #fff;
+      font-weight: 800; font-size: 12px; color: #fff;
+      letter-spacing: -0.5px;
+      flex-shrink: 0;
     }
-    .lt { font-size: 16px; font-weight: 700; }
-    .ls { font-size: 11px; color: var(--mut); }
-    .hsep { width: 1px; height: 24px; background: var(--bdr); }
-    .htl { font-size: 13px; font-weight: 600; }
-    .hbg { margin-left: auto; font-size: 11px; color: var(--mut); background: var(--surf2); border: 1px solid var(--bdr); padding: 3px 10px; border-radius: 20px; }
+    .header-title {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .lt {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--txt);
+      letter-spacing: -0.2px;
+    }
+    .ls {
+      font-size: 12px;
+      color: var(--txt3);
+      font-weight: 400;
+    }
+    .hsep {
+      width: 1px; height: 20px;
+      background: var(--bdr2);
+      flex-shrink: 0;
+    }
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hbg {
+      font-size: 11px;
+      color: var(--txt3);
+      background: var(--surf2);
+      border: 1px solid var(--bdr);
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.01em;
+    }
 
-    .tabs { background: var(--surf); border-bottom: 1px solid var(--bdr); padding: 0 28px; display: flex; }
-    .tab { padding: 12px 16px; font-size: 13px; font-weight: 500; color: var(--mut); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-    .tab:hover { color: var(--txt); }
+    /* ── Version toggles ── */
+    .ver-toggle { display: flex; align-items: center; gap: 4px; }
+    .ver-btn {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      border: 1px solid var(--bdr2);
+      background: transparent;
+      color: var(--txt3);
+      transition: all .12s;
+      font-family: inherit;
+      letter-spacing: 0.01em;
+    }
+    .ver-btn:hover { color: var(--txt2); border-color: var(--bdr2); background: var(--surf2); }
+    .ver-btn.act { background: var(--acc); color: #fff; border-color: var(--acc); }
+    .hl-btn {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 20px;
+      cursor: pointer;
+      border: 1px solid var(--bdr2);
+      background: transparent;
+      color: var(--txt3);
+      transition: all .12s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: inherit;
+    }
+    .hl-btn:hover { color: var(--txt2); background: var(--surf2); }
+    .hl-btn.act { background: rgba(34,197,94,.1); color: #4ade80; border-color: rgba(34,197,94,.4); }
+    .hl-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    /* ── Tabs bar ── */
+    .tabs {
+      background: var(--surf);
+      border-bottom: 1px solid var(--bdr);
+      padding: 0 24px;
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      padding: 0 14px;
+      height: 42px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--txt3);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all .12s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      letter-spacing: 0.01em;
+    }
+    .tab:hover { color: var(--txt2); }
     .tab.act { color: var(--txt); border-bottom-color: var(--acc); }
-    .td { width: 6px; height: 6px; border-radius: 50%; background: var(--mut); }
+    .td {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--txt3);
+      transition: background .12s;
+    }
     .tab.act .td { background: var(--acc); }
 
-    main { padding: 28px; }
+    /* ── Main content ── */
+    main { padding: 24px; }
     .tp { display: none; }
     .tp.act { display: block; }
-    .stl { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
-    .sds { font-size: 13px; color: var(--mut); line-height: 1.6; max-width: 760px; }
+    .stl {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      letter-spacing: -0.3px;
+      color: var(--txt);
+    }
+    .sds {
+      font-size: 12px;
+      color: var(--txt3);
+      line-height: 1.6;
+      max-width: 680px;
+    }
 
-    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
-    .pill { display: flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--bdr); background: var(--surf2); color: var(--mut); transition: all .15s; user-select: none; }
-    .pill:hover { color: var(--txt); }
+    /* ── Pills ── */
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 16px 0;
+    }
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 11px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--bdr2);
+      background: transparent;
+      color: var(--txt3);
+      transition: all .12s;
+      user-select: none;
+      letter-spacing: 0.01em;
+    }
+    .pill:hover { color: var(--txt2); border-color: var(--bdr2); background: var(--surf2); }
     .pill.act { color: #fff; border-color: transparent; }
     .pill[data-f="overview"].act    { background: #374151; }
     .pill[data-f="frontend"].act    { background: #1d4ed8; }
@@ -56,111 +213,305 @@
     .pill[data-f="backend"].act     { background: #b45309; }
     .pill[data-f="ai"].act          { background: #be185d; }
     .pill[data-f="integrations"].act { background: #166534; }
-    .pill[data-f="cmdcentre"].act  { background: #7c3aed; }
-    .pill[data-f="autonomy"].act   { background: #059669; }
-    .pill[data-f="proactive"].act  { background: #dc2626; }
+    .pill[data-f="cmdcentre"].act   { background: #7c3aed; }
+    .pill[data-f="autonomy"].act    { background: #059669; }
+    .pill[data-f="proactive"].act   { background: #dc2626; }
     .pill[data-f="slackcopilot"].act { background: #4338ca; }
-    .pill[data-f="demo"].act       { background: #a16207; }
-    .pill[data-f="credits"].act    { background: #e11d48; }
-    .pill[data-f="autopilot"].act  { background: #0e7490; }
+    .pill[data-f="demo"].act        { background: #a16207; }
+    .pill[data-f="credits"].act     { background: #e11d48; }
+    .pill[data-f="autopilot"].act   { background: #0e7490; }
 
-    .card { background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px; overflow: hidden; }
-    .cbar { padding: 10px 14px; border-bottom: 1px solid var(--bdr); background: var(--surf2); display: flex; align-items: center; gap: 7px; }
+    /* ── Diagram card ── */
+    .card {
+      background: var(--surf);
+      border: 1px solid var(--bdr);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .cbar {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--bdr);
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .dot { width: 10px; height: 10px; border-radius: 50%; }
-    .dr { background: #ff5f57; } .dy { background: #ffbd2e; } .dg { background: #28c840; }
-    .cfn { font-size: 11px; color: var(--mut); margin-left: 4px; font-family: monospace; }
+    .dr { background: #ff5f57; }
+    .dy { background: #ffbd2e; }
+    .dg { background: #28c840; }
+    .cfn {
+      font-size: 11px;
+      color: var(--txt3);
+      margin-left: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.01em;
+    }
 
-    .zc { margin-left: auto; display: flex; align-items: center; gap: 5px; }
-    .zb { background: var(--bg); border: 1px solid var(--bdr); color: var(--txt); width: 24px; height: 24px; border-radius: 5px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-    .zb:hover { background: var(--surf); }
-    .zp { font-size: 11px; color: var(--mut); min-width: 34px; text-align: center; font-family: monospace; }
-    .fsb { background: var(--bg); border: 1px solid var(--bdr); color: var(--mut); padding: 3px 9px; border-radius: 5px; font-size: 11px; cursor: pointer; margin-left: 4px; }
-    .fsb:hover { color: var(--txt); }
+    /* ── Zoom controls ── */
+    .zc { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+    .zb {
+      background: var(--surf2);
+      border: 1px solid var(--bdr2);
+      color: var(--txt2);
+      width: 22px; height: 22px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .1s;
+      font-family: inherit;
+    }
+    .zb:hover { background: var(--surf3); color: var(--txt); }
+    .zp {
+      font-size: 10px;
+      color: var(--txt3);
+      min-width: 34px;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--surf2);
+      border: 1px solid var(--bdr);
+      border-radius: 4px;
+      padding: 2px 4px;
+    }
+    .fsb {
+      background: transparent;
+      border: 1px solid var(--bdr2);
+      color: var(--txt3);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      cursor: pointer;
+      margin-left: 4px;
+      transition: all .1s;
+      font-family: inherit;
+      letter-spacing: 0.01em;
+    }
+    .fsb:hover { color: var(--txt); border-color: var(--bdr2); background: var(--surf2); }
 
-    .cbody { overflow: auto; background: var(--surf); cursor: grab; position: relative; height: calc(100vh - 290px); min-height: 320px; }
+    /* ── Diagram body ── */
+    .cbody {
+      overflow: hidden;
+      background: var(--surf);
+      cursor: grab;
+      position: relative;
+      height: calc(100vh - 260px);
+      min-height: 320px;
+    }
     .cbody:active { cursor: grabbing; }
-    .dstage { display: inline-block; padding: 28px 24px; transform-origin: 0 0; min-width: 100%; }
+    .dstage {
+      display: inline-block;
+      padding: 28px 24px;
+      transform-origin: 0 0;
+      min-width: 100%;
+    }
     .dstage svg { display: block; max-width: none !important; }
 
+    /* ── Feature view headers ── */
     .fv { display: none; }
     .fv.vis { display: block; }
-    .fvh { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-    .fvb { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; color: #fff; }
-    .fvt { font-size: 15px; font-weight: 600; }
-    .fvd { font-size: 12px; color: var(--mut); margin-top: 2px; }
+    .fvh {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .fv-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .fvb {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .fvt {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--txt);
+      letter-spacing: -0.2px;
+    }
+    .fvd {
+      font-size: 11px;
+      color: var(--txt3);
+      margin-top: 2px;
+      line-height: 1.5;
+    }
 
+    /* ── Fullscreen overlay ── */
     .fso { display: none; position: fixed; inset: 0; z-index: 9999; background: var(--bg); flex-direction: column; }
     .fso.open { display: flex; }
-    .fsh { background: var(--surf); border-bottom: 1px solid var(--bdr); padding: 10px 18px; display: flex; align-items: center; gap: 10px; }
-    .fstl { font-size: 13px; font-weight: 600; }
-    .fscl { margin-left: auto; background: none; border: 1px solid var(--bdr); color: var(--txt); padding: 4px 12px; border-radius: 5px; font-size: 11px; cursor: pointer; }
-    .fsbd { flex: 1; overflow: auto; cursor: grab; padding: 28px; display: flex; align-items: flex-start; }
+    .fsh {
+      background: var(--surf);
+      border-bottom: 1px solid var(--bdr);
+      padding: 0 18px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .fstl { font-size: 12px; font-weight: 600; color: var(--txt); }
+    .fscl {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--bdr2);
+      color: var(--txt2);
+      padding: 4px 12px;
+      border-radius: 5px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all .1s;
+      font-family: inherit;
+    }
+    .fscl:hover { color: var(--txt); background: var(--surf2); }
+    .fsbd {
+      flex: 1;
+      overflow: hidden;
+      cursor: grab;
+      padding: 32px;
+      display: flex;
+      align-items: flex-start;
+    }
     .fsbd:active { cursor: grabbing; }
     .fsst { transform-origin: 0 0; display: inline-block; }
-    .fszb { background: var(--surf); border-top: 1px solid var(--bdr); padding: 9px 18px; display: flex; align-items: center; gap: 7px; }
+    .fszb {
+      background: var(--surf);
+      border-top: 1px solid var(--bdr);
+      padding: 8px 18px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
 
-    .legend { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 18px; padding: 16px 20px; background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px; }
-    .lgt { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--mut); margin-bottom: 8px; }
-    .lgi { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 5px; }
-    .lgc { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+    /* ── Legend ── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      margin-top: 16px;
+      padding: 14px 18px;
+      background: var(--surf);
+      border: 1px solid var(--bdr);
+      border-radius: 8px;
+    }
+    .lgt {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--txt3);
+      margin-bottom: 6px;
+    }
+    .lgi { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--txt2); margin-bottom: 4px; }
+    .lgc { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 
-    table.kt { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 18px; background: var(--surf); border: 1px solid var(--bdr); border-radius: 10px; overflow: hidden; }
-    table.kt th { background: var(--surf2); padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); border-bottom: 1px solid var(--bdr); }
-    table.kt td { padding: 10px 14px; border-bottom: 1px solid var(--bdr); color: var(--txt); vertical-align: top; }
+    /* ── Component tables ── */
+    table.kt {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 16px;
+      background: var(--surf);
+      border: 1px solid var(--bdr);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    table.kt th {
+      background: var(--bg);
+      padding: 9px 14px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--txt3);
+      border-bottom: 1px solid var(--bdr);
+    }
+    table.kt td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--bdr);
+      color: var(--txt2);
+      vertical-align: top;
+    }
+    table.kt tr:nth-child(even) td { background: rgba(255,255,255,.015); }
     table.kt tr:last-child td { border-bottom: none; }
-    table.kt td:first-child { font-family: monospace; font-size: 11px; color: var(--acc); white-space: nowrap; }
+    table.kt td:first-child {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--acc);
+      white-space: nowrap;
+    }
     .b { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 500; }
-    .bp { background: rgba(99,102,241,.15); color: #a5b4fc; }
-    .bb { background: rgba(59,130,246,.15); color: #93c5fd; }
-    .bg { background: rgba(34,197,94,.15); color: #86efac; }
-    .by { background: rgba(234,179,8,.15); color: #fde047; }
-    .bx { background: rgba(100,116,139,.15); color: #94a3b8; }
+    .bp { background: rgba(99,102,241,.12); color: #a5b4fc; }
+    .bb { background: rgba(59,130,246,.12); color: #93c5fd; }
+    .bg { background: rgba(34,197,94,.12); color: #86efac; }
+    .by { background: rgba(234,179,8,.12); color: #fde047; }
+    .bx { background: rgba(100,116,139,.12); color: #94a3b8; }
 
-    .loading { color: var(--mut); font-size: 13px; padding: 60px; text-align: center; }
-    .merr { color: #f87171; font-size: 12px; padding: 20px; font-family: monospace; white-space: pre-wrap; background: #1a0a0a; border-radius: 8px; margin: 20px; }
+    /* ── States ── */
+    .loading { color: var(--txt3); font-size: 12px; padding: 60px; text-align: center; font-family: 'JetBrains Mono', monospace; }
+    .merr { color: #f87171; font-size: 11px; padding: 20px; font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; background: #1a0a0a; border-radius: 8px; margin: 20px; border: 1px solid rgba(248,113,113,.2); }
 
-    /* Version toggle & V2 highlight system */
-    .ver-toggle { display: flex; align-items: center; gap: 6px; margin-left: 12px; }
-    .ver-btn { font-size: 11px; padding: 3px 10px; border-radius: 4px; cursor: pointer; border: 1px solid var(--bdr); background: var(--surf2); color: var(--mut); transition: all .15s; }
-    .ver-btn.act { background: var(--acc); color: #fff; border-color: var(--acc); }
-    .hl-btn { font-size: 11px; padding: 3px 10px; border-radius: 20px; cursor: pointer; border: 1px solid var(--bdr); background: var(--surf2); color: var(--mut); margin-left: 8px; transition: all .15s; display: flex; align-items: center; gap: 4px; }
-    .hl-btn.act { background: rgba(34,197,94,.15); color: #86efac; border-color: #22c55e; }
-    .v2-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(34,197,94,.15); color: #86efac; font-weight: 600; margin-left: 5px; vertical-align: middle; letter-spacing: .03em; }
+    /* ── V2 badge ── */
+    .v2-badge {
+      display: inline-block;
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(34,197,94,.12);
+      color: #4ade80;
+      font-weight: 600;
+      margin-left: 4px;
+      vertical-align: middle;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    /* ── V1/V2 visibility system ── */
     .v2-only { display: none; }
     .show-v2 .v2-only { display: block; }
     .show-v2 .tab.v2-only { display: flex; }
     .show-v2 .pill.v2-only { display: flex; }
-    /* Feature views (.fv) must stay hidden until .vis — override the catch-all above */
     .show-v2 .fv.v2-only { display: none; }
     .show-v2 .fv.v2-only.vis { display: block; }
-    /* Tab panels (.tp) must stay hidden until .act — override the catch-all above */
     .show-v2 .tp.v2-only { display: none; }
     .show-v2 .tp.v2-only.act { display: block; }
-    /* V2 Only mode — hide V1 content */
     body.v2-exclusive .v1-content { display: none !important; }
     body.v2-exclusive .tp.v1-content { display: none !important; }
-    body.hl-v2 .v2-card { box-shadow: 0 0 0 2px #22c55e, 0 0 20px rgba(34,197,94,.2); }
+    body.hl-v2 .v2-card { box-shadow: 0 0 0 2px #22c55e, 0 0 20px rgba(34,197,94,.15); }
     body.hl-v2 .v2-badge { animation: v2pulse 1.5s ease-in-out infinite; }
-    body.hl-v2 .v2-row { background: rgba(34,197,94,.06); }
-    body.hl-v2 .pill.v2-only { box-shadow: 0 0 0 1px #22c55e; }
+    body.hl-v2 .v2-row { background: rgba(34,197,94,.05); }
+    body.hl-v2 .pill.v2-only { box-shadow: 0 0 0 1px rgba(34,197,94,.5); }
     body.hl-v2 .tab.v2-only { box-shadow: inset 0 -2px 0 #22c55e; }
-    @keyframes v2pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+    @keyframes v2pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
   </style>
 </head>
 <body>
 
 <header>
   <div class="logo">60</div>
-  <div><div class="lt">use60.com</div><div class="ls">Sales Intelligence Platform</div></div>
+  <div class="header-title">
+    <span class="lt">Architecture</span>
+    <span class="ls">use60.com</span>
+  </div>
   <div class="hsep"></div>
-  <div class="htl">Architecture Diagrams</div>
   <div class="ver-toggle">
     <button class="ver-btn" onclick="setVer('v1',this)">V1</button>
     <button class="ver-btn act" onclick="setVer('v2',this)">V2</button>
     <button class="ver-btn" onclick="setVer('v2only',this)">V2 Only</button>
   </div>
-  <button class="hl-btn" id="hl-btn" onclick="toggleHL()"><span style="font-size:9px">&#9679;</span> Highlight V2</button>
-  <div class="hbg">staging branch · Feb 2026</div>
+  <button class="hl-btn" id="hl-btn" onclick="toggleHL()"><span class="hl-dot"></span> Highlight V2</button>
+  <div class="header-right">
+    <span class="hbg">staging &middot; Feb 2026</span>
+  </div>
 </header>
 
 <div class="tabs">
@@ -232,15 +583,15 @@
   </div>
 
   <div id="fv-recording" class="fv v1-content">
-    <div class="fvh"><div class="fvb" style="background:#0f766e">Recording Pipeline</div><div><div class="fvt">60 Notetaker - 4-Phase Pipeline</div><div class="fvd">Bot deploy, S3 upload with retry, transcription, Claude AI analysis</div></div></div>
+    <div class="fvh"><div class="fvb" style="background:#0f766e">Recording Pipeline</div><div><div class="fvt">4-Phase Recording Pipeline</div><div class="fvd">Bot deploy → S3 upload → Transcription → AI processing</div></div></div>
     <div class="card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">recording-feature.mermaid</span><div class="zc"><button class="zb" onclick="zD('rf',-0.15)">-</button><span class="zp" id="rf-pct">100%</span><button class="zb" onclick="zD('rf',0.15)">+</button><button class="zb" onclick="rD('rf')">R</button><button class="fsb" onclick="openFS('rf','Recording Pipeline')">Fullscreen</button></div></div>
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">recording-simple.mermaid</span><div class="zc"><button class="zb" onclick="zD('rf',-0.15)">-</button><span class="zp" id="rf-pct">100%</span><button class="zb" onclick="zD('rf',0.15)">+</button><button class="zb" onclick="rD('rf')">R</button><button class="fsb" onclick="openFS('rf','Recording Pipeline')">Fullscreen</button></div></div>
       <div class="cbody" id="rf-body"><div class="dstage" id="rf-stage"><div id="rf-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-backend" class="fv v1-content">
-    <div class="fvh"><div class="fvb" style="background:#b45309">Supabase Backend</div><div><div class="fvt">PostgreSQL + RLS + pgvector + Edge Functions</div><div class="fvd">Tables with row-level security, realtime, edge function groups</div></div></div>
+    <div class="fvh"><div class="fvb" style="background:#b45309">Supabase Backend</div><div><div class="fvt">PostgreSQL + Edge Functions + RLS</div><div class="fvd">Auth, CRM tables, copilot storage, skills DB, edge functions, CORS</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">backend.mermaid</span><div class="zc"><button class="zb" onclick="zD('be',-0.15)">-</button><span class="zp" id="be-pct">100%</span><button class="zb" onclick="zD('be',0.15)">+</button><button class="zb" onclick="rD('be')">R</button><button class="fsb" onclick="openFS('be','Supabase Backend')">Fullscreen</button></div></div>
       <div class="cbody" id="be-body"><div class="dstage" id="be-stage"><div id="be-container"><div class="loading">Rendering diagram...</div></div></div></div>
@@ -248,7 +599,7 @@
   </div>
 
   <div id="fv-ai" class="fv v1-content">
-    <div class="fvh"><div class="fvb" style="background:#be185d">AI Providers</div><div><div class="fvt">Multi-Provider AI Architecture</div><div class="fvd">Which features use which models and how keys are stored securely</div></div></div>
+    <div class="fvh"><div class="fvb" style="background:#be185d">AI Providers</div><div><div class="fvt">Multi-Provider AI Architecture</div><div class="fvd">Anthropic Claude, Google Gemini, OpenAI embeddings, OpenRouter workflow nodes</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">ai-providers.mermaid</span><div class="zc"><button class="zb" onclick="zD('ai',-0.15)">-</button><span class="zp" id="ai-pct">100%</span><button class="zb" onclick="zD('ai',0.15)">+</button><button class="zb" onclick="rD('ai')">R</button><button class="fsb" onclick="openFS('ai','AI Providers')">Fullscreen</button></div></div>
       <div class="cbody" id="ai-body"><div class="dstage" id="ai-stage"><div id="ai-container"><div class="loading">Rendering diagram...</div></div></div></div>
@@ -256,7 +607,7 @@
   </div>
 
   <div id="fv-integrations" class="fv v1-content">
-    <div class="fvh"><div class="fvb" style="background:#166534">Integrations</div><div><div class="fvt">External Service Integrations</div><div class="fvd">All external platforms and data flow directions</div></div></div>
+    <div class="fvh"><div class="fvb" style="background:#166534">Integrations</div><div><div class="fvt">External Service Integrations</div><div class="fvd">Fathom, MeetingBaaS, Google Calendar, HubSpot, Attio, Instantly, Slack</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">integrations.mermaid</span><div class="zc"><button class="zb" onclick="zD('ig',-0.15)">-</button><span class="zp" id="ig-pct">100%</span><button class="zb" onclick="zD('ig',0.15)">+</button><button class="zb" onclick="rD('ig')">R</button><button class="fsb" onclick="openFS('ig','Integrations')">Fullscreen</button></div></div>
       <div class="cbody" id="ig-body"><div class="dstage" id="ig-stage"><div id="ig-container"><div class="loading">Rendering diagram...</div></div></div></div>
@@ -264,259 +615,260 @@
   </div>
 
   <div id="fv-cmdcentre" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#7c3aed">Command Centre <span class="v2-badge">V2</span></div><div><div class="fvt">Unified Proactive Inbox with Enrichment Pipeline</div><div class="fvd">Enrich, prioritize, confidence-score, auto-execute or suggest. 9 source agents, 9 item types.</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">command-centre.mermaid</span><div class="zc"><button class="zb" onclick="zD('cc',-0.15)">-</button><span class="zp" id="cc-pct">100%</span><button class="zb" onclick="zD('cc',0.15)">+</button><button class="zb" onclick="rD('cc')">R</button><button class="fsb" onclick="openFS('cc','Command Centre')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#7c3aed">Command Centre <span class="v2-badge">V2</span></div><div><div class="fvt">Proactive Inbox + Autonomy Gate</div><div class="fvd">8 source agents → enrich → prioritise → autonomy resolver → action paths</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">command-centre.mermaid</span><div class="zc"><button class="zb" onclick="zD('cc',-0.15)">-</button><span class="zp" id="cc-pct">100%</span><button class="zb" onclick="zD('cc',0.15)">+</button><button class="zb" onclick="rD('cc')">R</button><button class="fsb" onclick="openFS('cc','Command Centre')">Fullscreen</button></div></div>
       <div class="cbody" id="cc-body"><div class="dstage" id="cc-stage"><div id="cc-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-autonomy" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#059669">Autonomy System <span class="v2-badge">V2</span></div><div><div class="fvt">Graduated Autonomy with Policy Resolution</div><div class="fvd">4-tier policies, preset system, promotion engine, analytics tracking</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-system.mermaid</span><div class="zc"><button class="zb" onclick="zD('au',-0.15)">-</button><span class="zp" id="au-pct">100%</span><button class="zb" onclick="zD('au',0.15)">+</button><button class="zb" onclick="rD('au')">R</button><button class="fsb" onclick="openFS('au','Autonomy System')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#059669">Autonomy System <span class="v2-badge">V2</span></div><div><div class="fvt">4-Tier Autonomy with Promotion/Demotion</div><div class="fvd">disabled → suggest → approve → auto, with trust signals and preset configs</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-system.mermaid</span><div class="zc"><button class="zb" onclick="zD('au',-0.15)">-</button><span class="zp" id="au-pct">100%</span><button class="zb" onclick="zD('au',0.15)">+</button><button class="zb" onclick="rD('au')">R</button><button class="fsb" onclick="openFS('au','Autonomy System')">Fullscreen</button></div></div>
       <div class="cbody" id="au-body"><div class="dstage" id="au-stage"><div id="au-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-proactive" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#dc2626">Proactive Fleet <span class="v2-badge">V2</span></div><div><div class="fvt">8 Autonomous Agent Fleet with Fleet Router</div><div class="fvd">Morning brief, EOD synthesis, meeting prep, deal risk, re-engagement, coaching, competitive intel, email signals</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet.mermaid</span><div class="zc"><button class="zb" onclick="zD('pf',-0.15)">-</button><span class="zp" id="pf-pct">100%</span><button class="zb" onclick="zD('pf',0.15)">+</button><button class="zb" onclick="rD('pf')">R</button><button class="fsb" onclick="openFS('pf','Proactive Fleet')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#dc2626">Proactive Fleet <span class="v2-badge">V2</span></div><div><div class="fvt">8-Agent Proactive Fleet</div><div class="fvd">Morning Brief, EOD, Meeting Prep, Deal Risk, Re-Engagement, Coaching, Competitive, Email Signals</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet.mermaid</span><div class="zc"><button class="zb" onclick="zD('pf',-0.15)">-</button><span class="zp" id="pf-pct">100%</span><button class="zb" onclick="zD('pf',0.15)">+</button><button class="zb" onclick="rD('pf')">R</button><button class="fsb" onclick="openFS('pf','Proactive Fleet')">Fullscreen</button></div></div>
       <div class="cbody" id="pf-body"><div class="dstage" id="pf-stage"><div id="pf-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-slackcopilot" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#4338ca">Slack Copilot <span class="v2-badge">V2</span></div><div><div class="fvt">In-Channel CRM Agent with Assertive Messaging</div><div class="fvd">Thread-based queries, 8 intent handlers, assertive 3-part notifications</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">slack-copilot.mermaid</span><div class="zc"><button class="zb" onclick="zD('sc',-0.15)">-</button><span class="zp" id="sc-pct">100%</span><button class="zb" onclick="zD('sc',0.15)">+</button><button class="zb" onclick="rD('sc')">R</button><button class="fsb" onclick="openFS('sc','Slack Copilot')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#4338ca">Slack Copilot <span class="v2-badge">V2</span></div><div><div class="fvt">In-Channel Copilot with Intent Classification</div><div class="fvd">8 query types, thread memory, assertive messaging, interactive buttons</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">slack-copilot.mermaid</span><div class="zc"><button class="zb" onclick="zD('sc',-0.15)">-</button><span class="zp" id="sc-pct">100%</span><button class="zb" onclick="zD('sc',0.15)">+</button><button class="zb" onclick="rD('sc')">R</button><button class="fsb" onclick="openFS('sc','Slack Copilot')">Fullscreen</button></div></div>
       <div class="cbody" id="sc-body"><div class="dstage" id="sc-stage"><div id="sc-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-demo" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#a16207">Demo Experience <span class="v2-badge">V2</span></div><div><div class="fvt">5-Act Always-On Interactive Narrative</div><div class="fvd">Product demo at /settings/demo showing the full agent journey from pain to autonomy</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">demo-experience.mermaid</span><div class="zc"><button class="zb" onclick="zD('dm',-0.15)">-</button><span class="zp" id="dm-pct">100%</span><button class="zb" onclick="zD('dm',0.15)">+</button><button class="zb" onclick="rD('dm')">R</button><button class="fsb" onclick="openFS('dm','Demo Experience')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#a16207">Demo Experience <span class="v2-badge">V2</span></div><div><div class="fvt">5-Act Progressive Demo Narrative</div><div class="fvd">Before 60 → Onboarding → Day 1 (10 scenes) → Week 2 → Month 1</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">demo-experience.mermaid</span><div class="zc"><button class="zb" onclick="zD('dm',-0.15)">-</button><span class="zp" id="dm-pct">100%</span><button class="zb" onclick="zD('dm',0.15)">+</button><button class="zb" onclick="rD('dm')">R</button><button class="fsb" onclick="openFS('dm','Demo Experience')">Fullscreen</button></div></div>
       <div class="cbody" id="dm-body"><div class="dstage" id="dm-stage"><div id="dm-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-credits" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#e11d48">Credit Governance <span class="v2-badge">V2</span></div><div><div class="fvt">AI Credit Metering, Budgets, and Circuit Breakers</div><div class="fvd">Every AI call metered through creditLedger. Per-user budgets, org ceilings, fleet throttling, and real-time usage visibility.</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance.mermaid</span><div class="zc"><button class="zb" onclick="zD('cg',-0.15)">-</button><span class="zp" id="cg-pct">100%</span><button class="zb" onclick="zD('cg',0.15)">+</button><button class="zb" onclick="rD('cg')">R</button><button class="fsb" onclick="openFS('cg','Credit Governance')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#e11d48">Credit Governance <span class="v2-badge">V2</span></div><div><div class="fvt">AI Credit Metering + Budget Enforcement</div><div class="fvd">Model router, credit ledger, budget service, fleet throttle, circuit breakers</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance.mermaid</span><div class="zc"><button class="zb" onclick="zD('cg',-0.15)">-</button><span class="zp" id="cg-pct">100%</span><button class="zb" onclick="zD('cg',0.15)">+</button><button class="zb" onclick="rD('cg')">R</button><button class="fsb" onclick="openFS('cg','Credit Governance')">Fullscreen</button></div></div>
       <div class="cbody" id="cg-body"><div class="dstage" id="cg-stage"><div id="cg-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
-
   <div id="fv-autopilot" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#0e7490">Autopilot Engine <span class="v2-badge">V2</span></div><div><div class="fvt">Confidence-Gated Progressive Autonomy (PRD-AP-001)</div><div class="fvd">Signal learning loop: every approval builds confidence, earning autonomous tier upgrades over time</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-overview.mermaid</span><div class="zc"><button class="zb" onclick="zD('apo',-0.15)">-</button><span class="zp" id="apo-pct">100%</span><button class="zb" onclick="zD('apo',0.15)">+</button><button class="zb" onclick="rD('apo')">R</button><button class="fsb" onclick="openFS('apo','Autopilot Engine Overview')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#0e7490">Autopilot Engine <span class="v2-badge">V2</span></div><div><div class="fvt">Signal Learning + Confidence Scoring</div><div class="fvd">Record signals → recalculate confidence → evaluate → propose → promote/demote</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-overview.mermaid</span><div class="zc"><button class="zb" onclick="zD('apo',-0.15)">-</button><span class="zp" id="apo-pct">100%</span><button class="zb" onclick="zD('apo',0.15)">+</button><button class="zb" onclick="rD('apo')">R</button><button class="fsb" onclick="openFS('apo','Autopilot Engine')">Fullscreen</button></div></div>
       <div class="cbody" id="apo-body"><div class="dstage" id="apo-stage"><div id="apo-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div class="legend">
-    <div><div class="lgt">Arrows</div><div class="lgi"><div class="lgc" style="background:#e2e8f0"></div>Solid - direct data flow</div><div class="lgi"><div class="lgc" style="background:#64748b"></div>Dashed - integration or optional</div></div>
-    <div><div class="lgt">DB columns</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>meetings - owner_user_id</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>deals and contacts - owner_id</div></div>
-    <div><div class="lgt">Security</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>Copilot convos - user-private only</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>AI keys - user_settings, never VITE_</div></div>
-    <div><div class="lgt">V2 Credits</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>All AI calls metered via creditLedger</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>Fleet agents throttled by budget</div></div>
-    <div><div class="lgt">Autopilot Engine</div><div class="lgi"><div class="lgc" style="background:#0e7490"></div>Signal weights +1.0 to -3.0 per interaction</div><div class="lgi"><div class="lgc" style="background:#0e7490"></div>15%→70% autonomous within 90 days</div></div>
+    <div>
+      <div class="lgt">Connections</div>
+      <div class="lgi"><svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#6366f1" stroke-width="1.5"/></svg> Data flow</div>
+      <div class="lgi"><svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="4,3"/></svg> Optional / event-driven</div>
+    </div>
+    <div>
+      <div class="lgt">Node types</div>
+      <div class="lgi"><div class="lgc" style="background:#1e1e2e;border:1px solid #6366f1"></div> Subsystem group</div>
+      <div class="lgi"><div class="lgc" style="background:#16162a;border:1px solid #3a3a4a"></div> Component</div>
+    </div>
+    <div>
+      <div class="lgt">AI Models</div>
+      <div class="lgi"><div class="lgc" style="background:#1a1a2e;border:1px solid #8b5cf6"></div> Anthropic Claude</div>
+      <div class="lgi"><div class="lgc" style="background:#1a1a2e;border:1px solid #4285f4"></div> Google Gemini</div>
+    </div>
   </div>
 </div>
 
 <!-- TAB 2: Copilot Lifecycle -->
 <div id="tab-copilot" class="tp v1-content">
-  <div class="stl">Copilot Request Lifecycle</div>
-  <div class="sds">Sequence from user message through routing, skill lazy-loading, Claude tool execution, and streaming response.</div>
-  <div style="margin-top:20px">
+  <div class="stl">Copilot Lifecycle</div>
+  <div class="sds">Full request/response lifecycle through the copilot system — routing, autonomous execution, skill loading, streaming.</div>
+
+  <div style="margin: 18px 0 12px;">
+    <div class="fvh"><div class="fvb" style="background:#6d28d9">Sequence Flow</div><div><div class="fvt">Message Routing Sequence</div><div class="fvd">From user message to streamed response — routing, lazy skill loading, tool iterations</div></div></div>
     <div class="card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">copilot-lifecycle.mermaid</span><div class="zc"><button class="zb" onclick="zD('sq',-0.15)">-</button><span class="zp" id="sq-pct">100%</span><button class="zb" onclick="zD('sq',0.15)">+</button><button class="zb" onclick="rD('sq')">R</button><button class="fsb" onclick="openFS('sq','Copilot Lifecycle')">Fullscreen</button></div></div>
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">copilot-sequence.mermaid</span><div class="zc"><button class="zb" onclick="zD('sq',-0.15)">-</button><span class="zp" id="sq-pct">100%</span><button class="zb" onclick="zD('sq',0.15)">+</button><button class="zb" onclick="rD('sq')">R</button><button class="fsb" onclick="openFS('sq','Copilot Sequence')">Fullscreen</button></div></div>
       <div class="cbody" id="sq-body"><div class="dstage" id="sq-stage"><div id="sq-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Tool</th><th>Mode</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr><td>list_skills</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Lists available skills for the active organization</td></tr>
-        <tr><td>get_skill</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Retrieves compiled skill content, lazy-loaded on demand to save tokens</td></tr>
-        <tr><td>execute_action</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Executes CRM actions and runs skills or sequences</td></tr>
-        <tr><td>resolve_entity</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Resolves ambiguous person references such as first-name-only lookups</td></tr>
-      </tbody>
-    </table>
   </div>
+
+  <table class="kt">
+    <thead><tr><th>Component</th><th>File</th><th>Role</th><th>Type</th></tr></thead>
+    <tbody>
+      <tr><td>CopilotContext</td><td>src/lib/contexts/CopilotContext.tsx</td><td>State management, mode routing, sendMessage()</td><td><span class="b bp">Context</span></td></tr>
+      <tr><td>copilotRoutingService</td><td>src/lib/services/copilotRoutingService.ts</td><td>3-step skill routing: sequences → triggers → embeddings</td><td><span class="b bb">Service</span></td></tr>
+      <tr><td>copilot-autonomous</td><td>supabase/functions/copilot-autonomous/</td><td>Claude Haiku 4.5 native tool_use, streaming SSE</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>api-copilot</td><td>supabase/functions/api-copilot/</td><td>Gemini 2.5 Flash, 48 response panels, HITL confirm</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>autonomousExecutor</td><td>src/lib/copilot/agent/autonomousExecutor.ts</td><td>Skill-to-tool conversion, lazy loading, iteration</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>useCopilotChat</td><td>src/lib/hooks/useCopilotChat.ts</td><td>Streaming, tool tracking, progress steps</td><td><span class="b by">Hook</span></td></tr>
+    </tbody>
+  </table>
 </div>
 
 <!-- TAB 3: Recording Pipeline -->
 <div id="tab-recording" class="tp v1-content">
-  <div class="stl">60 Notetaker - Recording Pipeline</div>
-  <div class="sds">Four-phase flow: bot deployment, S3 upload with retry, async transcription, then Claude AI analysis synced to the CRM.</div>
-  <div style="margin-top:20px">
+  <div class="stl">Recording Pipeline</div>
+  <div class="sds">4-phase pipeline: bot deployment → S3 upload with multipart → transcription (AssemblyAI/Gladia) → Claude AI processing.</div>
+
+  <div style="margin: 18px 0 12px;">
+    <div class="fvh"><div class="fvb" style="background:#0f766e">Recording Pipeline</div><div><div class="fvt">Full Recording Pipeline — Detailed</div><div class="fvd">All phases with retry logic, dual transcription providers, AI processing</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">recording-pipeline.mermaid</span><div class="zc"><button class="zb" onclick="zD('rp',-0.15)">-</button><span class="zp" id="rp-pct">100%</span><button class="zb" onclick="zD('rp',0.15)">+</button><button class="zb" onclick="rD('rp')">R</button><button class="fsb" onclick="openFS('rp','Recording Pipeline')">Fullscreen</button></div></div>
       <div class="cbody" id="rp-body"><div class="dstage" id="rp-stage"><div id="rp-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Edge Function</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr><td>auto-join-scheduler</td><td><span class="b bb">cron</span></td><td>Scans calendar_events and deploys bots for upcoming meetings</td></tr>
-        <tr><td>deploy-recording-bot</td><td><span class="b bx">http</span></td><td>Calls MeetingBaaS API to join a specific meeting URL</td></tr>
-        <tr><td>meetingbaas-webhook</td><td><span class="b by">webhook</span></td><td>Receives bot completion callbacks, triggers upload queue</td></tr>
-        <tr><td>poll-s3-upload-queue</td><td><span class="b bb">cron</span></td><td>Uploads video and audio to S3 in 5MB chunks with exponential-backoff retry</td></tr>
-        <tr><td>poll-transcription-queue</td><td><span class="b bb">cron</span></td><td>Checks AssemblyAI and Gladia job status until transcript is ready</td></tr>
-        <tr><td>process-recording</td><td><span class="b bx">http</span></td><td>Claude-powered analysis: summary, highlights, action items, speaker ID</td></tr>
-        <tr><td>_shared/recordingCompleteSync.ts</td><td><span class="b bg">shared</span></td><td>Syncs recording results to meetings, contacts, and tasks tables</td></tr>
-      </tbody>
-    </table>
   </div>
+
+  <table class="kt">
+    <thead><tr><th>Function</th><th>Trigger</th><th>Purpose</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td>auto-join-scheduler</td><td>Cron every 2 min</td><td>Deploy MeetingBaaS bot for upcoming meetings</td><td><span class="b bb">1 · Deploy</span></td></tr>
+      <tr><td>deploy-recording-bot</td><td>Scheduler call</td><td>MeetingBaaS API — Zoom, Meet, Teams support</td><td><span class="b bb">1 · Deploy</span></td></tr>
+      <tr><td>meetingbaas-webhook</td><td>Webhook POST</td><td>Receive bot completion signal, enqueue upload</td><td><span class="b bp">2 · Upload</span></td></tr>
+      <tr><td>poll-s3-upload-queue</td><td>Cron</td><td>5MB multipart upload, exponential backoff retry</td><td><span class="b bp">2 · Upload</span></td></tr>
+      <tr><td>poll-transcription-queue</td><td>Cron</td><td>AssemblyAI primary, Gladia fallback</td><td><span class="b bg">3 · Transcribe</span></td></tr>
+      <tr><td>process-recording</td><td>Transcript ready</td><td>Claude Haiku analysis: summary, highlights, speaker ID</td><td><span class="b by">4 · AI</span></td></tr>
+    </tbody>
+  </table>
 </div>
 
 <!-- TAB 4: Skills System -->
 <div id="tab-skills" class="tp v1-content">
   <div class="stl">Skills System</div>
-  <div class="sds">SKILL.md files sync to Supabase, compile per org with variable resolution, embed with pgvector, discovered at runtime via 3-step routing.</div>
-  <div style="margin-top:20px">
+  <div class="sds">30 skills (18 atomic + 12 sequences) defined in SKILL.md files, synced to database, compiled per org with variables resolved, embedded for semantic search.</div>
+
+  <div style="margin: 18px 0 12px;">
+    <div class="fvh"><div class="fvb" style="background:#0369a1">Skills System</div><div><div class="fvt">Full Skills Pipeline</div><div class="fvd">Source SKILL.md → sync → platform_skills → compile → organization_skills → runtime RPC</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">skills-full.mermaid</span><div class="zc"><button class="zb" onclick="zD('sf',-0.15)">-</button><span class="zp" id="sf-pct">100%</span><button class="zb" onclick="zD('sf',0.15)">+</button><button class="zb" onclick="rD('sf')">R</button><button class="fsb" onclick="openFS('sf','Skills System')">Fullscreen</button></div></div>
       <div class="cbody" id="sf-body"><div class="dstage" id="sf-stage"><div id="sf-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
-    <table class="kt">
-      <thead><tr><th>File or Table</th><th>Role</th><th>Notes</th></tr></thead>
-      <tbody>
-        <tr><td>skills/**/SKILL.md</td><td><span class="b bg">source</span></td><td>Gray-matter YAML frontmatter and markdown content. 18 atomic and 12 sequences.</td></tr>
-        <tr><td>scripts/sync-skills.ts</td><td><span class="b bb">CLI</span></td><td>Parse, validate, upsert, compile orgs, generate embeddings. Supports --dry-run and --skill flags.</td></tr>
-        <tr><td>platform_skills</td><td><span class="b by">DB</span></td><td>Master template store with variable placeholders. Admin-only writes.</td></tr>
-        <tr><td>organization_skills</td><td><span class="b by">DB</span></td><td>Runtime compiled per org with variables resolved. Read by all copilot paths.</td></tr>
-        <tr><td>description_embedding</td><td><span class="b bp">pgvector</span></td><td>1536-dim vector on platform_skills. Queried via match_skills_by_embedding RPC.</td></tr>
-        <tr><td>autonomousExecutor.ts</td><td><span class="b bp">runtime</span></td><td>Converts org skills to Claude tool definitions. Lazy-loads content tier on demand.</td></tr>
-      </tbody>
-    </table>
   </div>
+
+  <table class="kt">
+    <thead><tr><th>Table / RPC</th><th>Purpose</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>platform_skills</td><td>Master skill templates with ${variable} placeholders</td><td><span class="b bp">Admin read</span></td></tr>
+      <tr><td>organization_skills</td><td>Compiled per-org with variables resolved, is_enabled flag</td><td><span class="b bg">Runtime read</span></td></tr>
+      <tr><td>description_embedding</td><td>pgvector 1536-dim embedding of skill description</td><td><span class="b bb">Semantic search</span></td></tr>
+      <tr><td>get_organization_skills_for_agent</td><td>RPC returning compiled skills as Claude tool definitions</td><td><span class="b by">All copilot paths</span></td></tr>
+      <tr><td>match_skills_by_embedding</td><td>Cosine similarity search, threshold 0.6+</td><td><span class="b bx">Fallback</span></td></tr>
+    </tbody>
+  </table>
 </div>
 
 <!-- TAB 5: Command Centre (V2) -->
 <div id="tab-cmdcentre" class="tp v2-only">
   <div class="stl">Command Centre <span class="v2-badge">V2</span></div>
-  <div class="sds">Unified proactive inbox. Source agents emit items, enrichment pipeline scores confidence, autonomy resolver decides auto-execute vs approve vs suggest.</div>
-  <div style="margin-top:20px">
+  <div class="sds">Proactive inbox driven by 8 source agents. Items are enriched with live context, scored by AI confidence, then routed through the autonomy gate to CRM, Slack, or user suggestion.</div>
+
+  <div style="margin: 18px 0 12px;">
+    <div class="fvh"><div class="fvb" style="background:#7c3aed">Command Centre Sequence <span class="v2-badge">V2</span></div><div><div class="fvt">Full Item Lifecycle — Budget Check to Action</div><div class="fvd">Model routing, enrichment, scoring, autonomy resolution, execution with credit metering</div></div></div>
     <div class="card v2-card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">command-centre-pipeline.mermaid</span><div class="zc"><button class="zb" onclick="zD('ccp',-0.15)">-</button><span class="zp" id="ccp-pct">100%</span><button class="zb" onclick="zD('ccp',0.15)">+</button><button class="zb" onclick="rD('ccp')">R</button><button class="fsb" onclick="openFS('ccp','Command Centre Pipeline')">Fullscreen</button></div></div>
       <div class="cbody" id="ccp-body"><div class="dstage" id="ccp-stage"><div id="ccp-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Edge Function</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>cc-enrich</td><td><span class="b bp">pipeline</span></td><td>Runs context loaders (calendar, CRM, email, pipeline, transcript) to enrich items</td></tr>
-        <tr class="v2-row"><td>cc-prioritise</td><td><span class="b bp">pipeline</span></td><td>AI confidence scoring and priority ranking of enriched items</td></tr>
-        <tr class="v2-row"><td>cc-auto-execute</td><td><span class="b by">cron</span></td><td>Executes high-confidence items per autonomy policy</td></tr>
-        <tr class="v2-row"><td>cc-daily-cleanup</td><td><span class="b bb">cron</span></td><td>Archive stale items, deduplicate, maintain queue health</td></tr>
-        <tr class="v2-row"><td>cc-auto-report</td><td><span class="b bg">report</span></td><td>Daily summary of autonomous actions taken and outcomes</td></tr>
-      </tbody>
-    </table>
   </div>
 </div>
 
 <!-- TAB 6: Autonomy System (V2) -->
 <div id="tab-autonomy" class="tp v2-only">
-  <div class="stl">Graduated Autonomy System <span class="v2-badge">V2</span></div>
-  <div class="sds">4-tier policy resolution: user policy, org policy, preset, default. Automatic promotion and demotion based on agent behavior and user trust signals.</div>
-  <div style="margin-top:20px">
-    <div class="card v2-card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-resolution.mermaid</span><div class="zc"><button class="zb" onclick="zD('aur',-0.15)">-</button><span class="zp" id="aur-pct">100%</span><button class="zb" onclick="zD('aur',0.15)">+</button><button class="zb" onclick="rD('aur')">R</button><button class="fsb" onclick="openFS('aur','Autonomy Resolution')">Fullscreen</button></div></div>
-      <div class="cbody" id="aur-body"><div class="dstage" id="aur-stage"><div id="aur-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <div class="stl">Autonomy System <span class="v2-badge">V2</span></div>
+  <div class="sds">4-tier autonomy (disabled → suggest → approve → auto) with resolution chain, policy ceilings, promotion engine, demotion engine, and analytics.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#059669">Autonomy Resolver <span class="v2-badge">V2</span></div><div><div class="fvt">Policy Resolution Cache</div><div class="fvd">User → Org → Preset → Default, 5 min cache</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-resolver.mermaid</span><div class="zc"><button class="zb" onclick="zD('aur',-0.15)">-</button><span class="zp" id="aur-pct">100%</span><button class="zb" onclick="zD('aur',0.15)">+</button><button class="zb" onclick="rD('aur')">R</button><button class="fsb" onclick="openFS('aur','Autonomy Resolver')">Fullscreen</button></div></div>
+        <div class="cbody" id="aur-body" style="height:420px"><div class="dstage" id="aur-stage"><div id="aur-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Role</th><th>Notes</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>autonomyResolver.ts</td><td><span class="b bp">engine</span></td><td>Resolves effective policy: user, org, preset, default (5-min cache)</td></tr>
-        <tr class="v2-row"><td>promotionEngine.ts</td><td><span class="b bg">engine</span></td><td>7-step threshold check: confidence, cooldown, ceiling, numeric thresholds, streak guard</td></tr>
-        <tr class="v2-row"><td>demotionEngine.ts</td><td><span class="b by">engine</span></td><td>4-severity demotion: warn / demote / emergency. email.send reverts on any single undo.</td></tr>
-        <tr class="v2-row"><td>autopilot-evaluate</td><td><span class="b bb">cron</span></td><td>Daily: queries promotion_eligible=true, evaluates engine, sends batched Slack proposals</td></tr>
-        <tr class="v2-row"><td>autopilot-record-signal</td><td><span class="b bb">edge fn</span></td><td>Records every approval signal; fires confidence trigger; checks rubber-stamp (&lt;2s)</td></tr>
-        <tr class="v2-row"><td>autopilot_confidence</td><td><span class="b bx">table</span></td><td>Pre-computed scores: score, clean_approval_rate, promotion_eligible, cooldown_until</td></tr>
-        <tr class="v2-row"><td>autonomy_policies</td><td><span class="b bx">table</span></td><td>Per-action-type policy storage with presets — updated on promotion acceptance</td></tr>
-      </tbody>
-    </table>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#059669">Tiers &amp; Presets <span class="v2-badge">V2</span></div><div><div class="fvt">4 Tiers + Promotion/Demotion</div><div class="fvd">Trust signals, promotion engine, demotion on violations</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-tiers.mermaid</span><div class="zc"><button class="zb" onclick="zD('au',-0.15)">-</button><span class="zp" id="au-pct">100%</span><button class="zb" onclick="zD('au',0.15)">+</button><button class="zb" onclick="rD('au')">R</button><button class="fsb" onclick="openFS('au','Autonomy Tiers')">Fullscreen</button></div></div>
+        <div class="cbody" id="au-body" style="height:420px"><div class="dstage" id="au-stage"><div id="au-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- TAB 7: Proactive Agents (V2) -->
 <div id="tab-proactive" class="tp v2-only">
-  <div class="stl">Proactive Agent Fleet <span class="v2-badge">V2</span></div>
-  <div class="sds">8 autonomous agents triggered by cron or events. Fleet router orchestrates parallel execution with deduplication into Command Centre.</div>
-  <div style="margin-top:20px">
-    <div class="card v2-card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet-detail.mermaid</span><div class="zc"><button class="zb" onclick="zD('pfd',-0.15)">-</button><span class="zp" id="pfd-pct">100%</span><button class="zb" onclick="zD('pfd',0.15)">+</button><button class="zb" onclick="rD('pfd')">R</button><button class="fsb" onclick="openFS('pfd','Proactive Fleet Detail')">Fullscreen</button></div></div>
-      <div class="cbody" id="pfd-body"><div class="dstage" id="pfd-stage"><div id="pfd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <div class="stl">Proactive Agents <span class="v2-badge">V2</span></div>
+  <div class="sds">Fleet of 8 autonomous agents triggered by cron + events. Each agent enriches with live context, generates assertive messages, routes to Command Centre or Slack.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#dc2626">Fleet Router <span class="v2-badge">V2</span></div><div><div class="fvt">Agent Fleet Architecture</div><div class="fvd">Triggers, routing, assertive messaging, credit governance</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet.mermaid</span><div class="zc"><button class="zb" onclick="zD('pf',-0.15)">-</button><span class="zp" id="pf-pct">100%</span><button class="zb" onclick="zD('pf',0.15)">+</button><button class="zb" onclick="rD('pf')">R</button><button class="fsb" onclick="openFS('pf','Proactive Fleet')">Fullscreen</button></div></div>
+        <div class="cbody" id="pf-body" style="height:420px"><div class="dstage" id="pf-stage"><div id="pf-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Agent</th><th>Trigger</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>agent-morning-briefing</td><td><span class="b bb">cron 7am</span></td><td>Pipeline analysis, fleet routes, priority actions for the day</td></tr>
-        <tr class="v2-row"><td>agent-eod-synthesis</td><td><span class="b bb">cron 6pm</span></td><td>Day scorecard, deal health, relationship scoring, overnight plan</td></tr>
-        <tr class="v2-row"><td>proactive-meeting-prep</td><td><span class="b by">event</span></td><td>V2: 5-improvement briefing. RAG pipeline (PR #72): transcript search, stakeholder mapping, attendee enrichment, competitive signals. Filters personal emails + calendar noise.</td></tr>
-        <tr class="v2-row"><td>agent-deal-risk</td><td><span class="b bb">cron</span></td><td>Temperature scoring, risk factor detection, automated alerts</td></tr>
-        <tr class="v2-row"><td>agent-reengagement</td><td><span class="b bb">cron</span></td><td>At-risk contact detection, Apollo/Apify signals, cooldown enforcement</td></tr>
-        <tr class="v2-row"><td>agent-coaching</td><td><span class="b by">event</span></td><td>Post-meeting coaching insights, skill progression tracking</td></tr>
-        <tr class="v2-row"><td>agent-competitive-intel</td><td><span class="b bb">cron</span></td><td>Competitor monitoring, battlecard generation, Slack alerts</td></tr>
-        <tr class="v2-row"><td>agent-email-signals</td><td><span class="b by">event</span></td><td>Email activity signal extraction, classification, recommendations</td></tr>
-      </tbody>
-    </table>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#dc2626">Fleet Detail <span class="v2-badge">V2</span></div><div><div class="fvt">Triggers + Per-Agent Detail</div><div class="fvd">Cron + event triggers, per-agent subgraphs with file sizes</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet-detail.mermaid</span><div class="zc"><button class="zb" onclick="zD('pfd',-0.15)">-</button><span class="zp" id="pfd-pct">100%</span><button class="zb" onclick="zD('pfd',0.15)">+</button><button class="zb" onclick="rD('pfd')">R</button><button class="fsb" onclick="openFS('pfd','Fleet Detail')">Fullscreen</button></div></div>
+        <div class="cbody" id="pfd-body" style="height:420px"><div class="dstage" id="pfd-stage"><div id="pfd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- TAB 8: Credit Governance (V2) -->
 <div id="tab-credits" class="tp v2-only">
   <div class="stl">Credit Governance <span class="v2-badge">V2</span></div>
-  <div class="sds">Every AI call — fleet agents, copilot, enrichment, scoring, Slack copilot — is metered through a central credit ledger. Per-user budgets, org ceilings, fleet circuit breakers, and real-time usage dashboards prevent runaway consumption.</div>
-  <div style="margin-top:20px">
-    <div class="card v2-card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance-detail.mermaid</span><div class="zc"><button class="zb" onclick="zD('cgd',-0.15)">-</button><span class="zp" id="cgd-pct">100%</span><button class="zb" onclick="zD('cgd',0.15)">+</button><button class="zb" onclick="rD('cgd')">R</button><button class="fsb" onclick="openFS('cgd','Credit Governance Detail')">Fullscreen</button></div></div>
-      <div class="cbody" id="cgd-body"><div class="dstage" id="cgd-stage"><div id="cgd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <div class="sds">Every AI call metered through modelRouter → creditLedger → creditBudgetService → fleetThrottle. Hard kill at 100%, Slack alerts at 80%, usage dashboard with per-agent breakdowns.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#e11d48">Credit Architecture <span class="v2-badge">V2</span></div><div><div class="fvt">Full Credit Governance System</div><div class="fvd">All consumers, model router, ledger, budget enforcement, circuit breakers</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance.mermaid</span><div class="zc"><button class="zb" onclick="zD('cg',-0.15)">-</button><span class="zp" id="cg-pct">100%</span><button class="zb" onclick="zD('cg',0.15)">+</button><button class="zb" onclick="rD('cg')">R</button><button class="fsb" onclick="openFS('cg','Credit Governance')">Fullscreen</button></div></div>
+        <div class="cbody" id="cg-body" style="height:420px"><div class="dstage" id="cg-stage"><div id="cg-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Role</th><th>Credit Impact</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>creditLedger.ts</td><td><span class="b bp">core</span></td><td>Central metering — logs provider, model, tokens, cost per call</td></tr>
-        <tr class="v2-row"><td>creditBudgetService.ts</td><td><span class="b bg">service</span></td><td>Per-user daily/monthly budgets, org-wide ceilings, alert thresholds</td></tr>
-        <tr class="v2-row"><td>fleetThrottle.ts</td><td><span class="b by">guard</span></td><td>Circuit breaker — pauses non-critical fleet agents when budget &gt;80%</td></tr>
-        <tr class="v2-row"><td>modelRouter.ts</td><td><span class="b bb">router</span></td><td>Routes to cheapest capable model per task type (Haiku for triage, Sonnet for drafts)</td></tr>
-        <tr class="v2-row"><td>credit_ledger</td><td><span class="b bx">table</span></td><td>Append-only log: user_id, org_id, provider, model, tokens_in, tokens_out, cost_usd, source_agent</td></tr>
-        <tr class="v2-row"><td>credit_budgets</td><td><span class="b bx">table</span></td><td>Budget configs: user or org scope, daily_limit_usd, monthly_limit_usd, alert_pct</td></tr>
-        <tr class="v2-row"><td>credit-usage-rollup</td><td><span class="b bb">cron</span></td><td>Hourly rollup into credit_usage_daily for fast dashboard queries</td></tr>
-        <tr class="v2-row"><td>credit-budget-alert</td><td><span class="b by">trigger</span></td><td>Slack alert when user or org hits 80% / 100% of budget</td></tr>
-      </tbody>
-    </table>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#e11d48">Credit Flow <span class="v2-badge">V2</span></div><div><div class="fvt">AI Call Lifecycle with Budget Checks</div><div class="fvd">Request → budget check → model select → log → throttle path</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-flow.mermaid</span><div class="zc"><button class="zb" onclick="zD('cgd',-0.15)">-</button><span class="zp" id="cgd-pct">100%</span><button class="zb" onclick="zD('cgd',0.15)">+</button><button class="zb" onclick="rD('cgd')">R</button><button class="fsb" onclick="openFS('cgd','Credit Flow')">Fullscreen</button></div></div>
+        <div class="cbody" id="cgd-body" style="height:420px"><div class="dstage" id="cgd-stage"><div id="cgd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- TAB 9: Autopilot Engine (V2) -->
 <div id="tab-autopilot" class="tp v2-only">
   <div class="stl">Autopilot Engine <span class="v2-badge">V2</span></div>
-  <div class="sds">Confidence-gated progressive autonomy (PRD-AP-001). Every approval interaction trains a per-user, per-action confidence model. When thresholds are met the system proposes tier upgrades via Slack. Reps go from 15% to ~70% autonomous within 90 days.</div>
-  <div style="margin-top:20px">
-    <div class="card v2-card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-engine.mermaid</span><div class="zc"><button class="zb" onclick="zD('ape',-0.15)">-</button><span class="zp" id="ape-pct">100%</span><button class="zb" onclick="zD('ape',0.15)">+</button><button class="zb" onclick="rD('ape')">R</button><button class="fsb" onclick="openFS('ape','Autopilot Engine')">Fullscreen</button></div></div>
-      <div class="cbody" id="ape-body"><div class="dstage" id="ape-stage"><div id="ape-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <div class="sds">Signal recording → time-decayed confidence scoring → daily evaluation → Slack promotion proposal → autonomy policy update → demotion on undo spikes.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#0e7490">Autopilot Overview <span class="v2-badge">V2</span></div><div><div class="fvt">Signal Learning Loop</div><div class="fvd">Rubber-stamp guard, time-decay, promotion/demotion cycle</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-overview.mermaid</span><div class="zc"><button class="zb" onclick="zD('apo',-0.15)">-</button><span class="zp" id="apo-pct">100%</span><button class="zb" onclick="zD('apo',0.15)">+</button><button class="zb" onclick="rD('apo')">R</button><button class="fsb" onclick="openFS('apo','Autopilot Overview')">Fullscreen</button></div></div>
+        <div class="cbody" id="apo-body" style="height:420px"><div class="dstage" id="apo-stage"><div id="apo-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Role</th><th>Notes</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>autopilot-record-signal</td><td><span class="b bb">edge fn</span></td><td>POST: records signals, fires confidence trigger, checks rubber-stamp, queues nudge. GET: returns and clears pending nudge.</td></tr>
-        <tr class="v2-row"><td>autopilot-evaluate</td><td><span class="b bb">cron</span></td><td>Daily: queries all promotion_eligible=true rows, runs 7-step engine, batches proposals per user, resets flag on send.</td></tr>
-        <tr class="v2-row"><td>autopilot-admin</td><td><span class="b bp">admin</span></td><td>upsert_ceiling, remove_ceiling, get_team_confidence, force_eligible (QA). Admin/owner only.</td></tr>
-        <tr class="v2-row"><td>autopilot-backfill</td><td><span class="b bx">util</span></td><td>Imports historical approval data from slack_pending_actions into autopilot_signals. Idempotent via is_backfill flag.</td></tr>
-        <tr class="v2-row"><td>_shared/autopilot/signals.ts</td><td><span class="b bg">shared</span></td><td>Signal weights (+1.0 to -3.0), rubber-stamp thresholds per action type, isRubberStamp().</td></tr>
-        <tr class="v2-row"><td>_shared/autopilot/confidence.ts</td><td><span class="b bg">shared</span></td><td>calculateConfidence() with 30-day half-life decay, recalculateUserConfidence(), updateRepMemory().</td></tr>
-        <tr class="v2-row"><td>_shared/autonomy/promotionEngine.ts</td><td><span class="b bg">shared</span></td><td>evaluatePromotionEligibility(): 7 steps — confidence, never_promote, cooldown, tier, ceiling, numeric thresholds, streak guard.</td></tr>
-        <tr class="v2-row"><td>_shared/autopilot/demotionEngine.ts</td><td><span class="b by">shared</span></td><td>evaluateDemotionTriggers(): warn/demote/emergency severity. Emergency on any email.send undo. Auto-revert + Slack DM.</td></tr>
-        <tr class="v2-row"><td>autopilot_signals</td><td><span class="b bx">table</span></td><td>Append-only: user_id, action_type, signal, time_to_respond_ms, edit_distance, edit_fields, is_backfill.</td></tr>
-        <tr class="v2-row"><td>autopilot_confidence</td><td><span class="b bx">table</span></td><td>Pre-computed per (user, action_type): score, clean_approval_rate, promotion_eligible, cooldown_until, never_promote, rubber_stamp_count.</td></tr>
-        <tr class="v2-row"><td>autopilot_events</td><td><span class="b bx">table</span></td><td>Audit log: promotion_proposed, promotion_accepted, promotion_declined, demotion_auto, demotion_emergency, manual_override.</td></tr>
-        <tr class="v2-row"><td>autopilot_thresholds</td><td><span class="b bx">table</span></td><td>Per-action-type thresholds: min_signals, min_clean_approval_rate, max_undo_rate, min_days_active, last_n_clean. Org-customisable.</td></tr>
-        <tr class="v2-row"><td>autopilot_org_settings</td><td><span class="b bx">table</span></td><td>Manager ceilings: max_tier per action_type, enabled, allow_rep_override. Enforced before any promotion proposal.</td></tr>
-        <tr class="v2-row"><td>AutopilotDashboard</td><td><span class="b bp">UI</span></td><td>Per-action-type status cards, autonomy %, time saved calc (auto=full, approve=70%), cooldowns, promotion_eligible badges.</td></tr>
-        <tr class="v2-row"><td>AutonomySimulator</td><td><span class="b bp">UI</span></td><td>Animated 90-day progression demo at /platform/demo/autonomy. Recharts AreaChart, milestone proposal cards.</td></tr>
-        <tr class="v2-row"><td>AutopilotNudgeBanner</td><td><span class="b bp">UI</span></td><td>In-copilot slide-in banner. Polls GET /autopilot-record-signal every 30s, clears nudge on dismiss.</td></tr>
-        <tr class="v2-row"><td>autonomy-report skill</td><td><span class="b bg">skill</span></td><td>Copilot skill: "how autonomous am I?" — reads autopilot_confidence, formats autonomy report in chat.</td></tr>
-      </tbody>
-    </table>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#0e7490">Autopilot Engine Detail <span class="v2-badge">V2</span></div><div><div class="fvt">6-Stage Engine Architecture</div><div class="fvd">Signal recording, DB trigger, daily eval, proposal, demotion, dashboard</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-engine.mermaid</span><div class="zc"><button class="zb" onclick="zD('ape',-0.15)">-</button><span class="zp" id="ape-pct">100%</span><button class="zb" onclick="zD('ape',0.15)">+</button><button class="zb" onclick="rD('ape')">R</button><button class="fsb" onclick="openFS('ape','Autopilot Engine')">Fullscreen</button></div></div>
+        <div class="cbody" id="ape-body" style="height:420px"><div class="dstage" id="ape-stage"><div id="ape-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -524,9 +876,20 @@
 
 <!-- Fullscreen overlay -->
 <div class="fso" id="fso">
-  <div class="fsh"><div class="logo" style="width:28px;height:28px;font-size:12px">60</div><div class="fstl" id="fstl">Diagram</div><button class="fscl" onclick="closeFS()">Close x</button></div>
-  <div class="fsbd" id="fsbd"><div class="fsst" id="fsst"></div></div>
-  <div class="fszb"><button class="zb" onclick="zFS(-0.2)">-</button><span class="zp" id="fs-pct">100%</span><button class="zb" onclick="zFS(0.2)">+</button><button class="zb" onclick="rFS()">R</button><span style="font-size:11px;color:var(--mut);margin-left:10px">Scroll to zoom - Drag to pan - Esc to close</span></div>
+  <div class="fsh">
+    <div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div>
+    <span class="fstl" id="fstl">Diagram</span>
+    <button class="fscl" onclick="closeFS()">Close &nbsp;ESC</button>
+  </div>
+  <div class="fsbd" id="fsbd">
+    <div class="fsst" id="fsst"></div>
+  </div>
+  <div class="fszb">
+    <button class="zb" onclick="zFS(-0.15)">-</button>
+    <span class="zp" id="fs-pct">100%</span>
+    <button class="zb" onclick="zFS(0.15)">+</button>
+    <button class="zb" onclick="rFS()">R</button>
+  </div>
 </div>
 
 <script>
@@ -674,7 +1037,7 @@ ov: [
 ].join('\n'),
 
 fe: [
-  'flowchart TB',
+  'flowchart LR',
   '    subgraph AUTH["Authentication"]',
   '        SA["Supabase Auth - JWT sessions"]',
   '        CL["Clerk - alternative provider"]',
@@ -714,7 +1077,7 @@ fe: [
 ].join('\n'),
 
 cp: [
-  'flowchart TD',
+  'flowchart LR',
   '    MSG(["User message"])',
   '    subgraph CTX["CopilotContext.sendMessage()"]',
   '        CHK["autonomous mode check"]',
@@ -760,7 +1123,7 @@ cp: [
 ].join('\n'),
 
 sk: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph SRC["Source of Truth"]',
   '        MD["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n30 total - YAML frontmatter + markdown"]',
   '    end',
@@ -808,7 +1171,7 @@ sk: [
 ].join('\n'),
 
 rf: [
-  'flowchart TD',
+  'flowchart LR',
   '    START(["Meeting scheduled\\nGoogle Calendar sync"])',
   '    subgraph P1["Phase 1 - Bot Deployment"]',
   '        SCH["auto-join-scheduler\\ncron every 2 min"]',
@@ -909,7 +1272,7 @@ be: [
 ].join('\n'),
 
 ai: [
-  'flowchart TB',
+  'flowchart LR',
   '    subgraph ANT["Anthropic Claude"]',
   '        H45["Claude Haiku 4.5\\nnative tool_use"]',
   '        HREC["Claude Haiku\\nRecording analysis"]',
@@ -1016,7 +1379,7 @@ sq: [
 ].join('\n'),
 
 rp: [
-  'flowchart TD',
+  'flowchart LR',
   '    START(["Meeting scheduled - Google Calendar sync"])',
   '    subgraph P1["Phase 1 - Bot Deployment"]',
   '        SCH2["auto-join-scheduler\\ncron every 2 min\\nscans calendar_events"]',
@@ -1067,7 +1430,7 @@ rp: [
 ].join('\n'),
 
 sf: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph SRC2["Source of Truth"]',
   '        MD2["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n30 total - 18 atomic + 12 sequences"]',
   '    end',
@@ -1117,7 +1480,7 @@ sf: [
 // ── V2 Diagrams (feat/always_on branch) ────────────────────────
 
 ,cc: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph SRC["Source Agents - 8 total"]',
   '        A1["Morning Briefing"]',
   '        A2["EOD Synthesis"]',
@@ -1168,7 +1531,7 @@ sf: [
 ].join('\n'),
 
 au: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph TIERS["4 Autonomy Tiers"]',
   '        T1["disabled\\nAgent cannot act"]',
   '        T2["suggest\\nAgent suggests only"]',
@@ -1260,7 +1623,7 @@ pf: [
 ].join('\n'),
 
 sc: [
-  'flowchart TD',
+  'flowchart LR',
   '    USR(["Slack User Message"])  ',
   '    subgraph EVENTS["slack-events edge function"]',
   '        EV["Event receiver\\napp_mention + message"]',
@@ -1302,7 +1665,7 @@ sc: [
 ].join('\n'),
 
 dm: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph SHELL["DemoShell.tsx - /settings/demo"]',
   '        NAV["Act navigation\\n5 acts progressive"]',
   '    end',
@@ -1387,7 +1750,7 @@ ccp: [
 ].join('\n'),
 
 aur: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph INPUT["Action Request"]',
   '        ACT["Action type\\ncreate_task send_email update_deal\\npost_slack generate_proposal"]',
   '    end',
@@ -1418,7 +1781,7 @@ aur: [
 ].join('\n'),
 
 pfd: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph CRON["Cron Triggers"]',
   '        AM["7:00 AM\\nMorning Brief"]',
   '        MID["Throughout Day\\nDeal Risk + Re-Engagement"]',
@@ -1470,7 +1833,7 @@ pfd: [
 // ── Credit Governance diagrams ────────────────────────────────
 
 cg: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph CONSUMERS["AI Credit Consumers"]',
   '        FC["Fleet Agents x8\\ncron + event triggered"]',
   '        CP2["Copilot Chat\\nautonomous + regular"]',
@@ -1585,7 +1948,7 @@ apo: [
 
 
 ape: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph S1["1 — Signal Recording  autopilot-record-signal"]',
   '        A1["Approval event\napproved / edited / rejected / expired\nundone / auto_executed / auto_undone"]',
   '        A2["Rubber-stamp guard\ntime_to_respond < threshold = not clean\nemail.send 5000ms  stage change 3000ms  default 2000ms"]',
@@ -1644,22 +2007,23 @@ ape: [
 
 }; // end DIAGRAMS
 
+
 // ── Mermaid setup ──────────────────────────────────────────────
 mermaid.initialize({
   startOnLoad: false,
   theme: 'dark',
   themeVariables: {
     primaryColor: '#1e1e2e', primaryBorderColor: '#6366f1',
-    primaryTextColor: '#e2e8f0', secondaryColor: '#16162a',
-    tertiaryColor: '#1a1a2e', background: '#111118',
+    primaryTextColor: '#ededed', secondaryColor: '#16162a',
+    tertiaryColor: '#1a1a2e', background: '#111111',
     mainBkg: '#1e1e2e', nodeBorder: '#3a3a4a',
     clusterBkg: '#16162a', clusterBorder: '#2a2a3a',
-    titleColor: '#e2e8f0', edgeLabelBackground: '#1a1a24',
-    lineColor: '#6366f1', textColor: '#e2e8f0',
-    fontFamily: 'Inter,-apple-system,sans-serif', fontSize: '13px',
-    actorBorder: '#6366f1', actorBkg: '#1e1e2e', actorTextColor: '#e2e8f0',
-    signalColor: '#a5b4fc', signalTextColor: '#e2e8f0',
-    noteBorderColor: '#8b5cf6', noteBkgColor: '#1e1a2e', noteTextColor: '#e2e8f0',
+    titleColor: '#ededed', edgeLabelBackground: '#1a1a24',
+    lineColor: '#6366f1', textColor: '#ededed',
+    fontFamily: "'Inter',-apple-system,sans-serif", fontSize: '13px',
+    actorBorder: '#6366f1', actorBkg: '#1e1e2e', actorTextColor: '#ededed',
+    signalColor: '#a5b4fc', signalTextColor: '#ededed',
+    noteBorderColor: '#8b5cf6', noteBkgColor: '#1e1a2e', noteTextColor: '#ededed',
     activationBorderColor: '#8b5cf6', activationBkgColor: '#1e1a2e',
   }
 });
@@ -1706,7 +2070,7 @@ function fitDiagram(k) {
   }
   if (!svgW || !svgH) return;
 
-  var pad = 56; // 28px stage padding × 2
+  var pad = 56; // 28px stage padding x2
   var bodyW = body.clientWidth  || 900;
   var bodyH = body.clientHeight || 500;
   var scale = Math.min((bodyW - pad) / svgW, (bodyH - pad) / svgH);
@@ -1815,7 +2179,7 @@ window.addEventListener('mousemove', function(e){ if(!fsDrag)return; fsTx+=e.cli
 window.addEventListener('mouseup', function(){ fsDrag=false; fsbd.style.userSelect=''; });
 window.addEventListener('keydown', function(e){ if(e.key==='Escape') closeFS(); });
 
-// ── V1 / V2 / V2 Only  Toggle ────────────────────────────────────
+// ── V1 / V2 / V2 Only Toggle ────────────────────────────────────
 function setVer(ver, btn) {
   document.querySelectorAll('.ver-btn').forEach(function(b){ b.classList.remove('act'); });
   if (btn) btn.classList.add('act');
