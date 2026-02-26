@@ -130,8 +130,10 @@
     .show-v2 .v2-only { display: block; }
     .show-v2 .tab.v2-only { display: flex; }
     .show-v2 .pill.v2-only { display: flex; }
+    /* Feature views (.fv) must stay hidden until .vis — override the catch-all above */
+    .show-v2 .fv.v2-only { display: none; }
     .show-v2 .fv.v2-only.vis { display: block; }
-    /* Tab panels (.tp) must follow active-only visibility regardless of v2-only class */
+    /* Tab panels (.tp) must stay hidden until .act — override the catch-all above */
     .show-v2 .tp.v2-only { display: none; }
     .show-v2 .tp.v2-only.act { display: block; }
     /* V2 Only mode — hide V1 content */
