@@ -137,9 +137,9 @@ export const explloriumSearchService = {
     const { data, error } = await supabase.functions.invoke('copilot-dynamic-table', {
       body: {
         source: 'explorium',
+        action: params.search_type,
         query_description: params.query_description,
-        search_type: params.search_type,
-        filters: params.filters,
+        search_params: params.filters,
         ...(params.table_name ? { table_name: params.table_name } : {}),
         ...(params.exclude_crm !== undefined ? { exclude_crm: params.exclude_crm } : {}),
         ...(params.per_page !== undefined ? { per_page: params.per_page } : {}),
@@ -148,7 +148,15 @@ export const explloriumSearchService = {
     })
 
     if (error) {
-      throw new Error(error.message || 'Failed to create ops table from Explorium search')
+      let msg = error.message || 'Failed to create ops table from Explorium search'
+      try {
+        const body = await (error as { context?: Response }).context?.json()
+        console.warn('[explloriumSearchService.searchAndCreateTable] Error body:', body)
+        if (body?.details) console.warn('[explloriumSearchService.searchAndCreateTable] Explorium details:', body.details)
+        if (body?.payload_sent) console.warn('[explloriumSearchService.searchAndCreateTable] Payload sent to Explorium:', body.payload_sent)
+        if (body?.error) msg = body.error
+      } catch { /* ignore parse errors */ }
+      throw new Error(msg)
     }
 
     // The edge function returns error payloads in the data body for
@@ -225,13 +233,20 @@ export const explloriumSearchService = {
     const { data, error } = await supabase.functions.invoke('explorium-search', {
       body: {
         action: 'stats',
+        entity_type: params.action,   // explicit entity type so edge fn doesn't have to guess
         ...params.filters,
       },
       ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
     })
 
     if (error) {
-      throw new Error(error.message || 'Failed to fetch Explorium stats')
+      let msg = error.message || 'Failed to fetch Explorium stats'
+      try {
+        const body = await (error as { context?: Response }).context?.json()
+        console.warn('[explloriumSearchService.getStats] Error body:', body)
+        if (body?.error) msg = body.error
+      } catch { /* ignore parse errors */ }
+      throw new Error(msg)
     }
 
     if (data?.error) {
@@ -240,6 +255,8 @@ export const explloriumSearchService = {
       throw err
     }
 
-    return { total_count: data?.total_count ?? 0 }
+    // Edge function may return null total_count for empty filters (no Explorium call made)
+    if (data?.total_count == null) throw new Error('Count unavailable')
+    return { total_count: data.total_count as number }
   },
 }

@@ -67,7 +67,15 @@ interface GetTeamConfidenceRequest {
   org_id: string
 }
 
-type PostBody = UpsertCeilingRequest | RemoveCeilingRequest | GetTeamConfidenceRequest
+/** DEV/QA only — directly sets promotion_eligible = true on an autopilot_confidence row */
+interface ForceEligibleRequest {
+  action: 'force_eligible'
+  org_id: string
+  user_id: string
+  action_type: string
+}
+
+type PostBody = UpsertCeilingRequest | RemoveCeilingRequest | GetTeamConfidenceRequest | ForceEligibleRequest
 
 // =============================================================================
 // Auth helper
@@ -305,6 +313,60 @@ async function handleGetTeamConfidence(
   return jsonResponse({ success: true, data: data ?? [] }, req, 200)
 }
 
+/** POST — dev/QA helper: force promotion_eligible = true on a confidence row */
+async function handleForceEligible(
+  req: Request,
+  body: ForceEligibleRequest,
+  serviceClient: ReturnType<typeof createClient>,
+): Promise<Response> {
+  const { org_id, user_id, action_type } = body
+
+  if (!org_id || !user_id || !action_type) {
+    return errorResponse('Missing required fields: org_id, user_id, action_type', req, 400)
+  }
+
+  // Authorize — must be admin/owner of the org
+  try {
+    await resolveAuth(req, org_id, serviceClient)
+  } catch (authError) {
+    const message = typeof authError === 'string' ? authError : 'Unauthorized'
+    const status = message.startsWith('Forbidden') ? 403 : 401
+    return errorResponse(message, req, status)
+  }
+
+  const { error } = await serviceClient
+    .from('autopilot_confidence')
+    .upsert(
+      {
+        user_id,
+        org_id,
+        action_type,
+        promotion_eligible: true,
+        score: 0.92,
+        clean_approval_rate: 0.95,
+        approval_rate: 0.95,
+        rejection_rate: 0.0,
+        undo_rate: 0.0,
+        total_signals: 20,
+        total_approved: 19,
+        total_rejected: 0,
+        total_undone: 0,
+        days_active: 10,
+        current_tier: 'approve',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,action_type' },
+    )
+
+  if (error) {
+    console.error('[autopilot-admin] handleForceEligible upsert error:', error)
+    return errorResponse('Failed to force eligible', req, 500)
+  }
+
+  console.log(`[autopilot-admin] Force eligible: user=${user_id} action=${action_type}`)
+  return jsonResponse({ success: true, user_id, action_type, promotion_eligible: true }, req, 200)
+}
+
 // =============================================================================
 // Main handler
 // =============================================================================
@@ -346,9 +408,12 @@ serve(async (req: Request) => {
         case 'get_team_confidence':
           return await handleGetTeamConfidence(req, body as GetTeamConfidenceRequest, serviceClient)
 
+        case 'force_eligible':
+          return await handleForceEligible(req, body as ForceEligibleRequest, serviceClient)
+
         default:
           return errorResponse(
-            `Unknown action "${action ?? ''}" — valid actions: upsert_ceiling, remove_ceiling, get_team_confidence`,
+            `Unknown action "${action ?? ''}" — valid actions: upsert_ceiling, remove_ceiling, get_team_confidence, force_eligible`,
             req,
             400,
           )

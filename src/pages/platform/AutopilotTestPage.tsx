@@ -24,6 +24,8 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  Zap,
+  Database,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -276,12 +278,15 @@ function Panel({ title, icon, status = 'idle', isOpen, onToggle, children }: Pan
 // =============================================================================
 
 function SignalRecorderPanel({ userId }: { userId: string }) {
+  const queryClient = useQueryClient();
   const [actionType, setActionType] = useState<ActionType>('crm.note_add');
   const [signal, setSignal] = useState<SignalType>('approved');
   const [timeToRespond, setTimeToRespond] = useState(3000);
   const [agentName, setAgentName] = useState('test-harness');
   const [recentSignals, setRecentSignals] = useState<RecordedSignal[]>([]);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [seedCount, setSeedCount] = useState(15);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -320,6 +325,90 @@ function SignalRecorderPanel({ userId }: { userId: string }) {
     },
     onError: (err: Error) => {
       toast.error(`Failed to record signal: ${err.message}`);
+    },
+  });
+
+  // Bulk seed: fires N approved signals sequentially so DB trigger fires
+  const bulkSeedMutation = useMutation({
+    mutationFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      setBulkProgress({ done: 0, total: seedCount });
+      const safeResponseMs = Math.max(getRubberStampThreshold(actionType) + 500, 3000);
+
+      for (let i = 0; i < seedCount; i++) {
+        const { error } = await supabase.functions.invoke('autopilot-record-signal', {
+          method: 'POST',
+          body: {
+            action_type: actionType,
+            agent_name: agentName || 'test-harness-seed',
+            signal: 'approved',
+            time_to_respond_ms: safeResponseMs,
+            autonomy_tier_at_time: 'approve',
+          },
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (error) throw new Error(`Signal ${i + 1} failed: ${error.message}`);
+        setBulkProgress({ done: i + 1, total: seedCount });
+      }
+    },
+    onSuccess: () => {
+      setBulkProgress(null);
+      toast.success(
+        `Seeded ${seedCount} approved signals for ${actionType}. ` +
+        `Check Confidence Scores panel — promotion_eligible should now be true if score > 0.7.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ['autopilot-confidence-live', userId] });
+    },
+    onError: (err: Error) => {
+      setBulkProgress(null);
+      toast.error(`Bulk seed failed: ${err.message}`);
+    },
+  });
+
+  // Force eligible: calls autopilot-admin (service role) to set promotion_eligible = true.
+  // Cannot write directly — autopilot_confidence RLS only allows reads for the user role.
+  const forceEligibleMutation = useMutation({
+    mutationFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      // Resolve org_id from active membership (user client, RLS is fine for reads)
+      const { data: memberRow, error: memberErr } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', userId)
+        .eq('member_status', 'active')
+        .limit(1)
+        .maybeSingle();
+      if (memberErr) throw memberErr;
+      if (!memberRow) throw new Error('No active org membership found');
+
+      const { data, error } = await supabase.functions.invoke('autopilot-admin', {
+        method: 'POST',
+        body: {
+          action: 'force_eligible',
+          org_id: memberRow.org_id,
+          user_id: userId,
+          action_type: actionType,
+        },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success(
+        `Force-set promotion_eligible=true for ${actionType}. ` +
+        `Run the Promotion Evaluator to see it picked up.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ['autopilot-confidence-live', userId] });
+    },
+    onError: (err: Error) => {
+      toast.error(`Force eligible failed: ${err.message}`);
     },
   });
 
@@ -437,6 +526,85 @@ function SignalRecorderPanel({ userId }: { userId: string }) {
         <Play className="h-4 w-4" />
         {mutation.isPending ? 'Recording...' : 'Record Signal'}
       </button>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Bulk Seed + Force Eligible — for testing Promotion Evaluator        */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="border border-dashed border-gray-700 rounded-lg p-4 space-y-3">
+        <p className="text-xs font-semibold text-gray-400 flex items-center gap-2">
+          <Zap className="h-3.5 w-3.5 text-amber-400" />
+          Seed helpers — make Promotion Evaluator find candidates
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Quick Seed */}
+          <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-medium text-white">Quick Seed (via edge function)</p>
+            <p className="text-xs text-gray-500">
+              Fires N clean approved signals through the real edge function so the DB trigger
+              sets <span className="font-mono text-gray-400">promotion_eligible = true</span>.
+              Uses response time above rubber-stamp threshold.
+            </p>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-400 whitespace-nowrap">Count:</label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={seedCount}
+                onChange={(e) => setSeedCount(Math.max(1, parseInt(e.target.value, 10) || 15))}
+                className="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none"
+              />
+            </div>
+            {bulkProgress && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-gray-400">
+                  <span>Seeding... {bulkProgress.done}/{bulkProgress.total}</span>
+                  <span>{Math.round((bulkProgress.done / bulkProgress.total) * 100)}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-1.5">
+                  <div
+                    className="bg-indigo-500 h-1.5 rounded-full transition-all"
+                    style={{ width: `${(bulkProgress.done / bulkProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => bulkSeedMutation.mutate()}
+              disabled={bulkSeedMutation.isPending}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors w-full justify-center"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              {bulkSeedMutation.isPending
+                ? `Seeding ${bulkProgress?.done ?? 0}/${seedCount}...`
+                : `Seed ${seedCount} approved signals`}
+            </button>
+          </div>
+
+          {/* Force Eligible */}
+          <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-medium text-white">Force Eligible (direct DB write)</p>
+            <p className="text-xs text-gray-500">
+              Directly upserts a <span className="font-mono text-gray-400">autopilot_confidence</span> row
+              with <span className="font-mono text-gray-400">promotion_eligible = true</span> and
+              a high score (0.92). Bypasses edge function — instant result for testing the evaluator.
+            </p>
+            <p className="text-xs text-amber-400 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              Action type: <span className="font-mono ml-1">{actionType}</span>
+            </p>
+            <button
+              onClick={() => forceEligibleMutation.mutate()}
+              disabled={forceEligibleMutation.isPending}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors w-full justify-center"
+            >
+              <Database className="h-3.5 w-3.5" />
+              {forceEligibleMutation.isPending ? 'Writing...' : 'Force promotion_eligible = true'}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Recent Signals */}
       {recentSignals.length > 0 && (
