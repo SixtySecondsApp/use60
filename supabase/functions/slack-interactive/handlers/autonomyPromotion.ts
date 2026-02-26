@@ -15,6 +15,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { applyPromotion, rejectPromotion } from '../../_shared/orchestrator/promotionEngine.ts';
+import { recordSignal, ApprovalEvent } from '../../_shared/autopilot/signals.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -51,6 +52,12 @@ interface ActionValue {
   promotion_id: string;
   org_id: string;
   action_type: string;
+}
+
+interface UndoActionValue {
+  org_id: string;
+  action_type: string;
+  original_signal_id?: string;
 }
 
 // =============================================================================
@@ -91,7 +98,8 @@ export async function handleAutonomyPromotion(
   if (
     actionId !== 'autonomy_promotion_approve' &&
     actionId !== 'autonomy_promotion_reject' &&
-    actionId !== 'autonomy_promotion_snooze'
+    actionId !== 'autonomy_promotion_snooze' &&
+    actionId !== 'autonomy_undo_action'
   ) {
     return null;
   }
@@ -99,7 +107,53 @@ export async function handleAutonomyPromotion(
   const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
   // -------------------------------------------------------------------------
-  // 1. Parse action value
+  // autonomy_undo_action — rep reverses an auto-executed action
+  // -------------------------------------------------------------------------
+  if (actionId === 'autonomy_undo_action') {
+    let undoParsed: UndoActionValue;
+    try {
+      undoParsed = JSON.parse(action.value);
+    } catch {
+      console.error('[autonomyPromotion] Failed to parse undo action.value:', action.value);
+      return { success: false, error: 'Invalid action value format' };
+    }
+
+    const { org_id: undoOrgId, action_type: undoActionType } = undoParsed;
+    if (!undoOrgId || !undoActionType) {
+      return { success: false, error: 'Missing org_id or action_type in undo action value' };
+    }
+
+    // Resolve the Sixty user who clicked undo
+    const { data: undoMapping } = await serviceClient
+      .from('slack_user_mappings')
+      .select('sixty_user_id')
+      .eq('slack_user_id', payload.user.id)
+      .eq('org_id', undoOrgId)
+      .maybeSingle();
+
+    const undoResolvedUserId = undoMapping?.sixty_user_id || `slack:${payload.user.id}`;
+
+    const undoEvent: ApprovalEvent = {
+      user_id: undoResolvedUserId,
+      org_id: undoOrgId,
+      action_type: undoActionType,
+      agent_name: 'autopilot',
+      signal: 'auto_undone',
+      autonomy_tier_at_time: 'auto',
+    };
+
+    recordSignal(serviceClient, undoEvent).catch(() => {});
+
+    return {
+      success: true,
+      responseBlocks: [
+        section(`Action reversed. The AI will take note and require approval before executing *${ACTION_LABELS[undoActionType] || undoActionType.replace(/_/g, ' ')}* actions in the future.`),
+      ],
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // 1. Parse action value (promotion actions)
   // -------------------------------------------------------------------------
   let parsed: ActionValue;
   try {
