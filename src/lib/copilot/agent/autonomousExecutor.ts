@@ -16,6 +16,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from '../../supabase/clientV2';
 import type { SkillFrontmatterV2 } from '../../types/skills';
 import { cleanUnresolvedVariables, hasUnresolvedVariables } from '../../utils/templateUtils';
+import { creditBudgetService, CreditExhaustedError } from '../../services/creditBudgetService';
+import { creditLedger } from '../../services/creditLedger';
 
 // =============================================================================
 // Types
@@ -61,6 +63,8 @@ export interface ExecutorConfig {
     name: string;
     criteria?: Record<string, unknown>;
   };
+  /** Source agent label for cost attribution (default: 'autonomous-executor') */
+  sourceAgent?: string;
 }
 
 export interface ExecutorMessage {
@@ -89,6 +93,10 @@ export interface ExecutorResult {
   toolsUsed: string[];
   iterations: number;
   error?: string;
+  /** Total input tokens consumed across all iterations */
+  totalInputTokens?: number;
+  /** Total output tokens consumed across all iterations */
+  totalOutputTokens?: number;
 }
 
 // =============================================================================
@@ -196,6 +204,7 @@ export class AutonomousExecutor {
       systemPromptAdditions: config.systemPromptAdditions || '',
       icpProfile: config.icpProfile,
       parentIcpProfile: config.parentIcpProfile,
+      sourceAgent: config.sourceAgent ?? 'autonomous-executor',
     };
 
     this.anthropic = new Anthropic();
@@ -355,6 +364,8 @@ export class AutonomousExecutor {
     const messages: ExecutorMessage[] = [];
     const toolsUsed: string[] = [];
     let iterations = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
 
     // Build system prompt
     const systemPrompt = this.buildSystemPrompt();
@@ -378,6 +389,19 @@ export class AutonomousExecutor {
       while (iterations < this.config.maxIterations) {
         iterations++;
 
+        // Pre-flight budget check (non-critical: background executor)
+        const budgetCheck = await creditBudgetService.checkBudget(
+          this.config.organizationId,
+          { isCritical: false }
+        );
+        if (!budgetCheck.allowed) {
+          throw new CreditExhaustedError(
+            budgetCheck.reason ?? 'Credit budget exhausted',
+            budgetCheck.percentUsed,
+            this.config.organizationId
+          );
+        }
+
         // Call Claude
         const response = await this.anthropic.messages.create({
           model: this.config.model,
@@ -386,6 +410,23 @@ export class AutonomousExecutor {
           tools: claudeTools,
           messages: claudeMessages,
         });
+
+        // Log cost attribution (fire-and-forget — does not deduct credits)
+        if (response.usage) {
+          totalInputTokens += response.usage.input_tokens;
+          totalOutputTokens += response.usage.output_tokens;
+          creditLedger.logCall({
+            userId: this.config.userId,
+            orgId: this.config.organizationId,
+            provider: 'anthropic',
+            model: this.config.model ?? 'claude-haiku-4-5',
+            inputTokens: response.usage.input_tokens,
+            outputTokens: response.usage.output_tokens,
+            feature: 'copilot_autonomous',
+            sourceAgent: this.config.sourceAgent ?? 'autonomous-executor',
+            metadata: { iteration: iterations },
+          });
+        }
 
         // Check stop reason
         if (response.stop_reason === 'end_turn') {
@@ -401,6 +442,8 @@ export class AutonomousExecutor {
             messages,
             toolsUsed: [...new Set(toolsUsed)],
             iterations,
+            totalInputTokens,
+            totalOutputTokens,
           };
         }
 
@@ -497,8 +540,23 @@ export class AutonomousExecutor {
         toolsUsed: [...new Set(toolsUsed)],
         iterations,
         error: 'max_iterations_reached',
+        totalInputTokens,
+        totalOutputTokens,
       };
     } catch (error) {
+      if (error instanceof CreditExhaustedError) {
+        return {
+          success: false,
+          response: error.message,
+          messages,
+          toolsUsed: [...new Set(toolsUsed)],
+          iterations,
+          error: 'credit_exhausted',
+          totalInputTokens,
+          totalOutputTokens,
+        };
+      }
+
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error('[AutonomousExecutor.execute] Error:', error);
 
@@ -509,6 +567,8 @@ export class AutonomousExecutor {
         toolsUsed: [...new Set(toolsUsed)],
         iterations,
         error: errorMsg,
+        totalInputTokens,
+        totalOutputTokens,
       };
     }
   }
@@ -571,6 +631,19 @@ export class AutonomousExecutor {
       }
     }
 
+    // Pre-flight budget check for skill execution
+    const skillBudgetCheck = await creditBudgetService.checkBudget(
+      this.config.organizationId,
+      { isCritical: false }
+    );
+    if (!skillBudgetCheck.allowed) {
+      throw new CreditExhaustedError(
+        skillBudgetCheck.reason ?? 'Credit budget exhausted',
+        skillBudgetCheck.percentUsed,
+        this.config.organizationId
+      );
+    }
+
     // Execute skill via Claude (skill content as system prompt)
     const response = await this.anthropic.messages.create({
       model: this.config.model,
@@ -587,6 +660,21 @@ Respond with a JSON object containing the result. If the skill defines outputs, 
         },
       ],
     });
+
+    // Log skill execution cost (fire-and-forget)
+    if (response.usage) {
+      creditLedger.logCall({
+        userId: this.config.userId,
+        orgId: this.config.organizationId,
+        provider: 'anthropic',
+        model: this.config.model ?? 'claude-haiku-4-5',
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        feature: 'copilot_autonomous',
+        sourceAgent: this.config.sourceAgent ?? 'autonomous-executor',
+        metadata: { skill: toolName },
+      });
+    }
 
     // Extract response
     const textContent = response.content.find((c) => c.type === 'text');
