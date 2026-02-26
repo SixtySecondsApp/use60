@@ -77,7 +77,7 @@
     .fsb { background: var(--bg); border: 1px solid var(--bdr); color: var(--mut); padding: 3px 9px; border-radius: 5px; font-size: 11px; cursor: pointer; margin-left: 4px; }
     .fsb:hover { color: var(--txt); }
 
-    .cbody { overflow: auto; background: var(--surf); cursor: grab; position: relative; min-height: 400px; }
+    .cbody { overflow: auto; background: var(--surf); cursor: grab; position: relative; height: calc(100vh - 290px); min-height: 320px; }
     .cbody:active { cursor: grabbing; }
     .dstage { display: inline-block; padding: 28px 24px; transform-origin: 0 0; min-width: 100%; }
     .dstage svg { display: block; max-width: none !important; }
@@ -1677,10 +1677,43 @@ async function renderDiagram(key) {
     container.innerHTML = result.svg;
     if (result.bindFunctions) result.bindFunctions(container);
     rendered[key] = true;
+    fitDiagram(key);
   } catch(e) {
     container.innerHTML = '<div class="merr">Error rendering ' + key + ':\n' + e.message + '</div>';
     console.error('Mermaid error [' + key + ']:', e.message, '\n\nDiagram text:\n', text);
   }
+}
+
+// Scale diagram to fill its container, never upscaling beyond 100%
+function fitDiagram(k) {
+  var container = document.getElementById(k + '-container');
+  var body = document.getElementById(k + '-body');
+  if (!container || !body) return;
+  var svg = container.querySelector('svg');
+  if (!svg) return;
+
+  // Read natural dimensions from viewBox (available even when element is hidden)
+  var svgW, svgH;
+  var vb = svg.getAttribute('viewBox');
+  if (vb) {
+    var parts = vb.trim().split(/[\s,]+/);
+    svgW = parseFloat(parts[2]);
+    svgH = parseFloat(parts[3]);
+  }
+  if (!svgW || !svgH) {
+    svgW = parseFloat(svg.getAttribute('width')) || 0;
+    svgH = parseFloat(svg.getAttribute('height')) || 0;
+  }
+  if (!svgW || !svgH) return;
+
+  var pad = 56; // 28px stage padding × 2
+  var bodyW = body.clientWidth  || 900;
+  var bodyH = body.clientHeight || 500;
+  var scale = Math.min((bodyW - pad) / svgW, (bodyH - pad) / svgH);
+  scale = Math.max(0.1, Math.min(scale, 1)); // never upscale beyond 100%
+
+  DS[k] = { s: scale, tx: 0, ty: 0 };
+  applyT(k);
 }
 
 // Render all diagrams on load
@@ -1694,6 +1727,11 @@ function switchTab(id) {
   document.querySelectorAll('.tp').forEach(function(p){ p.classList.remove('act'); });
   document.querySelector('[data-tab="'+id+'"]').classList.add('act');
   document.getElementById('tab-'+id).classList.add('act');
+  // Fit all diagrams inside the newly-visible tab panel
+  var panel = document.getElementById('tab-'+id);
+  if (panel) panel.querySelectorAll('[id$="-container"]').forEach(function(c) {
+    var k = c.id.replace('-container',''); fitDiagram(k);
+  });
 }
 
 // ── Feature pill switching ─────────────────────────────────────
@@ -1701,7 +1739,12 @@ function showF(f) {
   document.querySelectorAll('.pill').forEach(function(p){ p.classList.remove('act'); });
   document.querySelector('[data-f="'+f+'"]').classList.add('act');
   document.querySelectorAll('.fv').forEach(function(v){ v.classList.remove('vis'); });
-  document.getElementById('fv-'+f).classList.add('vis');
+  var fv = document.getElementById('fv-'+f);
+  fv.classList.add('vis');
+  // Fit diagrams inside the newly-visible feature view
+  fv.querySelectorAll('[id$="-container"]').forEach(function(c) {
+    var k = c.id.replace('-container',''); fitDiagram(k);
+  });
 }
 
 // ── Zoom / pan ─────────────────────────────────────────────────
@@ -1717,7 +1760,7 @@ function applyT(k) {
 }
 
 function zD(k, delta) { DS[k].s = Math.min(4, Math.max(0.2, DS[k].s + delta)); applyT(k); }
-function rD(k) { DS[k]={s:1,tx:0,ty:0}; applyT(k); }
+function rD(k) { fitDiagram(k); }
 
 ['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd','apo','ape'].forEach(function(k) {
   var el = document.getElementById(k+'-body');
