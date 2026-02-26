@@ -10,6 +10,7 @@ import {
 } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
 import { extractEventsFromMeeting } from '../_shared/memory/writer.ts';
+import { createRAGClient } from '../_shared/memory/ragClient.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -893,7 +894,7 @@ serve(async (req) => {
     // Auto-trigger follow-up generation (FUV3-002): fire-and-forget call to generate-follow-up
     // with delivery='slack' so the follow-up draft lands in the user's Slack DM as a separate message.
     try {
-      if (!isTest && meeting.owner_user_id) {
+      if (meeting.owner_user_id) {
         // Guard: skip if no transcript/summary to compose from
         const hasTranscript = !!(meeting.transcript_text || meeting.summary);
         const meetingDuration = meeting.duration_minutes || 0;
@@ -918,6 +919,7 @@ serve(async (req) => {
 
           // Fire-and-forget: dispatch to generate-follow-up — don't block the debrief response
           const generateFollowUpUrl = `${supabaseUrl}/functions/v1/generate-follow-up`;
+          const internalSecret = Deno.env.get('CRON_SECRET') || '';
           fetch(generateFollowUpUrl, {
             method: 'POST',
             headers: {
@@ -928,6 +930,7 @@ serve(async (req) => {
               meeting_id: meeting.id,
               delivery: 'slack',
               user_id: meeting.owner_user_id,
+              internal_secret: internalSecret,
             }),
           }).then(async (res) => {
             // Drain the SSE stream so the connection closes cleanly

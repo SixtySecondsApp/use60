@@ -6703,7 +6703,8 @@ async function handleDealRiskOverflow(
 async function handleDebriefMeetingSelect(
   supabase: ReturnType<typeof createClient>,
   payload: InteractivePayload,
-  action: SlackAction
+  action: SlackAction,
+  corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const meetingId = action.value;
   const teamId = payload.team?.id;
@@ -6892,7 +6893,8 @@ function getDefaultCoachingInsight(sentiment: 'positive' | 'neutral' | 'challeng
 async function handleDebriefDraftFollowup(
   supabase: ReturnType<typeof createClient>,
   payload: InteractivePayload,
-  action: SlackAction
+  action: SlackAction,
+  corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const teamId = payload.team?.id;
   const channelId = payload.channel?.id;
@@ -6938,34 +6940,41 @@ async function handleDebriefDraftFollowup(
       body: JSON.stringify({
         channel: channelId,
         user: payload.user.id,
-        text: `✨ Drafting follow-up for ${actionData.meetingTitle || 'meeting'}...`,
+        text: `\u23F3 Drafting follow-up for ${actionData.meetingTitle || 'meeting'}...`,
       }),
     });
   }
 
-  // Call the follow-up command with meeting context
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const followUpTarget = actionData.dealName || actionData.attendees?.[0] || actionData.meetingTitle || '';
+  // Call generate-follow-up directly with delivery='slack' so the draft
+  // lands in the user's DM with approve/edit/adjust buttons.
+  if (actionData.meetingId) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const internalSecret = Deno.env.get('CRON_SECRET') || '';
 
-  try {
-    await fetch(`${supabaseUrl}/functions/v1/slack-slash-commands`, {
+    fetch(`${supabaseUrl}/functions/v1/generate-follow-up`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'x-slack-request-timestamp': Math.floor(Date.now() / 1000).toString(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`,
       },
-      body: new URLSearchParams({
-        command: '/sixty',
-        text: `follow-up ${followUpTarget}`,
-        user_id: payload.user.id,
-        team_id: teamId || '',
-        channel_id: channelId || '',
-        trigger_id: payload.trigger_id || '',
-        response_url: payload.response_url || '',
-      }).toString(),
+      body: JSON.stringify({
+        meeting_id: actionData.meetingId,
+        delivery: 'slack',
+        internal_secret: internalSecret,
+        ...(ctx?.userId ? { user_id: ctx.userId } : {}),
+      }),
+    }).then(async (res) => {
+      if (res.body) {
+        const reader = res.body.getReader();
+        try { while (true) { const { done } = await reader.read(); if (done) break; } } catch { /* drain */ }
+      }
+      console.log('[debrief_draft_followup] generate-follow-up completed, status:', res.status);
+    }).catch((err) => {
+      console.warn('[debrief_draft_followup] generate-follow-up error:', (err as any)?.message || err);
     });
-  } catch (error) {
-    console.error('Error calling follow-up command:', error);
+  } else {
+    console.warn('[debrief_draft_followup] No meetingId in action value, skipping');
   }
 
   return new Response(JSON.stringify({ ok: true }), {
@@ -6981,7 +6990,8 @@ async function handleDebriefDraftFollowup(
 async function handleDebriefUpdateDeal(
   supabase: ReturnType<typeof createClient>,
   payload: InteractivePayload,
-  action: SlackAction
+  action: SlackAction,
+  corsHeaders: Record<string, string>,
 ): Promise<Response> {
   let actionData: { meetingId?: string; dealId?: string; dealName?: string } = {};
   try {
@@ -7028,7 +7038,8 @@ async function handleDebriefUpdateDeal(
 async function handleDebriefAddTask(
   supabase: ReturnType<typeof createClient>,
   payload: InteractivePayload,
-  action: SlackAction
+  action: SlackAction,
+  corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const teamId = payload.team?.id;
   const channelId = payload.channel?.id;
@@ -7152,7 +7163,8 @@ async function handleDebriefAddTask(
 async function handleDebriefAddAllTasks(
   supabase: ReturnType<typeof createClient>,
   payload: InteractivePayload,
-  action: SlackAction
+  action: SlackAction,
+  corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const teamId = payload.team?.id;
   const channelId = payload.channel?.id;
@@ -8131,15 +8143,15 @@ serve(async (req) => {
 
         // Phase 3: Debrief command actions
         else if (action.action_id === 'debrief_meeting_select') {
-          return handleDebriefMeetingSelect(supabase, payload, action);
+          return handleDebriefMeetingSelect(supabase, payload, action, corsHeaders);
         } else if (action.action_id === 'debrief_draft_followup') {
-          return handleDebriefDraftFollowup(supabase, payload, action);
+          return handleDebriefDraftFollowup(supabase, payload, action, corsHeaders);
         } else if (action.action_id === 'debrief_update_deal') {
-          return handleDebriefUpdateDeal(supabase, payload, action);
+          return handleDebriefUpdateDeal(supabase, payload, action, corsHeaders);
         } else if (action.action_id.startsWith('add_task_')) {
-          return handleDebriefAddTask(supabase, payload, action);
+          return handleDebriefAddTask(supabase, payload, action, corsHeaders);
         } else if (action.action_id === 'add_all_tasks') {
-          return handleDebriefAddAllTasks(supabase, payload, action);
+          return handleDebriefAddAllTasks(supabase, payload, action, corsHeaders);
         }
 
         // Phase 3: Message shortcut button actions
@@ -8530,18 +8542,19 @@ serve(async (req) => {
             const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
 
             // Fire-and-forget: generate-follow-up sends a new Slack DM with the adjusted email
+            const internalSecretVal = Deno.env.get('CRON_SECRET') || '';
             fetch(`${supabaseUrl}/functions/v1/generate-follow-up`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${supabaseServiceKey}`,
-                ...(ctx?.userId ? { 'x-user-id': ctx.userId } : {}),
               },
               body: JSON.stringify({
                 meeting_id: adjustData.meeting_id,
                 regenerate_guidance: guidance,
                 delivery: 'slack',
                 version: adjustVersion,
+                internal_secret: internalSecretVal,
                 ...(ctx?.userId ? { user_id: ctx.userId } : {}),
               }),
             }).catch(err => console.warn('[Follow-Up] Quick-adjust fire-and-forget error:', err));

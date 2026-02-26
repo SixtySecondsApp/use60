@@ -286,15 +286,29 @@ async function handleGenerateFollowUp(
   // auth fails (browsers handle SSE errors poorly once the stream is open).
   let userId: string;
   try {
-    const authContext = await getAuthContext(req, supabase, SUPABASE_SERVICE_ROLE_KEY);
-    console.log('[generate-follow-up] authContext:', { mode: authContext.mode, userId: authContext.userId, bodyUserId: (body as any).user_id });
-    if (authContext.mode === 'service_role' && (body as any).user_id) {
-      // Allow service-role callers to specify user_id (for cron/internal triggers)
+    // Internal service-to-service auth: check internal_secret in body or header
+    // (the Supabase gateway rewrites the Authorization header, preventing
+    //  service_role token matching, so we use a body param as fallback.)
+    const cronSecret = Deno.env.get('CRON_SECRET') || undefined;
+    const bodySecret = (body as any).internal_secret;
+    const headerSecret = req.headers.get('x-internal-secret');
+    const internalSecret = bodySecret || headerSecret;
+    const isInternalCall = !!(internalSecret && cronSecret && internalSecret === cronSecret);
+    let authContext;
+    if (isInternalCall && (body as any).user_id) {
+      // Trusted internal call with user_id in body — skip full auth
+      console.log('[generate-follow-up] internal auth, user_id:', (body as any).user_id);
       userId = (body as any).user_id;
-    } else if (!authContext.userId) {
-      return errorResponse('Unauthorized', req, 401);
     } else {
-      userId = authContext.userId;
+      authContext = await getAuthContext(req, supabase, SUPABASE_SERVICE_ROLE_KEY, { cronSecret });
+      console.log('[generate-follow-up] authContext:', { mode: authContext.mode, userId: authContext.userId, bodyUserId: (body as any).user_id });
+      if ((authContext.mode === 'service_role' || authContext.mode === 'cron') && (body as any).user_id) {
+        userId = (body as any).user_id;
+      } else if (!authContext.userId) {
+        return errorResponse('Unauthorized', req, 401);
+      } else {
+        userId = authContext.userId;
+      }
     }
   } catch (authErr) {
     console.error('[generate-follow-up] auth error:', authErr);
