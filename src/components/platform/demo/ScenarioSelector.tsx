@@ -1,20 +1,20 @@
 /**
  * ScenarioSelector
  *
- * Grid of scenario cards for the multi-agent demo page.
- * Each card shows an icon, title, description, and expected agent badges.
+ * Grid of scenario cards for multi-agent demo pages.
+ * Accepts scenarios as a prop so different pages can use different sets.
  */
 
-import { BarChart3, Mail, Search, Zap, Calendar, Database, Target } from 'lucide-react';
+import { BarChart3, Mail, Search, Zap, Calendar, Database, Target, Globe, Building2, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import type { Scenario } from './types';
 
 // =============================================================================
-// Scenarios — SMB sales workflows (longer, high-volume processes)
+// Sales Scenarios — SMB sales workflows (longer, high-volume processes)
 // =============================================================================
 
-export const SCENARIOS: Scenario[] = [
+export const SALES_SCENARIOS: Scenario[] = [
   {
     id: 'weekly-pipeline-cleanup',
     title: 'Weekly Pipeline Cleanup',
@@ -95,14 +95,105 @@ export const SCENARIOS: Scenario[] = [
   },
 ];
 
+// =============================================================================
+// Research Scenarios — Fast, parallel agent execution
+// =============================================================================
+
+export const RESEARCH_SCENARIOS: Scenario[] = [
+  {
+    id: 'company-deep-dive',
+    title: 'Company Deep Dive',
+    description: 'Full company intelligence report: overview, tech stack, funding history, key people, competitive landscape, and recent news — all in parallel.',
+    prompt: 'Research Stripe.com — get me a full company profile: overview, tech stack, recent funding, leadership team, competitors, and any recent news or product launches.',
+    icon: 'Building2',
+    agents: [
+      { name: 'Overview', color: 'blue' },
+      { name: 'Tech Stack', color: 'emerald' },
+      { name: 'People', color: 'purple' },
+      { name: 'News', color: 'amber' },
+    ],
+  },
+  {
+    id: 'prospect-list-enrich',
+    title: 'Prospect List Enrichment',
+    description: 'Take 10 company domains and enrich each with firmographics, decision-maker contacts, tech stack signals, and ICP scoring — single agent does them one by one, multi-agent does all at once.',
+    prompt: 'Enrich these 10 companies: notion.so, linear.app, vercel.com, supabase.com, resend.com, cal.com, dub.co, trigger.dev, inngest.com, neon.tech — get employee count, funding, key contacts, and tech stack for each.',
+    icon: 'Database',
+    agents: [
+      { name: 'Firmographics', color: 'blue' },
+      { name: 'Contacts', color: 'rose' },
+      { name: 'Tech Intel', color: 'emerald' },
+      { name: 'Scoring', color: 'orange' },
+    ],
+  },
+  {
+    id: 'competitive-intel',
+    title: 'Competitive Intelligence',
+    description: 'Build a competitive battlecard: product comparison, pricing analysis, market positioning, customer reviews, and win/loss patterns across 4 competitors.',
+    prompt: 'Build a competitive battlecard for us vs HubSpot, Salesforce, Pipedrive, and Close. Compare features, pricing, positioning, G2 reviews, and common win/loss reasons.',
+    icon: 'Target',
+    agents: [
+      { name: 'Features', color: 'blue' },
+      { name: 'Pricing', color: 'emerald' },
+      { name: 'Reviews', color: 'amber' },
+      { name: 'Positioning', color: 'purple' },
+    ],
+  },
+  {
+    id: 'account-mapping',
+    title: 'Account Mapping',
+    description: 'Map an entire target account: org chart, decision-makers, budget holders, champions, and recent hiring signals to find the best path in.',
+    prompt: 'Map the buying committee at Datadog — find the VP Sales, Head of RevOps, CRO, and any recent hires. Get LinkedIn profiles, reporting lines, and any mutual connections.',
+    icon: 'Users',
+    agents: [
+      { name: 'Org Chart', color: 'blue' },
+      { name: 'LinkedIn', color: 'purple' },
+      { name: 'Hiring', color: 'rose' },
+      { name: 'Signals', color: 'emerald' },
+    ],
+  },
+  {
+    id: 'market-scan',
+    title: 'Market Landscape Scan',
+    description: 'Scan an entire market segment: identify 20 companies, categorize by stage, pull funding data, and surface the fastest-growing targets.',
+    prompt: 'Scan the AI sales tools market — find 20 companies, categorize by stage (seed to series C+), pull their latest funding rounds, employee growth, and rank by growth rate.',
+    icon: 'Globe',
+    agents: [
+      { name: 'Discovery', color: 'blue' },
+      { name: 'Funding', color: 'emerald' },
+      { name: 'Growth', color: 'amber' },
+      { name: 'Ranking', color: 'orange' },
+    ],
+  },
+  {
+    id: 'pre-call-research',
+    title: 'Pre-Call Research',
+    description: 'Prep for a sales call in seconds: company overview, contact background, mutual connections, recent activity, talking points, and potential objections.',
+    prompt: 'I have a call with Sarah Chen, VP Marketing at Notion, in 30 minutes. Get me everything: her background, Notion\'s recent news, their current stack, what they care about, and 3 talking points.',
+    icon: 'Search',
+    agents: [
+      { name: 'Company', color: 'blue' },
+      { name: 'Contact', color: 'purple' },
+      { name: 'Signals', color: 'emerald' },
+      { name: 'Prep', color: 'amber' },
+    ],
+  },
+];
+
+/** @deprecated Use SALES_SCENARIOS or RESEARCH_SCENARIOS directly */
+export const SCENARIOS = SALES_SCENARIOS;
+
 const ICON_MAP: Record<string, React.ElementType> = {
   BarChart3,
-  Mail,
-  Search,
-  Zap,
+  Building2,
   Calendar,
   Database,
+  Globe,
+  Mail,
+  Search,
   Target,
+  Users,
+  Zap,
 };
 
 const BADGE_COLORS: Record<string, string> = {
@@ -119,15 +210,16 @@ const BADGE_COLORS: Record<string, string> = {
 // =============================================================================
 
 interface ScenarioSelectorProps {
+  scenarios?: Scenario[];
   selectedId: string | null;
   onSelect: (scenario: Scenario) => void;
   disabled?: boolean;
 }
 
-export function ScenarioSelector({ selectedId, onSelect, disabled }: ScenarioSelectorProps) {
+export function ScenarioSelector({ scenarios = SALES_SCENARIOS, selectedId, onSelect, disabled }: ScenarioSelectorProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {SCENARIOS.map((scenario) => {
+      {scenarios.map((scenario) => {
         const Icon = ICON_MAP[scenario.icon] || Zap;
         const isSelected = selectedId === scenario.id;
 

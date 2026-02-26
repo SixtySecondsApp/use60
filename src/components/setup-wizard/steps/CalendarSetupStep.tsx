@@ -44,7 +44,7 @@ export function CalendarSetupStep() {
             Connect Google Calendar
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Sync your calendar so 60 can auto-prepare meeting briefs and schedule follow-ups.
+            I need your calendar to prep you for meetings and keep your schedule in sync.
           </p>
         </div>
       </div>
@@ -90,15 +90,15 @@ export function CalendarSetupStep() {
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              Auto-prepares meeting briefs before calls
+              I'll auto-prepare briefings before your calls
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              Syncs events for smart scheduling
+              I'll sync your events for smart scheduling
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              Required for AI Notetaker
+              Required for me to join meetings as your notetaker
             </div>
           </div>
 

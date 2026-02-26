@@ -260,7 +260,7 @@ async function handleGenerateFollowUp(
   corsHeaders: Record<string, string>,
 ): Promise<Response> {
   const body = await req.json().catch(() => ({}));
-  const { meeting_id, include_comparison, delivery, regenerate_guidance, cached_rag_context, version } = body as {
+  const { meeting_id, include_comparison, delivery, regenerate_guidance, cached_rag_context } = body as {
     meeting_id?: string;
     include_comparison?: boolean;
     delivery?: string;
@@ -271,7 +271,6 @@ async function handleGenerateFollowUp(
       sections: Record<string, { chunks: unknown[] }>;
       queryCredits: number;
     };
-    version?: number;
   };
 
   if (!meeting_id) {
@@ -287,17 +286,11 @@ async function handleGenerateFollowUp(
   let userId: string;
   try {
     const authContext = await getAuthContext(req, supabase, SUPABASE_SERVICE_ROLE_KEY);
-    console.log('[generate-follow-up] authContext:', { mode: authContext.mode, userId: authContext.userId, bodyUserId: (body as any).user_id });
-    if (authContext.mode === 'service_role' && (body as any).user_id) {
-      // Allow service-role callers to specify user_id (for cron/internal triggers)
-      userId = (body as any).user_id;
-    } else if (!authContext.userId) {
+    if (!authContext.userId) {
       return errorResponse('Unauthorized', req, 401);
-    } else {
-      userId = authContext.userId;
     }
-  } catch (authErr) {
-    console.error('[generate-follow-up] auth error:', authErr);
+    userId = authContext.userId;
+  } catch (_err) {
     return errorResponse('Unauthorized', req, 401);
   }
 
@@ -457,25 +450,6 @@ async function handleGenerateFollowUp(
 
         if (primaryAttendee?.email === 'prospect@example.com') {
           warnings.push({ severity: 'warn', message: 'No attendee found — using placeholder recipient' });
-        }
-
-        // Try to get contact profile photo from LinkedIn enrichment cache
-        let contactPhotoUrl: string | undefined;
-        if (primaryAttendee?.email && primaryAttendee.email !== 'prospect@example.com') {
-          try {
-            const { data: enrichedRows } = await supabase
-              .from('dynamic_table_rows')
-              .select('source_data')
-              .ilike('source_data->>email', primaryAttendee.email)
-              .not('source_data->linkedin->>profilePic', 'is', null)
-              .limit(1);
-            const pic = (enrichedRows?.[0]?.source_data as any)?.linkedin?.profilePic;
-            if (pic && typeof pic === 'string' && pic.startsWith('http')) {
-              contactPhotoUrl = pic;
-            }
-          } catch {
-            // Non-critical — continue without photo
-          }
         }
 
         let companyName: string | undefined;
@@ -754,20 +728,10 @@ async function handleGenerateFollowUp(
               ? email.body.slice(0, 2497) + '...'
               : email.body;
 
-            // FUV3-004: Version-aware header for regenerations
-            const currentVersion = version ?? 1;
-            const headerText = currentVersion > 1
-              ? `Follow-Up Email Ready for Review (v${currentVersion})`
-              : 'Follow-Up Email Ready for Review';
-
-            // FUV3-004: Button value for quick-adjust buttons
-            const nextVersion = currentVersion + 1;
-            const adjustButtonValue = JSON.stringify({ meeting_id, version: nextVersion });
-
             const blocks = [
               {
                 type: 'header',
-                text: { type: 'plain_text', text: headerText, emoji: true },
+                text: { type: 'plain_text', text: 'Follow-Up Email Ready for Review', emoji: true },
               },
               { type: 'divider' },
               {
@@ -784,22 +748,18 @@ async function handleGenerateFollowUp(
               },
               { type: 'divider' },
               {
-                type: 'context',
-                elements: [{ type: 'mrkdwn', text: 'After approving, you\'ll get a link to open the draft directly in Gmail.' }],
-              },
-              {
                 type: 'actions',
                 elements: [
                   {
                     type: 'button',
-                    text: { type: 'plain_text', text: 'Approve & Create Draft', emoji: true },
+                    text: { type: 'plain_text', text: 'Approve & Send', emoji: true },
                     style: 'primary',
                     action_id: 'followup_approve',
-                    value: JSON.stringify({ meeting_id, to: email.to, subject: email.subject, body: email.body.slice(0, 1800) }),
+                    value: JSON.stringify({ meeting_id, to: email.to, subject: email.subject }),
                   },
                   {
                     type: 'button',
-                    text: { type: 'plain_text', text: 'Edit', emoji: true },
+                    text: { type: 'plain_text', text: 'Edit in App', emoji: true },
                     action_id: 'followup_edit',
                     value: meeting_id,
                   },
@@ -811,35 +771,6 @@ async function handleGenerateFollowUp(
                   },
                 ],
               },
-              {
-                type: 'actions',
-                elements: [
-                  {
-                    type: 'button',
-                    text: { type: 'plain_text', text: 'Shorter', emoji: true },
-                    action_id: 'followup_adjust_shorter',
-                    value: adjustButtonValue,
-                  },
-                  {
-                    type: 'button',
-                    text: { type: 'plain_text', text: 'More Formal', emoji: true },
-                    action_id: 'followup_adjust_formal',
-                    value: adjustButtonValue,
-                  },
-                  {
-                    type: 'button',
-                    text: { type: 'plain_text', text: 'More Casual', emoji: true },
-                    action_id: 'followup_adjust_casual',
-                    value: adjustButtonValue,
-                  },
-                  {
-                    type: 'button',
-                    text: { type: 'plain_text', text: 'Add Next Steps', emoji: true },
-                    action_id: 'followup_adjust_nextsteps',
-                    value: adjustButtonValue,
-                  },
-                ],
-              },
             ];
 
             const slackResult = await sendSlackDM({
@@ -847,8 +778,6 @@ async function handleGenerateFollowUp(
               slackUserId: slackMapping.slack_user_id as string,
               blocks,
               text: `Follow-up email ready for ${email.to}: ${email.subject}`,
-              ...(contactPhotoUrl && { icon_url: contactPhotoUrl }),
-              ...(primaryAttendee?.name && { username: `60 — ${primaryAttendee.name}` }),
             });
 
             slackSent = slackResult.success;
@@ -921,7 +850,6 @@ async function handleGenerateFollowUp(
               wordCount: email.wordCount,
               creditsConsumed: followUpContext?.queryCredits ?? 0,
               modelUsed: 'claude-sonnet-4-20250514',
-              threadDetected: false, // FUV3-005: updated to true when draft created as reply-in-thread
             },
           },
           warnings: warnings.length > 0 ? warnings : undefined,

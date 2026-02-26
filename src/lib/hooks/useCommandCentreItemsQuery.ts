@@ -14,6 +14,7 @@ import {
   commandCentreItemsService,
   type CCItemFilters,
 } from '@/lib/services/commandCentreItemsService';
+import { useTableSubscription } from './useRealtimeHub';
 
 // ============================================================================
 // Cache keys
@@ -34,7 +35,7 @@ export function useCommandCentreItemsQuery(filters: CCItemFilters = {}) {
   return useQuery({
     queryKey: [CC_ITEMS_KEY, filters],
     queryFn: () => commandCentreItemsService.getItems(filters),
-    staleTime: 30_000,
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: true,
   });
 }
@@ -46,7 +47,7 @@ export function useCommandCentreStatsQuery() {
   return useQuery({
     queryKey: [CC_STATS_KEY],
     queryFn: () => commandCentreItemsService.getStats(),
-    staleTime: 60_000,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -123,5 +124,40 @@ export function useCommandCentreItemMutations() {
     },
   });
 
-  return { approveItem, dismissItem, snoozeItem, undoItem, updateDraftedAction };
+  const approveAndSendEmail = useMutation({
+    mutationFn: ({
+      id,
+      emailPayload,
+    }: {
+      id: string;
+      emailPayload: { to: string; subject: string; body_html: string };
+    }) => commandCentreItemsService.approveAndSendEmail(id, emailPayload),
+    onSuccess: () => {
+      invalidate();
+      // Toast handled by the undo-window logic in CCDetailPanel
+    },
+    onError: () => {
+      toast.error('Failed to send email');
+    },
+  });
+
+  return { approveItem, dismissItem, snoozeItem, undoItem, updateDraftedAction, approveAndSendEmail };
+}
+
+// ============================================================================
+// Realtime hook
+// ============================================================================
+
+/**
+ * Subscribes to Realtime changes on command_centre_items.
+ * Invalidates both items and stats caches on any change.
+ * Mount this once in the CommandCentre page component.
+ */
+export function useCommandCentreRealtime() {
+  const queryClient = useQueryClient();
+
+  useTableSubscription('command_centre_items', () => {
+    queryClient.invalidateQueries({ queryKey: [CC_ITEMS_KEY] });
+    queryClient.invalidateQueries({ queryKey: [CC_STATS_KEY] });
+  });
 }
