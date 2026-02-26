@@ -41,6 +41,7 @@ import { NotetakerConfigModal } from '@/components/integrations/NotetakerConfigM
 import { FirefliesConfigModal } from '@/components/integrations/FirefliesConfigModal';
 import { ApolloConfigModal } from '@/components/integrations/ApolloConfigModal';
 import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
+import { ExplloriumConfigModal } from '@/components/integrations/ExplloriumConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
 
@@ -56,6 +57,7 @@ import { useNotetakerIntegration } from '@/lib/hooks/useNotetakerIntegration';
 import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
 import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
 import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
+import { useExploriumIntegration } from '@/lib/hooks/useExploriumIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
 import { getIntegrationDomain, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
@@ -496,6 +498,21 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'explorium',
+    name: 'Explorium',
+    description: 'AI-powered company and prospect data — firmographics, intent signals, contact details, and lookalikes.',
+    permissions: [
+      { title: 'Search companies', description: 'Find companies by firmographic filters and lookalike matching.' },
+      { title: 'Search prospects', description: 'Find contacts by role, seniority, and department.' },
+      { title: 'Enrich records', description: 'Reveal contact details, funding data, technographics, and intent signals.' },
+    ],
+    brandColor: 'indigo',
+    iconBgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
+    iconBorderColor: 'border-indigo-100 dark:border-indigo-800/40',
+    fallbackIcon: <Database className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />,
+    isBuilt: true,
+  },
+  {
     id: 'instantly',
     name: 'Instantly',
     description: 'Cold email campaigns at scale.',
@@ -705,6 +722,11 @@ export default function Integrations() {
   } = useAiArkIntegration();
 
   const {
+    isConnected: exploriumConnected,
+    loading: exploriumLoading,
+  } = useExploriumIntegration();
+
+  const {
     isConnected: instantlyConnected,
     loading: instantlyLoading,
   } = useInstantlyIntegration();
@@ -802,6 +824,8 @@ export default function Integrations() {
         return apolloConnected ? 'active' : 'inactive';
       case 'ai-ark':
         return aiArkConnected ? 'active' : 'inactive';
+      case 'explorium':
+        return exploriumConnected ? 'active' : 'inactive';
       case 'instantly':
         return instantlyConnected ? 'active' : 'inactive';
       case 'apify':
@@ -850,6 +874,10 @@ export default function Integrations() {
       }
       if (integrationId === 'ai-ark') {
         setActiveConfigModal('ai-ark');
+        return;
+      }
+      if (integrationId === 'explorium') {
+        setActiveConfigModal('explorium');
         return;
       }
       if (integrationId === 'instantly') {
@@ -941,10 +969,11 @@ export default function Integrations() {
       fireflies: firefliesLoading,
       apollo: apolloLoading,
       'ai-ark': aiArkLoading,
+      explorium: exploriumLoading,
       instantly: instantlyLoading,
       apify: apifyLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, instantlyLoading, apifyLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading]
   );
 
   // Preload logo.dev URLs on page load to prevent any visible swap/flicker.
@@ -1110,6 +1139,10 @@ export default function Integrations() {
       />
       <AiArkConfigModal
         open={activeConfigModal === 'ai-ark'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <ExplloriumConfigModal
+        open={activeConfigModal === 'explorium'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
       <InstantlyConfigModal
