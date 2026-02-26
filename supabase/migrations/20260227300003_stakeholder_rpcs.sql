@@ -72,8 +72,8 @@ AS $$
         JOIN public.deals d ON d.id = dc.deal_id
         WHERE dc.contact_id = c.id
           AND d.status NOT IN ('won', 'lost')
-          AND d.org_id IN (
-            SELECT om.org_id
+          AND d.clerk_org_id IN (
+            SELECT om.org_id::TEXT
             FROM public.organization_memberships om
             WHERE om.user_id = auth.uid()
           )
@@ -153,7 +153,7 @@ AS $$
   JOIN public.deals d          ON d.id = dc.deal_id
   -- Org-scope: deal must belong to a org the caller is a member of
   JOIN public.organization_memberships om
-    ON om.org_id = d.org_id
+    ON om.org_id::TEXT = d.clerk_org_id
    AND om.user_id = auth.uid()
   WHERE dc.deal_id = p_deal_id
   ORDER BY dc.last_active DESC;

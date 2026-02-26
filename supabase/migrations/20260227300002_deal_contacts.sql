@@ -122,7 +122,7 @@ DO $$ BEGIN
     EXISTS (
       SELECT 1
       FROM public.deals d
-      JOIN public.organization_memberships om ON om.org_id = d.org_id
+      JOIN public.organization_memberships om ON om.org_id::TEXT = d.clerk_org_id
       WHERE d.id = deal_contacts.deal_id
         AND om.user_id = auth.uid()
     )

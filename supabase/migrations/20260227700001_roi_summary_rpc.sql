@@ -167,7 +167,7 @@ BEGIN
     SELECT COUNT(*)
     INTO v_active_deals
     FROM public.deals d
-    WHERE d.org_id = p_org_id
+    WHERE d.clerk_org_id = p_org_id::TEXT
       AND d.status = 'active';
   EXCEPTION WHEN OTHERS THEN
     v_active_deals := 0;
@@ -183,7 +183,7 @@ BEGIN
       FROM public.command_centre_items cci
       JOIN public.deals d
         ON d.id     = cci.deal_id
-       AND d.org_id = p_org_id
+       AND d.clerk_org_id = p_org_id::TEXT
        AND d.status = 'active'
       WHERE cci.org_id     = p_org_id
         AND cci.deal_id    IS NOT NULL
