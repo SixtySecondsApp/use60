@@ -55,7 +55,7 @@
     "react-hooks/exhaustive-deps": "warn",
     
     // Type Safety
-    "@typescript-eslint/prefer-nullish-coalescing": ["warn"],
+    "@typescript-eslint/prefer-nullish-coalescing": ["warn", { "allowRuleToRunWithoutStrictNullChecksIKnowWhatIAmDoing": true }],
     "@typescript-eslint/prefer-optional-chain": ["warn"],
     "@typescript-eslint/no-non-null-assertion": ["warn"],
     

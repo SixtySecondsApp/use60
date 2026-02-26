@@ -12,6 +12,7 @@ import { ContactDealHealthWidget } from '@/components/ContactDealHealthWidget';
 import { DealHealthBadge } from '@/components/DealHealthBadge';
 import { useDealHealthScore } from '@/lib/hooks/useDealHealth';
 import { RelationshipHealthWidget } from '@/components/relationship-health/RelationshipHealthWidget';
+import { ContactRoles } from '@/components/contacts/ContactRoles';
 
 interface ContactRightPanelProps {
   contact: Contact;
@@ -131,6 +132,9 @@ export function ContactRightPanel({ contact, graph }: ContactRightPanelProps) {
 
       {/* Deal Health Widget */}
       <ContactDealHealthWidget contactId={contact.id} />
+
+      {/* Role in Deals — manual override UI (REL-011) */}
+      <ContactRoles contactId={contact.id} />
 
       {/* Active Deals */}
       <div className="section-card">

@@ -12,6 +12,7 @@
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { getServiceClient, enrichContactContext } from './contextEnrichment.ts';
 import { logAICostEvent, extractAnthropicUsage, extractGeminiUsage } from '../../costTracking.ts';
+import { logAgentAction } from '../../memory/dailyLog.ts';
 import { createDealMemoryReader } from '../../memory/reader.ts';
 import { createRAGClient } from '../../memory/ragClient.ts';
 import { detectMeetingHistory } from '../../meeting-prep/historyDetector.ts';
@@ -511,6 +512,113 @@ export const pullCrmHistoryAdapter: SkillAdapter = {
         }
       }
 
+      // --- REL-009: Per-attendee relationship context via get_deal_stakeholder_map ---
+      let attendeeRelationshipContext: Array<{
+        email: string;
+        name: string;
+        role_in_deal: string | null;
+        confidence_score: number | null;
+        last_active: string | null;
+        days_since_active: number | null;
+        talking_points: string[];
+      }> = [];
+      let singleThreadWarning = false;
+
+      const dealId = contactEnrichment.dealContext?.id || null;
+      if (dealId) {
+        try {
+          const { data: stakeholderMap, error: smError } = await supabase.rpc(
+            'get_deal_stakeholder_map',
+            { p_deal_id: dealId }
+          );
+
+          if (!smError && stakeholderMap && Array.isArray(stakeholderMap)) {
+            // Build a lookup of email -> stakeholder data from the map
+            const stakeholderByEmail = new Map<string, any>();
+            for (const s of stakeholderMap) {
+              if (s.email) {
+                stakeholderByEmail.set(s.email.toLowerCase(), s);
+              }
+            }
+
+            // For each confirmed attendee, look up their stakeholder entry
+            const enrichAttendeesOutput = state.outputs['enrich-attendees'] as any;
+            const attendees: any[] = enrichAttendeesOutput?.attendees || [];
+            for (const att of attendees) {
+              if (!att.email || att.is_internal) continue;
+              const emailKey = att.email.toLowerCase();
+              const stakeholder = stakeholderByEmail.get(emailKey);
+
+              let daysSinceActive: number | null = null;
+              if (stakeholder?.last_active) {
+                const lastActiveDate = new Date(stakeholder.last_active);
+                daysSinceActive = Math.floor(
+                  (Date.now() - lastActiveDate.getTime()) / (1000 * 60 * 60 * 24)
+                );
+              }
+
+              // Pull contact memory talking points for this attendee
+              const attendeeTalkingPoints: string[] = [];
+              try {
+                // Look up contact by email
+                const { data: memContact } = await supabase
+                  .from('contacts')
+                  .select('id')
+                  .eq('email', emailKey)
+                  .maybeSingle();
+
+                if (memContact?.id) {
+                  const { data: memories } = await supabase
+                    .from('contact_memory')
+                    .select('memory_text, memory_type')
+                    .eq('contact_id', memContact.id)
+                    .in('memory_type', ['talking_point', 'interest', 'preference', 'context'])
+                    .order('created_at', { ascending: false })
+                    .limit(3);
+
+                  for (const mem of (memories || [])) {
+                    if (mem.memory_text) {
+                      attendeeTalkingPoints.push(mem.memory_text);
+                    }
+                  }
+                }
+              } catch (memErr) {
+                console.warn(`[pull-crm-history] Could not load memory for ${emailKey}:`, memErr);
+              }
+
+              attendeeRelationshipContext.push({
+                email: att.email,
+                name: att.name || att.email,
+                role_in_deal: stakeholder?.role || null,
+                confidence_score: stakeholder?.confidence_score ?? null,
+                last_active: stakeholder?.last_active || null,
+                days_since_active: daysSinceActive,
+                talking_points: attendeeTalkingPoints,
+              });
+            }
+
+            // Single-thread warning: if multi_thread_score < 0.5 on the stakeholder map result
+            // The RPC may return a summary object or the first row may contain aggregate data
+            const mapSummary = stakeholderMap.find((r: any) => 'multi_thread_score' in r);
+            if (mapSummary && typeof mapSummary.multi_thread_score === 'number') {
+              singleThreadWarning = mapSummary.multi_thread_score < 0.5;
+            } else {
+              // Infer from attendee count: if only 1 external stakeholder in the map, single-threaded
+              const externalStakeholders = stakeholderMap.filter((s: any) => s.email && s.role !== 'internal');
+              singleThreadWarning = externalStakeholders.length <= 1;
+            }
+
+            console.log(
+              `[pull-crm-history] REL-009: ${attendeeRelationshipContext.length} attendees with relationship context, ` +
+              `single_thread_warning=${singleThreadWarning}`
+            );
+          }
+        } catch (relErr) {
+          console.warn('[pull-crm-history] REL-009: Failed to load stakeholder map (non-blocking):', relErr);
+        }
+      }
+      // --- END REL-009 ---
+
       enrichment = {
         contact: contactEnrichment.contact,
         recent_meetings: contactEnrichment.recentMeetings,
@@ -520,13 +628,16 @@ export const pullCrmHistoryAdapter: SkillAdapter = {
         deal: contactEnrichment.dealContext,
         meeting_count: count || 0,
         engagement_pattern: engagementPattern,
+        attendee_relationship_context: attendeeRelationshipContext,
+        single_thread_warning: singleThreadWarning,
       };
 
       console.log(
         `[pull-crm-history] Complete: ${enrichment.recent_meetings.length} meetings, ` +
         `${enrichment.recent_emails.length} emails, ${formattedActionItems.length} action items, ` +
         `${previousObjections.length} objections, total meetings=${count}, ` +
-        `pattern=${engagementPattern ? 'loaded' : 'none'}`
+        `pattern=${engagementPattern ? 'loaded' : 'none'}, ` +
+        `attendee_rel_context=${attendeeRelationshipContext.length}, single_thread_warning=${singleThreadWarning}`
       );
 
       return { success: true, output: enrichment, duration_ms: Date.now() - start };
@@ -1536,6 +1647,36 @@ export const generateBriefingAdapter: SkillAdapter = {
         promptSections.push('');
       }
 
+      // --- REL-009: Per-attendee relationship context from deal_contacts + contact_memory ---
+      const attendeeRelCtx = crmHistoryOutput?.attendee_relationship_context;
+      if (attendeeRelCtx && attendeeRelCtx.length > 0) {
+        promptSections.push('## Attendee Relationship Context (from CRM)');
+        for (const arc of attendeeRelCtx) {
+          const parts = [`*${arc.name}* (${arc.email})`];
+          if (arc.role_in_deal) parts.push(`Role in deal: ${arc.role_in_deal}`);
+          if (arc.confidence_score != null) parts.push(`Confidence: ${Math.round(arc.confidence_score * 100)}%`);
+          if (arc.days_since_active != null) {
+            parts.push(`Last active: ${arc.days_since_active} day${arc.days_since_active === 1 ? '' : 's'} ago`);
+          }
+          promptSections.push(`- ${parts.join(' | ')}`);
+          if (arc.talking_points && arc.talking_points.length > 0) {
+            promptSections.push(`  Memory talking points:`);
+            for (const tp of arc.talking_points) {
+              promptSections.push(`    - ${tp}`);
+            }
+          }
+        }
+        promptSections.push('');
+      }
+      if (crmHistoryOutput?.single_thread_warning) {
+        promptSections.push(
+          '> WARNING: This deal appears to be single-threaded — only 1 contact is engaged. ' +
+          'Recommend asking for introductions to other stakeholders or decision-makers.'
+        );
+        promptSections.push('');
+      }
+      // --- END REL-009 ---
+
       // Risk signals
       if (riskSignals.length > 0) {
         promptSections.push('## Deal Risk Signals');
@@ -1667,6 +1808,24 @@ export const generateBriefingAdapter: SkillAdapter = {
           );
         }
       }
+
+      const meetingId = state.event.payload.meeting_id as string | undefined;
+      const sectionsGenerated = briefing ? Object.keys(briefing).filter((k) => !k.startsWith('_')) : [];
+      logAgentAction({
+        supabaseClient: getServiceClient() as any,
+        orgId: state.event.org_id,
+        userId: state.event.user_id ?? null,
+        agentType: 'post_meeting_intel',
+        actionType: 'prep_generated',
+        actionDetail: {
+          meeting_id: meetingId ?? null,
+          sections_generated: sectionsGenerated,
+          sections_count: sectionsGenerated.length,
+          is_return_meeting: briefing?._isReturnMeeting ?? false,
+        },
+        outcome: 'success',
+        chainId: state.event.parent_job_id ?? null,
+      });
 
       return { success: true, output: { briefing }, duration_ms: Date.now() - start };
     } catch (err) {

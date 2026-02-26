@@ -120,6 +120,34 @@ export interface SignificantChange {
   risk_level: string;
 }
 
+// Stage thresholds used when no org_settings row exists yet (contacts needed per stage)
+const DEFAULT_STAGE_THRESHOLDS: Record<string, number> = {
+  discovery:     1,
+  qualification: 2,
+  proposal:      3,
+  negotiation:   3,
+  closing:       2,
+  sql:           2,
+  opportunity:   3,
+  signed:        2,
+};
+
+// Stages at which a single-thread alert should fire (order_index >= proposal level)
+// We treat any stage whose order_index is >= the lowest proposal-equivalent stage as alert-eligible.
+// In lieu of hard-coding order_index values we match by lowercased stage name.
+const ALERT_ELIGIBLE_STAGES = new Set([
+  'proposal', 'negotiation', 'closing', 'opportunity', 'signed',
+]);
+
+// Score below this triggers a "single threaded" warning
+const SINGLE_THREAD_THRESHOLD = 0.5;
+
+// Minimum days between repeat alerts per deal
+const ALERT_DEBOUNCE_DAYS = 7;
+
+// Default champion inactivity threshold (days) — configurable via org_settings.champion_gone_dark_days
+const DEFAULT_CHAMPION_GONE_DARK_DAYS = 21;
+
 // =============================================================================
 // Health Calculation Functions
 // =============================================================================
@@ -448,6 +476,659 @@ async function calculateRelationshipHealth(
 }
 
 // =============================================================================
+// Multi-Thread Score Calculation (REL-006)
+// =============================================================================
+
+interface MultiThreadResult {
+  score: number;          // 0.0–1.0
+  engagedContacts: number;
+  contactsNeeded: number;
+  stageName: string;
+  isAlertEligible: boolean;  // stage is proposal or later
+}
+
+/**
+ * Calculate multi-threading score for a deal.
+ *
+ * score = engaged_contacts / contacts_needed_for_stage
+ *
+ * "Engaged" = deal_contacts with last_active within the last 14 days.
+ * Stage thresholds are read from org_settings.multi_thread_stage_thresholds
+ * with a hardcoded fallback for orgs that don't have a settings row yet.
+ */
+async function calculateMultiThreadScore(
+  supabase: any,
+  dealId: string,
+  clerkOrgId: string | null
+): Promise<MultiThreadResult | null> {
+  // Fetch deal with its stage name
+  const { data: deal } = await supabase
+    .from('deals')
+    .select('id, stage_id, deal_stages!inner(name, order_index)')
+    .eq('id', dealId)
+    .maybeSingle();
+
+  if (!deal) return null;
+
+  const stageName: string = deal.deal_stages?.name ?? '';
+  const stageKey = stageName.toLowerCase();
+
+  // Fetch org-specific thresholds if available
+  let thresholds: Record<string, number> = { ...DEFAULT_STAGE_THRESHOLDS };
+
+  if (clerkOrgId) {
+    const { data: orgRow } = await supabase
+      .from('organizations')
+      .select('id')
+      .eq('clerk_org_id', clerkOrgId)
+      .maybeSingle();
+
+    if (orgRow?.id) {
+      const { data: orgSettings } = await supabase
+        .from('org_settings')
+        .select('multi_thread_stage_thresholds')
+        .eq('org_id', orgRow.id)
+        .maybeSingle();
+
+      if (orgSettings?.multi_thread_stage_thresholds) {
+        thresholds = { ...thresholds, ...orgSettings.multi_thread_stage_thresholds };
+      }
+    }
+  }
+
+  const contactsNeeded: number = thresholds[stageKey] ?? 2; // Default 2 for unknown stages
+
+  // Count engaged contacts (last_active within 14 days)
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { count: engagedCount } = await supabase
+    .from('deal_contacts')
+    .select('id', { count: 'exact', head: true })
+    .eq('deal_id', dealId)
+    .gte('last_active', fourteenDaysAgo);
+
+  const engagedContacts = engagedCount ?? 0;
+  const score = Math.min(1.0, engagedContacts / contactsNeeded);
+  const isAlertEligible = ALERT_ELIGIBLE_STAGES.has(stageKey);
+
+  return {
+    score: Math.round(score * 1000) / 1000, // 3 decimal places
+    engagedContacts,
+    contactsNeeded,
+    stageName,
+    isAlertEligible,
+  };
+}
+
+/**
+ * Send a single-thread Slack alert for a deal that lacks sufficient multi-threading.
+ * Respects the 7-day per-deal debounce stored in deals.last_single_thread_alert.
+ * Returns true if the alert was sent, false if skipped/failed.
+ */
+async function maybeSendSingleThreadAlert(
+  supabase: any,
+  dealId: string,
+  dealName: string,
+  ownerId: string,
+  multiThreadResult: MultiThreadResult,
+  appBaseUrl: string = 'https://app.use60.com'
+): Promise<boolean> {
+  // Check debounce: only alert if last_single_thread_alert is NULL or > 7 days ago
+  const { data: deal } = await supabase
+    .from('deals')
+    .select('last_single_thread_alert')
+    .eq('id', dealId)
+    .maybeSingle();
+
+  if (deal?.last_single_thread_alert) {
+    const lastAlertDate = new Date(deal.last_single_thread_alert);
+    const daysSinceAlert = (Date.now() - lastAlertDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceAlert < ALERT_DEBOUNCE_DAYS) {
+      console.log(
+        `[MultiThread] Skipping alert for deal ${dealId} — last alert was ${Math.floor(daysSinceAlert)} days ago (debounce: ${ALERT_DEBOUNCE_DAYS}d)`
+      );
+      return false;
+    }
+  }
+
+  // Get Slack credentials for owner
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('org_id')
+    .eq('id', ownerId)
+    .maybeSingle();
+
+  if (!profile?.org_id) return false;
+
+  const { data: slackSettings } = await supabase
+    .from('slack_org_settings')
+    .select('bot_access_token, is_connected')
+    .eq('org_id', profile.org_id)
+    .eq('is_connected', true)
+    .maybeSingle();
+
+  if (!slackSettings?.bot_access_token) {
+    console.log(`[MultiThread] No Slack integration for org ${profile.org_id}, skipping alert`);
+    return false;
+  }
+
+  const { data: mapping } = await supabase
+    .from('slack_user_mappings')
+    .select('slack_user_id')
+    .eq('sixty_user_id', ownerId)
+    .maybeSingle();
+
+  if (!mapping?.slack_user_id) {
+    console.log(`[MultiThread] No Slack user mapping for user ${ownerId}, skipping alert`);
+    return false;
+  }
+
+  const botToken: string = slackSettings.bot_access_token;
+  const slackUserId: string = mapping.slack_user_id;
+
+  // Build Block Kit message
+  const scorePercent = Math.round(multiThreadResult.score * 100);
+  const blocks = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `Warning: Single-threaded deal at risk`,
+        emoji: true,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${dealName}* is in *${multiThreadResult.stageName}* with only *${multiThreadResult.engagedContacts}* engaged contact(s) — ${scorePercent}% of the ${multiThreadResult.contactsNeeded} needed for this stage.`,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Why this matters:* Deals with a single point of contact are significantly more likely to go dark or stall. Adding more stakeholders now reduces churn risk.`,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Suggested actions:*\n1. Identify other stakeholders via LinkedIn or the contact's email signature\n2. Ask your champion to introduce you to the economic buyer\n3. Schedule a multi-stakeholder demo or workshop`,
+      },
+    },
+    { type: 'divider' },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Open Deal', emoji: true },
+          url: `${appBaseUrl}/crm/pipeline?deal=${dealId}`,
+          style: 'primary',
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Ask Copilot', emoji: true },
+          url: `${appBaseUrl}/crm/pipeline?copilot=true&context=deal:${dealId}`,
+        },
+      ],
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `Deal: ${dealName} | Stage: ${multiThreadResult.stageName} | Multi-thread score: ${scorePercent}% | ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`,
+        },
+      ],
+    },
+  ];
+
+  // Open DM with the rep
+  try {
+    const dmResponse = await fetch('https://slack.com/api/conversations.open', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ users: slackUserId }),
+    });
+    const dmResult = await dmResponse.json();
+    if (!dmResult.ok) {
+      console.error(`[MultiThread] Failed to open DM for user ${ownerId}:`, dmResult.error);
+      return false;
+    }
+
+    const msgResponse = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: dmResult.channel.id,
+        blocks,
+        text: `Warning: ${dealName} is single-threaded (${scorePercent}% multi-thread coverage in ${multiThreadResult.stageName})`,
+      }),
+    });
+    const msgResult = await msgResponse.json();
+
+    if (!msgResult.ok) {
+      console.error(`[MultiThread] Failed to send Slack message for deal ${dealId}:`, msgResult.error);
+      return false;
+    }
+
+    // Stamp the debounce timestamp on the deal
+    await supabase
+      .from('deals')
+      .update({ last_single_thread_alert: new Date().toISOString() })
+      .eq('id', dealId);
+
+    console.log(`[MultiThread] Sent single-thread alert for deal ${dealId} to Slack user ${slackUserId}`);
+    return true;
+  } catch (err) {
+    console.error(`[MultiThread] Error sending Slack DM for deal ${dealId}:`, err);
+    return false;
+  }
+}
+
+// =============================================================================
+// Champion Ghost Detection (REL-008)
+// =============================================================================
+
+interface ChampionGhostResult {
+  championContactId: string;
+  championName: string;
+  daysSinceActive: number;
+  threshold: number;
+}
+
+/**
+ * Check whether any champion on an active deal has gone dark.
+ *
+ * Queries deal_contacts WHERE role = 'champion' for the given deal and checks
+ * whether last_active has exceeded the org-configured threshold
+ * (org_settings.champion_gone_dark_days, default 21 days).
+ *
+ * Returns null when:
+ *   - the deal has no champions
+ *   - all champions are within threshold
+ *   - the deal is in a closed/lost stage (won/lost deals are excluded)
+ *
+ * When a ghost is detected:
+ *   1. Inserts a ghost_detection_signals row (signal_type = 'champion_disappeared')
+ *   2. Inserts a command_centre_item with urgency = 'high'
+ *   3. Optionally fires a Slack DM to the rep (via maybeSendChampionGhostAlert)
+ *   4. Stamps deals.last_champion_ghost_alert for 7-day debounce
+ */
+async function checkChampionGhostDetection(
+  supabase: any,
+  dealId: string,
+  dealName: string,
+  ownerId: string,
+  orgId: string            // internal UUID from organizations table (for org_settings + command_centre_items)
+): Promise<ChampionGhostResult | null> {
+  // ------------------------------------------------------------------
+  // 1. Debounce: skip if last alert was < 7 days ago
+  // ------------------------------------------------------------------
+  const { data: dealDebounce } = await supabase
+    .from('deals')
+    .select('last_champion_ghost_alert')
+    .eq('id', dealId)
+    .maybeSingle();
+
+  if (dealDebounce?.last_champion_ghost_alert) {
+    const daysSinceLastAlert =
+      (Date.now() - new Date(dealDebounce.last_champion_ghost_alert).getTime()) /
+      (1000 * 60 * 60 * 24);
+    if (daysSinceLastAlert < ALERT_DEBOUNCE_DAYS) {
+      console.log(
+        `[ChampionGhost] Skipping deal ${dealId} — last alert was ` +
+        `${Math.floor(daysSinceLastAlert)}d ago (debounce: ${ALERT_DEBOUNCE_DAYS}d)`
+      );
+      return null;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 2. Read org-specific threshold from org_settings
+  // ------------------------------------------------------------------
+  let thresholdDays = DEFAULT_CHAMPION_GONE_DARK_DAYS;
+
+  const { data: orgSettings } = await supabase
+    .from('org_settings')
+    .select('champion_gone_dark_days')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (orgSettings?.champion_gone_dark_days != null) {
+    thresholdDays = orgSettings.champion_gone_dark_days;
+  }
+
+  const cutoffDate = new Date(Date.now() - thresholdDays * 24 * 60 * 60 * 1000).toISOString();
+
+  // ------------------------------------------------------------------
+  // 3. Find champions whose last_active has exceeded the threshold
+  // ------------------------------------------------------------------
+  const { data: darkChampions } = await supabase
+    .from('deal_contacts')
+    .select('contact_id, last_active, contacts!inner(id, name, owner_id)')
+    .eq('deal_id', dealId)
+    .eq('role', 'champion')
+    .lt('last_active', cutoffDate);
+
+  if (!darkChampions || darkChampions.length === 0) {
+    return null;
+  }
+
+  // Use the most-stale champion as the primary signal
+  const primary = darkChampions.sort(
+    (a: any, b: any) =>
+      new Date(a.last_active).getTime() - new Date(b.last_active).getTime()
+  )[0];
+
+  const championContactId: string = primary.contact_id;
+  const championName: string = primary.contacts?.name ?? 'Unknown champion';
+  const daysSinceActive = Math.floor(
+    (Date.now() - new Date(primary.last_active).getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  console.log(
+    `[ChampionGhost] Deal ${dealId} (${dealName}): champion ${championName} ` +
+    `has been inactive for ${daysSinceActive}d (threshold: ${thresholdDays}d)`
+  );
+
+  // ------------------------------------------------------------------
+  // 4. Look up relationship_health_scores for this contact + owner
+  //    (ghost_detection_signals requires a relationship_health_id FK)
+  // ------------------------------------------------------------------
+  const { data: healthScore } = await supabase
+    .from('relationship_health_scores')
+    .select('id')
+    .eq('contact_id', championContactId)
+    .eq('user_id', ownerId)
+    .maybeSingle();
+
+  // ------------------------------------------------------------------
+  // 5. Insert ghost_detection_signals row (non-blocking on failure)
+  // ------------------------------------------------------------------
+  if (healthScore?.id) {
+    const { error: signalError } = await supabase
+      .from('ghost_detection_signals')
+      .insert({
+        relationship_health_id: healthScore.id,
+        user_id: ownerId,
+        signal_type: 'champion_disappeared',
+        severity: 'critical',
+        signal_context:
+          `Champion ${championName} has been inactive for ${daysSinceActive} days ` +
+          `on deal "${dealName}" (threshold: ${thresholdDays} days).`,
+        signal_data: {
+          deal_id: dealId,
+          deal_name: dealName,
+          contact_id: championContactId,
+          contact_name: championName,
+          last_active: primary.last_active,
+          days_since_active: daysSinceActive,
+          threshold_days: thresholdDays,
+        },
+        detected_at: new Date().toISOString(),
+      });
+
+    if (signalError) {
+      console.error(
+        `[ChampionGhost] Failed to insert ghost_detection_signals for deal ${dealId}:`,
+        signalError
+      );
+    }
+  } else {
+    console.warn(
+      `[ChampionGhost] No relationship_health_scores row for contact ${championContactId} + ` +
+      `user ${ownerId} — ghost_detection_signals row skipped`
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 6. Insert command_centre_item (high priority)
+  // ------------------------------------------------------------------
+  const { error: ccError } = await supabase
+    .from('command_centre_items')
+    .insert({
+      org_id: orgId,
+      user_id: ownerId,
+      source_agent: 'health-recalculate',
+      item_type: 'risk_alert',
+      title: `Champion gone dark on "${dealName}"`,
+      summary:
+        `${championName} hasn't been active in ${daysSinceActive} days. ` +
+        `Re-engage before the deal stalls.`,
+      context: {
+        signal_type: 'champion_disappeared',
+        deal_id: dealId,
+        deal_name: dealName,
+        contact_id: championContactId,
+        contact_name: championName,
+        last_active: primary.last_active,
+        days_since_active: daysSinceActive,
+        threshold_days: thresholdDays,
+        dark_champions_count: darkChampions.length,
+      },
+      priority_score: 85,
+      priority_factors: {
+        signal: 'champion_disappeared',
+        days_since_active: daysSinceActive,
+        threshold_days: thresholdDays,
+      },
+      urgency: 'high',
+      confidence_score: 0.95,
+      status: 'open',
+      enrichment_status: 'skipped',
+      deal_id: dealId,
+      contact_id: championContactId,
+    });
+
+  if (ccError) {
+    console.error(
+      `[ChampionGhost] Failed to insert command_centre_item for deal ${dealId}:`,
+      ccError
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 7. Stamp debounce timestamp on deal
+  // ------------------------------------------------------------------
+  await supabase
+    .from('deals')
+    .update({ last_champion_ghost_alert: new Date().toISOString() })
+    .eq('id', dealId);
+
+  return {
+    championContactId,
+    championName,
+    daysSinceActive,
+    threshold: thresholdDays,
+  };
+}
+
+/**
+ * Send a Slack DM to the deal rep when a champion has gone dark.
+ * Mirrors the pattern of maybeSendSingleThreadAlert (REL-006).
+ * Returns true if the message was sent, false if skipped or failed.
+ */
+async function maybeSendChampionGhostAlert(
+  supabase: any,
+  dealId: string,
+  dealName: string,
+  ownerId: string,
+  ghostResult: ChampionGhostResult,
+  appBaseUrl: string = 'https://app.use60.com'
+): Promise<boolean> {
+  // Resolve org_id for Slack settings
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('org_id')
+    .eq('id', ownerId)
+    .maybeSingle();
+
+  if (!profile?.org_id) return false;
+
+  const { data: slackSettings } = await supabase
+    .from('slack_org_settings')
+    .select('bot_access_token, is_connected')
+    .eq('org_id', profile.org_id)
+    .eq('is_connected', true)
+    .maybeSingle();
+
+  if (!slackSettings?.bot_access_token) {
+    console.log(
+      `[ChampionGhost] No Slack integration for org ${profile.org_id}, skipping Slack alert`
+    );
+    return false;
+  }
+
+  const { data: mapping } = await supabase
+    .from('slack_user_mappings')
+    .select('slack_user_id')
+    .eq('sixty_user_id', ownerId)
+    .maybeSingle();
+
+  if (!mapping?.slack_user_id) {
+    console.log(
+      `[ChampionGhost] No Slack user mapping for user ${ownerId}, skipping Slack alert`
+    );
+    return false;
+  }
+
+  const botToken: string = slackSettings.bot_access_token;
+  const slackUserId: string = mapping.slack_user_id;
+
+  const blocks = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `Alert: Champion gone dark — ${dealName}`,
+        emoji: true,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text:
+          `*${ghostResult.championName}* (champion on *${dealName}*) has been ` +
+          `inactive for *${ghostResult.daysSinceActive} days* — exceeding the ` +
+          `${ghostResult.threshold}-day threshold.`,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text:
+          `*Why this matters:* When your champion goes dark, the deal loses its internal ` +
+          `advocate. Budget cycles, org changes, or competing priorities can derail it silently.`,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text:
+          `*Suggested actions:*\n` +
+          `1. Send a personalised re-engagement email to ${ghostResult.championName}\n` +
+          `2. Try an alternate contact or ask for an intro to the economic buyer\n` +
+          `3. Check LinkedIn for any role changes or org news`,
+      },
+    },
+    { type: 'divider' },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Open Deal', emoji: true },
+          url: `${appBaseUrl}/crm/pipeline?deal=${dealId}`,
+          style: 'primary',
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Ask Copilot', emoji: true },
+          url: `${appBaseUrl}/crm/pipeline?copilot=true&context=deal:${dealId}`,
+        },
+      ],
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text:
+            `Deal: ${dealName} | Champion: ${ghostResult.championName} | ` +
+            `Inactive: ${ghostResult.daysSinceActive}d | ` +
+            `${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`,
+        },
+      ],
+    },
+  ];
+
+  try {
+    const dmResponse = await fetch('https://slack.com/api/conversations.open', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ users: slackUserId }),
+    });
+    const dmResult = await dmResponse.json();
+
+    if (!dmResult.ok) {
+      console.error(
+        `[ChampionGhost] Failed to open DM for user ${ownerId}:`,
+        dmResult.error
+      );
+      return false;
+    }
+
+    const msgResponse = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: dmResult.channel.id,
+        blocks,
+        text:
+          `Alert: Champion ${ghostResult.championName} has been inactive for ` +
+          `${ghostResult.daysSinceActive} days on deal "${dealName}".`,
+      }),
+    });
+    const msgResult = await msgResponse.json();
+
+    if (!msgResult.ok) {
+      console.error(
+        `[ChampionGhost] Failed to send Slack message for deal ${dealId}:`,
+        msgResult.error
+      );
+      return false;
+    }
+
+    console.log(
+      `[ChampionGhost] Sent champion ghost alert for deal ${dealId} to Slack user ${slackUserId}`
+    );
+    return true;
+  } catch (err) {
+    console.error(`[ChampionGhost] Error sending Slack DM for deal ${dealId}:`, err);
+    return false;
+  }
+}
+
+// =============================================================================
 // Main Handler
 // =============================================================================
 
@@ -506,6 +1187,8 @@ serve(async (req: Request) => {
     }
 
     const significantChanges: SignificantChange[] = [];
+    // Maps dealId -> internal org UUID (for champion ghost detection + command_centre_items)
+    const internalOrgIdsByDeal = new Map<string, string>();
 
     // Process deals
     for (const dealId of dealIds) {
@@ -513,7 +1196,7 @@ serve(async (req: Request) => {
         // Get deal owner and org_id
         const { data: deal } = await supabase
           .from('deals')
-          .select('owner_id, name, clerk_org_id')
+          .select('owner_id, name, clerk_org_id, org_id')
           .eq('id', dealId)
           .maybeSingle();
 
@@ -522,6 +1205,10 @@ serve(async (req: Request) => {
         // Track org_id for this deal (for ops sync later)
         if (deal.clerk_org_id) {
           orgIdsByDeal.set(dealId, deal.clerk_org_id);
+        }
+        // Track internal org UUID for champion ghost detection
+        if (deal.org_id) {
+          internalOrgIdsByDeal.set(dealId, deal.org_id);
         }
 
         // Check for existing score
@@ -569,6 +1256,83 @@ serve(async (req: Request) => {
 
         if (historyError) {
           console.error(`Error inserting health history for ${dealId}:`, historyError);
+        }
+
+        // ---------------------------------------------------------------
+        // Multi-thread score calculation (REL-006)
+        // ---------------------------------------------------------------
+        try {
+          const multiThread = await calculateMultiThreadScore(
+            supabase,
+            dealId,
+            deal.clerk_org_id ?? null
+          );
+
+          if (multiThread !== null) {
+            // Persist score to deals table
+            await supabase
+              .from('deals')
+              .update({ multi_thread_score: multiThread.score })
+              .eq('id', dealId);
+
+            console.log(
+              `[MultiThread] Deal ${dealId} (${deal.name}): score=${multiThread.score} ` +
+              `(${multiThread.engagedContacts}/${multiThread.contactsNeeded} engaged contacts, ` +
+              `stage=${multiThread.stageName})`
+            );
+
+            // Fire single-thread Slack alert if:
+            //  1. Score is below threshold (< 0.5)
+            //  2. Stage is proposal-level or later
+            if (
+              multiThread.score < SINGLE_THREAD_THRESHOLD &&
+              multiThread.isAlertEligible
+            ) {
+              await maybeSendSingleThreadAlert(
+                supabase,
+                dealId,
+                deal.name,
+                deal.owner_id,
+                multiThread
+              );
+            }
+          }
+        } catch (mtError) {
+          // Non-blocking — log and continue
+          console.error(`[MultiThread] Error calculating multi-thread score for deal ${dealId}:`, mtError);
+        }
+
+        // ---------------------------------------------------------------
+        // Champion ghost detection (REL-008)
+        // ---------------------------------------------------------------
+        try {
+          const internalOrgId = internalOrgIdsByDeal.get(dealId);
+          if (internalOrgId) {
+            const ghostResult = await checkChampionGhostDetection(
+              supabase,
+              dealId,
+              deal.name,
+              deal.owner_id,
+              internalOrgId
+            );
+
+            if (ghostResult !== null) {
+              // Optionally notify the rep via Slack DM
+              await maybeSendChampionGhostAlert(
+                supabase,
+                dealId,
+                deal.name,
+                deal.owner_id,
+                ghostResult
+              );
+            }
+          }
+        } catch (ghostError) {
+          // Non-blocking — log and continue
+          console.error(
+            `[ChampionGhost] Error in ghost detection for deal ${dealId}:`,
+            ghostError
+          );
         }
 
         // Track significant changes
