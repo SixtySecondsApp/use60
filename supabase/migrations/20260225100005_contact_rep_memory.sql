@@ -47,12 +47,17 @@ CREATE INDEX IF NOT EXISTS idx_cm_last_interaction
 ALTER TABLE contact_memory ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "org_members_select_contact_memory" ON contact_memory;
+<<<<<<< HEAD
 DO $$ BEGIN
   CREATE POLICY "org_members_select_contact_memory"
+=======
+CREATE POLICY "org_members_select_contact_memory"
+>>>>>>> origin/main
   ON contact_memory FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+<<<<<<< HEAD
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -64,6 +69,14 @@ DO $$ BEGIN
   USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+=======
+
+DROP POLICY IF EXISTS "service_role_all_contact_memory" ON contact_memory;
+CREATE POLICY "service_role_all_contact_memory"
+  ON contact_memory FOR ALL
+  TO service_role
+  USING (true) WITH CHECK (true);
+>>>>>>> origin/main
 
 -- ---------------------------------------------------------------------------
 -- updated_at trigger: contact_memory
@@ -75,7 +88,10 @@ BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$;
 
 DROP TRIGGER IF EXISTS contact_memory_updated_at ON contact_memory;
+<<<<<<< HEAD
 DROP TRIGGER IF EXISTS contact_memory_updated_at ON contact_memory;
+=======
+>>>>>>> origin/main
 CREATE TRIGGER contact_memory_updated_at
   BEFORE UPDATE ON contact_memory
   FOR EACH ROW EXECUTE FUNCTION update_contact_memory_updated_at();
@@ -130,6 +146,7 @@ ALTER TABLE rep_memory ENABLE ROW LEVEL SECURITY;
 
 -- Reps can see their own memory
 DROP POLICY IF EXISTS "users_select_own_rep_memory" ON rep_memory;
+<<<<<<< HEAD
 DO $$ BEGIN
   CREATE POLICY "users_select_own_rep_memory"
   ON rep_memory FOR SELECT
@@ -141,11 +158,21 @@ END $$;
 DROP POLICY IF EXISTS "managers_select_org_rep_memory" ON rep_memory;
 DO $$ BEGIN
   CREATE POLICY "managers_select_org_rep_memory"
+=======
+CREATE POLICY "users_select_own_rep_memory"
+  ON rep_memory FOR SELECT
+  USING (user_id = auth.uid());
+
+-- Managers and admins can see all rep memory in their org
+DROP POLICY IF EXISTS "managers_select_org_rep_memory" ON rep_memory;
+CREATE POLICY "managers_select_org_rep_memory"
+>>>>>>> origin/main
   ON rep_memory FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om
     WHERE om.user_id = auth.uid() AND om.role IN ('admin', 'manager', 'owner')
   ));
+<<<<<<< HEAD
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -158,6 +185,15 @@ DO $$ BEGIN
   USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+=======
+
+-- Service role full access
+DROP POLICY IF EXISTS "service_role_all_rep_memory" ON rep_memory;
+CREATE POLICY "service_role_all_rep_memory"
+  ON rep_memory FOR ALL
+  TO service_role
+  USING (true) WITH CHECK (true);
+>>>>>>> origin/main
 
 -- ---------------------------------------------------------------------------
 -- updated_at trigger: rep_memory
@@ -169,7 +205,10 @@ BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$;
 
 DROP TRIGGER IF EXISTS rep_memory_updated_at ON rep_memory;
+<<<<<<< HEAD
 DROP TRIGGER IF EXISTS rep_memory_updated_at ON rep_memory;
+=======
+>>>>>>> origin/main
 CREATE TRIGGER rep_memory_updated_at
   BEFORE UPDATE ON rep_memory
   FOR EACH ROW EXECUTE FUNCTION update_rep_memory_updated_at();
