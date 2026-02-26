@@ -15,9 +15,10 @@ import { nextActionsAdapter } from './nextActions.ts';
 import { createTasksAdapter } from './createTasks.ts';
 import { emailClassifierAdapter } from './emailClassifier.ts';
 import { detectIntentsAdapter } from './detectIntents.ts';
-import { proposalGeneratorAdapter, populateProposalAdapter, generateCustomSectionsAdapter, presentForReviewAdapter } from './proposalGenerator.ts';
-import { findAvailableSlotsAdapter, presentTimeOptionsAdapter, parseSchedulingRequestAdapter } from './calendar.ts';
+import { proposalGeneratorAdapter, populateProposalAdapter, generateCustomSectionsAdapter, presentForReviewAdapter, detectProposalIntentAdapter, proposalApprovalAdapter } from './proposalGenerator.ts';
+import { findAvailableSlotsAdapter, presentTimeOptionsAdapter, parseSchedulingRequestAdapter, detectSchedulingIntentAdapter, calendarSlotApprovalAdapter } from './calendar.ts';
 import { draftFollowupEmailAdapter, sendEmailAsRepAdapter } from './emailSend.ts';
+import { emailDraftApprovalAdapter } from './emailDraftApproval.ts';
 import { matchToCrmContactAdapter } from './emailHandler.ts';
 import {
   pullCampaignMetricsAdapter,
@@ -68,6 +69,9 @@ import { eodOvernightPlanAdapter } from './eodOvernight.ts';
 import { buildRelationshipGraphAdapter, enrichRelationshipGraphAdapter } from './relationshipGraph.ts';
 import { extractCompetitiveMentionsAdapter, aggregateCompetitorProfileAdapter, deliverCompetitiveIntelSlackAdapter } from './competitiveIntelSlack.ts';
 import { analysePipelinePatternsAdapter, deliverPatternSlackAdapter } from './pipelinePatternSlack.ts';
+import { roleInferenceAdapter } from './roleInference.ts';
+import { emailRoleInferenceAdapter } from './emailRoleInference.ts';
+import { jobChangeDetectorAdapter } from './jobChangeDetector.ts';
 
 // =============================================================================
 // Stub adapters for steps that don't have full implementations yet
@@ -98,6 +102,7 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'find-available-slots': findAvailableSlotsAdapter,
   'present-time-options': presentTimeOptionsAdapter,
   'draft-followup-email': draftFollowupEmailAdapter,
+  'email-draft-approval': emailDraftApprovalAdapter,
   'send-email-as-rep': sendEmailAsRepAdapter,
   'pull-campaign-metrics': pullCampaignMetricsAdapter,
   'classify-replies': classifyRepliesAdapter,
@@ -134,8 +139,24 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   'generate-custom-sections': generateCustomSectionsAdapter,
   'present-for-review': presentForReviewAdapter,
 
+  // Proposal intent detection in meeting_ended sequence (PROP-001)
+  // Reads send_proposal commitments from detect-intents output and kicks off
+  // an async proposal job via generate-proposal with deal-memory context.
+  'detect-proposal-intent': detectProposalIntentAdapter,
+
+  // Proposal HITL approval in meeting_ended sequence (PROP-002)
+  // Sends a Slack DM with [Approve & Send] [Edit in 60] [Skip] buttons.
+  // Pauses the sequence until the rep acts on the approval.
+  'proposal-approval': proposalApprovalAdapter,
+
   // Calendar (calendar_find_times sequence)
   'parse-scheduling-request': parseSchedulingRequestAdapter,
+
+  // CAL-001: Detect schedule_meeting intent from detect-intents output, then find available slots
+  'detect-scheduling-intent': detectSchedulingIntentAdapter,
+
+  // CAL-002: Slack HITL DM presenting top 3 slots; pauses sequence for rep approval
+  'calendar-slot-approval': calendarSlotApprovalAdapter,
 
   // Stale Deal Revival (stale_deal_revival sequence)
   'research-trigger-events': researchTriggerEventsAdapter,
@@ -186,6 +207,19 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   // Pipeline Patterns (KNW-010/011 — PRD-18)
   'analyse-pipeline-patterns': analysePipelinePatternsAdapter,
   'deliver-pattern-slack': deliverPatternSlackAdapter,
+
+  // Stakeholder role inference from transcript (REL-003)
+  'infer-attendee-roles': roleInferenceAdapter,
+
+  // Stakeholder role inference from email patterns (REL-004)
+  // NOTE: Not wired into eventSequences.ts — called from email classification pipelines only.
+  'infer-roles-from-email': emailRoleInferenceAdapter,
+
+  // Job change detection (REL-007)
+  // Called from cron or email_classified event; detects champion/economic_buyer job moves
+  // via Apollo enrichment and email domain monitoring, then updates contact_org_history
+  // and flags reengagement events.
+  'detect-job-changes': jobChangeDetectorAdapter,
 };
 
 /**

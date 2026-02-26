@@ -66,6 +66,7 @@ export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentR
 export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
 export const OpsWebhookDemo = lazyWithRetry(() => import('@/pages/demo/OpsWebhookDemo'));
 // Admin Configuration
+export const ControlRoom = lazyWithRetry(() => import('@/pages/admin/ControlRoom'));
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
 export const PipelineSettings = lazyWithRetry(() => import('@/pages/admin/PipelineSettings'));
 export const AuditLogs = lazyWithRetry(() => import('@/pages/admin/AuditLogs'));

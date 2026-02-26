@@ -37,12 +37,14 @@ import { resolveRoute, getSequenceSteps, getHandoffRoutes, evaluateHandoffCondit
 import { enqueueDeadLetter } from './deadLetter.ts';
 import { isCircuitAllowed, recordSuccess, recordFailure, loadPersistedState, getStateToPersist } from './circuitBreaker.ts';
 import { maybeEvaluateConfigQuestion } from '../config/questionTriggerHook.ts';
+import { logAgentAction } from '../memory/dailyLog.ts';
 
 // Steps that should only run for sales calls (Discovery, Demo, Close)
 const SALES_ONLY_STEPS = new Set([
   'detect-intents',
   'suggest-next-actions',
   'draft-followup-email',
+  'email-draft-approval',
 ]);
 
 // Chain depth constant from types (not exported, so defined here too)
@@ -400,6 +402,19 @@ async function executeStepsParallel(
       // Mark step as running in DB
       await rpcUpdateStep(supabase, jobId, state.steps_completed.length + 1, step.skill, null, 'running');
 
+      // LOG-003: step start
+      await logAgentAction({
+        supabaseClient: supabase as any,
+        orgId: state.event.org_id,
+        userId: state.event.user_id ?? null,
+        agentType: state.event.type,
+        actionType: step.skill,
+        actionDetail: { wave: waveNum },
+        outcome: 'pending',
+        chainId: jobId,
+        waveNumber: waveNum,
+      });
+
       execPromises.push({
         step,
         promise: executeStepWithRetry(supabase, state, step),
@@ -474,11 +489,42 @@ async function executeStepsParallel(
 
         await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, result.output, 'completed');
 
+        // LOG-003: step success
+        await logAgentAction({
+          supabaseClient: supabase as any,
+          orgId: state.event.org_id,
+          userId: state.event.user_id ?? null,
+          agentType: state.event.type,
+          actionType: step.skill,
+          actionDetail: {},
+          decisionReasoning: (result.output as any)?.reasoning ?? null,
+          outcome: 'success',
+          executionMs: result.duration_ms ?? null,
+          creditCost: (result.output as any)?.credit_cost ?? null,
+          chainId: jobId,
+          waveNumber: waveNum,
+        });
+
         // Fire question trigger evaluation after successful step (fire-and-forget)
         maybeEvaluateConfigQuestion(supabase, state.event.org_id, state.event.user_id, step.skill);
 
       } else {
         recordFailure(step.skill);
+
+        // LOG-003: step failure
+        await logAgentAction({
+          supabaseClient: supabase as any,
+          orgId: state.event.org_id,
+          userId: state.event.user_id ?? null,
+          agentType: state.event.type,
+          actionType: step.skill,
+          actionDetail: {},
+          outcome: 'failed',
+          errorMessage: result.error ?? null,
+          executionMs: result.duration_ms ?? null,
+          chainId: jobId,
+          waveNumber: waveNum,
+        });
 
         if (step.criticality === 'critical') {
           state.error = `Critical step ${step.skill} failed: ${result.error}`;
@@ -570,7 +616,8 @@ async function executeStepsSequential(
   startTime: number,
 ): Promise<{ job_id: string; status: string; error?: string }> {
 
-  for (const step of steps) {
+  for (let seqStepIdx = 0; seqStepIdx < steps.length; seqStepIdx++) {
+    const step = steps[seqStepIdx];
     if (state.steps_completed.includes(step.skill)) continue;
 
     const elapsed = Date.now() - startTime;
@@ -601,6 +648,19 @@ async function executeStepsSequential(
     state.updated_at = new Date().toISOString();
 
     await rpcUpdateStep(supabase, jobId, state.steps_completed.length + 1, step.skill, null, 'running');
+
+    // LOG-003: step start
+    await logAgentAction({
+      supabaseClient: supabase as any,
+      orgId: state.event.org_id,
+      userId: state.event.user_id ?? null,
+      agentType: state.event.type,
+      actionType: step.skill,
+      actionDetail: { step_index: seqStepIdx },
+      outcome: 'pending',
+      chainId: jobId,
+      waveNumber: seqStepIdx,
+    });
 
     const result = await executeStepWithRetry(supabase, state, step);
 
@@ -633,10 +693,41 @@ async function executeStepsSequential(
 
       await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, result.output, 'completed');
 
+      // LOG-003: step success
+      await logAgentAction({
+        supabaseClient: supabase as any,
+        orgId: state.event.org_id,
+        userId: state.event.user_id ?? null,
+        agentType: state.event.type,
+        actionType: step.skill,
+        actionDetail: {},
+        decisionReasoning: (result.output as any)?.reasoning ?? null,
+        outcome: 'success',
+        executionMs: result.duration_ms ?? null,
+        creditCost: (result.output as any)?.credit_cost ?? null,
+        chainId: jobId,
+        waveNumber: seqStepIdx,
+      });
+
       // Fire question trigger evaluation after successful step (fire-and-forget)
       maybeEvaluateConfigQuestion(supabase, state.event.org_id, state.event.user_id, step.skill);
 
     } else {
+      // LOG-003: step failure
+      await logAgentAction({
+        supabaseClient: supabase as any,
+        orgId: state.event.org_id,
+        userId: state.event.user_id ?? null,
+        agentType: state.event.type,
+        actionType: step.skill,
+        actionDetail: {},
+        outcome: 'failed',
+        errorMessage: result.error ?? null,
+        executionMs: result.duration_ms ?? null,
+        chainId: jobId,
+        waveNumber: seqStepIdx,
+      });
+
       if (step.criticality === 'critical') {
         state.error = `Critical step ${step.skill} failed: ${result.error}`;
         await persistState(supabase, jobId, state);

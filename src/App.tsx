@@ -68,6 +68,7 @@ import {
   // Platform Admin
   MeetingsWaitlist, WaitlistSlackSettings, OnboardingSimulator, TrialTimelineSimulator, PricingControl, CostAnalysis, AIUsageAdmin, ApiUsageDashboard, LaunchChecklist,
   ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, SkillsQAPage, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, CopilotLabPage, AgentPerformanceDashboard, CopilotConsolePage, OrchestratorDashboard, Users, PipelineSettings,
+  ControlRoom,
   AuditLogs, SmartTasksAdmin, PipelineAutomationAdmin, EmailTemplates, FunctionTesting,
   AIProviderSettings, GoogleIntegrationTestsLegacy, GoogleIntegrationTests, SettingsSavvyCal,
   SettingsBookingSources, HealthRules, EmailCategorizationSettings, AdminModelSettings,
@@ -348,6 +349,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/insights" element={<AppLayout><Insights /></AppLayout>} />
                 <Route path="/crm" element={<Navigate to="/ops" replace />} />
                 <Route path="/crm/elegant" element={<Navigate to="/ops" replace />} />
+                {/* Org Admin — Control Room (must come before /admin/* catch-all) */}
+                <Route path="/admin/control-room" element={<OrgAdminRouteGuard fallbackRoute="/dashboard"><AppLayout><ControlRoom /></AppLayout></OrgAdminRouteGuard>} />
                 {/* Legacy /admin routes - redirect to /platform (replaced by 3-tier architecture) */}
                 <Route path="/admin" element={<Navigate to="/platform" replace />} />
                 <Route path="/admin/users" element={<Navigate to="/platform/users" replace />} />

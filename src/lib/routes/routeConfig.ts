@@ -40,6 +40,7 @@ import {
   Send,
   LifeBuoy,
   FileText,
+  LayoutGrid,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -453,6 +454,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
   // ========== Org Admin Routes ==========
   // Org/team management is now accessed via the main Settings page (role-gated cards).
   // We keep legacy redirects for /team/* paths elsewhere.
+  {
+    path: '/admin/control-room',
+    access: 'orgAdmin',
+    label: 'Control Room',
+    icon: LayoutGrid,
+    showInNav: true,
+    navSection: 'org',
+    order: 80,
+    badge: 'New',
+  },
   {
     path: '/settings/autonomy',
     access: 'orgAdmin',

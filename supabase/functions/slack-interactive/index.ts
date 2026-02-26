@@ -2124,7 +2124,7 @@ function parseHITLActionId(actionId: string): ParsedHITLAction | null {
 
   const validResourceTypes: HITLResourceType[] = [
     'email_draft', 'follow_up', 'task_list', 'summary',
-    'meeting_notes', 'proposal_section', 'coaching_tip'
+    'meeting_notes', 'proposal_section', 'coaching_tip', 'calendar_slots', 'proposal',
   ];
   if (!validResourceTypes.includes(resourceType as HITLResourceType)) return null;
 
@@ -2256,21 +2256,24 @@ function getResourceTypeLabel(resourceType: HITLResourceType): string {
     meeting_notes: 'Meeting Notes',
     proposal_section: 'Proposal Section',
     coaching_tip: 'Coaching Tip',
+    calendar_slots: 'Meeting Times',
+    proposal: 'Proposal',
   };
   return labels[resourceType] || resourceType;
 }
 
 /**
- * Trigger callback after HITL action
+ * Trigger callback after HITL action.
+ * Returns { ok, error } so callers can surface send results to Slack.
  */
 async function triggerHITLCallback(
   approval: HITLApprovalRecord,
   action: 'approved' | 'rejected' | 'edited',
   content: Record<string, unknown>
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   if (!approval.callback_type || !approval.callback_target) {
     console.log('No callback configured for approval:', approval.id);
-    return;
+    return { ok: true };
   }
 
   const callbackPayload = {
@@ -2299,9 +2302,21 @@ async function triggerHITLCallback(
           body: JSON.stringify(callbackPayload),
         });
         if (!response.ok) {
-          console.error('Callback edge function failed:', await response.text());
+          const errText = await response.text().catch(() => `HTTP ${response.status}`);
+          console.error('Callback edge function failed:', errText);
+          return { ok: false, error: errText };
         }
-        break;
+        // For hitl-send-followup-email, parse the response to surface send success/failure.
+        try {
+          const respBody = await response.json();
+          if (respBody && respBody.success === false) {
+            const errMsg = respBody.gmail?.error || respBody.error || 'Send failed';
+            return { ok: false, error: String(errMsg) };
+          }
+        } catch {
+          // Non-JSON response — treat as ok if HTTP status was ok
+        }
+        return { ok: true };
       }
 
       case 'webhook': {
@@ -2314,19 +2329,59 @@ async function triggerHITLCallback(
           body: JSON.stringify(callbackPayload),
         });
         if (!response.ok) {
-          console.error('Callback webhook failed:', await response.text());
+          const errText = await response.text().catch(() => `HTTP ${response.status}`);
+          console.error('Callback webhook failed:', errText);
+          return { ok: false, error: errText };
         }
-        break;
+        return { ok: true };
       }
 
       case 'workflow': {
         // Future: trigger internal workflow
         console.log('Workflow callback not yet implemented:', approval.callback_target);
-        break;
+        return { ok: true };
       }
+
+      default:
+        return { ok: true };
     }
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
     console.error('Error triggering HITL callback:', error);
+    return { ok: false, error: errMsg };
+  }
+}
+
+/**
+ * Resume the orchestrator sequence job that was paused waiting for this HITL approval.
+ * Fire-and-forget — we don't block Slack's 3 s response window on this.
+ */
+async function resumeOrchestratorJob(jobId: string, approvalId: string): Promise<void> {
+  try {
+    const orchestratorUrl = `${supabaseUrl}/functions/v1/agent-orchestrator`;
+    const response = await fetch(orchestratorUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify({
+        resume_job_id: jobId,
+        approval_data: {
+          approved: true,
+          approval_id: approvalId,
+          source: 'slack_hitl',
+          actioned_at: new Date().toISOString(),
+        },
+      }),
+    });
+    if (!response.ok) {
+      console.warn(`[HITL] agent-orchestrator resume returned ${response.status} for job ${jobId}`);
+    } else {
+      console.log(`[HITL] agent-orchestrator resumed job ${jobId}`);
+    }
+  } catch (err) {
+    console.warn('[HITL] Failed to resume orchestrator job:', err);
   }
 }
 
@@ -2635,7 +2690,651 @@ async function handleHITLApprove(
     });
   }
 
-  // Update the original Slack message
+  // Log the action
+  await logHITLAction(supabase, approval, 'approved', ctx?.userId || payload.user.id);
+
+  // EMAIL-002/EMAIL-005: For email_draft approvals, queue a 30-second delayed send
+  // (EMAIL-005 undo window) instead of sending immediately. For all other resource
+  // types, show the standard approval confirmation and trigger callback right away.
+  const isEmailDraft = hitlAction.resourceType === 'email_draft';
+
+  if (isEmailDraft) {
+    // -------------------------------------------------------------------------
+    // EMAIL-005: Queue a 30-second delayed send so the rep can undo within 30s.
+    // Re-uses the scheduled_email_sends table + process_scheduled_email_sends
+    // pg_cron from EMAIL-008 — just with a very short scheduled_at offset.
+    // -------------------------------------------------------------------------
+    const scheduledAt = new Date(Date.now() + 30 * 1000); // now + 30 seconds
+
+    // Cancel any existing pending row for this approval (e.g. rep clicked Approve twice)
+    await supabase
+      .from('scheduled_email_sends')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('approval_id', hitlAction.approvalId)
+      .eq('status', 'pending');
+
+    const { data: schedRow, error: insertErr } = await supabase
+      .from('scheduled_email_sends')
+      .insert({
+        approval_id: hitlAction.approvalId,
+        org_id: approval.org_id,
+        user_id: ctx?.userId || null,
+        scheduled_at: scheduledAt.toISOString(),
+        scheduled_label: 'Sending in 30s',
+        slack_team_id: payload.team?.id || approval.slack_team_id,
+        slack_channel_id: payload.channel?.id || approval.slack_channel_id,
+        slack_message_ts: payload.message?.ts || approval.slack_message_ts,
+      })
+      .select('id')
+      .single();
+
+    if (insertErr || !schedRow) {
+      console.error('[EMAIL-005] Failed to queue 30s delayed send:', insertErr);
+      // Fall back to immediate send on queue failure
+      if (payload.response_url) {
+        await updateMessage(payload.response_url, [
+          { type: 'section', text: { type: 'mrkdwn', text: '*Sending email...*' } },
+          {
+            type: 'context',
+            elements: [{ type: 'mrkdwn', text: `Approved by <@${payload.user.id}> · ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` }],
+          },
+        ]);
+      }
+      const callbackResult = await triggerHITLCallback(approval, 'approved', approval.original_content);
+      if (isEmailDraft && payload.response_url) {
+        const recipientEmail =
+          (approval.original_content?.to as string | undefined) ||
+          (approval.original_content?.recipientEmail as string | undefined) ||
+          '';
+        const subject = (approval.original_content?.subject as string | undefined) || '';
+        const resourceName = approval.resource_name || 'Follow-up email';
+        if (callbackResult.ok) {
+          await updateMessage(payload.response_url, [
+            { type: 'section', text: { type: 'mrkdwn', text: `*${resourceName}* — Sent` } },
+            {
+              type: 'context',
+              elements: [{ type: 'mrkdwn', text: [
+                recipientEmail ? `To: ${recipientEmail}` : null,
+                subject ? `Subject: ${subject}` : null,
+                `Sent by <@${payload.user.id}> · ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`,
+              ].filter(Boolean).join(' | ') }],
+            },
+          ]);
+        }
+      }
+    } else {
+      // Successfully queued — update Slack message to show [Undo] button with countdown.
+      const schedRowId = schedRow.id;
+      const resourceName = approval.resource_name || 'Follow-up email';
+      const recipientEmail =
+        (approval.original_content?.to as string | undefined) ||
+        (approval.original_content?.recipientEmail as string | undefined) ||
+        '';
+      const subject = (approval.original_content?.subject as string | undefined) || '';
+
+      const undoBlocks = [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: [
+              `*${resourceName}* — Sending in 30 seconds`,
+              recipientEmail ? `To: ${recipientEmail}` : null,
+              subject ? `Subject: _${subject}_` : null,
+            ].filter(Boolean).join('\n'),
+          },
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: 'Undo (30s)', emoji: false },
+              style: 'danger',
+              action_id: 'undo_email_send',
+              value: JSON.stringify({ schedRowId, approvalId: hitlAction.approvalId }),
+            },
+          ],
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: `Approved by <@${payload.user.id}> · ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`,
+            },
+          ],
+        },
+      ];
+
+      if (payload.response_url) {
+        await updateMessage(payload.response_url, undoBlocks);
+      }
+
+      console.log(`[EMAIL-005] Queued 30s delayed send ${schedRowId} for approval ${hitlAction.approvalId}`);
+    }
+
+    // EMAIL-002: Resume the paused orchestrator sequence job (if one exists for this approval).
+    // This is fire-and-forget — we do not block the Slack response on it.
+    const jobId = approval.callback_metadata?.job_id as string | undefined;
+    if (jobId) {
+      resumeOrchestratorJob(jobId, hitlAction.approvalId).catch(() => {});
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // CAL-003/CAL-004: calendar_slots approve — send_email chains into PRD-01 email HITL (CAL-003);
+  // send_invite creates a Google Calendar event with attendees (CAL-004).
+  if (hitlAction.resourceType === 'calendar_slots') {
+    let subAction: string | undefined;
+    try { subAction = JSON.parse(action.value)?.subAction; } catch { /* ignore */ }
+
+    const calJobId = approval.callback_metadata?.job_id as string | undefined;
+
+    // -------------------------------------------------------------------------
+    // CAL-004: send_invite — create a real Google Calendar event with invites
+    // -------------------------------------------------------------------------
+    if (subAction === 'send_invite') {
+      const originalContent = approval.original_content as Record<string, unknown> | undefined;
+      const slots = (originalContent?.slots as Array<Record<string, unknown>> | undefined) ?? [];
+      const durationMinutes = (originalContent?.duration_minutes as number | undefined) ?? 45;
+      const contactName = (originalContent?.contact_name as string | undefined) || 'the prospect';
+      const meetingTitle = (originalContent?.meeting_title as string | undefined) || `Meeting with ${contactName}`;
+      const prospectTimezone = (originalContent?.prospect_timezone as string | undefined) || 'UTC';
+
+      // Use the first (highest-scored) available slot
+      const chosenSlot = slots[0];
+
+      if (!chosenSlot) {
+        if (payload.response_url) {
+          await updateMessage(payload.response_url, [
+            { type: 'section', text: { type: 'mrkdwn', text: '*Could not send invite* — no slot data found. Please schedule manually.' } },
+            {
+              type: 'context',
+              elements: [{ type: 'mrkdwn', text: `<@${payload.user.id}> · ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}` }],
+            },
+          ]);
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const startTime = chosenSlot.start_time as string;
+      const endTime = chosenSlot.end_time as string
+        || new Date(new Date(startTime).getTime() + durationMinutes * 60 * 1000).toISOString();
+
+      // Resolve rep's Sixty userId from Slack payload
+      const calCtx = ctx;
+      const repUserId = calCtx?.userId;
+
+      // Optimistically update the Slack message to show "Sending..."
+      if (payload.response_url) {
+        await updateMessage(payload.response_url, [
+          { type: 'section', text: { type: 'mrkdwn', text: `*Sending calendar invite* — creating event for ${contactName}...` } },
+          {
+            type: 'context',
+            elements: [{ type: 'mrkdwn', text: `<@${payload.user.id}> · ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}` }],
+          },
+        ]);
+      }
+
+      // Gather attendee emails: contact email from original_content + rep's own email
+      const attendeeEmails: string[] = [];
+      const contactEmail = originalContent?.contact_email as string | undefined;
+      if (contactEmail) attendeeEmails.push(contactEmail);
+
+      // Add rep's email if we can look it up
+      if (repUserId) {
+        try {
+          const { data: repProfile } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('id', repUserId)
+            .maybeSingle();
+          if (repProfile?.email) attendeeEmails.push(repProfile.email);
+        } catch { /* non-fatal */ }
+      }
+
+      // Call google-calendar-sync with action='create'
+      let inviteResult: { success: boolean; eventId?: string; htmlLink?: string; error?: string } = { success: false };
+      try {
+        const calSyncUrl = `${supabaseUrl}/functions/v1/google-calendar-sync`;
+        const calResp = await fetch(calSyncUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'create',
+            userId: repUserId,
+            summary: meetingTitle,
+            start: startTime,
+            end: endTime,
+            attendees: attendeeEmails,
+            timezone: prospectTimezone,
+          }),
+        });
+
+        if (calResp.ok) {
+          inviteResult = await calResp.json();
+        } else {
+          const errText = await calResp.text().catch(() => '');
+          inviteResult = { success: false, error: `HTTP ${calResp.status}: ${errText}` };
+        }
+      } catch (fetchErr: any) {
+        inviteResult = { success: false, error: String(fetchErr) };
+      }
+
+      // Format the chosen slot for the confirmation message
+      const slotDateStr = (() => {
+        try {
+          const d = new Date(startTime);
+          const tz = prospectTimezone || 'UTC';
+          const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz });
+          const timeFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz });
+          const tzAbbrevParts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short', hour: 'numeric', timeZone: tz }).formatToParts(d);
+          const tzAbbrev = tzAbbrevParts.find((p) => p.type === 'timeZoneName')?.value || tz;
+          return `${dayFmt.format(d)}, ${timeFmt.format(d)} ${tzAbbrev}`;
+        } catch { return startTime; }
+      })();
+
+      if (inviteResult.success) {
+        console.log(`[CAL-004] Calendar invite created: eventId=${inviteResult.eventId}, slot="${slotDateStr}", contact=${contactName}`);
+
+        const linkText = inviteResult.htmlLink ? ` — <${inviteResult.htmlLink}|View in Google Calendar>` : '';
+        if (payload.response_url) {
+          await updateMessage(payload.response_url, [
+            { type: 'section', text: { type: 'mrkdwn', text: `*Calendar invite sent* to ${contactName} for *${slotDateStr}*${linkText}` } },
+            {
+              type: 'context',
+              elements: [{ type: 'mrkdwn', text: `Sent by <@${payload.user.id}> · ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}` }],
+            },
+          ]);
+        }
+      } else {
+        console.error(`[CAL-004] Calendar invite failed: ${inviteResult.error}`);
+
+        const isReconnectError = inviteResult.error?.toLowerCase().includes('reconnect') || inviteResult.error?.toLowerCase().includes('permission');
+        const errMsg = isReconnectError
+          ? `Could not create invite — Google Calendar needs write permissions. Please reconnect in Settings > Integrations.`
+          : `Could not create invite — ${inviteResult.error || 'unknown error'}. Please schedule manually.`;
+
+        if (payload.response_url) {
+          await updateMessage(payload.response_url, [
+            { type: 'section', text: { type: 'mrkdwn', text: `*${errMsg}*` } },
+            {
+              type: 'context',
+              elements: [{ type: 'mrkdwn', text: `<@${payload.user.id}> · ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}` }],
+            },
+          ]);
+        }
+      }
+
+      if (calJobId) {
+        resumeOrchestratorJob(calJobId, hitlAction.approvalId).catch(() => {});
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // CAL-003: [Send times via email] — compose availability email and chain
+    // into the PRD-01 email draft HITL flow.
+    // -------------------------------------------------------------------------
+    if (subAction === 'send_email') {
+      // Immediately update the original Slack message so the rep sees feedback.
+      if (payload.response_url) {
+        await updateMessage(payload.response_url, [
+          { type: 'section', text: { type: 'mrkdwn', text: '*Composing availability email...* — check your DM for the draft' } },
+          {
+            type: 'context',
+            elements: [{
+              type: 'mrkdwn',
+              text: `<@${payload.user.id}> · ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`,
+            }],
+          },
+        ]);
+      }
+
+      // --- Read data from the calendar_slots original_content ---
+      const calContent = approval.original_content;
+      const emailSlots = (calContent.slots as Array<Record<string, unknown>>) || [];
+      const emailDurationMinutes = (calContent.duration_minutes as number) || 45;
+      const emailProspectTimezone = (calContent.prospect_timezone as string) || 'UTC';
+      const emailContactName = (calContent.contact_name as string) || 'there';
+      const emailContactEmail = (calContent.contact_email as string) || '';
+      const emailMeetingTitle = (calContent.meeting_title as string) || 'our meeting';
+      const emailMeetingId = calContent.meeting_id as string | undefined;
+
+      // Thread context (forward In-Reply-To / thread_id if present in original_content)
+      const emailThreadId = (calContent.thread_id as string | undefined) || null;
+      const emailInReplyTo = (calContent.in_reply_to as string | undefined) || (calContent.inReplyTo as string | undefined) || null;
+      const emailReferences = (calContent.references as string | undefined) || null;
+
+      // --- Format top-3 slots into a human-readable list ---
+      function formatSlotForEmail(slot: Record<string, unknown>, durMins: number, tz: string): string {
+        const slotStart = slot.start_time as string | undefined;
+        if (!slotStart) return '(time unknown)';
+        try {
+          const startDate = new Date(slotStart);
+          const endDate = new Date(startDate.getTime() + durMins * 60 * 1000);
+          const dayFmt = new Intl.DateTimeFormat('en-US', {
+            weekday: 'long', month: 'long', day: 'numeric', timeZone: tz,
+          });
+          const timeFmt = new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz,
+          });
+          const tzParts = new Intl.DateTimeFormat('en-US', {
+            timeZoneName: 'short', hour: 'numeric', timeZone: tz,
+          }).formatToParts(startDate);
+          const tzAbbrev = tzParts.find((p) => p.type === 'timeZoneName')?.value || tz;
+          return `${dayFmt.format(startDate)}, ${timeFmt.format(startDate)}–${timeFmt.format(endDate)} ${tzAbbrev}`;
+        } catch {
+          return slotStart;
+        }
+      }
+
+      const top3Slots = emailSlots.slice(0, 3);
+      const slotBullets = top3Slots
+        .map((slot) => `• ${formatSlotForEmail(slot, emailDurationMinutes, emailProspectTimezone)}`)
+        .join('\n');
+
+      // --- Compose the availability email ---
+      const emailFirstName = emailContactName.split(' ')[0];
+      const emailSubject = `Following up — Available times for ${emailMeetingTitle}`;
+      const emailBody = [
+        `Hi ${emailFirstName},`,
+        '',
+        `Following up on ${emailMeetingTitle} — I have the following times available:`,
+        '',
+        slotBullets,
+        '',
+        "Let me know which works best for you, or feel free to suggest an alternative time that's more convenient.",
+        '',
+        'Looking forward to connecting.',
+      ].join('\n');
+
+      // --- Get Slack bot token for posting the new email draft message ---
+      const cal3OrgConnection = await getSlackOrgConnection(supabase, approval.slack_team_id || payload.team?.id);
+      const cal3DmChannelId = approval.slack_channel_id;
+      const cal3SlackTeamId = approval.slack_team_id || payload.team?.id || '';
+
+      if (cal3OrgConnection?.botToken && cal3DmChannelId) {
+        const cal3ExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        // --- Create a new hitl_pending_approvals row for the email draft ---
+        const { data: cal3EmailApproval, error: cal3EmailApprovalError } = await supabase
+          .from('hitl_pending_approvals')
+          .insert({
+            org_id: approval.org_id,
+            user_id: approval.user_id,
+            created_by: approval.user_id,
+            resource_type: 'email_draft',
+            resource_id: emailMeetingId || approval.resource_id,
+            resource_name: `Availability email: ${emailMeetingTitle}`,
+            slack_team_id: cal3SlackTeamId,
+            slack_channel_id: cal3DmChannelId,
+            slack_message_ts: '', // updated after message is sent
+            status: 'pending',
+            original_content: {
+              to: emailContactEmail,
+              toName: emailContactName,
+              subject: emailSubject,
+              body: emailBody,
+              meeting_id: emailMeetingId,
+              meeting_title: emailMeetingTitle,
+              ai_generated: true,
+              // Preserve thread context so hitl-send-followup-email can reply in-thread
+              ...(emailThreadId ? { thread_id: emailThreadId } : {}),
+              ...(emailInReplyTo ? { in_reply_to: emailInReplyTo } : {}),
+              ...(emailReferences ? { references: emailReferences } : {}),
+              // Trace back to the originating calendar_slots approval
+              source_calendar_approval_id: hitlAction.approvalId,
+            },
+            callback_type: 'edge_function',
+            callback_target: 'hitl-send-followup-email',
+            callback_metadata: {
+              meeting_id: emailMeetingId,
+              job_id: approval.callback_metadata?.job_id || null,
+              sequence_type: 'calendar_slots',
+              source_calendar_approval_id: hitlAction.approvalId,
+            },
+            expires_at: cal3ExpiresAt,
+            metadata: {
+              sequence_type: 'calendar_slots',
+              step: 'send-times-via-email',
+              meeting_id: emailMeetingId,
+              source_calendar_approval_id: hitlAction.approvalId,
+            },
+          })
+          .select('id')
+          .single();
+
+        if (cal3EmailApprovalError || !cal3EmailApproval?.id) {
+          console.error('[CAL-003] Failed to create email_draft hitl_pending_approvals row:', cal3EmailApprovalError);
+          // Non-fatal — still mark original approval and resume job
+        } else {
+          const cal3EmailApprovalId = cal3EmailApproval.id;
+          const cal3EditUrl = `${appUrl}/meetings?approval=${cal3EmailApprovalId}`;
+          const cal3DisplayBody = emailBody.length > 1500 ? emailBody.substring(0, 1500) + '\n...' : emailBody;
+
+          // --- Build email draft approval Slack blocks (mirrors emailDraftApproval adapter pattern) ---
+          const cal3EmailDraftBlocks: unknown[] = [
+            {
+              type: 'header',
+              text: { type: 'plain_text', text: 'Availability Email Ready for Review', emoji: false },
+            },
+            {
+              type: 'context',
+              elements: [{
+                type: 'mrkdwn',
+                text: `Meeting: *${emailMeetingTitle}* | AI-generated availability email`,
+              }],
+            },
+            { type: 'divider' },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `*To:* ${emailContactName}${emailContactEmail ? ` (${emailContactEmail})` : ''}\n*Subject:* ${emailSubject}`,
+              },
+            },
+            { type: 'divider' },
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: cal3DisplayBody.substring(0, 3000) },
+            },
+            { type: 'divider' },
+            {
+              type: 'actions',
+              block_id: `email_draft_approval_primary_${cal3EmailApprovalId}`,
+              elements: [
+                {
+                  type: 'button',
+                  text: { type: 'plain_text', text: 'Approve', emoji: false },
+                  action_id: `approve::email_draft::${cal3EmailApprovalId}`,
+                  value: JSON.stringify({ approvalId: cal3EmailApprovalId }),
+                  style: 'primary',
+                },
+                {
+                  type: 'button',
+                  text: { type: 'plain_text', text: 'Edit in 60', emoji: false },
+                  action_id: `edit::email_draft::${cal3EmailApprovalId}`,
+                  value: JSON.stringify({ approvalId: cal3EmailApprovalId }),
+                  url: cal3EditUrl,
+                },
+              ],
+            },
+            {
+              type: 'actions',
+              block_id: `email_draft_approval_sched_${cal3EmailApprovalId}`,
+              elements: [
+                {
+                  type: 'button',
+                  text: { type: 'plain_text', text: 'Schedule', emoji: false },
+                  action_id: `reject::email_draft::${cal3EmailApprovalId}`,
+                  value: JSON.stringify({ approvalId: cal3EmailApprovalId, subAction: 'schedule' }),
+                },
+              ],
+            },
+            {
+              type: 'actions',
+              block_id: `email_draft_approval_skip_${cal3EmailApprovalId}`,
+              elements: [
+                {
+                  type: 'button',
+                  text: { type: 'plain_text', text: 'Skip', emoji: false },
+                  action_id: `reject::email_draft::${cal3EmailApprovalId}`,
+                  value: JSON.stringify({ approvalId: cal3EmailApprovalId, subAction: 'skip' }),
+                  style: 'danger',
+                },
+              ],
+            },
+            {
+              type: 'context',
+              elements: [{ type: 'mrkdwn', text: 'Expires in 24 hours | Review in Sixty or your email client' }],
+            },
+          ];
+
+          // --- Post the email draft approval message to the same DM channel ---
+          const cal3SlackPostResp = await fetch('https://slack.com/api/chat.postMessage', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${cal3OrgConnection.botToken}`,
+            },
+            body: JSON.stringify({
+              channel: cal3DmChannelId,
+              text: `Availability email draft ready for review: ${emailSubject}`,
+              blocks: cal3EmailDraftBlocks,
+            }),
+          });
+
+          const cal3SlackPostResult = await cal3SlackPostResp.json();
+
+          if (cal3SlackPostResult.ok) {
+            // Update the email_draft approval row with the real Slack message timestamp
+            await supabase
+              .from('hitl_pending_approvals')
+              .update({
+                slack_message_ts: cal3SlackPostResult.ts || '',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', cal3EmailApprovalId);
+
+            console.log(
+              `[CAL-003] Email draft HITL created: id=${cal3EmailApprovalId}, to=${emailContactEmail}, ` +
+              `slack_ts=${cal3SlackPostResult.ts}`
+            );
+          } else {
+            console.error('[CAL-003] Slack postMessage failed for email draft:', cal3SlackPostResult.error);
+            // Clean up the orphaned approval row
+            await supabase.from('hitl_pending_approvals').delete().eq('id', cal3EmailApprovalId);
+          }
+        }
+      } else {
+        console.warn('[CAL-003] No Slack bot token or DM channel — skipping email draft HITL message');
+      }
+
+      // --- Mark the original calendar_slots approval as 'approved' ---
+      const { error: cal3UpdateError } = await supabase.rpc('process_hitl_action', {
+        p_approval_id: hitlAction.approvalId,
+        p_action: 'approved',
+        p_actioned_by: ctx?.userId || null,
+        p_response: { slack_user_id: payload.user.id, sub_action: 'send_email' },
+      });
+
+      if (cal3UpdateError) {
+        console.error('[CAL-003] Failed to mark calendar_slots approval as approved:', cal3UpdateError);
+      }
+
+      // Resume the paused orchestrator job (fire-and-forget)
+      if (calJobId) {
+        resumeOrchestratorJob(calJobId, hitlAction.approvalId).catch(() => {});
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Generic approve (any other subAction) — acknowledge and resume job
+    if (payload.response_url) {
+      await updateMessage(payload.response_url, [
+        { type: 'section', text: { type: 'mrkdwn', text: `*Approved* — handling your meeting scheduling` } },
+        {
+          type: 'context',
+          elements: [{
+            type: 'mrkdwn',
+            text: `<@${payload.user.id}> · ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`,
+          }],
+        },
+      ]);
+    }
+
+    if (calJobId) {
+      resumeOrchestratorJob(calJobId, hitlAction.approvalId).catch(() => {});
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // PROP-002 / PROP-003: proposal approve — mark approved, update Slack message, trigger
+  // hitl-send-followup-email which handles the proposal email send (PROP-003 logic), and
+  // resume the paused sequence job.
+  if (hitlAction.resourceType === 'proposal') {
+    const dealName = (approval.original_content?.deal_name as string | undefined) || approval.resource_name || 'Proposal';
+
+    if (payload.response_url) {
+      await updateMessage(payload.response_url, [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*${dealName}* — Approved & Sending` },
+        },
+        {
+          type: 'context',
+          elements: [{
+            type: 'mrkdwn',
+            text: `Approved by <@${payload.user.id}> · ${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })} | Sending proposal via email...`,
+          }],
+        },
+      ]);
+    }
+
+    // PROP-003: Trigger hitl-send-followup-email which now handles proposal sends
+    await triggerHITLCallback(approval, 'approved', {
+      ...approval.original_content,
+      actioned_by_slack_user: payload.user.id,
+      actioned_at: new Date().toISOString(),
+    });
+
+    // Resume the paused orchestrator sequence job
+    const propJobId = approval.callback_metadata?.job_id as string | undefined;
+    if (propJobId) {
+      resumeOrchestratorJob(propJobId, hitlAction.approvalId).catch(() => {});
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Non-email-draft: standard approval confirmation + immediate callback
   if (payload.response_url) {
     const confirmationData: HITLActionedConfirmation = {
       action: 'approved',
@@ -2648,11 +3347,179 @@ async function handleHITLApprove(
     await updateMessage(payload.response_url, confirmationMessage.blocks);
   }
 
-  // Log the action
-  await logHITLAction(supabase, approval, 'approved', ctx?.userId || payload.user.id);
-
-  // Trigger callback
+  // Trigger callback immediately for non-email resources
   await triggerHITLCallback(approval, 'approved', approval.original_content);
+
+  // EMAIL-002: Resume the paused orchestrator sequence job (if one exists for this approval).
+  const jobId = approval.callback_metadata?.job_id as string | undefined;
+  if (jobId) {
+    resumeOrchestratorJob(jobId, hitlAction.approvalId).catch(() => {});
+  }
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// EMAIL-005: Undo queued email send (30-second undo window)
+// ---------------------------------------------------------------------------
+
+/**
+ * Handle [Undo] button click after an email approval queues a 30-second delayed send.
+ * Cancels the scheduled_email_sends row (if still pending) and updates the Slack
+ * message to show "Cancelled". Records an 'undone' autopilot signal.
+ */
+async function handleUndoEmailSend(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  let schedRowId: string | undefined;
+  let approvalId: string | undefined;
+  try {
+    const parsed = JSON.parse(action.value);
+    schedRowId = parsed?.schedRowId;
+    approvalId = parsed?.approvalId;
+  } catch {
+    console.warn('[EMAIL-005] undo_email_send: could not parse action value');
+  }
+
+  if (!schedRowId) {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Fetch the row to check its current status and timing
+  const { data: schedRow } = await supabase
+    .from('scheduled_email_sends')
+    .select('id, approval_id, org_id, user_id, scheduled_at, status')
+    .eq('id', schedRowId)
+    .maybeSingle();
+
+  if (!schedRow || schedRow.status !== 'pending') {
+    // Already sent or cancelled — inform the rep
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: ':warning: This email has already been sent (or was already cancelled) — it cannot be undone.' } }],
+        text: 'Cannot undo: email already sent or cancelled.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Attempt to cancel — use conditional update to prevent race with cron
+  const { count: cancelledCount } = await supabase
+    .from('scheduled_email_sends')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', schedRowId)
+    .eq('status', 'pending')
+    .select('id', { count: 'exact', head: true });
+
+  if (!cancelledCount || cancelledCount === 0) {
+    // Cron fired between our fetch and our update — email already sent
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: ':warning: The email was sent just before the undo reached us — too late to cancel.' } }],
+        text: 'Cannot undo: email already sent.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Successfully cancelled — log the HITL action and update Slack message
+  if (approvalId) {
+    const { data: approvalRec } = await supabase
+      .from('hitl_pending_approvals')
+      .select('id, org_id, user_id, created_by, resource_type, resource_id, resource_name, slack_team_id, slack_channel_id, slack_message_ts, slack_thread_ts, status, original_content, edited_content, response, actioned_by, actioned_at, callback_type, callback_target, callback_metadata, created_at, updated_at, expires_at, metadata')
+      .eq('id', approvalId)
+      .maybeSingle();
+
+    if (approvalRec) {
+      const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+      await logHITLAction(supabase, approvalRec as HITLApprovalRecord, 'undo_send', ctx?.userId || payload.user.id, {
+        scheduled_send_id: schedRowId,
+        undone_by_slack_user: payload.user.id,
+        outcome: 'undone',
+      });
+
+      // EMAIL-009: Record 'undone' autopilot signal (fire-and-forget)
+      if (ctx?.userId && approvalRec.org_id) {
+        try {
+          const { recordSignal } = await import('../_shared/autopilot/signals.ts');
+          const { recalculateUserConfidence } = await import('../_shared/autopilot/confidence.ts');
+          const { evaluateDemotionTriggers, executeDemotion } = await import('../_shared/autopilot/demotionEngine.ts');
+
+          const ACTION_TYPE = 'email.send';
+          const { data: tierRow } = await supabase
+            .from('autopilot_confidence')
+            .select('current_tier')
+            .eq('user_id', ctx.userId)
+            .eq('action_type', ACTION_TYPE)
+            .maybeSingle();
+          const tier = (tierRow as Record<string, unknown> | null)?.current_tier as string ?? 'approve';
+
+          await recordSignal(supabase as Parameters<typeof recordSignal>[0], {
+            user_id: ctx.userId,
+            org_id: approvalRec.org_id,
+            action_type: ACTION_TYPE,
+            agent_name: 'hitl-send-followup-email',
+            signal: 'undone',
+            autonomy_tier_at_time: tier,
+            meeting_id: undefined,
+          });
+
+          recalculateUserConfidence(supabase as Parameters<typeof recalculateUserConfidence>[0], ctx.userId, approvalRec.org_id, ACTION_TYPE)
+            .catch((err: unknown) => console.error('[EMAIL-005] recalculateUserConfidence error:', err));
+
+          evaluateDemotionTriggers(supabase as Parameters<typeof evaluateDemotionTriggers>[0], ctx.userId, approvalRec.org_id, ACTION_TYPE)
+            .then((result: { triggered: boolean; severity?: string }) => {
+              if (result.triggered && result.severity) {
+                return executeDemotion(supabase as Parameters<typeof executeDemotion>[0], ctx.userId!, approvalRec.org_id, ACTION_TYPE, result.severity, result);
+              }
+            })
+            .catch((err: unknown) => console.error('[EMAIL-005] demotion evaluation error:', err));
+        } catch (err) {
+          console.error('[EMAIL-005] autopilot signal error:', err);
+        }
+      }
+    }
+  }
+
+  // Update the Slack message to show "Cancelled"
+  const cancelledBlocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `_Email send undone by <@${payload.user.id}>_`,
+      },
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `Cancelled · ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`,
+        },
+      ],
+    },
+  ];
+
+  if (payload.response_url) {
+    await updateMessage(payload.response_url, cancelledBlocks);
+  }
+
+  console.log(`[EMAIL-005] Undone scheduled send ${schedRowId} for approval ${approvalId}`);
 
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
@@ -2662,6 +3529,13 @@ async function handleHITLApprove(
 
 /**
  * Handle HITL reject action
+ *
+ * EMAIL-003: Detects subAction='skip' in the action value JSON.
+ * When skip is detected:
+ *   1. Sets hitl_pending_approvals status='rejected' (with skip metadata in response)
+ *   2. Marks the sequence_job complete with outcome='skipped'
+ *   3. Stores skip reason 'rep_skipped' in sequence_job output
+ *   4. Updates Slack message to show 'Skipped' with muted styling (no buttons)
  */
 async function handleHITLReject(
   supabase: ReturnType<typeof createClient>,
@@ -2671,6 +3545,214 @@ async function handleHITLReject(
 ): Promise<Response> {
   const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
 
+  // EMAIL-003: Parse value JSON to detect skip subAction.
+  // Both Schedule and Skip share the same action_id format (reject::email_draft::{id});
+  // the distinction is in the value JSON's subAction field.
+  let subAction: string | undefined;
+  try {
+    const parsedValue = JSON.parse(action.value);
+    subAction = parsedValue?.subAction;
+  } catch {
+    // value is not JSON (legacy plain-string path) — no subAction
+  }
+  const isSkip = subAction === 'skip';
+  const isSchedule = subAction === 'schedule';
+
+  // EMAIL-008: [Schedule] button — open a date/time picker modal instead of rejecting.
+  if (isSchedule) {
+    return handleScheduleEmailModal(supabase, payload, hitlAction);
+  }
+
+  // CAL-002: calendar_slots reject — handle 'dismiss' and 'show_more' subActions.
+  // 'dismiss': rep will handle scheduling manually — mark rejected, complete job with outcome='rep_handling'.
+  // 'show_more': placeholder for CAL-005; for now mark as rejected so Sixty stops nudging.
+  if (hitlAction.resourceType === 'calendar_slots') {
+    const isDismiss = subAction === 'dismiss' || subAction === 'show_more';
+    const calValidation = await validateHITLApproval(supabase, hitlAction.approvalId);
+    if (!calValidation.valid || !calValidation.approval) {
+      return handleExpiredHITLApproval(supabase, payload, calValidation.approval, calValidation.error || 'Invalid approval');
+    }
+    const calApproval = calValidation.approval;
+
+    const { error: calUpdateError } = await supabase.rpc('process_hitl_action', {
+      p_approval_id: hitlAction.approvalId,
+      p_action: 'rejected',
+      p_actioned_by: ctx?.userId || null,
+      p_response: { slack_user_id: payload.user.id, sub_action: subAction || 'dismiss' },
+    });
+
+    if (calUpdateError) {
+      console.error('[CAL-002] Error processing calendar_slots reject:', calUpdateError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Failed to process. Please try again.' } }],
+          text: 'Failed to process.',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Mark the sequence job complete with outcome='rep_handling' (dismiss) or 'rep_requested_more' (show_more)
+    const calJobId = calApproval.callback_metadata?.job_id as string | undefined;
+    if (calJobId && isDismiss) {
+      const outcome = subAction === 'show_more' ? 'rep_requested_more' : 'rep_handling';
+      try {
+        const { error: completeRpcError } = await supabase.rpc('complete_sequence_job', {
+          p_job_id: calJobId,
+          p_final_output: {
+            outcome,
+            step: 'calendar-slot-approval',
+            actioned_by_slack_user: payload.user.id,
+            sub_action: subAction,
+            actioned_at: new Date().toISOString(),
+          },
+        });
+
+        if (completeRpcError?.message?.includes('does not exist') || completeRpcError?.code === '42883') {
+          await supabase.from('sequence_jobs').update({
+            status: 'completed',
+            context: {
+              outcome,
+              step: 'calendar-slot-approval',
+              actioned_by_slack_user: payload.user.id,
+              sub_action: subAction,
+              actioned_at: new Date().toISOString(),
+            },
+            completed_at: new Date().toISOString(),
+          }).eq('id', calJobId);
+        } else if (completeRpcError) {
+          console.error('[CAL-002] Error completing sequence_job:', completeRpcError);
+        }
+
+        console.log(`[CAL-002] Sequence job ${calJobId} marked complete with outcome=${outcome}`);
+      } catch (err) {
+        console.error('[CAL-002] Failed to mark sequence_job complete:', err);
+      }
+    }
+
+    // Update Slack message to reflect the rep's choice
+    if (payload.response_url) {
+      const dismissLabel = subAction === 'show_more'
+        ? `_Showing more options — <@${payload.user.id}> is reviewing_`
+        : `_You're handling this manually — <@${payload.user.id}>_`;
+      await updateMessage(payload.response_url, [
+        { type: 'section', text: { type: 'mrkdwn', text: dismissLabel } },
+        {
+          type: 'context',
+          elements: [{
+            type: 'mrkdwn',
+            text: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }),
+          }],
+        },
+      ]);
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // PROP-002: proposal reject/skip — mark rejected, complete sequence job with outcome='skipped'.
+  if (hitlAction.resourceType === 'proposal') {
+    const propValidation = await validateHITLApproval(supabase, hitlAction.approvalId);
+    if (!propValidation.valid || !propValidation.approval) {
+      return handleExpiredHITLApproval(supabase, payload, propValidation.approval, propValidation.error || 'Invalid approval');
+    }
+    const propApproval = propValidation.approval;
+    const dealName = (propApproval.original_content?.deal_name as string | undefined) || propApproval.resource_name || 'Proposal';
+
+    const { error: propUpdateError } = await supabase.rpc('process_hitl_action', {
+      p_approval_id: hitlAction.approvalId,
+      p_action: 'rejected',
+      p_actioned_by: ctx?.userId || null,
+      p_response: {
+        slack_user_id: payload.user.id,
+        sub_action: 'skip',
+        skip_reason: 'rep_skipped',
+      },
+    });
+
+    if (propUpdateError) {
+      console.error('[PROP-002] Error processing proposal skip:', propUpdateError);
+      if (payload.response_url) {
+        await sendEphemeral(payload.response_url, {
+          blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Failed to process. Please try again.' } }],
+          text: 'Failed to process.',
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Mark the sequence job complete with outcome='skipped'
+    const propJobId = (propApproval.callback_metadata as Record<string, unknown>)?.job_id as string | undefined;
+    if (propJobId) {
+      try {
+        const { error: completeRpcError } = await supabase.rpc('complete_sequence_job', {
+          p_job_id: propJobId,
+          p_final_output: {
+            outcome: 'skipped',
+            skip_reason: 'rep_skipped',
+            skipped_step: 'proposal-approval',
+            actioned_by_slack_user: payload.user.id,
+            actioned_at: new Date().toISOString(),
+          },
+        });
+
+        if (completeRpcError?.message?.includes('does not exist') || completeRpcError?.code === '42883') {
+          await supabase.from('sequence_jobs').update({
+            status: 'completed',
+            context: {
+              outcome: 'skipped',
+              skip_reason: 'rep_skipped',
+              skipped_step: 'proposal-approval',
+              actioned_by_slack_user: payload.user.id,
+              actioned_at: new Date().toISOString(),
+            },
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq('id', propJobId);
+        } else if (completeRpcError) {
+          console.error('[PROP-002] Error completing sequence_job for skip:', completeRpcError);
+        }
+
+        console.log(`[PROP-002] Sequence job ${propJobId} marked complete with outcome=skipped`);
+      } catch (err) {
+        console.error('[PROP-002] Failed to mark sequence_job skipped:', err);
+      }
+    }
+
+    // Update Slack message to show muted 'Skipped' state (no buttons)
+    if (payload.response_url) {
+      await updateMessage(payload.response_url, [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `_${dealName} — Skipped by <@${payload.user.id}>_` },
+        },
+        {
+          type: 'context',
+          elements: [{
+            type: 'mrkdwn',
+            text: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }),
+          }],
+        },
+      ]);
+    }
+
+    await logHITLAction(supabase, propApproval, 'skipped', ctx?.userId || payload.user.id, { skip_reason: 'rep_skipped', sub_action: 'skip' });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   // Validate the approval
   const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
   if (!validation.valid || !validation.approval) {
@@ -2679,12 +3761,15 @@ async function handleHITLReject(
 
   const approval = validation.approval;
 
-  // Process the rejection
+  // Process the rejection — skip stores the reason in the response metadata
   const { error: updateError } = await supabase.rpc('process_hitl_action', {
     p_approval_id: hitlAction.approvalId,
     p_action: 'rejected',
     p_actioned_by: ctx?.userId || null,
-    p_response: { slack_user_id: payload.user.id },
+    p_response: {
+      slack_user_id: payload.user.id,
+      ...(isSkip ? { sub_action: 'skip', skip_reason: 'rep_skipped' } : {}),
+    },
   });
 
   if (updateError) {
@@ -2701,24 +3786,519 @@ async function handleHITLReject(
     });
   }
 
-  // Update the original Slack message
-  if (payload.response_url) {
-    const confirmationData: HITLActionedConfirmation = {
-      action: 'rejected',
-      resourceType: hitlAction.resourceType,
-      resourceName: approval.resource_name || getResourceTypeLabel(hitlAction.resourceType),
-      slackUserId: payload.user.id,
-      timestamp: new Date().toISOString(),
-    };
-    const confirmationMessage = buildHITLActionedConfirmation(confirmationData);
-    await updateMessage(payload.response_url, confirmationMessage.blocks);
+  // EMAIL-003: When rep clicks Skip, mark the sequence_job complete with outcome='skipped'.
+  // The job_id is stored in callback_metadata by the emailDraftApproval adapter.
+  if (isSkip) {
+    const jobId = (approval.callback_metadata as Record<string, unknown>)?.job_id as string | undefined;
+    if (jobId) {
+      try {
+        // Attempt RPC first; fall back to direct update if RPC is unavailable (mirrors runner.ts pattern)
+        const { error: completeRpcError } = await supabase.rpc('complete_sequence_job', {
+          p_job_id: jobId,
+          p_final_output: {
+            outcome: 'skipped',
+            skip_reason: 'rep_skipped',
+            skipped_step: 'email-draft-approval',
+            actioned_by_slack_user: payload.user.id,
+            actioned_at: new Date().toISOString(),
+          },
+        });
+
+        if (completeRpcError?.message?.includes('does not exist') || completeRpcError?.code === '42883') {
+          // Fallback: direct update
+          await supabase.from('sequence_jobs').update({
+            status: 'completed',
+            context: {
+              outcome: 'skipped',
+              skip_reason: 'rep_skipped',
+              skipped_step: 'email-draft-approval',
+              actioned_by_slack_user: payload.user.id,
+              actioned_at: new Date().toISOString(),
+            },
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq('id', jobId);
+        } else if (completeRpcError) {
+          console.error('[HITL] Error completing sequence_job for skip:', completeRpcError);
+        }
+
+        console.log(`[HITL] Sequence job ${jobId} marked complete with outcome=skipped`);
+      } catch (err) {
+        // Non-fatal: log but do not block the Slack response
+        console.error('[HITL] Failed to mark sequence_job skipped:', err);
+      }
+    } else {
+      console.log('[HITL] Skip action: no job_id in callback_metadata, skipping sequence_job update');
+    }
   }
 
-  // Log the action
-  await logHITLAction(supabase, approval, 'rejected', ctx?.userId || payload.user.id);
+  // Update the original Slack message
+  if (payload.response_url) {
+    if (isSkip) {
+      // EMAIL-003: Replace all buttons with a muted static 'Skipped' text block
+      const skippedBlocks = [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `_Skipped by <@${payload.user.id}>_`,
+          },
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: new Date().toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+              }),
+            },
+          ],
+        },
+      ];
+      await updateMessage(payload.response_url, skippedBlocks);
+    } else {
+      const confirmationData: HITLActionedConfirmation = {
+        action: 'rejected',
+        resourceType: hitlAction.resourceType,
+        resourceName: approval.resource_name || getResourceTypeLabel(hitlAction.resourceType),
+        slackUserId: payload.user.id,
+        timestamp: new Date().toISOString(),
+      };
+      const confirmationMessage = buildHITLActionedConfirmation(confirmationData);
+      await updateMessage(payload.response_url, confirmationMessage.blocks);
+    }
+  }
 
-  // Trigger callback (with original content since nothing was changed)
-  await triggerHITLCallback(approval, 'rejected', approval.original_content);
+  // Log the action (distinguish skip from generic reject in the audit log)
+  await logHITLAction(
+    supabase,
+    approval,
+    isSkip ? 'skipped' : 'rejected',
+    ctx?.userId || payload.user.id,
+    isSkip ? { skip_reason: 'rep_skipped', sub_action: 'skip' } : undefined,
+  );
+
+  // Trigger callback (with original content; skip includes skip metadata)
+  await triggerHITLCallback(approval, 'rejected', {
+    ...approval.original_content,
+    ...(isSkip ? { skip_reason: 'rep_skipped', sub_action: 'skip' } : {}),
+  });
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// EMAIL-008: Schedule email send
+// ---------------------------------------------------------------------------
+
+/**
+ * Open a Slack modal with date_picker + time_picker so the rep can pick a
+ * future send time. Called when the [Schedule] button is clicked.
+ */
+async function handleScheduleEmailModal(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  hitlAction: ParsedHITLAction
+): Promise<Response> {
+  const triggerId = payload.trigger_id;
+  if (!triggerId) {
+    console.warn('[EMAIL-008] No trigger_id — cannot open schedule modal');
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Validate the approval still exists and is pending.
+  const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
+  if (!validation.valid || !validation.approval) {
+    return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
+  }
+
+  const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
+  if (!orgConnection) {
+    console.warn('[EMAIL-008] No org connection — cannot open schedule modal');
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Default: tomorrow at 9am (local Slack user's date; Slack will format it correctly)
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const defaultDate = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD
+
+  const privateMetadata = JSON.stringify({
+    approvalId: hitlAction.approvalId,
+    resourceType: hitlAction.resourceType,
+    channelId: payload.channel?.id,
+    messageTs: payload.message?.ts,
+    responseUrl: payload.response_url,
+    slackTeamId: payload.team?.id,
+  });
+
+  const modalRes = await fetch('https://slack.com/api/views.open', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${orgConnection.botToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      trigger_id: triggerId,
+      view: {
+        type: 'modal',
+        callback_id: 'schedule_email_modal',
+        private_metadata: privateMetadata,
+        title: { type: 'plain_text', text: 'Schedule email send' },
+        submit: { type: 'plain_text', text: 'Schedule' },
+        close: { type: 'plain_text', text: 'Cancel' },
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: 'Pick a date and time to send this follow-up email. You can cancel up to 5 minutes before it sends.',
+            },
+          },
+          {
+            type: 'input',
+            block_id: 'send_date',
+            label: { type: 'plain_text', text: 'Date' },
+            element: {
+              type: 'datepicker',
+              action_id: 'send_date_input',
+              initial_date: defaultDate,
+              placeholder: { type: 'plain_text', text: 'Select a date' },
+            },
+          },
+          {
+            type: 'input',
+            block_id: 'send_time',
+            label: { type: 'plain_text', text: 'Time' },
+            element: {
+              type: 'timepicker',
+              action_id: 'send_time_input',
+              initial_time: '09:00',
+              placeholder: { type: 'plain_text', text: 'Select a time' },
+            },
+            hint: {
+              type: 'plain_text',
+              text: 'Times are in UTC. Convert from your local timezone before submitting.',
+            },
+          },
+        ],
+      },
+    }),
+  });
+
+  const modalResult = await modalRes.json();
+  if (!modalResult.ok) {
+    console.error('[EMAIL-008] Failed to open schedule modal:', modalResult);
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Failed to open schedule dialog. Please try again.' } }],
+        text: 'Failed to open schedule dialog.',
+      });
+    }
+  }
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+/**
+ * Handle submission of the schedule_email_modal.
+ * Inserts a row into scheduled_email_sends and updates the Slack message to
+ * show the scheduled time with a [Cancel scheduled send] button.
+ */
+async function handleScheduleEmailSubmission(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload
+): Promise<Response> {
+  const meta = JSON.parse(payload.view?.private_metadata || '{}') as {
+    approvalId: string;
+    resourceType: string;
+    channelId?: string;
+    messageTs?: string;
+    responseUrl?: string;
+    slackTeamId?: string;
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const values = (payload.view?.state?.values || {}) as any;
+  const datePicked: string = values['send_date']?.['send_date_input']?.selected_date || '';
+  const timePicked: string = values['send_time']?.['send_time_input']?.selected_time || '09:00';
+
+  if (!datePicked) {
+    return new Response(
+      JSON.stringify({ response_action: 'errors', errors: { send_date: 'Please select a date.' } }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Construct scheduled_at as UTC ISO string (date_picker + time_picker are both UTC in Slack)
+  const scheduledAt = new Date(`${datePicked}T${timePicked}:00.000Z`);
+
+  // Must be in the future
+  if (scheduledAt <= new Date()) {
+    return new Response(
+      JSON.stringify({ response_action: 'errors', errors: { send_time: 'Please pick a time in the future.' } }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Validate the approval still exists / is pending
+  const validation = await validateHITLApproval(supabase, meta.approvalId);
+  if (!validation.valid || !validation.approval) {
+    // Close the modal — approval is no longer actionable
+    return new Response('', { status: 200, headers: corsHeaders });
+  }
+  const approval = validation.approval;
+
+  // Human-readable label, e.g. "Fri Feb 28 · 9:00am UTC"
+  const scheduledLabel = scheduledAt.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }) + ' · ' + scheduledAt.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC',
+  }) + ' UTC';
+
+  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+
+  // Upsert: if there's already a pending row for this approval, replace it.
+  // This handles the rep clicking Schedule twice.
+  await supabase
+    .from('scheduled_email_sends')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('approval_id', meta.approvalId)
+    .eq('status', 'pending');
+
+  const { data: schedRow, error: insertErr } = await supabase
+    .from('scheduled_email_sends')
+    .insert({
+      approval_id: meta.approvalId,
+      org_id: approval.org_id,
+      user_id: ctx?.userId || approval.user_id,
+      scheduled_at: scheduledAt.toISOString(),
+      scheduled_label: scheduledLabel,
+      slack_team_id: payload.team?.id || approval.slack_team_id,
+      slack_channel_id: meta.channelId || approval.slack_channel_id,
+      slack_message_ts: meta.messageTs || approval.slack_message_ts,
+    })
+    .select('id')
+    .single();
+
+  if (insertErr || !schedRow) {
+    console.error('[EMAIL-008] Failed to insert scheduled send:', insertErr);
+    // Close modal — we'll let the error surface as a log (not fatal from Slack's perspective)
+    return new Response('', { status: 200, headers: corsHeaders });
+  }
+
+  const schedRowId = schedRow.id as string;
+
+  // Log the action
+  await logHITLAction(supabase, approval, 'scheduled', ctx?.userId || payload.user.id, {
+    scheduled_at: scheduledAt.toISOString(),
+    scheduled_label: scheduledLabel,
+    scheduled_send_id: schedRowId,
+  });
+
+  // Update the Slack message to show the scheduled time + a Cancel button.
+  // Cancel stores the scheduled_email_sends.id so we can find the row quickly.
+  const scheduledBlocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `⏰ *Scheduled for ${scheduledLabel}*\n_Scheduled by <@${payload.user.id}>_`,
+      },
+    },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Cancel scheduled send', emoji: false },
+          style: 'danger',
+          action_id: 'cancel_scheduled_email',
+          value: JSON.stringify({ schedRowId, approvalId: meta.approvalId }),
+          confirm: {
+            title: { type: 'plain_text', text: 'Cancel scheduled send?' },
+            text: { type: 'mrkdwn', text: 'This will cancel the scheduled send. The email draft will not be sent.' },
+            confirm: { type: 'plain_text', text: 'Yes, cancel' },
+            deny: { type: 'plain_text', text: 'Keep scheduled' },
+          },
+        },
+      ],
+    },
+  ];
+
+  // Try response_url first (stale after ~30 min; fall back to chat.update)
+  const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
+  const responseUrl = meta.responseUrl;
+  const channelId = meta.channelId || approval.slack_channel_id;
+  const messageTs = meta.messageTs || approval.slack_message_ts;
+
+  if (responseUrl) {
+    await updateMessage(responseUrl, scheduledBlocks);
+  } else if (orgConnection && channelId && messageTs) {
+    await updateMessageViaApi(
+      orgConnection.botToken,
+      channelId,
+      messageTs,
+      scheduledBlocks,
+      `Scheduled for ${scheduledLabel}`
+    );
+  }
+
+  console.log(`[EMAIL-008] Scheduled send ${schedRowId} for approval ${meta.approvalId} at ${scheduledAt.toISOString()}`);
+
+  // Close the modal — return empty 200
+  return new Response('', { status: 200, headers: corsHeaders });
+}
+
+/**
+ * Handle [Cancel scheduled send] button click.
+ * Marks the scheduled_email_sends row as cancelled and updates the Slack message.
+ */
+async function handleCancelScheduledEmail(
+  supabase: ReturnType<typeof createClient>,
+  payload: InteractivePayload,
+  action: SlackAction
+): Promise<Response> {
+  let schedRowId: string | undefined;
+  let approvalId: string | undefined;
+  try {
+    const parsed = JSON.parse(action.value);
+    schedRowId = parsed?.schedRowId;
+    approvalId = parsed?.approvalId;
+  } catch {
+    console.warn('[EMAIL-008] cancel_scheduled_email: could not parse action value');
+  }
+
+  if (!schedRowId) {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Fetch the row before cancelling to enforce the 5-minute window
+  const { data: schedRow } = await supabase
+    .from('scheduled_email_sends')
+    .select('id, approval_id, org_id, user_id, scheduled_at, scheduled_label, slack_team_id, slack_channel_id, slack_message_ts, status')
+    .eq('id', schedRowId)
+    .maybeSingle();
+
+  if (!schedRow || schedRow.status !== 'pending') {
+    // Already sent or cancelled
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '⚠️ This send has already gone out (or was already cancelled) and cannot be cancelled.' } }],
+        text: 'Cannot cancel: email already sent or cancelled.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Enforce 5-minute cutoff: cannot cancel within 5 min of send time
+  const sendTime = new Date(schedRow.scheduled_at);
+  const cutoff = new Date(sendTime.getTime() - 5 * 60 * 1000);
+  if (new Date() >= cutoff) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '⚠️ The scheduled send is within 5 minutes and can no longer be cancelled.' } }],
+        text: 'Cannot cancel: send time is within 5 minutes.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Cancel the row
+  await supabase
+    .from('scheduled_email_sends')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', schedRowId)
+    .eq('status', 'pending');
+
+  // Log the cancellation
+  if (approvalId) {
+    const { data: approvalRec } = await supabase
+      .from('hitl_pending_approvals')
+      .select('id, org_id, user_id, created_by, resource_type, resource_id, resource_name, slack_team_id, slack_channel_id, slack_message_ts, slack_thread_ts, status, original_content, edited_content, response, actioned_by, actioned_at, callback_type, callback_target, callback_metadata, created_at, updated_at, expires_at, metadata')
+      .eq('id', approvalId)
+      .maybeSingle();
+    if (approvalRec) {
+      const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+      await logHITLAction(supabase, approvalRec as HITLApprovalRecord, 'schedule_cancelled', ctx?.userId || payload.user.id, {
+        scheduled_send_id: schedRowId,
+        cancelled_by_slack_user: payload.user.id,
+      });
+    }
+  }
+
+  // Update the Slack message to show cancelled state
+  const cancelledBlocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `_Scheduled send cancelled by <@${payload.user.id}>_`,
+      },
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: new Date().toLocaleString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: '2-digit', hour12: true,
+          }),
+        },
+      ],
+    },
+  ];
+
+  if (payload.response_url) {
+    await updateMessage(payload.response_url, cancelledBlocks);
+  } else {
+    const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
+    if (orgConnection && schedRow.slack_channel_id && schedRow.slack_message_ts) {
+      await updateMessageViaApi(
+        orgConnection.botToken,
+        schedRow.slack_channel_id,
+        schedRow.slack_message_ts,
+        cancelledBlocks,
+        'Scheduled send cancelled'
+      );
+    }
+  }
+
+  console.log(`[EMAIL-008] Cancelled scheduled send ${schedRowId}`);
 
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
@@ -2833,7 +4413,7 @@ function buildHITLEditModalBlocks(
 }
 
 /**
- * Handle HITL edit action - opens a modal for editing
+ * Handle HITL edit action - opens a modal for editing (or, for email_draft, updates Slack message)
  */
 async function handleHITLEdit(
   supabase: ReturnType<typeof createClient>,
@@ -2841,22 +4421,7 @@ async function handleHITLEdit(
   action: SlackAction,
   hitlAction: ParsedHITLAction
 ): Promise<Response> {
-  const triggerId = payload.trigger_id;
-
-  if (!triggerId) {
-    if (payload.response_url) {
-      await sendEphemeral(payload.response_url, {
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Unable to open edit dialog.' } }],
-        text: 'Unable to open edit dialog.',
-      });
-    }
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  // Validate the approval
+  // Validate the approval first (needed for both email_draft and modal flows)
   const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
   if (!validation.valid || !validation.approval) {
     return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
@@ -2864,7 +4429,7 @@ async function handleHITLEdit(
 
   const approval = validation.approval;
 
-  // Get org connection for bot token
+  // Get org connection for bot token (needed for both flows)
   const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
   if (!orgConnection) {
     if (payload.response_url) {
@@ -2879,32 +4444,140 @@ async function handleHITLEdit(
     });
   }
 
+  // EMAIL-007: For email_draft approvals, the [Edit in 60] button is a URL button that already
+  // navigates the rep to the app. The Slack handler's job is to:
+  //   1. Update the Slack message to show "Editing in 60..." with the deep link
+  //   2. Record the editing action in audit logs
+  // The approval row stays 'pending' so the frontend can re-submit and create a new approval (AC4).
+  if (hitlAction.resourceType === 'email_draft') {
+    const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+    const deepLinkUrl = `${appUrl}/meetings?approval=${hitlAction.approvalId}`;
+    const resourceLabel = approval.resource_name || 'Follow-up Email';
+    const timestamp = new Date().toISOString();
+
+    // Update Slack message to show editing state
+    const editingBlocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `_Editing in Sixty..._ <${deepLinkUrl}|Open in Sixty>\n_${resourceLabel}_`,
+        },
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `Editing started by <@${payload.user.id}> • ${new Date(timestamp).toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true,
+            })}`,
+          },
+        ],
+      },
+    ];
+
+    // Try response_url first (fastest, works within ~30 min of message send)
+    if (payload.response_url) {
+      await updateMessage(payload.response_url, editingBlocks);
+    } else if (approval.slack_channel_id && approval.slack_message_ts) {
+      await updateMessageViaApi(
+        orgConnection.botToken,
+        approval.slack_channel_id,
+        approval.slack_message_ts,
+        editingBlocks,
+        `Editing in Sixty... ${resourceLabel}`
+      );
+    }
+
+    // Log the action
+    await logHITLAction(supabase, approval, 'editing_started', ctx?.userId || payload.user.id, {
+      deep_link: deepLinkUrl,
+      slack_user_id: payload.user.id,
+    });
+
+    console.log(`[EMAIL-007] Edit in 60 clicked for approval ${hitlAction.approvalId} — Slack message updated to editing state`);
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // PROP-002: proposal edit — the [Edit in 60] button is a URL button that deep-links to the app.
+  // The approval row stays 'pending' so the rep can come back and approve/skip after editing.
+  // We just update the Slack message to acknowledge the click.
+  if (hitlAction.resourceType === 'proposal') {
+    const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
+    const deepLinkUrl = `${appUrl}/deals?proposal_approval=${hitlAction.approvalId}`;
+    const resourceLabel = approval.resource_name || 'Proposal';
+    const timestamp = new Date().toISOString();
+
+    const editingBlocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `_Editing in Sixty..._ <${deepLinkUrl}|Open in Sixty>\n_${resourceLabel}_`,
+        },
+      },
+      {
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: `Editing started by <@${payload.user.id}> • ${new Date(timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`,
+        }],
+      },
+    ];
+
+    if (payload.response_url) {
+      await updateMessage(payload.response_url, editingBlocks);
+    } else if (approval.slack_channel_id && approval.slack_message_ts) {
+      await updateMessageViaApi(
+        orgConnection.botToken,
+        approval.slack_channel_id,
+        approval.slack_message_ts,
+        editingBlocks,
+        `Editing in Sixty... ${resourceLabel}`
+      );
+    }
+
+    await logHITLAction(supabase, approval, 'editing_started', ctx?.userId || payload.user.id, {
+      deep_link: deepLinkUrl,
+      slack_user_id: payload.user.id,
+    });
+
+    console.log(`[PROP-002] Edit in 60 clicked for proposal approval ${hitlAction.approvalId}`);
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // For all other resource types, open a Slack modal for in-place editing.
+  // Modals require a trigger_id which is only present for button-click interactions.
+  const triggerId = payload.trigger_id;
+  if (!triggerId) {
+    if (payload.response_url) {
+      await sendEphemeral(payload.response_url, {
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '❌ Unable to open edit dialog.' } }],
+        text: 'Unable to open edit dialog.',
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   // Use stored content by default, but for simulations/demos we can safely seed from the Slack message
   // so the modal shows the real draft body even if the DB stored a placeholder.
-  let modalSeedContent: Record<string, unknown> = approval.original_content || {};
-  if (hitlAction.resourceType === 'email_draft') {
-    const derived = deriveEmailDraftFromSlackMessage(payload.message);
-    if (derived) {
-      const existingBody = isNonEmptyString(modalSeedContent.body) ? String(modalSeedContent.body).trim() : '';
-      const derivedBody = isNonEmptyString(derived.body) ? derived.body.trim() : '';
-      const shouldUseDerivedBody =
-        isNonEmptyString(derivedBody) &&
-        (!existingBody || isProbablySimulatedPlaceholderBody(existingBody) || derivedBody.length > existingBody.length);
-
-      const existingSubject = isNonEmptyString(modalSeedContent.subject) ? String(modalSeedContent.subject).trim() : '';
-      const derivedSubject = isNonEmptyString(derived.subject) ? derived.subject.trim() : '';
-      const shouldUseDerivedSubject =
-        isNonEmptyString(derivedSubject) &&
-        (!existingSubject || derivedSubject.length > existingSubject.length);
-
-      modalSeedContent = {
-        ...modalSeedContent,
-        ...(derived.recipient ? { recipient: derived.recipient } : {}),
-        ...(shouldUseDerivedSubject ? { subject: derivedSubject } : {}),
-        ...(shouldUseDerivedBody ? { body: derivedBody } : {}),
-      };
-    }
-  }
+  const modalSeedContent: Record<string, unknown> = approval.original_content || {};
 
   // Build modal blocks based on resource type
   const editBlocks = buildHITLEditModalBlocks(
@@ -7545,6 +9218,16 @@ serve(async (req) => {
           }
         }
 
+        // EMAIL-008: Handle [Cancel scheduled send] button
+        if (action.action_id === 'cancel_scheduled_email') {
+          return handleCancelScheduledEmail(supabase, payload, action);
+        }
+
+        // EMAIL-005: Handle [Undo] button after approval queues a 30-second delayed send
+        if (action.action_id === 'undo_email_send') {
+          return handleUndoEmailSend(supabase, payload, action);
+        }
+
         // GRAD-003: Handle autonomy promotion actions (autonomy_promotion_*)
         if (action.action_id.startsWith('autonomy_promotion_')) {
           console.log('[AutonomyPromotion] Processing action:', action.action_id);
@@ -8284,6 +9967,10 @@ serve(async (req) => {
         }
         if (payload.view?.callback_id === 'hitl_edit_modal') {
           return handleHITLEditSubmission(supabase, payload);
+        }
+        // EMAIL-008: Schedule email modal submission
+        if (payload.view?.callback_id === 'schedule_email_modal') {
+          return handleScheduleEmailSubmission(supabase, payload);
         }
         if (payload.view?.callback_id === 'create_task_from_message_modal') {
           return handleCreateTaskFromMessageSubmission(supabase, payload);

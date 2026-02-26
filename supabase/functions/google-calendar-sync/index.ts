@@ -17,7 +17,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts';
 import { authenticateRequest, getUserOrgId } from '../_shared/edgeAuth.ts';
-import { getGoogleIntegration } from '../_shared/googleOAuth.ts';
+import { getGoogleIntegration, refreshGoogleAccessToken } from '../_shared/googleOAuth.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
 import { extractMeetingUrl } from '../_shared/meetingUrlExtractor.ts';
 import { triggerPreMeetingIfSoon } from '../_shared/orchestrator/triggerPreMeeting.ts';
@@ -60,11 +60,18 @@ async function logSyncOperation(
 }
 
 interface SyncRequest {
-  action: 'incremental-sync';
+  action: 'incremental-sync' | 'create';
   syncToken?: string;
   startDate?: string;
   endDate?: string;
   userId?: string; // Required for service-role calls
+  // Fields for action='create'
+  summary?: string;
+  start?: string; // ISO datetime
+  end?: string; // ISO datetime
+  attendees?: string[]; // Array of email addresses
+  description?: string;
+  timezone?: string;
 }
 
 serve(async (req) => {
@@ -119,6 +126,205 @@ serve(async (req) => {
       mode = authResult.mode;
       console.log(`[CALENDAR-SYNC] Authenticated as ${mode}, userId: ${userId}`);
     }
+
+    // -------------------------------------------------------------------------
+    // CAL-004: action='create' — create a Google Calendar event and send invites
+    // -------------------------------------------------------------------------
+    if (body.action === 'create') {
+      const { summary, start, end, attendees, description, timezone } = body;
+
+      if (!summary || !start || !end) {
+        return errorResponse('Missing required fields: summary, start, end', req, 400);
+      }
+
+      // Get Google OAuth tokens (handles refresh if needed)
+      let accessToken: string;
+      try {
+        const googleIntegration = await getGoogleIntegration(supabase, userId);
+        accessToken = googleIntegration.accessToken;
+      } catch (err: any) {
+        console.error('[CALENDAR-CREATE] Failed to get Google integration:', err.message);
+        if (err.message?.includes('reconnect')) {
+          return errorResponse(
+            'Your Google Calendar needs to be reconnected with write permissions. Please visit Settings > Integrations > Google Calendar and reconnect.',
+            req,
+            403,
+          );
+        }
+        return errorResponse(`Google Calendar not connected: ${err.message}`, req, 400);
+      }
+
+      const tz = timezone || 'UTC';
+
+      const eventBody: Record<string, unknown> = {
+        summary,
+        start: { dateTime: start, timeZone: tz },
+        end: { dateTime: end, timeZone: tz },
+        reminders: { useDefault: true },
+      };
+
+      if (description) {
+        eventBody.description = description;
+      }
+
+      if (Array.isArray(attendees) && attendees.length > 0) {
+        eventBody.attendees = attendees.map((email: string) => ({ email }));
+      }
+
+      // Create the event — sendUpdates=all ensures Google sends invite emails
+      let createResp = await fetch(
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(eventBody),
+        },
+      );
+
+      // Handle 401: try token refresh once then retry
+      if (createResp.status === 401) {
+        console.warn('[CALENDAR-CREATE] Got 401 — attempting token refresh');
+        try {
+          const { data: integration } = await supabase
+            .from('google_integrations')
+            .select('refresh_token')
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .single();
+
+          if (!integration?.refresh_token) {
+            return errorResponse('Google Calendar token expired. Please reconnect your Google account.', req, 403);
+          }
+
+          accessToken = await refreshGoogleAccessToken(integration.refresh_token, supabase, userId);
+
+          createResp = await fetch(
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all',
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(eventBody),
+            },
+          );
+        } catch (refreshErr: any) {
+          console.error('[CALENDAR-CREATE] Token refresh failed:', refreshErr.message);
+          return errorResponse('Google Calendar access expired. Please reconnect your Google account.', req, 403);
+        }
+      }
+
+      // Handle insufficient scope (403 with specific error)
+      if (createResp.status === 403) {
+        const errData = await createResp.json().catch(() => ({}));
+        const errMsg = (errData as any)?.error?.message || 'Insufficient permissions';
+        console.error('[CALENDAR-CREATE] 403 from Google:', errMsg);
+        if (errMsg.toLowerCase().includes('scope') || errMsg.toLowerCase().includes('permission')) {
+          return errorResponse(
+            'Google Calendar write permission required. Please reconnect your Google account and grant calendar write access.',
+            req,
+            403,
+          );
+        }
+        return errorResponse(`Google Calendar error: ${errMsg}`, req, 403);
+      }
+
+      if (!createResp.ok) {
+        const errData = await createResp.json().catch(() => ({}));
+        const errMsg = (errData as any)?.error?.message || createResp.statusText;
+        console.error('[CALENDAR-CREATE] Google Calendar API error:', errMsg);
+        return errorResponse(`Failed to create calendar event: ${errMsg}`, req, 500);
+      }
+
+      const createdEvent = await createResp.json();
+      const googleEventId: string = createdEvent.id;
+
+      console.log(`[CALENDAR-CREATE] Event created: id=${googleEventId}, summary="${summary}", attendees=${attendees?.length ?? 0}`);
+
+      // Sync the created event to local calendar_events table
+      const orgId = await getUserOrgId(supabase, userId);
+      const now = new Date().toISOString();
+
+      // Find the calendar record for this user
+      const { data: calRecord } = await supabase
+        .from('calendar_calendars')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('external_id', 'primary')
+        .maybeSingle();
+
+      if (calRecord?.id) {
+        const eventPayload: Record<string, unknown> = {
+          user_id: userId,
+          calendar_id: calRecord.id,
+          external_id: googleEventId,
+          title: summary,
+          description: description || null,
+          start_time: start,
+          end_time: end,
+          all_day: false,
+          status: 'confirmed',
+          attendees_count: Array.isArray(attendees) ? attendees.length : 0,
+          attendees: Array.isArray(attendees)
+            ? attendees.map((email: string) => ({ email, responseStatus: 'needsAction' }))
+            : null,
+          html_link: createdEvent.htmlLink || null,
+          hangout_link: createdEvent.hangoutLink || null,
+          etag: createdEvent.etag || null,
+          external_updated_at: createdEvent.updated ? new Date(createdEvent.updated).toISOString() : now,
+          sync_status: 'synced',
+          synced_at: now,
+          raw_data: createdEvent,
+        };
+        if (orgId) {
+          eventPayload.org_id = orgId;
+        }
+
+        const { error: upsertError } = await supabase
+          .from('calendar_events')
+          .upsert(eventPayload, { onConflict: 'user_id,external_id' });
+
+        if (upsertError) {
+          console.warn('[CALENDAR-CREATE] Failed to upsert event to local table:', upsertError.message);
+          // Non-fatal — event was created in Google, local sync is best-effort
+        }
+      } else {
+        console.warn('[CALENDAR-CREATE] No calendar_calendars record found — skipping local upsert');
+      }
+
+      await logSyncOperation(supabase, {
+        orgId,
+        userId,
+        operation: 'create',
+        direction: 'outbound',
+        entityType: 'calendar_event',
+        entityId: googleEventId,
+        entityName: summary,
+        status: 'success',
+        metadata: { attendees_count: attendees?.length ?? 0, timezone: tz },
+      });
+
+      return jsonResponse(
+        {
+          success: true,
+          eventId: googleEventId,
+          htmlLink: createdEvent.htmlLink,
+          summary,
+          start,
+          end,
+          attendees: attendees ?? [],
+        },
+        req,
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // Default: action='incremental-sync'
+    // -------------------------------------------------------------------------
 
     const { syncToken, startDate, endDate } = body;
 

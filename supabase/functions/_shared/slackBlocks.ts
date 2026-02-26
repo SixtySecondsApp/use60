@@ -1129,7 +1129,9 @@ export type HITLResourceType =
   | 'summary'
   | 'meeting_notes'
   | 'proposal_section'
-  | 'coaching_tip';
+  | 'coaching_tip'
+  | 'calendar_slots'
+  | 'proposal';
 
 export interface HITLApprovalData {
   approvalId: string;
@@ -1212,6 +1214,8 @@ const getHITLResourceEmoji = (resourceType: HITLResourceType): string => {
     'meeting_notes': '🎯',
     'proposal_section': '📄',
     'coaching_tip': '💡',
+    'calendar_slots': '📅',
+    'proposal': '📋',
   };
   return emojiMap[resourceType] || '📋';
 };
