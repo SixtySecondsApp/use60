@@ -25,6 +25,7 @@ const SOURCE_LABELS: Record<string, string> = {
   copilot: 'Copilot',
   manual: 'Manual',
   ops_table: 'Cross-Ops',
+  explorium: 'Explorium',
 };
 
 export const OpsTableListResponse: React.FC<OpsTableListResponseProps> = ({ data, onActionClick }) => {
