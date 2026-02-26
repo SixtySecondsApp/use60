@@ -56,16 +56,58 @@ export const SIGNAL_WEIGHTS: Record<ApprovalSignal, number> = {
 }
 
 /**
- * Minimum time-to-respond (ms) below which an approval is considered a
- * rubber stamp — i.e. the rep approved without meaningfully reviewing the
- * proposal. Approvals faster than this threshold are flagged so downstream
- * analytics can discount them when building confidence scores.
+ * Default minimum time-to-respond (ms) below which an approval is considered
+ * a rubber stamp — i.e. the rep approved without meaningfully reviewing the
+ * proposal.
  *
  * 2 seconds: a human cannot meaningfully read and evaluate a proposal in
  * under 2 seconds, so any approval faster than this is assumed to be a
  * click-through rather than a genuine review.
+ *
+ * @deprecated Prefer `RUBBER_STAMP_THRESHOLDS` for action-type-specific
+ *   thresholds. This constant is retained for backward compatibility.
  */
 export const RUBBER_STAMP_THRESHOLD_MS = 2000
+
+/**
+ * Action-type-specific rubber-stamp thresholds (milliseconds).
+ *
+ * Some actions are genuinely quick to review (a simple activity log entry),
+ * while others require careful reading before approval (sending an email or
+ * kicking off a sequence). Using per-action thresholds avoids both false
+ * positives (flagging legitimately fast approvals as rubber stamps) and false
+ * negatives (not catching hasty approvals on high-stakes actions).
+ *
+ * If an action_type is not listed here the `DEFAULT_RUBBER_STAMP_MS` fallback
+ * is used.
+ */
+export const RUBBER_STAMP_THRESHOLDS: Record<string, number> = {
+  'crm.note_add':            2000,  // 2s  — notes need reading
+  'crm.activity_log':        1500,  // 1.5s — simple activity
+  'crm.contact_enrich':      2000,  // 2s
+  'crm.next_steps_update':   2000,  // 2s
+  'crm.deal_field_update':   1500,  // 1.5s — simple field
+  'crm.deal_stage_change':   3000,  // 3s  — high stakes, needs thought
+  'crm.deal_amount_change':  3000,  // 3s  — high stakes
+  'crm.deal_close_date_change': 2000, // 2s
+  'email.draft_save':        1500,  // 1.5s — draft save, lower stakes
+  'email.send':              5000,  // 5s  — email needs careful review
+  'email.follow_up_send':    4000,  // 4s
+  'email.check_in_send':     3000,  // 3s
+  'task.create':             1500,  // 1.5s
+  'task.assign':             1500,  // 1.5s
+  'calendar.create_event':   2000,  // 2s
+  'calendar.reschedule':     2000,  // 2s
+  'sequence.start':          3000,  // 3s  — sequences have downstream impact
+  'slack.notification_send': 1500,  // 1.5s
+  'slack.briefing_send':     2000,  // 2s
+}
+
+/**
+ * Fallback threshold used when `action_type` is absent or not listed in
+ * `RUBBER_STAMP_THRESHOLDS`.
+ */
+export const DEFAULT_RUBBER_STAMP_MS = 2000
 
 // =============================================================================
 // Interfaces
@@ -115,23 +157,34 @@ export interface ApprovalEvent {
 // =============================================================================
 
 /**
- * Returns `true` if the approval event looks like a rubber stamp — i.e. the
- * rep approved (with or without edits) suspiciously fast, suggesting they did
- * not genuinely review the proposal.
+ * Returns `true` if the approval looks like a rubber stamp — i.e. the rep
+ * responded suspiciously fast, suggesting they did not genuinely review the
+ * proposal.
  *
- * Only `approved` and `approved_edited` signals can be rubber stamps.
- * If `time_to_respond_ms` is not available the function returns `false`.
+ * The threshold is determined by `actionType` (looked up in
+ * `RUBBER_STAMP_THRESHOLDS`). If `actionType` is omitted or not in the table,
+ * `DEFAULT_RUBBER_STAMP_MS` is used.
  *
- * @param event - The approval event to evaluate
+ * Returns `false` when `timeToRespondMs` is `null` or `undefined` — unknown
+ * response time gets the benefit of the doubt.
+ *
+ * Note: only call this for `approved` / `approved_edited` signals; for all
+ * other signal types the caller should skip the rubber-stamp check entirely.
+ *
+ * @param timeToRespondMs - Milliseconds between proposal presentation and rep
+ *   response. Pass `null` / `undefined` when the value is unavailable.
+ * @param actionType      - Optional action type slug (e.g. `'email.send'`).
+ *   When supplied, an action-specific threshold from `RUBBER_STAMP_THRESHOLDS`
+ *   is used; otherwise `DEFAULT_RUBBER_STAMP_MS` applies.
  */
-export function isRubberStamp(event: ApprovalEvent): boolean {
-  if (event.signal !== 'approved' && event.signal !== 'approved_edited') {
-    return false
-  }
-  if (event.time_to_respond_ms === undefined || event.time_to_respond_ms === null) {
-    return false
-  }
-  return event.time_to_respond_ms < RUBBER_STAMP_THRESHOLD_MS
+export function isRubberStamp(
+  timeToRespondMs: number | null | undefined,
+  actionType?: string,
+): boolean {
+  if (timeToRespondMs == null) return false  // unknown → benefit of the doubt
+  const threshold =
+    (actionType ? RUBBER_STAMP_THRESHOLDS[actionType] : null) ?? DEFAULT_RUBBER_STAMP_MS
+  return timeToRespondMs < threshold
 }
 
 // =============================================================================
@@ -170,7 +223,7 @@ export async function recordSignal(
       meeting_id: event.meeting_id ?? null,
       autonomy_tier_at_time: event.autonomy_tier_at_time,
       is_backfill: event.is_backfill ?? false,
-      rubber_stamp: isRubberStamp(event),
+      rubber_stamp: isRubberStamp(event.time_to_respond_ms, event.action_type),
     })
 
     if (error) {
