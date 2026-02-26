@@ -94,7 +94,7 @@ export function AgentActivityBell() {
           aria-expanded={isOpen}
           title="Agent Activity Feed"
         >
-          <Bot className="w-4 h-4 text-gray-700 dark:text-gray-400 transition-colors" />
+          <Bot className="w-[21px] h-[21px] text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors" />
           {/* Status dot: green = active, gray = quiet */}
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
 
