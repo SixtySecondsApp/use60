@@ -47,6 +47,7 @@ export function CompletionStep() {
   const invalidateProfile = useInvalidateUserProfile();
   const [isNavigating, setIsNavigating] = useState(false);
   const orgProfileCreatedRef = useRef(false);
+  const creditsGrantedRef = useRef(false);
 
   // Determine which skills have been configured (have non-empty data)
   const configuredSkillIds = SKILLS.filter((skill) => {
@@ -103,53 +104,55 @@ export function CompletionStep() {
     setStep('skills_config');
   };
 
+  // Shared completion side effects — called once regardless of navigation path
+  const ensureCompletionSideEffects = async () => {
+    await completeStep('complete');
+
+    if (organizationId) {
+      setActiveOrg(organizationId);
+    }
+
+    // Grant credits + start trial only once (guard with ref)
+    if (organizationId && !creditsGrantedRef.current) {
+      creditsGrantedRef.current = true;
+      try {
+        await supabase.functions.invoke('grant-welcome-credits', {
+          body: { org_id: organizationId },
+        });
+        localStorage.setItem(`sixty_welcome_credits_${organizationId}`, 'pending');
+      } catch (err) {
+        console.error('[CompletionStep] Failed to grant welcome credits:', err);
+      }
+
+      supabase.functions.invoke('start-free-trial', {
+        body: { org_id: organizationId },
+      }).catch((err) => {
+        console.error('[CompletionStep] Failed to start free trial:', err);
+      });
+    }
+
+    await ensureOrgProfile();
+
+    if (user?.id) {
+      invalidateProfile();
+    }
+  };
+
   const handleGoToDashboard = async () => {
     if (isNavigating) return;
     setIsNavigating(true);
 
     try {
-      // Mark onboarding as complete using the proper hook
-      // This ensures needsOnboarding state updates before navigation
-      await completeStep('complete');
-
-      // Set the active org to the one from onboarding (prevents picking wrong/waitlist org)
-      if (organizationId) {
-        setActiveOrg(organizationId);
-      }
-
-      // Grant 10 welcome credits to new org (non-blocking)
-      if (organizationId) {
-        try {
-          await supabase.functions.invoke('grant-welcome-credits', {
-            body: { org_id: organizationId },
-          });
-          localStorage.setItem(`sixty_welcome_credits_${organizationId}`, 'pending');
-        } catch (err) {
-          console.error('[CompletionStep] Failed to grant welcome credits:', err);
-          // Non-fatal — do not block navigation
-        }
-
-        // Start 14-day free trial (non-blocking, idempotent)
-        supabase.functions.invoke('start-free-trial', {
-          body: { org_id: organizationId },
-        }).catch((err) => {
-          console.error('[CompletionStep] Failed to start free trial:', err);
-        });
-      }
-
-      // Create org fact profile — await so the request isn't killed by navigation
-      await ensureOrgProfile();
-
-      // Invalidate profile cache so dashboard fetches fresh data
-      if (user?.id) {
-        invalidateProfile();
-      }
-
-      // Navigate to dashboard with full page refresh to clear React Query cache
+      await ensureCompletionSideEffects();
       window.location.href = '/dashboard';
     } catch (error) {
       console.error('Error completing onboarding:', error);
-      // Fall back to direct navigation even if completion save fails
+      // Retry completeStep once before giving up
+      try {
+        await completeStep('complete');
+      } catch {
+        // Still failed — navigate anyway but user may see onboarding again
+      }
       window.location.href = '/dashboard';
     } finally {
       setIsNavigating(false);
@@ -249,32 +252,10 @@ export function CompletionStep() {
               if (isNavigating) return;
               setIsNavigating(true);
               try {
-                await completeStep('complete');
-                // Set the active org to the one from onboarding
-                if (organizationId) {
-                  setActiveOrg(organizationId);
-                }
-                // Grant 10 welcome credits to new org (non-blocking)
-                if (organizationId) {
-                  try {
-                    await supabase.functions.invoke('grant-welcome-credits', {
-                      body: { org_id: organizationId },
-                    });
-                    localStorage.setItem(`sixty_welcome_credits_${organizationId}`, 'pending');
-                  } catch (err) {
-                    console.error('[CompletionStep] Failed to grant welcome credits:', err);
-                  }
-
-                  // Start 14-day free trial (non-blocking, idempotent)
-                  supabase.functions.invoke('start-free-trial', {
-                    body: { org_id: organizationId },
-                  }).catch((err) => {
-                    console.error('[CompletionStep] Failed to start free trial:', err);
-                  });
-                }
-                // Create org fact profile — await before navigating
-                await ensureOrgProfile();
-                // Use full page load to clear React Query cache
+                await ensureCompletionSideEffects();
+                window.location.href = item.route;
+              } catch (error) {
+                console.error('[CompletionStep] Navigation error:', error);
                 window.location.href = item.route;
               } finally {
                 setIsNavigating(false);

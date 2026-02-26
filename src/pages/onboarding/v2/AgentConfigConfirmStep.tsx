@@ -470,7 +470,7 @@ export function AgentConfigConfirmStep() {
 
     fetchInferred();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationId]);
+  }, [organizationId, enrichment]);
 
   const handleValueChange = (key: string, newVal: unknown) => {
     setItems((prev) =>

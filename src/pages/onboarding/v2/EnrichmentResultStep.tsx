@@ -21,6 +21,10 @@ export function EnrichmentResultStep() {
 
   const handleStartOver = async () => {
     if (isResetting) return;
+    const confirmed = window.confirm(
+      'Are you sure you want to start over? This will delete your organization and all enrichment data.'
+    );
+    if (!confirmed) return;
     setIsResetting(true);
     try {
       await resetAndCleanup(queryClient);
@@ -35,7 +39,7 @@ export function EnrichmentResultStep() {
       setIsLoading(true);
       supabase
         .from('organization_enrichment')
-        .select('*')
+        .select('id, organization_id, domain, status, error_message, company_name, logo_url, tagline, description, industry, employee_count, products, value_propositions, competitors, target_market, tech_stack, key_people, pain_points, confidence_score, generated_skills, enrichment_source')
         .eq('organization_id', organizationId)
         .maybeSingle()
         .then(({ data, error }) => {

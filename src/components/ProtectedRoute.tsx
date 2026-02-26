@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
-import { useOrganizationContext } from '@/lib/hooks/useOrganizationContext';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -71,7 +71,7 @@ const isOnboardingExemptRoute = (pathname: string): boolean => {
 export function ProtectedRoute({ children, redirectTo = '/auth/login' }: ProtectedRouteProps) {
   const { isAuthenticated, loading, user } = useAuth();
   const { needsOnboarding, loading: onboardingLoading } = useOnboardingProgress();
-  const { activeOrgId } = useOrganizationContext();
+  const activeOrgId = useOrgStore((state) => state.activeOrgId);
   const isResettingOnboarding = useOnboardingV2Store((s) => s.isResettingOnboarding);
   const navigate = useNavigate();
   const location = useLocation();
@@ -327,9 +327,10 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
           .from('organizations')
           .select('is_active, name')
           .eq('id', activeOrgId)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
+        if (!org) return; // Org doesn't exist (deleted or not yet created during onboarding)
 
         logger.log('[ProtectedRoute] Organization active status:', org?.is_active);
         setIsOrgActive(org?.is_active ?? true);

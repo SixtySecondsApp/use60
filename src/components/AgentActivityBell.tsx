@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { GraduationCap } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AgentActivityFeed } from './agent/AgentActivityFeed';
 import { useAgentActivityUnreadCount } from '@/hooks/useAgentActivity';
@@ -94,7 +94,9 @@ export function AgentActivityBell() {
           aria-expanded={isOpen}
           title="Agent Activity Feed"
         >
-          <GraduationCap className="w-5 h-5 text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors" />
+          <Bot className="w-[21px] h-[21px] text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors" />
+          {/* Status dot: green = active, gray = quiet */}
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
 
           {/* Unread Count Badge */}
           <AnimatePresence>

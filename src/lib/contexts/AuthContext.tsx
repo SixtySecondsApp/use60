@@ -7,6 +7,7 @@ import { getAuthRedirectUrl } from '@/lib/utils/siteUrl';
 import logger from '@/lib/utils/logger';
 import { setSentryUser, clearSentryUser } from '@/lib/sentry';
 import { initAnalytics, identify, reset as resetAnalytics } from '@/lib/analytics';
+import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 
 // Check if Clerk auth is enabled via feature flag
 const USE_CLERK_AUTH = import.meta.env.VITE_USE_CLERK_AUTH === 'true';
@@ -265,7 +266,18 @@ const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               }
               break;
               
-            case 'SIGNED_OUT':
+            case 'SIGNED_OUT': {
+              // Guard: Suppress SIGNED_OUT during entire onboarding flow (OLH-002)
+              // refreshSession() during enrichment polling, stale profile refetches on step
+              // transitions, and resetAndCleanup can all trigger spurious SIGNED_OUT events
+              const obState = useOnboardingV2Store.getState();
+              const isInOnboarding = obState.isResettingOnboarding ||
+                (obState.currentStep && obState.currentStep !== 'complete' && window.location.pathname.includes('/onboarding'));
+              if (isInOnboarding) {
+                logger.log('Suppressed SIGNED_OUT during onboarding:', obState.currentStep);
+                break;
+              }
+
               // Check if this is a password recovery flow or invitation flow
               // Supabase clears the session when processing recovery/invite tokens
               // We should NOT show the "Successfully signed out!" toast in these cases
@@ -295,6 +307,7 @@ const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               }
               // Note: We don't log SIGNED_OUT since we won't have session data
               break;
+            }
               
             case 'TOKEN_REFRESHED':
               logger.log('Token refreshed successfully');

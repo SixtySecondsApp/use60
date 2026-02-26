@@ -48,10 +48,15 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
     emailDomain,
     signupCompanyDomain,
     resolveDomainMismatch,
+    resolvedResearchDomain,
   } = useOnboardingV2Store();
 
   const handleStartOver = useCallback(async () => {
     if (isResetting) return;
+    const confirmed = window.confirm(
+      'Are you sure you want to start over? This will delete your organization and all enrichment data.'
+    );
+    if (!confirmed) return;
     setIsResetting(true);
     try {
       await resetAndCleanup(queryClient);
@@ -95,11 +100,18 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
       return;
     }
 
+    // Wait for user to resolve domain mismatch before starting enrichment
+    if (hasDomainMismatch) return;
+
+    // Use the resolved domain (user's choice) if they had a mismatch, otherwise fall back to prop
+    const { resolvedResearchDomain } = useOnboardingV2Store.getState();
+    const enrichDomain = resolvedResearchDomain || domain;
+
     // Only start enrichment for website-based flow
-    if (domain) {
-      startEnrichment(organizationId, domain);
+    if (enrichDomain) {
+      startEnrichment(organizationId, enrichDomain);
     }
-  }, [organizationId, domain, startEnrichment, enrichmentSource]);
+  }, [organizationId, domain, startEnrichment, enrichmentSource, hasDomainMismatch]);
 
   // Simulate progress while enrichment is running
   useEffect(() => {
@@ -114,10 +126,12 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
         const max = enrichment?.status === 'completed' ? 100 : 90;
         if (prev >= max) return prev;
 
-        // Adjust speed based on enrichment status
-        let increment = 2;
-        if (enrichment?.status === 'scraping') increment = 1.5;
-        if (enrichment?.status === 'analyzing') increment = 2.5;
+        // Slow progression — enrichment takes 20-40s, reach 90% in ~30s
+        let increment = 0.4;
+        if (enrichment?.status === 'scraping') increment = 0.3;
+        if (enrichment?.status === 'analyzing') increment = 0.5;
+        // Slow down as we approach the cap
+        if (prev > 70) increment *= 0.5;
 
         return Math.min(prev + increment, max);
       });
@@ -242,6 +256,68 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
     );
   }
 
+  // Show domain mismatch picker as a full standalone step (blocks enrichment)
+  if (hasDomainMismatch && emailDomain && signupCompanyDomain) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="w-full max-w-lg mx-auto px-4"
+      >
+        <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 overflow-hidden">
+          <div className="bg-amber-600 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h2 className="font-bold text-white">Which domain should we research?</h2>
+                <p className="text-amber-100 text-sm">We detected two different domains</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <p className="text-sm text-gray-400 mb-6">
+              Your email domain (<span className="text-white font-medium">@{emailDomain}</span>) and the website you entered (<span className="text-white font-medium">{signupCompanyDomain}</span>) are different. Pick the one we should use for your company research.
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => resolveDomainMismatch(emailDomain)}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border border-gray-700 hover:border-violet-500 hover:bg-violet-900/20 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-violet-900/50 flex items-center justify-center flex-shrink-0">
+                  <span className="text-violet-300 text-sm font-bold">@</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-medium truncate">{emailDomain}</p>
+                  <p className="text-xs text-gray-500">From your email address</p>
+                </div>
+                <Check className="w-4 h-4 text-gray-600 group-hover:text-violet-400 transition-colors" />
+              </button>
+
+              <button
+                onClick={() => resolveDomainMismatch(signupCompanyDomain)}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border border-gray-700 hover:border-violet-500 hover:bg-violet-900/20 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+                  <span className="text-blue-300 text-sm font-bold">W</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-medium truncate">{signupCompanyDomain}</p>
+                  <p className="text-xs text-gray-500">From the website you entered</p>
+                </div>
+                <Check className="w-4 h-4 text-gray-600 group-hover:text-violet-400 transition-colors" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -249,42 +325,6 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
       exit={{ opacity: 0, scale: 0.95 }}
       className="w-full max-w-md mx-auto px-4"
     >
-      {/* Domain Mismatch Picker */}
-      {hasDomainMismatch && emailDomain && signupCompanyDomain && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-lg mx-auto px-4 mb-6"
-        >
-          <div className="rounded-2xl border border-amber-700/50 bg-amber-900/20 p-6">
-            <h3 className="text-lg font-semibold text-white mb-2">
-              Which domain should we research?
-            </h3>
-            <p className="text-sm text-gray-400 mb-4">
-              Your email (@{emailDomain}) and the website you entered ({signupCompanyDomain}) are different. Choose which domain to use for your company research.
-            </p>
-            <div className="flex gap-3">
-              <Button
-                onClick={() => resolveDomainMismatch(emailDomain)}
-                variant="outline"
-                className="flex-1 border-gray-600 text-white hover:bg-gray-800"
-              >
-                {emailDomain}
-                <span className="block text-xs text-gray-400 mt-0.5">from your email</span>
-              </Button>
-              <Button
-                onClick={() => resolveDomainMismatch(signupCompanyDomain)}
-                variant="outline"
-                className="flex-1 border-gray-600 text-white hover:bg-gray-800"
-              >
-                {signupCompanyDomain}
-                <span className="block text-xs text-gray-400 mt-0.5">from your website</span>
-              </Button>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
       <div className="rounded-2xl shadow-xl border border-gray-800 bg-gray-900 p-8 sm:p-12 text-center">
         {/* Progress Circle */}
         <div className="relative w-24 h-24 mx-auto mb-8">
@@ -331,7 +371,7 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
 
         {/* Title */}
         <h2 className="text-xl font-bold text-white mb-2">
-          Analyzing {domain}
+          Analyzing {resolvedResearchDomain || domain || 'your company information'}
         </h2>
         <p className="text-gray-400 mb-8">
           Learning about your business to customize your assistant...
@@ -417,7 +457,7 @@ export function EnrichmentLoadingStep({ domain, organizationId: propOrgId }: Enr
         )}
 
         {/* Progressive Data Preview */}
-        {enrichment && (enrichment.company_name || enrichment.products?.length) && (
+        {enrichment && (enrichment.company_name || (enrichment.products?.length ?? 0) > 0) && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}

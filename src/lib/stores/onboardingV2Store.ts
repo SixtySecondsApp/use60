@@ -267,6 +267,7 @@ interface OnboardingV2State {
   // Polling timeout protection
   pollingStartTime: number | null;
   pollingAttempts: number;
+  pollingTimeoutId: ReturnType<typeof setTimeout> | null;
   // Retry tracking for enrichment failures
   enrichmentRetryCount: number;
 
@@ -445,6 +446,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
   // Polling timeout protection
   pollingStartTime: null as number | null,
   pollingAttempts: 0,
+  pollingTimeoutId: null as ReturnType<typeof setTimeout> | null,
   // Retry tracking for enrichment failures
   enrichmentRetryCount: 0,
 
@@ -518,14 +520,24 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         let exactMatchOrg: any = null;
         let fuzzyMatches: any[] = [];
 
-        // Strategy 1: Exact match by company_domain
-        const { data: exactMatch } = await supabase
-          .from('organizations')
-          .select('id, name, company_domain')
-          .eq('company_domain', domain)
-          .eq('is_active', true)
-          .maybeSingle();
-
+        // Strategy 1: Exact match by company_domain (OLH-005: use SECURITY DEFINER RPC to bypass RLS)
+        // Fallback to direct query if RPC not yet deployed
+        let exactMatch: any = null;
+        const { data: exactMatchResults, error: rpcError } = await supabase.rpc('find_organization_by_domain', {
+          p_domain: domain,
+        });
+        if (rpcError) {
+          // RPC not deployed yet or other error — fallback to direct query
+          console.warn('[onboardingV2] find_organization_by_domain RPC failed, using fallback:', rpcError.code);
+          const { data: fallbackResults } = await supabase
+            .from('organizations')
+            .select('id, name, company_domain')
+            .eq('company_domain', domain)
+            .limit(1);
+          exactMatch = fallbackResults?.[0] || null;
+        } else {
+          exactMatch = exactMatchResults?.[0] || null;
+        }
         if (exactMatch) {
           hasExactMatch = true;
           exactMatchOrg = exactMatch;
@@ -615,22 +627,70 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             domain,
           });
         } else {
-          // No match: proceed to enrichment as normal
-          console.log('[onboardingV2] No existing org found for domain, proceeding to enrichment');
-          set({
-            userEmail: email,
-            isPersonalEmail: isPersonal,
-            currentStep: 'enrichment_loading',
-            domain,
-          });
+          // No match: create org for this domain then proceed to enrichment
+          console.log('[onboardingV2] No existing org found for domain, creating org and proceeding to enrichment');
+          const domainLabel = domain.replace(/\.(com|io|ai|co|net|org|app|dev|xyz)$/i, '');
+          const orgName = domainLabel.charAt(0).toUpperCase() + domainLabel.slice(1);
+
+          const { data: newOrg, error: orgError } = await supabase
+            .from('organizations')
+            .insert({
+              name: orgName,
+              company_domain: domain,
+              created_by: session.user.id,
+              is_active: true,
+            })
+            .select('id')
+            .single();
+
+          if (orgError) {
+            // Might be duplicate — try to fetch existing
+            const { data: existing } = await supabase
+              .from('organizations')
+              .select('id')
+              .eq('company_domain', domain)
+              .eq('created_by', session.user.id)
+              .maybeSingle();
+
+            if (existing) {
+              console.log('[onboardingV2] Reusing existing org for domain:', domain);
+              // Ensure membership exists
+              await supabase.from('organization_memberships').upsert(
+                { org_id: existing.id, user_id: session.user.id, role: 'owner', member_status: 'active' },
+                { onConflict: 'org_id,user_id' }
+              );
+              set({
+                userEmail: email,
+                isPersonalEmail: isPersonal,
+                organizationId: existing.id,
+                currentStep: 'enrichment_loading',
+                domain,
+              });
+            } else {
+              throw orgError;
+            }
+          } else {
+            // Create membership for new org
+            await supabase.from('organization_memberships').upsert(
+              { org_id: newOrg.id, user_id: session.user.id, role: 'owner', member_status: 'active' },
+              { onConflict: 'org_id,user_id' }
+            );
+            set({
+              userEmail: email,
+              isPersonalEmail: isPersonal,
+              organizationId: newOrg.id,
+              currentStep: 'enrichment_loading',
+              domain,
+            });
+          }
         }
       } catch (error) {
         console.error('[onboardingV2] Error checking for existing org:', error);
-        // Fall back to enrichment on error
+        // Fall back to website input on error (can't enrich without org)
         set({
           userEmail: email,
           isPersonalEmail: isPersonal,
-          currentStep: 'enrichment_loading',
+          currentStep: 'website_input',
         });
       }
     } else {
@@ -704,15 +764,23 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
       let existingOrg = null;
 
-      // Strategy 1: Exact match by company_domain
-      const { data: exactMatch } = await supabase
-        .from('organizations')
-        .select('id, name, company_domain')
-        .eq('company_domain', domain)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      existingOrg = exactMatch;
+      // Strategy 1: Exact match by company_domain (OLH-005: use SECURITY DEFINER RPC to bypass RLS)
+      // Fallback to direct query if RPC not yet deployed
+      const { data: exactMatchResults, error: rpcError } = await supabase.rpc('find_organization_by_domain', {
+        p_domain: domain,
+      });
+      if (rpcError) {
+        // RPC not deployed yet or other error — fallback to direct query
+        console.warn('[onboardingV2] find_organization_by_domain RPC failed, using fallback:', rpcError.code);
+        const { data: fallbackResults } = await supabase
+          .from('organizations')
+          .select('id, name, company_domain')
+          .eq('company_domain', domain)
+          .limit(1);
+        existingOrg = fallbackResults?.[0] || null;
+      } else {
+        existingOrg = exactMatchResults?.[0] || null;
+      }
 
       // Strategy 2: If no exact match, try fuzzy domain matching RPC
       let multipleMatches = false;
@@ -1019,8 +1087,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // Check if we found a high-confidence match (similarity > 0.8, per user requirement)
       const highConfidenceMatch = similarOrgs && similarOrgs.length > 0 && similarOrgs[0].similarity_score > 0.8;
 
-      // If we found similar orgs, show selection step
-      if (similarOrgs && similarOrgs.length > 0 && !highConfidenceMatch) {
+      // If we found similar orgs, show selection step (OLH-005: fixed logic inversion —
+      // high-confidence matches should ALSO show selection so user can choose to join)
+      if (similarOrgs && similarOrgs.length > 0) {
         set({
           organizationCreationInProgress: false,
           currentStep: 'organization_selection',
@@ -1380,6 +1449,13 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
     const state = get();
 
+    // Guard: Stop polling if onboarding is being reset (prevents auth cascade)
+    if (state.isResettingOnboarding) {
+      console.log('[pollEnrichmentStatus] Stopping - onboarding is resetting');
+      set({ isEnrichmentLoading: false, pollingStartTime: null, pollingAttempts: 0, pollingTimeoutId: null });
+      return;
+    }
+
     // Guard: Stop polling if step changed away from enrichment flow
     if (state.currentStep !== 'enrichment_loading') {
       console.log('[pollEnrichmentStatus] Stopping - step changed');
@@ -1418,18 +1494,20 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
     const poll = async () => {
       try {
-        // CRITICAL FIX (BUG-001): Refresh session to get fresh JWT before edge function call
-        // This prevents "Invalid JWT" errors during the 5-minute polling window
-        const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
+        // Refresh session only if token is near expiry (within 60s)
+        // Avoids triggering spurious SIGNED_OUT events on every poll cycle
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        const expiresAt = currentSession?.expires_at ?? 0;
+        const secondsUntilExpiry = expiresAt - Math.floor(Date.now() / 1000);
 
-        if (sessionError || !session?.access_token) {
-          console.error('[pollEnrichmentStatus] Failed to refresh session:', sessionError);
-          throw new Error('Your session has expired. Please refresh the page and try again.');
+        if (secondsUntilExpiry < 60) {
+          console.log('[pollEnrichmentStatus] Token near expiry, refreshing...');
+          const { error: sessionError } = await supabase.auth.refreshSession();
+          if (sessionError) {
+            // Non-fatal: log and continue — current token may still work for this request
+            console.warn('[pollEnrichmentStatus] Session refresh failed (non-blocking):', sessionError);
+          }
         }
-
-        // Log token expiry for debugging JWT issues
-        const expiresAt = session.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'unknown';
-        console.log('[pollEnrichmentStatus] Token expires at:', expiresAt);
 
         // Poll status via Supabase SDK
         const { data, error } = await supabase.functions.invoke('deep-enrich-organization', {
@@ -1495,8 +1573,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           set({ enrichment });
         }
 
-        // Continue polling (recursive call after delay)
-        setTimeout(() => get().pollEnrichmentStatus(organizationId), POLL_INTERVAL);
+        // Continue polling (recursive call after delay) — store ID for cancellation
+        const timeoutId = setTimeout(() => get().pollEnrichmentStatus(organizationId), POLL_INTERVAL);
+        set({ pollingTimeoutId: timeoutId });
 
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to get enrichment status';
@@ -1886,15 +1965,17 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     if (!session?.user) throw new Error('No user found');
 
     try {
-      // Create new organization
+      // Create new organization (OLH-005: also set company_domain for UNIQUE constraint)
+      const state = get();
       const { data: org, error } = await supabase
         .from('organizations')
         .insert({
           name: orgName,
+          company_domain: state.resolvedResearchDomain || state.domain || null,
           created_by: session.user.id,
           is_active: true,
         })
-        .select()
+        .select('id, name, company_domain')
         .single();
 
       if (error) throw error;
@@ -1910,10 +1991,11 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
       set({ organizationId: org.id });
 
-      // Proceed to enrichment
-      const state = get();
-      if (state.domain) {
-        await get().startEnrichment(org.id, state.domain, false);
+      // Proceed to enrichment — use resolved domain if user picked one
+      const freshState = get();
+      const enrichDomain = freshState.resolvedResearchDomain || freshState.domain;
+      if (enrichDomain) {
+        await get().startEnrichment(org.id, enrichDomain, false);
       }
     } catch (error) {
       console.error('[onboardingV2Store] Error creating organization:', error);
@@ -1955,6 +2037,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // Polling timeout protection
       pollingStartTime: null,
       pollingAttempts: 0,
+      pollingTimeoutId: null,
       enrichmentRetryCount: 0,
       // Skills (legacy)
       skillConfigs: defaultSkillConfigs,
@@ -1992,6 +2075,14 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
     // Step 1: Set resetting flag FIRST to prevent ProtectedRoute redirects
     set({ isResettingOnboarding: true });
+
+    // Step 1b: Cancel any in-flight polling immediately to prevent auth cascade
+    const { pollingTimeoutId } = get();
+    if (pollingTimeoutId) {
+      clearTimeout(pollingTimeoutId);
+      set({ pollingTimeoutId: null, isEnrichmentLoading: false });
+      console.log('[onboardingV2] Cancelled in-flight polling timer');
+    }
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -2051,5 +2142,13 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
     // Step 5: Reset Zustand store state (this sets isResettingOnboarding back to false)
     get().reset();
+
+    // Step 6: Keep isResettingOnboarding true through the re-render cycle
+    // queryClient.clear() triggers async re-fetches that may check membership state.
+    // If the flag is already false, ProtectedRoute/AuthContext may redirect/logout.
+    set({ isResettingOnboarding: true });
+    setTimeout(() => {
+      set({ isResettingOnboarding: false });
+    }, 300);
   },
 }));
