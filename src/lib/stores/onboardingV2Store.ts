@@ -526,8 +526,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         const { data: exactMatchResults, error: rpcError } = await supabase.rpc('find_organization_by_domain', {
           p_domain: domain,
         });
-        if (rpcError && (rpcError.code === '42883' || rpcError.message?.includes('404'))) {
-          // RPC not deployed yet — fallback to direct query
+        if (rpcError) {
+          // RPC not deployed yet or other error — fallback to direct query
+          console.warn('[onboardingV2] find_organization_by_domain RPC failed, using fallback:', rpcError.code);
           const { data: fallbackResults } = await supabase
             .from('organizations')
             .select('id, name, company_domain')
@@ -626,22 +627,70 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             domain,
           });
         } else {
-          // No match: proceed to enrichment as normal
-          console.log('[onboardingV2] No existing org found for domain, proceeding to enrichment');
-          set({
-            userEmail: email,
-            isPersonalEmail: isPersonal,
-            currentStep: 'enrichment_loading',
-            domain,
-          });
+          // No match: create org for this domain then proceed to enrichment
+          console.log('[onboardingV2] No existing org found for domain, creating org and proceeding to enrichment');
+          const domainLabel = domain.replace(/\.(com|io|ai|co|net|org|app|dev|xyz)$/i, '');
+          const orgName = domainLabel.charAt(0).toUpperCase() + domainLabel.slice(1);
+
+          const { data: newOrg, error: orgError } = await supabase
+            .from('organizations')
+            .insert({
+              name: orgName,
+              company_domain: domain,
+              created_by: session.user.id,
+              is_active: true,
+            })
+            .select('id')
+            .single();
+
+          if (orgError) {
+            // Might be duplicate — try to fetch existing
+            const { data: existing } = await supabase
+              .from('organizations')
+              .select('id')
+              .eq('company_domain', domain)
+              .eq('created_by', session.user.id)
+              .maybeSingle();
+
+            if (existing) {
+              console.log('[onboardingV2] Reusing existing org for domain:', domain);
+              // Ensure membership exists
+              await supabase.from('organization_memberships').upsert(
+                { org_id: existing.id, user_id: session.user.id, role: 'owner', member_status: 'active' },
+                { onConflict: 'org_id,user_id' }
+              );
+              set({
+                userEmail: email,
+                isPersonalEmail: isPersonal,
+                organizationId: existing.id,
+                currentStep: 'enrichment_loading',
+                domain,
+              });
+            } else {
+              throw orgError;
+            }
+          } else {
+            // Create membership for new org
+            await supabase.from('organization_memberships').upsert(
+              { org_id: newOrg.id, user_id: session.user.id, role: 'owner', member_status: 'active' },
+              { onConflict: 'org_id,user_id' }
+            );
+            set({
+              userEmail: email,
+              isPersonalEmail: isPersonal,
+              organizationId: newOrg.id,
+              currentStep: 'enrichment_loading',
+              domain,
+            });
+          }
         }
       } catch (error) {
         console.error('[onboardingV2] Error checking for existing org:', error);
-        // Fall back to enrichment on error
+        // Fall back to website input on error (can't enrich without org)
         set({
           userEmail: email,
           isPersonalEmail: isPersonal,
-          currentStep: 'enrichment_loading',
+          currentStep: 'website_input',
         });
       }
     } else {
@@ -720,8 +769,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       const { data: exactMatchResults, error: rpcError } = await supabase.rpc('find_organization_by_domain', {
         p_domain: domain,
       });
-      if (rpcError && (rpcError.code === '42883' || rpcError.message?.includes('404'))) {
-        // RPC not deployed yet — fallback to direct query
+      if (rpcError) {
+        // RPC not deployed yet or other error — fallback to direct query
+        console.warn('[onboardingV2] find_organization_by_domain RPC failed, using fallback:', rpcError.code);
         const { data: fallbackResults } = await supabase
           .from('organizations')
           .select('id, name, company_domain')
