@@ -5,7 +5,7 @@
  * view toggle, and filter pills matching the pipeline design system.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   X,
@@ -69,6 +69,26 @@ export function PipelineHeader({
   onImportFromCRM,
   connectedCRMs = { hubspot: false, attio: false },
 }: PipelineHeaderProps) {
+  // Debounced search: local state updates instantly, URL param updates after 300ms
+  const [localSearch, setLocalSearch] = useState(searchValue);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    setLocalSearch(searchValue);
+  }, [searchValue]);
+
+  const handleSearchInput = (value: string) => {
+    setLocalSearch(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onSearchChange(value);
+    }, 300);
+  };
+
+  useEffect(() => {
+    return () => clearTimeout(debounceRef.current);
+  }, []);
+
   const safeSummary = summary ?? {
     total_value: 0,
     weighted_value: 0,
@@ -383,12 +403,12 @@ export function PipelineHeader({
           <input
             type="text"
             placeholder="Search deals..."
-            value={searchValue}
-            onChange={(e) => onSearchChange(e.target.value)}
+            value={localSearch}
+            onChange={(e) => handleSearchInput(e.target.value)}
             className="bg-transparent border-none outline-none text-gray-900 dark:text-white text-[12.5px] w-full placeholder:text-gray-400 dark:placeholder:text-gray-500"
           />
-          {searchValue && (
-            <button onClick={() => onSearchChange('')} className="flex-shrink-0">
+          {localSearch && (
+            <button onClick={() => { setLocalSearch(''); clearTimeout(debounceRef.current); onSearchChange(''); }} className="flex-shrink-0">
               <X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" />
             </button>
           )}
@@ -434,12 +454,12 @@ export function PipelineHeader({
           <input
             type="text"
             placeholder="Search deals..."
-            value={searchValue}
-            onChange={(e) => onSearchChange(e.target.value)}
+            value={localSearch}
+            onChange={(e) => handleSearchInput(e.target.value)}
             className="bg-transparent border-none outline-none text-gray-900 dark:text-white text-sm w-full placeholder:text-gray-400 dark:placeholder:text-gray-500"
           />
-          {searchValue && (
-            <button onClick={() => onSearchChange('')} className="flex-shrink-0">
+          {localSearch && (
+            <button onClick={() => { setLocalSearch(''); clearTimeout(debounceRef.current); onSearchChange(''); }} className="flex-shrink-0">
               <X className="w-4 h-4 text-gray-400 hover:text-gray-600 transition-colors" />
             </button>
           )}
