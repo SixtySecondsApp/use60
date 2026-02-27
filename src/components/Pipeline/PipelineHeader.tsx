@@ -23,6 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import type { PipelineSummary, StageMetric } from './hooks/usePipelineData';
 import type { PipelineViewMode } from './hooks/usePipelineFilters';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 interface PipelineHeaderProps {
   summary: PipelineSummary;
@@ -44,11 +45,6 @@ interface PipelineHeaderProps {
   connectedCRMs?: { hubspot: boolean; attio: boolean };
 }
 
-function formatCurrency(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
-  return `$${value.toFixed(0)}`;
-}
 
 export function PipelineHeader({
   summary,
@@ -69,6 +65,9 @@ export function PipelineHeader({
   onImportFromCRM,
   connectedCRMs = { hubspot: false, attio: false },
 }: PipelineHeaderProps) {
+  const { formatMoney: fmtMoney } = useOrgMoney();
+  const formatCurrency = (value: number) => fmtMoney(value, { compact: true });
+
   // Debounced search: local state updates instantly, URL param updates after 300ms
   const [localSearch, setLocalSearch] = useState(searchValue);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();

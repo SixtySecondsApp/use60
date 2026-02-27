@@ -39,6 +39,7 @@ import { useOrgStore } from '@/lib/stores/orgStore';
 import { DealTemperatureSummary } from '@/components/signals/DealTemperatureSummary';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 interface DealIntelligenceSheetProps {
   dealId: string | null;
@@ -52,18 +53,6 @@ interface DealIntelligenceSheetProps {
 // Helpers
 // =============================================================================
 
-/**
- * Format currency
- */
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return '$0';
-
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 /**
  * Get a deterministic gradient for the company avatar
@@ -173,6 +162,8 @@ export function DealIntelligenceSheet({
 }: DealIntelligenceSheetProps) {
   const dealChat = useDealCopilotChat(deal);
   const activeOrgId = useOrgStore((state) => state.activeOrgId);
+  const { formatMoney: fmtMoney } = useOrgMoney();
+  const formatCurrency = (value: number | null) => fmtMoney(value ?? 0);
   const [chatMode, setChatMode] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = React.useRef<HTMLDivElement>(null);

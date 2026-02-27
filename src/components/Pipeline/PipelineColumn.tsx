@@ -11,6 +11,7 @@ import { DealCard } from './DealCard';
 import { Plus, Inbox } from 'lucide-react';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { extractDomain } from './hooks/useCompanyLogoBatch';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 interface PipelineColumnProps {
   stage: {
@@ -38,6 +39,8 @@ export function PipelineColumn({
   onConvertToSubscription,
   batchedMetadata = { nextActions: {}, healthScores: {}, sentimentData: {} },
 }: PipelineColumnProps) {
+  const { formatMoney: fmtMoney } = useOrgMoney();
+
   // Calculate total value of deals in this stage
   const totalValue = useMemo(() => {
     return deals.reduce((sum, deal) => sum + parseFloat(deal.value || 0), 0);
@@ -45,10 +48,8 @@ export function PipelineColumn({
 
   // Format total value
   const formattedTotal = useMemo(() => {
-    if (totalValue >= 1_000_000) return `$${(totalValue / 1_000_000).toFixed(1)}M`;
-    if (totalValue >= 1_000) return `$${(totalValue / 1_000).toFixed(0)}K`;
-    return `$${totalValue.toFixed(0)}`;
-  }, [totalValue]);
+    return fmtMoney(totalValue, { compact: true });
+  }, [totalValue, fmtMoney]);
 
   // Compute logo URLs for deals
   const logoUrls = useMemo(() => {
