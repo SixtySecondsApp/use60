@@ -13,7 +13,7 @@
 
 ### 2026-02-26 — CREDIT-001 ✅
 **Story**: Add source_agent column to ai_cost_events
-**Files**: supabase/migrations/20260227000001_add_source_agent_to_ai_cost_events.sql
+**Files**: supabase/migrations/20260227000001_add_source_agent_to_ai_cost_events.sql (migration timestamp 2026-02-27 is intentional — ordered after existing migrations)
 **Gates**: N/A (DDL migration)
 
 ---

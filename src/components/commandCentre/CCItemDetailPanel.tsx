@@ -684,7 +684,7 @@ export function CCItemDetailPanel({ item, open, onClose }: CCItemDetailPanelProp
             <div className="flex items-center gap-3 flex-wrap">
               {item.deal_id && (
                 <a
-                  href={`/deals/${item.deal_id}`}
+                  href={`/crm/deals/${item.deal_id}`}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline"

@@ -18,7 +18,7 @@
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { getServiceClient } from './contextEnrichment.ts';
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.43.4';
 
 // =============================================================================
 // Types

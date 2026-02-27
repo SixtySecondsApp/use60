@@ -1,0 +1,251 @@
+{
+  "name": "Complete the Meeting-to-Action Pipeline — Calendar + Proposal Send",
+  "prd": "PRD-05",
+  "version": "1.0",
+  "createdAt": "2026-02-26T00:00:00Z",
+  "description": "Close the calendar and proposal loops — the remaining legs of the post-meeting pipeline after PRD-01 closes the email loop. find-available-slots and generate-proposal edge functions ALREADY EXIST. This is orchestrator wiring + HITL + delivery via the email send path from PRD-01.",
+  "status_baseline": {
+    "find_available_slots": "built — edge function exists, 100-point slot scoring, timezone-aware, 5-10 business days",
+    "generate_proposal": "built — edge function exists, async job execution, streaming, section structure",
+    "proposalGenerator_adapter": "built — _shared/orchestrator/adapters/proposalGenerator.ts exists",
+    "calendar_adapter": "built — _shared/orchestrator/adapters/calendar.ts exists",
+    "intent_detection": "running — detect-intents skill in Wave 2 outputs schedule_meeting and send_proposal intents",
+    "email_send": "PRD-01 dependency — calendar times and proposals delivered via email HITL flow",
+    "deal_memory": "built — event-sourced deal memory for proposal context",
+    "missing": [
+      "Orchestrator step: schedule_meeting intent → find-available-slots → Slack HITL with slot options",
+      "Slack Block Kit message for calendar slots with [Send times via email] [Send calendar invite] [Show more] [I'll handle this]",
+      "[Send times via email] → email HITL approval flow (PRD-01 dependency)",
+      "Google Calendar API write for sending invites (new — read exists, write doesn't)",
+      "Orchestrator step: send_proposal intent → generate-proposal with deal context → Slack/email HITL",
+      "Proposal HITL via Slack with [Approve] [Edit] [Skip] buttons",
+      "Proposal send via email (PRD-01 dependency)",
+      "Deal memory enrichment on proposal send"
+    ]
+  },
+  "effort_estimate": "2–3 weeks",
+  "ship_sequence_week": "5–7 (after PRD-01 email send is live)",
+  "dependencies_on_other_prds": [
+    "PRD-01 (EMAIL) — Email send path required for delivering availability times and approved proposals",
+    "Intent detection (Wave 2) — Already running, outputs schedule_meeting and send_proposal commitments"
+  ],
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Calendar availability wiring",
+      "description": "Wire schedule_meeting intent → find-available-slots → Slack HITL with slot options",
+      "priority": "critical",
+      "duration": "1 week",
+      "stories": ["CAL-001", "CAL-002", "CAL-003"]
+    },
+    {
+      "id": "phase-2",
+      "name": "Calendar invite creation",
+      "description": "Google Calendar API write — send actual calendar invites when rep approves",
+      "priority": "high",
+      "duration": "4–5 days",
+      "stories": ["CAL-004"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Proposal pipeline wiring",
+      "description": "Wire send_proposal intent → generate-proposal → HITL → email send → deal memory log",
+      "priority": "high",
+      "duration": "1 week",
+      "stories": ["PROP-001", "PROP-002", "PROP-003", "PROP-004"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "CAL-001",
+      "title": "Wire schedule_meeting intent → find-available-slots in meeting_ended chain",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "orchestrator",
+      "status": "pending",
+      "dependencies": [],
+      "blocks": ["CAL-002"],
+      "acceptance": [
+        "New orchestrator step added after detect-intents in Wave 2: reads detect-intents output for commitments with type='schedule_meeting'",
+        "When schedule_meeting commitment found: calls find-available-slots edge function with params: duration_minutes from commitment context (default 45), prospect_timezone from contact CRM data (or UTC fallback), days_ahead=7, max_results=5",
+        "find-available-slots result (top 3 slots) stored in sequence job output for use by Slack notification step",
+        "Step skips gracefully when no schedule_meeting commitment detected",
+        "Step skips gracefully when rep has no Google Calendar connected"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/calendar.ts",
+        "supabase/functions/_shared/orchestrator/sequences/meeting_ended.ts (or equivalent)"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "find-available-slots already exists. calendar.ts adapter may already call it — check existing implementation and extend rather than rewrite."
+    },
+    {
+      "id": "CAL-002",
+      "title": "Slack HITL message for calendar slot selection",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["CAL-001"],
+      "blocks": ["CAL-003", "CAL-004"],
+      "acceptance": [
+        "After find-available-slots runs, orchestrator sends Slack Block Kit message via slack-hitl-notification with top 3 slot options",
+        "Message shows: meeting context (who it's with, from which meeting), each slot as a readable time (e.g. 'Thursday Mar 5, 2:00–2:45pm PT'), 4 action buttons: [Send times via email] [Send calendar invite] [Show more options] [I'll handle this]",
+        "Orchestrator pauses with requires_approval: true, hitl_pending_approvals row created with resource_type='calendar_slots'",
+        "[Show more options] re-calls find-available-slots with offset to get next 5 slots and updates the message",
+        "[I'll handle this] marks job complete with outcome='rep_handling' — no further action"
+      ],
+      "files": [
+        "supabase/functions/slack-hitl-notification/index.ts",
+        "supabase/functions/slack-interactive/handlers/hitl.ts",
+        "supabase/functions/_shared/orchestrator/adapters/calendar.ts"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "CAL-003",
+      "title": "[Send times via email] — compose availability email via PRD-01 HITL flow",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["CAL-002"],
+      "blocks": [],
+      "acceptance": [
+        "When rep clicks [Send times via email]: compose a readable availability email ('I have the following times available: [slot 1], [slot 2], [slot 3] — let me know which works best')",
+        "Email draft passes through standard email HITL approval flow (PRD-01: Slack preview + [Approve] [Edit] [Skip])",
+        "Email sends via hitl-send-followup-email using rep's connected email account",
+        "Thread-aware: replies to existing email thread when prior email context exists"
+      ],
+      "files": [
+        "supabase/functions/slack-interactive/handlers/hitl.ts",
+        "supabase/functions/_shared/orchestrator/adapters/calendar.ts"
+      ],
+      "estimatedMinutes": 20,
+      "notes": "This is largely orchestration of existing PRD-01 pieces. The email body template for availability sharing is the main new content."
+    },
+    {
+      "id": "CAL-004",
+      "title": "Google Calendar invite creation — send actual calendar event",
+      "phase": "phase-2",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["CAL-002"],
+      "blocks": [],
+      "acceptance": [
+        "When rep clicks [Send calendar invite]: new google-calendar-create action (or google-calendar-sync with action='create') calls Google Calendar API events.insert",
+        "Event created with: summary (from meeting context), start/end (selected slot), attendees (contact email + rep email), description (short meeting agenda from deal context)",
+        "Requires google.calendar scope upgrade from read-only to read/write — OAuth scope upgrade flow handled gracefully (prompt rep if scope not yet granted)",
+        "Created event returned to Slack with confirmation: 'Invite sent to sarah@acme.com for Thu Mar 5 2pm PT'",
+        "Event also synced to local calendar_events table (consistent with existing sync pattern)"
+      ],
+      "files": [
+        "supabase/functions/google-calendar-sync/index.ts (add create action)",
+        "supabase/functions/slack-interactive/handlers/hitl.ts"
+      ],
+      "estimatedMinutes": 30,
+      "notes": "Check google-calendar-sync for existing OAuth token patterns. Calendar write scope is 'https://www.googleapis.com/auth/calendar.events' vs read-only 'https://www.googleapis.com/auth/calendar.readonly'."
+    },
+    {
+      "id": "PROP-001",
+      "title": "Wire send_proposal intent → generate-proposal with deal memory context",
+      "phase": "phase-3",
+      "priority": "P0",
+      "type": "orchestrator",
+      "status": "pending",
+      "dependencies": [],
+      "blocks": ["PROP-002"],
+      "acceptance": [
+        "New orchestrator step after detect-intents in Wave 2: reads commitments for type='send_proposal'",
+        "When send_proposal found: assembles proposal context from deal memory (requirements discussed, pricing tier, company background) + meeting transcript (topics, objections, specific asks)",
+        "Calls generate-proposal with: contact_name, company_name, focus_areas (from discussed topics), deal_id, transcripts",
+        "Proposal generation kicked off as async job (existing proposal_jobs pattern) to avoid edge function timeout",
+        "Step skips gracefully when no send_proposal commitment detected"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts",
+        "supabase/functions/_shared/orchestrator/sequences/meeting_ended.ts (or equivalent)"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "proposalGenerator.ts adapter already exists — check how it's currently triggered and extend for intent-based triggering. generate-proposal already handles async job execution."
+    },
+    {
+      "id": "PROP-002",
+      "title": "Proposal HITL via Slack — [Approve] [Edit] [Skip] buttons",
+      "phase": "phase-3",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["PROP-001"],
+      "blocks": ["PROP-003"],
+      "acceptance": [
+        "When proposal generation completes: send Slack message with proposal preview (executive summary + pricing section, max 500 chars + 'See full proposal' link)",
+        "Buttons: [Approve & Send] [Edit in 60] [Skip]",
+        "Orchestrator pauses with requires_approval: true, hitl_pending_approvals created with resource_type='proposal'",
+        "[Edit in 60]: deep link to app proposal editor with proposal_job_id param",
+        "[Skip]: mark sequence complete, log skip reason"
+      ],
+      "files": [
+        "supabase/functions/slack-hitl-notification/index.ts",
+        "supabase/functions/slack-interactive/handlers/hitl.ts",
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "PROP-003",
+      "title": "Proposal send via email on approval (PRD-01 dependency)",
+      "phase": "phase-3",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["PROP-002"],
+      "blocks": ["PROP-004"],
+      "acceptance": [
+        "On [Approve & Send]: orchestrator routes proposal through email send pipeline (PRD-01)",
+        "Email body: personalised cover note referencing meeting discussion + proposal PDF attachment or inline HTML",
+        "Subject line: 'Proposal for [Company] — [summary of discussed requirements]'",
+        "Send goes through standard email HITL (rep sees [Approve] [Edit] [Skip] in Slack before final send)",
+        "After send: sequence_job marked complete"
+      ],
+      "files": [
+        "supabase/functions/hitl-send-followup-email/index.ts",
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+      ],
+      "estimatedMinutes": 20,
+      "notes": "Proposal send reuses the PRD-01 email send path. The main work is assembling the email payload (cover note + proposal content) in the proposalGenerator adapter."
+    },
+    {
+      "id": "PROP-004",
+      "title": "Deal memory enrichment on proposal send",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["PROP-003"],
+      "blocks": [],
+      "acceptance": [
+        "After successful proposal send: log deal_memory_event with type='proposal_sent', detail includes: sent_at, proposal_id, sections covered, pricing tier discussed, contact_name",
+        "Memory text: 'Proposal sent on [date] to [contact] covering [topics] at [pricing tier]'",
+        "deal_memory event stored via existing _shared/memory/writer.ts pattern",
+        "Proposal send also logged to agent_daily_logs (PRD-03) with action_type='send_proposal'"
+      ],
+      "files": [
+        "supabase/functions/hitl-send-followup-email/index.ts",
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+      ],
+      "estimatedMinutes": 15
+    }
+  ],
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 0,
+    "parallelOpportunities": [
+      "CAL-001 through CAL-003 sequential (each depends on previous)",
+      "CAL-004 parallel with CAL-003 (both depend on CAL-002)",
+      "PROP-001 through PROP-004 sequential",
+      "Calendar phase and Proposal phase can run in parallel (independent tracks)"
+    ]
+  }
+}

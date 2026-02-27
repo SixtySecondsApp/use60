@@ -382,7 +382,43 @@ function toBase64UrlSend(str: string): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/**
+ * Fetch the user's primary Gmail signature (sendAs API).
+ * Returns the HTML signature string, or empty string on failure.
+ */
+async function fetchGmailSignature(accessToken: string): Promise<string> {
+  try {
+    const resp = await fetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs',
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+    if (!resp.ok) return '';
+    const data = await resp.json();
+    // Find the primary (default) sendAs alias
+    const primary = data.sendAs?.find((s: { isDefault?: boolean }) => s.isDefault);
+    return primary?.signature || '';
+  } catch {
+    return '';
+  }
+}
+
 async function sendEmail(accessToken: string, request: SendEmailRequest): Promise<any> {
+  // Fetch Gmail signature and append to body
+  let body = request.body;
+  const signature = await fetchGmailSignature(accessToken);
+  if (signature) {
+    if (request.isHtml !== false) {
+      // HTML mode: append signature with separator
+      body = `${body}<br><div class="gmail_signature_dash">--</div><div class="gmail_signature">${signature}</div>`;
+    } else {
+      // Plain text mode: strip HTML tags from signature
+      const plainSig = signature.replace(/<[^>]+>/g, '').trim();
+      if (plainSig) {
+        body = `${body}\n\n--\n${plainSig}`;
+      }
+    }
+  }
+
   const emailLines = [
     `To: ${request.to}`,
     `Subject: ${request.subject}`,
@@ -400,7 +436,7 @@ async function sendEmail(accessToken: string, request: SendEmailRequest): Promis
     emailLines.push(`References: ${request.inReplyTo}`);
   }
 
-  emailLines.push('', request.body);
+  emailLines.push('', body);
 
   const emailMessage = emailLines.join('\r\n');
   const encodedMessage = toBase64UrlSend(emailMessage);

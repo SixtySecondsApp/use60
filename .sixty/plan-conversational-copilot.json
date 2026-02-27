@@ -848,7 +848,7 @@
       "blocks": [],
       "parallelWith": [],
       "acceptance": [
-        "All modified edge functions deployed to staging (caerqjzvuerejfrdtygb) with --no-verify-jwt",
+        "All modified edge functions deployed to staging (caerqjzvuerejfrdtygb) with --no-verify-jwt (STAGING ONLY — never use this flag for production)",
         "Migration applied to staging database",
         "50 test queries across all 20 intent types verified: deal, contact, pipeline, history, metrics, risk, competitive, coaching, draft_email, draft_check_in, update_crm, create_task, trigger_prep, help, general, plus disambiguation and multi-turn",
         "Response time targets met: simple <3s, RAG <8s, drafts <10s",
@@ -861,7 +861,7 @@
   "execution": {
     "totalStories": 22,
     "completedStories": 21,
-    "currentFeature": "intent-entity",
+    "currentFeature": "deploy-qa",
     "lastUpdated": "2026-02-25T19:30:00Z",
     "parallelGroups": [
       {
