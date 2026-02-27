@@ -4,7 +4,8 @@
 
 -- Add a specific policy allowing authenticated users to update their own membership
 -- when changing member_status to 'removed' (leaving the organization)
-CREATE POLICY "users_can_leave_organization" ON "public"."organization_memberships"
+DO $$ BEGIN
+  CREATE POLICY "users_can_leave_organization" ON "public"."organization_memberships"
   FOR UPDATE
   USING (
     -- Allow if:
@@ -16,6 +17,8 @@ CREATE POLICY "users_can_leave_organization" ON "public"."organization_membershi
     -- Same conditions for WITH CHECK
     ("auth"."uid"() = "user_id")
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Comment for documentation
 COMMENT ON POLICY "users_can_leave_organization" ON "public"."organization_memberships"

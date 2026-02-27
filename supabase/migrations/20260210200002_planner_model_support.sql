@@ -45,7 +45,8 @@ CREATE TRIGGER trigger_org_ai_config_updated_at
 ALTER TABLE org_ai_config ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Org members can read their org_ai_config" ON org_ai_config;
-CREATE POLICY "Org members can read their org_ai_config"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read their org_ai_config"
   ON org_ai_config FOR SELECT
   USING (
     EXISTS (
@@ -54,9 +55,12 @@ CREATE POLICY "Org members can read their org_ai_config"
       AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Org admins can manage their org_ai_config" ON org_ai_config;
-CREATE POLICY "Org admins can manage their org_ai_config"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can manage their org_ai_config"
   ON org_ai_config FOR ALL
   USING (
     EXISTS (
@@ -66,9 +70,12 @@ CREATE POLICY "Org admins can manage their org_ai_config"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Platform admins can manage all org_ai_config" ON org_ai_config;
-CREATE POLICY "Platform admins can manage all org_ai_config"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can manage all org_ai_config"
   ON org_ai_config FOR ALL
   USING (
     EXISTS (
@@ -77,6 +84,8 @@ CREATE POLICY "Platform admins can manage all org_ai_config"
       AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 1. ALTER ai_feature_config — add planner_model_id

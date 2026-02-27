@@ -116,7 +116,8 @@ ALTER TABLE credit_transactions ENABLE ROW LEVEL SECURITY;
 
 -- Org members can read their org's balance
 DROP POLICY IF EXISTS "Org members can read their org_credit_balance" ON org_credit_balance;
-CREATE POLICY "Org members can read their org_credit_balance"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read their org_credit_balance"
   ON org_credit_balance FOR SELECT
   USING (
     EXISTS (
@@ -125,10 +126,13 @@ CREATE POLICY "Org members can read their org_credit_balance"
       AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can update their org's balance settings (threshold, auto-topup)
 DROP POLICY IF EXISTS "Org admins can update their org_credit_balance" ON org_credit_balance;
-CREATE POLICY "Org admins can update their org_credit_balance"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update their org_credit_balance"
   ON org_credit_balance FOR UPDATE
   USING (
     EXISTS (
@@ -138,10 +142,13 @@ CREATE POLICY "Org admins can update their org_credit_balance"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can manage all balances
 DROP POLICY IF EXISTS "Platform admins can manage all org_credit_balance" ON org_credit_balance;
-CREATE POLICY "Platform admins can manage all org_credit_balance"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can manage all org_credit_balance"
   ON org_credit_balance FOR ALL
   USING (
     EXISTS (
@@ -150,12 +157,15 @@ CREATE POLICY "Platform admins can manage all org_credit_balance"
       AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- --- credit_transactions ---
 
 -- Org members can read their org's transactions
 DROP POLICY IF EXISTS "Org members can read their credit_transactions" ON credit_transactions;
-CREATE POLICY "Org members can read their credit_transactions"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read their credit_transactions"
   ON credit_transactions FOR SELECT
   USING (
     EXISTS (
@@ -164,10 +174,13 @@ CREATE POLICY "Org members can read their credit_transactions"
       AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can manage all transactions
 DROP POLICY IF EXISTS "Platform admins can manage all credit_transactions" ON credit_transactions;
-CREATE POLICY "Platform admins can manage all credit_transactions"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can manage all credit_transactions"
   ON credit_transactions FOR ALL
   USING (
     EXISTS (
@@ -176,6 +189,8 @@ CREATE POLICY "Platform admins can manage all credit_transactions"
       AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 6. deduct_credits function

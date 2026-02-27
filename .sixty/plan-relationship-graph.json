@@ -1,0 +1,305 @@
+{
+  "name": "Relationship Graph Intelligence Layer",
+  "prd": "PRD-02",
+  "version": "1.0",
+  "createdAt": "2026-02-26T00:00:00Z",
+  "description": "Enrich existing relationship graph foundation (50-60% built) with the intelligence that makes it useful. Core addition: deal_contacts junction table + role inference from transcripts/email. Then: cross-deal queries, multi-threading scores, job change detection, and agent integration.",
+  "status_baseline": {
+    "agent_relationship_graph": "built — edge function exists, called by orchestrator after meetings",
+    "health_scoring": "built — health-recalculate, deal_health_history, ghost detection signals",
+    "contact_memory": "built — copilot_memories with decay, contact_memory module in _shared/memory/",
+    "rep_memory": "built — _shared/memory/reps.ts",
+    "deal_memory": "built — event-sourced deal memory",
+    "missing": [
+      "deal_contacts junction table (deal_id, contact_id, role, confidence, inferred_from)",
+      "contact_org_history table (job change tracking)",
+      "Role inference from transcript (Wave 2 post-meeting step)",
+      "Email-based role inference (CC/BCC/reply authority patterns)",
+      "Cross-deal stakeholder RPC",
+      "Multi-threading score calculation + single-thread alert",
+      "Job change detection (Apollo periodic check + email domain monitoring)",
+      "Champion disappeared signal wiring (signal type exists, logic doesn't)",
+      "Meeting prep agent enrichment with per-attendee relationship context",
+      "Deal risk agent enrichment with graph-based risk factors",
+      "Manual role override UI on contact detail page"
+    ]
+  },
+  "effort_estimate": "3 weeks",
+  "ship_sequence_week": "3–5 (parallel with PRD-04)",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Schema foundation",
+      "description": "deal_contacts junction table and contact_org_history — structural prerequisite for everything else",
+      "priority": "critical",
+      "duration": "2–3 days",
+      "stories": ["REL-001", "REL-002"]
+    },
+    {
+      "id": "phase-2",
+      "name": "Role inference",
+      "description": "Transcript-based and email-based role classification writing to deal_contacts",
+      "priority": "critical",
+      "duration": "1 week",
+      "stories": ["REL-003", "REL-004"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Graph intelligence queries",
+      "description": "Cross-deal stakeholder view, multi-threading score, job change detection, champion ghost detection",
+      "priority": "high",
+      "duration": "1 week",
+      "stories": ["REL-005", "REL-006", "REL-007", "REL-008"]
+    },
+    {
+      "id": "phase-4",
+      "name": "Agent integration",
+      "description": "Wire relationship context into meeting prep, deal risk, and re-engagement agents",
+      "priority": "high",
+      "duration": "3–5 days",
+      "stories": ["REL-009", "REL-010", "REL-011"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "REL-001",
+      "title": "deal_contacts junction table migration",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": [],
+      "blocks": ["REL-003", "REL-004", "REL-005", "REL-006", "REL-008", "REL-009", "REL-010", "REL-011"],
+      "acceptance": [
+        "Migration creates deal_contacts table: id, deal_id (FK deals), contact_id (FK contacts), role (enum: champion/blocker/economic_buyer/influencer/end_user/technical_evaluator), confidence (float 0-1), inferred_from (enum: transcript/email_pattern/manual/enrichment), first_seen (timestamptz), last_active (timestamptz), created_at, updated_at",
+        "Unique constraint on (deal_id, contact_id)",
+        "RLS: org members can read; only service role or owner can write (inference runs server-side)",
+        "Indexes on deal_id, contact_id, role, last_active",
+        "Migration runs on staging without errors"
+      ],
+      "files": [
+        "supabase/migrations/YYYYMMDD_deal_contacts.sql"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "REL-002",
+      "title": "contact_org_history table migration",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": [],
+      "blocks": ["REL-007"],
+      "acceptance": [
+        "Migration creates contact_org_history table: id, contact_id (FK contacts), company_id (FK companies), title, started_at, ended_at (nullable = current), source (enum: linkedin/apollo/crm_update/email_domain_change), created_at",
+        "Unique constraint on (contact_id, company_id, started_at)",
+        "RLS: org members read; service role write",
+        "Migration runs on staging without errors"
+      ],
+      "files": [
+        "supabase/migrations/YYYYMMDD_contact_org_history.sql"
+      ],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "REL-003",
+      "title": "Transcript-based role inference in Wave 2 (post-meeting analysis)",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["REL-001"],
+      "blocks": [],
+      "acceptance": [
+        "New step added to meeting_ended Wave 2 after existing classify step",
+        "Step calls AI (Anthropic/Gemini) with transcript + attendee list, asks to classify each attendee role using authority signals, questions asked, objection types, speaking patterns",
+        "Classification results written to deal_contacts with inferred_from='transcript' and confidence score",
+        "If deal_contacts row already exists: update confidence and last_active; if new: insert",
+        "Step handles missing transcript gracefully (skips without failing the wave)"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/roleInference.ts (new)",
+        "supabase/functions/_shared/orchestrator/sequences/meeting_ended.ts (or equivalent)"
+      ],
+      "estimatedMinutes": 30,
+      "notes": "Follow existing adapter pattern in _shared/orchestrator/adapters/. Look at classify step (meetingTypeClassifier.ts) for how to chain AI calls in Wave 2."
+    },
+    {
+      "id": "REL-004",
+      "title": "Email-based role inference from CC/BCC/reply patterns",
+      "phase": "phase-2",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["REL-001"],
+      "blocks": [],
+      "acceptance": [
+        "New orchestrator step or cron job analyses email patterns for a contact: CC'd on all emails (influencer), always replies (champion), initiates with pricing questions (economic_buyer)",
+        "Writes to deal_contacts with inferred_from='email_pattern' and lower confidence (0.4–0.6) vs transcript (0.6–0.9)",
+        "Runs after email classification events, not blocking the meeting_ended chain",
+        "Does not override manual or high-confidence transcript inferences"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/emailRoleInference.ts (new)"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "REL-005",
+      "title": "Cross-deal stakeholder PostgreSQL RPC",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": ["REL-001"],
+      "blocks": ["REL-009", "REL-010"],
+      "acceptance": [
+        "Migration adds get_cross_deal_stakeholders(p_contact_id uuid) RPC: returns contact_id, contact_name, plus array of {deal_id, deal_name, role, confidence, last_active} across all open deals for that contact",
+        "Second RPC get_deal_stakeholder_map(p_deal_id uuid): returns all contacts on a deal with roles, confidence scores, last activity",
+        "Both RPCs respect RLS (org-scoped via deals.owner_org_id)",
+        "RPCs are callable from edge functions with user-scoped client"
+      ],
+      "files": [
+        "supabase/migrations/YYYYMMDD_stakeholder_rpcs.sql"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "REL-006",
+      "title": "Multi-threading score calculation and single-thread Slack alert",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["REL-001"],
+      "blocks": [],
+      "acceptance": [
+        "Multi-threading score = engaged_contacts / contacts_needed (by deal stage). Stage thresholds configurable in org_settings.",
+        "Score calculated in health-recalculate when deal_contacts are updated",
+        "Score stored on deal record (new column: multi_thread_score float)",
+        "When score < 0.5 (single-threaded) and deal stage >= 'proposal': Slack alert sent to rep owner via slack-hitl-notification or deal temperature alert",
+        "Alert fires at most once per 7 days per deal to prevent noise"
+      ],
+      "files": [
+        "supabase/migrations/YYYYMMDD_multi_thread_score.sql",
+        "supabase/functions/health-recalculate/index.ts"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "REL-007",
+      "title": "Job change detection — Apollo check + email domain monitoring",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["REL-002"],
+      "blocks": [],
+      "acceptance": [
+        "Cron job (or trigger on email_classified event) checks Apollo for key contacts (deal_contacts.role IN ('champion', 'economic_buyer')) with last_enrichment > 30 days ago",
+        "If Apollo returns different company or title: insert new row in contact_org_history with ended_at on old record and new record with started_at = now()",
+        "Email domain change: monitor inbound emails — if contact's email domain changes from stored domain, flag as potential job change",
+        "Job change events trigger high-priority re-engagement sequence via orchestrator (existing reengagement adapter)"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/jobChangeDetector.ts (new)",
+        "supabase/functions/scheduled-health-refresh/index.ts (or new cron)"
+      ],
+      "estimatedMinutes": 30,
+      "notes": "Look at reengagementApollo.ts for Apollo API patterns. contact_org_history from REL-002 is the storage layer."
+    },
+    {
+      "id": "REL-008",
+      "title": "Champion disappeared ghost detection signal wiring",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["REL-001"],
+      "blocks": [],
+      "acceptance": [
+        "ghost_detection step in health-recalculate (or agent-relationship-graph) checks: deal_contacts WHERE role='champion' AND last_active < NOW() - threshold (default 21 days for active deal)",
+        "If champion last_active exceeds threshold: emit 'champion_disappeared' signal (signal type exists, logic doesn't)",
+        "Signal triggers: high-priority command_centre_item + optional Slack alert to rep",
+        "Threshold is configurable per org in org_settings (champion_gone_dark_days)"
+      ],
+      "files": [
+        "supabase/functions/agent-relationship-graph/index.ts",
+        "supabase/functions/health-recalculate/index.ts"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "REL-009",
+      "title": "Meeting prep agent — per-attendee relationship context",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["REL-001", "REL-005"],
+      "blocks": [],
+      "acceptance": [
+        "preMeeting.ts adapter queries deal_contacts + contact_memory for each confirmed attendee",
+        "Adds per-attendee section to meeting prep output: role in deal, confidence score, last interaction date, key talking points from memory",
+        "Single-threaded warning included in prep if multi_thread_score < 0.5",
+        "Uses get_deal_stakeholder_map RPC from REL-005"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "REL-010",
+      "title": "Deal risk agent — graph-based risk factors",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["REL-001", "REL-005"],
+      "blocks": [],
+      "acceptance": [
+        "dealRisk.ts adapter incorporates: champion engagement frequency (deal_contacts.last_active delta), multi-threading score, blocker influence (contacts with role='blocker' and high confidence)",
+        "Each graph factor added as weighted component to overall risk score",
+        "Risk output includes actionable text: 'Champion (Sarah) hasn't engaged in 18 days' or 'Deal is single-threaded — only 1 contact engaged'",
+        "Factors only included when deal_contacts data exists for the deal (graceful degradation)"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/dealRisk.ts"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "REL-011",
+      "title": "Manual role override UI on contact detail page",
+      "phase": "phase-4",
+      "priority": "P2",
+      "type": "frontend",
+      "status": "pending",
+      "dependencies": ["REL-001"],
+      "blocks": [],
+      "acceptance": [
+        "Contact detail page shows 'Role in Deals' section listing their role per open deal with confidence badge",
+        "Rep can click role to open inline dropdown (champion / blocker / economic_buyer / influencer / end_user / technical_evaluator / remove)",
+        "On save: updates deal_contacts row with inferred_from='manual', confidence=1.0",
+        "Manual overrides are never overwritten by inference steps (inferred_from='manual' is respected in REL-003/REL-004)"
+      ],
+      "files": [
+        "src/components/contacts/ContactRoles.tsx (new)",
+        "src/pages/ContactDetail.tsx (or equivalent contact page)"
+      ],
+      "estimatedMinutes": 30
+    }
+  ],
+  "execution": {
+    "totalStories": 11,
+    "completedStories": 0,
+    "parallelOpportunities": [
+      "REL-001 and REL-002 parallel (independent schema)",
+      "REL-003 and REL-004 parallel after REL-001",
+      "REL-005, REL-006, REL-007, REL-008 parallel (all after REL-001, REL-002)",
+      "REL-009, REL-010, REL-011 parallel after REL-001 + REL-005"
+    ]
+  }
+}

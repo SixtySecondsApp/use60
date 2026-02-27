@@ -39,6 +39,8 @@ interface AttioImportWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onComplete?: (tableId: string) => void;
+  /** When 'pipeline', imports deals into the deals table via materialize-crm-deals */
+  importMode?: 'ops' | 'pipeline';
 }
 
 type AttioObjectType = 'people' | 'companies' | 'deals';
@@ -128,7 +130,7 @@ function extractDisplayValue(attrValue: any): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function AttioImportWizard({ open, onOpenChange, onComplete }: AttioImportWizardProps) {
+export function AttioImportWizard({ open, onOpenChange, onComplete, importMode = 'ops' }: AttioImportWizardProps) {
   const { userData: user } = useUser();
   const { activeOrg } = useOrg();
   const queryClient = useQueryClient();
@@ -170,6 +172,67 @@ export function AttioImportWizard({ open, onOpenChange, onComplete }: AttioImpor
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ table_id: string; rows_imported: number } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // Pipeline mode: CRM deal index records
+  const [crmDeals, setCrmDeals] = useState<Array<{ id: string; name: string; stage: string | null; amount: number | null; close_date: string | null }>>([]);
+  const [loadingCrmDeals, setLoadingCrmDeals] = useState(false);
+  const [selectedCrmDealIds, setSelectedCrmDealIds] = useState<Set<string>>(new Set());
+  const [pipelineImportResult, setPipelineImportResult] = useState<{ materialized: number; failed: number } | null>(null);
+
+  // Pipeline mode: load unmaterialized CRM deals
+  useEffect(() => {
+    if (open && importMode === 'pipeline' && activeOrg?.id) {
+      loadCrmDeals();
+    }
+  }, [open, importMode, activeOrg?.id]);
+
+  const loadCrmDeals = async () => {
+    if (!activeOrg?.id) return;
+    setLoadingCrmDeals(true);
+    try {
+      const { data, error } = await supabase
+        .from('crm_deal_index')
+        .select('id, name, stage, amount, close_date')
+        .eq('org_id', activeOrg.id)
+        .eq('crm_source', 'attio')
+        .eq('is_materialized', false)
+        .order('name');
+      if (error) throw error;
+      setCrmDeals(data || []);
+      setSelectedCrmDealIds(new Set((data || []).map((d) => d.id)));
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to load Attio deals');
+    } finally {
+      setLoadingCrmDeals(false);
+    }
+  };
+
+  const handlePipelineImport = async () => {
+    if (!activeOrg?.id || selectedCrmDealIds.size === 0) return;
+    setIsImporting(true);
+    setImportError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('materialize-crm-deals', {
+        body: {
+          org_id: activeOrg.id,
+          deal_index_ids: [...selectedCrmDealIds],
+        },
+      });
+      if (error) throw error;
+      setPipelineImportResult({ materialized: data.materialized, failed: data.failed });
+      if (data.materialized > 0) {
+        toast.success(`Imported ${data.materialized} deal${data.materialized !== 1 ? 's' : ''} to pipeline`);
+      }
+      if (data.failed > 0) {
+        toast.error(`${data.failed} deal${data.failed !== 1 ? 's' : ''} failed to import`);
+      }
+    } catch (e: any) {
+      setImportError(e?.message || 'Pipeline import failed');
+      toast.error('Pipeline import failed: ' + (e?.message || 'Unknown error'));
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   // Auto-load lists when connected in list mode
   useEffect(() => {
@@ -371,6 +434,9 @@ export function AttioImportWizard({ open, onOpenChange, onComplete }: AttioImpor
     setIsImporting(false);
     setImportResult(null);
     setImportError(null);
+    setCrmDeals([]);
+    setSelectedCrmDealIds(new Set());
+    setPipelineImportResult(null);
   };
 
   const handleClose = () => {
@@ -482,8 +548,10 @@ export function AttioImportWizard({ open, onOpenChange, onComplete }: AttioImpor
 
         {/* Step indicator */}
         <div className="px-6 pt-4 pb-3 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Import from Attio</h2>
-          <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            {importMode === 'pipeline' ? 'Import Attio Deals to Pipeline' : 'Import from Attio'}
+          </h2>
+          {importMode !== 'pipeline' && <div className="flex items-center gap-2">
             {STEPS.map((s, i) => (
               <React.Fragment key={s.id}>
                 <div className="flex items-center gap-1.5">
@@ -507,13 +575,129 @@ export function AttioImportWizard({ open, onOpenChange, onComplete }: AttioImpor
                 )}
               </React.Fragment>
             ))}
-          </div>
+          </div>}
         </div>
 
         {/* Step content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* Pipeline mode: deal selection */}
+          {importMode === 'pipeline' && !pipelineImportResult && (
+            <div className="space-y-4">
+              {loadingCrmDeals ? (
+                <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                  <p className="text-sm text-gray-400">Loading Attio deals...</p>
+                </div>
+              ) : crmDeals.length === 0 && !isImporting ? (
+                <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                  <AlertCircle className="w-10 h-10 text-gray-500" />
+                  <p className="text-sm text-gray-300">No unmaterialized Attio deals found</p>
+                  <p className="text-xs text-gray-500 text-center max-w-sm">
+                    All synced deals have already been imported to the pipeline, or no deals have been synced from Attio yet.
+                  </p>
+                </div>
+              ) : isImporting ? (
+                <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                  <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+                  <p className="text-sm text-gray-300">Importing deals to pipeline...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-300">
+                      {crmDeals.length} deal{crmDeals.length !== 1 ? 's' : ''} available to import
+                    </p>
+                    <button
+                      onClick={() => {
+                        if (selectedCrmDealIds.size === crmDeals.length) {
+                          setSelectedCrmDealIds(new Set());
+                        } else {
+                          setSelectedCrmDealIds(new Set(crmDeals.map((d) => d.id)));
+                        }
+                      }}
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      {selectedCrmDealIds.size === crmDeals.length ? 'Deselect all' : 'Select all'}
+                    </button>
+                  </div>
+                  <div className="max-h-[320px] overflow-y-auto space-y-1 rounded-lg border border-gray-800 p-2">
+                    {crmDeals.map((deal) => (
+                      <label
+                        key={deal.id}
+                        className={`flex items-center justify-between rounded-lg px-3 py-2 cursor-pointer transition-colors ${
+                          selectedCrmDealIds.has(deal.id)
+                            ? 'bg-blue-500/10 border border-blue-500/20'
+                            : 'hover:bg-gray-800 border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedCrmDealIds.has(deal.id)}
+                            onChange={() => {
+                              setSelectedCrmDealIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(deal.id)) next.delete(deal.id);
+                                else next.add(deal.id);
+                                return next;
+                              });
+                            }}
+                            className="w-3.5 h-3.5 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                          />
+                          <span className="text-sm text-gray-200 truncate">{deal.name || 'Untitled Deal'}</span>
+                          {deal.stage && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400 shrink-0">
+                              {deal.stage}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0 ml-2">
+                          {deal.amount != null && (
+                            <span className="text-xs text-gray-400">
+                              ${deal.amount.toLocaleString()}
+                            </span>
+                          )}
+                          {deal.close_date && (
+                            <span className="text-[10px] text-gray-500">
+                              {new Date(deal.close_date).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  {importError && (
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-300">{importError}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Pipeline mode: import complete */}
+          {importMode === 'pipeline' && pipelineImportResult && (
+            <div className="flex flex-col items-center justify-center py-8 space-y-6">
+              <div className="flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                <CheckCircle2 className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="text-center space-y-1">
+                <h3 className="text-lg font-semibold text-white">Import Complete</h3>
+                <p className="text-sm text-gray-400">
+                  {pipelineImportResult.materialized} deal{pipelineImportResult.materialized !== 1 ? 's' : ''} imported to pipeline.
+                  {pipelineImportResult.failed > 0 && ` ${pipelineImportResult.failed} failed.`}
+                </p>
+              </div>
+              <Button onClick={handleClose} className="gap-2 bg-blue-600 hover:bg-blue-500">
+                Done
+              </Button>
+            </div>
+          )}
+
           {/* Connection check */}
-          {!isConnected && !attioLoading && (
+          {!isConnected && !attioLoading && importMode !== 'pipeline' && (
             <div className="flex flex-col items-center justify-center py-10 space-y-4">
               <AlertCircle className="w-10 h-10 text-blue-400" />
               <p className="text-sm text-gray-300">Attio is not connected</p>
@@ -526,7 +710,7 @@ export function AttioImportWizard({ open, onOpenChange, onComplete }: AttioImpor
             </div>
           )}
 
-          {attioLoading && (
+          {attioLoading && importMode !== 'pipeline' && (
             <div className="flex flex-col items-center justify-center py-10 space-y-4">
               <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
               <p className="text-sm text-gray-400">Checking Attio connection...</p>
@@ -534,7 +718,7 @@ export function AttioImportWizard({ open, onOpenChange, onComplete }: AttioImpor
           )}
 
           {/* Step 1: Select Source */}
-          {isConnected && step === 1 && (
+          {isConnected && step === 1 && importMode !== 'pipeline' && (
             <div className="space-y-4">
               {/* Table name */}
               <div>
@@ -921,32 +1105,55 @@ export function AttioImportWizard({ open, onOpenChange, onComplete }: AttioImpor
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-800 flex justify-between">
-          <Button
-            variant="ghost"
-            onClick={step === 1 ? handleClose : () => setStep(1)}
-            disabled={isImporting}
-          >
-            {step === 1 ? 'Cancel' : <><ArrowLeft className="w-4 h-4 mr-1" /> Back</>}
-          </Button>
+          {importMode === 'pipeline' ? (
+            <>
+              <Button variant="ghost" onClick={handleClose} disabled={isImporting}>
+                Cancel
+              </Button>
+              {!pipelineImportResult && (
+                <Button
+                  onClick={handlePipelineImport}
+                  disabled={selectedCrmDealIds.size === 0 || isImporting || loadingCrmDeals}
+                  className="gap-1 bg-blue-600 hover:bg-blue-500"
+                >
+                  {isImporting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>Import {selectedCrmDealIds.size} Deal{selectedCrmDealIds.size !== 1 ? 's' : ''}</>
+                  )}
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                onClick={step === 1 ? handleClose : () => setStep(1)}
+                disabled={isImporting}
+              >
+                {step === 1 ? 'Cancel' : <><ArrowLeft className="w-4 h-4 mr-1" /> Back</>}
+              </Button>
 
-          {isConnected && step === 1 && (
-            <Button
-              onClick={handleContinueToPreview}
-              disabled={!canProceedFromSource}
-              className="gap-1 bg-blue-600 hover:bg-blue-500"
-            >
-              Continue <ArrowRight className="w-4 h-4" />
-            </Button>
-          )}
+              {isConnected && step === 1 && (
+                <Button
+                  onClick={handleContinueToPreview}
+                  disabled={!canProceedFromSource}
+                  className="gap-1 bg-blue-600 hover:bg-blue-500"
+                >
+                  Continue <ArrowRight className="w-4 h-4" />
+                </Button>
+              )}
 
-          {isConnected && step === 2 && !importResult && !importError && !isImporting && (
-            <Button
-              onClick={handleImport}
-              disabled={!previewData || previewData.records.length === 0}
-              className="gap-1 bg-blue-600 hover:bg-blue-500"
-            >
-              Import {OBJECT_OPTIONS.find((o) => o.value === selectedObject)?.label || 'Records'}
-            </Button>
+              {isConnected && step === 2 && !importResult && !importError && !isImporting && (
+                <Button
+                  onClick={handleImport}
+                  disabled={!previewData || previewData.records.length === 0}
+                  className="gap-1 bg-blue-600 hover:bg-blue-500"
+                >
+                  Import {OBJECT_OPTIONS.find((o) => o.value === selectedObject)?.label || 'Records'}
+                </Button>
+              )}
+            </>
           )}
         </div>
       </DialogContent>

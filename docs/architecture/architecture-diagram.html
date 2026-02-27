@@ -4,49 +4,206 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>60 / Architecture Diagrams V2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <style>
     :root {
-      --bg: #0a0a0f; --surf: #111118; --surf2: #1a1a24;
-      --bdr: #2a2a3a; --acc: #6366f1; --acc2: #8b5cf6;
-      --txt: #e2e8f0; --mut: #64748b;
+      --bg: #0a0a0a;
+      --surf: #111111;
+      --surf2: #1a1a1a;
+      --surf3: #222222;
+      --bdr: #2a2a2a;
+      --bdr2: #333333;
+      --acc: #6366f1;
+      --acc2: #8b5cf6;
+      --txt: #ededed;
+      --txt2: #a0a0a0;
+      --txt3: #666666;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--txt); font-family: 'Inter', -apple-system, sans-serif; }
+    body {
+      background: var(--bg);
+      color: var(--txt);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
 
+    /* ── Header ── */
     header {
-      background: var(--surf); border-bottom: 1px solid var(--bdr);
-      padding: 15px 28px; display: flex; align-items: center; gap: 12px;
-      position: sticky; top: 0; z-index: 100;
+      background: var(--surf);
+      border-bottom: 1px solid var(--bdr);
+      height: 56px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
     .logo {
-      width: 32px; height: 32px; border-radius: 8px;
+      width: 28px; height: 28px; border-radius: 6px;
       background: linear-gradient(135deg, var(--acc), var(--acc2));
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 14px; color: #fff;
+      font-weight: 800; font-size: 12px; color: #fff;
+      letter-spacing: -0.5px;
+      flex-shrink: 0;
     }
-    .lt { font-size: 16px; font-weight: 700; }
-    .ls { font-size: 11px; color: var(--mut); }
-    .hsep { width: 1px; height: 24px; background: var(--bdr); }
-    .htl { font-size: 13px; font-weight: 600; }
-    .hbg { margin-left: auto; font-size: 11px; color: var(--mut); background: var(--surf2); border: 1px solid var(--bdr); padding: 3px 10px; border-radius: 20px; }
+    .header-title {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .lt {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--txt);
+      letter-spacing: -0.2px;
+    }
+    .ls {
+      font-size: 12px;
+      color: var(--txt3);
+      font-weight: 400;
+    }
+    .hsep {
+      width: 1px; height: 20px;
+      background: var(--bdr2);
+      flex-shrink: 0;
+    }
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hbg {
+      font-size: 11px;
+      color: var(--txt3);
+      background: var(--surf2);
+      border: 1px solid var(--bdr);
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.01em;
+    }
 
-    .tabs { background: var(--surf); border-bottom: 1px solid var(--bdr); padding: 0 28px; display: flex; }
-    .tab { padding: 12px 16px; font-size: 13px; font-weight: 500; color: var(--mut); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-    .tab:hover { color: var(--txt); }
+    /* ── Version toggles ── */
+    .ver-toggle { display: flex; align-items: center; gap: 4px; }
+    .ver-btn {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      border: 1px solid var(--bdr2);
+      background: transparent;
+      color: var(--txt3);
+      transition: all .12s;
+      font-family: inherit;
+      letter-spacing: 0.01em;
+    }
+    .ver-btn:hover { color: var(--txt2); border-color: var(--bdr2); background: var(--surf2); }
+    .ver-btn.act { background: var(--acc); color: #fff; border-color: var(--acc); }
+    .hl-btn {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 20px;
+      cursor: pointer;
+      border: 1px solid var(--bdr2);
+      background: transparent;
+      color: var(--txt3);
+      transition: all .12s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: inherit;
+    }
+    .hl-btn:hover { color: var(--txt2); background: var(--surf2); }
+    .hl-btn.act { background: rgba(34,197,94,.1); color: #4ade80; border-color: rgba(34,197,94,.4); }
+    .hl-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    /* ── Tabs bar ── */
+    .tabs {
+      background: var(--surf);
+      border-bottom: 1px solid var(--bdr);
+      padding: 0 24px;
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      padding: 0 14px;
+      height: 42px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--txt3);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all .12s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      letter-spacing: 0.01em;
+    }
+    .tab:hover { color: var(--txt2); }
     .tab.act { color: var(--txt); border-bottom-color: var(--acc); }
-    .td { width: 6px; height: 6px; border-radius: 50%; background: var(--mut); }
+    .td {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--txt3);
+      transition: background .12s;
+    }
     .tab.act .td { background: var(--acc); }
 
-    main { padding: 28px; }
+    /* ── Main content ── */
+    main { padding: 24px; }
     .tp { display: none; }
     .tp.act { display: block; }
-    .stl { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
-    .sds { font-size: 13px; color: var(--mut); line-height: 1.6; max-width: 760px; }
+    .stl {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      letter-spacing: -0.3px;
+      color: var(--txt);
+    }
+    .sds {
+      font-size: 12px;
+      color: var(--txt3);
+      line-height: 1.6;
+      max-width: 680px;
+    }
 
-    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
-    .pill { display: flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--bdr); background: var(--surf2); color: var(--mut); transition: all .15s; user-select: none; }
-    .pill:hover { color: var(--txt); }
+    /* ── Pills ── */
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 16px 0;
+    }
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 11px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--bdr2);
+      background: transparent;
+      color: var(--txt3);
+      transition: all .12s;
+      user-select: none;
+      letter-spacing: 0.01em;
+    }
+    .pill:hover { color: var(--txt2); border-color: var(--bdr2); background: var(--surf2); }
     .pill.act { color: #fff; border-color: transparent; }
     .pill[data-f="overview"].act    { background: #374151; }
     .pill[data-f="frontend"].act    { background: #1d4ed8; }
@@ -56,121 +213,312 @@
     .pill[data-f="backend"].act     { background: #b45309; }
     .pill[data-f="ai"].act          { background: #be185d; }
     .pill[data-f="integrations"].act { background: #166534; }
-    .pill[data-f="cmdcentre"].act  { background: #7c3aed; }
-    .pill[data-f="autonomy"].act   { background: #059669; }
-    .pill[data-f="proactive"].act  { background: #dc2626; }
+    .pill[data-f="cmdcentre"].act   { background: #7c3aed; }
+    .pill[data-f="autonomy"].act    { background: #059669; }
+    .pill[data-f="proactive"].act   { background: #dc2626; }
     .pill[data-f="slackcopilot"].act { background: #4338ca; }
-    .pill[data-f="demo"].act       { background: #a16207; }
-    .pill[data-f="credits"].act    { background: #e11d48; }
-    .pill[data-f="v2infra"].act    { background: #0d9488; }
-    .pill[data-f="v2obs"].act      { background: #0891b2; }
-    .pill[data-f="v2model"].act    { background: #7c3aed; }
-    .pill[data-f="v2route"].act    { background: #2563eb; }
-    .pill[data-f="v2skill"].act    { background: #0369a1; }
-    .pill[data-f="v2memory"].act   { background: #059669; }
-    .pill[data-f="v2retry"].act    { background: #d97706; }
-    .pill[data-f="v2bp"].act       { background: #dc2626; }
-    .pill[data-f="v2dedup"].act    { background: #9333ea; }
-    .pill[data-f="v2xchan"].act    { background: #4338ca; }
+    .pill[data-f="demo"].act        { background: #a16207; }
+    .pill[data-f="credits"].act     { background: #e11d48; }
+    .pill[data-f="autopilot"].act   { background: #0e7490; }
+    .pill[data-f="orchestrator"].act { background: #c2410c; }
+    .pill[data-f="memory"].act       { background: #7e22ce; }
+    .pill[data-f="emailsend"].act    { background: #0891b2; }
+    .pill[data-f="relgraph"].act     { background: #15803d; }
+    .pill[data-f="dailylogs"].act    { background: #b91c1c; }
+    .pill[data-f="controlroom"].act  { background: #6d28d9; }
 
-    .card { background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px; overflow: hidden; }
-    .cbar { padding: 10px 14px; border-bottom: 1px solid var(--bdr); background: var(--surf2); display: flex; align-items: center; gap: 7px; }
+    /* ── Diagram card ── */
+    .card {
+      background: var(--surf);
+      border: 1px solid var(--bdr);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .cbar {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--bdr);
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .dot { width: 10px; height: 10px; border-radius: 50%; }
-    .dr { background: #ff5f57; } .dy { background: #ffbd2e; } .dg { background: #28c840; }
-    .cfn { font-size: 11px; color: var(--mut); margin-left: 4px; font-family: monospace; }
+    .dr { background: #ff5f57; }
+    .dy { background: #ffbd2e; }
+    .dg { background: #28c840; }
+    .cfn {
+      font-size: 11px;
+      color: var(--txt3);
+      margin-left: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.01em;
+    }
 
-    .zc { margin-left: auto; display: flex; align-items: center; gap: 5px; }
-    .zb { background: var(--bg); border: 1px solid var(--bdr); color: var(--txt); width: 24px; height: 24px; border-radius: 5px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-    .zb:hover { background: var(--surf); }
-    .zp { font-size: 11px; color: var(--mut); min-width: 34px; text-align: center; font-family: monospace; }
-    .fsb { background: var(--bg); border: 1px solid var(--bdr); color: var(--mut); padding: 3px 9px; border-radius: 5px; font-size: 11px; cursor: pointer; margin-left: 4px; }
-    .fsb:hover { color: var(--txt); }
+    /* ── Zoom controls ── */
+    .zc { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+    .zb {
+      background: var(--surf2);
+      border: 1px solid var(--bdr2);
+      color: var(--txt2);
+      width: 22px; height: 22px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .1s;
+      font-family: inherit;
+    }
+    .zb:hover { background: var(--surf3); color: var(--txt); }
+    .zp {
+      font-size: 10px;
+      color: var(--txt3);
+      min-width: 34px;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--surf2);
+      border: 1px solid var(--bdr);
+      border-radius: 4px;
+      padding: 2px 4px;
+    }
+    .fsb {
+      background: transparent;
+      border: 1px solid var(--bdr2);
+      color: var(--txt3);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      cursor: pointer;
+      margin-left: 4px;
+      transition: all .1s;
+      font-family: inherit;
+      letter-spacing: 0.01em;
+    }
+    .fsb:hover { color: var(--txt); border-color: var(--bdr2); background: var(--surf2); }
 
-    .cbody { overflow: auto; background: var(--surf); cursor: grab; position: relative; min-height: 400px; }
+    /* ── Diagram body ── */
+    .cbody {
+      overflow: hidden;
+      background: var(--surf);
+      cursor: grab;
+      position: relative;
+      height: calc(100vh - 260px);
+      min-height: 320px;
+    }
     .cbody:active { cursor: grabbing; }
-    .dstage { display: inline-block; padding: 28px 24px; transform-origin: 0 0; min-width: 100%; }
+    .dstage {
+      display: inline-block;
+      padding: 28px 24px;
+      transform-origin: 0 0;
+      min-width: 100%;
+    }
     .dstage svg { display: block; max-width: none !important; }
 
+    /* ── Feature view headers ── */
     .fv { display: none; }
     .fv.vis { display: block; }
-    .fvh { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-    .fvb { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; color: #fff; }
-    .fvt { font-size: 15px; font-weight: 600; }
-    .fvd { font-size: 12px; color: var(--mut); margin-top: 2px; }
+    .fvh {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .fv-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .fvb {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .fvt {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--txt);
+      letter-spacing: -0.2px;
+    }
+    .fvd {
+      font-size: 11px;
+      color: var(--txt3);
+      margin-top: 2px;
+      line-height: 1.5;
+    }
 
+    /* ── Fullscreen overlay ── */
     .fso { display: none; position: fixed; inset: 0; z-index: 9999; background: var(--bg); flex-direction: column; }
     .fso.open { display: flex; }
-    .fsh { background: var(--surf); border-bottom: 1px solid var(--bdr); padding: 10px 18px; display: flex; align-items: center; gap: 10px; }
-    .fstl { font-size: 13px; font-weight: 600; }
-    .fscl { margin-left: auto; background: none; border: 1px solid var(--bdr); color: var(--txt); padding: 4px 12px; border-radius: 5px; font-size: 11px; cursor: pointer; }
-    .fsbd { flex: 1; overflow: auto; cursor: grab; padding: 28px; display: flex; align-items: flex-start; }
+    .fsh {
+      background: var(--surf);
+      border-bottom: 1px solid var(--bdr);
+      padding: 0 18px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .fstl { font-size: 12px; font-weight: 600; color: var(--txt); }
+    .fscl {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--bdr2);
+      color: var(--txt2);
+      padding: 4px 12px;
+      border-radius: 5px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all .1s;
+      font-family: inherit;
+    }
+    .fscl:hover { color: var(--txt); background: var(--surf2); }
+    .fsbd {
+      flex: 1;
+      overflow: hidden;
+      cursor: grab;
+      padding: 32px;
+      display: flex;
+      align-items: flex-start;
+    }
     .fsbd:active { cursor: grabbing; }
     .fsst { transform-origin: 0 0; display: inline-block; }
-    .fszb { background: var(--surf); border-top: 1px solid var(--bdr); padding: 9px 18px; display: flex; align-items: center; gap: 7px; }
+    .fszb {
+      background: var(--surf);
+      border-top: 1px solid var(--bdr);
+      padding: 8px 18px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
 
-    .legend { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 18px; padding: 16px 20px; background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px; }
-    .lgt { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--mut); margin-bottom: 8px; }
-    .lgi { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 5px; }
-    .lgc { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+    /* ── Legend ── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      margin-top: 16px;
+      padding: 14px 18px;
+      background: var(--surf);
+      border: 1px solid var(--bdr);
+      border-radius: 8px;
+    }
+    .lgt {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--txt3);
+      margin-bottom: 6px;
+    }
+    .lgi { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--txt2); margin-bottom: 4px; }
+    .lgc { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 
-    table.kt { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 18px; background: var(--surf); border: 1px solid var(--bdr); border-radius: 10px; overflow: hidden; }
-    table.kt th { background: var(--surf2); padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); border-bottom: 1px solid var(--bdr); }
-    table.kt td { padding: 10px 14px; border-bottom: 1px solid var(--bdr); color: var(--txt); vertical-align: top; }
+    /* ── Component tables ── */
+    table.kt {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 16px;
+      background: var(--surf);
+      border: 1px solid var(--bdr);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    table.kt th {
+      background: var(--bg);
+      padding: 9px 14px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--txt3);
+      border-bottom: 1px solid var(--bdr);
+    }
+    table.kt td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--bdr);
+      color: var(--txt2);
+      vertical-align: top;
+    }
+    table.kt tr:nth-child(even) td { background: rgba(255,255,255,.015); }
     table.kt tr:last-child td { border-bottom: none; }
-    table.kt td:first-child { font-family: monospace; font-size: 11px; color: var(--acc); white-space: nowrap; }
+    table.kt td:first-child {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--acc);
+      white-space: nowrap;
+    }
     .b { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 500; }
-    .bp { background: rgba(99,102,241,.15); color: #a5b4fc; }
-    .bb { background: rgba(59,130,246,.15); color: #93c5fd; }
-    .bg { background: rgba(34,197,94,.15); color: #86efac; }
-    .by { background: rgba(234,179,8,.15); color: #fde047; }
-    .bx { background: rgba(100,116,139,.15); color: #94a3b8; }
+    .bp { background: rgba(99,102,241,.12); color: #a5b4fc; }
+    .bb { background: rgba(59,130,246,.12); color: #93c5fd; }
+    .bg { background: rgba(34,197,94,.12); color: #86efac; }
+    .by { background: rgba(234,179,8,.12); color: #fde047; }
+    .bx { background: rgba(100,116,139,.12); color: #94a3b8; }
 
-    .loading { color: var(--mut); font-size: 13px; padding: 60px; text-align: center; }
-    .merr { color: #f87171; font-size: 12px; padding: 20px; font-family: monospace; white-space: pre-wrap; background: #1a0a0a; border-radius: 8px; margin: 20px; }
+    /* ── States ── */
+    .loading { color: var(--txt3); font-size: 12px; padding: 60px; text-align: center; font-family: 'JetBrains Mono', monospace; }
+    .merr { color: #f87171; font-size: 11px; padding: 20px; font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; background: #1a0a0a; border-radius: 8px; margin: 20px; border: 1px solid rgba(248,113,113,.2); }
 
-    /* Version toggle & V2 highlight system */
-    .ver-toggle { display: flex; align-items: center; gap: 6px; margin-left: 12px; }
-    .ver-btn { font-size: 11px; padding: 3px 10px; border-radius: 4px; cursor: pointer; border: 1px solid var(--bdr); background: var(--surf2); color: var(--mut); transition: all .15s; }
-    .ver-btn.act { background: var(--acc); color: #fff; border-color: var(--acc); }
-    .hl-btn { font-size: 11px; padding: 3px 10px; border-radius: 20px; cursor: pointer; border: 1px solid var(--bdr); background: var(--surf2); color: var(--mut); margin-left: 8px; transition: all .15s; display: flex; align-items: center; gap: 4px; }
-    .hl-btn.act { background: rgba(34,197,94,.15); color: #86efac; border-color: #22c55e; }
-    .v2-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(34,197,94,.15); color: #86efac; font-weight: 600; margin-left: 5px; vertical-align: middle; letter-spacing: .03em; }
+    /* ── V2 badge ── */
+    .v2-badge {
+      display: inline-block;
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(34,197,94,.12);
+      color: #4ade80;
+      font-weight: 600;
+      margin-left: 4px;
+      vertical-align: middle;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    /* ── V1/V2 visibility system ── */
     .v2-only { display: none; }
     .show-v2 .v2-only { display: block; }
     .show-v2 .tab.v2-only { display: flex; }
     .show-v2 .pill.v2-only { display: flex; }
+    .show-v2 .fv.v2-only { display: none; }
     .show-v2 .fv.v2-only.vis { display: block; }
-    /* Fix specificity: .show-v2 .v2-only (0,2,0) was overriding .tp (0,1,0) and .fv (0,1,0),
-       making all V2 panels/views visible simultaneously. These rules at (0,4,0) restore proper toggling. */
-    .show-v2 .tp.v2-only:not(.act) { display: none; }
-    .show-v2 .fv.v2-only:not(.vis) { display: none; }
-    /* V2 Only mode — hide V1 content */
+    .show-v2 .tp.v2-only { display: none; }
+    .show-v2 .tp.v2-only.act { display: block; }
     body.v2-exclusive .v1-content { display: none !important; }
     body.v2-exclusive .tp.v1-content { display: none !important; }
-    body.v2-exclusive .tp.v2-only:not(.act) { display: none !important; }
-    body.v2-exclusive .fv.v2-only:not(.vis) { display: none !important; }
-    body.hl-v2 .v2-card { box-shadow: 0 0 0 2px #22c55e, 0 0 20px rgba(34,197,94,.2); }
+    body.hl-v2 .v2-card { box-shadow: 0 0 0 2px #22c55e, 0 0 20px rgba(34,197,94,.15); }
     body.hl-v2 .v2-badge { animation: v2pulse 1.5s ease-in-out infinite; }
-    body.hl-v2 .v2-row { background: rgba(34,197,94,.06); }
-    body.hl-v2 .pill.v2-only { box-shadow: 0 0 0 1px #22c55e; }
+    body.hl-v2 .v2-row { background: rgba(34,197,94,.05); }
+    body.hl-v2 .pill.v2-only { box-shadow: 0 0 0 1px rgba(34,197,94,.5); }
     body.hl-v2 .tab.v2-only { box-shadow: inset 0 -2px 0 #22c55e; }
-    @keyframes v2pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+    @keyframes v2pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
   </style>
 </head>
 <body>
 
 <header>
   <div class="logo">60</div>
-  <div><div class="lt">use60.com</div><div class="ls">Sales Intelligence Platform</div></div>
+  <div class="header-title">
+    <span class="lt">Architecture</span>
+    <span class="ls">use60.com</span>
+  </div>
   <div class="hsep"></div>
-  <div class="htl">Architecture Diagrams</div>
   <div class="ver-toggle">
     <button class="ver-btn" onclick="setVer('v1',this)">V1</button>
     <button class="ver-btn act" onclick="setVer('v2',this)">V2</button>
     <button class="ver-btn" onclick="setVer('v2only',this)">V2 Only</button>
   </div>
-  <button class="hl-btn" id="hl-btn" onclick="toggleHL()"><span style="font-size:9px">&#9679;</span> Highlight V2</button>
-  <div class="hbg">V2 Architecture</div>
+  <button class="hl-btn" id="hl-btn" onclick="toggleHL()"><span class="hl-dot"></span> Highlight V2</button>
+  <div class="header-right">
+    <a href="feature_list.html" style="font-size:12px;color:#6366f1;text-decoration:none;padding:4px 12px;border-radius:6px;border:1px solid #2a2a2a;transition:all .15s;" onmouseover="this.style.borderColor='#6366f1';this.style.background='#1a1a1a'" onmouseout="this.style.borderColor='#2a2a2a';this.style.background='transparent'">Feature Catalogue</a>
+    <span class="hbg">staging &middot; Feb 2026 &middot; PRD v4 &middot; HITL v2</span>
+  </div>
 </header>
 
 <div class="tabs">
@@ -182,7 +530,11 @@
   <div class="tab v2-only" data-tab="autonomy"  onclick="switchTab('autonomy')" ><span class="td"></span>Autonomy System <span class="v2-badge">V2</span></div>
   <div class="tab v2-only" data-tab="proactive" onclick="switchTab('proactive')"><span class="td"></span>Proactive Agents <span class="v2-badge">V2</span></div>
   <div class="tab v2-only" data-tab="credits"   onclick="switchTab('credits')"  ><span class="td"></span>Credit Governance <span class="v2-badge">V2</span></div>
-  <div class="tab v2-only" data-tab="v2infra"   onclick="switchTab('v2infra')"  ><span class="td"></span>V2 Infrastructure <span class="v2-badge">V2</span></div>
+  <div class="tab v2-only" data-tab="autopilot" onclick="switchTab('autopilot')"><span class="td"></span>Autopilot Engine <span class="v2-badge">V2</span></div>
+  <div class="tab v2-only" data-tab="orchestrator" onclick="switchTab('orchestrator')"><span class="td"></span>Orchestrator Waves <span class="v2-badge">V2</span></div>
+  <div class="tab v2-only" data-tab="emailpipe" onclick="switchTab('emailpipe')"><span class="td"></span>Email Send Pipeline <span class="v2-badge">V2</span></div>
+  <div class="tab v2-only" data-tab="relgraph" onclick="switchTab('relgraph')"><span class="td"></span>Relationship Graph <span class="v2-badge">V2</span></div>
+  <div class="tab v2-only" data-tab="agentmem" onclick="switchTab('agentmem')"><span class="td"></span>Agent Memory <span class="v2-badge">V2</span></div>
 </div>
 
 <main>
@@ -207,7 +559,13 @@
     <div class="pill v2-only" data-f="slackcopilot" onclick="showF('slackcopilot')">Slack Copilot <span class="v2-badge">V2</span></div>
     <div class="pill v2-only" data-f="demo"         onclick="showF('demo')"        >Demo Experience <span class="v2-badge">V2</span></div>
     <div class="pill v2-only" data-f="credits"      onclick="showF('credits')"     >Credit Governance <span class="v2-badge">V2</span></div>
-    <div class="pill v2-only" data-f="v2infra"      onclick="showF('v2infra')"     >V2 Infrastructure <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="autopilot"    onclick="showF('autopilot')"   >Autopilot Engine <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="orchestrator" onclick="showF('orchestrator')">Orchestrator <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="memory"       onclick="showF('memory')"      >Agent Memory <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="emailsend"    onclick="showF('emailsend')"   >Email Send <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="relgraph"     onclick="showF('relgraph')"    >Relationship Graph <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="dailylogs"    onclick="showF('dailylogs')"   >Daily Logs <span class="v2-badge">V2</span></div>
+    <div class="pill v2-only" data-f="controlroom"  onclick="showF('controlroom')" >Control Room <span class="v2-badge">V2</span></div>
   </div>
 
   <div id="fv-overview" class="fv vis v1-content">
@@ -242,15 +600,15 @@
   </div>
 
   <div id="fv-recording" class="fv v1-content">
-    <div class="fvh"><div class="fvb" style="background:#0f766e">Recording Pipeline</div><div><div class="fvt">60 Notetaker - 4-Phase Pipeline</div><div class="fvd">Bot deploy, S3 upload with retry, transcription, Claude AI analysis</div></div></div>
+    <div class="fvh"><div class="fvb" style="background:#0f766e">Recording Pipeline</div><div><div class="fvt">4-Phase Recording Pipeline</div><div class="fvd">Bot deploy → S3 upload → Transcription → AI processing</div></div></div>
     <div class="card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">recording-feature.mermaid</span><div class="zc"><button class="zb" onclick="zD('rf',-0.15)">-</button><span class="zp" id="rf-pct">100%</span><button class="zb" onclick="zD('rf',0.15)">+</button><button class="zb" onclick="rD('rf')">R</button><button class="fsb" onclick="openFS('rf','Recording Pipeline')">Fullscreen</button></div></div>
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">recording-simple.mermaid</span><div class="zc"><button class="zb" onclick="zD('rf',-0.15)">-</button><span class="zp" id="rf-pct">100%</span><button class="zb" onclick="zD('rf',0.15)">+</button><button class="zb" onclick="rD('rf')">R</button><button class="fsb" onclick="openFS('rf','Recording Pipeline')">Fullscreen</button></div></div>
       <div class="cbody" id="rf-body"><div class="dstage" id="rf-stage"><div id="rf-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-backend" class="fv v1-content">
-    <div class="fvh"><div class="fvb" style="background:#b45309">Supabase Backend</div><div><div class="fvt">PostgreSQL + RLS + pgvector + Edge Functions</div><div class="fvd">Tables with row-level security, realtime, edge function groups</div></div></div>
+    <div class="fvh"><div class="fvb" style="background:#b45309">Supabase Backend</div><div><div class="fvt">PostgreSQL + Edge Functions + RLS</div><div class="fvd">Auth, CRM tables, copilot storage, skills DB, edge functions, CORS</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">backend.mermaid</span><div class="zc"><button class="zb" onclick="zD('be',-0.15)">-</button><span class="zp" id="be-pct">100%</span><button class="zb" onclick="zD('be',0.15)">+</button><button class="zb" onclick="rD('be')">R</button><button class="fsb" onclick="openFS('be','Supabase Backend')">Fullscreen</button></div></div>
       <div class="cbody" id="be-body"><div class="dstage" id="be-stage"><div id="be-container"><div class="loading">Rendering diagram...</div></div></div></div>
@@ -258,7 +616,7 @@
   </div>
 
   <div id="fv-ai" class="fv v1-content">
-    <div class="fvh"><div class="fvb" style="background:#be185d">AI Providers</div><div><div class="fvt">Multi-Provider AI Architecture</div><div class="fvd">Which features use which models and how keys are stored securely</div></div></div>
+    <div class="fvh"><div class="fvb" style="background:#be185d">AI Providers</div><div><div class="fvt">Multi-Provider AI Architecture</div><div class="fvd">Anthropic Claude, Google Gemini, OpenAI embeddings, OpenRouter workflow nodes</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">ai-providers.mermaid</span><div class="zc"><button class="zb" onclick="zD('ai',-0.15)">-</button><span class="zp" id="ai-pct">100%</span><button class="zb" onclick="zD('ai',0.15)">+</button><button class="zb" onclick="rD('ai')">R</button><button class="fsb" onclick="openFS('ai','AI Providers')">Fullscreen</button></div></div>
       <div class="cbody" id="ai-body"><div class="dstage" id="ai-stage"><div id="ai-container"><div class="loading">Rendering diagram...</div></div></div></div>
@@ -266,7 +624,7 @@
   </div>
 
   <div id="fv-integrations" class="fv v1-content">
-    <div class="fvh"><div class="fvb" style="background:#166534">Integrations</div><div><div class="fvt">External Service Integrations</div><div class="fvd">All external platforms and data flow directions</div></div></div>
+    <div class="fvh"><div class="fvb" style="background:#166534">Integrations</div><div><div class="fvt">External Service Integrations</div><div class="fvd">Fathom, MeetingBaaS, Google Calendar, HubSpot, Attio, Instantly, Slack</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">integrations.mermaid</span><div class="zc"><button class="zb" onclick="zD('ig',-0.15)">-</button><span class="zp" id="ig-pct">100%</span><button class="zb" onclick="zD('ig',0.15)">+</button><button class="zb" onclick="rD('ig')">R</button><button class="fsb" onclick="openFS('ig','Integrations')">Fullscreen</button></div></div>
       <div class="cbody" id="ig-body"><div class="dstage" id="ig-stage"><div id="ig-container"><div class="loading">Rendering diagram...</div></div></div></div>
@@ -274,404 +632,464 @@
   </div>
 
   <div id="fv-cmdcentre" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#7c3aed">Command Centre <span class="v2-badge">V2</span></div><div><div class="fvt">Unified Proactive Inbox with Enrichment Pipeline</div><div class="fvd">Enrich, prioritize, confidence-score, auto-execute or suggest. 9 source agents, 9 item types.</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">command-centre.mermaid</span><div class="zc"><button class="zb" onclick="zD('cc',-0.15)">-</button><span class="zp" id="cc-pct">100%</span><button class="zb" onclick="zD('cc',0.15)">+</button><button class="zb" onclick="rD('cc')">R</button><button class="fsb" onclick="openFS('cc','Command Centre')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#7c3aed">Command Centre <span class="v2-badge">V2</span></div><div><div class="fvt">Proactive Inbox + Autonomy Gate</div><div class="fvd">8 source agents → enrich → prioritise → autonomy resolver → action paths</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">command-centre.mermaid</span><div class="zc"><button class="zb" onclick="zD('cc',-0.15)">-</button><span class="zp" id="cc-pct">100%</span><button class="zb" onclick="zD('cc',0.15)">+</button><button class="zb" onclick="rD('cc')">R</button><button class="fsb" onclick="openFS('cc','Command Centre')">Fullscreen</button></div></div>
       <div class="cbody" id="cc-body"><div class="dstage" id="cc-stage"><div id="cc-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-autonomy" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#059669">Autonomy System <span class="v2-badge">V2</span></div><div><div class="fvt">Graduated Autonomy with Policy Resolution</div><div class="fvd">4-tier policies, preset system, promotion engine, analytics tracking</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-system.mermaid</span><div class="zc"><button class="zb" onclick="zD('au',-0.15)">-</button><span class="zp" id="au-pct">100%</span><button class="zb" onclick="zD('au',0.15)">+</button><button class="zb" onclick="rD('au')">R</button><button class="fsb" onclick="openFS('au','Autonomy System')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#059669">Autonomy System <span class="v2-badge">V2</span></div><div><div class="fvt">4-Tier Autonomy with Promotion/Demotion</div><div class="fvd">disabled → suggest → approve → auto, with trust signals and preset configs</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-system.mermaid</span><div class="zc"><button class="zb" onclick="zD('au',-0.15)">-</button><span class="zp" id="au-pct">100%</span><button class="zb" onclick="zD('au',0.15)">+</button><button class="zb" onclick="rD('au')">R</button><button class="fsb" onclick="openFS('au','Autonomy System')">Fullscreen</button></div></div>
       <div class="cbody" id="au-body"><div class="dstage" id="au-stage"><div id="au-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-proactive" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#dc2626">Proactive Fleet <span class="v2-badge">V2</span></div><div><div class="fvt">8 Autonomous Agent Fleet with Fleet Router</div><div class="fvd">Morning brief, EOD synthesis, meeting prep, deal risk, re-engagement, coaching, competitive intel, email signals</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet.mermaid</span><div class="zc"><button class="zb" onclick="zD('pf',-0.15)">-</button><span class="zp" id="pf-pct">100%</span><button class="zb" onclick="zD('pf',0.15)">+</button><button class="zb" onclick="rD('pf')">R</button><button class="fsb" onclick="openFS('pf','Proactive Fleet')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#dc2626">Proactive Fleet <span class="v2-badge">V2</span></div><div><div class="fvt">8-Agent Proactive Fleet</div><div class="fvd">Morning Brief, EOD, Meeting Prep, Deal Risk, Re-Engagement, Coaching, Competitive, Email Signals</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet.mermaid</span><div class="zc"><button class="zb" onclick="zD('pf',-0.15)">-</button><span class="zp" id="pf-pct">100%</span><button class="zb" onclick="zD('pf',0.15)">+</button><button class="zb" onclick="rD('pf')">R</button><button class="fsb" onclick="openFS('pf','Proactive Fleet')">Fullscreen</button></div></div>
       <div class="cbody" id="pf-body"><div class="dstage" id="pf-stage"><div id="pf-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-slackcopilot" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#4338ca">Slack Copilot <span class="v2-badge">V2</span></div><div><div class="fvt">In-Channel CRM Agent with Assertive Messaging</div><div class="fvd">Thread-based queries, 8 intent handlers, assertive 3-part notifications</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">slack-copilot.mermaid</span><div class="zc"><button class="zb" onclick="zD('sc',-0.15)">-</button><span class="zp" id="sc-pct">100%</span><button class="zb" onclick="zD('sc',0.15)">+</button><button class="zb" onclick="rD('sc')">R</button><button class="fsb" onclick="openFS('sc','Slack Copilot')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#4338ca">Slack Copilot <span class="v2-badge">V2</span></div><div><div class="fvt">In-Channel Copilot with Intent Classification</div><div class="fvd">8 query types, thread memory, assertive messaging, interactive buttons</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">slack-copilot.mermaid</span><div class="zc"><button class="zb" onclick="zD('sc',-0.15)">-</button><span class="zp" id="sc-pct">100%</span><button class="zb" onclick="zD('sc',0.15)">+</button><button class="zb" onclick="rD('sc')">R</button><button class="fsb" onclick="openFS('sc','Slack Copilot')">Fullscreen</button></div></div>
       <div class="cbody" id="sc-body"><div class="dstage" id="sc-stage"><div id="sc-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-demo" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#a16207">Demo Experience <span class="v2-badge">V2</span></div><div><div class="fvt">5-Act Always-On Interactive Narrative</div><div class="fvd">Product demo at /settings/demo showing the full agent journey from pain to autonomy</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">demo-experience.mermaid</span><div class="zc"><button class="zb" onclick="zD('dm',-0.15)">-</button><span class="zp" id="dm-pct">100%</span><button class="zb" onclick="zD('dm',0.15)">+</button><button class="zb" onclick="rD('dm')">R</button><button class="fsb" onclick="openFS('dm','Demo Experience')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#a16207">Demo Experience <span class="v2-badge">V2</span></div><div><div class="fvt">5-Act Progressive Demo Narrative</div><div class="fvd">Before 60 → Onboarding → Day 1 (10 scenes) → Week 2 → Month 1</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">demo-experience.mermaid</span><div class="zc"><button class="zb" onclick="zD('dm',-0.15)">-</button><span class="zp" id="dm-pct">100%</span><button class="zb" onclick="zD('dm',0.15)">+</button><button class="zb" onclick="rD('dm')">R</button><button class="fsb" onclick="openFS('dm','Demo Experience')">Fullscreen</button></div></div>
       <div class="cbody" id="dm-body"><div class="dstage" id="dm-stage"><div id="dm-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div id="fv-credits" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#e11d48">Credit Governance <span class="v2-badge">V2</span></div><div><div class="fvt">AI Credit Metering, Budgets, and Circuit Breakers</div><div class="fvd">Every AI call metered through creditLedger. Per-user budgets, org ceilings, fleet throttling, and real-time usage visibility.</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance.mermaid</span><div class="zc"><button class="zb" onclick="zD('cg',-0.15)">-</button><span class="zp" id="cg-pct">100%</span><button class="zb" onclick="zD('cg',0.15)">+</button><button class="zb" onclick="rD('cg')">R</button><button class="fsb" onclick="openFS('cg','Credit Governance')">Fullscreen</button></div></div>
+    <div class="fvh"><div class="fvb" style="background:#e11d48">Credit Governance <span class="v2-badge">V2</span></div><div><div class="fvt">AI Credit Metering + Budget Enforcement</div><div class="fvd">Model router, credit ledger, budget service, fleet throttle, circuit breakers</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance.mermaid</span><div class="zc"><button class="zb" onclick="zD('cg',-0.15)">-</button><span class="zp" id="cg-pct">100%</span><button class="zb" onclick="zD('cg',0.15)">+</button><button class="zb" onclick="rD('cg')">R</button><button class="fsb" onclick="openFS('cg','Credit Governance')">Fullscreen</button></div></div>
       <div class="cbody" id="cg-body"><div class="dstage" id="cg-stage"><div id="cg-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
-  <div id="fv-v2infra" class="fv v2-only">
-    <div class="fvh"><div class="fvb" style="background:#0d9488">V2 Infrastructure <span class="v2-badge">V2</span></div><div><div class="fvt">10 Foundational Workstreams — 35 Stories</div><div class="fvd">Observability, Model Router, Unified Routing, Skill Versioning, Adaptive Memory, Fleet Retry, Backpressure, Dedup, Cross-Channel, Fleet Health</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-infrastructure.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2i',-0.15)">-</button><span class="zp" id="v2i-pct">100%</span><button class="zb" onclick="zD('v2i',0.15)">+</button><button class="zb" onclick="rD('v2i')">R</button><button class="fsb" onclick="openFS('v2i','V2 Infrastructure')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2i-body"><div class="dstage" id="v2i-stage"><div id="v2i-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <div id="fv-autopilot" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#0e7490">Autopilot Engine <span class="v2-badge">V2</span></div><div><div class="fvt">Signal Learning + Confidence Scoring</div><div class="fvd">Record signals → recalculate confidence → evaluate → propose → promote/demote</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-overview.mermaid</span><div class="zc"><button class="zb" onclick="zD('apo',-0.15)">-</button><span class="zp" id="apo-pct">100%</span><button class="zb" onclick="zD('apo',0.15)">+</button><button class="zb" onclick="rD('apo')">R</button><button class="fsb" onclick="openFS('apo','Autopilot Engine')">Fullscreen</button></div></div>
+      <div class="cbody" id="apo-body"><div class="dstage" id="apo-stage"><div id="apo-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-orchestrator" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#c2410c">Orchestrator <span class="v2-badge">V2</span></div><div><div class="fvt">Event-Driven 5-Wave Pipeline</div><div class="fvd">meeting_ended → classify → extract + detect intents + coaching → draft email + tasks + CRM → signal processor → Slack</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">orchestrator-waves.mermaid</span><div class="zc"><button class="zb" onclick="zD('orch',-0.15)">-</button><span class="zp" id="orch-pct">100%</span><button class="zb" onclick="zD('orch',0.15)">+</button><button class="zb" onclick="rD('orch')">R</button><button class="fsb" onclick="openFS('orch','Orchestrator Waves')">Fullscreen</button></div></div>
+      <div class="cbody" id="orch-body"><div class="dstage" id="orch-stage"><div id="orch-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-memory" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#7e22ce">Agent Memory <span class="v2-badge">V2</span></div><div><div class="fvt">10-Module Event-Sourced Memory System</div><div class="fvd">Deal memory, contact memory with decay, rep memory, commitments, RAG search</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">agent-memory.mermaid</span><div class="zc"><button class="zb" onclick="zD('mem',-0.15)">-</button><span class="zp" id="mem-pct">100%</span><button class="zb" onclick="zD('mem',0.15)">+</button><button class="zb" onclick="rD('mem')">R</button><button class="fsb" onclick="openFS('mem','Agent Memory')">Fullscreen</button></div></div>
+      <div class="cbody" id="mem-body"><div class="dstage" id="mem-stage"><div id="mem-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-emailsend" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#0891b2">Email Send <span class="v2-badge">V2</span></div><div><div class="fvt">HITL Email Approval + Gmail/O365 Send</div><div class="fvd">Draft → Slack approval (fire-and-forget, tz-aware scheduling) or Control Room deep-link → Gmail signature auto-append → 30s undo</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">email-send-pipeline.mermaid</span><div class="zc"><button class="zb" onclick="zD('eml',-0.15)">-</button><span class="zp" id="eml-pct">100%</span><button class="zb" onclick="zD('eml',0.15)">+</button><button class="zb" onclick="rD('eml')">R</button><button class="fsb" onclick="openFS('eml','Email Send Pipeline')">Fullscreen</button></div></div>
+      <div class="cbody" id="eml-body"><div class="dstage" id="eml-stage"><div id="eml-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-relgraph" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#15803d">Relationship Graph <span class="v2-badge">V2</span></div><div><div class="fvt">Deal-Contact Intelligence Layer</div><div class="fvd">Role inference → deal_contacts junction → cross-deal stakeholder view → multi-threading score → champion ghost detection</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">relationship-graph.mermaid</span><div class="zc"><button class="zb" onclick="zD('rg',-0.15)">-</button><span class="zp" id="rg-pct">100%</span><button class="zb" onclick="zD('rg',0.15)">+</button><button class="zb" onclick="rD('rg')">R</button><button class="fsb" onclick="openFS('rg','Relationship Graph')">Fullscreen</button></div></div>
+      <div class="cbody" id="rg-body"><div class="dstage" id="rg-stage"><div id="rg-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-dailylogs" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#b91c1c">Daily Logs <span class="v2-badge">V2</span></div><div><div class="fvt">Agent Audit Trail + Chain Replay</div><div class="fvd">Every orchestrator wave step, email send, fleet agent decision logged with chain_id for full replay</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">daily-logs.mermaid</span><div class="zc"><button class="zb" onclick="zD('dl',-0.15)">-</button><span class="zp" id="dl-pct">100%</span><button class="zb" onclick="zD('dl',0.15)">+</button><button class="zb" onclick="rD('dl')">R</button><button class="fsb" onclick="openFS('dl','Agent Daily Logs')">Fullscreen</button></div></div>
+      <div class="cbody" id="dl-body"><div class="dstage" id="dl-stage"><div id="dl-container"><div class="loading">Rendering diagram...</div></div></div></div>
+    </div>
+  </div>
+
+  <div id="fv-controlroom" class="fv v2-only">
+    <div class="fvh"><div class="fvb" style="background:#6d28d9">Control Room <span class="v2-badge">V2</span></div><div><div class="fvt">Unified Manager Dashboard + HITL Approval</div><div class="fvd">Fleet Pulse + Team Autonomy Matrix + Credit Health + Action Feed + ROI Summary + ApprovalReviewDialog (deep-linked from Slack)</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">control-room.mermaid</span><div class="zc"><button class="zb" onclick="zD('cr',-0.15)">-</button><span class="zp" id="cr-pct">100%</span><button class="zb" onclick="zD('cr',0.15)">+</button><button class="zb" onclick="rD('cr')">R</button><button class="fsb" onclick="openFS('cr','Control Room')">Fullscreen</button></div></div>
+      <div class="cbody" id="cr-body"><div class="dstage" id="cr-stage"><div id="cr-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
   </div>
 
   <div class="legend">
-    <div><div class="lgt">Arrows</div><div class="lgi"><div class="lgc" style="background:#e2e8f0"></div>Solid - direct data flow</div><div class="lgi"><div class="lgc" style="background:#64748b"></div>Dashed - integration or optional</div></div>
-    <div><div class="lgt">DB columns</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>meetings - owner_user_id</div><div class="lgi"><div class="lgc" style="background:#f59e0b"></div>deals and contacts - owner_id</div></div>
-    <div><div class="lgt">Security</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>Copilot convos - user-private only</div><div class="lgi"><div class="lgc" style="background:#ef4444"></div>AI keys - user_settings, never VITE_</div></div>
-    <div><div class="lgt">V2 Credits</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>All AI calls metered via creditLedger</div><div class="lgi"><div class="lgc" style="background:#e11d48"></div>Fleet agents throttled by budget</div></div>
-    <div><div class="lgt">V2 Infrastructure</div><div class="lgi"><div class="lgc" style="background:#0d9488"></div>10 workstreams, 35 stories</div><div class="lgi"><div class="lgc" style="background:#0d9488"></div>11 migrations, 3 shared modules</div><div class="lgi"><div class="lgc" style="background:#0d9488"></div>4 new edge functions, 8 slack skills</div></div>
+    <div>
+      <div class="lgt">Connections</div>
+      <div class="lgi"><svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#6366f1" stroke-width="1.5"/></svg> Data flow</div>
+      <div class="lgi"><svg width="24" height="2"><line x1="0" y1="1" x2="24" y2="1" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="4,3"/></svg> Optional / event-driven</div>
+    </div>
+    <div>
+      <div class="lgt">Node types</div>
+      <div class="lgi"><div class="lgc" style="background:#1e1e2e;border:1px solid #6366f1"></div> Subsystem group</div>
+      <div class="lgi"><div class="lgc" style="background:#16162a;border:1px solid #3a3a4a"></div> Component</div>
+    </div>
+    <div>
+      <div class="lgt">AI Models</div>
+      <div class="lgi"><div class="lgc" style="background:#1a1a2e;border:1px solid #8b5cf6"></div> Anthropic Claude</div>
+      <div class="lgi"><div class="lgc" style="background:#1a1a2e;border:1px solid #4285f4"></div> Google Gemini</div>
+    </div>
   </div>
 </div>
 
 <!-- TAB 2: Copilot Lifecycle -->
 <div id="tab-copilot" class="tp v1-content">
-  <div class="stl">Copilot Request Lifecycle</div>
-  <div class="sds">Sequence from user message through routing, skill lazy-loading, Claude tool execution, and streaming response.</div>
-  <div style="margin-top:20px">
+  <div class="stl">Copilot Lifecycle</div>
+  <div class="sds">Full request/response lifecycle through the copilot system — routing, autonomous execution, skill loading, streaming.</div>
+
+  <div style="margin: 18px 0 12px;">
+    <div class="fvh"><div class="fvb" style="background:#6d28d9">Sequence Flow</div><div><div class="fvt">Message Routing Sequence</div><div class="fvd">From user message to streamed response — routing, lazy skill loading, tool iterations</div></div></div>
     <div class="card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">copilot-lifecycle.mermaid</span><div class="zc"><button class="zb" onclick="zD('sq',-0.15)">-</button><span class="zp" id="sq-pct">100%</span><button class="zb" onclick="zD('sq',0.15)">+</button><button class="zb" onclick="rD('sq')">R</button><button class="fsb" onclick="openFS('sq','Copilot Lifecycle')">Fullscreen</button></div></div>
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">copilot-sequence.mermaid</span><div class="zc"><button class="zb" onclick="zD('sq',-0.15)">-</button><span class="zp" id="sq-pct">100%</span><button class="zb" onclick="zD('sq',0.15)">+</button><button class="zb" onclick="rD('sq')">R</button><button class="fsb" onclick="openFS('sq','Copilot Sequence')">Fullscreen</button></div></div>
       <div class="cbody" id="sq-body"><div class="dstage" id="sq-stage"><div id="sq-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Tool</th><th>Mode</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr><td>list_skills</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Lists available skills for the active organization</td></tr>
-        <tr><td>get_skill</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Retrieves compiled skill content, lazy-loaded on demand to save tokens</td></tr>
-        <tr><td>execute_action</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Executes CRM actions and runs skills or sequences</td></tr>
-        <tr><td>resolve_entity</td><td><span class="b bp">autonomous</span> <span class="b bx">regular</span></td><td>Resolves ambiguous person references such as first-name-only lookups</td></tr>
-      </tbody>
-    </table>
   </div>
+
+  <table class="kt">
+    <thead><tr><th>Component</th><th>File</th><th>Role</th><th>Type</th></tr></thead>
+    <tbody>
+      <tr><td>CopilotContext</td><td>src/lib/contexts/CopilotContext.tsx</td><td>State management, mode routing, sendMessage()</td><td><span class="b bp">Context</span></td></tr>
+      <tr><td>copilotRoutingService</td><td>src/lib/services/copilotRoutingService.ts</td><td>3-step skill routing: sequences → triggers → embeddings</td><td><span class="b bb">Service</span></td></tr>
+      <tr><td>copilot-autonomous</td><td>supabase/functions/copilot-autonomous/</td><td>Claude Haiku 4.5 native tool_use, streaming SSE</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>api-copilot</td><td>supabase/functions/api-copilot/</td><td>Gemini 2.5 Flash, 48 response panels, HITL confirm</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>autonomousExecutor</td><td>src/lib/copilot/agent/autonomousExecutor.ts</td><td>Skill-to-tool conversion, lazy loading, iteration</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>useCopilotChat</td><td>src/lib/hooks/useCopilotChat.ts</td><td>Streaming, tool tracking, progress steps</td><td><span class="b by">Hook</span></td></tr>
+    </tbody>
+  </table>
 </div>
 
 <!-- TAB 3: Recording Pipeline -->
 <div id="tab-recording" class="tp v1-content">
-  <div class="stl">60 Notetaker - Recording Pipeline</div>
-  <div class="sds">Four-phase flow: bot deployment, S3 upload with retry, async transcription, then Claude AI analysis synced to the CRM.</div>
-  <div style="margin-top:20px">
+  <div class="stl">Recording Pipeline</div>
+  <div class="sds">4-phase pipeline: bot deployment → S3 upload with multipart → transcription (AssemblyAI/Gladia) → Claude AI processing.</div>
+
+  <div style="margin: 18px 0 12px;">
+    <div class="fvh"><div class="fvb" style="background:#0f766e">Recording Pipeline</div><div><div class="fvt">Full Recording Pipeline — Detailed</div><div class="fvd">All phases with retry logic, dual transcription providers, AI processing</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">recording-pipeline.mermaid</span><div class="zc"><button class="zb" onclick="zD('rp',-0.15)">-</button><span class="zp" id="rp-pct">100%</span><button class="zb" onclick="zD('rp',0.15)">+</button><button class="zb" onclick="rD('rp')">R</button><button class="fsb" onclick="openFS('rp','Recording Pipeline')">Fullscreen</button></div></div>
       <div class="cbody" id="rp-body"><div class="dstage" id="rp-stage"><div id="rp-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Edge Function</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr><td>auto-join-scheduler</td><td><span class="b bb">cron</span></td><td>Scans calendar_events and deploys bots for upcoming meetings</td></tr>
-        <tr><td>deploy-recording-bot</td><td><span class="b bx">http</span></td><td>Calls MeetingBaaS API to join a specific meeting URL</td></tr>
-        <tr><td>meetingbaas-webhook</td><td><span class="b by">webhook</span></td><td>Receives bot completion callbacks, triggers upload queue</td></tr>
-        <tr><td>poll-s3-upload-queue</td><td><span class="b bb">cron</span></td><td>Uploads video and audio to S3 in 5MB chunks with exponential-backoff retry</td></tr>
-        <tr><td>poll-transcription-queue</td><td><span class="b bb">cron</span></td><td>Checks AssemblyAI and Gladia job status until transcript is ready</td></tr>
-        <tr><td>process-recording</td><td><span class="b bx">http</span></td><td>Claude-powered analysis: summary, highlights, action items, speaker ID</td></tr>
-        <tr><td>_shared/recordingCompleteSync.ts</td><td><span class="b bg">shared</span></td><td>Syncs recording results to meetings, contacts, and tasks tables</td></tr>
-      </tbody>
-    </table>
   </div>
+
+  <table class="kt">
+    <thead><tr><th>Function</th><th>Trigger</th><th>Purpose</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td>auto-join-scheduler</td><td>Cron every 2 min</td><td>Deploy MeetingBaaS bot for upcoming meetings</td><td><span class="b bb">1 · Deploy</span></td></tr>
+      <tr><td>deploy-recording-bot</td><td>Scheduler call</td><td>MeetingBaaS API — Zoom, Meet, Teams support</td><td><span class="b bb">1 · Deploy</span></td></tr>
+      <tr><td>meetingbaas-webhook</td><td>Webhook POST</td><td>Receive bot completion signal, enqueue upload</td><td><span class="b bp">2 · Upload</span></td></tr>
+      <tr><td>poll-s3-upload-queue</td><td>Cron</td><td>5MB multipart upload, exponential backoff retry</td><td><span class="b bp">2 · Upload</span></td></tr>
+      <tr><td>poll-transcription-queue</td><td>Cron</td><td>AssemblyAI primary, Gladia fallback</td><td><span class="b bg">3 · Transcribe</span></td></tr>
+      <tr><td>process-recording</td><td>Transcript ready</td><td>Claude Haiku analysis: summary, highlights, speaker ID</td><td><span class="b by">4 · AI</span></td></tr>
+    </tbody>
+  </table>
 </div>
 
 <!-- TAB 4: Skills System -->
 <div id="tab-skills" class="tp v1-content">
   <div class="stl">Skills System</div>
-  <div class="sds">SKILL.md files sync to Supabase, compile per org with variable resolution, embed with pgvector, discovered at runtime via 3-step routing.</div>
-  <div style="margin-top:20px">
+  <div class="sds">30 skills (18 atomic + 12 sequences) defined in SKILL.md files, synced to database, compiled per org with variables resolved, embedded for semantic search.</div>
+
+  <div style="margin: 18px 0 12px;">
+    <div class="fvh"><div class="fvb" style="background:#0369a1">Skills System</div><div><div class="fvt">Full Skills Pipeline</div><div class="fvd">Source SKILL.md → sync → platform_skills → compile → organization_skills → runtime RPC</div></div></div>
     <div class="card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">skills-full.mermaid</span><div class="zc"><button class="zb" onclick="zD('sf',-0.15)">-</button><span class="zp" id="sf-pct">100%</span><button class="zb" onclick="zD('sf',0.15)">+</button><button class="zb" onclick="rD('sf')">R</button><button class="fsb" onclick="openFS('sf','Skills System')">Fullscreen</button></div></div>
       <div class="cbody" id="sf-body"><div class="dstage" id="sf-stage"><div id="sf-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
-    <table class="kt">
-      <thead><tr><th>File or Table</th><th>Role</th><th>Notes</th></tr></thead>
-      <tbody>
-        <tr><td>skills/**/SKILL.md</td><td><span class="b bg">source</span></td><td>Gray-matter YAML frontmatter and markdown content. 18 atomic and 12 sequences.</td></tr>
-        <tr><td>scripts/sync-skills.ts</td><td><span class="b bb">CLI</span></td><td>Parse, validate, upsert, compile orgs, generate embeddings. Supports --dry-run and --skill flags.</td></tr>
-        <tr><td>platform_skills</td><td><span class="b by">DB</span></td><td>Master template store with variable placeholders. Admin-only writes.</td></tr>
-        <tr><td>organization_skills</td><td><span class="b by">DB</span></td><td>Runtime compiled per org with variables resolved. Read by all copilot paths.</td></tr>
-        <tr><td>description_embedding</td><td><span class="b bp">pgvector</span></td><td>1536-dim vector on platform_skills. Queried via match_skills_by_embedding RPC.</td></tr>
-        <tr><td>autonomousExecutor.ts</td><td><span class="b bp">runtime</span></td><td>Converts org skills to Claude tool definitions. Lazy-loads content tier on demand.</td></tr>
-      </tbody>
-    </table>
   </div>
+
+  <table class="kt">
+    <thead><tr><th>Table / RPC</th><th>Purpose</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>platform_skills</td><td>Master skill templates with ${variable} placeholders</td><td><span class="b bp">Admin read</span></td></tr>
+      <tr><td>organization_skills</td><td>Compiled per-org with variables resolved, is_enabled flag</td><td><span class="b bg">Runtime read</span></td></tr>
+      <tr><td>description_embedding</td><td>pgvector 1536-dim embedding of skill description</td><td><span class="b bb">Semantic search</span></td></tr>
+      <tr><td>get_organization_skills_for_agent</td><td>RPC returning compiled skills as Claude tool definitions</td><td><span class="b by">All copilot paths</span></td></tr>
+      <tr><td>match_skills_by_embedding</td><td>Cosine similarity search, threshold 0.6+</td><td><span class="b bx">Fallback</span></td></tr>
+    </tbody>
+  </table>
 </div>
 
 <!-- TAB 5: Command Centre (V2) -->
 <div id="tab-cmdcentre" class="tp v2-only">
   <div class="stl">Command Centre <span class="v2-badge">V2</span></div>
-  <div class="sds">Unified proactive inbox. Source agents emit items, enrichment pipeline scores confidence, autonomy resolver decides auto-execute vs approve vs suggest.</div>
-  <div style="margin-top:20px">
+  <div class="sds">Proactive inbox driven by 8 source agents. Items are enriched with live context, scored by AI confidence, then routed through the autonomy gate to CRM, Slack, or user suggestion.</div>
+
+  <div style="margin: 18px 0 12px;">
+    <div class="fvh"><div class="fvb" style="background:#7c3aed">Command Centre Sequence <span class="v2-badge">V2</span></div><div><div class="fvt">Full Item Lifecycle — Budget Check to Action</div><div class="fvd">Model routing, enrichment, scoring, autonomy resolution, execution with credit metering</div></div></div>
     <div class="card v2-card">
       <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">command-centre-pipeline.mermaid</span><div class="zc"><button class="zb" onclick="zD('ccp',-0.15)">-</button><span class="zp" id="ccp-pct">100%</span><button class="zb" onclick="zD('ccp',0.15)">+</button><button class="zb" onclick="rD('ccp')">R</button><button class="fsb" onclick="openFS('ccp','Command Centre Pipeline')">Fullscreen</button></div></div>
       <div class="cbody" id="ccp-body"><div class="dstage" id="ccp-stage"><div id="ccp-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Edge Function</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>cc-enrich</td><td><span class="b bp">pipeline</span></td><td>Runs context loaders (calendar, CRM, email, pipeline, transcript) to enrich items</td></tr>
-        <tr class="v2-row"><td>cc-prioritise</td><td><span class="b bp">pipeline</span></td><td>AI confidence scoring and priority ranking of enriched items</td></tr>
-        <tr class="v2-row"><td>cc-auto-execute</td><td><span class="b by">cron</span></td><td>Executes high-confidence items per autonomy policy</td></tr>
-        <tr class="v2-row"><td>cc-daily-cleanup</td><td><span class="b bb">cron</span></td><td>Archive stale items, deduplicate, maintain queue health</td></tr>
-        <tr class="v2-row"><td>cc-auto-report</td><td><span class="b bg">report</span></td><td>Daily summary of autonomous actions taken and outcomes</td></tr>
-      </tbody>
-    </table>
   </div>
 </div>
 
 <!-- TAB 6: Autonomy System (V2) -->
 <div id="tab-autonomy" class="tp v2-only">
-  <div class="stl">Graduated Autonomy System <span class="v2-badge">V2</span></div>
-  <div class="sds">4-tier policy resolution: user policy, org policy, preset, default. Automatic promotion and demotion based on agent behavior and user trust signals.</div>
-  <div style="margin-top:20px">
-    <div class="card v2-card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-resolution.mermaid</span><div class="zc"><button class="zb" onclick="zD('aur',-0.15)">-</button><span class="zp" id="aur-pct">100%</span><button class="zb" onclick="zD('aur',0.15)">+</button><button class="zb" onclick="rD('aur')">R</button><button class="fsb" onclick="openFS('aur','Autonomy Resolution')">Fullscreen</button></div></div>
-      <div class="cbody" id="aur-body"><div class="dstage" id="aur-stage"><div id="aur-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <div class="stl">Autonomy System <span class="v2-badge">V2</span></div>
+  <div class="sds">4-tier autonomy (disabled → suggest → approve → auto) with resolution chain, policy ceilings, promotion engine, demotion engine, and analytics.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#059669">Autonomy Resolver <span class="v2-badge">V2</span></div><div><div class="fvt">Policy Resolution Cache</div><div class="fvd">User → Org → Preset → Default, 5 min cache</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-resolver.mermaid</span><div class="zc"><button class="zb" onclick="zD('aur',-0.15)">-</button><span class="zp" id="aur-pct">100%</span><button class="zb" onclick="zD('aur',0.15)">+</button><button class="zb" onclick="rD('aur')">R</button><button class="fsb" onclick="openFS('aur','Autonomy Resolver')">Fullscreen</button></div></div>
+        <div class="cbody" id="aur-body" style="height:420px"><div class="dstage" id="aur-stage"><div id="aur-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Role</th><th>Notes</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>autonomyResolver.ts</td><td><span class="b bp">engine</span></td><td>Resolves effective policy: user, org, preset, default (5-min cache)</td></tr>
-        <tr class="v2-row"><td>promotionEngine.ts</td><td><span class="b bg">engine</span></td><td>Evaluates trust signals for tier promotion (474 lines)</td></tr>
-        <tr class="v2-row"><td>demotionHandler.ts</td><td><span class="b by">engine</span></td><td>Demotes on violations like undo frequency, safety nets, cooldowns</td></tr>
-        <tr class="v2-row"><td>autonomy-promotion-notify</td><td><span class="b bb">edge fn</span></td><td>Slack notification when agent earns a new tier</td></tr>
-        <tr class="v2-row"><td>autonomy_policies</td><td><span class="b bx">table</span></td><td>Per-action-type policy storage with presets</td></tr>
-      </tbody>
-    </table>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#059669">Tiers &amp; Presets <span class="v2-badge">V2</span></div><div><div class="fvt">4 Tiers + Promotion/Demotion</div><div class="fvd">Trust signals, promotion engine, demotion on violations</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autonomy-tiers.mermaid</span><div class="zc"><button class="zb" onclick="zD('au',-0.15)">-</button><span class="zp" id="au-pct">100%</span><button class="zb" onclick="zD('au',0.15)">+</button><button class="zb" onclick="rD('au')">R</button><button class="fsb" onclick="openFS('au','Autonomy Tiers')">Fullscreen</button></div></div>
+        <div class="cbody" id="au-body" style="height:420px"><div class="dstage" id="au-stage"><div id="au-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- TAB 7: Proactive Agents (V2) -->
 <div id="tab-proactive" class="tp v2-only">
-  <div class="stl">Proactive Agent Fleet <span class="v2-badge">V2</span></div>
-  <div class="sds">8 autonomous agents triggered by cron or events. Fleet router orchestrates parallel execution with deduplication into Command Centre.</div>
-  <div style="margin-top:20px">
-    <div class="card v2-card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet-detail.mermaid</span><div class="zc"><button class="zb" onclick="zD('pfd',-0.15)">-</button><span class="zp" id="pfd-pct">100%</span><button class="zb" onclick="zD('pfd',0.15)">+</button><button class="zb" onclick="rD('pfd')">R</button><button class="fsb" onclick="openFS('pfd','Proactive Fleet Detail')">Fullscreen</button></div></div>
-      <div class="cbody" id="pfd-body"><div class="dstage" id="pfd-stage"><div id="pfd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <div class="stl">Proactive Agents <span class="v2-badge">V2</span></div>
+  <div class="sds">Fleet of 8 autonomous agents triggered by cron + events. Each agent enriches with live context, generates assertive messages, routes to Command Centre or Slack.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#dc2626">Fleet Router <span class="v2-badge">V2</span></div><div><div class="fvt">Agent Fleet Architecture</div><div class="fvd">Triggers, routing, assertive messaging, credit governance</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet.mermaid</span><div class="zc"><button class="zb" onclick="zD('pf',-0.15)">-</button><span class="zp" id="pf-pct">100%</span><button class="zb" onclick="zD('pf',0.15)">+</button><button class="zb" onclick="rD('pf')">R</button><button class="fsb" onclick="openFS('pf','Proactive Fleet')">Fullscreen</button></div></div>
+        <div class="cbody" id="pf-body" style="height:420px"><div class="dstage" id="pf-stage"><div id="pf-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Agent</th><th>Trigger</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>slack-morning-brief</td><td><span class="b bb">cron 7am</span></td><td>Pipeline analysis, fleet routes, priority actions for the day</td></tr>
-        <tr class="v2-row"><td>agent-eod-synthesis</td><td><span class="b bb">cron 6pm</span></td><td>Day scorecard, deal health, relationship scoring, overnight plan</td></tr>
-        <tr class="v2-row"><td>proactive-meeting-prep</td><td><span class="b by">event</span></td><td>Type-specific prep (1:1, QBR, pipeline review, standup)</td></tr>
-        <tr class="v2-row"><td>agent-deal-risk</td><td><span class="b bb">cron</span></td><td>Temperature scoring, risk factor detection, automated alerts</td></tr>
-        <tr class="v2-row"><td>agent-reengagement</td><td><span class="b bb">cron</span></td><td>At-risk contact detection, Apollo/Apify signals, cooldown enforcement</td></tr>
-        <tr class="v2-row"><td>coaching-analysis</td><td><span class="b by">event</span></td><td>Post-meeting coaching insights, skill progression tracking</td></tr>
-        <tr class="v2-row"><td>agent-competitive-intel</td><td><span class="b bb">cron</span></td><td>Competitor monitoring, battlecard generation, Slack alerts</td></tr>
-        <tr class="v2-row"><td>agent-email-signals</td><td><span class="b by">event</span></td><td>Email activity signal extraction, classification, recommendations</td></tr>
-      </tbody>
-    </table>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#dc2626">Fleet Detail <span class="v2-badge">V2</span></div><div><div class="fvt">Triggers + Per-Agent Detail</div><div class="fvd">Cron + event triggers, per-agent subgraphs with file sizes</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">proactive-fleet-detail.mermaid</span><div class="zc"><button class="zb" onclick="zD('pfd',-0.15)">-</button><span class="zp" id="pfd-pct">100%</span><button class="zb" onclick="zD('pfd',0.15)">+</button><button class="zb" onclick="rD('pfd')">R</button><button class="fsb" onclick="openFS('pfd','Fleet Detail')">Fullscreen</button></div></div>
+        <div class="cbody" id="pfd-body" style="height:420px"><div class="dstage" id="pfd-stage"><div id="pfd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- TAB 8: Credit Governance (V2) -->
 <div id="tab-credits" class="tp v2-only">
   <div class="stl">Credit Governance <span class="v2-badge">V2</span></div>
-  <div class="sds">Every AI call — fleet agents, copilot, enrichment, scoring, Slack copilot — is metered through a central credit ledger. Per-user budgets, org ceilings, fleet circuit breakers, and real-time usage dashboards prevent runaway consumption.</div>
-  <div style="margin-top:20px">
-    <div class="card v2-card">
-      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance-detail.mermaid</span><div class="zc"><button class="zb" onclick="zD('cgd',-0.15)">-</button><span class="zp" id="cgd-pct">100%</span><button class="zb" onclick="zD('cgd',0.15)">+</button><button class="zb" onclick="rD('cgd')">R</button><button class="fsb" onclick="openFS('cgd','Credit Governance Detail')">Fullscreen</button></div></div>
-      <div class="cbody" id="cgd-body"><div class="dstage" id="cgd-stage"><div id="cgd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <div class="sds">Every AI call metered through modelRouter → creditLedger → creditBudgetService → fleetThrottle. Hard kill at 100%, Slack alerts at 80%, usage dashboard with per-agent breakdowns.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#e11d48">Credit Architecture <span class="v2-badge">V2</span></div><div><div class="fvt">Full Credit Governance System</div><div class="fvd">All consumers, model router, ledger, budget enforcement, circuit breakers</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-governance.mermaid</span><div class="zc"><button class="zb" onclick="zD('cg',-0.15)">-</button><span class="zp" id="cg-pct">100%</span><button class="zb" onclick="zD('cg',0.15)">+</button><button class="zb" onclick="rD('cg')">R</button><button class="fsb" onclick="openFS('cg','Credit Governance')">Fullscreen</button></div></div>
+        <div class="cbody" id="cg-body" style="height:420px"><div class="dstage" id="cg-stage"><div id="cg-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Role</th><th>Credit Impact</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>creditLedger.ts</td><td><span class="b bp">core</span></td><td>Central metering — logs provider, model, tokens, cost per call</td></tr>
-        <tr class="v2-row"><td>creditBudgetService.ts</td><td><span class="b bg">service</span></td><td>Per-user daily/monthly budgets, org-wide ceilings, alert thresholds</td></tr>
-        <tr class="v2-row"><td>fleetThrottle.ts</td><td><span class="b by">guard</span></td><td>Circuit breaker — pauses non-critical fleet agents when budget &gt;80%</td></tr>
-        <tr class="v2-row"><td>modelRouter.ts</td><td><span class="b bb">router</span></td><td>Routes to cheapest capable model per task type (Haiku for triage, Sonnet for drafts)</td></tr>
-        <tr class="v2-row"><td>credit_ledger</td><td><span class="b bx">table</span></td><td>Append-only log: user_id, org_id, provider, model, tokens_in, tokens_out, cost_usd, source_agent</td></tr>
-        <tr class="v2-row"><td>credit_budgets</td><td><span class="b bx">table</span></td><td>Budget configs: user or org scope, daily_limit_usd, monthly_limit_usd, alert_pct</td></tr>
-        <tr class="v2-row"><td>get-credit-usage-summary</td><td><span class="b bb">cron</span></td><td>Credit usage summary for fast dashboard queries</td></tr>
-        <tr class="v2-row"><td>check-credit-alerts</td><td><span class="b by">trigger</span></td><td>Slack alert when user or org hits 80% / 100% of budget</td></tr>
-      </tbody>
-    </table>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#e11d48">Credit Flow <span class="v2-badge">V2</span></div><div><div class="fvt">AI Call Lifecycle with Budget Checks</div><div class="fvd">Request → budget check → model select → log → throttle path</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">credit-flow.mermaid</span><div class="zc"><button class="zb" onclick="zD('cgd',-0.15)">-</button><span class="zp" id="cgd-pct">100%</span><button class="zb" onclick="zD('cgd',0.15)">+</button><button class="zb" onclick="rD('cgd')">R</button><button class="fsb" onclick="openFS('cgd','Credit Flow')">Fullscreen</button></div></div>
+        <div class="cbody" id="cgd-body" style="height:420px"><div class="dstage" id="cgd-stage"><div id="cgd-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- TAB 9: V2 Infrastructure -->
-<div id="tab-v2infra" class="tp v2-only">
-  <div class="stl">V2 Infrastructure Foundations <span class="v2-badge">V2</span></div>
-  <div class="sds">10 foundational workstreams (35 stories) providing observability, intelligent model routing, unified message routing, skill versioning with namespaces, adaptive memory with 3-tier compaction, fleet retry with DLQ, backpressure with priority queues, entity deduplication, cross-channel continuity, and fleet health monitoring.</div>
-  <div class="pills">
-    <div class="pill act v2-only" data-f="v2obs"   onclick="showV2Sub('v2obs')"  >Observability</div>
-    <div class="pill v2-only" data-f="v2model" onclick="showV2Sub('v2model')">Model Router</div>
-    <div class="pill v2-only" data-f="v2route" onclick="showV2Sub('v2route')">Unified Routing</div>
-    <div class="pill v2-only" data-f="v2skill" onclick="showV2Sub('v2skill')">Skill Versioning</div>
-    <div class="pill v2-only" data-f="v2memory" onclick="showV2Sub('v2memory')">Adaptive Memory</div>
-    <div class="pill v2-only" data-f="v2retry" onclick="showV2Sub('v2retry')">Fleet Retry</div>
-    <div class="pill v2-only" data-f="v2bp"    onclick="showV2Sub('v2bp')"   >Backpressure</div>
-    <div class="pill v2-only" data-f="v2dedup" onclick="showV2Sub('v2dedup')">Deduplication</div>
-    <div class="pill v2-only" data-f="v2xchan" onclick="showV2Sub('v2xchan')">Cross-Channel</div>
+<!-- TAB 9: Autopilot Engine (V2) -->
+<div id="tab-autopilot" class="tp v2-only">
+  <div class="stl">Autopilot Engine <span class="v2-badge">V2</span></div>
+  <div class="sds">Signal recording → time-decayed confidence scoring → daily evaluation → Slack promotion proposal → autonomy policy update → demotion on undo spikes.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#0e7490">Autopilot Overview <span class="v2-badge">V2</span></div><div><div class="fvt">Signal Learning Loop</div><div class="fvd">Rubber-stamp guard, time-decay, promotion/demotion cycle</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-overview.mermaid</span><div class="zc"><button class="zb" onclick="zD('apo',-0.15)">-</button><span class="zp" id="apo-pct">100%</span><button class="zb" onclick="zD('apo',0.15)">+</button><button class="zb" onclick="rD('apo')">R</button><button class="fsb" onclick="openFS('apo','Autopilot Overview')">Fullscreen</button></div></div>
+        <div class="cbody" id="apo-body" style="height:420px"><div class="dstage" id="apo-stage"><div id="apo-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#0e7490">Autopilot Engine Detail <span class="v2-badge">V2</span></div><div><div class="fvt">6-Stage Engine Architecture</div><div class="fvd">Signal recording, DB trigger, daily eval, proposal, demotion, dashboard</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">autopilot-engine.mermaid</span><div class="zc"><button class="zb" onclick="zD('ape',-0.15)">-</button><span class="zp" id="ape-pct">100%</span><button class="zb" onclick="zD('ape',0.15)">+</button><button class="zb" onclick="rD('ape')">R</button><button class="fsb" onclick="openFS('ape','Autopilot Engine')">Fullscreen</button></div></div>
+        <div class="cbody" id="ape-body" style="height:420px"><div class="dstage" id="ape-stage"><div id="ape-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 10: Orchestrator Waves (V2) -->
+<div id="tab-orchestrator" class="tp v2-only">
+  <div class="stl">Orchestrator Waves <span class="v2-badge">V2</span></div>
+  <div class="sds">Event-driven sequence runner with 5-wave meeting_ended chain, HITL pause/resume, idempotency, 45 adapters, chain depth limits, and dead-letter retry.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#c2410c">meeting_ended Chain <span class="v2-badge">V2</span></div><div><div class="fvt">5-Wave Post-Meeting Pipeline</div><div class="fvd">Classify → Extract + Detect intents + Coaching → Draft email + Tasks + CRM → Signal processor → Slack</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">meeting-ended-waves.mermaid</span><div class="zc"><button class="zb" onclick="zD('mew',-0.15)">-</button><span class="zp" id="mew-pct">100%</span><button class="zb" onclick="zD('mew',0.15)">+</button><button class="zb" onclick="rD('mew')">R</button><button class="fsb" onclick="openFS('mew','meeting_ended Waves')">Fullscreen</button></div></div>
+        <div class="cbody" id="mew-body" style="height:480px"><div class="dstage" id="mew-stage"><div id="mew-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#c2410c">Runner Architecture <span class="v2-badge">V2</span></div><div><div class="fvt">Orchestrator Runner Engine</div><div class="fvd">Idempotency, HITL pause/resume, retry, self-invocation, 45 adapters</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">orchestrator-runner.mermaid</span><div class="zc"><button class="zb" onclick="zD('orch2',-0.15)">-</button><span class="zp" id="orch2-pct">100%</span><button class="zb" onclick="zD('orch2',0.15)">+</button><button class="zb" onclick="rD('orch2')">R</button><button class="fsb" onclick="openFS('orch2','Orchestrator Runner')">Fullscreen</button></div></div>
+        <div class="cbody" id="orch2-body" style="height:480px"><div class="dstage" id="orch2-stage"><div id="orch2-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 
-  <div id="v2sub-v2obs" class="v2sub vis" style="margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#0891b2">Observability</div><div><div class="fvt">Structured Logging, Distributed Tracing, Fleet Health</div><div class="fvd">system_logs table, logger.ts shared module, logs-cleanup cron, agent_executions tracking, fleet-health monitoring with Slack alerts</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-observability.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2obs',-0.15)">-</button><span class="zp" id="v2obs-pct">100%</span><button class="zb" onclick="zD('v2obs',0.15)">+</button><button class="zb" onclick="rD('v2obs')">R</button><button class="fsb" onclick="openFS('v2obs','Observability')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2obs-body"><div class="dstage" id="v2obs-stage"><div id="v2obs-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <table class="kt">
+    <thead><tr><th>Component</th><th>File</th><th>Role</th><th>Type</th></tr></thead>
+    <tbody>
+      <tr><td>agent-orchestrator</td><td>supabase/functions/agent-orchestrator/</td><td>Entry point: runSequence(), resumeSequence(), retry_dead_letters</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>runner.ts</td><td>supabase/functions/_shared/orchestrator/runner.ts</td><td>Execution engine: step iteration, HITL pause, retry, self-invocation</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>fleetRouter.ts</td><td>supabase/functions/_shared/orchestrator/fleetRouter.ts</td><td>Event → sequence resolution, parallel dispatch</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>45 Adapters</td><td>supabase/functions/_shared/orchestrator/adapters/</td><td>Email, CRM, calendar, proposal, risk, coaching, reengagement, etc. notifySlackSummary no longer duplicates email draft notifications (handled by emailDraftApproval adapter)</td><td><span class="b bb">Adapters</span></td></tr>
+      <tr><td>sequence_jobs</td><td>PostgreSQL table</td><td>Job state: paused_at, output, error, chain depth tracking</td><td><span class="b by">Table</span></td></tr>
+      <tr><td>hitl_pending_approvals</td><td>PostgreSQL table</td><td>HITL approval queue with resource_type, callback, expiry</td><td><span class="b by">Table</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- TAB 11: Email Send Pipeline (V2) -->
+<div id="tab-emailpipe" class="tp v2-only">
+  <div class="stl">Email Send Pipeline <span class="v2-badge">V2</span></div>
+  <div class="sds">End-to-end path from meeting transcription to sent follow-up email. Draft generated in Wave 3, Slack HITL approval (fire-and-forget modals, timezone-aware scheduling, editable To field), in-app review via Control Room deep-link, Gmail signature auto-append, plain-text to HTML conversion, 30s undo window, daily caps, and autonomy signal capture.</div>
+
+  <div style="margin: 18px 0 12px;">
+    <div class="fvh"><div class="fvb" style="background:#0891b2">Email Send Flow <span class="v2-badge">V2</span></div><div><div class="fvt">Meeting → Draft → Approve → Send</div><div class="fvd">Complete HITL lifecycle with Slack fire-and-forget modals, Control Room deep-link, Gmail signature, plain-text→HTML, undo, threading, and autonomy learning</div></div></div>
+    <div class="card v2-card">
+      <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">email-send-sequence.mermaid</span><div class="zc"><button class="zb" onclick="zD('esq',-0.15)">-</button><span class="zp" id="esq-pct">100%</span><button class="zb" onclick="zD('esq',0.15)">+</button><button class="zb" onclick="rD('esq')">R</button><button class="fsb" onclick="openFS('esq','Email Send Sequence')">Fullscreen</button></div></div>
+      <div class="cbody" id="esq-body"><div class="dstage" id="esq-stage"><div id="esq-container"><div class="loading">Rendering diagram...</div></div></div></div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>system_logs</td><td><span class="b by">table</span></td><td>Structured log storage with trace_id, span_id, parent_span_id for distributed tracing. 9 indexes, GIN on metadata.</td></tr>
-        <tr class="v2-row"><td>_shared/logger.ts</td><td><span class="b bg">shared</span></td><td>createLogger(service) — batched writes (5 per flush), nested spans via span.child(), console fallback when no service key</td></tr>
-        <tr class="v2-row"><td>logs-cleanup</td><td><span class="b bb">cron</span></td><td>Nightly retention: debug=30d, info/warn=90d, error=365d. Self-dogfoods logger with nested spans.</td></tr>
-        <tr class="v2-row"><td>agent_executions</td><td><span class="b by">table</span></td><td>20-column execution tracking: trace_id, agent_name, status, tokens, credits, model_id, model_was_fallback</td></tr>
-        <tr class="v2-row"><td>fleet-health</td><td><span class="b bb">cron</span></td><td>5-min cron checking 6 agent cadences. Health: healthy/warning/critical/stale. Slack alerts via webhook.</td></tr>
-        <tr class="v2-row"><td>fleet_health_snapshots</td><td><span class="b by">table</span></td><td>Point-in-time snapshots per agent: failure_rate_24h, avg_duration_ms, credits_consumed_24h, alerts_fired</td></tr>
-      </tbody>
-    </table>
   </div>
 
-  <div id="v2sub-v2model" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#7c3aed">Model Router</div><div><div class="fvt">Intelligent Model Resolution with Circuit Breaker</div><div class="fvd">model_config table, 3 intelligence tiers x 5 features, circuit breaker with half-open probe, credit deduction and budget enforcement</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-model-router.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2mdl',-0.15)">-</button><span class="zp" id="v2mdl-pct">100%</span><button class="zb" onclick="zD('v2mdl',0.15)">+</button><button class="zb" onclick="rD('v2mdl')">R</button><button class="fsb" onclick="openFS('v2mdl','Model Router')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2mdl-body"><div class="dstage" id="v2mdl-stage"><div id="v2mdl-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <table class="kt">
+    <thead><tr><th>Component</th><th>File</th><th>Role</th><th>Type</th></tr></thead>
+    <tbody>
+      <tr><td>draft-followup-email</td><td>Wave 3 adapter (emailSend.ts)</td><td>AI-generated follow-up using Acknowledge-Advance framework</td><td><span class="b bg">Adapter</span></td></tr>
+      <tr><td>slack-hitl-notification</td><td>supabase/functions/slack-hitl-notification/</td><td>Block Kit message with email preview + 4 action buttons</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>slack-interactive</td><td>supabase/functions/slack-interactive/index.ts</td><td>Routes Approve/Edit/Schedule/Skip. Fire-and-forget modal submit. Parallel token+validation. Timezone-aware scheduling via Slack tz_offset</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>hitl-send-followup-email</td><td>supabase/functions/hitl-send-followup-email/</td><td>Receives approval, converts plain-text to HTML, calls google-gmail or ms-graph-email</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>google-gmail</td><td>supabase/functions/google-gmail/</td><td>Gmail API send with thread-aware In-Reply-To headers. Auto-appends Gmail signature via sendAs API</td><td><span class="b bb">Edge Fn</span></td></tr>
+      <tr><td>ApprovalReviewDialog</td><td>src/components/control-room/ApprovalReviewDialog.tsx</td><td>In-app HITL review at /admin/control-room?approval=id. Editable To/Subject/Body. Deep-linked from Slack</td><td><span class="b bp">Component</span></td></tr>
+      <tr><td>autopilot_confidence</td><td>PostgreSQL table</td><td>email.send starts at approve tier, signals from HITL actions</td><td><span class="b by">Table</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- TAB 12: Relationship Graph (V2) -->
+<div id="tab-relgraph" class="tp v2-only">
+  <div class="stl">Relationship Graph <span class="v2-badge">V2</span></div>
+  <div class="sds">Intelligence layer built on deal_contacts junction table. Role inference from transcripts and email patterns, cross-deal stakeholder queries, multi-threading scores, job change detection, and champion ghost detection.</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#15803d">Graph Data Model <span class="v2-badge">V2</span></div><div><div class="fvt">deal_contacts + contact_org_history</div><div class="fvd">Junction table with role inference, confidence scoring, cross-deal queries</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">rel-graph-schema.mermaid</span><div class="zc"><button class="zb" onclick="zD('rgs',-0.15)">-</button><span class="zp" id="rgs-pct">100%</span><button class="zb" onclick="zD('rgs',0.15)">+</button><button class="zb" onclick="rD('rgs')">R</button><button class="fsb" onclick="openFS('rgs','Graph Schema')">Fullscreen</button></div></div>
+        <div class="cbody" id="rgs-body" style="height:420px"><div class="dstage" id="rgs-stage"><div id="rgs-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>model_config</td><td><span class="b by">table</span></td><td>15 primary models (3 tiers x 5 features) + 6 cross-tier fallbacks. Partial unique index WHERE is_primary=true.</td></tr>
-        <tr class="v2-row"><td>model_health</td><td><span class="b by">table</span></td><td>Circuit breaker state: failure_count, last_failure_at, circuit_state (closed/open/half_open), cooldown_until</td></tr>
-        <tr class="v2-row"><td>_shared/modelRouter.ts</td><td><span class="b bg">shared</span></td><td>resolveModel() — tier lookup, circuit check, fallback chain. recordSuccess/recordFailure for circuit state.</td></tr>
-        <tr class="v2-row"><td>checkBudget()</td><td><span class="b bp">function</span></td><td>Pre-flight credit check with -10 grace threshold. Returns boolean.</td></tr>
-        <tr class="v2-row"><td>deductCredits()</td><td><span class="b bp">function</span></td><td>Post-call deduction via existing deduct_credits RPC. Logs to credit_transactions.</td></tr>
-        <tr class="v2-row"><td>checkAgentBudget()</td><td><span class="b by">guard</span></td><td>Per-run budget limits per agent name: FLEET_AGENT_BUDGETS constant.</td></tr>
-      </tbody>
-    </table>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#15803d">Intelligence Pipeline <span class="v2-badge">V2</span></div><div><div class="fvt">Inference → Scoring → Alerts</div><div class="fvd">Transcript + email role inference, multi-threading, champion ghost detection, job change monitoring</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">rel-graph-pipeline.mermaid</span><div class="zc"><button class="zb" onclick="zD('rgp',-0.15)">-</button><span class="zp" id="rgp-pct">100%</span><button class="zb" onclick="zD('rgp',0.15)">+</button><button class="zb" onclick="rD('rgp')">R</button><button class="fsb" onclick="openFS('rgp','Graph Intelligence')">Fullscreen</button></div></div>
+        <div class="cbody" id="rgp-body" style="height:420px"><div class="dstage" id="rgp-stage"><div id="rgp-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 
-  <div id="v2sub-v2route" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#2563eb">Unified Routing</div><div><div class="fvt">Server-Side Message Routing with Cache</div><div class="fvd">route-message edge function with 5-step pipeline, SHA-256 routing cache, migrated web/slack/fleet copilots</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-unified-routing.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2rt',-0.15)">-</button><span class="zp" id="v2rt-pct">100%</span><button class="zb" onclick="zD('v2rt',0.15)">+</button><button class="zb" onclick="rD('v2rt')">R</button><button class="fsb" onclick="openFS('v2rt','Unified Routing')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2rt-body"><div class="dstage" id="v2rt-stage"><div id="v2rt-container"><div class="loading">Rendering diagram...</div></div></div></div>
+  <table class="kt">
+    <thead><tr><th>Table / RPC</th><th>Purpose</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>deal_contacts</td><td>Junction: deal_id, contact_id, role, confidence, inferred_from, last_active</td><td><span class="b bg">New schema</span></td></tr>
+      <tr><td>contact_org_history</td><td>Job change tracking: contact_id, company_id, title, started_at, ended_at</td><td><span class="b bg">New schema</span></td></tr>
+      <tr><td>get_cross_deal_stakeholders</td><td>RPC: contacts appearing across multiple open deals with roles</td><td><span class="b bb">New RPC</span></td></tr>
+      <tr><td>get_deal_stakeholder_map</td><td>RPC: all contacts on a deal with roles and confidence</td><td><span class="b bb">New RPC</span></td></tr>
+      <tr><td>roleInference.ts</td><td>Adapter: transcript-based role classification in Wave 2</td><td><span class="b bp">New adapter</span></td></tr>
+      <tr><td>emailRoleInference.ts</td><td>Adapter: CC/BCC/reply authority pattern analysis</td><td><span class="b bp">New adapter</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- TAB 13: Agent Memory (V2) -->
+<div id="tab-agentmem" class="tp v2-only">
+  <div class="stl">Agent Memory <span class="v2-badge">V2</span></div>
+  <div class="sds">10-module event-sourced memory system in _shared/memory/. Deal memory, contact memory with time-decay, rep memory, commitment tracking, RAG search. Plus agent_daily_logs audit trail (PRD-03).</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#7e22ce">Memory Modules <span class="v2-badge">V2</span></div><div><div class="fvt">10-File Shared Memory System</div><div class="fvd">Reader, writer, decay, contacts, reps, commitments, taxonomy, types, snapshot, RAG</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">memory-modules.mermaid</span><div class="zc"><button class="zb" onclick="zD('mem',-0.15)">-</button><span class="zp" id="mem-pct">100%</span><button class="zb" onclick="zD('mem',0.15)">+</button><button class="zb" onclick="rD('mem')">R</button><button class="fsb" onclick="openFS('mem','Memory Modules')">Fullscreen</button></div></div>
+        <div class="cbody" id="mem-body" style="height:420px"><div class="dstage" id="mem-stage"><div id="mem-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
     </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>route-message</td><td><span class="b bp">edge fn</span></td><td>5-step pipeline: intent classify, sequence triggers (0.7+), skill triggers (0.5+), semantic fallback (0.6+), general</td></tr>
-        <tr class="v2-row"><td>routing_cache</td><td><span class="b by">table</span></td><td>SHA-256 hash key, JSONB response, 2-min TTL. Avoids redundant AI classification calls.</td></tr>
-        <tr class="v2-row"><td>CopilotContext.tsx</td><td><span class="b bb">frontend</span></td><td>Calls route-message with source: web_copilot before AI call, passes routingContext downstream</td></tr>
-        <tr class="v2-row"><td>slack-copilot</td><td><span class="b bb">edge fn</span></td><td>classifyViaRouteMessage() replaces inline intent classifier. Source: slack_copilot</td></tr>
-        <tr class="v2-row"><td>agent-orchestrator</td><td><span class="b bb">edge fn</span></td><td>routeFleetMessage() calls route-message with source: fleet_agent for fleet routing</td></tr>
-        <tr class="v2-row"><td>copilotRoutingService.ts</td><td><span class="b bx">deprecated</span></td><td>All exports marked @deprecated with JSDoc migration guide to route-message</td></tr>
-      </tbody>
-    </table>
+    <div>
+      <div class="fvh"><div class="fvb" style="background:#b91c1c">Agent Daily Logs <span class="v2-badge">V2</span></div><div><div class="fvt">Audit Trail + Chain Replay</div><div class="fvd">agent_daily_logs table, logAgentAction(), orchestrator hooks, 90-day retention</div></div></div>
+      <div class="card v2-card">
+        <div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">daily-logs.mermaid</span><div class="zc"><button class="zb" onclick="zD('dl',-0.15)">-</button><span class="zp" id="dl-pct">100%</span><button class="zb" onclick="zD('dl',0.15)">+</button><button class="zb" onclick="rD('dl')">R</button><button class="fsb" onclick="openFS('dl','Agent Daily Logs')">Fullscreen</button></div></div>
+        <div class="cbody" id="dl-body" style="height:420px"><div class="dstage" id="dl-stage"><div id="dl-container"><div class="loading">Rendering diagram...</div></div></div></div>
+      </div>
+    </div>
   </div>
 
-  <div id="v2sub-v2skill" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#0369a1">Skill Versioning</div><div><div class="fvt">Namespaced Skills with Version Pinning</div><div class="fvd">4 namespaces (copilot/fleet/slack/shared), version management, 8 new slack-namespaced skills, namespace-filtered RPC</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-skill-versioning.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2sk',-0.15)">-</button><span class="zp" id="v2sk-pct">100%</span><button class="zb" onclick="zD('v2sk',0.15)">+</button><button class="zb" onclick="rD('v2sk')">R</button><button class="fsb" onclick="openFS('v2sk','Skill Versioning')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2sk-body"><div class="dstage" id="v2sk-stage"><div id="v2sk-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>platform_skills (new cols)</td><td><span class="b by">migration</span></td><td>namespace (copilot/fleet/slack/shared), source, is_current, changelog, deprecated_at</td></tr>
-        <tr class="v2-row"><td>organization_skills (new cols)</td><td><span class="b by">migration</span></td><td>pinned_version, source, namespace_override for per-org version control</td></tr>
-        <tr class="v2-row"><td>get_organization_skills_for_agent</td><td><span class="b bp">RPC</span></td><td>Updated with p_source parameter. Maps: web_copilot->copilot+shared, slack->slack+shared, fleet->fleet+shared</td></tr>
-        <tr class="v2-row"><td>sync-skills.ts</td><td><span class="b bb">CLI</span></td><td>--deprecate flag, version incrementing with is_current management, namespace/source field sync</td></tr>
-        <tr class="v2-row"><td>8 slack skills</td><td><span class="b bg">skills</span></td><td>slack-deal-query, slack-contact-query, slack-pipeline-query, slack-history-query, slack-coaching-query, slack-competitive-query, slack-actions-query, slack-general-query</td></tr>
-        <tr class="v2-row"><td>SkillDetailView.tsx</td><td><span class="b bb">frontend</span></td><td>Read-only namespace badge and version badge display in skill detail panel</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2memory" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#059669">Adaptive Memory</div><div><div class="fvt">3-Tier Compaction with Cross-Channel Context</div><div class="fvd">conversation_context table, dynamic compaction thresholds, verbatim/summarised/entity-facts tiers, cross-channel reads/writes</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-adaptive-memory.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2mem',-0.15)">-</button><span class="zp" id="v2mem-pct">100%</span><button class="zb" onclick="zD('v2mem',0.15)">+</button><button class="zb" onclick="rD('v2mem')">R</button><button class="fsb" onclick="openFS('v2mem','Adaptive Memory')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2mem-body"><div class="dstage" id="v2mem-stage"><div id="v2mem-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>conversation_context</td><td><span class="b by">table</span></td><td>Cross-channel memory: user_id, channel (web/slack/fleet), entity_type, entity_id, context_summary, expires_at</td></tr>
-        <tr class="v2-row"><td>getCompactionThreshold()</td><td><span class="b bp">function</span></td><td>Dynamic thresholds: ~137k tokens for Claude, ~737k for Gemini. Scales to model context window.</td></tr>
-        <tr class="v2-row"><td>compactWithTiers()</td><td><span class="b bp">function</span></td><td>Tier 1: verbatim (last 20 messages). Tier 2: AI-summarised (7 days). Tier 3: entity facts from copilotMemoryService</td></tr>
-        <tr class="v2-row"><td>copilot-autonomous</td><td><span class="b bb">edge fn</span></td><td>fetchConversationContext() reads last 7 days, injects top 3 blocks. trackEntityMentions() writes after 3+ mentions.</td></tr>
-        <tr class="v2-row"><td>storeEntityFacts()</td><td><span class="b bg">service</span></td><td>Tier 3 memory storage with source provenance in copilotMemoryService</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2retry" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#d97706">Fleet Retry</div><div><div class="fvt">Agent Execution Wrapper with DLQ</div><div class="fvd">agentRunner.ts with typed retry policies, agent_dead_letters table, daily DLQ retry cron, integrated into all fleet agents</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-fleet-retry.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2ret',-0.15)">-</button><span class="zp" id="v2ret-pct">100%</span><button class="zb" onclick="zD('v2ret',0.15)">+</button><button class="zb" onclick="rD('v2ret')">R</button><button class="fsb" onclick="openFS('v2ret','Fleet Retry')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2ret-body"><div class="dstage" id="v2ret-stage"><div id="v2ret-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>_shared/agentRunner.ts</td><td><span class="b bg">shared</span></td><td>runAgent(config, executor) — typed retry policies: transient=2x exponential, context_exceeded=1x, validation=0x</td></tr>
-        <tr class="v2-row"><td>agent_dead_letters</td><td><span class="b by">table</span></td><td>DLQ for permanently failed executions. Tracks agent_name, error, retry_count, original payload.</td></tr>
-        <tr class="v2-row"><td>agent-dead-letter-retry</td><td><span class="b bb">cron</span></td><td>Daily cron processing up to 20 DLQ entries. Re-fires through agent-orchestrator. Max 3 retries.</td></tr>
-        <tr class="v2-row"><td>agent-deal-risk-batch</td><td><span class="b bx">wrapped</span></td><td>Wrapped with runAgent() for automatic retry and telemetry</td></tr>
-        <tr class="v2-row"><td>agent-pipeline-snapshot</td><td><span class="b bx">wrapped</span></td><td>Both cron-all and single-user paths wrapped with runAgent()</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2bp" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#dc2626">Backpressure</div><div><div class="fvt">Priority Queues with Rate Limiting</div><div class="fvd">P0-P3 queue priorities, semaphore concurrency control (max 5), batch processing mode for bulk events</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-backpressure.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2bpr',-0.15)">-</button><span class="zp" id="v2bpr-pct">100%</span><button class="zb" onclick="zD('v2bpr',0.15)">+</button><button class="zb" onclick="rD('v2bpr')">R</button><button class="fsb" onclick="openFS('v2bpr','Backpressure')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2bpr-body"><div class="dstage" id="v2bpr-stage"><div id="v2bpr-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>command_centre_items (new cols)</td><td><span class="b by">migration</span></td><td>queue_priority (0-3, default 2), queued_at, processing_started_at, processing_attempts. Composite index for dequeue.</td></tr>
-        <tr class="v2-row"><td>RateLimiter</td><td><span class="b bp">class</span></td><td>Per-org rate limiting in cc-enrich. Configurable window and max requests.</td></tr>
-        <tr class="v2-row"><td>Semaphore</td><td><span class="b bp">class</span></td><td>Max 5 concurrent enrichment operations. Prevents resource exhaustion.</td></tr>
-        <tr class="v2-row"><td>Batch mode</td><td><span class="b bg">feature</span></td><td>Activates when queue depth > 20. Prefetches CRM/calendar data for the batch to reduce per-item queries.</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2dedup" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#9333ea">Deduplication</div><div><div class="fvt">Entity-Level Dedup with Evidence Merging</div><div class="fvd">Pre-enrichment and post-scoring dedup, confidence aggregation formula, merge window management, threshold re-check</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-deduplication.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2ded',-0.15)">-</button><span class="zp" id="v2ded-pct">100%</span><button class="zb" onclick="zD('v2ded',0.15)">+</button><button class="zb" onclick="rD('v2ded')">R</button><button class="fsb" onclick="openFS('v2ded','Deduplication')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2ded-body"><div class="dstage" id="v2ded-stage"><div id="v2ded-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>command_centre_items (dedup cols)</td><td><span class="b by">migration</span></td><td>dedup_key, merge_group_id, is_primary, merged_evidence (JSONB), merged_confidence, contributing_agents, merge_window_expires</td></tr>
-        <tr class="v2-row"><td>runPreEnrichmentDedup()</td><td><span class="b bp">function</span></td><td>4-hour merge window. Aggregation: 1 - product(1-confidence_i), capped at 0.95</td></tr>
-        <tr class="v2-row"><td>recheckMergeGroupThreshold()</td><td><span class="b bp">function</span></td><td>Post-scoring recalculation of merged confidence. Promotes to approved at 0.7</td></tr>
-        <tr class="v2-row"><td>cc-enrich</td><td><span class="b bb">edge fn</span></td><td>Pre-enrichment dedup before expensive context loading</td></tr>
-        <tr class="v2-row"><td>cc-prioritise</td><td><span class="b bb">edge fn</span></td><td>Post-scoring dedup re-check after confidence scoring</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div id="v2sub-v2xchan" class="v2sub" style="display:none; margin-top:20px">
-    <div class="fvh"><div class="fvb" style="background:#4338ca">Cross-Channel</div><div><div class="fvt">Session Continuity Across Web, Slack, and Fleet</div><div class="fvd">Slack thread context extraction, fleet agent context writes, 14-day cleanup, conversation_context bridging all channels</div></div></div>
-    <div class="card v2-card"><div class="cbar"><div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div><span class="cfn">v2-cross-channel.mermaid</span><div class="zc"><button class="zb" onclick="zD('v2xch',-0.15)">-</button><span class="zp" id="v2xch-pct">100%</span><button class="zb" onclick="zD('v2xch',0.15)">+</button><button class="zb" onclick="rD('v2xch')">R</button><button class="fsb" onclick="openFS('v2xch','Cross-Channel')">Fullscreen</button></div></div>
-      <div class="cbody" id="v2xch-body"><div class="dstage" id="v2xch-stage"><div id="v2xch-container"><div class="loading">Rendering diagram...</div></div></div></div>
-    </div>
-    <table class="kt">
-      <thead><tr><th>Component</th><th>Type</th><th>Purpose</th></tr></thead>
-      <tbody>
-        <tr class="v2-row"><td>threadMemory.ts</td><td><span class="b bg">shared</span></td><td>Slack thread context extraction. Triggers at 10+ messages or 15+ min gap. AI-summarised via Anthropic API.</td></tr>
-        <tr class="v2-row"><td>cc-enrich (XCHAN-002)</td><td><span class="b bb">edge fn</span></td><td>Fleet agent writes context to conversation_context after enrichment completes</td></tr>
-        <tr class="v2-row"><td>copilot-autonomous (MEM-004)</td><td><span class="b bb">edge fn</span></td><td>Reads last 7 days of conversation_context, injects top 3 blocks into system prompt</td></tr>
-        <tr class="v2-row"><td>cc-daily-cleanup</td><td><span class="b bb">cron</span></td><td>Phase 3: runContextCleanup() deletes conversation_context entries older than 14 days</td></tr>
-      </tbody>
-    </table>
-  </div>
+  <table class="kt">
+    <thead><tr><th>Module / Table</th><th>File</th><th>Role</th><th>Type</th></tr></thead>
+    <tbody>
+      <tr><td>reader.ts</td><td>supabase/functions/_shared/memory/reader.ts</td><td>Memory recall with relevance scoring</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>writer.ts</td><td>supabase/functions/_shared/memory/writer.ts</td><td>Fire-and-forget memory persistence</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>decay.ts</td><td>supabase/functions/_shared/memory/decay.ts</td><td>Time-decay for contact memory freshness</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>contacts.ts</td><td>supabase/functions/_shared/memory/contacts.ts</td><td>Contact-specific memory operations</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>commitments.ts</td><td>supabase/functions/_shared/memory/commitments.ts</td><td>Track commitments from meetings and emails</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>ragClient.ts</td><td>supabase/functions/_shared/memory/ragClient.ts</td><td>RAG search across memory stores</td><td><span class="b bp">Module</span></td></tr>
+      <tr><td>dailyLog.ts</td><td>supabase/functions/_shared/memory/dailyLog.ts</td><td>logAgentAction() — audit trail for all agent actions</td><td><span class="b bg">New module</span></td></tr>
+      <tr><td>copilot_memories</td><td>PostgreSQL table</td><td>User-scoped memory with category, confidence, decay</td><td><span class="b by">Table</span></td></tr>
+      <tr><td>agent_daily_logs</td><td>PostgreSQL table</td><td>Audit trail: agent_type, action_type, chain_id, wave_number, 90-day retention</td><td><span class="b bg">New table</span></td></tr>
+    </tbody>
+  </table>
 </div>
 
 </main>
 
 <!-- Fullscreen overlay -->
 <div class="fso" id="fso">
-  <div class="fsh"><div class="logo" style="width:28px;height:28px;font-size:12px">60</div><div class="fstl" id="fstl">Diagram</div><button class="fscl" onclick="closeFS()">Close x</button></div>
-  <div class="fsbd" id="fsbd"><div class="fsst" id="fsst"></div></div>
-  <div class="fszb"><button class="zb" onclick="zFS(-0.2)">-</button><span class="zp" id="fs-pct">100%</span><button class="zb" onclick="zFS(0.2)">+</button><button class="zb" onclick="rFS()">R</button><span style="font-size:11px;color:var(--mut);margin-left:10px">Scroll to zoom - Drag to pan - Esc to close</span></div>
+  <div class="fsh">
+    <div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div>
+    <span class="fstl" id="fstl">Diagram</span>
+    <button class="fscl" onclick="closeFS()">Close &nbsp;ESC</button>
+  </div>
+  <div class="fsbd" id="fsbd">
+    <div class="fsst" id="fsst"></div>
+  </div>
+  <div class="fszb">
+    <button class="zb" onclick="zFS(-0.15)">-</button>
+    <span class="zp" id="fs-pct">100%</span>
+    <button class="zb" onclick="zFS(0.15)">+</button>
+    <button class="zb" onclick="rFS()">R</button>
+  </div>
 </div>
 
 <script>
@@ -725,7 +1143,7 @@ ov: [
   '        PS --> EM',
   '    end',
   '    subgraph SB["Supabase Backend"]',
-  '        DC["meetings deals contacts tasks"]',
+  '        DC["meetings deals contacts tasks\\ndeal_stage_history\\nstage_id FK schema"]',
   '        EC["Copilot edge functions"]',
   '        ER["Recording edge functions"]',
   '        RT["Realtime"]',
@@ -787,7 +1205,7 @@ ov: [
   '        EOD["EOD Synthesis"]',
   '        IMP["Meeting Prep"]',
   '        DRK["Deal Risk"]',
-  '        REENG["Re-Engagement"]',
+  '        REG["Re-Engagement"]',
   '        COC["Coaching"]',
   '        CCI["Competitive Intel"]',
   '        ESG["Email Signals"]',
@@ -805,13 +1223,32 @@ ov: [
   '        MROUTE["Model Router\\ncheapest capable model"]',
   '        CLGR --> CBGT --> FTHR',
   '    end',
-  '    subgraph V2INFRA["V2 Infrastructure"]',
-  '        SLOG["system_logs\\nstructured logging"]',
-  '        MROUTER["modelRouter.ts\\ncircuit breaker + fallback"]',
-  '        RMSG["route-message\\n5-step unified routing"]',
-  '        ARUN["agentRunner.ts\\nretry + DLQ"]',
-  '        CCTX["conversation_context\\ncross-channel memory"]',
-  '        FHEALTH["fleet-health\\n5-min monitoring"]',
+  '    subgraph ORCH2["Orchestrator V2"]',
+  '        ORCHR["agent-orchestrator\\n5-wave meeting_ended chain\\n45 adapters"]',
+  '        ORCHH["HITL Pause/Resume\\nhitl_pending_approvals"]',
+  '        ORCHR --> ORCHH',
+  '    end',
+  '    subgraph EMAILP["Email Send Pipeline V2"]',
+  '        EDFT["draft-followup-email\\nWave 3"]',
+  '        EHITL["Slack HITL Approval\\nApprove Edit Schedule Skip\\nfire-and-forget modals\\ntimezone-aware scheduling"]',
+  '        EARD["Control Room Deep-Link\\nApprovalReviewDialog\\neditable To Subject Body"]',
+  '        ESEND["hitl-send-followup-email\\nGmail signature auto-append\\nplain-text to HTML\\nGmail + O365"]',
+  '        EDFT --> EHITL --> ESEND',
+  '        EHITL -.-> EARD --> ESEND',
+  '    end',
+  '    subgraph AGMEM["Agent Memory V2"]',
+  '        AMEM["_shared/memory\\n10 modules\\ndeal contact rep"]',
+  '        ADLG["agent_daily_logs\\naudit trail\\nchain replay"]',
+  '    end',
+  '    subgraph RELGR["Relationship Graph V2"]',
+  '        RJNC["deal_contacts\\nrole inference\\nchampion blocker buyer"]',
+  '        RMTS["Multi-threading\\njob change\\nghost detection"]',
+  '    end',
+  '    subgraph CTRLRM["Control Room V2"]',
+  '        CRFP["Fleet Pulse"]',
+  '        CRAM["Team Autonomy Matrix"]',
+  '        CRAF["Action Feed"]',
+  '        CRARD["ApprovalReviewDialog\\ndeep-link from Slack HITL"]',
   '    end',
   '    FLEET -->|items| CCQ',
   '    CCA -->|auto| DC',
@@ -824,17 +1261,20 @@ ov: [
   '    SCV -.->|metered| CLGR',
   '    FTHR -.->|throttle| FLEET',
   '    MROUTE -.->|route| AIP',
-  '    MROUTER -.->|model resolution| AEF',
-  '    MROUTER -.->|model resolution| AC',
-  '    RMSG -.->|routing| ROUTE',
-  '    ARUN -.->|wraps| FLEET',
-  '    CCTX -.->|cross-channel| AUTO',
-  '    FHEALTH -.->|monitors| FLEET',
-  '    SLOG -.->|logs| SB'
+  '    REC -->|meeting_completed| ORCHR',
+  '    ORCHR --> EMAILP',
+  '    ORCHR --> RELGR',
+  '    ORCHR -.->|logs| ADLG',
+  '    AMEM --> ORCHR',
+  '    ESEND --> SL',
+  '    ADLG --> CTRLRM',
+  '    CRARD -->|approve| ESEND',
+  '    EHITL -.->|deep link| CRARD',
+  '    RMTS --> FLEET'
 ].join('\n'),
 
 fe: [
-  'flowchart TB',
+  'flowchart LR',
   '    subgraph AUTH["Authentication"]',
   '        SA["Supabase Auth - JWT sessions"]',
   '        CL["Clerk - alternative provider"]',
@@ -849,6 +1289,7 @@ fe: [
   '        CON["Contacts\\nPeople and companies"]',
   '        MTG["Meetings\\nRecordings and AI summary"]',
   '        TSK["Tasks\\nAction items and follow-ups"]',
+  '        DRR["Deal Record\\nStage history timeline\\ndeal_stage_history table"]',
   '        SET["Settings\\nIntegrations and Skill builder"]',
   '    end',
   '    subgraph COP["Copilot UI"]',
@@ -874,7 +1315,7 @@ fe: [
 ].join('\n'),
 
 cp: [
-  'flowchart TD',
+  'flowchart LR',
   '    MSG(["User message"])',
   '    subgraph CTX["CopilotContext.sendMessage()"]',
   '        CHK["autonomous mode check"]',
@@ -908,7 +1349,7 @@ cp: [
   '    end',
   '    subgraph MEM["Memory and Sessions"]',
   '        CM["copilotMemoryService\\nstore recall extract"]',
-  '        CS["copilotSessionService\\ncompact at 80k tokens\\n⚠ V2: 3-tier adaptive compaction"]',
+  '        CS["copilotSessionService\\ncompact at 80k tokens"]',
   '    end',
   '    MSG --> CTX',
   '    CTX -->|autonomous on| ROUTING',
@@ -920,7 +1361,7 @@ cp: [
 ].join('\n'),
 
 sk: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph SRC["Source of Truth"]',
   '        MD["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n30 total - YAML frontmatter + markdown"]',
   '    end',
@@ -968,7 +1409,7 @@ sk: [
 ].join('\n'),
 
 rf: [
-  'flowchart TD',
+  'flowchart LR',
   '    START(["Meeting scheduled\\nGoogle Calendar sync"])',
   '    subgraph P1["Phase 1 - Bot Deployment"]',
   '        SCH["auto-join-scheduler\\ncron every 2 min"]',
@@ -1027,10 +1468,11 @@ be: [
   '    end',
   '    subgraph CRM2["CRM Tables"]',
   '        MT["meetings\\nowner_user_id"]',
-  '        DL["deals\\nowner_id"]',
+  '        DL["deals\\nowner_id\\nstage_id FK to deal_stages"]',
   '        CT["contacts\\nowner_id"]',
   '        TK["tasks\\nassigned_to and owner_id"]',
   '        AC["activities\\nuser_id"]',
+  '        DSH["deal_stage_history\\nstage transitions\\nduration tracking"]',
   '    end',
   '    subgraph COPDB["Copilot Tables - user-private"]',
   '        CV["copilot_conversations\\nuser_id - admins cannot read"]',
@@ -1056,6 +1498,7 @@ be: [
   '        RE5["process-recording"]',
   '        UE1["generate-embedding"]',
   '        CORS["corsHelper.ts\\ngetCorsHeaders origin-validated"]',
+  '        EAUTH["edgeAuth.ts\\nisServiceRoleAuth\\ndirect key + JWT format"]',
   '    end',
   '    RLS2 --> CRM2',
   '    RLS2 --> COPDB',
@@ -1069,7 +1512,7 @@ be: [
 ].join('\n'),
 
 ai: [
-  'flowchart TB',
+  'flowchart LR',
   '    subgraph ANT["Anthropic Claude"]',
   '        H45["Claude Haiku 4.5\\nnative tool_use"]',
   '        HREC["Claude Haiku\\nRecording analysis"]',
@@ -1118,7 +1561,7 @@ ig: [
   '        INS["Instantly\\nEmail campaigns\\nReply detection"]',
   '    end',
   '    subgraph NOTIF["Notifications"]',
-  '        SLK2["Slack\\nPipeline alerts\\nWin/loss notifications\\nHITL approvals"]',
+  '        SLK2["Slack\\nPipeline alerts\\nWin/loss notifications\\nHITL approvals\\nfire-and-forget modals"]',
   '    end',
   '    subgraph DB3["Platform Database"]',
   '        MTG2["meetings table"]',
@@ -1176,7 +1619,7 @@ sq: [
 ].join('\n'),
 
 rp: [
-  'flowchart TD',
+  'flowchart LR',
   '    START(["Meeting scheduled - Google Calendar sync"])',
   '    subgraph P1["Phase 1 - Bot Deployment"]',
   '        SCH2["auto-join-scheduler\\ncron every 2 min\\nscans calendar_events"]',
@@ -1227,7 +1670,7 @@ rp: [
 ].join('\n'),
 
 sf: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph SRC2["Source of Truth"]',
   '        MD2["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n30 total - 18 atomic + 12 sequences"]',
   '    end',
@@ -1277,7 +1720,7 @@ sf: [
 // ── V2 Diagrams (feat/always_on branch) ────────────────────────
 
 ,cc: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph SRC["Source Agents - 8 total"]',
   '        A1["Morning Briefing"]',
   '        A2["EOD Synthesis"]',
@@ -1328,7 +1771,7 @@ sf: [
 ].join('\n'),
 
 au: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph TIERS["4 Autonomy Tiers"]',
   '        T1["disabled\\nAgent cannot act"]',
   '        T2["suggest\\nAgent suggests only"]',
@@ -1358,7 +1801,7 @@ au: [
   '    end',
   '    subgraph DEMO["Demotion Engine"]',
   '        VIO["Violations\\nfrequent undo rejections"]',
-  '        DE["demotionHandler.ts\\nauto-downgrade"]',
+  '        DE["demotionEngine.ts\\nauto-downgrade"]',
   '        VIO --> DE -->|tier down| TIERS',
   '    end',
   '    subgraph ANALYTICS["Autonomy Analytics"]',
@@ -1420,14 +1863,14 @@ pf: [
 ].join('\n'),
 
 sc: [
-  'flowchart TD',
+  'flowchart LR',
   '    USR(["Slack User Message"])  ',
   '    subgraph EVENTS["slack-events edge function"]',
   '        EV["Event receiver\\napp_mention + message"]',
   '        TH["Thread detection\\nreply vs new thread"]',
   '        EV --> TH',
   '    end',
-  '    subgraph COPILOT["slack-copilot edge function — V1"]',
+  '    subgraph COPILOT["slack-copilot edge function"]',
   '        IC["Intent Classifier\\n8 query types"]',
   '        D1["Deals handler"]',
   '        D2["Contacts handler"]',
@@ -1446,11 +1889,6 @@ sc: [
   '        IC --> D7',
   '        IC --> D8',
   '    end',
-  '    subgraph COPILOTV2["V2: route-message + slack skills"]',
-  '        RM2["route-message\\n5-step unified pipeline"]',
-  '        SK2["8 slack-namespaced skills\\nslack-deal-query slack-contact-query\\nslack-pipeline-query etc."]',
-  '        RM2 --> SK2',
-  '    end',
   '    subgraph MEM["Thread Memory"]',
   '        TM["slack_copilot_threads\\ncontext per thread\\n180 line service"]',
   '    end',
@@ -1458,19 +1896,17 @@ sc: [
   '        AT2["Autonomy toggle handler"]',
   '        CQ["Config question answer"]',
   '        AP["Promotion approval"]',
+  '        HITLEM["HITL email modal\\neditable To field\\nfire-and-forget submit\\ntimezone-aware scheduling"]',
   '    end',
   '    USR --> EVENTS',
   '    TH --> COPILOT',
-  '    TH -.->|V2| COPILOTV2',
   '    MEM --> COPILOT',
-  '    MEM -.-> COPILOTV2',
   '    COPILOT -->|Block Kit response| USR',
-  '    COPILOTV2 -.->|Block Kit response| USR',
   '    USR -->|button click| INTER'
 ].join('\n'),
 
 dm: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph SHELL["DemoShell.tsx - /settings/demo"]',
   '        NAV["Act navigation\\n5 acts progressive"]',
   '    end',
@@ -1555,7 +1991,7 @@ ccp: [
 ].join('\n'),
 
 aur: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph INPUT["Action Request"]',
   '        ACT["Action type\\ncreate_task send_email update_deal\\npost_slack generate_proposal"]',
   '    end',
@@ -1586,7 +2022,7 @@ aur: [
 ].join('\n'),
 
 pfd: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph CRON["Cron Triggers"]',
   '        AM["7:00 AM\\nMorning Brief"]',
   '        MID["Throughout Day\\nDeal Risk + Re-Engagement"]',
@@ -1638,7 +2074,7 @@ pfd: [
 // ── Credit Governance diagrams ────────────────────────────────
 
 cg: [
-  'flowchart TD',
+  'flowchart LR',
   '    subgraph CONSUMERS["AI Credit Consumers"]',
   '        FC["Fleet Agents x8\\ncron + event triggered"]',
   '        CP2["Copilot Chat\\nautonomous + regular"]',
@@ -1672,11 +2108,11 @@ cg: [
   '    end',
   '    subgraph GUARD["Circuit Breakers"]',
   '        FT["fleetThrottle.ts\\npause non-critical at 80%"]',
-  '        AL["check-credit-alerts\\nSlack at 80% and 100%"]',
+  '        AL["credit-budget-alert\\nSlack at 80% and 100%"]',
   '        KB["Hard kill at 100%\\nonly critical paths proceed"]',
   '    end',
   '    subgraph VIS["Visibility"]',
-  '        RU["get-credit-usage-summary\\ncredit dashboard"]',
+  '        RU["credit-usage-rollup\\nhourly cron"]',
   '        DASH["Usage Dashboard\\nper agent per model\\ndaily monthly trends"]',
   '        RU --> DASH',
   '    end',
@@ -1717,417 +2153,545 @@ cgd: [
   '        end',
   '        Router-->>Agent: AI response',
   '    end'
-].join('\n')
-
-// ── V2 Infrastructure Foundation Diagrams ─────────────────────
-
-,v2i: [
-  'flowchart TB',
-  '    subgraph OBS["Observability Layer"]',
-  '        SL["system_logs\\ntrace_id span_id parent_span_id"]',
-  '        LG["logger.ts\\nbatched writes nested spans"]',
-  '        LC["logs-cleanup\\n30d/90d/365d retention"]',
-  '        AE["agent_executions\\n20-col execution tracking"]',
-  '        FH["fleet-health\\n5-min cron Slack alerts"]',
-  '        FHS["fleet_health_snapshots"]',
-  '        LG -->|writes| SL',
-  '        LC -->|prunes| SL',
-  '        AE --> FH --> FHS',
-  '    end',
-  '    subgraph MODEL["Model Router"]',
-  '        MC["model_config\\n15 primary + 6 fallback"]',
-  '        MH["model_health\\ncircuit breaker state"]',
-  '        MR["modelRouter.ts\\nresolveModel + deductCredits"]',
-  '        MC --> MR',
-  '        MH --> MR',
-  '    end',
-  '    subgraph ROUTE["Unified Routing"]',
-  '        RM["route-message\\n5-step pipeline"]',
-  '        RCACHE["routing_cache\\nSHA-256 key 2-min TTL"]',
-  '        RM --> RCACHE',
-  '    end',
-  '    subgraph SKILL["Skill Versioning"]',
-  '        NS["4 namespaces\\ncopilot fleet slack shared"]',
-  '        VER["Version pinning\\nis_current changelog"]',
-  '        SK8["8 slack-namespaced skills"]',
-  '        NS --> VER',
-  '    end',
-  '    subgraph MEM["Adaptive Memory"]',
-  '        CCTX["conversation_context\\ncross-channel memory"]',
-  '        T1M["Tier 1 Verbatim\\nlast 20 messages"]',
-  '        T2M["Tier 2 Summarised\\n7-day window"]',
-  '        T3M["Tier 3 Entity Facts\\nfrom copilotMemoryService"]',
-  '        T1M --> T2M --> T3M',
-  '    end',
-  '    subgraph RETRY["Fleet Retry"]',
-  '        AR["agentRunner.ts\\ntyped retry policies"]',
-  '        DLQ["agent_dead_letters\\nDLQ table"]',
-  '        DLC["agent-dead-letter-retry\\ndaily cron max 20"]',
-  '        AR -->|permanent fail| DLQ',
-  '        DLC -->|reprocess| DLQ',
-  '    end',
-  '    subgraph BP["Backpressure"]',
-  '        PQ["Priority Queues P0-P3"]',
-  '        RL["RateLimiter\\nper-org limits"]',
-  '        SEM["Semaphore\\nmax 5 concurrent"]',
-  '        BATCH["Batch Mode\\nqueue depth > 20"]',
-  '        PQ --> RL --> SEM',
-  '    end',
-  '    subgraph DEDUP["Deduplication"]',
-  '        PRE["Pre-enrichment dedup\\n4-hour merge window"]',
-  '        POST["Post-scoring recheck\\nthreshold at 0.7"]',
-  '        CONF["Confidence aggregation\\n1-prod 1-ci capped 0.95"]',
-  '        PRE --> CONF --> POST',
-  '    end',
-  '    subgraph XCHAN["Cross-Channel"]',
-  '        TM["threadMemory.ts\\nSlack thread extraction"]',
-  '        FW["Fleet context writes\\ncc-enrich"]',
-  '        CR["Context reads\\ncopilot-autonomous"]',
-  '        TM --> CCTX',
-  '        FW --> CCTX',
-  '        CCTX --> CR',
-  '    end',
-  '    subgraph CONSUMERS["Consumers"]',
-  '        CA["copilot-autonomous"]',
-  '        AC["api-copilot"]',
-  '        AO["agent-orchestrator"]',
-  '        SC["slack-copilot"]',
-  '        CE["cc-enrich"]',
-  '        CP["cc-prioritise"]',
-  '    end',
-  '    LG -.->|all services| CONSUMERS',
-  '    MR -.->|model resolution| CONSUMERS',
-  '    RM -.->|routing| CA',
-  '    RM -.->|routing| SC',
-  '    RM -.->|routing| AO',
-  '    AR -.->|wraps| AO',
-  '    BP -.->|controls| CE',
-  '    DEDUP -.->|dedup| CE',
-  '    DEDUP -.->|recheck| CP',
-  '    XCHAN -.->|context| CA'
 ].join('\n'),
 
-v2obs: [
-  'flowchart TD',
-  '    subgraph LOGGER["_shared/logger.ts"]',
-  '        CL["createLogger service options"]',
-  '        SP["span = logger.createSpan action"]',
-  '        CH["child = span.child action"]',
-  '        FL["Auto-flush every 2s or 5 logs"]',
-  '        CL --> SP --> CH',
-  '        CL --> FL',
-  '    end',
-  '    subgraph STORAGE["system_logs Table"]',
-  '        COL["trace_id span_id parent_span_id\\nservice action level\\nuser_id org_id agent_name\\nduration_ms metadata error_message"]',
-  '        IDX["9 indexes including\\nGIN on metadata\\npartial on nullable columns"]',
-  '    end',
-  '    subgraph CLEANUP["logs-cleanup Cron"]',
-  '        D30["debug: 30 days"]',
-  '        D90["info warn: 90 days"]',
-  '        D365["error: 365 days"]',
-  '    end',
-  '    subgraph EXEC["agent_executions Table"]',
-  '        ECOL["trace_id agent_name execution_type\\nstarted_at completed_at status\\nitems_emitted items_processed\\nmodel_id model_was_fallback\\ntokens_consumed credits_consumed"]',
-  '    end',
-  '    subgraph HEALTH["fleet-health Cron - 5 min"]',
-  '        CHECK["6 agent cadence checks"]',
-  '        STATUS["healthy warning critical stale"]',
-  '        SNAP["fleet_health_snapshots\\nfailure_rate avg_duration credits"]',
-  '        ALERT["Slack webhook alert\\nSLACK_PLATFORM_OPS_WEBHOOK"]',
-  '        CHECK --> STATUS',
-  '        STATUS -->|critical or stale| ALERT',
-  '        STATUS --> SNAP',
-  '    end',
-  '    FL -->|batch insert| STORAGE',
-  '    CLEANUP -->|nightly prune| STORAGE',
-  '    EXEC --> HEALTH'
-].join('\n'),
 
-v2mdl: [
-  'flowchart TD',
-  '    REQ(["AI Call Request\\nfeature + intelligence_tier"])  ',
-  '    subgraph RESOLVE["resolveModel"]',
-  '        TIER["Tier lookup\\nlow medium high"]',
-  '        FEAT["Feature lookup\\ncopilot fleet_agent recording\\nembedding enrichment"]',
-  '        PRIMARY["Primary model lookup\\nmodel_config WHERE is_primary"]',
-  '        TIER --> FEAT --> PRIMARY',
-  '    end',
-  '    subgraph CIRCUIT["Circuit Breaker"]',
-  '        MHEALTH["model_health table"]',
-  '        CLOSED["CLOSED\\nnormal operation"]',
-  '        OPEN["OPEN\\n3 failures in 5min\\nskip to fallback"]',
-  '        HALFOPEN["HALF-OPEN\\nprobe after cooldown"]',
-  '        CLOSED -->|3 failures| OPEN',
-  '        OPEN -->|cooldown expires| HALFOPEN',
-  '        HALFOPEN -->|success| CLOSED',
-  '        HALFOPEN -->|fail| OPEN',
-  '    end',
-  '    subgraph FALLBACK["Fallback Chain"]',
-  '        F1["Same-tier alternative"]',
-  '        F2["Cross-tier fallback\\ngemini-2.5-flash"]',
-  '        F3["Error: no models available"]',
-  '        F1 -->|unavailable| F2',
-  '        F2 -->|unavailable| F3',
-  '    end',
-  '    subgraph BUDGET["Budget Enforcement"]',
-  '        CHK["checkBudget\\ncredit balance > -10 grace"]',
-  '        DED["deductCredits\\nvia deduct_credits RPC"]',
-  '        AGT["checkAgentBudget\\nFLEET_AGENT_BUDGETS constant"]',
-  '    end',
-  '    REQ --> RESOLVE',
-  '    PRIMARY --> CIRCUIT',
-  '    CIRCUIT -->|open| FALLBACK',
-  '    CIRCUIT -->|closed| BUDGET',
-  '    CHK -->|ok| API(["AI Provider API Call"])',
-  '    API --> DED',
-  '    API -->|success| REC["recordSuccess"]',
-  '    API -->|fail| RECF["recordFailure"]'
-].join('\n'),
-
-v2rt: [
-  'flowchart TD',
-  '    MSG(["User Message + Source"])  ',
-  '    subgraph SOURCES["Message Sources"]',
-  '        WEB["CopilotContext.tsx\\nsource: web_copilot"]',
-  '        SLK["slack-copilot\\nsource: slack_copilot"]',
-  '        FLT["agent-orchestrator\\nsource: fleet_agent"]',
-  '    end',
-  '    subgraph CACHE["Routing Cache"]',
-  '        HASH["SHA-256 hash key\\nmessage + source + org_id"]',
-  '        HIT["Cache HIT\\n< 2 min TTL"]',
-  '        MISS["Cache MISS"]',
-  '    end',
-  '    subgraph PIPELINE["5-Step Pipeline"]',
-  '        S1["1. Intent Classification\\nAI-based intent detection"]',
-  '        S2["2. Sequence Triggers\\nconfidence >= 0.7"]',
-  '        S3["3. Skill Triggers\\nconfidence >= 0.5"]',
-  '        S4["4. Semantic Fallback\\ncosine >= 0.6 pgvector"]',
-  '        S5["5. General\\nno skill matched"]',
-  '        S1 --> S2',
-  '        S2 -->|no match| S3',
-  '        S3 -->|no match| S4',
-  '        S4 -->|no match| S5',
-  '    end',
-  '    subgraph NSFILTER["Namespace Filtering"]',
-  '        NF["p_source parameter\\nweb -> copilot+shared\\nslack -> slack+shared\\nfleet -> fleet+shared"]',
-  '    end',
-  '    RESULT(["Routing Context\\nskill_key confidence source"])  ',
-  '    SOURCES --> MSG',
-  '    MSG --> CACHE',
-  '    HIT --> RESULT',
-  '    MISS --> PIPELINE',
-  '    NF --> PIPELINE',
-  '    PIPELINE --> RESULT'
-].join('\n'),
-
-v2sk: [
-  'flowchart TD',
-  '    subgraph BEFORE["Before: V1 Skills"]',
-  '        OLD["platform_skills\\nversion int default 1\\nno namespace no source"]',
-  '    end',
-  '    subgraph AFTER["After: V2 Skills"]',
-  '        subgraph PT["platform_skills - new columns"]',
-  '            NS["namespace\\ncopilot fleet slack shared"]',
-  '            SRC["source\\nplatform custom community"]',
-  '            IC["is_current boolean"]',
-  '            CHL["changelog JSONB"]',
-  '            DEP["deprecated_at timestamp"]',
-  '        end',
-  '        subgraph OT["organization_skills - new columns"]',
-  '            PV["pinned_version int"]',
-  '            OSRC["source text"]',
-  '            NSO["namespace_override text"]',
-  '        end',
-  '    end',
-  '    subgraph RPC["get_organization_skills_for_agent"]',
-  '        PSRC["p_source parameter"]',
-  '        MAP["Namespace mapping\\nweb_copilot: copilot + shared\\nslack_copilot: slack + shared\\nfleet_agent: fleet + shared"]',
-  '        PSRC --> MAP',
-  '    end',
-  '    subgraph SKILLS8["8 New Slack Skills"]',
-  '        S1["slack-deal-query"]',
-  '        S2["slack-contact-query"]',
-  '        S3["slack-pipeline-query"]',
-  '        S4["slack-history-query"]',
-  '        S5["slack-coaching-query"]',
-  '        S6["slack-competitive-query"]',
-  '        S7["slack-actions-query"]',
-  '        S8["slack-general-query"]',
-  '    end',
-  '    BEFORE -->|migration| AFTER',
-  '    AFTER --> RPC',
-  '    SKILLS8 -->|namespace: slack| PT'
-].join('\n'),
-
-v2mem: [
-  'flowchart TD',
-  '    subgraph CHANNELS["Channel Writers"]',
-  '        WEB["copilot-autonomous\\ntrackEntityMentions after 3+ refs"]',
-  '        SLK["threadMemory.ts\\nSlack thread extraction\\n10+ msgs or 15min gap"]',
-  '        FLT["cc-enrich\\nfleet context writes"]',
-  '    end',
-  '    subgraph CTX["conversation_context Table"]',
-  '        COL["user_id org_id channel\\nentity_type entity_id\\ncontext_summary\\nsource_agent_name metadata\\nexpires_at"]',
-  '        CHK["CHECK channel IN\\nweb_copilot slack_copilot fleet_agent"]',
-  '    end',
-  '    subgraph COMPACT["3-Tier Compaction"]',
-  '        T1["Tier 1: Verbatim\\nlast 20 messages preserved as-is"]',
-  '        T2["Tier 2: Summarised\\n7-day window\\nAI-condensed via Claude Haiku"]',
-  '        T3["Tier 3: Entity Facts\\ncopilotMemoryService\\nkey facts with source provenance"]',
-  '        T1 -->|older messages| T2',
-  '        T2 -->|oldest| T3',
-  '    end',
-  '    subgraph THRESHOLD["Dynamic Thresholds"]',
-  '        GCT["getCompactionThreshold modelId"]',
-  '        CLD["Claude ~137k tokens"]',
-  '        GMN["Gemini ~737k tokens"]',
-  '    end',
-  '    subgraph READERS["Channel Readers"]',
-  '        RD["copilot-autonomous\\nfetchConversationContext\\nlast 7 days top 3 blocks"]',
-  '    end',
-  '    subgraph CLEANUP["Cleanup"]',
-  '        CL["cc-daily-cleanup Phase 3\\nrunContextCleanup\\n14-day expiry"]',
-  '    end',
-  '    WEB --> CTX',
-  '    SLK --> CTX',
-  '    FLT --> CTX',
-  '    CTX --> RD',
-  '    THRESHOLD --> COMPACT',
-  '    CLEANUP -->|prune| CTX'
-].join('\n'),
-
-v2ret: [
-  'flowchart TD',
-  '    subgraph RUNNER["agentRunner.ts"]',
-  '        CFG["AgentConfig\\nagentName budgetLimit retryPolicy"]',
-  '        EXEC["AgentExecutor T\\nasync function returning T"]',
-  '        RUN["runAgent config executor"]',
-  '        CFG --> RUN',
-  '        EXEC --> RUN',
-  '    end',
-  '    subgraph POLICY["Retry Policies"]',
-  '        TR["transient\\n2 retries exponential backoff"]',
-  '        CTX["context_exceeded\\n1 retry"]',
-  '        MU["model_unavailable\\n1 retry"]',
-  '        VAL["validation\\n0 retries"]',
-  '        UNK["unknown\\n1 retry"]',
-  '    end',
-  '    subgraph OUTCOMES["Outcomes"]',
-  '        OK["Success\\nAgentResult with data"]',
-  '        PARTIAL["Partial\\nsome items processed"]',
-  '        DLQ["Dead Letter Queue\\nagent_dead_letters table"]',
-  '    end',
-  '    subgraph DLQRETRY["DLQ Retry Cron"]',
-  '        CRON["agent-dead-letter-retry\\ndaily max 20 entries"]',
-  '        ORCH["Re-fire via\\nagent-orchestrator"]',
-  '        MAX["Max 3 retries\\nthen manual investigation"]',
-  '        CRON --> ORCH',
-  '        CRON --> MAX',
-  '    end',
-  '    subgraph TRACKING["Execution Tracking"]',
-  '        INS["insertExecutionRecord\\nstatus: running"]',
-  '        UPD["updateExecutionRecord\\nstatus: completed/failed/partial"]',
-  '    end',
-  '    RUN -->|success| OK',
-  '    RUN -->|partial| PARTIAL',
-  '    RUN -->|permanent fail| DLQ',
-  '    RUN --> POLICY',
-  '    RUN --> TRACKING',
-  '    DLQ --> DLQRETRY'
-].join('\n'),
-
-v2bpr: [
-  'flowchart TD',
-  '    subgraph QUEUE["Priority Queue"]',
-  '        P0["P0 Critical\\nimmediate processing"]',
-  '        P1["P1 High\\nreal-time events"]',
-  '        P2["P2 Normal\\nstandard items default"]',
-  '        P3["P3 Low\\nbatch and background"]',
-  '        P0 --> P1 --> P2 --> P3',
-  '    end',
-  '    subgraph COLS["New Columns on command_centre_items"]',
-  '        QP["queue_priority int 0-3 default 2"]',
-  '        QA["queued_at timestamptz"]',
-  '        PS["processing_started_at timestamptz"]',
-  '        PA["processing_attempts int default 0"]',
-  '        IDX2["Composite index\\nqueue_priority queued_at"]',
-  '    end',
-  '    subgraph RATE["Rate Limiting"]',
-  '        RL["RateLimiter class\\nper-org configurable window"]',
-  '        SEM["Semaphore class\\nmax 5 concurrent operations"]',
-  '    end',
-  '    subgraph MODES["Processing Modes"]',
-  '        NORM["Normal Mode\\nprocess items individually"]',
-  '        BTCH["Batch Mode\\nqueue depth > 20\\nprefetch CRM + calendar data"]',
-  '    end',
-  '    subgraph ENRICH["cc-enrich Pipeline"]',
-  '        FETCH["Priority-based fetch\\nP0 first then P1 etc"]',
-  '        PROC["Process with\\nconcurrency control"]',
-  '        FETCH --> RATE --> PROC',
-  '    end',
-  '    QUEUE --> FETCH',
-  '    MODES --> ENRICH'
-].join('\n'),
-
-v2ded: [
-  'flowchart TD',
-  '    subgraph COLS2["Dedup Columns on command_centre_items"]',
-  '        DK["dedup_key text\\nentity-type + entity-id hash"]',
-  '        MG["merge_group_id uuid"]',
-  '        IP["is_primary boolean"]',
-  '        ME["merged_evidence jsonb"]',
-  '        MCF["merged_confidence numeric"]',
-  '        CA["contributing_agents text array"]',
-  '        MW["merge_window_expires timestamptz"]',
-  '    end',
-  '    subgraph PRE["Pre-Enrichment Dedup - cc-enrich"]',
-  '        MATCH["Match by dedup_key\\nsame entity same type"]',
-  '        WINDOW["4-hour merge window"]',
-  '        MERGE["Merge evidence from\\nmultiple source agents"]',
-  '        MATCH --> WINDOW --> MERGE',
-  '    end',
-  '    subgraph FORMULA["Confidence Aggregation"]',
-  '        AGG["merged_confidence =\\n1 - product of 1 - confidence_i\\ncapped at 0.95"]',
-  '    end',
-  '    subgraph POST["Post-Scoring Recheck - cc-prioritise"]',
-  '        RECALC["recheckMergeGroupThreshold"]',
-  '        PROMOTE["Promote to approved\\nif merged_confidence >= 0.7"]',
-  '        RECALC --> PROMOTE',
-  '    end',
-  '    COLS2 --> PRE',
-  '    MERGE --> FORMULA',
-  '    FORMULA --> POST'
-].join('\n'),
-
-v2xch: [
+apo: [
   'flowchart LR',
-  '    subgraph SLACK["Slack Channel"]',
-  '        USR["User messages in thread"]',
-  '        TM["threadMemory.ts\\nextract when 10+ msgs\\nor 15min gap"]',
-  '        AI["AI Summary via\\nAnthropic API"]',
-  '        USR --> TM --> AI',
+  '    subgraph LOOP["Signal Learning Loop"]',
+  '        A["Rep Response\napproved +1.0 / edited +0.3\nrejected -1.0 / undone -2.0\nauto_undone -3.0"]',
+  '        B["Rubber-stamp guard\nfast approvals excluded\nemail.send threshold 5000ms"]',
+  '        C["autopilot_confidence\ntime-decayed score\n30-day half-life"]',
+  '        D["promotion_eligible = true\nwhen score > 0.7\nAND signals >= 10"]',
+  '        A --> B --> C --> D',
   '    end',
-  '    subgraph CTX2["conversation_context"]',
-  '        ROW["user_id org_id channel\\nentity_type entity_id\\ncontext_summary\\nsource_agent_name"]',
+  '    subgraph EVAL["Daily Evaluation"]',
+  '        E["autopilot-evaluate\ndaily cron"]',
+  '        F["promotionEngine.ts\n7-step threshold check\nmin signals, clean rate,\nstreak guard, ceiling"]',
+  '        G["Slack DM\nscorecard proposal"]',
+  '        E --> F --> G',
   '    end',
-  '    subgraph FLEET["Fleet Agents"]',
-  '        ENR["cc-enrich\\nwrites fleet context\\nafter enrichment"]',
+  '    subgraph RESPONSE["Rep Decision"]',
+  '        H["Yes go auto\n→ update autonomy_policies"]',
+  '        I["Not yet\n→ 30d cooldown"]',
+  '        J["Never\n→ permanent lock"]',
+  '        G --> H & I & J',
   '    end',
-  '    subgraph COPILOT["copilot-autonomous"]',
-  '        READ["fetchConversationContext\\nlast 7 days all channels\\ntop 3 by relevance"]',
-  '        INJECT["Inject into system prompt\\ncross-channel context block"]',
-  '        READ --> INJECT',
+  '    subgraph DEMOTION["Auto-Demotion"]',
+  '        K["demotionEngine.ts\nundo spike detected"]',
+  '        L["Revert to approve tier\n+ Slack DM"]',
+  '        K --> L',
   '    end',
-  '    subgraph CLEAN["cc-daily-cleanup"]',
-  '        PHASE3["Phase 3 runContextCleanup\\ndelete where expires_at < now\\n14-day default"]',
+  '    D --> E',
+  '    H -->|"autonomous actions"| K',
+  '    L -->|"resets confidence"| C'
+].join("\n"),
+
+
+ape: [
+  'flowchart LR',
+  '    subgraph S1["1 — Signal Recording  autopilot-record-signal"]',
+  '        A1["Approval event\napproved / edited / rejected / expired\nundone / auto_executed / auto_undone"]',
+  '        A2["Rubber-stamp guard\ntime_to_respond < threshold = not clean\nemail.send 5000ms  stage change 3000ms  default 2000ms"]',
+  '        A3["autopilot_signals\nuser_id  org_id  action_type  signal\ntime_to_respond_ms  edit_distance\nedit_fields  autonomy_tier_at_time"]',
+  '        A1 --> A2 --> A3',
   '    end',
-  '    AI -->|slack_copilot| CTX2',
-  '    ENR -->|fleet_agent| CTX2',
-  '    CTX2 --> READ',
-  '    CLEAN -->|prune| CTX2'
+  '    subgraph S2["2 — Confidence Recalculation  DB trigger SECURITY DEFINER"]',
+  '        B1["refresh_autopilot_confidence()\nfires AFTER INSERT on autopilot_signals"]',
+  '        B2["calculateConfidence()\ntime-decay: pow(0.5, daysOld/30)\nnormalised to 0-1  sample factor"]',
+  '        B3["autopilot_confidence\nscore  clean_approval_rate  rejection_rate\nundo_rate  last_30_signals  days_active\nrubber_stamp_count  rubber_stamp_rate"]',
+  '        B4["promotion_eligible = TRUE\nwhen score > 0.7 AND total_signals >= 10"]',
+  '        B1 --> B2 --> B3 --> B4',
+  '    end',
+  '    subgraph S3["3 — Daily Evaluation  autopilot-evaluate cron"]',
+  '        C1["Query autopilot_confidence\nWHERE promotion_eligible = true"]',
+  '        C2["evaluatePromotionEligibility()\n7-step check per user-action pair"]',
+  '        C3["autopilot_thresholds\nmin_signals  min_clean_approval_rate\nmax_undo_rate  min_days_active\nlast_n_clean streak guard"]',
+  '        C4["autopilot_org_settings\nManager ceiling\nmax_tier per action_type"]',
+  '        C1 --> C2',
+  '        C2 --> C3',
+  '        C4 -->|caps max tier| C2',
+  '    end',
+  '    subgraph S4["4 — Promotion Proposal  sendPromotionProposal"]',
+  '        D1["Batch by user\nsingle Slack DM per user"]',
+  '        D2["Slack scorecard\nsignals  clean rate  confidence score\ndays active  action type"]',
+  '        D3["Yes go auto\nupdate autonomy_policies\neffective tier = auto"]',
+  '        D4["Not yet\ncooldown_until = now + 30d"]',
+  '        D5["Never\nnever_promote = true"]',
+  '        D1 --> D2 --> D3 & D4 & D5',
+  '    end',
+  '    subgraph S5["5 — Demotion Engine  evaluateDemotionTriggers"]',
+  '        E1["Post every auto-executed action"]',
+  '        E2["warn — undo rate > 10% in 7d"]',
+  '        E3["demote — sustained undo > 8% in 14d"]',
+  '        E4["emergency — 3+ undos in 3d\nemail.send — ANY single undo"]',
+  '        E5["Revert autonomy_policies\nboost extra_required_signals\nSlack DM to rep"]',
+  '        E1 --> E2 & E3 & E4',
+  '        E3 & E4 --> E5',
+  '    end',
+  '    subgraph S6["Dashboard   Controls"]',
+  '        F1["AutopilotDashboard\nper-action status  time saved"]',
+  '        F2["AutopilotNudgeBanner\nin-copilot nudge  30s poll"]',
+  '        F3["AutonomySimulator\n90-day demo at /platform/demo/autonomy"]',
+  '        F4["autopilot-admin\nupsert_ceiling  get_team_confidence"]',
+  '    end',
+  '    A3 --> B1',
+  '    B4 --> C1',
+  '    C2 -->|candidates| D1',
+  '    D3 -->|updates| POL["autonomy_policies"]',
+  '    POL -->|governs auto actions| E1',
+  '    E5 -->|reverts| POL',
+  '    B3 --> F1 & F2',
+  '    F4 --> C4'
+].join("\n")
+
+// ── PRD V4 Diagrams — Orchestrator, Email, Memory, Relationship, Logs, Control Room ──
+
+,orch: [
+  'flowchart LR',
+  '    subgraph ENTRY["Entry Points"]',
+  '        EV["Event Triggers\\nmeeting_completed deal_updated\\ncontact_enriched activity_logged"]',
+  '        CR["Cron Triggers\\nmorning brief EOD\\nhealth refresh"]',
+  '        RS["resumeSequence()\\nHITL approval callback"]',
+  '    end',
+  '    subgraph ROUTER["Fleet Router"]',
+  '        FR["fleetRouter.ts\\nevent to sequence resolution"]',
+  '        CTX["Context Loading\\n3 tiers: metadata CRM AI\\ndeal stage_id FK resolution"]',
+  '        BDG["Cost Budget Gate\\ncreditBudgetService check"]',
+  '        FR --> CTX --> BDG',
+  '    end',
+  '    subgraph RUNNER["runner.ts — Execution Engine"]',
+  '        IDEM["Idempotency Check\\nidempotency_key dedup"]',
+  '        STEP["Step Iterator\\nsequential with parallel branches"]',
+  '        ADAPT["Adapter Dispatch\\n45 adapters"]',
+  '        HITL["HITL Pause\\nrequires_approval = true\\npaused_at timestamp"]',
+  '        RETRY["Retry Logic\\nMAX_STEP_RETRIES\\nexponential backoff"]',
+  '        DL["Dead Letter\\nfailed after max retries"]',
+  '        SELF["Self-Invocation\\n2s before timeout\\ncontinue in new isolate"]',
+  '        IDEM --> STEP --> ADAPT',
+  '        ADAPT -->|needs approval| HITL',
+  '        ADAPT -->|error| RETRY',
+  '        RETRY -->|exhausted| DL',
+  '        STEP -->|approaching 25s timeout| SELF',
+  '    end',
+  '    subgraph ADAPTERS["Key Adapters — 45 total"]',
+  '        AE["emailSend\\ndraft follow-up"]',
+  '        AC["calendar\\nfind slots"]',
+  '        AP["proposalGenerator\\ngenerate proposal"]',
+  '        AR["roleInference\\nclassify attendee roles"]',
+  '        AD["dealRisk\\ntemperature scoring"]',
+  '        AM["meetingTypeClassifier\\n1:1 QBR standup"]',
+  '        AI["detectIntents\\ncommitments buying signals"]',
+  '        AS["crmUpdate\\nauto-apply CRM changes"]',
+  '    end',
+  '    subgraph STATE["State Management"]',
+  '        SJ["sequence_jobs\\nstep state output error"]',
+  '        HP["hitl_pending_approvals\\nresource_type callback"]',
+  '        DLQ["Dead Letter Queue\\nretry via cron"]',
+  '    end',
+  '    EV --> FR',
+  '    CR --> FR',
+  '    RS --> RUNNER',
+  '    BDG -->|budget ok| RUNNER',
+  '    ADAPT --> ADAPTERS',
+  '    HITL --> HP',
+  '    DL --> DLQ',
+  '    STEP --> SJ'
+].join('\n'),
+
+orch2: [
+  'flowchart LR',
+  '    subgraph ENTRY["Entry Points"]',
+  '        EV["Event Triggers\\nmeeting_completed deal_updated\\ncontact_enriched activity_logged"]',
+  '        CR["Cron Triggers\\nmorning brief EOD\\nhealth refresh"]',
+  '        RS["resumeSequence()\\nHITL approval callback"]',
+  '    end',
+  '    subgraph ROUTER["Fleet Router"]',
+  '        FR["fleetRouter.ts\\nevent to sequence resolution"]',
+  '        CTX["Context Loading\\n3 tiers: metadata CRM AI"]',
+  '        BDG["Cost Budget Gate\\ncreditBudgetService check"]',
+  '        FR --> CTX --> BDG',
+  '    end',
+  '    subgraph RUNNER["runner.ts Execution Engine"]',
+  '        IDEM["Idempotency Check\\nidempotency_key dedup"]',
+  '        STEP["Step Iterator\\nsequential with parallel branches"]',
+  '        ADAPT["Adapter Dispatch\\n45 adapters"]',
+  '        HITL["HITL Pause\\nrequires_approval = true\\npaused_at timestamp"]',
+  '        RETRY["Retry Logic\\nMAX_STEP_RETRIES\\nexponential backoff"]',
+  '        DL2["Dead Letter\\nfailed after max retries"]',
+  '        SELF["Self-Invocation\\n2s before timeout\\ncontinue in new isolate"]',
+  '        IDEM --> STEP --> ADAPT',
+  '        ADAPT -->|needs approval| HITL',
+  '        ADAPT -->|error| RETRY',
+  '        RETRY -->|exhausted| DL2',
+  '        STEP -->|approaching 25s timeout| SELF',
+  '    end',
+  '    subgraph ADAPTERS["Key Adapters 45 total"]',
+  '        AE["emailSend draft follow-up"]',
+  '        AC2["calendar find slots"]',
+  '        AP2["proposalGenerator"]',
+  '        AR2["roleInference"]',
+  '        AD2["dealRisk"]',
+  '        AM2["meetingTypeClassifier"]',
+  '        AI3["detectIntents"]',
+  '        AS2["crmUpdate"]',
+  '    end',
+  '    subgraph STATE["State Management"]',
+  '        SJ2["sequence_jobs\\nstep state output error"]',
+  '        HP2["hitl_pending_approvals\\nresource_type callback"]',
+  '        DLQ2["Dead Letter Queue\\nretry via cron"]',
+  '    end',
+  '    EV --> FR',
+  '    CR --> FR',
+  '    RS --> RUNNER',
+  '    BDG -->|budget ok| RUNNER',
+  '    ADAPT --> ADAPTERS',
+  '    HITL --> HP2',
+  '    DL2 --> DLQ2',
+  '    STEP --> SJ2'
+].join('\n'),
+
+mew: [
+  'flowchart TB',
+  '    MTGEND(["meeting_completed event"])  ',
+  '    subgraph W1["Wave 1 — Classify"]',
+  '        W1A["meetingTypeClassifier\\n1:1 QBR standup pipeline\\ninternal detector"]',
+  '    end',
+  '    subgraph W2["Wave 2 — Extract + Analyse"]',
+  '        W2A["detect-intents\\ncommitments buying signals\\nschedule_meeting send_proposal"]',
+  '        W2B["coaching micro-feedback\\ntalk ratio question quality\\nobjection handling"]',
+  '        W2C["roleInference\\nattendee role classification\\nchampion blocker buyer"]',
+  '        W2D["agent-relationship-graph\\nupdate relationship edges\\nhealth scoring"]',
+  '    end',
+  '    subgraph W3["Wave 3 — Draft + Generate"]',
+  '        W3A["draft-followup-email\\nAcknowledge-Advance framework\\npersonalised per attendee roles"]',
+  '        W3B["suggest-tasks\\naction items from transcript"]',
+  '        W3C["crmUpdate\\nauto-update deal fields"]',
+  '        W3D["proposalGenerator\\ntriggered by send_proposal intent"]',
+  '        W3E["find-available-slots\\ntriggered by schedule_meeting intent"]',
+  '    end',
+  '    subgraph W4["Wave 4 — Process Signals"]',
+  '        W4A["signal-processor\\ndeal temperature change\\nrelationship health delta"]',
+  '    end',
+  '    subgraph W5["Wave 5 — Notify"]',
+  '        W5A["slack-post-meeting\\nmeeting summary to channel"]',
+  '        W5B["slack-hitl-notification\\nemail draft approval message\\nApprove and Send Edit Schedule Skip"]',
+  '        W5C["slack-deal-alert\\ntemperature or risk change"]',
+  '    end',
+  '    MTGEND --> W1',
+  '    W1 --> W2A & W2B & W2C & W2D',
+  '    W2A & W2B --> W3A & W3B & W3C',
+  '    W2A -->|schedule_meeting| W3E',
+  '    W2A -->|send_proposal| W3D',
+  '    W3A & W3B & W3C --> W4A',
+  '    W4A --> W5A & W5B & W5C'
+].join('\n'),
+
+eml: [
+  'flowchart LR',
+  '    subgraph DRAFT["Wave 3 — Email Draft"]',
+  '        DR["draft-followup-email\\nAcknowledge-Advance framework"]',
+  '        CTX["Meeting transcript + attendee roles\\n+ deal memory + contact memory"]',
+  '        CTX --> DR',
+  '    end',
+  '    subgraph HITL["Slack HITL Approval"]',
+  '        SN["slack-hitl-notification\\nBlock Kit preview\\neditable To Subject Body"]',
+  '        B1["Approve and Send"]',
+  '        B2["Edit in Slack modal\\neditable To field"]',
+  '        B3["Schedule\\ntimezone-aware via Slack tz_offset"]',
+  '        B4["Skip"]',
+  '        SN --> B1 & B2 & B3 & B4',
+  '    end',
+  '    subgraph WEBAPP["In-App Approval"]',
+  '        ARD["ApprovalReviewDialog\\n/admin/control-room?approval=id\\neditable To Subject Body"]',
+  '        B2 -.->|deep link| ARD',
+  '    end',
+  '    subgraph SEND["Email Send"]',
+  '        RES["resumeSequence()\\norchestrator continues"]',
+  '        TXT2HTML["Plain-text to HTML\\nparagraph wrapping\\nnewline to br"]',
+  '        HITLF["hitl-send-followup-email\\nroutes by provider"]',
+  '        GMAIL["google-gmail\\nGmail API\\nthread-aware In-Reply-To\\nauto-append Gmail signature"]',
+  '        MS365["ms-graph-email\\nMicrosoft Graph\\nMail.Send"]',
+  '        RES --> HITLF',
+  '        HITLF --> TXT2HTML',
+  '        TXT2HTML --> GMAIL',
+  '        HITLF -->|Microsoft| MS365',
+  '    end',
+  '    subgraph UNDO["30s Undo Window"]',
+  '        Q["Queue delayed send 30s"]',
+  '        UB["Slack Undo button"]',
+  '        Q --> UB',
+  '        UB -->|undo clicked| CANCEL["Cancel send"]',
+  '        Q -->|30s elapsed| EXEC["Execute send"]',
+  '    end',
+  '    subgraph CAP["Safety Guards"]',
+  '        DC["Daily send cap per rep\\ndefault 50 configurable"]',
+  '        SIG["Gmail signature auto-append\\nfetchGmailSignature via sendAs API\\nHTML and plain-text modes"]',
+  '    end',
+  '    subgraph LEARN["Autonomy Learning"]',
+  '        AP["autopilot_confidence\\nemail.send starts at approve tier"]',
+  '        SG["Signals captured\\napprove +1.0 edit +0.3\\nreject -1.0 undo -2.0"]',
+  '        PROM["Promotion to auto tier\\nSlack shows Undo instead of Approve"]',
+  '        AP --> SG --> PROM',
+  '    end',
+  '    DR --> SN',
+  '    B1 --> RES',
+  '    ARD -->|approve| RES',
+  '    B4 -->|mark skipped| DONE(["Complete"])',
+  '    EXEC --> LEARN',
+  '    HITLF --> UNDO',
+  '    HITLF --> CAP'
+].join('\n'),
+
+esq: [
+  'sequenceDiagram',
+  '    participant Wave3 as Wave 3 (draft-followup-email)',
+  '    participant Orch as Orchestrator Runner',
+  '    participant Slack as Slack (hitl-notification)',
+  '    participant Rep as Sales Rep',
+  '    participant SI as slack-interactive',
+  '    participant HITL as hitl-send-followup-email',
+  '    participant Gmail as google-gmail',
+  '    participant AP as autopilot_confidence',
+  '    participant CR as Control Room',
+  '    Wave3->>Orch: Draft complete (to, subject, body)',
+  '    Orch->>Orch: Set requires_approval = true',
+  '    Orch->>Slack: Block Kit message with email preview',
+  '    Note over Slack: [Approve and Send] [Edit] [Schedule] [Skip]',
+  '    Slack-->>Rep: Notification in Slack channel',
+  '    alt Rep clicks Edit in Slack',
+  '        Rep->>SI: Opens Slack modal (editable To Subject Body)',
+  '        Note over SI: Fire-and-forget modal submission',
+  '        Note over SI: Parallel token fetch + approval validation',
+  '        SI->>Orch: resumeSequence(edited content)',
+  '    else Rep clicks Edit in 60',
+  '        Rep->>CR: Deep link /admin/control-room?approval=id',
+  '        CR->>CR: ApprovalReviewDialog opens',
+  '        CR->>HITL: Approve and Send with edited content',
+  '    else Rep clicks Schedule',
+  '        Rep->>SI: Opens schedule modal',
+  '        Note over SI: Timezone-aware via Slack users.info tz_offset',
+  '        SI->>Orch: resumeSequence(scheduled_at in UTC)',
+  '    else Rep clicks Approve and Send',
+  '        Rep->>SI: Clicks [Approve and Send]',
+  '        SI->>Orch: resumeSequence(approval payload)',
+  '    end',
+  '    Orch->>HITL: Send email with draft content',
+  '    HITL->>HITL: Check daily send cap',
+  '    HITL->>HITL: Convert plain-text to HTML if needed',
+  '    HITL->>HITL: Queue with 30s delay',
+  '    HITL->>Slack: Update message with [Undo] button',
+  '    Note over HITL: 30 second undo window',
+  '    alt Rep clicks Undo within 30s',
+  '        Rep->>SI: Clicks [Undo]',
+  '        SI->>HITL: Cancel queued send',
+  '        HITL->>AP: Record undo signal (-2.0)',
+  '        HITL->>Slack: Update to Cancelled',
+  '    else 30s elapses',
+  '        HITL->>Gmail: Auto-append Gmail signature via sendAs API',
+  '        HITL->>Gmail: Send via Gmail API (thread-aware)',
+  '        Gmail-->>HITL: Message ID + Thread ID',
+  '        HITL->>AP: Record approve signal (+1.0)',
+  '        HITL->>Slack: Update to Sent checkmark',
+  '    end'
+].join('\n'),
+
+rg: [
+  'flowchart LR',
+  '    subgraph SCHEMA["Schema Layer"]',
+  '        DC["deal_contacts\\ndeal_id contact_id role\\nconfidence inferred_from\\nfirst_seen last_active"]',
+  '        COH["contact_org_history\\ncontact_id company_id\\ntitle started_at ended_at\\nsource"]',
+  '        DHH["deal_health_history\\nexisting health snapshots"]',
+  '    end',
+  '    subgraph INFER["Role Inference"]',
+  '        TRI["Transcript-based\\nWave 2 post-meeting\\nspeaking patterns authority\\nobjection types confidence 0.6-0.9"]',
+  '        ERI["Email-based\\nCC BCC reply authority\\nforwarding patterns\\nconfidence 0.4-0.6"]',
+  '        MAN["Manual override\\nrep sets role on contact page\\nconfidence 1.0 never overwritten"]',
+  '    end',
+  '    subgraph INTEL["Graph Intelligence"]',
+  '        XD["Cross-deal stakeholder RPC\\ncontacts across multiple deals\\nwith role per deal"]',
+  '        MT["Multi-threading score\\nengaged / needed by stage\\nalert when single-threaded"]',
+  '        JC["Job change detection\\nApollo periodic check\\nemail domain monitoring"]',
+  '        GH["Champion ghost detection\\nlast_active vs threshold\\nchampion_disappeared signal"]',
+  '    end',
+  '    subgraph AGENTS["Agent Consumers"]',
+  '        PREP["Meeting prep agent\\nper-attendee context\\nroles + interaction history"]',
+  '        RISK["Deal risk agent\\nchampion engagement\\nmulti-thread score as risk factor"]',
+  '        REENG["Re-engagement agent\\njob change = high-priority trigger\\nfull relationship context"]',
+  '        DRAFT["Draft follow-up\\npersonalised by attendee roles\\nrelationship strength"]',
+  '    end',
+  '    TRI --> DC',
+  '    ERI --> DC',
+  '    MAN --> DC',
+  '    DC --> XD & MT & GH',
+  '    COH --> JC',
+  '    JC --> REENG',
+  '    GH --> RISK',
+  '    XD --> PREP',
+  '    MT --> RISK',
+  '    DC --> AGENTS'
+].join('\n'),
+
+rgs: [
+  'flowchart LR',
+  '    subgraph DEALS["deals table"]',
+  '        D1["deal_id PK\\nowner_id stage\\npipeline_value"]',
+  '    end',
+  '    subgraph DC["deal_contacts junction"]',
+  '        DC1["deal_id FK\\ncontact_id FK\\nrole enum\\nchampion blocker\\neconomic_buyer influencer\\nend_user technical_evaluator"]',
+  '        DC2["confidence float 0-1\\ninferred_from enum\\ntranscript email_pattern\\nmanual enrichment"]',
+  '        DC3["first_seen timestamptz\\nlast_active timestamptz"]',
+  '    end',
+  '    subgraph CONTACTS["contacts table"]',
+  '        C1["contact_id PK\\nowner_id name email"]',
+  '    end',
+  '    subgraph COH["contact_org_history"]',
+  '        COH1["contact_id FK\\ncompany_id FK\\ntitle text\\nstarted_at ended_at\\nsource enum"]',
+  '    end',
+  '    subgraph RPCS["PostgreSQL RPCs"]',
+  '        R1["get_cross_deal_stakeholders\\n(contact_id) returns deals with roles"]',
+  '        R2["get_deal_stakeholder_map\\n(deal_id) returns contacts with roles"]',
+  '    end',
+  '    D1 --> DC1',
+  '    C1 --> DC1',
+  '    DC1 --> DC2 --> DC3',
+  '    C1 --> COH1',
+  '    DC --> RPCS'
+].join('\n'),
+
+rgp: [
+  'flowchart LR',
+  '    subgraph SOURCES["Inference Sources"]',
+  '        TR["Meeting transcript\\nWave 2 roleInference adapter\\nspeaking patterns authority signals"]',
+  '        EM["Email patterns\\nemailRoleInference adapter\\nCC BCC reply forwarding"]',
+  '        AP["Apollo enrichment\\njob title seniority\\nperiodic refresh"]',
+  '        MN["Manual input\\nrep correction on contact page\\nconfidence 1.0"]',
+  '    end',
+  '    subgraph STORE["deal_contacts"]',
+  '        UP["Upsert role\\nupdate confidence and last_active\\nrespect manual overrides"]',
+  '    end',
+  '    subgraph SCORES["Intelligence Queries"]',
+  '        MS["Multi-threading score\\nengaged_contacts / needed\\nby deal stage threshold"]',
+  '        GD["Ghost detection\\nchampion last_active vs 21d threshold\\nemit champion_disappeared signal"]',
+  '        JCD["Job change\\nApollo title change\\nemail domain change\\ninsert contact_org_history"]',
+  '    end',
+  '    subgraph ALERTS["Alert Outputs"]',
+  '        STA["Single-thread Slack alert\\nwhen score less than 0.5\\nonce per 7d per deal"]',
+  '        GHA["Champion ghost alert\\ncommand_centre_item\\nhigh priority"]',
+  '        JCA["Job change re-engagement\\nhigh-priority trigger\\norchestrator sequence"]',
+  '    end',
+  '    TR & EM & AP & MN --> UP',
+  '    UP --> MS & GD & JCD',
+  '    MS --> STA',
+  '    GD --> GHA',
+  '    JCD --> JCA'
+].join('\n'),
+
+mem: [
+  'flowchart LR',
+  '    subgraph MODULES["_shared/memory/ — 10 Modules"]',
+  '        WR["writer.ts\\nfire-and-forget persistence\\nnever throws on failure"]',
+  '        RD2["reader.ts\\nrecall with relevance scoring\\ncontext-aware retrieval"]',
+  '        DEC["decay.ts\\ntime-decay for freshness\\ncontact memory half-life"]',
+  '        CON["contacts.ts\\ncontact-specific operations\\nper-contact interaction history"]',
+  '        REP2["reps.ts\\nrep memory and preferences\\nlearned patterns over time"]',
+  '        COM["commitments.ts\\ntrack commitments from meetings\\ndeadlines and follow-ups"]',
+  '        TAX["taxonomy.ts\\nmemory categorisation\\ndeal relationship preference"]',
+  '        TYP["types.ts\\nTypeScript interfaces\\nAgentMemory MemoryCategory"]',
+  '        SNP["snapshot.ts\\npoint-in-time memory snapshots\\ndeal state at moment"]',
+  '        RAG["ragClient.ts\\nRAG search across stores\\nsemantic memory retrieval"]',
+  '    end',
+  '    subgraph TABLE["copilot_memories table"]',
+  '        T1["user_id category subject\\ncontent context_summary\\ndeal_id contact_id company_id\\nconfidence source_message_ids\\nlast_accessed_at access_count\\nexpires_at"]',
+  '    end',
+  '    subgraph CONSUMERS["Memory Consumers"]',
+  '        COP["Copilot chat\\npersonalised responses\\nrecall prior conversations"]',
+  '        FLEET2["Fleet agents\\ndeal context for risk scoring\\ncontact history for prep"]',
+  '        ORCH["Orchestrator\\ndeal memory for proposals\\ncontact memory for emails"]',
+  '    end',
+  '    WR --> TABLE',
+  '    RD2 --> TABLE',
+  '    DEC --> TABLE',
+  '    RAG --> TABLE',
+  '    TABLE --> CONSUMERS'
+].join('\n'),
+
+dl: [
+  'flowchart LR',
+  '    subgraph TABLE2["agent_daily_logs table"]',
+  '        C1["id org_id user_id\\nagent_type action_type\\naction_detail JSONB\\ndecision_reasoning text"]',
+  '        C2["outcome enum\\nsuccess failed pending\\ncancelled skipped"]',
+  '        C3["credit_cost execution_ms\\nchain_id wave_number\\ncreated_at"]',
+  '    end',
+  '    subgraph MODULE["dailyLog.ts module"]',
+  '        LOG["logAgentAction()\\nfire-and-forget\\nnever throws"]',
+  '    end',
+  '    subgraph HOOKS["Integration Hooks"]',
+  '        H1["runner.ts\\nwave step start complete fail"]',
+  '        H2["hitl-send-followup-email\\nsend outcome undo skip"]',
+  '        H3["emailSend adapter\\ndraft generated"]',
+  '        H4["dealRisk adapter\\nrisk assessed"]',
+  '        H5["reengagement adapter\\ntrigger fired"]',
+  '        H6["preMeeting adapter\\nprep generated"]',
+  '    end',
+  '    subgraph REPLAY["Chain Replay"]',
+  '        CR2["Given chain_id\\nSELECT * ORDER BY wave_number created_at\\nfull step-by-step replay\\nwith timing cost reasoning"]',
+  '    end',
+  '    subgraph CONSUMERS2["Consumers"]',
+  '        CTRL["Control Room Action Feed\\ncross-team stream\\nfilterable expandable"]',
+  '        ROI["ROI calculations\\nhours saved metrics\\nfollow-up speed"]',
+  '        PRUNE["pg_cron daily 3am UTC\\nDELETE WHERE created_at\\n< NOW - 90 days"]',
+  '    end',
+  '    LOG --> TABLE2',
+  '    HOOKS --> LOG',
+  '    TABLE2 --> REPLAY',
+  '    TABLE2 --> CONSUMERS2'
+].join('\n'),
+
+cr: [
+  'flowchart LR',
+  '    subgraph ROUTE["Route /admin/control-room"]',
+  '        GATE["Admin/Owner RLS gate\\nisUserAdmin() check"]',
+  '        QPARAM["?approval=id query param\\ndeep-link from Slack HITL"]',
+  '    end',
+  '    subgraph HITLREVIEW["HITL Approval Review"]',
+  '        ARD["ApprovalReviewDialog\\nopens on ?approval= param\\neditable To Subject Body"]',
+  '        FETCH["Fetch hitl_pending_approvals\\nhandle expired not-found already-actioned"]',
+  '        APPROVE["Approve and Send\\ncalls hitl-send-followup-email"]',
+  '        SKIP["Skip / Reject\\nupdates status directly"]',
+  '        ARD --> FETCH',
+  '        FETCH --> APPROVE',
+  '        FETCH --> SKIP',
+  '    end',
+  '    subgraph WIDGETS["5 Dashboard Widgets"]',
+  '        FP["Fleet Pulse\\n8 agents x status\\nlast run items today\\n7-day error trend\\n60s refetch"]',
+  '        TAM["Team Autonomy Matrix\\nreps x action types\\ntier colour coding\\npromotion badges\\n5 min refetch"]',
+  '        CH["Credit Health\\ndaily burn vs budget gauge\\nper-agent cost donut\\n30-day trend\\nprojected exhaustion\\n5 min refetch"]',
+  '        AF["Action Feed\\ncross-team stream\\nagent_daily_logs primary\\ncommand_centre_items fallback\\nfilter by rep agent type outcome\\nexpandable chain context\\nrealtime subscription"]',
+  '        ROI2["ROI Summary\\nhours saved this week\\nmedian follow-up speed\\npipeline coverage percent\\nget_roi_summary RPC"]',
+  '    end',
+  '    subgraph DATA["Data Sources"]',
+  '        SJ2["sequence_jobs\\nfleet agent status"]',
+  '        APC["autopilot_confidence\\nautopilot_events"]',
+  '        CL3["credit_ledger\\nrollup aggregations"]',
+  '        ADL["agent_daily_logs\\nPRD-03"]',
+  '        CCI2["command_centre_items\\nfallback source"]',
+  '        HPA["hitl_pending_approvals\\nemail draft content"]',
+  '    end',
+  '    GATE --> WIDGETS',
+  '    QPARAM --> ARD',
+  '    HPA --> FETCH',
+  '    SJ2 --> FP',
+  '    APC --> TAM',
+  '    CL3 --> CH',
+  '    ADL --> AF',
+  '    CCI2 -->|fallback| AF',
+  '    SJ2 --> ROI2',
+  '    ADL --> ROI2'
 ].join('\n')
 
 }; // end DIAGRAMS
+
 
 // ── Mermaid setup ──────────────────────────────────────────────
 mermaid.initialize({
@@ -2135,16 +2699,16 @@ mermaid.initialize({
   theme: 'dark',
   themeVariables: {
     primaryColor: '#1e1e2e', primaryBorderColor: '#6366f1',
-    primaryTextColor: '#e2e8f0', secondaryColor: '#16162a',
-    tertiaryColor: '#1a1a2e', background: '#111118',
+    primaryTextColor: '#ededed', secondaryColor: '#16162a',
+    tertiaryColor: '#1a1a2e', background: '#111111',
     mainBkg: '#1e1e2e', nodeBorder: '#3a3a4a',
     clusterBkg: '#16162a', clusterBorder: '#2a2a3a',
-    titleColor: '#e2e8f0', edgeLabelBackground: '#1a1a24',
-    lineColor: '#6366f1', textColor: '#e2e8f0',
-    fontFamily: 'Inter,-apple-system,sans-serif', fontSize: '13px',
-    actorBorder: '#6366f1', actorBkg: '#1e1e2e', actorTextColor: '#e2e8f0',
-    signalColor: '#a5b4fc', signalTextColor: '#e2e8f0',
-    noteBorderColor: '#8b5cf6', noteBkgColor: '#1e1a2e', noteTextColor: '#e2e8f0',
+    titleColor: '#ededed', edgeLabelBackground: '#1a1a24',
+    lineColor: '#6366f1', textColor: '#ededed',
+    fontFamily: "'Inter',-apple-system,sans-serif", fontSize: '13px',
+    actorBorder: '#6366f1', actorBkg: '#1e1e2e', actorTextColor: '#ededed',
+    signalColor: '#a5b4fc', signalTextColor: '#ededed',
+    noteBorderColor: '#8b5cf6', noteBkgColor: '#1e1a2e', noteTextColor: '#ededed',
     activationBorderColor: '#8b5cf6', activationBkgColor: '#1e1a2e',
   }
 });
@@ -2162,10 +2726,43 @@ async function renderDiagram(key) {
     container.innerHTML = result.svg;
     if (result.bindFunctions) result.bindFunctions(container);
     rendered[key] = true;
+    fitDiagram(key);
   } catch(e) {
     container.innerHTML = '<div class="merr">Error rendering ' + key + ':\n' + e.message + '</div>';
     console.error('Mermaid error [' + key + ']:', e.message, '\n\nDiagram text:\n', text);
   }
+}
+
+// Scale diagram to fill its container, never upscaling beyond 100%
+function fitDiagram(k) {
+  var container = document.getElementById(k + '-container');
+  var body = document.getElementById(k + '-body');
+  if (!container || !body) return;
+  var svg = container.querySelector('svg');
+  if (!svg) return;
+
+  // Read natural dimensions from viewBox (available even when element is hidden)
+  var svgW, svgH;
+  var vb = svg.getAttribute('viewBox');
+  if (vb) {
+    var parts = vb.trim().split(/[\s,]+/);
+    svgW = parseFloat(parts[2]);
+    svgH = parseFloat(parts[3]);
+  }
+  if (!svgW || !svgH) {
+    svgW = parseFloat(svg.getAttribute('width')) || 0;
+    svgH = parseFloat(svg.getAttribute('height')) || 0;
+  }
+  if (!svgW || !svgH) return;
+
+  var pad = 56; // 28px stage padding x2
+  var bodyW = body.clientWidth  || 900;
+  var bodyH = body.clientHeight || 500;
+  var scale = Math.min((bodyW - pad) / svgW, (bodyH - pad) / svgH);
+  scale = Math.max(0.1, Math.min(scale, 1)); // never upscale beyond 100%
+
+  DS[k] = { s: scale, tx: 0, ty: 0 };
+  applyT(k);
 }
 
 // Render all diagrams on load
@@ -2179,6 +2776,11 @@ function switchTab(id) {
   document.querySelectorAll('.tp').forEach(function(p){ p.classList.remove('act'); });
   document.querySelector('[data-tab="'+id+'"]').classList.add('act');
   document.getElementById('tab-'+id).classList.add('act');
+  // Fit all diagrams inside the newly-visible tab panel
+  var panel = document.getElementById('tab-'+id);
+  if (panel) panel.querySelectorAll('[id$="-container"]').forEach(function(c) {
+    var k = c.id.replace('-container',''); fitDiagram(k);
+  });
 }
 
 // ── Feature pill switching ─────────────────────────────────────
@@ -2186,12 +2788,17 @@ function showF(f) {
   document.querySelectorAll('.pill').forEach(function(p){ p.classList.remove('act'); });
   document.querySelector('[data-f="'+f+'"]').classList.add('act');
   document.querySelectorAll('.fv').forEach(function(v){ v.classList.remove('vis'); });
-  document.getElementById('fv-'+f).classList.add('vis');
+  var fv = document.getElementById('fv-'+f);
+  fv.classList.add('vis');
+  // Fit diagrams inside the newly-visible feature view
+  fv.querySelectorAll('[id$="-container"]').forEach(function(c) {
+    var k = c.id.replace('-container',''); fitDiagram(k);
+  });
 }
 
 // ── Zoom / pan ─────────────────────────────────────────────────
 var DS = {};
-['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd','v2i','v2obs','v2mdl','v2rt','v2sk','v2mem','v2ret','v2bpr','v2ded','v2xch'].forEach(function(k){ DS[k]={s:1,tx:0,ty:0}; });
+['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd','apo','ape','orch','orch2','mew','eml','esq','rg','rgs','rgp','mem','dl','cr'].forEach(function(k){ DS[k]={s:1,tx:0,ty:0}; });
 
 function applyT(k) {
   var d = DS[k], st = document.getElementById(k+'-stage');
@@ -2202,13 +2809,16 @@ function applyT(k) {
 }
 
 function zD(k, delta) { DS[k].s = Math.min(4, Math.max(0.2, DS[k].s + delta)); applyT(k); }
-function rD(k) { DS[k]={s:1,tx:0,ty:0}; applyT(k); }
+function rD(k) { fitDiagram(k); }
 
-['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd','v2i','v2obs','v2mdl','v2rt','v2sk','v2mem','v2ret','v2bpr','v2ded','v2xch'].forEach(function(k) {
+['ov','fe','cp','sk','rf','be','ai','ig','sq','rp','sf','cc','au','pf','sc','dm','ccp','aur','pfd','cg','cgd','apo','ape','orch','orch2','mew','eml','esq','rg','rgs','rgp','mem','dl','cr'].forEach(function(k) {
   var el = document.getElementById(k+'-body');
   if (!el) return;
   el.addEventListener('wheel', function(e) {
-    e.preventDefault(); zD(k, e.deltaY < 0 ? 0.1 : -0.1);
+    e.preventDefault();
+    var delta = -e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0005);
+    delta = Math.max(-0.15, Math.min(0.15, delta));
+    zD(k, delta);
   }, {passive:false});
   var drag=false, sx=0, sy=0;
   el.addEventListener('mousedown', function(e){ drag=true; sx=e.clientX; sy=e.clientY; el.style.userSelect='none'; });
@@ -2247,14 +2857,14 @@ function zFS(d) { fsS=Math.min(5,Math.max(0.15,fsS+d)); applyFsT(); }
 function rFS() { fsS=1;fsTx=0;fsTy=0; applyFsT(); }
 
 var fsbd=document.getElementById('fsbd');
-fsbd.addEventListener('wheel', function(e){ e.preventDefault(); fsS=Math.min(5,Math.max(0.15,fsS+(e.deltaY<0?0.12:-0.12))); applyFsT(); }, {passive:false});
+fsbd.addEventListener('wheel', function(e){ e.preventDefault(); var fd=-e.deltaY*(e.deltaMode===1?0.05:0.0005); fd=Math.max(-0.15,Math.min(0.15,fd)); fsS=Math.min(5,Math.max(0.15,fsS+fd)); applyFsT(); }, {passive:false});
 var fsDrag=false, fsSx=0, fsSy=0;
 fsbd.addEventListener('mousedown', function(e){ fsDrag=true; fsSx=e.clientX; fsSy=e.clientY; fsbd.style.userSelect='none'; });
 window.addEventListener('mousemove', function(e){ if(!fsDrag)return; fsTx+=e.clientX-fsSx; fsTy+=e.clientY-fsSy; fsSx=e.clientX; fsSy=e.clientY; applyFsT(); });
 window.addEventListener('mouseup', function(){ fsDrag=false; fsbd.style.userSelect=''; });
 window.addEventListener('keydown', function(e){ if(e.key==='Escape') closeFS(); });
 
-// ── V1 / V2 / V2 Only  Toggle ────────────────────────────────────
+// ── V1 / V2 / V2 Only Toggle ────────────────────────────────────
 function setVer(ver, btn) {
   document.querySelectorAll('.ver-btn').forEach(function(b){ b.classList.remove('act'); });
   if (btn) btn.classList.add('act');
@@ -2309,19 +2919,6 @@ function toggleHL() {
     document.body.classList.add('hl-v2');
     btn.classList.add('act');
   }
-}
-
-// ── V2 Infra sub-pill switching ────────────────────────────────
-function showV2Sub(f) {
-  // Toggle pills in v2infra tab
-  var tab = document.getElementById('tab-v2infra');
-  if (!tab) return;
-  tab.querySelectorAll('.pill').forEach(function(p){ p.classList.remove('act'); });
-  var pill = tab.querySelector('[data-f="'+f+'"]');
-  if (pill) pill.classList.add('act');
-  tab.querySelectorAll('.v2sub').forEach(function(v){ v.style.display = 'none'; v.classList.remove('vis'); });
-  var sub = document.getElementById('v2sub-'+f);
-  if (sub) { sub.style.display = 'block'; sub.classList.add('vis'); }
 }
 
 // Default to V2 on load

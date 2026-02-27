@@ -72,6 +72,8 @@ export interface UseCopilotChatOptions {
   persistSession?: boolean;
   /** Number of historical messages to load (default: 50) */
   historyLimit?: number;
+  /** If set, use a per-deal session instead of the main session */
+  dealId?: string;
 }
 
 export interface RoutingContext {
@@ -184,9 +186,11 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
       setActiveAgents([]);
 
       // Persist user message to database (non-blocking)
-      // Use ref to avoid stale closure — conversationId state may lag behind actual session load
+      // Skip persistence for silent messages — the caller handles their own persistence
+      // (e.g. deal copilot sends an enriched [DEAL_CONTEXT] message silently but
+      // persists only the clean user text separately)
       const currentConvId = conversationIdRef.current;
-      if (persistSession && currentConvId && sessionServiceRef.current) {
+      if (!silent && persistSession && currentConvId && sessionServiceRef.current) {
         sessionServiceRef.current.addMessage({
           conversation_id: currentConvId,
           role: 'user',
@@ -608,7 +612,9 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
     async function loadSession() {
       try {
         const service = sessionServiceRef.current!;
-        const session = await service.getMainSession(options.userId, options.organizationId);
+        const session = options.dealId
+          ? await service.getDealSession(options.userId, options.dealId, options.organizationId)
+          : await service.getMainSession(options.userId, options.organizationId);
 
         if (cancelled) return;
         setConversationId(session.id);
@@ -656,7 +662,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
     return () => {
       cancelled = true;
     };
-  }, [options.userId, options.organizationId, persistSession, historyLimit]);
+  }, [options.userId, options.organizationId, options.dealId, persistSession, historyLimit]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -5,10 +5,13 @@
 DROP POLICY IF EXISTS "organization_invitations_select" ON "public"."organization_invitations";
 
 -- Updated policy: Service role, super admins, and org owners/admins can view invitations
-CREATE POLICY "organization_invitations_select" ON "public"."organization_invitations"
+DO $$ BEGIN
+  CREATE POLICY "organization_invitations_select" ON "public"."organization_invitations"
   FOR SELECT
   USING (
     "public"."is_service_role"()
     OR "public"."is_admin_optimized"()
     OR ("public"."get_org_role"("auth"."uid"(), "org_id") = ANY (ARRAY['owner'::"text", 'admin'::"text"]))
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

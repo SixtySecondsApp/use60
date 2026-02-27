@@ -9,7 +9,7 @@
  * @see docs/project-requirements/PRD_ACTION_CENTRE.md
  */
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.43.4";
 
 // ============================================================================
 // Types

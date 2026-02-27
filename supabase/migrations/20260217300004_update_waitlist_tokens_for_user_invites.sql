@@ -10,10 +10,13 @@ ALTER TABLE public.waitlist_magic_tokens
   ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 
 -- Add check constraint to ensure at least one of waitlist_entry_id or user_id is set
-ALTER TABLE public.waitlist_magic_tokens
+DO $$ BEGIN
+  ALTER TABLE public.waitlist_magic_tokens
   ADD CONSTRAINT token_has_reference CHECK (
     (waitlist_entry_id IS NOT NULL) OR (user_id IS NOT NULL)
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add index for user_id lookups
 CREATE INDEX idx_waitlist_magic_tokens_user_id ON public.waitlist_magic_tokens(user_id);

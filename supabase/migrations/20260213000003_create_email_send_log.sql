@@ -34,15 +34,21 @@ WHERE thread_id IS NOT NULL;
 ALTER TABLE email_send_log ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own send logs
-CREATE POLICY "Users can read own email send logs"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own email send logs"
 ON email_send_log FOR SELECT
 USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access
-CREATE POLICY "Service role full access to email send logs"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to email send logs"
 ON email_send_log FOR ALL
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Grant permissions
 GRANT SELECT ON email_send_log TO authenticated;

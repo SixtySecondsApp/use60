@@ -1,0 +1,2 @@
+# External meeting webhook callbacks without a Supabase JWT.
+verify_jwt = false

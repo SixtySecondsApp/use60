@@ -7,7 +7,7 @@
  * Stories: FLT-005, FLT-006, FLT-011
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type { SequenceStep, EventType } from './types.ts';
 import { getSequenceForEvent } from './eventSequences.ts';
 import {

@@ -346,6 +346,7 @@ export interface MeetingAdapter {
     meeting_id?: string;
     contactEmail?: string;
     contactId?: string;
+    deal_id?: string;
     limit?: number;
   }): Promise<ActionResult>;
   getBookingStats(params: {
@@ -428,7 +429,7 @@ export interface CRMAdapter {
 
 export interface EmailAdapter {
   source: string;
-  searchEmails(params: { contact_email?: string; contact_id?: string; contact_name?: string; query?: string; limit?: number }): Promise<ActionResult>;
+  searchEmails(params: { contact_email?: string; contact_id?: string; contact_name?: string; deal_id?: string; query?: string; limit?: number }): Promise<ActionResult>;
   draftEmail(params: { to?: string; subject?: string; context?: string; tone?: string }): Promise<ActionResult>;
 }
 

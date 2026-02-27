@@ -1,0 +1,3 @@
+# Stripe sends webhooks without a Supabase JWT.
+# The function validates via Stripe signature verification.
+verify_jwt = false

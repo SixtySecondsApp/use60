@@ -31,7 +31,7 @@ export function useDealStages(
         // Fallback to direct Supabase client
         const { data: stagesData, error: supabaseError } = await (supabase as any)
           .from('deal_stages')
-          .select('*')
+          .select('id, name, color, order_position, default_probability')
           .order('order_position', { ascending: true });
         
         if (supabaseError) {

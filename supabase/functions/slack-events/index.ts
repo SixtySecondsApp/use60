@@ -6,6 +6,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { parseIntent, buildCapabilityList } from '../_shared/slackIntentParser.ts';
 import { reactionStateMachine } from '../_shared/slackReactions.ts';
+// CC-015: Slash command router — maps /60 subcommands to pre-resolved intents
+import { parseSlashCommand } from '../_shared/slack-copilot/slashCommands.ts';
 
 // Helper for logging sync operations to integration_sync_logs table
 async function logSyncOperation(
@@ -546,6 +548,11 @@ async function handleAppMention(
   // Strip bot mention from text
   const cleanText = text.replace(/<@[A-Z0-9]+>/g, '').trim();
 
+  // CC-015: Check if the mention text is a known /60 subcommand.
+  // If so, resolve the intent immediately and pass it to slack-copilot,
+  // which will skip AI classification entirely (confidence: 1.0).
+  const slashResult = parseSlashCommand(cleanText);
+
   // Reaction state machine
   const reactions = reactionStateMachine(botToken, channel, event.ts!);
   await reactions.pending();
@@ -555,24 +562,31 @@ async function handleAppMention(
   try {
     const copilotUrl = `${supabaseUrl}/functions/v1/slack-copilot`;
 
+    const copilotPayload: Record<string, unknown> = {
+      orgId,
+      userId,
+      slackUserId,
+      slackTeamId: teamId,
+      channelId: channel,
+      threadTs,
+      messageTs: event.ts,
+      text: cleanText,
+      botToken,
+      source: 'app_mention',
+    };
+
+    // Attach pre-resolved intent when a slash subcommand was detected
+    if (slashResult) {
+      copilotPayload.preResolvedIntent = slashResult.intent;
+    }
+
     const response = await fetch(copilotUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${supabaseServiceKey}`,
       },
-      body: JSON.stringify({
-        orgId,
-        userId,
-        slackUserId,
-        slackTeamId: teamId,
-        channelId: channel,
-        threadTs,
-        messageTs: event.ts,
-        text: cleanText,
-        botToken,
-        source: 'app_mention',
-      }),
+      body: JSON.stringify(copilotPayload),
     });
 
     if (!response.ok) {

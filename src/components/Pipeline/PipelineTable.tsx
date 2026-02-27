@@ -8,6 +8,7 @@ import React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
 import type { PipelineDeal } from './hooks/usePipelineData';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 interface PipelineTableProps {
   deals: PipelineDeal[];
@@ -21,18 +22,6 @@ interface PipelineTableProps {
 // Helper Functions
 // =============================================================================
 
-/**
- * Format currency
- */
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return '$0';
-
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 /**
  * Deterministic avatar gradient from a name string
@@ -361,6 +350,9 @@ export function PipelineTable({
   sortDir,
   onSort,
 }: PipelineTableProps) {
+  const { formatMoney: fmtMoney } = useOrgMoney();
+  const formatCurrency = (value: number | null) => fmtMoney(value ?? 0);
+
   if (deals.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500 dark:text-gray-400">

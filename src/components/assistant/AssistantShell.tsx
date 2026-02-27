@@ -8,6 +8,8 @@ import { AgentWorkingIndicator } from '@/components/copilot/AgentWorkingIndicato
 import { RichCopilotInput, type RichCopilotInputHandle } from '@/components/copilot/RichCopilotInput';
 import { EntityMentionDropdown } from '@/components/copilot/EntityMentionDropdown';
 import { SkillCommandDropdown } from '@/components/copilot/SkillCommandDropdown';
+import { AutopilotNudgeBanner } from '@/components/assistant/AutopilotNudgeBanner';
+import { useAutopilotNudge } from '@/lib/hooks/useAutopilotNudge';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useEventEmitter } from '@/lib/communication/EventBus';
@@ -29,6 +31,9 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
   const richInputRef = useRef<RichCopilotInputHandle>(null);
   const navigate = useNavigate();
   const emit = useEventEmitter();
+
+  // AP-032: in-context promotion nudge
+  const { nudge, dismissNudge } = useAutopilotNudge();
 
   // @ mention dropdown state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -501,6 +506,9 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
       {/* Messages area (has messages) */}
       {!isEmpty && (
         <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-custom p-5 space-y-4 relative">
+          {/* AP-032: In-context promotion nudge banner */}
+          <AutopilotNudgeBanner nudge={nudge} onDismiss={dismissNudge} />
+
           {messages
             // Hide empty assistant placeholder while the typing indicator is showing
             .filter((m) => !(isLoading && m.role === 'assistant' && !m.content))

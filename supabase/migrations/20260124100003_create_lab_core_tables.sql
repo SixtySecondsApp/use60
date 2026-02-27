@@ -48,21 +48,33 @@ CREATE INDEX IF NOT EXISTS idx_prompt_library_tags
 -- RLS
 ALTER TABLE copilot_prompt_library ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can read own prompts"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own prompts"
   ON copilot_prompt_library FOR SELECT
   USING (auth.uid() = created_by OR is_public = true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own prompts"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own prompts"
   ON copilot_prompt_library FOR INSERT
   WITH CHECK (auth.uid() = created_by);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own prompts"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own prompts"
   ON copilot_prompt_library FOR UPDATE
   USING (auth.uid() = created_by);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can delete own prompts"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own prompts"
   ON copilot_prompt_library FOR DELETE
   USING (auth.uid() = created_by);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- LAB-005: Response Grades Table
@@ -129,11 +141,15 @@ CREATE INDEX IF NOT EXISTS idx_response_grades_created
 -- RLS
 ALTER TABLE copilot_response_grades ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can read own grades"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own grades"
   ON copilot_response_grades FOR SELECT
   USING (auth.uid() = graded_by);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins can read org grades"
+DO $$ BEGIN
+  CREATE POLICY "Admins can read org grades"
   ON copilot_response_grades FOR SELECT
   USING (
     EXISTS (
@@ -144,10 +160,15 @@ CREATE POLICY "Admins can read org grades"
         AND p.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own grades"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own grades"
   ON copilot_response_grades FOR INSERT
   WITH CHECK (auth.uid() = graded_by);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- Aggregate View for Quality Dashboard

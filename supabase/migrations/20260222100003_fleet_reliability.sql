@@ -36,23 +36,32 @@ CREATE INDEX IF NOT EXISTS idx_fleet_dlq_org
 -- RLS
 ALTER TABLE fleet_dead_letter_queue ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "fleet_dlq_service_all"
+DO $$ BEGIN
+  CREATE POLICY "fleet_dlq_service_all"
   ON fleet_dead_letter_queue FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can read their dead letters
-CREATE POLICY "fleet_dlq_org_admin_read"
+DO $$ BEGIN
+  CREATE POLICY "fleet_dlq_org_admin_read"
   ON fleet_dead_letter_queue FOR SELECT
   USING (
     get_org_role(auth.uid(), org_id) IN ('admin', 'owner')
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can update (retry/abandon)
-CREATE POLICY "fleet_dlq_org_admin_update"
+DO $$ BEGIN
+  CREATE POLICY "fleet_dlq_org_admin_update"
   ON fleet_dead_letter_queue FOR UPDATE
   USING (
     get_org_role(auth.uid(), org_id) IN ('admin', 'owner')
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON fleet_dead_letter_queue TO service_role;
 GRANT SELECT, UPDATE ON fleet_dead_letter_queue TO authenticated;

@@ -58,7 +58,8 @@ ALTER TABLE deal_risk_scores ENABLE ROW LEVEL SECURITY;
 
 -- Users in the same org can view risk scores
 DROP POLICY IF EXISTS "Users can view org deal risk scores" ON deal_risk_scores;
-CREATE POLICY "Users can view org deal risk scores"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org deal risk scores"
   ON deal_risk_scores FOR SELECT
   TO authenticated
   USING (
@@ -68,14 +69,19 @@ CREATE POLICY "Users can view org deal risk scores"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (for edge functions)
 DROP POLICY IF EXISTS "Service role has full access to deal_risk_scores" ON deal_risk_scores;
-CREATE POLICY "Service role has full access to deal_risk_scores"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to deal_risk_scores"
   ON deal_risk_scores FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Comments

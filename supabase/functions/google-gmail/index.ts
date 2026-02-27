@@ -76,6 +76,10 @@ interface SendEmailRequest {
   subject: string;
   body: string;
   isHtml?: boolean;
+  // Thread context for RFC 2822 reply threading (EMAIL-004)
+  threadId?: string;
+  inReplyTo?: string;
+  references?: string;
 }
 
 interface ListEmailsRequest {
@@ -167,7 +171,16 @@ serve(async (req) => {
 
     switch (action) {
       case 'send':
-        response = await sendEmail(accessToken, requestBody as SendEmailRequest);
+        response = await sendEmail(accessToken, {
+          to: requestBody.to,
+          subject: requestBody.subject,
+          body: requestBody.body,
+          isHtml: requestBody.isHtml,
+          // Thread context (EMAIL-004) — optional, falls back gracefully when absent
+          threadId: requestBody.threadId,
+          inReplyTo: requestBody.inReplyTo,
+          references: requestBody.references,
+        });
         break;
       
       case 'list':
@@ -362,21 +375,77 @@ serve(async (req) => {
   }
 });
 
+// UTF-8 safe base64url encoder (mirrors gmail-actions.ts — btoa() crashes on chars > U+00FF)
+function toBase64UrlSend(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  const binary = Array.from(bytes).map((b: number) => String.fromCharCode(b)).join('');
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Fetch the user's primary Gmail signature (sendAs API).
+ * Returns the HTML signature string, or empty string on failure.
+ */
+async function fetchGmailSignature(accessToken: string): Promise<string> {
+  try {
+    const resp = await fetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs',
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+    if (!resp.ok) return '';
+    const data = await resp.json();
+    // Find the primary (default) sendAs alias
+    const primary = data.sendAs?.find((s: { isDefault?: boolean }) => s.isDefault);
+    return primary?.signature || '';
+  } catch {
+    return '';
+  }
+}
+
 async function sendEmail(accessToken: string, request: SendEmailRequest): Promise<any> {
+  // Fetch Gmail signature and append to body
+  let body = request.body;
+  const signature = await fetchGmailSignature(accessToken);
+  if (signature) {
+    if (request.isHtml !== false) {
+      // HTML mode: append signature with separator
+      body = `${body}<br><div class="gmail_signature_dash">--</div><div class="gmail_signature">${signature}</div>`;
+    } else {
+      // Plain text mode: strip HTML tags from signature
+      const plainSig = signature.replace(/<[^>]+>/g, '').trim();
+      if (plainSig) {
+        body = `${body}\n\n--\n${plainSig}`;
+      }
+    }
+  }
+
   const emailLines = [
     `To: ${request.to}`,
     `Subject: ${request.subject}`,
-    'Content-Type: text/html; charset=utf-8',
-    '',
-    request.body
+    `Content-Type: ${request.isHtml !== false ? 'text/html' : 'text/plain'}; charset=utf-8`,
   ];
-  
+
+  // RFC 2822 threading headers — added when caller provides prior thread context (EMAIL-004)
+  if (request.inReplyTo) {
+    emailLines.push(`In-Reply-To: ${request.inReplyTo}`);
+  }
+  if (request.references) {
+    emailLines.push(`References: ${request.references}`);
+  } else if (request.inReplyTo) {
+    // References must at minimum contain In-Reply-To when not explicitly provided
+    emailLines.push(`References: ${request.inReplyTo}`);
+  }
+
+  emailLines.push('', body);
+
   const emailMessage = emailLines.join('\r\n');
-  
-  const encodedMessage = btoa(emailMessage)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  const encodedMessage = toBase64UrlSend(emailMessage);
+
+  const messagePayload: Record<string, unknown> = { raw: encodedMessage };
+  // threadId keeps the sent message in the existing Gmail thread
+  if (request.threadId) {
+    messagePayload.threadId = request.threadId;
+  }
 
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
@@ -384,9 +453,7 @@ async function sendEmail(accessToken: string, request: SendEmailRequest): Promis
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      raw: encodedMessage
-    }),
+    body: JSON.stringify(messagePayload),
   });
 
   if (!response.ok) {

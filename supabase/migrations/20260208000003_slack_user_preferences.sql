@@ -35,24 +35,36 @@ ON slack_user_preferences (user_id, org_id);
 ALTER TABLE slack_user_preferences ENABLE ROW LEVEL SECURITY;
 
 -- Users can read/write their own preferences
-CREATE POLICY "Users can read own notification preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own notification preferences"
 ON slack_user_preferences FOR SELECT
 USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own notification preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own notification preferences"
 ON slack_user_preferences FOR INSERT
 WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own notification preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own notification preferences"
 ON slack_user_preferences FOR UPDATE
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access
-CREATE POLICY "Service role full access to notification preferences"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to notification preferences"
 ON slack_user_preferences FOR ALL
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Updated_at trigger
 CREATE OR REPLACE FUNCTION update_slack_user_preferences_updated_at()

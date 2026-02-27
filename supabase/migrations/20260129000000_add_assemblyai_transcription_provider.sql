@@ -6,9 +6,12 @@
 ALTER TABLE recordings
   DROP CONSTRAINT IF EXISTS recordings_transcription_provider_check;
 
-ALTER TABLE recordings
+DO $$ BEGIN
+  ALTER TABLE recordings
   ADD CONSTRAINT recordings_transcription_provider_check
     CHECK (transcription_provider IN ('whisperx', 'gladia', 'deepgram', 'meetingbaas', 'assemblyai'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comment for documentation
 COMMENT ON COLUMN recordings.transcription_provider IS 

@@ -102,7 +102,8 @@ CREATE TRIGGER trigger_update_client_fact_profiles_updated_at
 ALTER TABLE public.client_fact_profiles ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: org members can view profiles in their org
-CREATE POLICY "Org members can view client_fact_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view client_fact_profiles"
   ON public.client_fact_profiles
   FOR SELECT
   USING (
@@ -111,18 +112,24 @@ CREATE POLICY "Org members can view client_fact_profiles"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- SELECT: anonymous/public access via share_token when is_public = true and not expired
-CREATE POLICY "Public access to shared client_fact_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Public access to shared client_fact_profiles"
   ON public.client_fact_profiles
   FOR SELECT
   USING (
     is_public = true
     AND (share_expires_at IS NULL OR share_expires_at > now())
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- INSERT: org members can create profiles (with created_by = auth.uid())
-CREATE POLICY "Org members can create client_fact_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Org members can create client_fact_profiles"
   ON public.client_fact_profiles
   FOR INSERT
   WITH CHECK (
@@ -132,9 +139,12 @@ CREATE POLICY "Org members can create client_fact_profiles"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- UPDATE: creator or org admins can update
-CREATE POLICY "Creator or admin can update client_fact_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Creator or admin can update client_fact_profiles"
   ON public.client_fact_profiles
   FOR UPDATE
   USING (
@@ -145,9 +155,12 @@ CREATE POLICY "Creator or admin can update client_fact_profiles"
       AND role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- DELETE: creator or org admins can delete
-CREATE POLICY "Creator or admin can delete client_fact_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Creator or admin can delete client_fact_profiles"
   ON public.client_fact_profiles
   FOR DELETE
   USING (
@@ -158,12 +171,17 @@ CREATE POLICY "Creator or admin can delete client_fact_profiles"
       AND role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access
-CREATE POLICY "Service role full access to client_fact_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to client_fact_profiles"
   ON public.client_fact_profiles
   FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Done

@@ -48,26 +48,35 @@ CREATE INDEX IF NOT EXISTS idx_session_summaries_created
 ALTER TABLE copilot_session_summaries ENABLE ROW LEVEL SECURITY;
 
 -- Users can view summaries for their own conversations
-CREATE POLICY "Users can view own session summaries"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own session summaries"
   ON copilot_session_summaries
   FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert summaries for their own conversations
-CREATE POLICY "Users can insert own session summaries"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own session summaries"
   ON copilot_session_summaries
   FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can manage all summaries (for edge functions)
-CREATE POLICY "Service role can manage all session summaries"
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage all session summaries"
   ON copilot_session_summaries
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Helper function to get summaries for context building

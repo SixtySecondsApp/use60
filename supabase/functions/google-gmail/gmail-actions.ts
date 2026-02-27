@@ -1,5 +1,12 @@
 // Gmail action functions for modifying emails
 
+/** UTF-8 safe base64url encoder — btoa() crashes on chars > U+00FF (curly quotes, em-dashes). */
+function toBase64Url(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  const binary = Array.from(bytes).map((b: number) => String.fromCharCode(b)).join('');
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 export async function modifyEmail(accessToken: string, request: any): Promise<any> {
   const response = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${request.messageId}/modify`,
@@ -150,11 +157,8 @@ export async function replyToEmail(
   ];
   
   const emailMessage = emailLines.join('\r\n');
-  const encodedMessage = btoa(emailMessage)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-  
+  const encodedMessage = toBase64Url(emailMessage);
+
   const response = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`,
     {
@@ -414,11 +418,8 @@ export async function forwardEmail(
   ];
   
   const emailMessage = emailLines.join('\r\n');
-  const encodedMessage = btoa(emailMessage)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-  
+  const encodedMessage = toBase64Url(emailMessage);
+
   const response = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`,
     {

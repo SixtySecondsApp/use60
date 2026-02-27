@@ -1,0 +1,2 @@
+# Google sends calendar push notifications without a Supabase JWT.
+verify_jwt = false

@@ -101,10 +101,13 @@ COMMENT ON FUNCTION public.user_leave_organization IS 'Allows authenticated user
 DROP POLICY IF EXISTS "users_can_leave_organization" ON public.organization_memberships;
 
 -- Create the policy
-CREATE POLICY "users_can_leave_organization" ON "public"."organization_memberships"
+DO $$ BEGIN
+  CREATE POLICY "users_can_leave_organization" ON "public"."organization_memberships"
   FOR UPDATE
   USING (("auth"."uid"() = "user_id"))
   WITH CHECK (("auth"."uid"() = "user_id"));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comment for documentation
 COMMENT ON POLICY "users_can_leave_organization" ON "public"."organization_memberships"

@@ -365,3 +365,20 @@ verify_jwt = false
 # Uses service role internally; CORS handled in function
 [functions.meeting-process-structured-summary]
 verify_jwt = false
+
+# Explorium B2B data platform — match (free), search, enrich
+# Auth validated internally via userClient.auth.getUser()
+# Staging uses ES256 JWTs which the gateway rejects without this flag
+[functions.explorium-match]
+verify_jwt = false
+
+[functions.explorium-search]
+verify_jwt = false
+
+[functions.explorium-enrich]
+verify_jwt = false
+
+# copilot-dynamic-table — called from browser with user JWT
+# Auth handled internally; CORS preflight needs to work
+[functions.copilot-dynamic-table]
+verify_jwt = false

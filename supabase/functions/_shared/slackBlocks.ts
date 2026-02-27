@@ -292,7 +292,7 @@ const formatCurrency = (value: number, currency: string = 'GBP', locale?: string
  * Get sentiment indicator
  */
 const getSentimentBadge = (sentiment: string, score: number): string => {
-  const emoji = '';
+  const emoji = sentiment === 'positive' ? '🟢' : sentiment === 'challenging' ? '🔴' : '🟡';
   return `${emoji} ${sentiment.charAt(0).toUpperCase() + sentiment.slice(1)} (${score}%)`;
 };
 
@@ -301,8 +301,8 @@ const getSentimentBadge = (sentiment: string, score: number): string => {
  */
 const getTalkTimeBadge = (repPercent: number): string => {
   // Ideal is 30-40% rep talk time
-  if (repPercent >= 25 && repPercent <= 45) return `${repPercent}%`;
-  return `${repPercent}%`;
+  if (repPercent >= 25 && repPercent <= 45) return `✅ ${repPercent}%`;
+  return `⚠️ ${repPercent}%`;
 };
 
 // =============================================================================
@@ -424,94 +424,6 @@ export const actions = (
 });
 
 // =============================================================================
-// LINK FOOTER & ENTITY CONTEXT HELPERS
-// =============================================================================
-
-/**
- * Data for building a context block with deep links to relevant entities.
- */
-export interface LinkFooterData {
-  appUrl: string;
-  dealId?: string;
-  dealName?: string;
-  contactId?: string;
-  contactName?: string;
-  meetingId?: string;
-  meetingTitle?: string;
-}
-
-/**
- * Returns a context block with deep links to relevant entities.
- * Only includes links for IDs that are present.
- * Falls back to a general app link if no specific links are provided.
- */
-export const buildLinkFooter = (data: LinkFooterData): SlackBlock | null => {
-  const links: string[] = [];
-
-  if (data.dealId) {
-    links.push(`<${data.appUrl}/deals/${data.dealId}|View Deal>`);
-  }
-  if (data.contactId) {
-    links.push(`<${data.appUrl}/contacts/${data.contactId}|View Contact>`);
-  }
-  if (data.meetingId) {
-    links.push(`<${data.appUrl}/meetings/${data.meetingId}|View Meeting>`);
-  }
-
-  // Always add a general app link if no specific links
-  if (links.length === 0) {
-    links.push(`<${data.appUrl}|Open in 60>`);
-  }
-
-  return context([links.join('  ·  ')]);
-};
-
-/**
- * Data for building a fields section with key entity details.
- */
-export interface EntityContextData {
-  dealName?: string;
-  dealStage?: string;
-  dealValue?: number;
-  contactName?: string;
-  companyName?: string;
-  lastActivity?: string;
-  currencyCode?: string;
-  currencyLocale?: string;
-}
-
-/**
- * Returns a fields section with 2-4 key entity details.
- * Returns null if no data fields are populated.
- */
-export const entityContextBlock = (data: EntityContextData): SlackBlock | null => {
-  const fields: Array<{ label: string; value: string }> = [];
-
-  if (data.dealName) {
-    fields.push({ label: 'Deal', value: truncate(data.dealName, 60) });
-  }
-  if (data.dealStage) {
-    fields.push({ label: 'Stage', value: data.dealStage });
-  }
-  if (data.dealValue !== undefined) {
-    fields.push({ label: 'Value', value: formatCurrency(data.dealValue, data.currencyCode, data.currencyLocale) });
-  }
-  if (data.contactName) {
-    fields.push({ label: 'Contact', value: truncate(data.contactName, 60) });
-  }
-  if (data.companyName) {
-    fields.push({ label: 'Company', value: truncate(data.companyName, 60) });
-  }
-  if (data.lastActivity) {
-    fields.push({ label: 'Last Activity', value: data.lastActivity });
-  }
-
-  if (fields.length === 0) return null;
-
-  return sectionWithFields(fields.slice(0, 4));
-};
-
-// =============================================================================
 // ACTION CONFIRMATION BUILDERS (SLACK-006)
 // =============================================================================
 
@@ -533,19 +445,19 @@ export interface ActionConfirmationData {
 }
 
 const actionConfirmationConfig: Record<string, { emoji: string; label: string }> = {
-  'snoozed': { emoji: '', label: 'Snoozed' },
-  'dismissed': { emoji: '', label: 'Dismissed' },
-  'completed': { emoji: '', label: 'Completed' },
-  'approved': { emoji: '', label: 'Approved' },
-  'rejected': { emoji: '', label: 'Rejected' },
-  'expired': { emoji: '', label: 'Expired' },
-  'sent': { emoji: '', label: 'Sent' },
-  'created': { emoji: '', label: 'Created' },
+  'snoozed': { emoji: '⏰', label: 'Snoozed' },
+  'dismissed': { emoji: '🚫', label: 'Dismissed' },
+  'completed': { emoji: '✅', label: 'Completed' },
+  'approved': { emoji: '✅', label: 'Approved' },
+  'rejected': { emoji: '❌', label: 'Rejected' },
+  'expired': { emoji: '⏳', label: 'Expired' },
+  'sent': { emoji: '📨', label: 'Sent' },
+  'created': { emoji: '📝', label: 'Created' },
 };
 
 export const buildActionConfirmation = (data: ActionConfirmationData): SlackMessage => {
   const blocks: SlackBlock[] = [];
-  const config = actionConfirmationConfig[data.action] || { emoji: '', label: data.action };
+  const config = actionConfirmationConfig[data.action] || { emoji: '📋', label: data.action };
   const userMention = data.slackUserId ? `<@${data.slackUserId}>` : (data.actionedBy || 'Unknown');
 
   const formattedTime = new Date(data.timestamp).toLocaleString('en-US', {
@@ -585,7 +497,7 @@ export const buildMeetingDebriefMessage = (data: MeetingDebriefData): SlackMessa
   const blocks: SlackBlock[] = [];
 
   // Header — assertive past-tense
-  blocks.push(header(`Meeting Complete | ${truncate(data.meetingTitle, 100)}`));
+  blocks.push(header(`✅ Meeting Complete | ${truncate(data.meetingTitle, 100)}`));
 
   // Evidence line
   blocks.push(context([
@@ -601,13 +513,13 @@ export const buildMeetingDebriefMessage = (data: MeetingDebriefData): SlackMessa
   ]));
 
   // Summary
-  blocks.push(section(`*Summary*\n${truncate(data.summary, 500)}`));
+  blocks.push(section(`*📝 Summary*\n${truncate(data.summary, 500)}`));
 
   blocks.push(divider());
 
   // Action Items (max 3 shown inline)
   if (data.actionItems.length > 0) {
-    blocks.push(section('*Action Items*'));
+    blocks.push(section('*✅ Action Items*'));
     
     data.actionItems.slice(0, 3).forEach((item, index) => {
       const ownerText = item.suggestedOwner ? ` → _${item.suggestedOwner}_` : '';
@@ -621,7 +533,7 @@ export const buildMeetingDebriefMessage = (data: MeetingDebriefData): SlackMessa
 
       blocks.push(sectionWithButton(
         `• ${truncate(item.task, 180)}${ownerText}${dueText}`,
-        'Add',
+        '➕ Add',
         `add_task_${index}`,
         taskValue,
         'primary'
@@ -649,7 +561,7 @@ export const buildMeetingDebriefMessage = (data: MeetingDebriefData): SlackMessa
 
   // Coaching Insight
   if (data.coachingInsight) {
-    blocks.push(section(`*Coaching Tip*\n${truncate(data.coachingInsight, 400)}`));
+    blocks.push(section(`*💡 Coaching Tip*\n${truncate(data.coachingInsight, 400)}`));
   }
 
   // Key Quote (if available)
@@ -659,11 +571,11 @@ export const buildMeetingDebriefMessage = (data: MeetingDebriefData): SlackMessa
 
   // Action buttons row 1 - View links
   const viewButtons: Array<{ text: string; actionId: string; value: string; url?: string; style?: 'primary' }> = [
-    { text: 'View Meeting', actionId: 'view_meeting', value: data.meetingId, url: `${data.appUrl}/meetings/${data.meetingId}`, style: 'primary' },
+    { text: '🎬 View Meeting', actionId: 'view_meeting', value: data.meetingId, url: `${data.appUrl}/meetings/${data.meetingId}`, style: 'primary' },
   ];
 
   if (data.dealId) {
-    viewButtons.push({ text: 'View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` });
+    viewButtons.push({ text: '💼 View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` });
   }
 
   blocks.push(actions(viewButtons));
@@ -678,11 +590,11 @@ export const buildMeetingDebriefMessage = (data: MeetingDebriefData): SlackMessa
   });
 
   const quickActions: Array<{ text: string; actionId: string; value: string; style?: 'primary' }> = [
-    { text: 'Draft Follow-up', actionId: 'debrief_draft_followup', value: actionValue },
+    { text: '✉️ Draft Follow-up', actionId: 'debrief_draft_followup', value: actionValue },
   ];
 
   if (data.dealId) {
-    quickActions.push({ text: 'Update Deal', actionId: 'debrief_update_deal', value: actionValue });
+    quickActions.push({ text: '📊 Update Deal', actionId: 'debrief_update_deal', value: actionValue });
   }
 
   blocks.push(actions(quickActions));
@@ -700,15 +612,15 @@ export const buildDailyDigestMessage = (data: DailyDigestData): SlackMessage => 
   const blocks: SlackBlock[] = [];
 
   // Header
-  blocks.push(header(`Good Morning, ${truncate(data.teamName, 50)}!`));
-  blocks.push(context([`${data.date}`]));
+  blocks.push(header(`☀️ Good Morning, ${truncate(data.teamName, 50)}!`));
+  blocks.push(context([`📅 ${data.date}`]));
 
   // Quick Stats
   blocks.push(sectionWithFields([
-    { label: 'Pipeline', value: formatCurrency(data.weekStats.pipelineValue, data.currencyCode, data.currencyLocale) },
-    { label: 'Meetings', value: `${data.meetings.length} today` },
-    { label: 'Due Today', value: `${data.dueTodayTasks.length} tasks` },
-    { label: 'Overdue', value: `${data.overdueTasks.length} tasks` },
+    { label: '📊 Pipeline', value: formatCurrency(data.weekStats.pipelineValue, data.currencyCode, data.currencyLocale) },
+    { label: '🎯 Meetings', value: `${data.meetings.length} today` },
+    { label: '✅ Due Today', value: `${data.dueTodayTasks.length} tasks` },
+    { label: '🔴 Overdue', value: `${data.overdueTasks.length} tasks` },
   ]));
 
   blocks.push(divider());
@@ -717,11 +629,11 @@ export const buildDailyDigestMessage = (data: DailyDigestData): SlackMessage => 
   if (data.meetings.length > 0) {
     const meetingLines = data.meetings.slice(0, 4).map((m) => {
       const userMention = m.slackUserId ? `<@${m.slackUserId}>` : m.userName;
-      const important = m.isImportant ? '' : '';
+      const important = m.isImportant ? '🔥 ' : '';
       return `${important}*${m.time}* ${userMention} - ${truncate(m.title, 80)}`;
     });
 
-    blocks.push(section(`*TODAY'S MEETINGS*\n${meetingLines.join('\n')}`));
+    blocks.push(section(`*📅 TODAY'S MEETINGS*\n${meetingLines.join('\n')}`));
 
     if (data.meetings.length > 4) {
       blocks.push(context([`+ ${data.meetings.length - 4} more meetings`]));
@@ -732,29 +644,29 @@ export const buildDailyDigestMessage = (data: DailyDigestData): SlackMessage => 
   if (data.overdueTasks.length > 0) {
     const overdueLines = data.overdueTasks.slice(0, 3).map((t) => {
       const userMention = t.slackUserId ? `<@${t.slackUserId}>` : t.userName;
-      return `${userMention}: ${truncate(t.task, 60)} (${t.daysOverdue}d overdue)`;
+      return `🔴 ${userMention}: ${truncate(t.task, 60)} (${t.daysOverdue}d overdue)`;
     });
 
-    blocks.push(section(`*OVERDUE TASKS*\n${overdueLines.join('\n')}`));
+    blocks.push(section(`*🚨 OVERDUE TASKS*\n${overdueLines.join('\n')}`));
   }
 
   // AI Insights
   if (data.insights.length > 0) {
     blocks.push(divider());
-    const insightLines = data.insights.slice(0, 3).map((insight) => `• ${truncate(insight, 150)}`);
+    const insightLines = data.insights.slice(0, 3).map((insight) => `💡 ${truncate(insight, 150)}`);
     blocks.push(section(`*AI INSIGHTS*\n${insightLines.join('\n')}`));
   }
 
   // Week Stats Summary
   blocks.push(divider());
   blocks.push(context([
-    `This week: ${data.weekStats.dealsCount} deals closed (${formatCurrency(data.weekStats.dealsValue, data.currencyCode, data.currencyLocale)}) | ${data.weekStats.meetingsCount} meetings | ${data.weekStats.activitiesCount} activities`,
+    `📈 This week: ${data.weekStats.dealsCount} deals closed (${formatCurrency(data.weekStats.dealsValue, data.currencyCode, data.currencyLocale)}) | ${data.weekStats.meetingsCount} meetings | ${data.weekStats.activitiesCount} activities`,
   ]));
 
   // Action button
   blocks.push(actions([
-    { text: 'View Dashboard', actionId: 'view_dashboard', value: 'dashboard', url: `${data.appUrl}/dashboard`, style: 'primary' },
-    { text: 'View Tasks', actionId: 'view_tasks', value: 'tasks', url: `${data.appUrl}/tasks` },
+    { text: '📊 View Dashboard', actionId: 'view_dashboard', value: 'dashboard', url: `${data.appUrl}/dashboard`, style: 'primary' },
+    { text: '📋 View Tasks', actionId: 'view_tasks', value: 'tasks', url: `${data.appUrl}/tasks` },
   ]));
 
   return {
@@ -786,7 +698,7 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
       timeLabel = mins > 0 ? `in ${hours}h ${mins}m` : `in ${hours}h`;
     }
   }
-  blocks.push(header(`Meeting ${timeLabel}`));
+  blocks.push(header(`📅 Meeting ${timeLabel}`));
   blocks.push(section(`*${truncate(data.meetingTitle, 100)}*\n${userMention}`));
 
   // Evidence line
@@ -800,9 +712,9 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
   // Risk Alerts (if critical/high)
   const criticalRisks = data.riskSignals?.filter(r => r.severity === 'critical' || r.severity === 'high') || [];
   if (criticalRisks.length > 0) {
-    const riskEmoji = '';
+    const riskEmoji = criticalRisks.some(r => r.severity === 'critical') ? '🚨' : '⚠️';
     const riskLines = criticalRisks.slice(0, 2).map(r => {
-      const badge = '';
+      const badge = r.severity === 'critical' ? '🔴' : '🟠';
       return `${badge} ${truncate(r.description, 100)}`;
     });
     blocks.push(section(`${riskEmoji} *DEAL RISKS*\n${riskLines.join('\n')}`));
@@ -815,7 +727,7 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
   
   if (data.attendees.length > 0) {
     const keyAttendee = data.attendees.find(a => a.isDecisionMaker) || data.attendees[0];
-    const badge = keyAttendee.isDecisionMaker ? '' : '';
+    const badge = keyAttendee.isDecisionMaker ? ' 🎯' : '';
     fields.push({ label: 'With', value: `${keyAttendee.name}${keyAttendee.title ? ` (${keyAttendee.title})` : ''}${badge}` });
   }
 
@@ -839,18 +751,18 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
   const prepItems: string[] = [];
   
   if (data.lastMeetingNotes) {
-    prepItems.push(`Last meeting: _"${truncate(data.lastMeetingNotes, 120)}"_`);
+    prepItems.push(`📝 Last meeting: _"${truncate(data.lastMeetingNotes, 120)}"_`);
   }
 
   // Unresolved objections
   const unresolvedObjections = data.previousObjections?.filter(o => !o.resolved) || [];
   if (unresolvedObjections.length > 0) {
-    prepItems.push(`Open objection: ${truncate(unresolvedObjections[0].objection, 100)}`);
+    prepItems.push(`⚠️ Open objection: ${truncate(unresolvedObjections[0].objection, 100)}`);
   }
 
   // Key talking point
   if (data.talkingPoints.length > 0) {
-    prepItems.push(`Key point: ${truncate(data.talkingPoints[0], 100)}`);
+    prepItems.push(`🎯 Key point: ${truncate(data.talkingPoints[0], 100)}`);
   }
 
   if (prepItems.length > 0) {
@@ -861,7 +773,7 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
   if (data.leadProfile) {
     const lp = data.leadProfile;
     blocks.push(divider());
-    blocks.push(header('Attendee Intel'));
+    blocks.push(header('🔍 Attendee Intel'));
 
     // Person card: name, title, seniority
     const nameParts: string[] = [];
@@ -884,7 +796,7 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
 
     // Background as a concise summary
     if (lp.background) {
-      blocks.push(context([`${truncate(lp.background, 250)}`]));
+      blocks.push(context([`📋 ${truncate(lp.background, 250)}`]));
     }
 
     // Connection points with proper tier matching
@@ -892,16 +804,16 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
       blocks.push(divider());
       const cpLines = lp.connection_points.slice(0, 3).map(cp => {
         const tierRaw = String(cp.tier || '3').replace(/[^0-9]/g, '') || '3';
-        const tierBadge = '';
+        const tierBadge = tierRaw === '1' ? '🟢' : tierRaw === '2' ? '🟡' : '⚪';
         const useHint = cp.suggested_use ? ` _→ ${truncate(cp.suggested_use, 80)}_` : '';
         return `${tierBadge} ${truncate(cp.point, 100)}${useHint}`;
       });
-      blocks.push(section(`*Conversation Starters*\n${cpLines.join('\n')}`));
+      blocks.push(section(`*💬 Conversation Starters*\n${cpLines.join('\n')}`));
     }
 
     // Topics as context line
     if (lp.content_topics && lp.content_topics.length > 0) {
-      blocks.push(context([`Talks about: ${lp.content_topics.slice(0, 4).join(' · ')}`]));
+      blocks.push(context([`💡 Talks about: ${lp.content_topics.slice(0, 4).join(' · ')}`]));
     }
   }
 
@@ -909,18 +821,18 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
   const buttonRow: Array<{ text: string; actionId: string; value: string; url?: string; style?: 'primary' }> = [];
 
   if (data.meetingUrl) {
-    buttonRow.push({ text: 'Join Call', actionId: 'join_meeting', value: data.meetingId, url: data.meetingUrl, style: 'primary' });
+    buttonRow.push({ text: '🎥 Join Call', actionId: 'join_meeting', value: data.meetingId, url: data.meetingUrl, style: 'primary' });
   }
 
   if (data.deal) {
-    buttonRow.push({ text: 'View Deal', actionId: 'view_deal', value: data.deal.id, url: `${data.appUrl}/deals/${data.deal.id}` });
+    buttonRow.push({ text: '💼 View Deal', actionId: 'view_deal', value: data.deal.id, url: `${data.appUrl}/deals/${data.deal.id}` });
   }
 
   if (data.company.id) {
-    buttonRow.push({ text: 'Company Profile', actionId: 'view_company', value: data.company.id, url: `${data.appUrl}/companies/${data.company.id}` });
+    buttonRow.push({ text: '🏢 Company Profile', actionId: 'view_company', value: data.company.id, url: `${data.appUrl}/companies/${data.company.id}` });
   }
 
-  buttonRow.push({ text: 'Full Prep', actionId: 'view_meeting', value: data.meetingId, url: `${data.appUrl}/meetings/${data.meetingId}` });
+  buttonRow.push({ text: '📋 Full Prep', actionId: 'view_meeting', value: data.meetingId, url: `${data.appUrl}/meetings/${data.meetingId}` });
 
   blocks.push(actions(buttonRow.slice(0, 3)));
 
@@ -931,7 +843,7 @@ export const buildMeetingPrepMessage = (data: MeetingPrepData): SlackMessage => 
 
   // Context
   if (data.attendees.length > 1) {
-    blocks.push(context([`${data.attendees.length} attendees • ${data.company.industry || 'Company'}`]));
+    blocks.push(context([`👥 ${data.attendees.length} attendees • ${data.company.industry || 'Company'}`]));
   }
 
   return {
@@ -950,7 +862,7 @@ export const buildDealRoomMessage = (data: DealRoomData): SlackMessage => {
   const hasWinProb = data.winProbability !== undefined && data.winProbability !== null;
 
   // Header
-  blocks.push(header(`${truncate(companyName, 80)} Deal Room`));
+  blocks.push(header(`💰 ${truncate(companyName, 80)} Deal Room`));
 
   // Key deal info as fields
   blocks.push(sectionWithFields([
@@ -969,17 +881,17 @@ export const buildDealRoomMessage = (data: DealRoomData): SlackMessage => {
 
   const companyDetails = [industry, size, location].filter(Boolean).join(' • ');
   if (companyDetails) {
-    blocks.push(section(`*Company*\n${companyDetails}`));
+    blocks.push(section(`*🏢 Company*\n${companyDetails}`));
   }
 
   // Key Contacts
   const contacts = data.keyContacts || data.contacts || [];
   if (contacts.length > 0) {
     const contactLines = contacts.slice(0, 3).map((c) => {
-      const badge = c.isDecisionMaker ? '' : '';
+      const badge = c.isDecisionMaker ? ' 🎯' : '';
       return `• *${c.name}*${c.title ? ` (${c.title})` : ''}${badge}`;
     });
-    blocks.push(section(`*Key Contacts*\n${contactLines.join('\n')}`));
+    blocks.push(section(`*👥 Key Contacts*\n${contactLines.join('\n')}`));
   }
 
   // AI Assessment
@@ -987,20 +899,20 @@ export const buildDealRoomMessage = (data: DealRoomData): SlackMessage => {
     blocks.push(divider());
     const assessmentLines: string[] = [];
     if (data.aiAssessment.keyFactors?.length > 0) {
-      assessmentLines.push(`${data.aiAssessment.keyFactors.slice(0, 2).join(', ')}`);
+      assessmentLines.push(`✅ ${data.aiAssessment.keyFactors.slice(0, 2).join(', ')}`);
     }
     if (data.aiAssessment.risks?.length > 0) {
-      assessmentLines.push(`${data.aiAssessment.risks.slice(0, 2).join(', ')}`);
+      assessmentLines.push(`⚠️ ${data.aiAssessment.risks.slice(0, 2).join(', ')}`);
     }
     if (assessmentLines.length > 0) {
-      blocks.push(section(`*AI Assessment*\n${assessmentLines.join('\n')}`));
+      blocks.push(section(`*🤖 AI Assessment*\n${assessmentLines.join('\n')}`));
     }
   }
 
   // Action buttons
   blocks.push(actions([
-    { text: 'View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}`, style: 'primary' },
-    { text: 'Log Activity', actionId: 'log_activity', value: data.dealId },
+    { text: '💼 View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}`, style: 'primary' },
+    { text: '📝 Log Activity', actionId: 'log_activity', value: data.dealId },
   ]));
 
   // Context
@@ -1028,7 +940,7 @@ export const buildDealStageChangeMessage = (data: DealStageChangeData): SlackMes
   const prevIndex = stages.indexOf(data.previousStage.toLowerCase());
   const newIndex = stages.indexOf(data.newStage.toLowerCase());
   const isProgress = newIndex > prevIndex;
-  const emoji = '';
+  const emoji = isProgress ? '🚀' : '⚠️';
 
   blocks.push(section(`${emoji} *Stage Update*\n*${data.dealName}*\n${data.previousStage} → *${data.newStage}*`));
 
@@ -1036,7 +948,7 @@ export const buildDealStageChangeMessage = (data: DealStageChangeData): SlackMes
 
   if (data.dealId && data.appUrl) {
     blocks.push(actions([
-      { text: 'View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` },
+      { text: '💼 View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` },
     ]));
   }
 
@@ -1054,21 +966,21 @@ export const buildDealActivityMessage = (data: DealActivityData): SlackMessage =
   const userMention = data.slackUserId ? `<@${data.slackUserId}>` : data.createdBy;
 
   const activityEmoji: Record<string, string> = {
-    'call': '',
-    'email': '',
-    'meeting': '',
-    'proposal': '',
-    'note': '',
-    'task': '',
-    'demo': '',
+    'call': '📞',
+    'email': '📧',
+    'meeting': '📅',
+    'proposal': '📝',
+    'note': '📌',
+    'task': '✅',
+    'demo': '🎬',
   };
-  const emoji = activityEmoji[data.activityType.toLowerCase()] || '';
+  const emoji = activityEmoji[data.activityType.toLowerCase()] || '📢';
 
   blocks.push(section(`${emoji} *${data.activityType}* by ${userMention}\n\n${truncate(data.description, 300)}`));
 
   if (data.dealId && data.appUrl) {
     blocks.push(actions([
-      { text: 'View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` },
+      { text: '💼 View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` },
     ]));
   }
 
@@ -1086,9 +998,9 @@ export const buildWinProbabilityChangeMessage = (data: WinProbabilityChangeData)
 
   const change = data.newProbability - data.previousProbability;
   const isIncrease = change > 0;
-  const emoji = '';
+  const emoji = isIncrease ? '📈' : '⚠️';
   const direction = isIncrease ? '↑' : '↓';
-  const headerEmoji = '';
+  const headerEmoji = isIncrease ? '🟢' : '🔴';
 
   blocks.push(header(`${headerEmoji} Win Probability ${isIncrease ? 'Increased' : 'Dropped'}`));
 
@@ -1098,20 +1010,20 @@ export const buildWinProbabilityChangeMessage = (data: WinProbabilityChangeData)
   ]));
 
   if (data.factors && data.factors.length > 0) {
-    blocks.push(section(`*${isIncrease ? 'Positive Signals' : 'Risk Factors'}*\n${data.factors.slice(0, 3).map(f => `• ${truncate(f, 100)}`).join('\n')}`));
+    blocks.push(section(`*${isIncrease ? '✅ Positive Signals' : '⚠️ Risk Factors'}*\n${data.factors.slice(0, 3).map(f => `• ${truncate(f, 100)}`).join('\n')}`));
   }
 
   if (!isIncrease && data.suggestedActions && data.suggestedActions.length > 0) {
-    blocks.push(section(`*Suggested Actions*\n${data.suggestedActions.slice(0, 3).map(a => `• ${truncate(a, 100)}`).join('\n')}`));
+    blocks.push(section(`*🎯 Suggested Actions*\n${data.suggestedActions.slice(0, 3).map(a => `• ${truncate(a, 100)}`).join('\n')}`));
   }
 
   const buttonRow: Array<{ text: string; actionId: string; value: string; url?: string; style?: 'primary' | 'danger' }> = [];
 
   if (data.dealId && data.appUrl) {
-    buttonRow.push({ text: 'View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}`, style: 'primary' });
+    buttonRow.push({ text: '💼 View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}`, style: 'primary' });
   }
   if (!isIncrease) {
-    buttonRow.push({ text: 'Create Task', actionId: 'create_task_from_alert', value: JSON.stringify({ dealId: data.dealId, type: 'win_probability' }) });
+    buttonRow.push({ text: '📝 Create Task', actionId: 'create_task_from_alert', value: JSON.stringify({ dealId: data.dealId, type: 'win_probability' }) });
   }
 
   blocks.push(actions(buttonRow.slice(0, 3)));
@@ -1130,32 +1042,32 @@ export const buildDealWonMessage = (data: DealWonData): SlackMessage => {
   const userMention = data.slackUserId ? `<@${data.slackUserId}>` : data.closedBy;
 
   // Celebratory header
-  blocks.push(header('DEAL WON!'));
+  blocks.push(header(`🎉 DEAL WON!`));
 
   // Main announcement
-  blocks.push(section(`*${data.companyName}* just signed!\n\n*${formatCurrency(data.dealValue, data.currencyCode, data.currencyLocale)}* Contract${data.daysInPipeline ? `\n*${data.daysInPipeline} days* in pipeline` : ''}`));
+  blocks.push(section(`*${data.companyName}* just signed!\n\n💰 *${formatCurrency(data.dealValue, data.currencyCode, data.currencyLocale)}* Contract${data.daysInPipeline ? `\n⏱️ *${data.daysInPipeline} days* in pipeline` : ''}`));
 
   blocks.push(divider());
 
   // Winning factors (if provided)
   if (data.winningFactors && data.winningFactors.length > 0) {
-    const factorLines = data.winningFactors.slice(0, 3).map(f => `• ${truncate(f, 80)}`);
+    const factorLines = data.winningFactors.slice(0, 3).map(f => `✅ ${truncate(f, 80)}`);
     blocks.push(section(`*Winning Factors*\n${factorLines.join('\n')}`));
   }
 
   // Context
-  blocks.push(context([`Closed by ${userMention} • Great work!`]));
+  blocks.push(context([`Closed by ${userMention} • 🏆 Great work!`]));
 
   // Action buttons
   blocks.push(actions([
-    { text: 'Celebrate', actionId: 'celebrate_deal', value: data.dealId, style: 'primary' },
-    { text: 'Case Study', actionId: 'create_case_study', value: data.dealId },
-    { text: 'View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` },
+    { text: '🎊 Celebrate', actionId: 'celebrate_deal', value: data.dealId, style: 'primary' },
+    { text: '📝 Case Study', actionId: 'create_case_study', value: data.dealId },
+    { text: '💼 View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` },
   ]));
 
   return {
     blocks,
-    text: `Deal Won! ${data.companyName} - ${formatCurrency(data.dealValue, data.currencyCode, data.currencyLocale)}`,
+    text: `🎉 Deal Won! ${data.companyName} - ${formatCurrency(data.dealValue, data.currencyCode, data.currencyLocale)}`,
   };
 };
 
@@ -1166,7 +1078,7 @@ export const buildDealLostMessage = (data: DealLostData): SlackMessage => {
   const blocks: SlackBlock[] = [];
   const userMention = data.slackUserId ? `<@${data.slackUserId}>` : data.closedBy;
 
-  blocks.push(section(`*Deal Lost*\n\n*${data.companyName}* - ${formatCurrency(data.dealValue, data.currencyCode, data.currencyLocale)}`));
+  blocks.push(section(`😔 *Deal Lost*\n\n*${data.companyName}* - ${formatCurrency(data.dealValue, data.currencyCode, data.currencyLocale)}`));
 
   if (data.lostReason) {
     blocks.push(section(`*Reason:* ${truncate(data.lostReason, 200)}`));
@@ -1174,7 +1086,7 @@ export const buildDealLostMessage = (data: DealLostData): SlackMessage => {
 
   // Lessons learned (if provided)
   if (data.lessonsLearned && data.lessonsLearned.length > 0) {
-    const lessonLines = data.lessonsLearned.slice(0, 2).map(l => `• ${truncate(l, 100)}`);
+    const lessonLines = data.lessonsLearned.slice(0, 2).map(l => `📝 ${truncate(l, 100)}`);
     blocks.push(section(`*Takeaways*\n${lessonLines.join('\n')}`));
   }
 
@@ -1182,7 +1094,7 @@ export const buildDealLostMessage = (data: DealLostData): SlackMessage => {
 
   if (data.dealId && data.appUrl) {
     blocks.push(actions([
-      { text: 'View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` },
+      { text: '💼 View Deal', actionId: 'view_deal', value: data.dealId, url: `${data.appUrl}/deals/${data.dealId}` },
     ]));
   }
 
@@ -1197,8 +1109,8 @@ export const buildDealLostMessage = (data: DealLostData): SlackMessage => {
  */
 export const buildTaskAddedConfirmation = (taskTitle: string, count: number = 1): SlackMessage => {
   const message = count === 1
-    ? `Task added: "${truncate(taskTitle, 60)}"`
-    : `${count} tasks added to your task list!`;
+    ? `✅ Task added: "${truncate(taskTitle, 60)}"`
+    : `✅ ${count} tasks added to your task list!`;
 
   return {
     blocks: [section(message)],
@@ -1217,7 +1129,9 @@ export type HITLResourceType =
   | 'summary'
   | 'meeting_notes'
   | 'proposal_section'
-  | 'coaching_tip';
+  | 'coaching_tip'
+  | 'calendar_slots'
+  | 'proposal';
 
 export interface HITLApprovalData {
   approvalId: string;
@@ -1240,14 +1154,6 @@ export interface HITLApprovalData {
     meetingTitle?: string;
     meetingId?: string;
     confidence?: number;
-  };
-  contextBadge?: {
-    transcript: boolean;
-    priorMeetings: number;
-    commitmentsTracked: number;
-    dealContext: boolean;
-    writingStyle: boolean;
-    credits?: number;
   };
   expiresAt?: string;
   appUrl: string;
@@ -1301,15 +1207,17 @@ export interface HITLActionedConfirmation {
  */
 const getHITLResourceEmoji = (resourceType: HITLResourceType): string => {
   const emojiMap: Record<HITLResourceType, string> = {
-    'email_draft': '',
-    'follow_up': '',
-    'task_list': '',
-    'summary': '',
-    'meeting_notes': '',
-    'proposal_section': '',
-    'coaching_tip': '',
+    'email_draft': '📧',
+    'follow_up': '📞',
+    'task_list': '✅',
+    'summary': '📝',
+    'meeting_notes': '🎯',
+    'proposal_section': '📄',
+    'coaching_tip': '💡',
+    'calendar_slots': '📅',
+    'proposal': '📋',
   };
-  return emojiMap[resourceType] || '';
+  return emojiMap[resourceType] || '📋';
 };
 
 /**
@@ -1334,52 +1242,18 @@ export const buildHITLApprovalMessage = (data: HITLApprovalData): SlackMessage =
   // Header with resource type badge
   blocks.push(header(`${emoji} Review: ${truncate(typeLabel, 80)}`));
 
-  // Entity context block (SLK-006) — structured deal/contact summary after header
-  const entityCtx = entityContextBlock({
-    dealName: data.context?.dealName,
-    contactName: data.context?.contactName,
-  });
-  if (entityCtx) blocks.push(entityCtx);
-
   // Context section (deal, contact, meeting)
   if (data.context) {
     const contextParts: string[] = [];
-    if (data.context.meetingTitle) contextParts.push(`${truncate(data.context.meetingTitle, 40)}`);
+    if (data.context.dealName) contextParts.push(`💼 ${truncate(data.context.dealName, 40)}`);
+    if (data.context.contactName) contextParts.push(`👤 ${truncate(data.context.contactName, 30)}`);
+    if (data.context.meetingTitle) contextParts.push(`📅 ${truncate(data.context.meetingTitle, 40)}`);
     if (data.context.confidence !== undefined) {
-      contextParts.push(`${data.context.confidence}% confidence`);
+      contextParts.push(`🎯 ${data.context.confidence}% confidence`);
     }
 
     if (contextParts.length > 0) {
       blocks.push(context(contextParts));
-    }
-  }
-
-  // Context badge — show what context sources the AI used (FU-006)
-  if (data.contextBadge) {
-    const badge = data.contextBadge;
-    const badgeLines: string[] = [];
-
-    badgeLines.push('*Context used:*');
-    badgeLines.push(`├─ Today's transcript ${badge.transcript ? '✅' : '—'}`);
-
-    if (badge.priorMeetings > 0) {
-      badgeLines.push(`├─ ${badge.priorMeetings} prior meeting${badge.priorMeetings === 1 ? '' : 's'} via RAG ✅`);
-    }
-
-    if (badge.commitmentsTracked > 0) {
-      badgeLines.push(`├─ ${badge.commitmentsTracked} open commitment${badge.commitmentsTracked === 1 ? '' : 's'} tracked ✅`);
-    }
-
-    if (badge.dealContext) {
-      badgeLines.push(`├─ Deal context ✅`);
-    }
-
-    badgeLines.push(`└─ Rep writing style ${badge.writingStyle ? 'applied ✅' : '—'}`);
-
-    blocks.push(section(safeMrkdwn(badgeLines.join('\n'))));
-
-    if (badge.credits != null) {
-      blocks.push(context([safeContextMrkdwn(`Credits: ${badge.credits.toFixed(1)}`)]));
     }
   }
 
@@ -1424,28 +1298,22 @@ export const buildHITLApprovalMessage = (data: HITLApprovalData): SlackMessage =
     elements: [
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Approve'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('✅ Approve'), emoji: true },
         style: 'primary',
         action_id: `approve::${data.resourceType}::${data.approvalId}`,
         value: safeButtonValue(callbackValue),
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Edit'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('✏️ Edit'), emoji: true },
         action_id: `edit::${data.resourceType}::${data.approvalId}`,
         value: safeButtonValue(callbackValue),
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Reject'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('❌ Reject'), emoji: true },
         style: 'danger',
         action_id: `reject::${data.resourceType}::${data.approvalId}`,
-        value: safeButtonValue(callbackValue),
-      },
-      {
-        type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Regenerate'), emoji: true },
-        action_id: `regenerate::${data.resourceType}::${data.approvalId}`,
         value: safeButtonValue(callbackValue),
       },
     ],
@@ -1456,7 +1324,7 @@ export const buildHITLApprovalMessage = (data: HITLApprovalData): SlackMessage =
   if (data.expiresAt) {
     const expiresDate = new Date(data.expiresAt);
     const hoursLeft = Math.max(0, Math.round((expiresDate.getTime() - Date.now()) / 3600000));
-    contextItems.push(`Expires in ${hoursLeft} hours`);
+    contextItems.push(`⏱️ Expires in ${hoursLeft} hours`);
   }
   if (data.resourceName) {
     contextItems.push(truncate(data.resourceName, 60));
@@ -1464,16 +1332,6 @@ export const buildHITLApprovalMessage = (data: HITLApprovalData): SlackMessage =
   if (contextItems.length > 0) {
     blocks.push(context([contextItems.join(' • ')]));
   }
-
-  // Deep link footer (SLK-005)
-  const linkFooter = buildLinkFooter({
-    appUrl: data.appUrl,
-    dealId: data.context?.dealId,
-    dealName: data.context?.dealName,
-    meetingId: data.context?.meetingId,
-    meetingTitle: data.context?.meetingTitle,
-  });
-  if (linkFooter) blocks.push(linkFooter);
 
   return {
     blocks,
@@ -1488,7 +1346,7 @@ export const buildHITLApprovalMessage = (data: HITLApprovalData): SlackMessage =
 export const buildHITLConfirmationMessage = (data: HITLConfirmationData): SlackMessage => {
   const blocks: SlackBlock[] = [];
 
-  blocks.push(header(`${truncate(data.title, 100)}`));
+  blocks.push(header(`☑️ ${truncate(data.title, 100)}`));
 
   if (data.context) {
     blocks.push(context([truncate(data.context, 150)]));
@@ -1545,20 +1403,20 @@ export const buildHITLConfirmationMessage = (data: HITLConfirmationData): SlackM
     elements: [
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Confirm Selected'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('✅ Confirm Selected'), emoji: true },
         style: 'primary',
         action_id: `confirm_selected::confirmation::${data.approvalId}`,
         value: safeButtonValue(JSON.stringify({ approvalId: data.approvalId })),
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Confirm All'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('✅ Confirm All'), emoji: true },
         action_id: `confirm_all::confirmation::${data.approvalId}`,
         value: safeButtonValue(JSON.stringify({ approvalId: data.approvalId, itemIds: allItemIds })),
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Cancel'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('❌ Cancel'), emoji: true },
         style: 'danger',
         action_id: `cancel::confirmation::${data.approvalId}`,
         value: safeButtonValue(JSON.stringify({ approvalId: data.approvalId })),
@@ -1579,12 +1437,12 @@ export const buildHITLConfirmationMessage = (data: HITLConfirmationData): SlackM
 export const buildHITLEditRequestMessage = (data: HITLEditRequestData): SlackMessage => {
   const blocks: SlackBlock[] = [];
 
-  blocks.push(header('Suggested Changes'));
+  blocks.push(header(`📝 Suggested Changes`));
 
   if (data.context?.dealName) {
     const contextText = data.context.reason
-      ? `${truncate(data.context.dealName, 40)} • ${truncate(data.context.reason, 60)}`
-      : `${truncate(data.context.dealName, 60)}`;
+      ? `💼 ${truncate(data.context.dealName, 40)} • ${truncate(data.context.reason, 60)}`
+      : `💼 ${truncate(data.context.dealName, 60)}`;
     blocks.push(context([contextText]));
   }
 
@@ -1617,20 +1475,20 @@ export const buildHITLEditRequestMessage = (data: HITLEditRequestData): SlackMes
     elements: [
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Use Suggested'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('✅ Use Suggested'), emoji: true },
         style: 'primary',
         action_id: `use_suggested::${data.resourceType}::${data.approvalId}`,
         value: safeButtonValue(JSON.stringify({ ...JSON.parse(callbackValue), choice: 'suggested' })),
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Keep Original'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('📝 Keep Original'), emoji: true },
         action_id: `keep_original::${data.resourceType}::${data.approvalId}`,
         value: safeButtonValue(JSON.stringify({ ...JSON.parse(callbackValue), choice: 'original' })),
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Customize'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('✏️ Customize'), emoji: true },
         action_id: `customize::${data.resourceType}::${data.approvalId}`,
         value: safeButtonValue(callbackValue),
       },
@@ -1650,12 +1508,12 @@ export const buildHITLActionedConfirmation = (data: HITLActionedConfirmation): S
   const blocks: SlackBlock[] = [];
 
   const actionConfig: Record<string, { emoji: string; label: string }> = {
-    'approved': { emoji: '', label: 'Approved' },
-    'rejected': { emoji: '', label: 'Rejected' },
-    'edited': { emoji: '', label: 'Edited & Approved' },
+    'approved': { emoji: '✅', label: 'Approved' },
+    'rejected': { emoji: '❌', label: 'Rejected' },
+    'edited': { emoji: '✏️', label: 'Edited & Approved' },
   };
 
-  const config = actionConfig[data.action] || { emoji: '', label: data.action };
+  const config = actionConfig[data.action] || { emoji: '📋', label: data.action };
   const userMention = data.slackUserId ? `<@${data.slackUserId}>` : data.actionedBy;
   const typeLabel = formatResourceType(data.resourceType);
 
@@ -1669,12 +1527,12 @@ export const buildHITLActionedConfirmation = (data: HITLActionedConfirmation): S
 
   // Edit summary (if edited)
   if (data.action === 'edited' && data.editSummary) {
-    blocks.push(context([`${truncate(data.editSummary, 150)}`]));
+    blocks.push(context([`✏️ ${truncate(data.editSummary, 150)}`]));
   }
 
   // Rejection reason (if rejected)
   if (data.action === 'rejected' && data.rejectionReason) {
-    blocks.push(context([`_"${truncate(data.rejectionReason, 150)}"_`]));
+    blocks.push(context([`💬 _"${truncate(data.rejectionReason, 150)}"_`]));
   }
 
   // Timestamp
@@ -1796,7 +1654,7 @@ export const buildMorningBriefMessage = (data: MorningBriefData): SlackMessage =
   };
 
   // Header
-  blocks.push(header(safeHeaderText(`Good morning, ${data.userName}`)));
+  blocks.push(header(safeHeaderText(`☀️ Good morning, ${data.userName}`)));
 
   blocks.push(section(safeMrkdwn(`*Here's your day at a glance*`)));
   blocks.push(divider());
@@ -2044,17 +1902,7 @@ export const buildStaleDealAlertMessage = (data: StaleDealAlertData): SlackMessa
   };
 
   // Header
-  blocks.push(header(safeHeaderText('Deal going cold')));
-
-  // Entity context block (SLK-006) — deal name + last activity date
-  const staleEntityCtx = entityContextBlock({
-    dealName: data.deal.name,
-    dealStage: data.deal.stage,
-    lastActivity: data.deal.lastActivityDate
-      ? new Date(data.deal.lastActivityDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-      : `${data.deal.daysSinceLastActivity} days ago`,
-  });
-  if (staleEntityCtx) blocks.push(staleEntityCtx);
+  blocks.push(header(safeHeaderText(`⚠️ Deal going cold`)));
 
   blocks.push(section(safeMrkdwn(
     `*${data.deal.name}* - No activity in *${data.deal.daysSinceLastActivity} day${data.deal.daysSinceLastActivity !== 1 ? 's' : ''}*`
@@ -2062,7 +1910,7 @@ export const buildStaleDealAlertMessage = (data: StaleDealAlertData): SlackMessa
 
   // Context
   const contextParts: string[] = [];
-  contextParts.push(`${formatCurrency(data.deal.value)}`);
+  contextParts.push(`💰 ${formatCurrency(data.deal.value)}`);
   contextParts.push(`${data.deal.stage} stage`);
   if (data.deal.closeDate) {
     const daysUntilClose = data.deal.daysUntilClose || 0;
@@ -2082,7 +1930,7 @@ export const buildStaleDealAlertMessage = (data: StaleDealAlertData): SlackMessa
   // Activity timeline
   if (data.deal.lastActivityType) {
     blocks.push(section(safeMrkdwn(
-      `*Last activity*\n\n• ${data.deal.lastActivityType}${data.deal.lastActivityDate ? ` (${new Date(data.deal.lastActivityDate).toLocaleDateString()})` : ''}\n• _${data.deal.daysSinceLastActivity} days of silence..._`
+      `📊 *Last activity*\n\n• ${data.deal.lastActivityType}${data.deal.lastActivityDate ? ` (${new Date(data.deal.lastActivityDate).toLocaleDateString()})` : ''}\n• _${data.deal.daysSinceLastActivity} days of silence..._`
     )));
   }
 
@@ -2093,13 +1941,13 @@ export const buildStaleDealAlertMessage = (data: StaleDealAlertData): SlackMessa
       .map(a => `• ${a}`)
       .join('\n');
     
-    blocks.push(section(safeMrkdwn(`*Suggested next steps*\n\n${actionsText}`)));
+    blocks.push(section(safeMrkdwn(`💡 *Suggested next steps*\n\n${actionsText}`)));
   }
 
   // Re-engagement draft (if available)
   if (data.reEngagementDraft) {
     blocks.push(divider());
-    blocks.push(section(safeMrkdwn(`*Re-engagement draft*`)));
+    blocks.push(section(safeMrkdwn(`📧 *Re-engagement draft*`)));
     blocks.push(section(safeMrkdwn(`_${safeMrkdwn(data.reEngagementDraft.substring(0, 500))}_`)));
   }
 
@@ -2108,17 +1956,17 @@ export const buildStaleDealAlertMessage = (data: StaleDealAlertData): SlackMessa
   // Actions
   blocks.push(actions([
     {
-      text: { type: 'plain_text', text: safeButtonText('Open Deal'), emoji: true },
+      text: { type: 'plain_text', text: safeButtonText('📄 Open Deal'), emoji: true },
       url: `${data.appUrl}/deals/${data.deal.id}`,
       action_id: 'open_deal',
     },
     {
-      text: { type: 'plain_text', text: safeButtonText('Create Task'), emoji: true },
+      text: { type: 'plain_text', text: safeButtonText('➕ Create Task'), emoji: true },
       action_id: 'create_task',
       value: safeButtonValue(JSON.stringify({ dealId: data.deal.id, dealName: data.deal.name })),
     },
     {
-      text: { type: 'plain_text', text: safeButtonText('Send Check-in'), emoji: true },
+      text: { type: 'plain_text', text: safeButtonText('✉️ Send Check-in'), emoji: true },
       action_id: 'send_checkin',
       value: safeButtonValue(JSON.stringify({ dealId: data.deal.id })),
     },
@@ -2165,22 +2013,13 @@ export interface EmailReplyAlertData {
 export const buildEmailReplyAlertMessage = (data: EmailReplyAlertData): SlackMessage => {
   const blocks: SlackBlock[] = [];
   const userName = data.slackUserId ? `<@${data.slackUserId}>` : data.userName;
-  const sentimentEmoji = '';
+  const sentimentEmoji = data.sentiment === 'positive' ? '🟢' : data.sentiment === 'negative' ? '🔴' : '🟡';
 
   // Header
-  blocks.push(header(safeHeaderText('Reply received')));
-
-  // Entity context block (SLK-006) — contact name + company + deal context
-  const emailEntityCtx = entityContextBlock({
-    contactName: data.contact?.name,
-    companyName: data.contact?.companyName,
-    dealName: data.deal?.name,
-    dealStage: data.deal?.stage,
-  });
-  if (emailEntityCtx) blocks.push(emailEntityCtx);
+  blocks.push(header(safeHeaderText(`📬 Reply received`)));
 
   const fromDisplay = data.contact?.name || data.email.fromName || data.email.from;
-  const contextText = data.deal
+  const contextText = data.deal 
     ? `*${fromDisplay}* from *${data.contact?.companyName || 'Unknown'}* replied to your email`
     : `*${fromDisplay}* replied to your email`;
 
@@ -2201,20 +2040,20 @@ export const buildEmailReplyAlertMessage = (data: EmailReplyAlertData): SlackMes
       .map(p => `• ${p}`)
       .join('\n');
     
-    blocks.push(section(safeMrkdwn(`*Key points detected*\n\n${pointsText}`)));
+    blocks.push(section(safeMrkdwn(`💡 *Key points detected*\n\n${pointsText}`)));
   }
 
   // Deal context
   if (data.deal) {
     blocks.push(section(safeMrkdwn(
-      `*Deal context*\n• ${data.deal.name} • ${data.deal.stage} stage`
+      `💰 *Deal context*\n• ${data.deal.name} • ${data.deal.stage} stage`
     )));
   }
 
   // Suggested reply
   if (data.suggestedReply) {
     blocks.push(divider());
-    blocks.push(section(safeMrkdwn(`*Suggested reply*`)));
+    blocks.push(section(safeMrkdwn(`📝 *Suggested reply*`)));
     blocks.push(section(safeMrkdwn(`_${safeMrkdwn(data.suggestedReply.substring(0, 800))}_`)));
   }
 
@@ -2226,7 +2065,7 @@ export const buildEmailReplyAlertMessage = (data: EmailReplyAlertData): SlackMes
       .map(a => `• ${a}`)
       .join('\n');
     
-    blocks.push(section(safeMrkdwn(`*Suggested next steps*\n\n${actionsText}`)));
+    blocks.push(section(safeMrkdwn(`⚡ *Suggested next steps*\n\n${actionsText}`)));
   }
 
   blocks.push(divider());
@@ -2234,7 +2073,7 @@ export const buildEmailReplyAlertMessage = (data: EmailReplyAlertData): SlackMes
   // Actions
   const actionButtons: any[] = [
     {
-      text: { type: 'plain_text', text: safeButtonText('Reply'), emoji: true },
+      text: { type: 'plain_text', text: safeButtonText('✉️ Reply'), emoji: true },
       style: 'primary',
       action_id: 'reply_email',
       value: safeButtonValue(JSON.stringify({ 
@@ -2246,7 +2085,7 @@ export const buildEmailReplyAlertMessage = (data: EmailReplyAlertData): SlackMes
 
   if (data.suggestedReply) {
     actionButtons.push({
-      text: { type: 'plain_text', text: safeButtonText('Edit First'), emoji: true },
+      text: { type: 'plain_text', text: safeButtonText('✏️ Edit First'), emoji: true },
       action_id: 'edit_reply',
       value: safeButtonValue(JSON.stringify({ 
         threadId: data.email.threadId,
@@ -2257,14 +2096,14 @@ export const buildEmailReplyAlertMessage = (data: EmailReplyAlertData): SlackMes
 
   if (data.deal) {
     actionButtons.push({
-      text: { type: 'plain_text', text: safeButtonText('Update Deal'), emoji: true },
+      text: { type: 'plain_text', text: safeButtonText('🔄 Update Deal'), emoji: true },
       action_id: 'update_deal',
       value: safeButtonValue(JSON.stringify({ dealId: data.deal.id })),
     });
   }
 
   actionButtons.push({
-    text: { type: 'plain_text', text: safeButtonText('View Email'), emoji: true },
+    text: { type: 'plain_text', text: safeButtonText('📄 View Email'), emoji: true },
     url: `${data.appUrl}/emails${data.email.threadId ? `?thread=${data.email.threadId}` : ''}`,
     action_id: 'view_email',
   });
@@ -2320,29 +2159,29 @@ export interface ContactCardData {
 export const buildContactCardMessage = (data: ContactCardData): SlackMessage => {
   const blocks: SlackBlock[] = [];
   const c = data.contact;
-  const sourceBadge = c.source === 'hubspot' ? ' (HubSpot)' : '';
+  const sourceBadge = c.source === 'hubspot' ? ' 🔄' : '';
 
   // Header with name and company
   const headerText = c.company
-    ? `${truncate(c.full_name || 'Unknown', 50)} - ${truncate(c.company, 40)}`
-    : `${truncate(c.full_name || 'Unknown', 80)}`;
+    ? `👤 ${truncate(c.full_name || 'Unknown', 50)} - ${truncate(c.company, 40)}`
+    : `👤 ${truncate(c.full_name || 'Unknown', 80)}`;
   blocks.push(header(headerText));
 
   // Contact details as fields
   const fields: Array<{ label: string; value: string }> = [];
 
   if (c.email) {
-    fields.push({ label: 'Email', value: c.email });
+    fields.push({ label: '📧 Email', value: c.email });
   }
   if (c.phone) {
-    fields.push({ label: 'Phone', value: c.phone });
+    fields.push({ label: '📱 Phone', value: c.phone });
   }
   if (c.title) {
-    fields.push({ label: 'Title', value: c.title });
+    fields.push({ label: '💼 Title', value: c.title });
   }
   if (data.healthScore !== undefined) {
-    const healthEmoji = '';
-    fields.push({ label: 'Health', value: `${healthEmoji} ${data.healthScore}%` });
+    const healthEmoji = data.healthScore >= 80 ? '🟢' : data.healthScore >= 50 ? '🟡' : '🔴';
+    fields.push({ label: '❤️ Health', value: `${healthEmoji} ${data.healthScore}%` });
   }
 
   if (fields.length > 0) {
@@ -2354,24 +2193,24 @@ export const buildContactCardMessage = (data: ContactCardData): SlackMessage => 
   // Deal context
   if (data.dealContext) {
     const dealValue = formatCurrency(data.dealContext.value, data.currencyCode, data.currencyLocale);
-    blocks.push(section(`*Active Deal:* ${truncate(data.dealContext.name, 60)} - ${dealValue} (${data.dealContext.stage})`));
+    blocks.push(section(`🔗 *Active Deal:* ${truncate(data.dealContext.name, 60)} - ${dealValue} (${data.dealContext.stage})`));
   }
 
   // Last touch
   if (data.lastTouch) {
     const touchDate = new Date(data.lastTouch.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const touchSummary = data.lastTouch.summary ? ` - ${truncate(data.lastTouch.summary, 60)}` : '';
-    blocks.push(section(`*Last Touch:* ${touchDate} - ${data.lastTouch.type}${touchSummary}`));
+    blocks.push(section(`📅 *Last Touch:* ${touchDate} - ${data.lastTouch.type}${touchSummary}`));
   }
 
   // Next step
   if (data.nextStep) {
-    blocks.push(section(`*Next Step:* ${truncate(data.nextStep, 100)}`));
+    blocks.push(section(`⏭️ *Next Step:* ${truncate(data.nextStep, 100)}`));
   }
 
   // Risk signals
   if (data.riskSignals && data.riskSignals.length > 0) {
-    const riskLines = data.riskSignals.slice(0, 2).map(r => `• ${truncate(r, 80)}`);
+    const riskLines = data.riskSignals.slice(0, 2).map(r => `⚠️ ${truncate(r, 80)}`);
     blocks.push(section(riskLines.join('\n')));
   }
 
@@ -2381,21 +2220,21 @@ export const buildContactCardMessage = (data: ContactCardData): SlackMessage => 
   const buttonRow: Array<{ text: string; actionId: string; value: string; url?: string; style?: 'primary' }> = [];
 
   buttonRow.push({
-    text: 'Create Task',
+    text: '➕ Create Task',
     actionId: 'create_task_for_contact',
     value: JSON.stringify({ contactId: c.id, contactName: c.full_name }),
     style: 'primary',
   });
 
   buttonRow.push({
-    text: 'Draft Follow-up',
+    text: '✉️ Draft Follow-up',
     actionId: 'draft_followup_contact',
     value: JSON.stringify({ contactId: c.id, contactName: c.full_name, email: c.email }),
   });
 
   if (data.dealContext) {
     buttonRow.push({
-      text: 'View Deal',
+      text: '💼 View Deal',
       actionId: 'view_deal',
       value: data.dealContext.id,
       url: `${data.appUrl}/deals/${data.dealContext.id}`,
@@ -2411,16 +2250,6 @@ export const buildContactCardMessage = (data: ContactCardData): SlackMessage => 
   }
   contextItems.push(`Source: ${c.source === 'hubspot' ? 'HubSpot' : 'Sixty'}`);
   blocks.push(context(contextItems));
-
-  // Deep link footer (SLK-005)
-  const linkFooter = buildLinkFooter({
-    appUrl: data.appUrl,
-    contactId: c.id,
-    contactName: c.full_name || undefined,
-    dealId: data.dealContext?.id,
-    dealName: data.dealContext?.name,
-  });
-  if (linkFooter) blocks.push(linkFooter);
 
   return {
     blocks,
@@ -2468,26 +2297,26 @@ export const buildDealSnapshotMessage = (data: DealSnapshotData): SlackMessage =
   const blocks: SlackBlock[] = [];
   const d = data.deal;
   const dealValue = formatCurrency(d.value, data.currencyCode, data.currencyLocale);
-  const sourceBadge = d.source === 'hubspot' ? ' (HubSpot)' : '';
+  const sourceBadge = d.source === 'hubspot' ? ' 🔄' : '';
 
   // Header
   const headerText = d.company
-    ? `${truncate(d.name, 50)} - ${truncate(d.company, 40)}`
-    : `${truncate(d.name, 100)}`;
+    ? `💼 ${truncate(d.name, 50)} - ${truncate(d.company, 40)}`
+    : `💼 ${truncate(d.name, 100)}`;
   blocks.push(header(headerText));
 
   // Key metrics as fields
   const fields: Array<{ label: string; value: string }> = [];
-  fields.push({ label: 'Value', value: dealValue });
-  fields.push({ label: 'Stage', value: d.stageName || d.stage });
+  fields.push({ label: '💰 Value', value: dealValue });
+  fields.push({ label: '📊 Stage', value: d.stageName || d.stage });
 
   if (d.expectedCloseDate) {
     const closeDate = new Date(d.expectedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    fields.push({ label: 'Expected Close', value: closeDate });
+    fields.push({ label: '📅 Expected Close', value: closeDate });
   }
 
   if (d.probability !== undefined) {
-    fields.push({ label: 'Probability', value: `${d.probability}%` });
+    fields.push({ label: '🎯 Probability', value: `${d.probability}%` });
   }
 
   blocks.push(sectionWithFields(fields));
@@ -2495,12 +2324,12 @@ export const buildDealSnapshotMessage = (data: DealSnapshotData): SlackMessage =
   // Primary contact
   if (data.primaryContact) {
     const titlePart = data.primaryContact.title ? ` (${data.primaryContact.title})` : '';
-    blocks.push(section(`*Primary:* ${truncate(data.primaryContact.name, 50)}${titlePart}`));
+    blocks.push(section(`👤 *Primary:* ${truncate(data.primaryContact.name, 50)}${titlePart}`));
   }
 
   // Days in stage
   if (data.daysInStage !== undefined) {
-    const emoji = '';
+    const emoji = data.daysInStage > 14 ? '⚠️' : '📈';
     blocks.push(section(`${emoji} *Days in Stage:* ${data.daysInStage}`));
   }
 
@@ -2513,13 +2342,13 @@ export const buildDealSnapshotMessage = (data: DealSnapshotData): SlackMessage =
       const summary = a.summary ? ` - ${truncate(a.summary, 40)}` : '';
       return `• ${date} - ${a.type}${summary}`;
     });
-    blocks.push(section(`*Recent Activity:*\n${activityLines.join('\n')}`));
+    blocks.push(section(`*📋 Recent Activity:*\n${activityLines.join('\n')}`));
   }
 
   // Risks
   if (data.risks && data.risks.length > 0) {
     const riskLines = data.risks.slice(0, 2).map(r => `• ${truncate(r, 80)}`);
-    blocks.push(section(`*Risks:*\n${riskLines.join('\n')}`));
+    blocks.push(section(`*⚠️ Risks:*\n${riskLines.join('\n')}`));
   }
 
   blocks.push(divider());
@@ -2527,18 +2356,18 @@ export const buildDealSnapshotMessage = (data: DealSnapshotData): SlackMessage =
   // Action buttons
   blocks.push(actions([
     {
-      text: 'Update Stage',
+      text: '📊 Update Stage',
       actionId: 'update_deal_stage',
       value: JSON.stringify({ dealId: d.id, dealName: d.name }),
       style: 'primary',
     },
     {
-      text: 'Log Activity',
+      text: '📝 Log Activity',
       actionId: 'log_deal_activity',
       value: JSON.stringify({ dealId: d.id, dealName: d.name }),
     },
     {
-      text: 'Create Task',
+      text: '➕ Create Task',
       actionId: 'create_task_for_deal',
       value: JSON.stringify({ dealId: d.id, dealName: d.name }),
     },
@@ -2547,12 +2376,12 @@ export const buildDealSnapshotMessage = (data: DealSnapshotData): SlackMessage =
   // More actions row
   blocks.push(actions([
     {
-      text: 'Draft Check-in',
+      text: '✉️ Draft Check-in',
       actionId: 'draft_checkin_deal',
       value: JSON.stringify({ dealId: d.id, dealName: d.name, contactEmail: data.primaryContact?.email }),
     },
     {
-      text: 'View in App',
+      text: '💼 View in App',
       actionId: 'view_deal',
       value: d.id,
       url: `${data.appUrl}/deals/${d.id}`,
@@ -2608,7 +2437,7 @@ export const buildDayAtGlanceMessage = (data: DayAtGlanceData): SlackMessage => 
   const userMention = data.slackUserId ? `<@${data.slackUserId}>` : data.userName;
 
   // Header
-  blocks.push(header('Today at a Glance'));
+  blocks.push(header(`📅 Today at a Glance`));
   blocks.push(context([`${data.date} • ${userMention}`]));
 
   blocks.push(divider());
@@ -2620,9 +2449,9 @@ export const buildDayAtGlanceMessage = (data: DayAtGlanceData): SlackMessage => 
       const deal = m.dealValue ? ` - ${formatCurrency(m.dealValue, data.currencyCode, data.currencyLocale)}` : '';
       return `• *${m.time}* - ${truncate(m.title, 40)}${company}${deal}`;
     });
-    blocks.push(section(`*${data.meetings.length} Meeting${data.meetings.length !== 1 ? 's' : ''}*\n${meetingLines.join('\n')}`));
+    blocks.push(section(`*🗓️ ${data.meetings.length} Meeting${data.meetings.length !== 1 ? 's' : ''}*\n${meetingLines.join('\n')}`));
   } else {
-    blocks.push(section(`*No meetings today* - Focus time!`));
+    blocks.push(section(`*🗓️ No meetings today* - Focus time! 🎯`));
   }
 
   // Tasks section
@@ -2631,14 +2460,14 @@ export const buildDayAtGlanceMessage = (data: DayAtGlanceData): SlackMessage => 
     const taskLines: string[] = [];
 
     data.tasks.overdue.slice(0, 2).forEach(t => {
-      taskLines.push(`${truncate(t.title, 50)} _(${t.daysOverdue}d overdue)_`);
+      taskLines.push(`🔴 ${truncate(t.title, 50)} _(${t.daysOverdue}d overdue)_`);
     });
 
     data.tasks.dueToday.slice(0, 3).forEach(t => {
       taskLines.push(`• ${truncate(t.title, 60)}`);
     });
 
-    blocks.push(section(`*${totalTasks} Task${totalTasks !== 1 ? 's' : ''} Due*\n${taskLines.join('\n')}`));
+    blocks.push(section(`*✅ ${totalTasks} Task${totalTasks !== 1 ? 's' : ''} Due*\n${taskLines.join('\n')}`));
 
     if (data.tasks.overdue.length > 2 || data.tasks.dueToday.length > 3) {
       const moreCount = Math.max(0, data.tasks.overdue.length - 2) + Math.max(0, data.tasks.dueToday.length - 3);
@@ -2654,16 +2483,16 @@ export const buildDayAtGlanceMessage = (data: DayAtGlanceData): SlackMessage => 
         : '';
       return `• ${truncate(d.name, 35)} - ${formatCurrency(d.value, data.currencyCode, data.currencyLocale)} - ${d.stage}${closeInfo}`;
     });
-    blocks.push(section(`*${data.dealsClosingThisWeek.length} Deal${data.dealsClosingThisWeek.length !== 1 ? 's' : ''} Closing This Week*\n${dealLines.join('\n')}`));
+    blocks.push(section(`*💰 ${data.dealsClosingThisWeek.length} Deal${data.dealsClosingThisWeek.length !== 1 ? 's' : ''} Closing This Week*\n${dealLines.join('\n')}`));
   }
 
   // Email and engagement alerts
   const alerts: string[] = [];
   if (data.emailsToRespond > 0) {
-    alerts.push(`${data.emailsToRespond} email${data.emailsToRespond !== 1 ? 's' : ''} need response`);
+    alerts.push(`📧 ${data.emailsToRespond} email${data.emailsToRespond !== 1 ? 's' : ''} need response`);
   }
   if (data.ghostRiskContacts && data.ghostRiskContacts > 0) {
-    alerts.push(`${data.ghostRiskContacts} contact${data.ghostRiskContacts !== 1 ? 's' : ''} going cold`);
+    alerts.push(`👻 ${data.ghostRiskContacts} contact${data.ghostRiskContacts !== 1 ? 's' : ''} going cold`);
   }
 
   if (alerts.length > 0) {
@@ -2675,20 +2504,20 @@ export const buildDayAtGlanceMessage = (data: DayAtGlanceData): SlackMessage => 
   // Action buttons
   blocks.push(actions([
     {
-      text: 'View Dashboard',
+      text: '📊 View Dashboard',
       actionId: 'view_dashboard',
       value: 'dashboard',
       url: `${data.appUrl}/dashboard`,
       style: 'primary',
     },
     {
-      text: 'All Tasks',
+      text: '📋 All Tasks',
       actionId: 'view_tasks',
       value: 'tasks',
       url: `${data.appUrl}/tasks`,
     },
     {
-      text: 'Refresh',
+      text: '🔄 Refresh',
       actionId: 'refresh_today',
       value: 'refresh',
     },
@@ -2729,19 +2558,19 @@ export const buildFollowUpDraftMessage = (data: FollowUpDraftData): SlackMessage
   const blocks: SlackBlock[] = [];
 
   // Header
-  blocks.push(header('Follow-up Draft'));
+  blocks.push(header(`✉️ Follow-up Draft`));
 
   // Context
   const contextParts: string[] = [];
   if (data.recipient.company) {
-    contextParts.push(`${data.recipient.name} @ ${data.recipient.company}`);
+    contextParts.push(`👤 ${data.recipient.name} @ ${data.recipient.company}`);
   } else {
-    contextParts.push(`${data.recipient.name}`);
+    contextParts.push(`👤 ${data.recipient.name}`);
   }
   if (data.context?.dealName) {
-    contextParts.push(`${truncate(data.context.dealName, 30)}`);
+    contextParts.push(`💼 ${truncate(data.context.dealName, 30)}`);
   }
-  contextParts.push(`${data.confidence}% confidence`);
+  contextParts.push(`🎯 ${data.confidence}% confidence`);
   blocks.push(context(contextParts));
 
   blocks.push(divider());
@@ -2754,7 +2583,7 @@ export const buildFollowUpDraftMessage = (data: FollowUpDraftData): SlackMessage
   // Meeting context
   if (data.context?.lastMeetingDate) {
     const meetingDate = new Date(data.context.lastMeetingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    blocks.push(context([`Last meeting: ${meetingDate}${data.context.lastMeetingTitle ? ` - ${truncate(data.context.lastMeetingTitle, 40)}` : ''}`]));
+    blocks.push(context([`📅 Last meeting: ${meetingDate}${data.context.lastMeetingTitle ? ` - ${truncate(data.context.lastMeetingTitle, 40)}` : ''}`]));
   }
 
   blocks.push(divider());
@@ -2774,34 +2603,26 @@ export const buildFollowUpDraftMessage = (data: FollowUpDraftData): SlackMessage
     elements: [
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Approve & Send'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('✅ Approve & Send'), emoji: true },
         style: 'primary',
         action_id: `approve::follow_up::${data.approvalId}`,
         value: safeButtonValue(callbackValue),
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Edit'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('✏️ Edit'), emoji: true },
         action_id: `edit::follow_up::${data.approvalId}`,
         value: safeButtonValue(callbackValue),
       },
       {
         type: 'button',
-        text: { type: 'plain_text', text: safeButtonText('Reject'), emoji: true },
+        text: { type: 'plain_text', text: safeButtonText('❌ Reject'), emoji: true },
         style: 'danger',
         action_id: `reject::follow_up::${data.approvalId}`,
         value: safeButtonValue(callbackValue),
       },
     ],
   });
-
-  // Deep link footer (SLK-005)
-  const followUpLinkFooter = buildLinkFooter({
-    appUrl: data.appUrl,
-    dealId: data.context?.dealId,
-    dealName: data.context?.dealName,
-  });
-  if (followUpLinkFooter) blocks.push(followUpLinkFooter);
 
   return {
     blocks,
@@ -2830,7 +2651,7 @@ export interface SearchResultsPickerData {
  */
 export const buildSearchResultsPickerMessage = (data: SearchResultsPickerData): SlackMessage => {
   const blocks: SlackBlock[] = [];
-  const emoji = '';
+  const emoji = data.entityType === 'contact' ? '👤' : '💼';
   const label = data.entityType === 'contact' ? 'Contacts' : 'Deals';
 
   blocks.push(header(`${emoji} ${label} matching "${truncate(data.query, 30)}"`));
@@ -2841,7 +2662,7 @@ export const buildSearchResultsPickerMessage = (data: SearchResultsPickerData): 
     if (data.crmAvailable && data.showCrmButton) {
       blocks.push(actions([
         {
-          text: 'Search CRM',
+          text: '🔍 Search CRM',
           actionId: `search_crm_${data.entityType}`,
           value: JSON.stringify({ query: data.query, entityType: data.entityType }),
           style: 'primary',
@@ -2851,7 +2672,7 @@ export const buildSearchResultsPickerMessage = (data: SearchResultsPickerData): 
   } else {
     // Show results as buttons
     const resultButtons = data.results.slice(0, 5).map((r, i) => {
-      const sourceBadge = r.source === 'hubspot' ? ' (HubSpot)' : '';
+      const sourceBadge = r.source === 'hubspot' ? ' 🔄' : '';
       return {
         text: `${truncate(r.displayName, 35)}${sourceBadge}`,
         actionId: `select_${data.entityType}_${i}`,
@@ -2875,7 +2696,7 @@ export const buildSearchResultsPickerMessage = (data: SearchResultsPickerData): 
       blocks.push(divider());
       blocks.push(actions([
         {
-          text: 'Search CRM for more',
+          text: '🔍 Search CRM for more',
           actionId: `search_crm_${data.entityType}`,
           value: JSON.stringify({ query: data.query, entityType: data.entityType }),
         },
@@ -2956,10 +2777,10 @@ export interface DealMomentumData {
  * Get momentum score indicator
  */
 const getMomentumIndicator = (score: number): { emoji: string; label: string; color: string } => {
-  if (score >= 80) return { emoji: '', label: 'Strong', color: 'good' };
-  if (score >= 60) return { emoji: '', label: 'Fair', color: 'warning' };
-  if (score >= 40) return { emoji: '', label: 'Needs Attention', color: 'warning' };
-  return { emoji: '', label: 'At Risk', color: 'danger' };
+  if (score >= 80) return { emoji: '🟢', label: 'Strong', color: 'good' };
+  if (score >= 60) return { emoji: '🟡', label: 'Fair', color: 'warning' };
+  if (score >= 40) return { emoji: '🟠', label: 'Needs Attention', color: 'warning' };
+  return { emoji: '🔴', label: 'At Risk', color: 'danger' };
 };
 
 /**
@@ -2967,8 +2788,8 @@ const getMomentumIndicator = (score: number): { emoji: string; label: string; co
  */
 const getConfidenceIndicator = (confidence: number): string => {
   if (confidence >= 0.8) return '';       // High confidence, no indicator needed
-  if (confidence >= 0.6) return ' [?]';      // Medium confidence
-  return ' [!]';                             // Low confidence - needs attention
+  if (confidence >= 0.6) return '❓';      // Medium confidence
+  return '⚠️';                             // Low confidence - needs attention
 };
 
 /**
@@ -2976,7 +2797,7 @@ const getConfidenceIndicator = (confidence: number): string => {
  */
 const formatTruthFieldValue = (field: DealMomentumTruthField): string => {
   const indicator = getConfidenceIndicator(field.confidence);
-  const warning = field.isWarning ? ' [!]' : '';
+  const warning = field.isWarning ? ' ⚠️' : '';
 
   if (!field.value) {
     return `_Not defined_${warning}`;
@@ -3013,11 +2834,11 @@ const formatTruthFieldValue = (field: DealMomentumTruthField): string => {
  */
 const getMilestoneIcon = (milestone: DealMomentumMilestone): string => {
   switch (milestone.status) {
-    case 'completed': return '[done]';
-    case 'in_progress': return '[...]';
-    case 'blocked': return '[blocked]';
-    case 'skipped': return '[skip]';
-    default: return milestone.isOverdue ? '[!]' : '[ ]';
+    case 'completed': return '✅';
+    case 'in_progress': return '🔄';
+    case 'blocked': return '🚫';
+    case 'skipped': return '⏭️';
+    default: return milestone.isOverdue ? '⚠️' : '⬜';
   }
 };
 
@@ -3043,14 +2864,14 @@ export const buildDealMomentumMessage = (data: DealMomentumData): SlackMessage =
   const headerText = d.company
     ? `${truncate(d.name, 40)} - ${truncate(d.company, 30)}`
     : truncate(d.name, 75);
-  blocks.push(header(`${headerText}`));
+  blocks.push(header(`💼 ${headerText}`));
 
   // Momentum + Key metrics
   const momentum = getMomentumIndicator(data.scores.momentum);
   const metricsLine = [
     `*${momentum.emoji} Momentum:* ${data.scores.momentum}%`,
-    `*Value:* ${dealValue}`,
-    `*Stage:* ${d.stageName || d.stage}`,
+    `*💰 Value:* ${dealValue}`,
+    `*📊 Stage:* ${d.stageName || d.stage}`,
   ].join('  •  ');
   blocks.push(section(metricsLine));
 
@@ -3058,7 +2879,7 @@ export const buildDealMomentumMessage = (data: DealMomentumData): SlackMessage =
 
   // Deal Truth Section
   const clarityPct = data.scores.clarity;
-  const clarityEmoji = '';
+  const clarityEmoji = clarityPct >= 70 ? '🟢' : clarityPct >= 40 ? '🟡' : '🔴';
   blocks.push(section(`*${clarityEmoji} Deal Truth* (Clarity: ${clarityPct}%)`));
 
   // Display truth fields with indicators
@@ -3076,9 +2897,9 @@ export const buildDealMomentumMessage = (data: DealMomentumData): SlackMessage =
   // Close Plan Section
   const cp = data.closePlan;
   const progressBar = buildProgressBar(cp.completed, cp.total);
-  const overdueText = cp.overdue > 0 ? ` ${cp.overdue} overdue` : '';
-  const blockedText = cp.blocked > 0 ? ` ${cp.blocked} blocked` : '';
-  blocks.push(section(`*Close Plan* (${cp.completed}/${cp.total}) ${progressBar}${overdueText}${blockedText}`));
+  const overdueText = cp.overdue > 0 ? ` ⚠️ ${cp.overdue} overdue` : '';
+  const blockedText = cp.blocked > 0 ? ` 🚫 ${cp.blocked} blocked` : '';
+  blocks.push(section(`*📋 Close Plan* (${cp.completed}/${cp.total}) ${progressBar}${overdueText}${blockedText}`));
 
   // Display milestones
   const milestoneLines: string[] = [];
@@ -3112,7 +2933,7 @@ export const buildDealMomentumMessage = (data: DealMomentumData): SlackMessage =
   // Recommended Actions Section (if any)
   if (data.recommendedActions.length > 0) {
     blocks.push(divider());
-    blocks.push(section(`*Recommended Actions:*`));
+    blocks.push(section(`*💡 Recommended Actions:*`));
     const actionLines = data.recommendedActions.slice(0, 3).map(a => `• ${truncate(a, 80)}`);
     blocks.push(section(actionLines.join('\n')));
   }
@@ -3122,18 +2943,18 @@ export const buildDealMomentumMessage = (data: DealMomentumData): SlackMessage =
   // Action buttons - Row 1: Primary actions
   blocks.push(actions([
     {
-      text: 'Set Next Step',
+      text: '📅 Set Next Step',
       actionId: 'set_deal_next_step',
       value: JSON.stringify({ dealId: d.id, dealName: d.name }),
       style: 'primary',
     },
     {
-      text: 'Mark Milestone',
+      text: '✅ Mark Milestone',
       actionId: 'complete_deal_milestone',
       value: JSON.stringify({ dealId: d.id, dealName: d.name }),
     },
     {
-      text: 'Log Activity',
+      text: '📝 Log Activity',
       actionId: 'log_deal_activity',
       value: JSON.stringify({ dealId: d.id, dealName: d.name }),
     },
@@ -3142,12 +2963,12 @@ export const buildDealMomentumMessage = (data: DealMomentumData): SlackMessage =
   // Action buttons - Row 2: Secondary actions
   blocks.push(actions([
     {
-      text: 'Create Task',
+      text: '➕ Create Task',
       actionId: 'create_task_for_deal',
       value: JSON.stringify({ dealId: d.id, dealName: d.name }),
     },
     {
-      text: 'View in App',
+      text: '💼 View in App',
       actionId: 'view_deal',
       value: d.id,
       url: `${data.appUrl}/deals/${d.id}`,
@@ -3198,7 +3019,7 @@ export const buildClarificationQuestionMessage = (data: ClarificationQuestionDat
   const dealLabel = data.companyName
     ? `${data.dealName} (${data.companyName})`
     : data.dealName;
-  blocks.push(section(`*Quick question about ${truncate(dealLabel, 50)}*`));
+  blocks.push(section(`❓ *Quick question about ${truncate(dealLabel, 50)}*`));
 
   // The question
   blocks.push(section(data.question));
@@ -3234,7 +3055,7 @@ export const buildClarificationQuestionMessage = (data: ClarificationQuestionDat
   } else {
     // Simple Yes/No/Unknown for confirmation
     actionButtons.push({
-      text: 'Yes',
+      text: '✅ Yes',
       actionId: `confirm_truth_field_${data.fieldKey}`,
       value: JSON.stringify({
         dealId: data.dealId,
@@ -3245,7 +3066,7 @@ export const buildClarificationQuestionMessage = (data: ClarificationQuestionDat
       style: 'primary',
     });
     actionButtons.push({
-      text: 'No',
+      text: '❌ No',
       actionId: `confirm_truth_field_${data.fieldKey}`,
       value: JSON.stringify({
         dealId: data.dealId,
@@ -3258,7 +3079,7 @@ export const buildClarificationQuestionMessage = (data: ClarificationQuestionDat
 
   // Always add "Unknown" option
   actionButtons.push({
-    text: 'Unknown',
+    text: '❓ Unknown',
     actionId: `confirm_truth_field_${data.fieldKey}`,
     value: JSON.stringify({
       dealId: data.dealId,
@@ -3474,7 +3295,7 @@ export interface WeeklyCoachingDigestData {
  */
 export const buildCoachingMicroFeedbackMessage = (data: CoachingMicroFeedbackData): SlackMessage => {
   const blocks: SlackBlock[] = [];
-  const title = safeHeaderText(`Quick Coaching: ${data.meetingTitle}`);
+  const title = safeHeaderText(`🎯 Quick Coaching: ${data.meetingTitle}`);
 
   blocks.push(header(title));
   blocks.push(divider());
@@ -3483,11 +3304,11 @@ export const buildCoachingMicroFeedbackMessage = (data: CoachingMicroFeedbackDat
   const scoreBar = (score: number, max = 1): string => {
     const pct = Math.round(score * (max === 1 ? 100 : 1));
     const filled = Math.round(pct / 10);
-    return '█'.repeat(Math.min(filled, 10)) + '░'.repeat(Math.max(10 - filled, 0)) + ` ${pct}%`;
+    return '🟢'.repeat(Math.min(filled, 10)) + '⚪'.repeat(Math.max(10 - filled, 0)) + ` ${pct}%`;
   };
 
   // Talk ratio with benchmark indicator
-  const talkEmoji = '';
+  const talkEmoji = data.talkRatio > 60 ? '🔴' : data.talkRatio < 30 ? '🟡' : '🟢';
   const talkLabel = data.talkRatio > 60 ? 'Too high' : data.talkRatio < 30 ? 'Too low' : 'Good range';
 
   const fields: Array<{ label: string; value: string }> = [
@@ -3513,9 +3334,9 @@ export const buildCoachingMicroFeedbackMessage = (data: CoachingMicroFeedbackDat
   const neutrals = data.insights.filter(i => i.severity === 'neutral').slice(0, 1);
 
   const insightLines: string[] = [];
-  for (const i of positives) insightLines.push(`• ${i.text}`);
-  for (const i of improvements) insightLines.push(`• ${i.text}`);
-  for (const i of neutrals) insightLines.push(`${i.text}`);
+  for (const i of positives) insightLines.push(`✅ ${i.text}`);
+  for (const i of improvements) insightLines.push(`💡 ${i.text}`);
+  for (const i of neutrals) insightLines.push(`ℹ️ ${i.text}`);
 
   if (insightLines.length > 0) {
     blocks.push(section(safeMrkdwn(insightLines.join('\n'))));
@@ -3523,14 +3344,14 @@ export const buildCoachingMicroFeedbackMessage = (data: CoachingMicroFeedbackDat
 
   // Top recommendation
   if (data.recommendations && data.recommendations.length > 0) {
-    blocks.push(section(safeMrkdwn(`*Focus:* ${data.recommendations[0].action}`)));
+    blocks.push(section(safeMrkdwn(`*🎯 Focus:* ${data.recommendations[0].action}`)));
   }
 
   // Action buttons
   blocks.push(actions([
-    { text: 'Full Report', actionId: `coach_view_details_${data.analysisId}`, value: data.analysisId, url: `${data.appUrl}/coaching/${data.analysisId}`, style: 'primary' as const },
-    { text: 'Preferences', actionId: `coach_adjust_prefs_${data.analysisId}`, value: data.analysisId, url: `${data.appUrl}/settings/coaching` },
-    { text: 'Got It', actionId: `coach_dismiss_${data.analysisId}`, value: data.analysisId },
+    { text: '📊 Full Report', actionId: `coach_view_details_${data.analysisId}`, value: data.analysisId, url: `${data.appUrl}/coaching/${data.analysisId}`, style: 'primary' as const },
+    { text: '⚙️ Preferences', actionId: `coach_adjust_prefs_${data.analysisId}`, value: data.analysisId, url: `${data.appUrl}/settings/coaching` },
+    { text: '👍 Got It', actionId: `coach_dismiss_${data.analysisId}`, value: data.analysisId },
   ]));
 
   return {
@@ -3546,26 +3367,26 @@ export const buildWeeklyCoachingDigestMessage = (data: WeeklyCoachingDigestData)
   const blocks: SlackBlock[] = [];
   const userMention = data.slackUserId ? `<@${data.slackUserId}>` : data.userName;
 
-  blocks.push(header('Weekly Coaching Digest'));
+  blocks.push(header('📈 Weekly Coaching Digest'));
   blocks.push(context([`${userMention} • ${data.meetingsAnalyzed} meeting${data.meetingsAnalyzed !== 1 ? 's' : ''} analyzed this week`]));
   blocks.push(divider());
 
   // Trend helper
   const trend = (change: number): string => {
-    if (change > 0) return `+${change.toFixed(1)}%`;
-    if (change < 0) return `${change.toFixed(1)}%`;
-    return 'flat';
+    if (change > 0) return `📈 +${change.toFixed(1)}%`;
+    if (change < 0) return `📉 ${change.toFixed(1)}%`;
+    return '➡️ flat';
   };
 
   // Score bar
   const pctBar = (score: number): string => {
     const pct = Math.round(score * 100);
     const filled = Math.round(pct / 10);
-    return '█'.repeat(Math.min(filled, 10)) + '░'.repeat(Math.max(10 - filled, 0)) + ` ${pct}%`;
+    return '🟢'.repeat(Math.min(filled, 10)) + '⚪'.repeat(Math.max(10 - filled, 0)) + ` ${pct}%`;
   };
 
   // Talk ratio with benchmark context
-  const talkEmoji = '';
+  const talkEmoji = data.avgTalkRatio > 55 ? '🔴' : data.avgTalkRatio < 35 ? '🟡' : '🟢';
 
   const metricFields: Array<{ label: string; value: string }> = [
     { label: 'Avg Talk Ratio', value: `${talkEmoji} ${data.avgTalkRatio}% ${trend(data.weekOverWeek.talkRatioChange)}\n_Benchmark: 43% (Gong top performers)_` },
@@ -3586,44 +3407,44 @@ export const buildWeeklyCoachingDigestMessage = (data: WeeklyCoachingDigestData)
   // Improving areas
   if (data.improvingAreas.length > 0) {
     blocks.push(section(safeMrkdwn(
-      `*Improving:*\n${data.improvingAreas.slice(0, 3).map(a => `• ${a}`).join('\n')}`
+      `*🎉 Improving:*\n${data.improvingAreas.slice(0, 3).map(a => `• ${a}`).join('\n')}`
     )));
   }
 
   // Focus areas
   if (data.focusAreas.length > 0) {
     blocks.push(section(safeMrkdwn(
-      `*Focus Areas:*\n${data.focusAreas.slice(0, 3).map(a => `• ${a}`).join('\n')}`
+      `*🎯 Focus Areas:*\n${data.focusAreas.slice(0, 3).map(a => `• ${a}`).join('\n')}`
     )));
   }
 
   // Winning patterns
   if (data.winningPatterns.length > 0) {
     blocks.push(section(safeMrkdwn(
-      `*Winning Patterns:*\n${data.winningPatterns.slice(0, 3).map(a => `• ${a}`).join('\n')}`
+      `*🏆 Winning Patterns:*\n${data.winningPatterns.slice(0, 3).map(a => `• ${a}`).join('\n')}`
     )));
   }
 
   // Top moment of the week
   if (data.topMoment) {
     blocks.push(divider());
-    blocks.push(section(safeMrkdwn(`*Best Moment This Week:*\n${data.topMoment}`)));
+    blocks.push(section(safeMrkdwn(`*⭐ Best Moment This Week:*\n${data.topMoment}`)));
   }
 
   // Weekly challenge
   if (data.weeklyChallenge) {
-    blocks.push(section(safeMrkdwn(`*This Week's Challenge:*\n${data.weeklyChallenge}`)));
+    blocks.push(section(safeMrkdwn(`*💪 This Week's Challenge:*\n${data.weeklyChallenge}`)));
   }
 
   // Top recommendation
   if (data.recommendations && data.recommendations.length > 0) {
-    blocks.push(section(safeMrkdwn(`*Top Recommendation:*\n${data.recommendations[0].action}`)));
+    blocks.push(section(safeMrkdwn(`*🎯 Top Recommendation:*\n${data.recommendations[0].action}`)));
   }
 
   // Action buttons
   blocks.push(actions([
-    { text: 'Full Report', actionId: 'coach_view_details_weekly', value: 'weekly', url: `${data.appUrl}/coaching`, style: 'primary' as const },
-    { text: 'Preferences', actionId: 'coach_adjust_prefs_weekly', value: 'weekly', url: `${data.appUrl}/settings/coaching` },
+    { text: '📊 Full Report', actionId: 'coach_view_details_weekly', value: 'weekly', url: `${data.appUrl}/coaching`, style: 'primary' as const },
+    { text: '⚙️ Preferences', actionId: 'coach_adjust_prefs_weekly', value: 'weekly', url: `${data.appUrl}/settings/coaching` },
   ]));
 
   blocks.push(context([`Week ending ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`]));
@@ -3665,7 +3486,7 @@ export const buildCrmUpdateMessage = (data: CrmUpdateData): SlackMessage => {
   const userMention = data.slackUserId ? `<@${data.slackUserId}>` : data.userName;
 
   // Header with deal name
-  blocks.push(header(`CRM Updated: ${truncate(data.dealName, 100)}`));
+  blocks.push(header(`📋 CRM Updated: ${truncate(data.dealName, 100)}`));
 
   // Context: meeting and user
   blocks.push(context([
@@ -3677,9 +3498,9 @@ export const buildCrmUpdateMessage = (data: CrmUpdateData): SlackMessage => {
   // Confidence badge helper
   const getConfidenceBadge = (confidence: 'high' | 'medium' | 'low'): string => {
     switch (confidence) {
-      case 'high': return 'High';
-      case 'medium': return 'Medium';
-      case 'low': return 'Low';
+      case 'high': return '🟢 High';
+      case 'medium': return '🟡 Medium';
+      case 'low': return '🔴 Low';
     }
   };
 
@@ -3763,32 +3584,22 @@ export const buildDealRiskAlertMessage = (data: DealRiskAlertData): SlackMessage
   const ownerMention = data.ownerSlackUserId ? `<@${data.ownerSlackUserId}>` : (data.ownerName || 'Unassigned');
 
   // Header with warning
-  blocks.push(header(`Deal Risk Alert: ${truncate(data.dealName, 90)}`));
-
-  // Entity context block (SLK-006) — deal name + stage + value inline
-  const riskEntityCtx = entityContextBlock({
-    dealName: data.dealName,
-    dealStage: data.dealStage,
-    dealValue: data.dealValue,
-    currencyCode: data.currencyCode,
-    currencyLocale: data.currencyLocale,
-  });
-  if (riskEntityCtx) blocks.push(riskEntityCtx);
+  blocks.push(header(`⚠️ Deal Risk Alert: ${truncate(data.dealName, 90)}`));
 
   // Risk score bar helper
   const getRiskBar = (score: number): string => {
     const normalizedScore = Math.max(0, Math.min(100, score));
     const filled = Math.round(normalizedScore / 10);
-    const emoji = '█';
-    return emoji.repeat(Math.max(filled, 1)) + '░'.repeat(Math.max(10 - filled, 0));
+    const emoji = normalizedScore >= 70 ? '🔴' : normalizedScore >= 40 ? '🟡' : '🟢';
+    return emoji.repeat(Math.max(filled, 1)) + '⚪'.repeat(Math.max(10 - filled, 0));
   };
 
   // Delta from previous score
   const getDelta = (): string => {
     if (data.previousScore === undefined) return '';
     const delta = data.riskScore - data.previousScore;
-    if (delta > 0) return ` +${delta}`;
-    if (delta < 0) return ` ${delta}`;
+    if (delta > 0) return ` ↗️ +${delta}`;
+    if (delta < 0) return ` ↘️ ${delta}`;
     return ' →';
   };
 
@@ -3816,9 +3627,9 @@ export const buildDealRiskAlertMessage = (data: DealRiskAlertData): SlackMessage
   // Risk signals (top 5)
   if (data.signals.length > 0) {
     const getWeightBadge = (weight: number): string => {
-      if (weight >= 7) return '';
-      if (weight >= 4) return '';
-      return '';
+      if (weight >= 7) return '🔴';
+      if (weight >= 4) return '🟡';
+      return '🟢';
     };
 
     const signalLines = data.signals.slice(0, 5).map(s =>
@@ -3830,7 +3641,7 @@ export const buildDealRiskAlertMessage = (data: DealRiskAlertData): SlackMessage
 
   // Suggested action
   if (data.suggestedAction) {
-    blocks.push(section(safeMrkdwn(`*Suggested Action*\n${truncate(data.suggestedAction, 300)}`)));
+    blocks.push(section(safeMrkdwn(`*💡 Suggested Action*\n${truncate(data.suggestedAction, 300)}`)));
   }
 
   blocks.push(divider());
@@ -3847,7 +3658,7 @@ export const buildDealRiskAlertMessage = (data: DealRiskAlertData): SlackMessage
 
   return {
     blocks,
-    text: `Risk Alert: ${data.dealName} — Risk score ${data.riskScore}/100`,
+    text: `⚠️ Risk Alert: ${data.dealName} — Risk score ${data.riskScore}/100`,
   };
 };
 
@@ -3886,7 +3697,7 @@ export const buildReengagementAlertMessage = (data: ReengagementAlertData): Slac
   const blocks: SlackBlock[] = [];
 
   // Header
-  blocks.push(header('Re-engagement Opportunity'));
+  blocks.push(header(`🔄 Re-engagement Opportunity`));
 
   // Signal description
   blocks.push(section(safeMrkdwn(
@@ -3917,7 +3728,7 @@ export const buildReengagementAlertMessage = (data: ReengagementAlertData): Slac
   // Draft email preview
   if (data.draftEmail) {
     blocks.push(divider());
-    blocks.push(section(safeMrkdwn('*Draft Outreach*')));
+    blocks.push(section(safeMrkdwn('*📧 Draft Outreach*')));
     blocks.push(section(safeMrkdwn(
       `*Subject:* ${truncate(data.draftEmail.subject, 150)}\n\n${truncate(data.draftEmail.body, 400)}`
     )));
@@ -3941,17 +3752,9 @@ export const buildReengagementAlertMessage = (data: ReengagementAlertData): Slac
   contextElements.push(new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
   blocks.push(context(contextElements));
 
-  // Deep link footer (SLK-005)
-  const linkFooter = buildLinkFooter({
-    appUrl: data.appUrl,
-    dealId: data.dealId,
-    dealName: data.dealName,
-  });
-  if (linkFooter) blocks.push(linkFooter);
-
   return {
     blocks,
-    text: `Re-engagement: ${data.contactName} at ${data.companyName} — ${data.signal.type}`,
+    text: `🔄 Re-engagement: ${data.contactName} at ${data.companyName} — ${data.signal.type}`,
   };
 };
 
@@ -3971,9 +3774,6 @@ export interface ProposalReviewData {
   sections: Array<{ title: string; preview: string }>;
   jobId: string;
   pendingActionId: string;
-  appUrl?: string;
-  dealId?: string;
-  contactId?: string;
 }
 
 /**
@@ -3981,7 +3781,7 @@ export interface ProposalReviewData {
  */
 export function buildProposalReviewMessage(data: ProposalReviewData): SlackBlock[] {
   const blocks: SlackBlock[] = [
-    header(`Proposal Ready: ${data.title}`),
+    header(`📄 Proposal Ready: ${data.title}`),
     divider(),
   ];
 
@@ -4018,18 +3818,6 @@ export function buildProposalReviewMessage(data: ProposalReviewData): SlackBlock
     { text: 'Skip', actionId: `prop_skip_${data.jobId}`, value: data.pendingActionId },
   ]));
 
-  // Deep link footer (SLK-005)
-  if (data.appUrl) {
-    const proposalLinkFooter = buildLinkFooter({
-      appUrl: data.appUrl,
-      dealId: data.dealId,
-      dealName: data.deal_name,
-      contactId: data.contactId,
-      contactName: data.contact_name,
-    });
-    if (proposalLinkFooter) blocks.push(proposalLinkFooter);
-  }
-
   return blocks;
 }
 
@@ -4048,7 +3836,7 @@ export interface CalendarSlotsData {
  */
 export function buildCalendarSlotsMessage(data: CalendarSlotsData): SlackBlock[] {
   const blocks: SlackBlock[] = [
-    header(`Available Times${data.prospectName ? ` for ${data.prospectName}` : ''}`),
+    header(`📅 Available Times${data.prospectName ? ` for ${data.prospectName}` : ''}`),
     divider(),
   ];
 
@@ -4089,9 +3877,9 @@ export function buildCalendarSlotsMessage(data: CalendarSlotsData): SlackBlock[]
 
   // Action buttons
   blocks.push(actions([
-    { text: 'Send Invite', actionId: `cal_send_invite_${data.jobId}`, value: data.pendingActionId, style: 'primary' },
-    { text: 'Send Times via Email', actionId: `cal_send_times_${data.jobId}`, value: data.pendingActionId },
-    { text: 'More Options', actionId: `cal_more_${data.jobId}`, value: data.pendingActionId },
+    { text: '📅 Send Invite', actionId: `cal_send_invite_${data.jobId}`, value: data.pendingActionId, style: 'primary' },
+    { text: '📧 Send Times via Email', actionId: `cal_send_times_${data.jobId}`, value: data.pendingActionId },
+    { text: '🔍 More Options', actionId: `cal_more_${data.jobId}`, value: data.pendingActionId },
     { text: 'I\'ll Handle This', actionId: `cal_handle_${data.jobId}`, value: data.pendingActionId },
   ]));
 
@@ -4116,7 +3904,7 @@ export interface EmailPreviewData {
  */
 export function buildEmailPreviewMessage(data: EmailPreviewData): SlackBlock[] {
   const blocks: SlackBlock[] = [
-    header('Email Ready to Send'),
+    header('📧 Email Ready to Send'),
     divider(),
   ];
 
@@ -4142,10 +3930,10 @@ export function buildEmailPreviewMessage(data: EmailPreviewData): SlackBlock[] {
   // Action buttons
   blocks.push(divider());
   blocks.push(actions([
-    { text: 'Send Now', actionId: `email_send_now_${data.jobId}`, value: data.pendingActionId, style: 'primary' },
-    { text: 'Edit in use60', actionId: `email_edit_${data.jobId}`, value: data.pendingActionId },
-    { text: 'Send Later', actionId: `email_send_later_${data.jobId}`, value: data.pendingActionId },
-    { text: 'Cancel', actionId: `email_cancel_${data.jobId}`, value: data.pendingActionId, style: 'danger' },
+    { text: '✅ Send Now', actionId: `email_send_now_${data.jobId}`, value: data.pendingActionId, style: 'primary' },
+    { text: '✏️ Edit in use60', actionId: `email_edit_${data.jobId}`, value: data.pendingActionId },
+    { text: '📅 Send Later', actionId: `email_send_later_${data.jobId}`, value: data.pendingActionId },
+    { text: '❌ Cancel', actionId: `email_cancel_${data.jobId}`, value: data.pendingActionId, style: 'danger' },
   ]));
 
   return blocks;
@@ -4181,10 +3969,10 @@ export interface CampaignReportData {
  * Build Slack blocks for campaign daily report
  */
 export function buildCampaignReportMessage(data: CampaignReportData): SlackMessage {
-  const statusEmoji = '';
+  const statusEmoji = data.status === 'healthy' ? '🟢' : data.status === 'warning' ? '🟡' : '🔴';
 
   const blocks: SlackBlock[] = [
-    header(`Campaign Report: ${data.campaign_name}`),
+    header(`📊 Campaign Report: ${data.campaign_name}`),
     divider(),
     sectionWithFields([
       { label: 'Status', value: `${statusEmoji} ${data.status}` },
@@ -4201,11 +3989,11 @@ export function buildCampaignReportMessage(data: CampaignReportData): SlackMessa
     blocks.push(section(`*Recent Replies (${replies.length}):*`));
 
     const intentBadge: Record<string, string> = {
-      positive: 'Positive',
-      negative: 'Negative',
-      ooo: 'OOO',
-      unsubscribe: 'Unsubscribe',
-      other: 'Other',
+      positive: '🟢 Positive',
+      negative: '🔴 Negative',
+      ooo: '🟡 OOO',
+      unsubscribe: '⚫ Unsubscribe',
+      other: '⚪ Other',
     };
 
     for (const reply of replies.slice(0, 5)) {
@@ -4235,7 +4023,7 @@ export function buildCampaignReportMessage(data: CampaignReportData): SlackMessa
 
   return {
     blocks,
-    text: `Campaign Report: ${data.campaign_name} — ${statusEmoji} ${data.status}`,
+    text: `📊 Campaign Report: ${data.campaign_name} — ${statusEmoji} ${data.status}`,
   };
 }
 
@@ -4656,7 +4444,7 @@ export const buildReengagementApprovalMessage = (data: ReengagementApprovalData)
   const blocks: SlackBlock[] = [];
 
   // --- Header — assertive low-tier ---
-  const headerText = safeHeaderText(`Opportunity Spotted | ${data.dealName}`);
+  const headerText = safeHeaderText(`💡 Opportunity Spotted | ${data.dealName}`);
   blocks.push(header(headerText));
 
   // --- Deal + contact context ---
@@ -5561,11 +5349,11 @@ export interface CCDigestDataBlock {
 
 const CC_APP_URL = 'https://app.use60.com/command-centre';
 
-const URGENCY_LABEL: Record<string, string> = {
-  critical: '[!]',
-  high: '[!]',
-  normal: '',
-  low: '',
+const URGENCY_EMOJI: Record<string, string> = {
+  critical: '\uD83D\uDD34', // 🔴
+  high: '\uD83D\uDFE0',     // 🟠
+  normal: '\uD83D\uDFE1',   // 🟡
+  low: '\uD83D\uDFE2',      // 🟢
 };
 
 /**
@@ -5606,7 +5394,7 @@ export const buildCommandCentreDigest = (data: CCDigestDataBlock): SlackMessage 
 
   // ---- Helper: render one item with HITL buttons ----
   const renderItem = (item: CCDigestItemBlock): void => {
-    const emoji = URGENCY_LABEL[item.urgency] || '';
+    const emoji = URGENCY_EMOJI[item.urgency] || '';
     const summaryLine = item.summary
       ? `\n${truncate(item.summary, 200)}`
       : '';
@@ -5646,19 +5434,13 @@ export const buildCommandCentreDigest = (data: CCDigestDataBlock): SlackMessage 
           value: item.id,
           style: 'danger',
         },
-        {
-          text: safeButtonText('View'),
-          actionId: `cc_view::${item.id}`,
-          value: item.id,
-          url: `${CC_APP_URL}?item=${item.id}`,
-        },
       ]),
     );
   };
 
   // ---- Critical tier ----
   if (data.critical.total_count > 0) {
-    blocks.push(section(safeMrkdwn(`*${URGENCY_LABEL.critical} Critical — ${data.critical.total_count} item${data.critical.total_count !== 1 ? 's' : ''}*`)));
+    blocks.push(section(safeMrkdwn(`*${URGENCY_EMOJI.critical} Critical — ${data.critical.total_count} item${data.critical.total_count !== 1 ? 's' : ''}*`)));
 
     for (const item of data.critical.items) {
       if (blocks.length >= MAX_BLOCKS - 5) break; // keep room for footer
@@ -5677,7 +5459,7 @@ export const buildCommandCentreDigest = (data: CCDigestDataBlock): SlackMessage 
 
   // ---- High tier ----
   if (data.high.total_count > 0) {
-    blocks.push(section(safeMrkdwn(`*${URGENCY_LABEL.high} High — ${data.high.total_count} item${data.high.total_count !== 1 ? 's' : ''}*`)));
+    blocks.push(section(safeMrkdwn(`*${URGENCY_EMOJI.high} High — ${data.high.total_count} item${data.high.total_count !== 1 ? 's' : ''}*`)));
 
     for (const item of data.high.items) {
       if (blocks.length >= MAX_BLOCKS - 5) break;
@@ -5699,7 +5481,7 @@ export const buildCommandCentreDigest = (data: CCDigestDataBlock): SlackMessage 
     blocks.push(
       section(
         safeMrkdwn(
-          `${URGENCY_LABEL.normal} *${data.normal_count} normal/low item${data.normal_count !== 1 ? 's' : ''}*`,
+          `${URGENCY_EMOJI.normal} *${data.normal_count} normal/low item${data.normal_count !== 1 ? 's' : ''}*`,
         ),
       ),
     );
@@ -6219,79 +6001,3 @@ export function buildEnhancedCoachingDigestBlocks(data: EnhancedCoachingDigestDa
     text: `Weekly Coaching Digest for ${data.repName} — ${data.weekOf}`,
   };
 }
-
-// =============================================================================
-// WEEKLY AGENT SCORECARD (SLK-017)
-// =============================================================================
-
-export interface WeeklyAgentScorecardData {
-  emailsDrafted: number;
-  emailsApproved: number;
-  meetingsPrepped: number;
-  dealsAlerted: number;
-  totalInteractions: number;
-  estimatedHoursSaved: string;
-  appUrl: string;
-}
-
-export const buildWeeklyAgentScorecard = (data: WeeklyAgentScorecardData): SlackMessage => {
-  const blocks: SlackBlock[] = [];
-
-  blocks.push(header('Your Week with 60'));
-
-  blocks.push(sectionWithFields([
-    { label: 'Emails Drafted', value: `${data.emailsDrafted} (${data.emailsApproved} approved)` },
-    { label: 'Meetings Prepped', value: `${data.meetingsPrepped}` },
-    { label: 'Deals Flagged', value: `${data.dealsAlerted}` },
-    { label: 'Time Saved', value: `~${data.estimatedHoursSaved} hours` },
-  ]));
-
-  blocks.push(divider());
-
-  blocks.push(context([`${data.totalInteractions} total interactions this week`]));
-
-  blocks.push(actions([
-    { text: 'View Full Report', actionId: 'weekly_scorecard_view_report', value: 'weekly_report', url: `${data.appUrl}/dashboard`, style: 'primary' },
-  ]));
-
-  return {
-    blocks,
-    text: `Your week with 60: ${data.emailsDrafted} emails drafted, ${data.meetingsPrepped} meetings prepped, ~${data.estimatedHoursSaved}h saved`,
-  };
-};
-
-// =============================================================================
-// COMPACT NOTIFICATION RENDERER (SLK-015)
-// =============================================================================
-
-export interface CompactNotificationData {
-  type: string;
-  entityName: string;
-  action: string;
-  appUrl: string;
-  dealId?: string;
-  contactId?: string;
-  meetingId?: string;
-}
-
-export const buildCompactNotification = (data: CompactNotificationData): SlackMessage => {
-  const linkParts: string[] = [];
-
-  if (data.dealId) {
-    linkParts.push(`<${data.appUrl}/deals/${data.dealId}|View Deal>`);
-  }
-  if (data.contactId) {
-    linkParts.push(`<${data.appUrl}/contacts/${data.contactId}|View Contact>`);
-  }
-  if (data.meetingId) {
-    linkParts.push(`<${data.appUrl}/meetings/${data.meetingId}|View Meeting>`);
-  }
-
-  const linkText = linkParts.length > 0 ? ` · ${linkParts.join(' · ')}` : '';
-  const line = `*${data.entityName}* ${data.action}${linkText}`;
-
-  return {
-    blocks: [context([line])],
-    text: `${data.entityName} ${data.action}`,
-  };
-};

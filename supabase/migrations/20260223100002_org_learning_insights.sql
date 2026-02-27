@@ -57,7 +57,8 @@ CREATE INDEX IF NOT EXISTS idx_org_learning_insights_active
 ALTER TABLE org_learning_insights ENABLE ROW LEVEL SECURITY;
 
 -- All org members can read insights (data is already anonymised)
-CREATE POLICY "Org members can read org learning insights"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read org learning insights"
   ON org_learning_insights FOR SELECT
   USING (
     EXISTS (
@@ -66,15 +67,23 @@ CREATE POLICY "Org members can read org learning insights"
         AND organization_memberships.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role inserts (edge functions write insights)
-CREATE POLICY "Service role can insert org learning insights"
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert org learning insights"
   ON org_learning_insights FOR INSERT
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can update org learning insights"
+DO $$ BEGIN
+  CREATE POLICY "Service role can update org learning insights"
   ON org_learning_insights FOR UPDATE
   USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ----------------------------------------------------------------------------
 -- 4. Helper RPCs

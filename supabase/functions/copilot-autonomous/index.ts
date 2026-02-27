@@ -43,7 +43,6 @@ import {
   handleGetSkill,
   resolveOrgId,
 } from '../_shared/skillsToolHandlers.ts';
-import { resolveModel, recordSuccess, recordFailure, deductCredits } from '../_shared/modelRouter.ts';
 import {
   detectAndStructureResponse,
   type StructuredResponse,
@@ -54,6 +53,7 @@ import { loadAgentTeamConfig, type AgentTeamConfig, type IntentClassification } 
 import { classifyIntent } from '../_shared/agentClassifier.ts';
 import { runSpecialist, type StreamWriter } from '../_shared/agentSpecialist.ts';
 import { getSpecialistConfig, getAgentDisplayInfo } from '../_shared/agentDefinitions.ts';
+import { recordSignal, type ApprovalSignal } from '../_shared/autopilot/signals.ts';
 
 // =============================================================================
 // Configuration
@@ -171,7 +171,7 @@ ACTION PARAMETERS:
 - get_company_status: { company_id?, company_name?, domain? } - Holistic company view
 
 ## Meetings & Calendar
-- get_meetings: { contactEmail?, contactId?, limit? } - Get meetings with a contact
+- get_meetings: { deal_id?, contactEmail?, contactId?, limit? } - Get meetings. ALWAYS pass deal_id when in Deal Copilot Mode to scope results to the correct deal
 - get_meeting_count: { period?, timezone?, week_starts_on? } - Count meetings for a period
 - get_next_meeting: { include_context?, timezone? } - Get next upcoming meeting with CRM context
 - get_meetings_for_period: { period?, timezone?, week_starts_on?, include_context?, limit? } - Get meeting list for a period
@@ -184,7 +184,7 @@ ACTION PARAMETERS:
 - create_activity: { type, client_name, details?, amount?, date?, status?, priority? } - Create an activity (requires params.confirm=true)
 
 ## Email & Notifications
-- search_emails: { contact_email?, query?, limit? } - Search emails
+- search_emails: { deal_id?, contact_email?, contact_id?, query?, limit? } - Search emails. ALWAYS pass deal_id in Deal Copilot Mode to scope results to this deal
 - draft_email: { to, subject?, context?, tone? } - Draft an email
 - send_notification: { channel: 'slack', message, blocks? } - Send a Slack notification
 
@@ -572,6 +572,10 @@ This returns a lightweight summary of relevant meetings — use it to enrich you
           type: 'string',
           description: 'Optional: filter by company name mentioned in meetings',
         },
+        deal_id: {
+          type: 'string',
+          description: 'Deal ID to scope meeting search to a specific deal. ALWAYS pass this in Deal Copilot Mode.',
+        },
         maxResults: {
           type: 'number',
           description: 'Max meetings to analyze (default: 5)',
@@ -875,186 +879,6 @@ async function executeToolCall(
 
     default:
       return { success: false, error: `Unknown tool: ${toolName}` };
-  }
-}
-
-// =============================================================================
-// Conversation Context (MEM-004)
-// =============================================================================
-
-// Simple entity extraction: looks for capitalised multi-word names, company-like tokens
-// Returns deduplicated list of candidate entity terms from the message.
-function extractEntityTerms(message: string): string[] {
-  const terms = new Set<string>();
-
-  // Match capitalised words (likely proper nouns: contact/company names)
-  const proper = message.match(/\b[A-Z][a-z]{1,}(?:\s[A-Z][a-z]{1,})*/g) || [];
-  for (const p of proper) {
-    if (p.length > 2) terms.add(p.toLowerCase());
-  }
-
-  // Also include quoted strings (deal names, company names)
-  const quoted = message.match(/["']([^"']{2,40})["']/g) || [];
-  for (const q of quoted) {
-    terms.add(q.replace(/["']/g, '').toLowerCase());
-  }
-
-  return [...terms].slice(0, 10);
-}
-
-const CONTEXT_TOKEN_CAP = 8000; // ~2000 tokens
-
-interface ConversationContextRow {
-  id: string;
-  channel: string;
-  entity_type: string;
-  entity_id: string;
-  context_summary: string;
-  last_updated: string;
-}
-
-/**
- * Queries conversation_context for entities mentioned in the message.
- * Returns formatted context blocks for system prompt injection (max 3, capped at ~2000 tokens).
- */
-async function fetchConversationContext(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  message: string
-): Promise<string> {
-  try {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
-    const { data, error } = await supabase
-      .from('conversation_context')
-      .select('id, channel, entity_type, entity_id, context_summary, last_updated')
-      .eq('user_id', userId)
-      .gte('last_updated', sevenDaysAgo)
-      .order('last_updated', { ascending: false })
-      .limit(20);
-
-    if (error || !data || data.length === 0) return '';
-
-    const entityTerms = extractEntityTerms(message);
-
-    // Score rows by how well they match entity terms from the message
-    const scored = (data as ConversationContextRow[])
-      .map((row) => {
-        let score = 0;
-        const summary = row.context_summary.toLowerCase();
-        for (const term of entityTerms) {
-          if (summary.includes(term)) score += 2;
-        }
-        // Recency boost
-        const ageMs = Date.now() - new Date(row.last_updated).getTime();
-        const ageHours = ageMs / (1000 * 60 * 60);
-        if (ageHours < 24) score += 3;
-        else if (ageHours < 72) score += 1;
-        return { ...row, score };
-      })
-      .filter((r) => r.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-
-    if (scored.length === 0) return '';
-
-    const blocks: string[] = [];
-    let totalChars = 0;
-
-    for (const row of scored) {
-      const date = new Date(row.last_updated).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric',
-      });
-      const label = `[Context from ${row.channel} — ${row.entity_type} — ${date}]`;
-      const block = `${label}: ${row.context_summary}`;
-
-      if (totalChars + block.length > CONTEXT_TOKEN_CAP) break;
-      blocks.push(block);
-      totalChars += block.length;
-    }
-
-    if (blocks.length === 0) return '';
-
-    return `\n## Prior Conversation Context\n\nRelevant context from prior interactions (use to personalise your response):\n\n${blocks.join('\n\n')}\n`;
-  } catch (err) {
-    console.error('[fetchConversationContext] Error (non-fatal):', err);
-    return '';
-  }
-}
-
-// Per-session entity mention tracking (in-memory, keyed by userId+entityTerm)
-// Maps `${userId}:${entityTerm}` -> mention count this session
-const entityMentionCounts = new Map<string, number>();
-
-/**
- * Increments entity mention counters for the current message.
- * Returns list of entities that have crossed the 3-mention threshold.
- */
-function trackEntityMentions(userId: string, message: string): string[] {
-  const terms = extractEntityTerms(message);
-  const crossed: string[] = [];
-  for (const term of terms) {
-    const key = `${userId}:${term}`;
-    const count = (entityMentionCounts.get(key) || 0) + 1;
-    entityMentionCounts.set(key, count);
-    if (count === 3) {
-      crossed.push(term);
-    }
-  }
-  return crossed;
-}
-
-/**
- * Writes a context summary to conversation_context for entities that have
- * crossed the 3-message mention threshold.
- */
-async function writeConversationContext(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  orgId: string,
-  message: string,
-  responseText: string,
-  thresholdCrossedTerms: string[]
-): Promise<void> {
-  if (thresholdCrossedTerms.length === 0) return;
-
-  try {
-    // Build a brief summary of what was discussed
-    const snippet = `User asked: "${message.slice(0, 200)}"\nAssistant responded: "${responseText.slice(0, 400)}"`;
-
-    for (const term of thresholdCrossedTerms) {
-      // We don't have entity UUIDs here — use a deterministic UUID derived from
-      // userId + term so the same term maps to the same row on upsert.
-      // We use a fixed namespace UUID (v5-style stub using string hashing).
-      const entityKey = `${userId}-${term}`;
-      // Simple hash to a UUID-shaped string (not cryptographic — just unique)
-      const hash = Array.from(entityKey).reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) & 0xffffffff, 0);
-      const fakeUuid = `00000000-0000-4000-${((hash >>> 16) & 0x3fff | 0x8000).toString(16).padStart(4, '0')}-${Math.abs(hash).toString(16).padStart(12, '0').slice(0, 12)}`;
-
-      const { error } = await supabase.from('conversation_context').upsert(
-        {
-          user_id: userId,
-          org_id: orgId,
-          channel: 'web_copilot',
-          entity_type: 'contact', // best-effort default; we can't resolve entity_type without a lookup
-          entity_id: fakeUuid,
-          context_summary: `[${term}] ${snippet}`,
-          last_updated: new Date().toISOString(),
-        },
-        {
-          onConflict: 'user_id,entity_type,entity_id',
-          ignoreDuplicates: false,
-        }
-      );
-
-      if (error) {
-        console.warn('[writeConversationContext] Upsert error (non-fatal):', error.message);
-      } else {
-        console.log(`[writeConversationContext] Wrote context for entity term: "${term}"`);
-      }
-    }
-  } catch (err) {
-    console.error('[writeConversationContext] Error (non-fatal):', err);
   }
 }
 
@@ -1523,8 +1347,7 @@ function buildSystemPrompt(
   memoryContext?: string,
   apifyConnection?: ApifyConnectionInfo,
   profileContext?: ProfileContext,
-  emailPersonalization?: EmailPersonalization,
-  conversationContextBlocks?: string
+  emailPersonalization?: EmailPersonalization
 ): string {
   return `You are an AI sales assistant for a platform called Sixty. You help sales professionals manage their pipeline, prepare for meetings, track contacts, and execute sales workflows.
 
@@ -1562,6 +1385,50 @@ When the user's request involves MULTIPLE steps (e.g., "find leads AND create em
 Don't stop after completing just one step — complete the FULL workflow the user requested.
 
 ## Common Patterns
+
+### Deal Copilot Mode
+
+When the user message includes a [DEAL_CONTEXT] block, you are in **Deal Copilot Mode**. This means the user opened a specific deal and is asking for help with it. Be proactive, action-oriented, and use every tool available.
+
+**1. Always use the Deal ID for ALL lookups — this prevents cross-deal contamination:**
+- Use execute_action with get_deal { id: "<deal_id>", include_health: true } instead of searching by name
+- ALWAYS pass deal_id to get_meetings { deal_id: "<deal_id>" } — never rely on contactId alone, it returns meetings from OTHER deals
+- ALWAYS pass deal_id to search_emails { deal_id: "<deal_id>" } — scopes emails to this deal's contacts
+- ALWAYS pass deal_id to list_tasks { deal_id: "<deal_id>" } — only shows tasks for this deal
+- If a Primary Contact ID is provided, also use it for get_contact { id }, get_lead { contact_id }
+
+**2. Proactively enrich every response with meeting intelligence:**
+- ALWAYS call search_meeting_context { query: "<user question>", companyName: "<company>", deal_id: "<deal_id>" } to find relevant meeting context
+- Include meeting insights naturally — "In your last call on Jan 15, they mentioned budget concerns..."
+- If the user asks about objections, sentiment, or history — search_meeting_context is your primary source
+
+**3. Match the user's intent to the right skill:**
+
+| User says... | Action |
+|---|---|
+| "write a follow-up" / "draft an email" | execute_action("run_skill", { skill_key: "copilot-followup", skill_context: { deal_id, contact_id } }) |
+| "summarize this deal" / "what's going on" | execute_action("run_skill", { skill_key: "copilot-summary", skill_context: { deal_id } }) |
+| "what should I do next" / "next steps" | execute_action("run_skill", { skill_key: "deal-next-best-actions", skill_context: { deal_id } }) |
+| "this deal is stuck" / "rescue this" | execute_action("run_skill", { skill_key: "deal-rescue-plan", skill_context: { deal_id } }) |
+| "they mentioned [competitor]" | execute_action("run_skill", { skill_key: "copilot-battlecard", skill_context: { competitor_name, deal_id } }) |
+| "prep me for the meeting" | execute_action("run_skill", { skill_key: "copilot-agenda", skill_context: { deal_id } }) |
+| "they went quiet" / "no response" | execute_action("run_skill", { skill_key: "copilot-chase", skill_context: { deal_id } }) |
+| "hand this off" / "transfer deal" | execute_action("run_skill", { skill_key: "deal-handoff-brief", skill_context: { deal_id } }) |
+| "write a proposal" | execute_action("run_skill", { skill_key: "copilot-proposal", skill_context: { deal_id } }) |
+| "they objected to..." | execute_action("run_skill", { skill_key: "copilot-objection", skill_context: { deal_id, objection_text } }) |
+| "we won!" / "deal closed" | execute_action("run_skill", { skill_key: "copilot-win", skill_context: { deal_id } }) |
+| "research this company" | execute_action("run_skill", { skill_key: "copilot-research", skill_context: { company_name } }) |
+
+**4. Combine tools for richer answers (always pass deal_id to every tool):**
+- When asked "tell me about this deal": call get_deal { id: deal_id } + search_meeting_context { query, companyName, deal_id } + list_tasks { deal_id } in parallel, then synthesize
+- When asked to write a follow-up: call get_meetings { deal_id } + search_meeting_context { query: "latest discussion", companyName, deal_id } first, then run copilot-followup skill with that context
+- When asked about risk: use the health data from [DEAL_CONTEXT] + search_meeting_context { deal_id } for sentiment signals + get the latest activity
+
+**5. Always flag risks proactively:**
+- Critical health (<40) or high ghost risk (>50%) — mention it and suggest the deal-rescue-plan skill
+- No recent activity (>14 days) — flag staleness and offer copilot-chase
+- $0 deal value — prompt the user to qualify and assign value
+- Missing contact — suggest linking a primary contact
 
 ### Contact/Person Lookup
 1. Use execute_action with get_contact to find the contact by name/email
@@ -1634,7 +1501,6 @@ ${organizationId ? `Organization ID: ${organizationId}` : 'No organization speci
 ${context?.temporalContext ? `\n## Current Date & Time\n\nToday is ${(context.temporalContext as Record<string, string>).date}. Current time: ${(context.temporalContext as Record<string, string>).time} (${(context.temporalContext as Record<string, string>).timezone}).` : ''}
 ${memoryContext || ''}
 ${memoryContext ? MEMORY_SYSTEM_ADDITION : ''}
-${conversationContextBlocks || ''}
 ${profileContext?.companyContext ? `\n## Company Context\n\nThe user has selected a company profile for this conversation. Use this context to personalize responses, tailor outreach messaging, and inform sales strategy:\n\n${profileContext.companyContext}\n` : ''}
 ${profileContext?.productContext ? `\n## Product Context\n\nThe user has selected a product profile for this conversation. Use this context to craft relevant messaging, highlight product-market fit, and tailor sales approaches:\n\n${profileContext.productContext}\n` : ''}
 ${emailPersonalization?.signOff || emailPersonalization?.writingStyleSummary ? `\n## Email Personalization\n\nWhen generating ANY email (cold outreach, follow-ups, introductions, meeting follow-ups, etc.), ALWAYS apply these user preferences:\n${emailPersonalization.signOff ? `\n**Sign-Off:** Always end emails with:\n${emailPersonalization.signOff}` : ''}${emailPersonalization.writingStyleSummary ? `\n\n**Trained Writing Style:**\n${emailPersonalization.writingStyleSummary}` : ''}\n` : ''}
@@ -1693,8 +1559,7 @@ async function logExecutionStart(
   supabase: ReturnType<typeof createClient>,
   organizationId: string | undefined,
   userId: string | null,
-  message: string,
-  modelId: string = MODEL
+  message: string
 ): Promise<string | null> {
   if (!userId) return null;
 
@@ -1706,7 +1571,7 @@ async function logExecutionStart(
         user_id: userId,
         user_message: message,
         execution_mode: 'autonomous',
-        model: modelId,
+        model: MODEL,
         started_at: new Date().toISOString(),
       })
       .select('id')
@@ -2139,6 +2004,88 @@ Combine these into a single, well-structured response that tells a coherent stor
 }
 
 // =============================================================================
+// HITL Signal Detection (AP-009)
+// =============================================================================
+
+/**
+ * Detect if a user message is a HITL confirm/cancel response to a pending
+ * copilot proposal, and return the appropriate ApprovalSignal.
+ *
+ * Detection rules:
+ *  - "confirm" / "yes" / "go ahead" / "do it" etc.  → 'approved'
+ *  - Same confirm keywords BUT message contains extra text that looks like
+ *    edits (substantive content beyond 50 chars after stripping the keyword)
+ *    → 'approved_edited'
+ *  - "cancel" / "no" / "don't" / "stop" / "reject" etc. → 'rejected'
+ *  - Returns null for any other message (not a HITL response)
+ */
+function detectHITLSignal(message: string): ApprovalSignal | null {
+  const normalized = message.trim().toLowerCase();
+
+  // --- Cancel / reject patterns ---
+  const cancelPatterns = [
+    /^cancel\b/,
+    /^no\b/,
+    /^nope\b/,
+    /^don'?t\b/,
+    /^do not\b/,
+    /^stop\b/,
+    /^reject\b/,
+    /^skip\b/,
+    /^abort\b/,
+    /^never mind\b/,
+    /^nevermind\b/,
+    /^discard\b/,
+    /^i don'?t (want|need)\b/,
+    /^not (now|needed)\b/,
+  ];
+
+  for (const pattern of cancelPatterns) {
+    if (pattern.test(normalized)) {
+      return 'rejected';
+    }
+  }
+
+  // --- Confirm patterns ---
+  const confirmPatterns = [
+    /^confirm\b/,
+    /^yes\b/,
+    /^yeah\b/,
+    /^yep\b/,
+    /^yup\b/,
+    /^ok\b/,
+    /^okay\b/,
+    /^sure\b/,
+    /^go ahead\b/,
+    /^do it\b/,
+    /^proceed\b/,
+    /^execute\b/,
+    /^approved\b/,
+    /^looks good\b/,
+    /^that'?s? (good|great|fine|correct|right)\b/,
+    /^perfect\b/,
+    /^sounds good\b/,
+  ];
+
+  for (const pattern of confirmPatterns) {
+    if (pattern.test(normalized)) {
+      // Check whether the rest of the message contains substantial edit content.
+      // Strip the matched keyword phrase and see what remains.
+      const remainder = normalized.replace(pattern, '').trim();
+      // Remove common filler words and punctuation
+      const editContent = remainder.replace(/^[,.\s!]+/, '').trim();
+      if (editContent.length > 50) {
+        // Non-trivial additional content — treat as approved with edits
+        return 'approved_edited';
+      }
+      return 'approved';
+    }
+  }
+
+  return null;
+}
+
+// =============================================================================
 // Main Handler
 // =============================================================================
 
@@ -2226,12 +2173,6 @@ serve(async (req: Request) => {
     // Load recent conversation turns so the classifier understands follow-up messages
     const recentConversationContext = await loadRecentConversationContext(supabase, userId);
 
-    // Fetch conversation_context blocks for entity references in this message (MEM-004)
-    const conversationContextBlocks = await fetchConversationContext(supabase, userId, message);
-
-    // Track entity mentions for threshold-based context writing (MEM-004)
-    const thresholdCrossedTerms = trackEntityMentions(userId, message);
-
     // Trigger compaction check in background (non-blocking)
     handleCompactionIfNeeded(supabase, anthropic, userId, MODEL).catch((err) =>
       console.error('[copilot-autonomous] Background compaction error:', err)
@@ -2248,24 +2189,39 @@ serve(async (req: Request) => {
       ? organizationId
       : await resolveOrgId(supabase, userId, null).catch(() => null);
 
-    // Resolve model via modelRouter (circuit breaker + fallback)
-    // Uses the real orgId so ai_feature_config tier lookup is accurate.
-    const modelResolution = await resolveModel(supabase, {
-      feature: 'copilot',
-      userId,
-      orgId: resolvedOrgForConfig ?? '',
-      traceId: crypto.randomUUID(),
-    }).catch((err) => {
-      console.warn('[copilot-autonomous] resolveModel failed, using hardcoded fallback:', err);
-      return { modelId: MODEL, provider: 'anthropic', creditCost: 0, maxTokens: MAX_TOKENS, wasFallback: false, traceId: '' };
-    });
+    // =========================================================================
+    // AP-009: HITL Signal Recording
+    // =========================================================================
+    // Detect if this message is a confirm/cancel response to a pending copilot
+    // proposal, and record the appropriate approval signal fire-and-forget.
+    // This runs before Claude processes the message so every HITL interaction
+    // is captured regardless of how Claude responds.
+    // Guard: only attempt HITL signal detection when there is actually a pending
+    // action in context. Without this guard, any message that starts with "yes",
+    // "confirm", etc. would generate a spurious 'approved' signal even on normal
+    // conversational queries like "yes, schedule a meeting for tomorrow."
+    const hasPendingAction = Boolean(context?.pending_action || context?.pending_action_type);
 
-    console.log(`[copilot-autonomous] Model resolved: ${modelResolution.modelId} (wasFallback=${modelResolution.wasFallback}, traceId=${modelResolution.traceId})`);
+    if (resolvedOrgForConfig && hasPendingAction) {
+      const hitlSignal = detectHITLSignal(message);
+      if (hitlSignal) {
+        // Extract action_type from context if the frontend passed it, otherwise default
+        const pendingActionType = typeof context?.pending_action_type === 'string'
+          ? context.pending_action_type
+          : 'copilot.action';
 
-    // Trigger compaction check in background (non-blocking)
-    handleCompactionIfNeeded(supabase, anthropic, userId, modelResolution.modelId).catch((err) =>
-      console.error('[copilot-autonomous] Background compaction error:', err)
-    );
+        recordSignal(supabase, {
+          user_id: userId!, // non-null: guarded by the auth check above
+          org_id: resolvedOrgForConfig,
+          action_type: pendingActionType,
+          agent_name: 'copilot-autonomous',
+          signal: hitlSignal,
+          autonomy_tier_at_time: 'approve',
+        }).catch(() => {});
+
+        console.log(`[copilot-autonomous] AP-009: HITL signal recorded: ${hitlSignal} for action_type=${pendingActionType}`);
+      }
+    }
 
     // Check credit balance before proceeding
     if (resolvedOrgForConfig) {
@@ -2336,7 +2292,7 @@ serve(async (req: Request) => {
     ]);
 
     // Build system prompt (no longer depends on per-skill tool defs)
-    let systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext, emailPersonalization, conversationContextBlocks);
+    let systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext, emailPersonalization);
 
     // Append credit alert context to system prompt if one was surfaced
     if (creditAlertNote) {
@@ -2424,7 +2380,7 @@ serve(async (req: Request) => {
 
           (async () => {
             // Start parent execution log
-            const executionId = await logExecutionStart(supabase, organizationId, userId, message, modelResolution.modelId);
+            const executionId = await logExecutionStart(supabase, organizationId, userId, message);
 
             // Log routing decision
             if (executionId) {
@@ -2486,7 +2442,7 @@ serve(async (req: Request) => {
         };
 
         // Start execution logging
-        const executionId = await logExecutionStart(supabase, organizationId, userId, message, modelResolution.modelId);
+        const executionId = await logExecutionStart(supabase, organizationId, userId, message);
         if (executionId) {
           analytics.executionId = executionId;
         }
@@ -2583,27 +2539,20 @@ serve(async (req: Request) => {
             // Get the final message with complete content
             const finalMessage = await stream.finalMessage();
 
-            // Record model success (resets circuit breaker) and deduct credits
-            await recordSuccess(supabase, modelResolution.modelId);
-            const actualTokenCount = finalMessage.usage
-              ? finalMessage.usage.input_tokens + finalMessage.usage.output_tokens
-              : 0;
-            if (resolvedOrgForConfig) {
-              await deductCredits(supabase, userId, resolvedOrgForConfig, modelResolution, actualTokenCount, 'copilot_autonomous');
-            }
-
             // Log cost + deduct org credits for autonomous copilot usage
             if (userId && finalMessage.usage) {
               await logAICostEvent(
                 supabase,
                 userId,
                 resolvedOrgForConfig,
-                modelResolution.provider as 'anthropic' | 'gemini' | 'openrouter' | 'exa',
-                modelResolution.modelId,
+                'anthropic',
+                MODEL,
                 finalMessage.usage.input_tokens,
                 finalMessage.usage.output_tokens,
                 'copilot_autonomous',
-                { request_type: 'copilot_autonomous', trace_id: modelResolution.traceId }
+                { request_type: 'copilot_autonomous' },
+                undefined,
+                'copilot-autonomous'
               );
             }
 
@@ -2675,19 +2624,6 @@ serve(async (req: Request) => {
                   sequenceKey
                 );
               }
-
-              // Write conversation context for entities that crossed the 3-mention threshold (MEM-004)
-              if (thresholdCrossedTerms.length > 0 && resolvedOrgForConfig) {
-                writeConversationContext(
-                  supabase,
-                  userId!,
-                  resolvedOrgForConfig,
-                  message,
-                  finalResponseText,
-                  thresholdCrossedTerms
-                ).catch((err) => console.error('[copilot-autonomous] writeConversationContext error (non-fatal):', err));
-              }
-
               break;
             }
 
@@ -2852,10 +2788,6 @@ serve(async (req: Request) => {
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           console.error('[copilot-autonomous] Error:', error);
-
-          // Record model failure (increments circuit breaker failure count)
-          await recordFailure(supabase, modelResolution.modelId);
-
           await sendSSE(writer, encoder, 'error', { message: errorMsg });
 
           // Log error

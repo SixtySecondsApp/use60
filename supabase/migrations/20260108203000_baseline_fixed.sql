@@ -25908,64 +25908,151 @@ ALTER TABLE ONLY "public"."workflow_forms"
 ALTER TABLE ONLY "public"."workflow_mcp_logs"
     ADD CONSTRAINT "workflow_mcp_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
-CREATE POLICY "Admins can insert waitlist admin actions" ON "public"."waitlist_admin_actions" FOR INSERT TO "authenticated" WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "Admins can insert waitlist admin actions" ON "public"."waitlist_admin_actions" FOR INSERT TO "authenticated" WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins can view billing events" ON "public"."billing_event_log" FOR SELECT USING ("public"."is_admin_optimized"());
+DO $$ BEGIN
+  CREATE POLICY "Admins can view billing events" ON "public"."billing_event_log" FOR SELECT USING ("public"."is_admin_optimized"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Admins can view waitlist admin actions" ON "public"."waitlist_admin_actions" FOR SELECT TO "authenticated" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "Admins can view waitlist admin actions" ON "public"."waitlist_admin_actions" FOR SELECT TO "authenticated" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Allow anon to read internal_users" ON "public"."internal_users" FOR SELECT TO "anon" USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Allow anon to read internal_users" ON "public"."internal_users" FOR SELECT TO "anon" USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Allow authenticated to read internal_users" ON "public"."internal_users" FOR SELECT TO "authenticated" USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Allow authenticated to read internal_users" ON "public"."internal_users" FOR SELECT TO "authenticated" USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Allow authenticated users to read system_config" ON "public"."system_config" FOR SELECT TO "authenticated" USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Allow authenticated users to read system_config" ON "public"."system_config" FOR SELECT TO "authenticated" USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Allow service role full access" ON "public"."internal_users" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Allow service role full access" ON "public"."internal_users" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Anyone can insert page views" ON "public"."page_views" FOR INSERT TO "authenticated", "anon" WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Anyone can insert page views" ON "public"."page_views" FOR INSERT TO "authenticated", "anon" WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Anyone can insert partial signups" ON "public"."partial_signups" FOR INSERT TO "authenticated", "anon" WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Anyone can insert partial signups" ON "public"."partial_signups" FOR INSERT TO "authenticated", "anon" WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Anyone can read active platform skills" ON "public"."platform_skills" FOR SELECT USING (("is_active" = true));
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read active platform skills" ON "public"."platform_skills" FOR SELECT USING (("is_active" = true));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Anyone can read platform skills history" ON "public"."platform_skills_history" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read platform skills history" ON "public"."platform_skills_history" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Anyone can update partial signups by session" ON "public"."partial_signups" FOR UPDATE TO "authenticated", "anon" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Anyone can update partial signups by session" ON "public"."partial_signups" FOR UPDATE TO "authenticated", "anon" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Anyone can view public voice recordings via share token" ON "public"."voice_recordings" FOR SELECT USING ((("is_public" = true) AND ("share_token" IS NOT NULL)));
+DO $$ BEGIN
+  CREATE POLICY "Anyone can view public voice recordings via share token" ON "public"."voice_recordings" FOR SELECT USING ((("is_public" = true) AND ("share_token" IS NOT NULL)));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Public can validate invite codes" ON "public"."waitlist_invite_codes" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Public can validate invite codes" ON "public"."waitlist_invite_codes" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can insert billing events" ON "public"."billing_event_log" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert billing events" ON "public"."billing_event_log" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can insert enrichment" ON "public"."organization_enrichment" FOR INSERT WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert enrichment" ON "public"."organization_enrichment" FOR INSERT WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can insert platform skills history" ON "public"."platform_skills_history" FOR INSERT WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert platform skills history" ON "public"."platform_skills_history" FOR INSERT WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can insert skills history" ON "public"."organization_skills_history" FOR INSERT WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert skills history" ON "public"."organization_skills_history" FOR INSERT WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can manage context" ON "public"."organization_context" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage context" ON "public"."organization_context" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can manage pipeline log" ON "public"."pipeline_automation_log" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage pipeline log" ON "public"."pipeline_automation_log" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can manage pipeline rules" ON "public"."pipeline_automation_rules" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage pipeline rules" ON "public"."pipeline_automation_rules" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can manage workflow results" ON "public"."meeting_workflow_results" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage workflow results" ON "public"."meeting_workflow_results" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access to automation rules" ON "public"."user_automation_rules" USING (((( SELECT "current_setting"('role'::"text", true) AS "current_setting") = 'service_role'::"text") OR (( SELECT "current_setting"('request.jwt.claim.role'::"text", true) AS "current_setting") = 'service_role'::"text")));
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to automation rules" ON "public"."user_automation_rules" USING (((( SELECT "current_setting"('role'::"text", true) AS "current_setting") = 'service_role'::"text") OR (( SELECT "current_setting"('request.jwt.claim.role'::"text", true) AS "current_setting") = 'service_role'::"text")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access to calendar connections" ON "public"."meetingbaas_calendars" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to calendar connections" ON "public"."meetingbaas_calendars" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access to integration alerts" ON "public"."integration_alerts" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to integration alerts" ON "public"."integration_alerts" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access to integration test results" ON "public"."integration_test_results" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to integration test results" ON "public"."integration_test_results" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role has full access to calendar channels" ON "public"."google_calendar_channels" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to calendar channels" ON "public"."google_calendar_channels" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role has full access to calendars" ON "public"."calendar_calendars" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to calendars" ON "public"."calendar_calendars" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can view history of accessible templates" ON "public"."ai_prompt_template_history" FOR SELECT USING (("template_id" IN ( SELECT "ai_prompt_templates"."id"
+DO $$ BEGIN
+  CREATE POLICY "Users can view history of accessible templates" ON "public"."ai_prompt_template_history" FOR SELECT USING (("template_id" IN ( SELECT "ai_prompt_templates"."id"
    FROM "public"."ai_prompt_templates")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."action_items" ENABLE ROW LEVEL SECURITY;
 
@@ -25975,9 +26062,15 @@ ALTER TABLE "public"."activity_sync_rules" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."ai_cost_events" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "ai_cost_events_delete" ON "public"."ai_cost_events" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "ai_cost_events_delete" ON "public"."ai_cost_events" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "ai_cost_events_update" ON "public"."ai_cost_events" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "ai_cost_events_update" ON "public"."ai_cost_events" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."ai_feedback" ENABLE ROW LEVEL SECURITY;
 
@@ -25989,19 +26082,37 @@ ALTER TABLE "public"."ai_prompt_templates" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."ai_usage_logs" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "ai_usage_logs_delete" ON "public"."ai_usage_logs" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "ai_usage_logs_delete" ON "public"."ai_usage_logs" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "ai_usage_logs_update" ON "public"."ai_usage_logs" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "ai_usage_logs_update" ON "public"."ai_usage_logs" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "anon_insert" ON "public"."vsl_video_analytics" FOR INSERT TO "anon" WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "anon_insert" ON "public"."vsl_video_analytics" FOR INSERT TO "anon" WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."api_key_usage" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "api_key_usage_delete" ON "public"."api_key_usage" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "api_key_usage_delete" ON "public"."api_key_usage" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "api_key_usage_insert" ON "public"."api_key_usage" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "api_key_usage_insert" ON "public"."api_key_usage" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "api_key_usage_update" ON "public"."api_key_usage" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "api_key_usage_update" ON "public"."api_key_usage" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."api_keys" ENABLE ROW LEVEL SECURITY;
 
@@ -26013,27 +26124,54 @@ ALTER TABLE "public"."api_monitor_snapshots" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."api_requests" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "api_requests_delete" ON "public"."api_requests" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "api_requests_delete" ON "public"."api_requests" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "api_requests_update" ON "public"."api_requests" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "api_requests_update" ON "public"."api_requests" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."app_settings" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "app_settings_read" ON "public"."app_settings" FOR SELECT TO "authenticated" USING (true);
+DO $$ BEGIN
+  CREATE POLICY "app_settings_read" ON "public"."app_settings" FOR SELECT TO "authenticated" USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."audit_logs" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "audit_logs_delete" ON "public"."audit_logs" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "audit_logs_delete" ON "public"."audit_logs" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "audit_logs_insert" ON "public"."audit_logs" FOR INSERT TO "authenticated" WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "audit_logs_insert" ON "public"."audit_logs" FOR INSERT TO "authenticated" WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "audit_logs_select" ON "public"."audit_logs" FOR SELECT TO "authenticated" USING ("public"."is_platform_admin"());
+DO $$ BEGIN
+  CREATE POLICY "audit_logs_select" ON "public"."audit_logs" FOR SELECT TO "authenticated" USING ("public"."is_platform_admin"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "audit_logs_update" ON "public"."audit_logs" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "audit_logs_update" ON "public"."audit_logs" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "auth_insert" ON "public"."vsl_video_analytics" FOR INSERT TO "authenticated" WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "auth_insert" ON "public"."vsl_video_analytics" FOR INSERT TO "authenticated" WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "auth_select" ON "public"."vsl_video_analytics" FOR SELECT TO "authenticated" USING (true);
+DO $$ BEGIN
+  CREATE POLICY "auth_select" ON "public"."vsl_video_analytics" FOR SELECT TO "authenticated" USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."automation_executions" ENABLE ROW LEVEL SECURITY;
 
@@ -26041,13 +26179,25 @@ ALTER TABLE "public"."billing_event_log" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."billing_history" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "billing_history_delete" ON "public"."billing_history" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "billing_history_delete" ON "public"."billing_history" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "billing_history_insert" ON "public"."billing_history" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "billing_history_insert" ON "public"."billing_history" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "billing_history_select" ON "public"."billing_history" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "billing_history_select" ON "public"."billing_history" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "billing_history_update" ON "public"."billing_history" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "billing_history_update" ON "public"."billing_history" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."booking_sources" ENABLE ROW LEVEL SECURITY;
 
@@ -26055,19 +26205,37 @@ ALTER TABLE "public"."bot_deployments" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."branding_settings" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "branding_settings_delete" ON "public"."branding_settings" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "branding_settings_delete" ON "public"."branding_settings" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "branding_settings_insert" ON "public"."branding_settings" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "branding_settings_insert" ON "public"."branding_settings" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "branding_settings_update" ON "public"."branding_settings" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "branding_settings_update" ON "public"."branding_settings" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."calendar_attendees" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "calendar_attendees_delete" ON "public"."calendar_attendees" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "calendar_attendees_delete" ON "public"."calendar_attendees" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "calendar_attendees_insert" ON "public"."calendar_attendees" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "calendar_attendees_insert" ON "public"."calendar_attendees" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "calendar_attendees_update" ON "public"."calendar_attendees" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "calendar_attendees_update" ON "public"."calendar_attendees" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."calendar_calendars" ENABLE ROW LEVEL SECURITY;
 
@@ -26075,27 +26243,48 @@ ALTER TABLE "public"."calendar_events" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."calendar_reminders" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "calendar_reminders_delete" ON "public"."calendar_reminders" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "calendar_reminders_delete" ON "public"."calendar_reminders" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "calendar_reminders_insert" ON "public"."calendar_reminders" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "calendar_reminders_insert" ON "public"."calendar_reminders" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "calendar_reminders_update" ON "public"."calendar_reminders" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "calendar_reminders_update" ON "public"."calendar_reminders" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."calendar_sync_logs" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "calendar_sync_logs_delete" ON "public"."calendar_sync_logs" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "calendar_sync_logs_delete" ON "public"."calendar_sync_logs" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "calendar_sync_logs_update" ON "public"."calendar_sync_logs" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "calendar_sync_logs_update" ON "public"."calendar_sync_logs" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."call_action_items" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."call_file_search_index" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "call_file_search_index_service_all" ON "public"."call_file_search_index" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "call_file_search_index_service_all" ON "public"."call_file_search_index" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."call_index_queue" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "call_index_queue_service_all" ON "public"."call_index_queue" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "call_index_queue_service_all" ON "public"."call_index_queue" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."call_transcript_queue" ENABLE ROW LEVEL SECURITY;
 
@@ -26103,31 +26292,61 @@ ALTER TABLE "public"."calls" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."challenge_features" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "challenge_features_delete" ON "public"."challenge_features" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "challenge_features_delete" ON "public"."challenge_features" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "challenge_features_insert" ON "public"."challenge_features" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "challenge_features_insert" ON "public"."challenge_features" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "challenge_features_select" ON "public"."challenge_features" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "challenge_features_select" ON "public"."challenge_features" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "challenge_features_update" ON "public"."challenge_features" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "challenge_features_update" ON "public"."challenge_features" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."challenges" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "challenges_delete" ON "public"."challenges" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "challenges_delete" ON "public"."challenges" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "challenges_insert" ON "public"."challenges" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "challenges_insert" ON "public"."challenges" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "challenges_select" ON "public"."challenges" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "challenges_select" ON "public"."challenges" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "challenges_update" ON "public"."challenges" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "challenges_update" ON "public"."challenges" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."clerk_sync_log" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "clerk_sync_log_all" ON "public"."clerk_sync_log" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "clerk_sync_log_all" ON "public"."clerk_sync_log" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."clerk_user_mappings" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "clerk_user_mappings_all" ON "public"."clerk_user_mappings" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "clerk_user_mappings_all" ON "public"."clerk_user_mappings" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."clients" ENABLE ROW LEVEL SECURITY;
 
@@ -26139,19 +26358,37 @@ ALTER TABLE "public"."companies" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."company_meeting_insights" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "company_meeting_insights_delete" ON "public"."company_meeting_insights" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "company_meeting_insights_delete" ON "public"."company_meeting_insights" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "company_meeting_insights_insert" ON "public"."company_meeting_insights" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "company_meeting_insights_insert" ON "public"."company_meeting_insights" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "company_meeting_insights_update" ON "public"."company_meeting_insights" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "company_meeting_insights_update" ON "public"."company_meeting_insights" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."contact_meeting_insights" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "contact_meeting_insights_delete" ON "public"."contact_meeting_insights" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "contact_meeting_insights_delete" ON "public"."contact_meeting_insights" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "contact_meeting_insights_insert" ON "public"."contact_meeting_insights" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "contact_meeting_insights_insert" ON "public"."contact_meeting_insights" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "contact_meeting_insights_update" ON "public"."contact_meeting_insights" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "contact_meeting_insights_update" ON "public"."contact_meeting_insights" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."contact_notes" ENABLE ROW LEVEL SECURITY;
 
@@ -26159,47 +26396,95 @@ ALTER TABLE "public"."contacts" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."content" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "content_delete" ON "public"."content" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "content_delete" ON "public"."content" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "content_insert" ON "public"."content" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "content_insert" ON "public"."content" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "content_select" ON "public"."content" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "content_select" ON "public"."content" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."content_topic_links" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "content_topic_links_delete" ON "public"."content_topic_links" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "content_topic_links_delete" ON "public"."content_topic_links" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "content_topic_links_insert" ON "public"."content_topic_links" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "content_topic_links_insert" ON "public"."content_topic_links" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "content_topic_links_select" ON "public"."content_topic_links" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "content_topic_links_select" ON "public"."content_topic_links" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "content_topic_links_update" ON "public"."content_topic_links" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "content_topic_links_update" ON "public"."content_topic_links" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "content_update" ON "public"."content" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "content_update" ON "public"."content" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."copilot_analytics" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "copilot_analytics_delete" ON "public"."copilot_analytics" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "copilot_analytics_delete" ON "public"."copilot_analytics" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "copilot_analytics_update" ON "public"."copilot_analytics" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "copilot_analytics_update" ON "public"."copilot_analytics" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."copilot_conversations" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."copilot_messages" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "copilot_messages_delete" ON "public"."copilot_messages" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "copilot_messages_delete" ON "public"."copilot_messages" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "copilot_messages_update" ON "public"."copilot_messages" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "copilot_messages_update" ON "public"."copilot_messages" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."cost_rates" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "cost_rates_delete" ON "public"."cost_rates" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "cost_rates_delete" ON "public"."cost_rates" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "cost_rates_insert" ON "public"."cost_rates" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "cost_rates_insert" ON "public"."cost_rates" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "cost_rates_select" ON "public"."cost_rates" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "cost_rates_select" ON "public"."cost_rates" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "cost_rates_update" ON "public"."cost_rates" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "cost_rates_update" ON "public"."cost_rates" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."cron_job_logs" ENABLE ROW LEVEL SECURITY;
 
@@ -26215,41 +26500,83 @@ ALTER TABLE "public"."deal_close_plan_items" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."deal_health_alerts" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "deal_health_alerts_delete" ON "public"."deal_health_alerts" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_health_alerts_delete" ON "public"."deal_health_alerts" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_health_alerts_insert" ON "public"."deal_health_alerts" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "deal_health_alerts_insert" ON "public"."deal_health_alerts" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_health_alerts_update" ON "public"."deal_health_alerts" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_health_alerts_update" ON "public"."deal_health_alerts" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."deal_health_history" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "deal_health_history_delete" ON "public"."deal_health_history" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "deal_health_history_delete" ON "public"."deal_health_history" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_health_history_insert" ON "public"."deal_health_history" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "deal_health_history_insert" ON "public"."deal_health_history" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_health_history_update" ON "public"."deal_health_history" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "deal_health_history_update" ON "public"."deal_health_history" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."deal_health_rules" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "deal_health_rules_delete" ON "public"."deal_health_rules" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_health_rules_delete" ON "public"."deal_health_rules" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_health_rules_insert" ON "public"."deal_health_rules" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_health_rules_insert" ON "public"."deal_health_rules" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_health_rules_select" ON "public"."deal_health_rules" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_health_rules_select" ON "public"."deal_health_rules" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_health_rules_update" ON "public"."deal_health_rules" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_health_rules_update" ON "public"."deal_health_rules" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."deal_health_scores" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "deal_health_scores_delete" ON "public"."deal_health_scores" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "deal_health_scores_delete" ON "public"."deal_health_scores" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_health_scores_insert" ON "public"."deal_health_scores" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "deal_health_scores_insert" ON "public"."deal_health_scores" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_health_scores_update" ON "public"."deal_health_scores" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "deal_health_scores_update" ON "public"."deal_health_scores" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."deal_migration_reviews" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "deal_migration_reviews_all" ON "public"."deal_migration_reviews" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_migration_reviews_all" ON "public"."deal_migration_reviews" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."deal_notes" ENABLE ROW LEVEL SECURITY;
 
@@ -26259,19 +26586,34 @@ ALTER TABLE "public"."deal_risk_signals" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."deal_splits" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "deal_splits_delete" ON "public"."deal_splits" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_splits_delete" ON "public"."deal_splits" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_splits_insert" ON "public"."deal_splits" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_splits_insert" ON "public"."deal_splits" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_splits_update" ON "public"."deal_splits" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "deal_splits_update" ON "public"."deal_splits" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."deal_stage_history" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."deal_stages" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "deal_stages_select_authenticated" ON "public"."deal_stages" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "deal_stages_select_authenticated" ON "public"."deal_stages" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "deal_stages_service_role_all" ON "public"."deal_stages" USING (("current_setting"('role'::"text", true) = 'service_role'::"text"));
+DO $$ BEGIN
+  CREATE POLICY "deal_stages_service_role_all" ON "public"."deal_stages" USING (("current_setting"('role'::"text", true) = 'service_role'::"text"));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."deal_truth_fields" ENABLE ROW LEVEL SECURITY;
 
@@ -26279,11 +26621,20 @@ ALTER TABLE "public"."deals" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."email_attachments" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "email_attachments_delete" ON "public"."email_attachments" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "email_attachments_delete" ON "public"."email_attachments" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "email_attachments_insert" ON "public"."email_attachments" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "email_attachments_insert" ON "public"."email_attachments" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "email_attachments_update" ON "public"."email_attachments" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "email_attachments_update" ON "public"."email_attachments" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."email_categorizations" ENABLE ROW LEVEL SECURITY;
 
@@ -26291,17 +26642,29 @@ ALTER TABLE "public"."email_journeys" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."email_label_map" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "email_label_map_delete" ON "public"."email_label_map" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "email_label_map_delete" ON "public"."email_label_map" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "email_label_map_insert" ON "public"."email_label_map" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "email_label_map_insert" ON "public"."email_label_map" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "email_label_map_update" ON "public"."email_label_map" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "email_label_map_update" ON "public"."email_label_map" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."email_labels" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."email_logs" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "email_logs_service_role_write" ON "public"."email_logs" USING (((("current_setting"('request.jwt.claims'::"text", true))::json ->> 'role'::"text") = 'service_role'::"text")) WITH CHECK (((("current_setting"('request.jwt.claims'::"text", true))::json ->> 'role'::"text") = 'service_role'::"text"));
+DO $$ BEGIN
+  CREATE POLICY "email_logs_service_role_write" ON "public"."email_logs" USING (((("current_setting"('request.jwt.claims'::"text", true))::json ->> 'role'::"text") = 'service_role'::"text")) WITH CHECK (((("current_setting"('request.jwt.claims'::"text", true))::json ->> 'role'::"text") = 'service_role'::"text"));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."email_sends" ENABLE ROW LEVEL SECURITY;
 
@@ -26331,39 +26694,78 @@ ALTER TABLE "public"."fathom_sync_state" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."fathom_transcript_retry_jobs" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "fathom_transcript_retry_jobs_delete" ON "public"."fathom_transcript_retry_jobs" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "fathom_transcript_retry_jobs_delete" ON "public"."fathom_transcript_retry_jobs" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "fathom_transcript_retry_jobs_update" ON "public"."fathom_transcript_retry_jobs" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "fathom_transcript_retry_jobs_update" ON "public"."fathom_transcript_retry_jobs" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."fathom_user_mappings" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."ghost_detection_signals" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "ghost_detection_signals_delete" ON "public"."ghost_detection_signals" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "ghost_detection_signals_delete" ON "public"."ghost_detection_signals" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "ghost_detection_signals_insert" ON "public"."ghost_detection_signals" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "ghost_detection_signals_insert" ON "public"."ghost_detection_signals" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "ghost_detection_signals_update" ON "public"."ghost_detection_signals" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "ghost_detection_signals_update" ON "public"."ghost_detection_signals" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."global_topic_sources" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "global_topic_sources_delete" ON "public"."global_topic_sources" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "global_topic_sources_delete" ON "public"."global_topic_sources" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "global_topic_sources_insert" ON "public"."global_topic_sources" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "global_topic_sources_insert" ON "public"."global_topic_sources" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "global_topic_sources_select" ON "public"."global_topic_sources" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "global_topic_sources_select" ON "public"."global_topic_sources" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "global_topic_sources_update" ON "public"."global_topic_sources" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "global_topic_sources_update" ON "public"."global_topic_sources" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."global_topics" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "global_topics_delete" ON "public"."global_topics" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "global_topics_delete" ON "public"."global_topics" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "global_topics_insert" ON "public"."global_topics" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "global_topics_insert" ON "public"."global_topics" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "global_topics_select" ON "public"."global_topics" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "global_topics_select" ON "public"."global_topics" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "global_topics_update" ON "public"."global_topics" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "global_topics_update" ON "public"."global_topics" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."gmail_label_mappings" ENABLE ROW LEVEL SECURITY;
 
@@ -26371,29 +26773,56 @@ ALTER TABLE "public"."google_calendar_channels" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."google_calendars" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "google_calendars_delete" ON "public"."google_calendars" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_calendars_delete" ON "public"."google_calendars" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "google_calendars_insert" ON "public"."google_calendars" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_calendars_insert" ON "public"."google_calendars" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "google_calendars_update" ON "public"."google_calendars" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_calendars_update" ON "public"."google_calendars" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."google_docs_templates" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."google_drive_folders" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "google_drive_folders_delete" ON "public"."google_drive_folders" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_drive_folders_delete" ON "public"."google_drive_folders" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "google_drive_folders_insert" ON "public"."google_drive_folders" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_drive_folders_insert" ON "public"."google_drive_folders" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "google_drive_folders_update" ON "public"."google_drive_folders" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_drive_folders_update" ON "public"."google_drive_folders" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."google_email_labels" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "google_email_labels_delete" ON "public"."google_email_labels" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_email_labels_delete" ON "public"."google_email_labels" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "google_email_labels_insert" ON "public"."google_email_labels" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_email_labels_insert" ON "public"."google_email_labels" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "google_email_labels_update" ON "public"."google_email_labels" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_email_labels_update" ON "public"."google_email_labels" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."google_integrations" ENABLE ROW LEVEL SECURITY;
 
@@ -26401,11 +26830,20 @@ ALTER TABLE "public"."google_oauth_states" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."google_service_logs" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "google_service_logs_delete" ON "public"."google_service_logs" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_service_logs_delete" ON "public"."google_service_logs" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "google_service_logs_insert" ON "public"."google_service_logs" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_service_logs_insert" ON "public"."google_service_logs" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "google_service_logs_update" ON "public"."google_service_logs" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "google_service_logs_update" ON "public"."google_service_logs" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."google_task_lists" ENABLE ROW LEVEL SECURITY;
 
@@ -26419,7 +26857,10 @@ ALTER TABLE "public"."google_tasks_sync_status" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."hitl_pending_approvals" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hitl_pending_approvals_service_all" ON "public"."hitl_pending_approvals" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "hitl_pending_approvals_service_all" ON "public"."hitl_pending_approvals" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."hitl_requests" ENABLE ROW LEVEL SECURITY;
 
@@ -26427,51 +26868,90 @@ ALTER TABLE "public"."http_request_recordings" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."hubspot_oauth_states" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hubspot_oauth_states_service_all" ON "public"."hubspot_oauth_states" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "hubspot_oauth_states_service_all" ON "public"."hubspot_oauth_states" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."hubspot_object_mappings" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hubspot_object_mappings_service_all" ON "public"."hubspot_object_mappings" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "hubspot_object_mappings_service_all" ON "public"."hubspot_object_mappings" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."hubspot_org_credentials" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hubspot_org_credentials_service_all" ON "public"."hubspot_org_credentials" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "hubspot_org_credentials_service_all" ON "public"."hubspot_org_credentials" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."hubspot_org_integrations" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hubspot_org_integrations_admin_all" ON "public"."hubspot_org_integrations" USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id"))) WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "hubspot_org_integrations_admin_all" ON "public"."hubspot_org_integrations" USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id"))) WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "hubspot_org_integrations_select" ON "public"."hubspot_org_integrations" FOR SELECT USING (("public"."is_service_role"() OR "public"."can_access_org_data"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "hubspot_org_integrations_select" ON "public"."hubspot_org_integrations" FOR SELECT USING (("public"."is_service_role"() OR "public"."can_access_org_data"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."hubspot_org_sync_state" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hubspot_org_sync_state_select" ON "public"."hubspot_org_sync_state" FOR SELECT USING (("public"."is_service_role"() OR "public"."can_access_org_data"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "hubspot_org_sync_state_select" ON "public"."hubspot_org_sync_state" FOR SELECT USING (("public"."is_service_role"() OR "public"."can_access_org_data"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "hubspot_org_sync_state_service_write" ON "public"."hubspot_org_sync_state" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "hubspot_org_sync_state_service_write" ON "public"."hubspot_org_sync_state" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."hubspot_settings" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hubspot_settings_admin_all" ON "public"."hubspot_settings" USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id"))) WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "hubspot_settings_admin_all" ON "public"."hubspot_settings" USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id"))) WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "hubspot_settings_select" ON "public"."hubspot_settings" FOR SELECT USING (("public"."is_service_role"() OR "public"."can_access_org_data"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "hubspot_settings_select" ON "public"."hubspot_settings" FOR SELECT USING (("public"."is_service_role"() OR "public"."can_access_org_data"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."hubspot_sync_queue" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hubspot_sync_queue_service_all" ON "public"."hubspot_sync_queue" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "hubspot_sync_queue_service_all" ON "public"."hubspot_sync_queue" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."hubspot_webhook_events" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "hubspot_webhook_events_service_all" ON "public"."hubspot_webhook_events" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "hubspot_webhook_events_service_all" ON "public"."hubspot_webhook_events" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."impersonation_logs" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "impersonation_logs_all" ON "public"."impersonation_logs" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "impersonation_logs_all" ON "public"."impersonation_logs" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."integration_alerts" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."integration_sync_logs" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "integration_sync_logs_service_all" ON "public"."integration_sync_logs" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "integration_sync_logs_service_all" ON "public"."integration_sync_logs" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."integration_test_results" ENABLE ROW LEVEL SECURITY;
 
@@ -26481,21 +26961,42 @@ ALTER TABLE "public"."internal_users" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."intervention_templates" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "intervention_templates_delete" ON "public"."intervention_templates" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "intervention_templates_delete" ON "public"."intervention_templates" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "intervention_templates_insert" ON "public"."intervention_templates" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "intervention_templates_insert" ON "public"."intervention_templates" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "intervention_templates_select" ON "public"."intervention_templates" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "intervention_templates_select" ON "public"."intervention_templates" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "intervention_templates_update" ON "public"."intervention_templates" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "intervention_templates_update" ON "public"."intervention_templates" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."interventions" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "interventions_delete" ON "public"."interventions" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "interventions_delete" ON "public"."interventions" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "interventions_insert" ON "public"."interventions" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "interventions_insert" ON "public"."interventions" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "interventions_update" ON "public"."interventions" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "interventions_update" ON "public"."interventions" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."justcall_integration_secrets" ENABLE ROW LEVEL SECURITY;
 
@@ -26507,11 +27008,20 @@ ALTER TABLE "public"."launch_checklist_items" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."lead_events" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "lead_events_delete" ON "public"."lead_events" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "lead_events_delete" ON "public"."lead_events" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "lead_events_insert" ON "public"."lead_events" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "lead_events_insert" ON "public"."lead_events" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "lead_events_update" ON "public"."lead_events" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "lead_events_update" ON "public"."lead_events" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."lead_prep_notes" ENABLE ROW LEVEL SECURITY;
 
@@ -26527,31 +27037,58 @@ ALTER TABLE "public"."meeting_aggregate_metrics" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."meeting_attendees" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "meeting_attendees_delete" ON "public"."meeting_attendees" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_attendees_delete" ON "public"."meeting_attendees" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_attendees_insert" ON "public"."meeting_attendees" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_attendees_insert" ON "public"."meeting_attendees" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_attendees_update" ON "public"."meeting_attendees" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_attendees_update" ON "public"."meeting_attendees" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."meeting_classifications" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."meeting_contacts" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "meeting_contacts_delete" ON "public"."meeting_contacts" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_contacts_delete" ON "public"."meeting_contacts" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_contacts_insert" ON "public"."meeting_contacts" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_contacts_insert" ON "public"."meeting_contacts" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_contacts_update" ON "public"."meeting_contacts" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_contacts_update" ON "public"."meeting_contacts" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."meeting_content_topics" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."meeting_documents" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "meeting_documents_delete" ON "public"."meeting_documents" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_documents_delete" ON "public"."meeting_documents" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_documents_insert" ON "public"."meeting_documents" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_documents_insert" ON "public"."meeting_documents" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_documents_update" ON "public"."meeting_documents" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_documents_update" ON "public"."meeting_documents" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."meeting_file_search_index" ENABLE ROW LEVEL SECURITY;
 
@@ -26563,11 +27100,20 @@ ALTER TABLE "public"."meeting_intelligence_queries" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."meeting_metrics" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "meeting_metrics_delete" ON "public"."meeting_metrics" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "meeting_metrics_delete" ON "public"."meeting_metrics" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_metrics_insert" ON "public"."meeting_metrics" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_metrics_insert" ON "public"."meeting_metrics" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_metrics_update" ON "public"."meeting_metrics" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "meeting_metrics_update" ON "public"."meeting_metrics" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."meeting_scorecards" ENABLE ROW LEVEL SECURITY;
 
@@ -26575,11 +27121,20 @@ ALTER TABLE "public"."meeting_structured_summaries" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."meeting_topics" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "meeting_topics_delete" ON "public"."meeting_topics" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "meeting_topics_delete" ON "public"."meeting_topics" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_topics_insert" ON "public"."meeting_topics" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "meeting_topics_insert" ON "public"."meeting_topics" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meeting_topics_update" ON "public"."meeting_topics" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "meeting_topics_update" ON "public"."meeting_topics" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."meeting_workflow_results" ENABLE ROW LEVEL SECURITY;
 
@@ -26589,17 +27144,32 @@ ALTER TABLE "public"."meetings" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."meetings_waitlist" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "meetings_waitlist_insert" ON "public"."meetings_waitlist" FOR INSERT WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "meetings_waitlist_insert" ON "public"."meetings_waitlist" FOR INSERT WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "meetings_waitlist_select" ON "public"."meetings_waitlist" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "meetings_waitlist_select" ON "public"."meetings_waitlist" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."next_action_suggestions" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "next_action_suggestions_delete" ON "public"."next_action_suggestions" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "next_action_suggestions_delete" ON "public"."next_action_suggestions" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "next_action_suggestions_insert" ON "public"."next_action_suggestions" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "next_action_suggestions_insert" ON "public"."next_action_suggestions" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "next_action_suggestions_update" ON "public"."next_action_suggestions" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "next_action_suggestions_update" ON "public"."next_action_suggestions" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."node_executions" ENABLE ROW LEVEL SECURITY;
 
@@ -26615,51 +27185,102 @@ ALTER TABLE "public"."notification_queue" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."notification_rate_limits" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "notification_rate_limits_all" ON "public"."notification_rate_limits" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "notification_rate_limits_all" ON "public"."notification_rate_limits" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."notifications" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "notifications_insert" ON "public"."notifications" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "notifications_insert" ON "public"."notifications" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_admins_manage_justcall_integration_secrets" ON "public"."justcall_integration_secrets" USING (("public"."can_admin_org"("org_id") OR "public"."is_service_role"())) WITH CHECK (("public"."can_admin_org"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_admins_manage_justcall_integration_secrets" ON "public"."justcall_integration_secrets" USING (("public"."can_admin_org"("org_id") OR "public"."is_service_role"())) WITH CHECK (("public"."can_admin_org"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_admins_manage_justcall_integrations" ON "public"."justcall_integrations" USING (("public"."can_admin_org"("org_id") OR "public"."is_service_role"())) WITH CHECK (("public"."can_admin_org"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_admins_manage_justcall_integrations" ON "public"."justcall_integrations" USING (("public"."can_admin_org"("org_id") OR "public"."is_service_role"())) WITH CHECK (("public"."can_admin_org"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."org_ai_preferences" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."org_call_types" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "org_delete_call_action_items" ON "public"."call_action_items" FOR DELETE USING (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_delete_call_action_items" ON "public"."call_action_items" FOR DELETE USING (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_delete_calls" ON "public"."calls" FOR DELETE USING (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_delete_calls" ON "public"."calls" FOR DELETE USING (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."org_email_categorization_settings" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."org_file_search_stores" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "org_file_search_stores_delete" ON "public"."org_file_search_stores" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "org_file_search_stores_delete" ON "public"."org_file_search_stores" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_file_search_stores_insert" ON "public"."org_file_search_stores" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "org_file_search_stores_insert" ON "public"."org_file_search_stores" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_file_search_stores_select" ON "public"."org_file_search_stores" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "org_file_search_stores_select" ON "public"."org_file_search_stores" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_file_search_stores_update" ON "public"."org_file_search_stores" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "org_file_search_stores_update" ON "public"."org_file_search_stores" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_insert_call_action_items" ON "public"."call_action_items" FOR INSERT WITH CHECK (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_insert_call_action_items" ON "public"."call_action_items" FOR INSERT WITH CHECK (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_insert_calls" ON "public"."calls" FOR INSERT WITH CHECK (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_insert_calls" ON "public"."calls" FOR INSERT WITH CHECK (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."org_proposal_workflows" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "org_select_call_action_items" ON "public"."call_action_items" FOR SELECT USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_select_call_action_items" ON "public"."call_action_items" FOR SELECT USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_select_calls" ON "public"."calls" FOR SELECT USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_select_calls" ON "public"."calls" FOR SELECT USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_select_justcall_integrations" ON "public"."justcall_integrations" FOR SELECT USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_select_justcall_integrations" ON "public"."justcall_integrations" FOR SELECT USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_update_call_action_items" ON "public"."call_action_items" FOR UPDATE USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"())) WITH CHECK (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_update_call_action_items" ON "public"."call_action_items" FOR UPDATE USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"())) WITH CHECK (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "org_update_calls" ON "public"."calls" FOR UPDATE USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"())) WITH CHECK (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+DO $$ BEGIN
+  CREATE POLICY "org_update_calls" ON "public"."calls" FOR UPDATE USING (("public"."can_access_org_data"("org_id") OR "public"."is_service_role"())) WITH CHECK (("public"."can_write_to_org"("org_id") OR "public"."is_service_role"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."organization_context" ENABLE ROW LEVEL SECURITY;
 
@@ -26667,23 +27288,47 @@ ALTER TABLE "public"."organization_enrichment" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."organization_feature_flags" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "organization_feature_flags_delete" ON "public"."organization_feature_flags" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "organization_feature_flags_delete" ON "public"."organization_feature_flags" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_feature_flags_insert" ON "public"."organization_feature_flags" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "organization_feature_flags_insert" ON "public"."organization_feature_flags" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_feature_flags_select" ON "public"."organization_feature_flags" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "organization_feature_flags_select" ON "public"."organization_feature_flags" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_feature_flags_update" ON "public"."organization_feature_flags" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "organization_feature_flags_update" ON "public"."organization_feature_flags" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."organization_invitations" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "organization_invitations_delete" ON "public"."organization_invitations" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "organization_invitations_delete" ON "public"."organization_invitations" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_invitations_insert" ON "public"."organization_invitations" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "organization_invitations_insert" ON "public"."organization_invitations" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_invitations_select" ON "public"."organization_invitations" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "organization_invitations_select" ON "public"."organization_invitations" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_invitations_update" ON "public"."organization_invitations" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "organization_invitations_update" ON "public"."organization_invitations" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."organization_memberships" ENABLE ROW LEVEL SECURITY;
 
@@ -26693,21 +27338,42 @@ ALTER TABLE "public"."organization_skills_history" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."organization_subscriptions" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "organization_subscriptions_delete" ON "public"."organization_subscriptions" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "organization_subscriptions_delete" ON "public"."organization_subscriptions" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_subscriptions_insert" ON "public"."organization_subscriptions" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "organization_subscriptions_insert" ON "public"."organization_subscriptions" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_subscriptions_update" ON "public"."organization_subscriptions" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "organization_subscriptions_update" ON "public"."organization_subscriptions" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."organization_usage" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "organization_usage_delete" ON "public"."organization_usage" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "organization_usage_delete" ON "public"."organization_usage" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_usage_insert" ON "public"."organization_usage" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "organization_usage_insert" ON "public"."organization_usage" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_usage_select" ON "public"."organization_usage" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "organization_usage_select" ON "public"."organization_usage" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "organization_usage_update" ON "public"."organization_usage" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "organization_usage_update" ON "public"."organization_usage" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."organizations" ENABLE ROW LEVEL SECURITY;
 
@@ -26721,13 +27387,25 @@ ALTER TABLE "public"."pipeline_automation_rules" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."pipeline_stage_recommendations" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "pipeline_stage_recommendations_delete" ON "public"."pipeline_stage_recommendations" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "pipeline_stage_recommendations_delete" ON "public"."pipeline_stage_recommendations" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "pipeline_stage_recommendations_insert" ON "public"."pipeline_stage_recommendations" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "pipeline_stage_recommendations_insert" ON "public"."pipeline_stage_recommendations" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "pipeline_stage_recommendations_update" ON "public"."pipeline_stage_recommendations" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "pipeline_stage_recommendations_update" ON "public"."pipeline_stage_recommendations" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "platform_admin_manage_internal_users" ON "public"."internal_users" TO "authenticated" USING ("public"."is_admin_optimized"()) WITH CHECK ("public"."is_admin_optimized"());
+DO $$ BEGIN
+  CREATE POLICY "platform_admin_manage_internal_users" ON "public"."internal_users" TO "authenticated" USING ("public"."is_admin_optimized"()) WITH CHECK ("public"."is_admin_optimized"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."platform_skills" ENABLE ROW LEVEL SECURITY;
 
@@ -26735,13 +27413,25 @@ ALTER TABLE "public"."platform_skills_history" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."pricing_plans" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "pricing_plans_delete" ON "public"."pricing_plans" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "pricing_plans_delete" ON "public"."pricing_plans" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "pricing_plans_insert" ON "public"."pricing_plans" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "pricing_plans_insert" ON "public"."pricing_plans" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "pricing_plans_select" ON "public"."pricing_plans" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "pricing_plans_select" ON "public"."pricing_plans" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "pricing_plans_update" ON "public"."pricing_plans" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "pricing_plans_update" ON "public"."pricing_plans" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."process_map_coverage_snapshots" ENABLE ROW LEVEL SECURITY;
 
@@ -26763,7 +27453,10 @@ ALTER TABLE "public"."process_maps" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "profiles_delete" ON "public"."profiles" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "profiles_delete" ON "public"."profiles" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON POLICY "profiles_delete" ON "public"."profiles" IS 'Allows service role and platform admins to delete profiles. Regular users cannot delete profiles.';
 
@@ -26785,55 +27478,109 @@ ALTER TABLE "public"."recordings" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."relationship_health_history" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "relationship_health_history_delete" ON "public"."relationship_health_history" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "relationship_health_history_delete" ON "public"."relationship_health_history" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "relationship_health_history_insert" ON "public"."relationship_health_history" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "relationship_health_history_insert" ON "public"."relationship_health_history" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "relationship_health_history_update" ON "public"."relationship_health_history" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "relationship_health_history_update" ON "public"."relationship_health_history" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."relationship_health_scores" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "relationship_health_scores_delete" ON "public"."relationship_health_scores" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "relationship_health_scores_delete" ON "public"."relationship_health_scores" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "relationship_health_scores_insert" ON "public"."relationship_health_scores" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "relationship_health_scores_insert" ON "public"."relationship_health_scores" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "relationship_health_scores_update" ON "public"."relationship_health_scores" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "relationship_health_scores_update" ON "public"."relationship_health_scores" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."roadmap_comments" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "roadmap_comments_select" ON "public"."roadmap_comments" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "roadmap_comments_select" ON "public"."roadmap_comments" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."roadmap_suggestions" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "roadmap_suggestions_select" ON "public"."roadmap_suggestions" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "roadmap_suggestions_select" ON "public"."roadmap_suggestions" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."roadmap_votes" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "roadmap_votes_select" ON "public"."roadmap_votes" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "roadmap_votes_select" ON "public"."roadmap_votes" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."savvycal_integration_secrets" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "savvycal_integration_secrets_admin_all" ON "public"."savvycal_integration_secrets" USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id"))) WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "savvycal_integration_secrets_admin_all" ON "public"."savvycal_integration_secrets" USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id"))) WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."savvycal_integrations" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "savvycal_integrations_admin_delete" ON "public"."savvycal_integrations" FOR DELETE USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "savvycal_integrations_admin_delete" ON "public"."savvycal_integrations" FOR DELETE USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "savvycal_integrations_admin_insert" ON "public"."savvycal_integrations" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "savvycal_integrations_admin_insert" ON "public"."savvycal_integrations" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "savvycal_integrations_admin_update" ON "public"."savvycal_integrations" FOR UPDATE USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id"))) WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "savvycal_integrations_admin_update" ON "public"."savvycal_integrations" FOR UPDATE USING (("public"."is_service_role"() OR "public"."can_admin_org"("org_id"))) WITH CHECK (("public"."is_service_role"() OR "public"."can_admin_org"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "savvycal_integrations_select" ON "public"."savvycal_integrations" FOR SELECT USING (("public"."is_service_role"() OR "public"."can_access_org_data"("org_id")));
+DO $$ BEGIN
+  CREATE POLICY "savvycal_integrations_select" ON "public"."savvycal_integrations" FOR SELECT USING (("public"."is_service_role"() OR "public"."can_access_org_data"("org_id")));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."savvycal_link_mappings" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "savvycal_link_mappings_delete" ON "public"."savvycal_link_mappings" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "savvycal_link_mappings_delete" ON "public"."savvycal_link_mappings" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "savvycal_link_mappings_insert" ON "public"."savvycal_link_mappings" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "savvycal_link_mappings_insert" ON "public"."savvycal_link_mappings" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "savvycal_link_mappings_select" ON "public"."savvycal_link_mappings" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "savvycal_link_mappings_select" ON "public"."savvycal_link_mappings" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "savvycal_link_mappings_update" ON "public"."savvycal_link_mappings" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "savvycal_link_mappings_update" ON "public"."savvycal_link_mappings" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."savvycal_source_mappings" ENABLE ROW LEVEL SECURITY;
 
@@ -26841,7 +27588,10 @@ ALTER TABLE "public"."scenario_fixtures" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."sentiment_alerts" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "sentiment_alerts_insert" ON "public"."sentiment_alerts" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "sentiment_alerts_insert" ON "public"."sentiment_alerts" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."sentry_bridge_config" ENABLE ROW LEVEL SECURITY;
 
@@ -26869,11 +27619,20 @@ ALTER TABLE "public"."sequence_references_archive" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."sequence_token_budgets" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "service_role_deal_stage_history" ON "public"."deal_stage_history" TO "service_role" USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "service_role_deal_stage_history" ON "public"."deal_stage_history" TO "service_role" USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "service_role_manage_call_transcript_queue" ON "public"."call_transcript_queue" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "service_role_manage_call_transcript_queue" ON "public"."call_transcript_queue" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "service_role_manage_justcall_oauth_states" ON "public"."justcall_oauth_states" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "service_role_manage_justcall_oauth_states" ON "public"."justcall_oauth_states" USING ("public"."is_service_role"()) WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."skill_output_storage" ENABLE ROW LEVEL SECURITY;
 
@@ -26881,137 +27640,281 @@ ALTER TABLE "public"."slack_channels" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."slack_deal_rooms" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "slack_deal_rooms_delete" ON "public"."slack_deal_rooms" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "slack_deal_rooms_delete" ON "public"."slack_deal_rooms" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_deal_rooms_insert" ON "public"."slack_deal_rooms" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "slack_deal_rooms_insert" ON "public"."slack_deal_rooms" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_deal_rooms_select" ON "public"."slack_deal_rooms" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "slack_deal_rooms_select" ON "public"."slack_deal_rooms" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_deal_rooms_update" ON "public"."slack_deal_rooms" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "slack_deal_rooms_update" ON "public"."slack_deal_rooms" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."slack_integrations" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "slack_integrations_delete" ON "public"."slack_integrations" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "slack_integrations_delete" ON "public"."slack_integrations" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_integrations_insert" ON "public"."slack_integrations" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "slack_integrations_insert" ON "public"."slack_integrations" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_integrations_select" ON "public"."slack_integrations" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "slack_integrations_select" ON "public"."slack_integrations" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_integrations_update" ON "public"."slack_integrations" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "slack_integrations_update" ON "public"."slack_integrations" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."slack_notification_settings" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."slack_notifications_sent" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "slack_notifications_sent_delete" ON "public"."slack_notifications_sent" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "slack_notifications_sent_delete" ON "public"."slack_notifications_sent" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_notifications_sent_insert" ON "public"."slack_notifications_sent" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "slack_notifications_sent_insert" ON "public"."slack_notifications_sent" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_notifications_sent_select" ON "public"."slack_notifications_sent" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "slack_notifications_sent_select" ON "public"."slack_notifications_sent" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_notifications_sent_update" ON "public"."slack_notifications_sent" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "slack_notifications_sent_update" ON "public"."slack_notifications_sent" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."slack_org_settings" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "slack_org_settings_delete" ON "public"."slack_org_settings" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "slack_org_settings_delete" ON "public"."slack_org_settings" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_org_settings_insert" ON "public"."slack_org_settings" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "slack_org_settings_insert" ON "public"."slack_org_settings" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."slack_user_mappings" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "slack_user_mappings_delete" ON "public"."slack_user_mappings" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "slack_user_mappings_delete" ON "public"."slack_user_mappings" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "slack_user_mappings_insert" ON "public"."slack_user_mappings" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "slack_user_mappings_insert" ON "public"."slack_user_mappings" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."smart_task_templates" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "smart_task_templates_delete" ON "public"."smart_task_templates" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "smart_task_templates_delete" ON "public"."smart_task_templates" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "smart_task_templates_insert" ON "public"."smart_task_templates" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "smart_task_templates_insert" ON "public"."smart_task_templates" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "smart_task_templates_update" ON "public"."smart_task_templates" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "smart_task_templates_update" ON "public"."smart_task_templates" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."solutions" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "solutions_delete" ON "public"."solutions" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "solutions_delete" ON "public"."solutions" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "solutions_insert" ON "public"."solutions" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "solutions_insert" ON "public"."solutions" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "solutions_select" ON "public"."solutions" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "solutions_select" ON "public"."solutions" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "solutions_update" ON "public"."solutions" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "solutions_update" ON "public"."solutions" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."stages" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "stages_delete" ON "public"."stages" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "stages_delete" ON "public"."stages" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "stages_insert" ON "public"."stages" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "stages_insert" ON "public"."stages" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "stages_select" ON "public"."stages" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "stages_select" ON "public"."stages" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "stages_update" ON "public"."stages" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "stages_update" ON "public"."stages" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."subscription_plans" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "subscription_plans_delete" ON "public"."subscription_plans" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "subscription_plans_delete" ON "public"."subscription_plans" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "subscription_plans_insert" ON "public"."subscription_plans" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "subscription_plans_insert" ON "public"."subscription_plans" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "subscription_plans_select" ON "public"."subscription_plans" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "subscription_plans_select" ON "public"."subscription_plans" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "subscription_plans_update" ON "public"."subscription_plans" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "subscription_plans_update" ON "public"."subscription_plans" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."subscription_seat_usage" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "subscription_seat_usage_delete" ON "public"."subscription_seat_usage" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "subscription_seat_usage_delete" ON "public"."subscription_seat_usage" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "subscription_seat_usage_insert" ON "public"."subscription_seat_usage" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "subscription_seat_usage_insert" ON "public"."subscription_seat_usage" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "subscription_seat_usage_select" ON "public"."subscription_seat_usage" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "subscription_seat_usage_select" ON "public"."subscription_seat_usage" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "subscription_seat_usage_update" ON "public"."subscription_seat_usage" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "subscription_seat_usage_update" ON "public"."subscription_seat_usage" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."system_config" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."targets" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "targets_delete" ON "public"."targets" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "targets_delete" ON "public"."targets" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "targets_insert" ON "public"."targets" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "targets_insert" ON "public"."targets" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "targets_update" ON "public"."targets" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "targets_update" ON "public"."targets" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."task_notifications" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "task_notifications_insert" ON "public"."task_notifications" FOR INSERT WITH CHECK ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "task_notifications_insert" ON "public"."task_notifications" FOR INSERT WITH CHECK ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."tasks" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."team_members" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "team_members_delete" ON "public"."team_members" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "team_members_delete" ON "public"."team_members" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "team_members_insert" ON "public"."team_members" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "team_members_insert" ON "public"."team_members" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "team_members_update" ON "public"."team_members" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "team_members_update" ON "public"."team_members" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."teams" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "teams_delete" ON "public"."teams" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "teams_delete" ON "public"."teams" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "teams_insert" ON "public"."teams" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "teams_insert" ON "public"."teams" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "teams_update" ON "public"."teams" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "teams_update" ON "public"."teams" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."topic_aggregation_queue" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "topic_aggregation_queue_all" ON "public"."topic_aggregation_queue" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "topic_aggregation_queue_all" ON "public"."topic_aggregation_queue" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."usage_events" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "usage_events_delete" ON "public"."usage_events" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "usage_events_delete" ON "public"."usage_events" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "usage_events_update" ON "public"."usage_events" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "usage_events_update" ON "public"."usage_events" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."user_activation_events" ENABLE ROW LEVEL SECURITY;
 
@@ -27039,13 +27942,25 @@ ALTER TABLE "public"."user_profiles" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."user_roles" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "user_roles_delete" ON "public"."user_roles" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "user_roles_delete" ON "public"."user_roles" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "user_roles_insert" ON "public"."user_roles" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "user_roles_insert" ON "public"."user_roles" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "user_roles_select" ON "public"."user_roles" FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "user_roles_select" ON "public"."user_roles" FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "user_roles_update" ON "public"."user_roles" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "user_roles_update" ON "public"."user_roles" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."user_settings" ENABLE ROW LEVEL SECURITY;
 
@@ -27063,21 +27978,39 @@ ALTER TABLE "public"."vsl_video_analytics" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."waitlist_admin_actions" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "waitlist_admin_actions_all" ON "public"."waitlist_admin_actions" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "waitlist_admin_actions_all" ON "public"."waitlist_admin_actions" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."waitlist_email_invites" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "waitlist_email_invites_delete" ON "public"."waitlist_email_invites" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "waitlist_email_invites_delete" ON "public"."waitlist_email_invites" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "waitlist_email_invites_insert" ON "public"."waitlist_email_invites" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "waitlist_email_invites_insert" ON "public"."waitlist_email_invites" FOR INSERT WITH CHECK (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "waitlist_email_invites_select" ON "public"."waitlist_email_invites" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "waitlist_email_invites_select" ON "public"."waitlist_email_invites" FOR SELECT USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "waitlist_email_invites_update" ON "public"."waitlist_email_invites" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "waitlist_email_invites_update" ON "public"."waitlist_email_invites" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."waitlist_email_templates" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "waitlist_email_templates_all" ON "public"."waitlist_email_templates" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "waitlist_email_templates_all" ON "public"."waitlist_email_templates" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."waitlist_invite_codes" ENABLE ROW LEVEL SECURITY;
 
@@ -27085,15 +28018,24 @@ ALTER TABLE "public"."waitlist_onboarding_progress" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."waitlist_shares" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "waitlist_shares_delete" ON "public"."waitlist_shares" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "waitlist_shares_delete" ON "public"."waitlist_shares" FOR DELETE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "waitlist_shares_update" ON "public"."waitlist_shares" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "waitlist_shares_update" ON "public"."waitlist_shares" FOR UPDATE USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."webhook_events" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."webhook_mirror_config" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "webhook_mirror_config_all" ON "public"."webhook_mirror_config" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+DO $$ BEGIN
+  CREATE POLICY "webhook_mirror_config_all" ON "public"."webhook_mirror_config" USING (("public"."is_service_role"() OR "public"."is_admin_optimized"()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."workflow_batch_windows" ENABLE ROW LEVEL SECURITY;
 
@@ -27115,9 +28057,15 @@ ALTER TABLE "public"."workflow_idempotency_keys" ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE "public"."workflow_mcp_logs" ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "workflow_mcp_logs_delete" ON "public"."workflow_mcp_logs" FOR DELETE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "workflow_mcp_logs_delete" ON "public"."workflow_mcp_logs" FOR DELETE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "workflow_mcp_logs_update" ON "public"."workflow_mcp_logs" FOR UPDATE USING ("public"."is_service_role"());
+DO $$ BEGIN
+  CREATE POLICY "workflow_mcp_logs_update" ON "public"."workflow_mcp_logs" FOR UPDATE USING ("public"."is_service_role"());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "public"."workflow_rate_limits" ENABLE ROW LEVEL SECURITY;
 

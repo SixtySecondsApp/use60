@@ -9,8 +9,8 @@ const corsHeaders = {
 }
 
 interface CreateDynamicTableRequest {
-  source?: 'apollo' | 'ai_ark'
-  action?: 'company_search' | 'people_search'
+  source?: 'apollo' | 'ai_ark' | 'explorium'
+  action?: 'company_search' | 'people_search' | 'business_search' | 'prospect_search'
   query_description: string
   search_params: Record<string, unknown>
   table_name?: string
@@ -84,6 +84,98 @@ interface NormalizedAiArkContact {
   current_company: string | null
   current_company_domain: string | null
   photo_url: string | null
+}
+
+// ============================================================================
+// Explorium normalized types
+// ============================================================================
+
+interface NormalizedExploriumBusiness {
+  explorium_id: string       // business_id (32-char hex)
+  company_name: string
+  domain: string | null
+  industry: string | null
+  employee_range: string | null
+  revenue_range: string | null
+  country: string | null
+  city: string | null
+  description: string | null
+  logo_url: string | null
+  linkedin_url: string | null
+  website: string | null
+  is_public: boolean | null
+}
+
+interface NormalizedExploriumProspect {
+  explorium_id: string       // prospect_id (40-char hex)
+  first_name: string
+  last_name: string
+  full_name: string
+  title: string
+  job_level: string | null
+  department: string | null
+  linkedin_url: string | null
+  country: string | null
+  city: string | null
+  company_name: string | null
+  company_domain: string | null
+  business_id: string | null
+}
+
+// Standard columns for Explorium business-sourced ops tables
+const EXPLORIUM_BUSINESS_COLUMNS = [
+  { key: 'company_name',   label: 'Company',     column_type: 'company', position: 0, width: 200 },
+  { key: 'domain',         label: 'Domain',      column_type: 'url',     position: 1, width: 180 },
+  { key: 'industry',       label: 'Industry',    column_type: 'text',    position: 2, width: 160 },
+  { key: 'employee_range', label: 'Employees',   column_type: 'text',    position: 3, width: 120 },
+  { key: 'revenue_range',  label: 'Revenue',     column_type: 'text',    position: 4, width: 130 },
+  { key: 'country',        label: 'Country',     column_type: 'text',    position: 5, width: 120 },
+  { key: 'city',           label: 'City',        column_type: 'text',    position: 6, width: 120 },
+  { key: 'description',    label: 'Description', column_type: 'text',    position: 7, width: 250 },
+  { key: 'linkedin_url',   label: 'LinkedIn',    column_type: 'linkedin',position: 8, width: 160 },
+  { key: 'website',        label: 'Website',     column_type: 'url',     position: 9, width: 180 },
+] as const
+
+// Standard columns for Explorium prospect-sourced ops tables
+const EXPLORIUM_PROSPECT_COLUMNS = [
+  { key: 'full_name',      label: 'Name',           column_type: 'person',  position: 0, width: 180 },
+  { key: 'title',          label: 'Title',          column_type: 'text',    position: 1, width: 200 },
+  { key: 'company_name',   label: 'Company',        column_type: 'company', position: 2, width: 180 },
+  { key: 'linkedin_url',   label: 'LinkedIn',       column_type: 'linkedin',position: 3, width: 160 },
+  { key: 'job_level',      label: 'Seniority',      column_type: 'text',    position: 4, width: 120 },
+  { key: 'department',     label: 'Department',     column_type: 'text',    position: 5, width: 140 },
+  { key: 'country',        label: 'Country',        column_type: 'text',    position: 6, width: 120 },
+  { key: 'company_domain', label: 'Company Domain', column_type: 'url',     position: 7, width: 160 },
+] as const
+
+function getExploriumBusinessCellValue(biz: NormalizedExploriumBusiness, key: string): string | null {
+  switch (key) {
+    case 'company_name':   return biz.company_name || null
+    case 'domain':         return biz.domain
+    case 'industry':       return biz.industry
+    case 'employee_range': return biz.employee_range
+    case 'revenue_range':  return biz.revenue_range
+    case 'country':        return biz.country
+    case 'city':           return biz.city
+    case 'description':    return biz.description
+    case 'linkedin_url':   return biz.linkedin_url
+    case 'website':        return biz.website
+    default:               return null
+  }
+}
+
+function getExploriumProspectCellValue(p: NormalizedExploriumProspect, key: string): string | null {
+  switch (key) {
+    case 'full_name':      return p.full_name || null
+    case 'title':          return p.title || null
+    case 'company_name':   return p.company_name
+    case 'linkedin_url':   return p.linkedin_url
+    case 'job_level':      return p.job_level
+    case 'department':     return p.department
+    case 'country':        return p.country
+    case 'company_domain': return p.company_domain
+    default:               return null
+  }
 }
 
 // Standard columns for AI Ark company-sourced ops tables
@@ -341,7 +433,7 @@ serve(async (req) => {
       )
     }
 
-    const { source = 'apollo', action, query_description, search_params, table_name: requestedTableName, target_table_id, auto_enrich } = body
+    const { source = 'apollo', action, query_description, search_params, table_name: requestedTableName, target_table_id, auto_enrich, per_page: bodyPerPage } = body
 
     // ---------------------------------------------------------------
     // AI Ark branch — separate flow for AI Ark data source
@@ -568,6 +660,318 @@ serve(async (req) => {
     }
 
     // ---------------------------------------------------------------
+    // Explorium branch — Method 2 exclusion + table creation
+    // ---------------------------------------------------------------
+    if (source === 'explorium') {
+      const searchAction = (action === 'prospect_search' || action === 'people_search')
+        ? 'prospect_search'
+        : 'business_search'
+      const isBusinessSearch = searchAction === 'business_search'
+      const explColumns = isBusinessSearch ? EXPLORIUM_BUSINESS_COLUMNS : EXPLORIUM_PROSPECT_COLUMNS
+
+      const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey)
+
+      // --- Step 1: Load cached Explorium CRM mappings for exclusion (Method 2) ---
+      const { data: crmMappings } = await serviceClient
+        .from('explorium_crm_mappings')
+        .select('entity_type, explorium_id, matched_at')
+        .eq('organization_id', orgId)
+        .order('matched_at', { ascending: false })
+        .limit(60000)
+
+      const excludedBusinessIds: string[] = []
+      const excludedProspectIds: string[] = []
+      let latestSync: Date | null = null
+
+      for (const m of (crmMappings || [])) {
+        if (m.entity_type === 'business') excludedBusinessIds.push(m.explorium_id)
+        else if (m.entity_type === 'prospect') excludedProspectIds.push(m.explorium_id)
+        const syncDate = new Date(m.matched_at)
+        if (!latestSync || syncDate > latestSync) latestSync = syncDate
+      }
+
+      // Fire-and-forget CRM re-sync if cache is stale (>24h) or empty
+      const cacheAge = latestSync ? Date.now() - latestSync.getTime() : Infinity
+      if (cacheAge > 24 * 60 * 60 * 1000) {
+        fetch(`${supabaseUrl}/functions/v1/explorium-match`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: authHeader, apikey: supabaseAnonKey },
+          body: JSON.stringify({ action: 'sync_crm_org' }),
+        }).catch((e) => console.warn('[copilot-dynamic-table] Explorium CRM sync trigger failed:', e))
+      }
+
+      // --- Step 2: Load existing Explorium source_ids from org tables (for dedup) ---
+      const { data: orgTables } = await serviceClient
+        .from('dynamic_tables')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('source_type', 'explorium')
+
+      const explTableIds = (orgTables || []).map((t: { id: string }) => t.id)
+      let existingExploriumIds = new Set<string>()
+
+      if (explTableIds.length > 0) {
+        const { data: existingRows } = await serviceClient
+          .from('dynamic_table_rows')
+          .select('source_id')
+          .in('table_id', explTableIds)
+          .not('source_id', 'is', null)
+          .limit(50000)
+
+        for (const r of (existingRows || [])) {
+          if (r.source_id) existingExploriumIds.add(r.source_id)
+        }
+      }
+
+      // --- Step 3: Call explorium-search (no exclude param — Method 2 dedupes in memory) ---
+      const explSearchBody: Record<string, unknown> = {
+        action: searchAction,
+        page: (search_params.page as number) || 1,
+        per_page: (bodyPerPage as number) || (search_params.per_page as number) || 25,
+        preview_mode: false,
+        ...(isBusinessSearch ? {
+          industries: search_params.industries,
+          employee_ranges: search_params.employee_ranges,
+          revenue_ranges: search_params.revenue_ranges,
+          countries: search_params.countries,
+          technologies: search_params.technologies,
+          intent_topics: search_params.intent_topics,
+          is_public: search_params.is_public,
+          domains: search_params.domains,
+          company_names: search_params.company_names,
+        } : {
+          job_title: search_params.job_title,
+          include_related_titles: search_params.include_related_titles ?? true,
+          seniorities: search_params.seniorities,
+          departments: search_params.departments,
+          has_email: search_params.has_email ?? true,
+          business_ids: search_params.business_ids,
+          employee_ranges: search_params.employee_ranges,
+          prospect_countries: search_params.prospect_countries || search_params.countries,
+        }),
+      }
+
+      const explResponse = await fetch(`${supabaseUrl}/functions/v1/explorium-search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: authHeader, apikey: supabaseAnonKey },
+        body: JSON.stringify(explSearchBody),
+      })
+
+      if (!explResponse.ok) {
+        const errorBody = await explResponse.text()
+        console.error('[copilot-dynamic-table] Explorium search failed:', explResponse.status, errorBody)
+        try {
+          const parsed = JSON.parse(errorBody)
+          return new Response(
+            JSON.stringify({
+              error: parsed.error || 'Explorium search failed',
+              code: parsed.code,
+              details: parsed.details,
+              payload_sent: parsed.payload_sent,
+            }),
+            { status: explResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        } catch {
+          return new Response(
+            JSON.stringify({ error: 'Explorium search failed' }),
+            { status: explResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+
+      const explData = await explResponse.json()
+      const rawResults = (explData.results || []) as Array<NormalizedExploriumBusiness | NormalizedExploriumProspect>
+      const totalSearched = rawResults.length
+
+      // --- Step 4: Method 2 dedup — filter in memory by CRM mappings + existing source_ids ---
+      const crmExclusionSet = new Set<string>(
+        isBusinessSearch ? excludedBusinessIds : excludedProspectIds
+      )
+
+      const netNewResults = rawResults.filter((item) => {
+        const id = item.explorium_id
+        if (!id) return true
+        if (existingExploriumIds.has(id)) return false   // already in an Explorium table
+        if (crmExclusionSet.has(id)) return false         // matched to existing CRM account
+        return true
+      })
+
+      const dupCount = totalSearched - netNewResults.length
+
+      if (netNewResults.length === 0) {
+        return new Response(
+          JSON.stringify({
+            error: totalSearched > 0
+              ? `All ${totalSearched} results are already in your CRM or a previous table. Try adjusting your filters.`
+              : 'No results found. Try broadening your search criteria.',
+            code: totalSearched > 0 ? 'ALL_DUPLICATES' : 'NO_RESULTS',
+            dedup: { total: totalSearched, duplicates: dupCount, net_new: 0 },
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // --- Step 5: Create table ---
+      const tableName = requestedTableName || truncateName(query_description || `Explorium ${isBusinessSearch ? 'Companies' : 'Prospects'}`)
+      let finalTableName = tableName
+      let newTable: { id: string; name: string } | null = null
+      let lastErr: { message?: string; code?: string } | null = null
+
+      for (let suffix = 0; suffix <= 5; suffix++) {
+        if (suffix > 0) finalTableName = `${tableName} (${suffix})`
+
+        const { data, error: tableErr } = await serviceClient
+          .from('dynamic_tables')
+          .insert({
+            organization_id: orgId,
+            created_by: userId,
+            name: finalTableName,
+            description: query_description,
+            source_type: 'explorium',
+            source_query: search_params,
+          })
+          .select('id, name')
+          .single()
+
+        if (!tableErr && data) { newTable = data; break }
+        lastErr = tableErr
+        if (tableErr?.code !== '23505') break
+        console.log(`[copilot-dynamic-table] Explorium table "${finalTableName}" exists, trying next suffix`)
+      }
+
+      if (!newTable) {
+        return new Response(
+          JSON.stringify({ error: `Failed to create ops table: ${lastErr?.message || 'Unknown error'}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const tableId = newTable.id
+
+      // --- Step 6: Insert columns ---
+      const colInserts = explColumns.map((col) => ({
+        table_id: tableId,
+        key: col.key,
+        label: col.label,
+        column_type: col.column_type,
+        position: col.position,
+        width: col.width,
+        is_enrichment: false,
+        is_visible: true,
+      }))
+
+      const { data: columns, error: colErr } = await serviceClient
+        .from('dynamic_table_columns')
+        .insert(colInserts)
+        .select('id, key')
+
+      if (colErr || !columns) {
+        await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
+        return new Response(
+          JSON.stringify({ error: 'Failed to create table columns' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const colKeyToId: Record<string, string> = {}
+      for (const col of columns) colKeyToId[col.key] = col.id
+
+      // --- Step 7: Insert rows ---
+      const rowInserts = netNewResults.map((item, index) => ({
+        table_id: tableId,
+        row_index: index,
+        source_id: item.explorium_id,
+        source_data: item as unknown as Record<string, unknown>,
+      }))
+
+      const { data: rows, error: rowErr } = await serviceClient
+        .from('dynamic_table_rows')
+        .insert(rowInserts)
+        .select('id, row_index')
+
+      if (rowErr || !rows) {
+        await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
+        return new Response(
+          JSON.stringify({ error: 'Failed to create table rows' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // --- Step 8: Insert cells ---
+      const cellInserts: Array<{ row_id: string; column_id: string; value: string | null; source: string; status: string }> = []
+      const sortedRows = [...rows].sort((a: { row_index: number }, b: { row_index: number }) => a.row_index - b.row_index)
+
+      for (let i = 0; i < sortedRows.length; i++) {
+        const row = sortedRows[i]
+        const item = netNewResults[i]
+
+        for (const col of explColumns) {
+          const columnId = colKeyToId[col.key]
+          if (!columnId) continue
+          const value = isBusinessSearch
+            ? getExploriumBusinessCellValue(item as NormalizedExploriumBusiness, col.key)
+            : getExploriumProspectCellValue(item as NormalizedExploriumProspect, col.key)
+          cellInserts.push({ row_id: row.id, column_id: columnId, value, source: 'explorium', status: 'none' })
+        }
+      }
+
+      if (cellInserts.length > 0) {
+        const CELL_CHUNK = 500
+        for (let i = 0; i < cellInserts.length; i += CELL_CHUNK) {
+          const chunk = cellInserts.slice(i, i + CELL_CHUNK)
+          const { error: cellErr } = await serviceClient.from('dynamic_table_cells').insert(chunk)
+          if (cellErr) {
+            await serviceClient.from('dynamic_tables').delete().eq('id', tableId)
+            return new Response(
+              JSON.stringify({ error: 'Failed to populate table data' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+          }
+        }
+      }
+
+      // Update row_count on the table
+      await serviceClient
+        .from('dynamic_tables')
+        .update({ row_count: netNewResults.length })
+        .eq('id', tableId)
+
+      console.log(`[copilot-dynamic-table] Explorium: Created table ${tableId} with ${netNewResults.length} rows (${dupCount} dupes excluded), ${cellInserts.length} cells`)
+
+      // --- Step 9: Build preview ---
+      const previewItems = netNewResults.slice(0, 5)
+      const previewRows = isBusinessSearch
+        ? previewItems.map((c) => {
+            const b = c as NormalizedExploriumBusiness
+            return { Company: b.company_name, Domain: b.domain || '', Industry: b.industry || '', Employees: b.employee_range || '', Country: b.country || '' }
+          })
+        : previewItems.map((c) => {
+            const p = c as NormalizedExploriumProspect
+            return { Name: p.full_name, Title: p.title || '', Company: p.company_name || '', Seniority: p.job_level || '', LinkedIn: p.linkedin_url || '' }
+          })
+
+      const previewColumns = isBusinessSearch
+        ? ['Company', 'Domain', 'Industry', 'Employees', 'Country']
+        : ['Name', 'Title', 'Company', 'Seniority', 'LinkedIn']
+
+      return new Response(JSON.stringify({
+        table_id: tableId,
+        table_name: newTable.name,
+        row_count: netNewResults.length,
+        column_count: explColumns.length,
+        source_type: 'explorium',
+        enriched_count: 0,
+        preview_rows: previewRows,
+        preview_columns: previewColumns,
+        query_description,
+        dedup: { total: totalSearched, duplicates: dupCount, net_new: netNewResults.length },
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // ---------------------------------------------------------------
     // Apollo flow (default) — existing behavior
     // ---------------------------------------------------------------
 
@@ -679,9 +1083,10 @@ serve(async (req) => {
       if (!title) return ''
       let normalized = title.toLowerCase().trim()
       normalized = normalized.replace(/\s*\([^)]*\)\s*/g, ' ')
+      const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       for (const [full, abbrevs] of Object.entries(TITLE_ABBREVIATIONS)) {
         for (const abbrev of abbrevs) {
-          const pattern = new RegExp(`\\b${abbrev.replace(/\./g, '\\.')}\\b`, 'gi')
+          const pattern = new RegExp(`\\b${escapeRegExp(abbrev)}\\b`, 'gi')
           normalized = normalized.replace(pattern, full)
         }
       }

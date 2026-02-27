@@ -32,6 +32,8 @@ import { ActionPolicyGrid, type PolicyValue, type ActionType } from '@/component
 import { UserOverridePermissions } from '@/components/agent/UserOverridePermissions';
 import { ManagerAutonomyControls } from '@/components/settings/ManagerAutonomyControls';
 import { AutonomyProgressionDashboard } from '@/components/settings/AutonomyProgressionDashboard';
+import AutopilotDashboard from '@/components/platform/autopilot/AutopilotDashboard';
+import TeamAutopilotView from '@/components/platform/autopilot/TeamAutopilotView';
 
 // ============================================================================
 // Types
@@ -267,12 +269,9 @@ export default function AutonomySettingsPage() {
     return (
       <SettingsPageWrapper
         title="Autonomy & Approvals"
-        description="Configure how the AI agent executes actions on your team's behalf."
+        description="Your personal autonomy profile — track which actions the AI agent handles automatically for you."
       >
-        <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
-          <p className="text-sm">You need org admin permissions to manage autonomy settings.</p>
-        </div>
+        <AutopilotDashboard />
       </SettingsPageWrapper>
     );
   }
@@ -283,6 +282,29 @@ export default function AutonomySettingsPage() {
       description="Control how the AI agent executes actions. Choose a preset or configure each action type individually."
     >
       <div className="space-y-8">
+        {/* Per-rep autonomy dashboard — always visible for the current user */}
+        <section>
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">My Autonomy Profile</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Your personal autonomy level — how much the AI agent acts on your behalf without review.
+            </p>
+          </div>
+          <AutopilotDashboard />
+        </section>
+
+        {/* Team-wide autonomy view */}
+        <section>
+          <div className="mb-4 flex items-center gap-2">
+            <Users className="h-4 w-4 text-gray-500" />
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Team Autonomy</h2>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Overview of autonomy levels, time saved, and ceiling settings across your team.
+          </p>
+          {orgId && <TeamAutopilotView orgId={orgId} />}
+        </section>
+
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-gray-400" />

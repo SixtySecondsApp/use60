@@ -23,12 +23,15 @@ COMMENT ON COLUMN public.dynamic_tables.is_standard IS
 ALTER TABLE public.dynamic_tables
   DROP CONSTRAINT IF EXISTS dynamic_tables_source_type_check;
 
-ALTER TABLE public.dynamic_tables
+DO $$ BEGIN
+  ALTER TABLE public.dynamic_tables
   ADD CONSTRAINT dynamic_tables_source_type_check
   CHECK (source_type IN (
     'manual', 'apollo', 'csv', 'copilot',
     'hubspot', 'attio', 'ops_table', 'standard'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON CONSTRAINT dynamic_tables_source_type_check ON public.dynamic_tables IS
   'standard = provisioned from template, ops_table = user-created ops table';
@@ -120,11 +123,14 @@ COMMENT ON COLUMN public.organizations.ops_tables_provisioned IS
 -- RESTRICTIVE policy: Block deletion of system columns
 -- (works alongside existing permissive "Users can manage columns of own tables" policy)
 DROP POLICY IF EXISTS "Block deletion of system columns" ON public.dynamic_table_columns;
-CREATE POLICY "Block deletion of system columns"
+DO $$ BEGIN
+  CREATE POLICY "Block deletion of system columns"
   ON public.dynamic_table_columns
   AS RESTRICTIVE
   FOR DELETE
   USING (is_system = false);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON POLICY "Block deletion of system columns" ON public.dynamic_table_columns IS
   'Restrictive policy that prevents deletion of system columns (is_system = true) even if user owns the table.';
@@ -132,11 +138,14 @@ COMMENT ON POLICY "Block deletion of system columns" ON public.dynamic_table_col
 -- RESTRICTIVE policy: Block deletion of standard tables
 -- (works alongside existing permissive "Users can delete own dynamic tables" policy)
 DROP POLICY IF EXISTS "Block deletion of standard tables" ON public.dynamic_tables;
-CREATE POLICY "Block deletion of standard tables"
+DO $$ BEGIN
+  CREATE POLICY "Block deletion of standard tables"
   ON public.dynamic_tables
   AS RESTRICTIVE
   FOR DELETE
   USING (is_standard = false);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON POLICY "Block deletion of standard tables" ON public.dynamic_tables IS
   'Restrictive policy that prevents deletion of standard template tables (is_standard = true) even if user created them.';

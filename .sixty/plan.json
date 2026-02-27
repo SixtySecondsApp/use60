@@ -17,16 +17,22 @@
     },
     {
       "id": "followup-email-v2",
-      "name": "Follow-Up Email v2 — Quality + Demo Polish",
+      "name": "Follow-Up Email v2 \u2014 Quality + Demo Polish",
       "status": "complete",
       "consultReport": ".sixty/consult/followup-email-v2.md",
       "createdAt": "2026-02-25"
     },
     {
-      "id": "followup-email-v3",
-      "name": "Follow-Up Email v3 — Zero-Friction Delivery",
+      "id": "pipeline-migration",
+      "name": "Pipeline Real Deals Migration & Full Audit",
       "status": "complete",
-      "createdAt": "2026-02-25"
+      "createdAt": "2026-02-27"
+    },
+    {
+      "id": "deal-copilot-v2",
+      "name": "Deal Copilot V2 — Intelligence, Memory & Actions",
+      "status": "in_progress",
+      "createdAt": "2026-02-27"
     }
   ],
   "stories": [
@@ -49,9 +55,19 @@
       "files": [
         "supabase/functions/generate-follow-up/index.ts"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["FUV2-002", "FUV2-008"],
-      "parallelWith": ["FUV2-003", "FUV2-006"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FUV2-002",
+        "FUV2-008"
+      ],
+      "parallelWith": [
+        "FUV2-003",
+        "FUV2-006"
+      ],
       "startedAt": "2026-02-25T15:10:00Z",
       "completedAt": "2026-02-25T15:22:00Z"
     },
@@ -67,7 +83,7 @@
         "When guidance provided, re-composes email with same RAG context plus user instructions appended to prompt",
         "Frontend shows text input modal when Regenerate button is clicked",
         "Regenerated email replaces previous result with a 'Regenerated' badge",
-        "No re-query of RAG — uses cached context from first generation (saves credits and time)"
+        "No re-query of RAG \u2014 uses cached context from first generation (saves credits and time)"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": 18,
@@ -76,9 +92,17 @@
         "supabase/functions/_shared/follow-up/composer.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "FUV2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-004"],
+      "parallelWith": [
+        "FUV2-004"
+      ],
       "startedAt": "2026-02-25T16:00:00Z",
       "completedAt": "2026-02-25T16:18:00Z"
     },
@@ -101,9 +125,18 @@
       "files": [
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["FUV2-004"],
-      "parallelWith": ["FUV2-001", "FUV2-006"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FUV2-004"
+      ],
+      "parallelWith": [
+        "FUV2-001",
+        "FUV2-006"
+      ],
       "startedAt": "2026-02-25T15:10:00Z",
       "completedAt": "2026-02-25T15:25:00Z"
     },
@@ -117,7 +150,7 @@
       "acceptance": [
         "Edit button on email preview switches to editable textarea for body and input for subject",
         "Preview button returns to styled read-only view with edited content",
-        "Edited content persists in state — Copy button copies edited version",
+        "Edited content persists in state \u2014 Copy button copies edited version",
         "Cancel button reverts to original generated content",
         "Edit state does not re-trigger generation"
       ],
@@ -126,9 +159,19 @@
       "files": [
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-003"], "files": [], "schema": [] },
-      "blocks": ["FUV2-005"],
-      "parallelWith": ["FUV2-002"],
+      "dependencies": {
+        "stories": [
+          "FUV2-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FUV2-005"
+      ],
+      "parallelWith": [
+        "FUV2-002"
+      ],
       "startedAt": "2026-02-25T16:20:00Z",
       "completedAt": "2026-02-25T16:32:00Z"
     },
@@ -152,7 +195,13 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-004"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "FUV2-004"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": [],
       "startedAt": "2026-02-25T16:35:00Z",
@@ -178,9 +227,16 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-001", "FUV2-003"],
+      "parallelWith": [
+        "FUV2-001",
+        "FUV2-003"
+      ],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:42:00Z"
     },
@@ -204,9 +260,15 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-008"],
+      "parallelWith": [
+        "FUV2-008"
+      ],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:40:00Z"
     },
@@ -221,7 +283,7 @@
         "SSE result event includes warnings array listing what degraded: missing writing style, no sentiment, RAG partial results, placeholder attendee",
         "Each warning has a severity (info/warn) and human-readable message",
         "Frontend renders warnings as amber badges below the context breakdown",
-        "Warnings are informational only — generation still completes",
+        "Warnings are informational only \u2014 generation still completes",
         "No warnings shown when all data sources returned successfully"
       ],
       "estimatedMinutes": 10,
@@ -230,145 +292,807 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "FUV2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-007"],
+      "parallelWith": [
+        "FUV2-007"
+      ],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:40:00Z"
     },
     {
-      "id": "FUV3-001",
-      "feature": "followup-email-v3",
-      "title": "Add 'Open in Gmail' deep link to Slack confirmation after draft creation",
-      "type": "fullstack",
+      "id": "PIPE-001",
+      "feature": "pipeline-migration",
+      "title": "Delete seed deals from staging database",
+      "type": "data",
       "status": "complete",
       "priority": 1,
       "acceptance": [
-        "followup_approve and followup_draft handlers in slack-interactive return draftId from google-gmail response",
-        "Confirmation message includes an 'Open in Gmail' button linking to https://mail.google.com/mail/u/0/#drafts?compose=<messageId>",
-        "generate-follow-up Slack delivery also includes a pre-emptive note: 'After approving, click Open in Gmail to send'",
-        "Link opens in browser (Slack external link button with url type)"
+        "All 8 seed deals (UUIDs 11111111-..through 88888888-..) deleted from staging deals table",
+        "Child records in deal_contacts and deal_health_scores cleaned up first",
+        "SELECT count(*) FROM deals WHERE id LIKE '11111111%' returns 0",
+        "Real deals unaffected \u2014 verified by count before/after"
       ],
-      "estimatedMinutes": 20,
-      "actualMinutes": 18,
-      "files": [
-        "supabase/functions/slack-interactive/index.ts",
-        "supabase/functions/generate-follow-up/index.ts"
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "PIPE-003",
+        "PIPE-004",
+        "PIPE-005",
+        "PIPE-006",
+        "PIPE-007",
+        "PIPE-008"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["FUV3-002", "FUV3-005"],
-      "startedAt": "2026-02-25T19:00:00Z",
-      "completedAt": "2026-02-25T19:18:00Z"
+      "parallelWith": [
+        "PIPE-002"
+      ],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "FUV3-002",
-      "feature": "followup-email-v3",
-      "title": "Auto-trigger follow-up generation after every meeting via slack-post-meeting",
-      "type": "backend",
+      "id": "PIPE-002",
+      "feature": "pipeline-migration",
+      "title": "Fix useDealStages select('*') to explicit columns",
+      "type": "frontend",
       "status": "complete",
       "priority": 2,
       "acceptance": [
-        "slack-post-meeting calls generate-follow-up with delivery='slack' after debrief analysis completes",
-        "Follow-up draft lands in user's Slack DM within 2 minutes of transcript indexing",
-        "Debrief message and follow-up draft are separate Slack messages (not combined)",
-        "Respects proactive notification policy (quiet hours, rate limits)",
-        "Skips auto-generation if meeting has no external attendees (internal meetings)"
+        "useDealStages.ts select('*') replaced with explicit column list: id, name, color, order_position, default_probability",
+        "Pipeline stages render correctly after change",
+        "No TypeScript errors introduced"
       ],
-      "estimatedMinutes": 25,
-      "actualMinutes": 20,
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
       "files": [
-        "supabase/functions/slack-post-meeting/index.ts"
+        "src/lib/hooks/deals/useDealStages.ts"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV3-001", "FUV3-005"],
-      "startedAt": "2026-02-25T19:00:00Z",
-      "completedAt": "2026-02-25T19:20:00Z"
+      "parallelWith": [
+        "PIPE-001"
+      ],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "FUV3-003",
-      "feature": "followup-email-v3",
-      "title": "Replace 'Edit in App' with inline Slack modal for email editing",
-      "type": "backend",
+      "id": "PIPE-003",
+      "feature": "pipeline-migration",
+      "title": "Audit Kanban view \u2014 stages, drag-drop, counts",
+      "type": "frontend",
       "status": "complete",
       "priority": 3,
       "acceptance": [
-        "followup_edit action opens a Slack modal (views.open) pre-filled with subject, recipient, and email body",
-        "Modal uses plain_text_input blocks: single-line for To and Subject, multi-line for Body",
-        "On submit, modal calls google-gmail?action=draft with edited content and updates the original message with confirmation",
-        "Modal title shows 'Edit Follow-Up' with Save Draft and Cancel buttons",
-        "Original Slack message buttons replaced with confirmation after modal submit"
+        "All stages render including empty ones",
+        "Drag-drop between stages updates deal stage and persists",
+        "Stage counts and value totals update after drag-drop",
+        "Error rollback works when API fails"
       ],
-      "estimatedMinutes": 30,
-      "actualMinutes": 22,
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
       "files": [
-        "supabase/functions/slack-interactive/index.ts"
+        "src/components/Pipeline/PipelineKanban.tsx",
+        "src/components/Pipeline/PipelineColumn.tsx",
+        "src/components/Pipeline/DealCard.tsx"
       ],
-      "dependencies": { "stories": ["FUV3-001"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "PIPE-001"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV3-004"],
-      "startedAt": "2026-02-25T21:30:00Z",
-      "completedAt": "2026-02-25T21:52:00Z"
+      "parallelWith": [
+        "PIPE-004"
+      ],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "FUV3-004",
-      "feature": "followup-email-v3",
-      "title": "Add tone/length quick-adjust buttons to Slack follow-up message",
-      "type": "fullstack",
+      "id": "PIPE-004",
+      "feature": "pipeline-migration",
+      "title": "Audit Table view \u2014 columns, sort, row click",
+      "type": "frontend",
       "status": "complete",
       "priority": 4,
       "acceptance": [
-        "Slack follow-up message includes a second action row with 4 buttons: Shorter, More Formal, More Casual, Add Next Steps",
-        "Each button calls generate-follow-up with regenerate_guidance set to the adjustment instruction and cached_rag_context from original",
-        "Slack message is replaced (chat.update) with regenerated email content and same action buttons",
-        "A small counter shows 'v2', 'v3' etc. after each regeneration in the message header",
-        "Quick-adjust buttons are compact (style: default) to not visually compete with primary approve/draft buttons"
+        "All columns render with real data (name, company, value, stage, health, close date)",
+        "Sort by column headers works correctly",
+        "Row click opens DealIntelligenceSheet with correct deal data",
+        "Empty state renders when no deals match filters"
       ],
-      "estimatedMinutes": 25,
-      "actualMinutes": 20,
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
       "files": [
-        "supabase/functions/generate-follow-up/index.ts",
-        "supabase/functions/slack-interactive/index.ts"
+        "src/components/Pipeline/PipelineTable.tsx"
       ],
-      "dependencies": { "stories": ["FUV3-001"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "PIPE-001"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV3-003"],
-      "startedAt": "2026-02-25T21:30:00Z",
-      "completedAt": "2026-02-25T21:50:00Z"
+      "parallelWith": [
+        "PIPE-003"
+      ],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "FUV3-005",
-      "feature": "followup-email-v3",
-      "title": "Create Gmail draft as reply-in-thread when prior thread exists with recipient",
-      "type": "backend",
+      "id": "PIPE-005",
+      "feature": "pipeline-migration",
+      "title": "Audit deal creation flow \u2014 DealForm create mode",
+      "type": "frontend",
       "status": "complete",
       "priority": 5,
       "acceptance": [
-        "Before creating draft, query Gmail API for recent threads with recipient email (q: 'to:{email} OR from:{email}' maxResults: 1)",
-        "If thread found, create draft with threadId set and In-Reply-To/References headers from last message",
-        "If no thread found, create draft as new email (current behavior)",
-        "generate-follow-up SSE step 'compose' metadata includes threadDetected: boolean for frontend display",
-        "google-gmail draft action accepts optional threadId param and sets it on the draft message"
+        "DealForm opens from 'New Deal' button and creates a deal successfully",
+        "Contact selection works (search, select from dropdown)",
+        "Revenue fields (one_off_revenue, monthly_mrr) compute value correctly",
+        "Company field has fallback when no email domain available",
+        "New deal appears in both Kanban and Table views"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/Pipeline/DealForm.tsx",
+        "src/components/Pipeline/PipelineView.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "PIPE-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "PIPE-006"
+      ],
+      "parallelWith": [
+        "PIPE-003",
+        "PIPE-004"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-006",
+      "feature": "pipeline-migration",
+      "title": "Audit deal editing and wire onDelete handler",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "Edit mode opens from DealIntelligenceSheet with pre-filled data",
+        "Edit saves correctly and updates pipeline views",
+        "onDelete handler wired from PipelineView through to DealForm",
+        "Delete confirmation dialog shown before deletion",
+        "Deleted deal removed from pipeline views immediately"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/Pipeline/DealForm.tsx",
+        "src/components/Pipeline/PipelineView.tsx",
+        "src/components/Pipeline/DealIntelligenceSheet.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "PIPE-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-007"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-007",
+      "feature": "pipeline-migration",
+      "title": "Audit filters and search across views",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "Stage filter narrows deals in both Kanban and Table views",
+        "Health status filter works (Healthy, Warning, Critical, Stalled)",
+        "Risk level filter works correctly",
+        "Search by deal name and company filters in real-time",
+        "Clear filters resets all and shows full pipeline"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/Pipeline/PipelineHeader.tsx",
+        "src/components/Pipeline/hooks/usePipelineFilters.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "PIPE-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-006"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-008",
+      "feature": "pipeline-migration",
+      "title": "Audit DealIntelligenceSheet display",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "SheetContent has !top-16 !h-[calc(100vh-4rem)] classes (already confirmed)",
+        "Health scores render correctly (Deal Health, Relationship Health, Ghost Risk)",
+        "Risk factors and signals display with real data",
+        "Copilot chat mode works with deal context",
+        "CRM sync status shows correctly"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/Pipeline/DealIntelligenceSheet.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "PIPE-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-006",
+        "PIPE-007"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-009",
+      "feature": "pipeline-migration",
+      "title": "Create materialize-crm-deals edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "acceptance": [
+        "Edge function reads unmaterialized deals from crm_deal_index",
+        "Maps name, amount\u2192value, stage\u2192stage_id (fuzzy match to deal_stages.name), close_date\u2192expected_close_date",
+        "Resolves contact_crm_ids \u2192 contacts.id via crm_contact_index",
+        "Resolves company_crm_id \u2192 companies.id via crm_company_index",
+        "Sets is_materialized=true and materialized_deal_id on crm_deal_index record"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/materialize-crm-deals/index.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "crm_deal_index",
+          "deals",
+          "deal_stages"
+        ]
+      },
+      "blocks": [
+        "PIPE-011",
+        "PIPE-013",
+        "PIPE-014"
+      ],
+      "parallelWith": [
+        "PIPE-003",
+        "PIPE-004"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-010",
+      "feature": "pipeline-migration",
+      "title": "Wire materialization into hubspot-webhook",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "acceptance": [
+        "After upsertDealIndex succeeds in hubspot-webhook, trigger materialization for the deal",
+        "Fix unpinned @supabase/supabase-js@2 import to @2.43.4",
+        "Replace legacyCorsHeaders with getCorsHeaders(req)",
+        "Materialized deal appears in deals table with correct stage and contacts"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/hubspot-webhook/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "PIPE-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-011"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-011",
+      "feature": "pipeline-migration",
+      "title": "Add deal support to attio-webhook",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "acceptance": [
+        "attio-webhook handles deal.created and deal.updated events",
+        "Deal events call upsertDealIndex with correct Attio field mapping",
+        "After upsert, trigger materialization for the deal",
+        "Materialized deal appears in deals table"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/attio-webhook/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "PIPE-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-010"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-012",
+      "feature": "pipeline-migration",
+      "title": "Fix upsertCrmIndex.ts unpinned import",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+      "acceptance": [
+        "supabase/functions/_shared/upsertCrmIndex.ts import changed from @2.39.3 to @2.43.4",
+        "Functions that use upsertCrmIndex still deploy and work correctly"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/upsertCrmIndex.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-009"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-013",
+      "feature": "pipeline-migration",
+      "title": "Add Import from CRM dropdown to Pipeline header",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 13,
+      "acceptance": [
+        "Dropdown button next to 'New Deal' with HubSpot and Attio options",
+        "Only shows CRM options for connected integrations",
+        "Clicking option opens respective import wizard in deal mode",
+        "Uses Lucide icons for CRM logos"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/Pipeline/PipelineHeader.tsx",
+        "src/components/Pipeline/PipelineView.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "PIPE-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "PIPE-014",
+        "PIPE-015"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-014",
+      "feature": "pipeline-migration",
+      "title": "Add deal import to HubSpot Import Wizard",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 14,
+      "acceptance": [
+        "Object type selector added: Contacts | Deals",
+        "When Deals selected, shows CRM deals from crm_deal_index for selection",
+        "Selected deals imported via materialize-crm-deals edge function",
+        "Imported deals appear in pipeline after import completes",
+        "Progress feedback during import (loading state, success toast)"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": 22,
+      "actualMinutes": null,
       "files": [
-        "supabase/functions/google-gmail/index.ts",
-        "supabase/functions/generate-follow-up/index.ts",
-        "supabase/functions/slack-interactive/index.ts"
+        "src/components/ops/HubSpotImportWizard.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "PIPE-009",
+          "PIPE-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-015"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-015",
+      "feature": "pipeline-migration",
+      "title": "Enhance Attio wizard for pipeline deal import",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 15,
+      "acceptance": [
+        "When object type is 'deals', show 'Import to Pipeline' toggle",
+        "When toggled on, calls materialize-crm-deals instead of creating ops table",
+        "Imported deals appear in pipeline after import completes",
+        "Existing ops table import flow unaffected when toggle is off"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/ops/AttioImportWizard.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "PIPE-009",
+          "PIPE-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-014"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-016",
+      "feature": "pipeline-migration",
+      "title": "Verify ops table sync for deals",
+      "type": "integration",
+      "status": "complete",
+      "priority": 16,
+      "acceptance": [
+        "Creating a deal populates the standard 'Deals' ops table",
+        "Changing deal stage updates the ops table cell",
+        "All 18 system columns populated correctly",
+        "CRM-imported deals also appear in ops table"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [],
+      "dependencies": {
+        "stories": [
+          "PIPE-009",
+          "PIPE-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-017"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "PIPE-017",
+      "feature": "pipeline-migration",
+      "title": "Verify contact and company linkage for CRM deals",
+      "type": "integration",
+      "status": "complete",
+      "priority": 17,
+      "acceptance": [
+        "deal_contacts junction populated for CRM-imported deals",
+        "primary_contact_id and company_id set correctly on materialized deals",
+        "DealIntelligenceSheet shows linked contacts for imported deals"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [],
+      "dependencies": {
+        "stories": [
+          "PIPE-009",
+          "PIPE-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIPE-016"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+    {
+      "id": "DCV2-001",
+      "feature": "deal-copilot-v2",
+      "title": "Extend enrichment with meeting intelligence, overdue tasks, temperature, and email signals",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "acceptance": [
+        "askMeeting() called in parallel with existing meetings/activities fetch during enrichment",
+        "Overdue tasks fetched: tasks where deal_id match, completed=false, due_date < now()",
+        "Deal temperature fetched from deal_signal_temperature table",
+        "Email signals fetched from email_signal_events (latest 3 per deal)",
+        "All fetches non-blocking — .catch(() => null) so greeting works if any fail",
+        "EnrichmentData interface extended with meetingIntelligence, overdueTasks, temperature, emailSignals"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["DCV2-002"],
+      "parallelWith": ["DCV2-003", "DCV2-005"]
+    },
+    {
+      "id": "DCV2-002",
+      "feature": "deal-copilot-v2",
+      "title": "Build proactive alerts and meeting intel into greeting",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "acceptance": [
+        "Greeting includes meeting intelligence one-liner when available (e.g. 'Last discussed pricing on Feb 12')",
+        "Overdue tasks surfaced: '{count} overdue task(s) need attention'",
+        "Cold temperature flagged: 'Signal temperature is cold (18%)'",
+        "Declining trend flagged: 'Signals are declining'",
+        "Recent email signal surfaced for notable types (proposal_opened, positive_buying_signal)",
+        "Alerts render as markdown bullet list after the health line"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts"
+      ],
+      "dependencies": { "stories": ["DCV2-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-003",
+      "feature": "deal-copilot-v2",
+      "title": "Render structured response cards in deal copilot chat",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "acceptance": [
+        "Import CopilotResponse from @/components/copilot/CopilotResponse",
+        "Assistant messages check m.structuredResponse before rendering",
+        "Structured responses render CopilotResponse component instead of ReactMarkdown",
+        "Plain text responses still render as ReactMarkdown (fallback)",
+        "Dark theme (bg-gray-900 parent) doesn't break structured card styling"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/Pipeline/DealIntelligenceSheet.tsx"
       ],
       "dependencies": { "stories": [], "files": [], "schema": [] },
       "blocks": [],
-      "parallelWith": ["FUV3-001", "FUV3-002"],
-      "startedAt": "2026-02-25T19:00:00Z",
-      "completedAt": "2026-02-25T19:22:00Z"
+      "parallelWith": ["DCV2-001", "DCV2-005"]
+    },
+    {
+      "id": "DCV2-004",
+      "feature": "deal-copilot-v2",
+      "title": "Add deal_id column to copilot_conversations and create migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "Migration adds deal_id UUID column to copilot_conversations referencing deals(id) ON DELETE SET NULL",
+        "Unique partial index on (user_id, deal_id) WHERE deal_id IS NOT NULL prevents duplicate deal sessions",
+        "Migration runs without errors on staging",
+        "Existing main sessions unaffected (deal_id is NULL for them)"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "supabase/migrations/20260227120000_add_deal_id_to_copilot_conversations.sql"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": ["copilot_conversations"] },
+      "blocks": ["DCV2-006"],
+      "parallelWith": ["DCV2-001", "DCV2-003", "DCV2-005"]
+    },
+    {
+      "id": "DCV2-005",
+      "feature": "deal-copilot-v2",
+      "title": "Add slash command dropdown to deal copilot input",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "acceptance": [
+        "DEAL_SLASH_COMMANDS constant defines 11 commands with command, label, description, prompt",
+        "Typing / in empty input shows dropdown with all commands",
+        "Typing /fo filters to /followup only",
+        "Arrow Up/Down navigates highlighted item, Enter/Tab selects, Escape closes",
+        "Commands ending with ': ' fill input for user to complete (e.g. /objection)",
+        "Other commands send immediately on selection",
+        "Dropdown renders above input with dark theme styling (bg-gray-800, violet highlight)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/Pipeline/DealIntelligenceSheet.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DCV2-001", "DCV2-003"]
+    },
+    {
+      "id": "DCV2-006",
+      "feature": "deal-copilot-v2",
+      "title": "Add getDealSession to CopilotSessionService",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "acceptance": [
+        "CopilotConversation type updated with deal_id?: string | null",
+        "getDealSession(userId, dealId, orgId?) method queries by user_id + deal_id",
+        "If no existing session, creates one with is_main_session: false and deal_id set",
+        "Uses maybeSingle() for safe lookup"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/types/copilot.ts",
+        "src/lib/services/copilotSessionService.ts"
+      ],
+      "dependencies": { "stories": ["DCV2-004"], "files": [], "schema": ["copilot_conversations"] },
+      "blocks": ["DCV2-007"],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-007",
+      "feature": "deal-copilot-v2",
+      "title": "Add dealId option to useCopilotChat hook",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "acceptance": [
+        "dealId?: string added to UseCopilotChatOptions interface",
+        "Session loading useEffect branches: dealId → getDealSession, else → getMainSession",
+        "options.dealId added to useEffect dependency array",
+        "isLoadingSession correctly reflects deal session loading state"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/hooks/useCopilotChat.ts"
+      ],
+      "dependencies": { "stories": ["DCV2-006"], "files": [], "schema": [] },
+      "blocks": ["DCV2-008"],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-008",
+      "feature": "deal-copilot-v2",
+      "title": "Wire deal copilot to use persistent per-deal sessions",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "acceptance": [
+        "useDealCopilotChat passes persistSession: true and dealId: deal.id to useCopilotChat",
+        "On activate(), if chat.messages.length > 0 (persisted history), skip greeting injection",
+        "Closing and reopening the same deal shows previous conversation",
+        "Opening a different deal shows a separate conversation (no cross-contamination)",
+        "isLoadingSession passed through for loading state in UI"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts",
+        "src/components/Pipeline/DealIntelligenceSheet.tsx"
+      ],
+      "dependencies": { "stories": ["DCV2-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-009",
+      "feature": "deal-copilot-v2",
+      "title": "Deploy migration and edge function to staging",
+      "type": "deployment",
+      "status": "pending",
+      "priority": 9,
+      "acceptance": [
+        "Migration pushed to staging: npx supabase db push --project-ref caerqjzvuerejfrdtygb",
+        "copilot-autonomous redeployed with --no-verify-jwt",
+        "Build succeeds: npx vite build with no errors"
+      ],
+      "estimatedMinutes": 5,
+      "files": [],
+      "dependencies": { "stories": ["DCV2-008", "DCV2-005", "DCV2-003", "DCV2-002"], "files": [], "schema": [] },
+      "blocks": ["DCV2-010"],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-010",
+      "feature": "deal-copilot-v2",
+      "title": "End-to-end verification of all 5 features",
+      "type": "testing",
+      "status": "pending",
+      "priority": 10,
+      "acceptance": [
+        "Open deal → greeting shows health + proactive alerts + meeting intel one-liner",
+        "Type / → dropdown with 11 commands, keyboard navigation works, Enter selects",
+        "Select /summary → response renders as structured card (not plain markdown)",
+        "Close sheet, reopen same deal → previous conversation preserved",
+        "Open different deal → fresh conversation, no cross-contamination"
+      ],
+      "estimatedMinutes": 15,
+      "files": [],
+      "dependencies": { "stories": ["DCV2-009"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": []
     }
   ],
   "execution": {
-    "totalStories": 13,
-    "completedStories": 13,
-    "currentFeature": "followup-email-v3",
-    "lastUpdated": "2026-02-25T18:00:00Z"
+    "totalStories": 35,
+    "completedStories": 25,
+    "currentFeature": "deal-copilot-v2",
+    "lastUpdated": "2026-02-27T12:00:00Z"
   }
 }

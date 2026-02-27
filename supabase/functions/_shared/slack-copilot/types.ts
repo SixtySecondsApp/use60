@@ -1,14 +1,38 @@
 // supabase/functions/_shared/slack-copilot/types.ts
 // Shared types for the Slack Copilot conversational interface (PRD-22)
 
+// --- QUERY intents ---
+// Questions and information retrieval
+// --- ACTION intents ---
+// Requests for the copilot to do something
+// --- META intents ---
+// Conversation management and meta-interactions
+
 export type CopilotIntentType =
+  // QUERY
   | 'deal_query'
+  | 'contact_query'
   | 'pipeline_query'
   | 'history_query'
-  | 'contact_query'
-  | 'action_request'
+  | 'metrics_query'
+  | 'risk_query'
   | 'competitive_query'
   | 'coaching_query'
+  // ACTION
+  | 'draft_email'
+  | 'draft_check_in'
+  | 'update_crm'
+  | 'create_task'
+  | 'trigger_prep'
+  | 'trigger_enrichment'
+  | 'schedule_meeting'
+  // META
+  | 'help'
+  | 'feedback'
+  | 'clarification_needed'
+  | 'general'
+  // Backward-compatibility aliases (deprecated — use specific intents above)
+  | 'action_request'
   | 'general_chat';
 
 export interface ExtractedEntities {
@@ -17,7 +41,17 @@ export interface ExtractedEntities {
   companyName?: string;
   competitorName?: string;
   dateRange?: { start?: string; end?: string };
-  actionType?: 'draft_email' | 'create_task' | 'send_email' | 'schedule_meeting';
+  /** Relative or named time reference, e.g. "last week", "Q2", "Friday" */
+  time_reference?: string;
+  actionType?:
+    | 'draft_email'
+    | 'create_task'
+    | 'send_email'
+    | 'schedule_meeting'
+    | 'draft_check_in'
+    | 'update_crm'
+    | 'trigger_prep'
+    | 'trigger_enrichment';
   objectionType?: string;
   rawQuery?: string;
 }
@@ -28,6 +62,29 @@ export interface ClassifiedIntent {
   entities: ExtractedEntities;
   reasoning?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Confidence routing
+// ---------------------------------------------------------------------------
+
+/**
+ * How the copilot should respond based on classification confidence.
+ *
+ * - `direct`             — high confidence (≥0.8): act immediately
+ * - `with_clarification` — medium confidence (≥0.5): act but surface assumptions
+ * - `ask_first`          — low confidence (<0.5): ask a clarifying question first
+ */
+export type ConfidenceRouting = 'direct' | 'with_clarification' | 'ask_first';
+
+export function getConfidenceRouting(confidence: number): ConfidenceRouting {
+  if (confidence >= 0.8) return 'direct';
+  if (confidence >= 0.5) return 'with_clarification';
+  return 'ask_first';
+}
+
+// ---------------------------------------------------------------------------
+// Unchanged interfaces — kept as-is for full backward compatibility
+// ---------------------------------------------------------------------------
 
 export interface ThreadState {
   id: string;

@@ -29,14 +29,26 @@ CREATE INDEX idx_predictions_active ON ops_table_predictions(table_id) WHERE dis
 ALTER TABLE ops_behavioral_patterns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ops_table_predictions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view patterns in their org" ON ops_behavioral_patterns FOR SELECT
+DO $$ BEGIN
+  CREATE POLICY "Users can view patterns in their org" ON ops_behavioral_patterns FOR SELECT
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can view predictions in their org" ON ops_table_predictions FOR SELECT
+DO $$ BEGIN
+  CREATE POLICY "Users can view predictions in their org" ON ops_table_predictions FOR SELECT
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can create predictions in their org" ON ops_table_predictions FOR INSERT
+DO $$ BEGIN
+  CREATE POLICY "Users can create predictions in their org" ON ops_table_predictions FOR INSERT
   WITH CHECK (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update predictions in their org" ON ops_table_predictions FOR UPDATE
+DO $$ BEGIN
+  CREATE POLICY "Users can update predictions in their org" ON ops_table_predictions FOR UPDATE
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

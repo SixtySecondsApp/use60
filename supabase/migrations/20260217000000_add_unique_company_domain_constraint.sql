@@ -7,8 +7,11 @@
 -- Add unique constraint on company_domain
 -- Note: PostgreSQL allows multiple NULL values in UNIQUE columns (per SQL standard)
 -- This means nullable domains won't cause constraint violations
-ALTER TABLE public.organizations
+DO $$ BEGIN
+  ALTER TABLE public.organizations
 ADD CONSTRAINT organizations_company_domain_unique UNIQUE (company_domain);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add case-insensitive unique index to catch variations like "use60.com" vs "Use60.com"
 -- This ensures domain matching is case-insensitive

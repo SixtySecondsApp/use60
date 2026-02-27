@@ -72,40 +72,55 @@ ALTER TABLE user_sequence_preferences ENABLE ROW LEVEL SECURITY;
 
 -- Users can read own preferences
 DROP POLICY IF EXISTS "Users can read own sequence preferences" ON user_sequence_preferences;
-CREATE POLICY "Users can read own sequence preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own sequence preferences"
   ON user_sequence_preferences FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can create own preferences
 DROP POLICY IF EXISTS "Users can create own sequence preferences" ON user_sequence_preferences;
-CREATE POLICY "Users can create own sequence preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can create own sequence preferences"
   ON user_sequence_preferences FOR INSERT
   TO authenticated
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update own preferences
 DROP POLICY IF EXISTS "Users can update own sequence preferences" ON user_sequence_preferences;
-CREATE POLICY "Users can update own sequence preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own sequence preferences"
   ON user_sequence_preferences FOR UPDATE
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can delete own preferences
 DROP POLICY IF EXISTS "Users can delete own sequence preferences" ON user_sequence_preferences;
-CREATE POLICY "Users can delete own sequence preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own sequence preferences"
   ON user_sequence_preferences FOR DELETE
   TO authenticated
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (for edge functions)
 DROP POLICY IF EXISTS "Service role has full access to sequence preferences" ON user_sequence_preferences;
-CREATE POLICY "Service role has full access to sequence preferences"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to sequence preferences"
   ON user_sequence_preferences FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Trigger: Update updated_at timestamp

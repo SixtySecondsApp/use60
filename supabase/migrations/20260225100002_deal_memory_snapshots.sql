@@ -62,14 +62,33 @@ COMMENT ON COLUMN deal_memory_snapshots.generated_by IS
 ALTER TABLE deal_memory_snapshots ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "org_members_select_deal_memory_snapshots" ON deal_memory_snapshots;
+<<<<<<< HEAD
+DO $$ BEGIN
+  CREATE POLICY "org_members_select_deal_memory_snapshots"
+=======
 CREATE POLICY "org_members_select_deal_memory_snapshots"
+>>>>>>> origin/main
   ON deal_memory_snapshots FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+<<<<<<< HEAD
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DROP POLICY IF EXISTS "service_role_all_deal_memory_snapshots" ON deal_memory_snapshots;
+DO $$ BEGIN
+  CREATE POLICY "service_role_all_deal_memory_snapshots"
+  ON deal_memory_snapshots FOR ALL
+  TO service_role
+  USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+=======
 
 DROP POLICY IF EXISTS "service_role_all_deal_memory_snapshots" ON deal_memory_snapshots;
 CREATE POLICY "service_role_all_deal_memory_snapshots"
   ON deal_memory_snapshots FOR ALL
   TO service_role
   USING (true) WITH CHECK (true);
+>>>>>>> origin/main

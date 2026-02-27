@@ -39,6 +39,8 @@ import {
   Brain,
   Send,
   LifeBuoy,
+  FileText,
+  LayoutGrid,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -184,10 +186,10 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Pipeline',
     icon: Kanban,
-    showInNav: false, // Phase 2: accessible from Ops standard tables
+    showInNav: true,
     navSection: 'main',
     order: 4,
-    displayGroup: 3,
+    displayGroup: 1,
   },
   {
     path: '/calls',
@@ -392,6 +394,26 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     order: 10,
     badge: 'Demo',
   },
+  {
+    path: '/platform/demo/prep-briefing',
+    access: 'platformAdmin',
+    label: 'Prep Briefing Demo',
+    icon: FileText,
+    showInNav: false,
+    navSection: 'platform',
+    order: 56,
+    badge: 'New',
+  },
+  {
+    path: '/platform/demo/conversational-copilot',
+    access: 'platformAdmin',
+    label: 'Conversational Copilot Demo',
+    icon: Bot,
+    showInNav: false,
+    navSection: 'platform',
+    order: 57,
+    badge: 'New',
+  },
 
   // ========== Settings Section (Tier 1: All Users) ==========
   {
@@ -432,6 +454,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
   // ========== Org Admin Routes ==========
   // Org/team management is now accessed via the main Settings page (role-gated cards).
   // We keep legacy redirects for /team/* paths elsewhere.
+  {
+    path: '/admin/control-room',
+    access: 'orgAdmin',
+    label: 'Control Room',
+    icon: LayoutGrid,
+    showInNav: true,
+    navSection: 'org',
+    order: 80,
+    badge: 'New',
+  },
   {
     path: '/settings/autonomy',
     access: 'orgAdmin',

@@ -25,15 +25,21 @@ COMMENT ON TABLE public.actor_schema_cache IS 'Cached Apify actor input schemas.
 -- RLS: org members can read, service role full access
 ALTER TABLE public.actor_schema_cache ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "actor_schema_cache_select"
+DO $$ BEGIN
+  CREATE POLICY "actor_schema_cache_select"
   ON public.actor_schema_cache
   FOR SELECT
   USING (public.is_service_role() OR public.can_access_org_data(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "actor_schema_cache_service_write"
+DO $$ BEGIN
+  CREATE POLICY "actor_schema_cache_service_write"
   ON public.actor_schema_cache
   USING (public.is_service_role())
   WITH CHECK (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Index for lookups
 CREATE INDEX idx_actor_schema_cache_org_actor
@@ -74,26 +80,38 @@ COMMENT ON TABLE public.apify_runs IS 'Tracks Apify actor run executions. Each r
 -- RLS: org members can read, service role full access, creator can delete
 ALTER TABLE public.apify_runs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "apify_runs_select"
+DO $$ BEGIN
+  CREATE POLICY "apify_runs_select"
   ON public.apify_runs
   FOR SELECT
   USING (public.is_service_role() OR public.can_access_org_data(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "apify_runs_insert"
+DO $$ BEGIN
+  CREATE POLICY "apify_runs_insert"
   ON public.apify_runs
   FOR INSERT
   WITH CHECK (public.is_service_role() OR public.can_access_org_data(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "apify_runs_update"
+DO $$ BEGIN
+  CREATE POLICY "apify_runs_update"
   ON public.apify_runs
   FOR UPDATE
   USING (public.is_service_role())
   WITH CHECK (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "apify_runs_delete"
+DO $$ BEGIN
+  CREATE POLICY "apify_runs_delete"
   ON public.apify_runs
   FOR DELETE
   USING (public.is_service_role() OR (auth.uid() = created_by));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Indexes
 CREATE INDEX idx_apify_runs_org_id ON public.apify_runs(org_id);
@@ -125,15 +143,21 @@ COMMENT ON TABLE public.apify_results IS 'Raw Apify actor output items. Auto-pur
 -- RLS: org members can read, service role full access
 ALTER TABLE public.apify_results ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "apify_results_select"
+DO $$ BEGIN
+  CREATE POLICY "apify_results_select"
   ON public.apify_results
   FOR SELECT
   USING (public.is_service_role() OR public.can_access_org_data(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "apify_results_service_write"
+DO $$ BEGIN
+  CREATE POLICY "apify_results_service_write"
   ON public.apify_results
   USING (public.is_service_role())
   WITH CHECK (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Indexes
 CREATE INDEX idx_apify_results_run_id ON public.apify_results(run_id);

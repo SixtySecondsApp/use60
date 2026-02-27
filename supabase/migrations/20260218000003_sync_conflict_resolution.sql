@@ -98,7 +98,8 @@ COMMENT ON INDEX idx_dynamic_table_cells_source_updated IS
 ALTER TABLE public.ops_sync_conflicts ENABLE ROW LEVEL SECURITY;
 
 -- Allow org members to view conflicts in their tables
-CREATE POLICY "org_members_view_conflicts"
+DO $$ BEGIN
+  CREATE POLICY "org_members_view_conflicts"
   ON public.ops_sync_conflicts
   FOR SELECT
   USING (
@@ -109,15 +110,20 @@ CREATE POLICY "org_members_view_conflicts"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON POLICY "org_members_view_conflicts" ON public.ops_sync_conflicts IS
   'Org members can view conflicts in their organization tables (scoped via organization_memberships).';
 
 -- Allow service role full access for automation/webhooks
-CREATE POLICY "service_role_full_access_conflicts"
+DO $$ BEGIN
+  CREATE POLICY "service_role_full_access_conflicts"
   ON public.ops_sync_conflicts
   FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON POLICY "service_role_full_access_conflicts" ON public.ops_sync_conflicts IS
   'Service role (webhooks, edge functions) can insert/update conflicts for automation.';

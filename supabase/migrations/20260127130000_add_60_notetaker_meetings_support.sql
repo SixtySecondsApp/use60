@@ -16,8 +16,11 @@ COMMENT ON COLUMN meetings.recording_id IS 'FK to recordings table for 60_noteta
 
 -- 2. Update source_type CHECK constraint to allow '60_notetaker'
 ALTER TABLE meetings DROP CONSTRAINT IF EXISTS meetings_source_type_check;
-ALTER TABLE meetings ADD CONSTRAINT meetings_source_type_check
+DO $$ BEGIN
+  ALTER TABLE meetings ADD CONSTRAINT meetings_source_type_check
   CHECK (source_type = ANY (ARRAY['fathom'::text, 'voice'::text, '60_notetaker'::text]));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 3. Add unique index on bot_id (only one meeting per bot)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_bot_id_unique
