@@ -5,13 +5,16 @@
  * colored count badges, and @hello-pangea/dnd drop zone.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 import { DealCard } from './DealCard';
 import { Plus, Inbox } from 'lucide-react';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { extractDomain } from './hooks/useCompanyLogoBatch';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
+
+const INITIAL_VISIBLE = 10;
+const LOAD_MORE_COUNT = 10;
 
 interface PipelineColumnProps {
   stage: {
@@ -41,6 +44,26 @@ export function PipelineColumn({
 }: PipelineColumnProps) {
   const { formatMoney: fmtMoney } = useOrgMoney();
 
+  // Lazy-load: show first INITIAL_VISIBLE cards, load more on scroll
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset visible count when deals change (e.g. filter/sort)
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE);
+  }, [deals.length]);
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    // Load more when within 100px of bottom
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+      setVisibleCount((prev) => Math.min(prev + LOAD_MORE_COUNT, deals.length));
+    }
+  }, [deals.length]);
+
+  const visibleDeals = deals.slice(0, visibleCount);
+  const hasMore = visibleCount < deals.length;
+
   // Calculate total value of deals in this stage
   const totalValue = useMemo(() => {
     return deals.reduce((sum, deal) => sum + parseFloat(deal.value || 0), 0);
@@ -51,15 +74,15 @@ export function PipelineColumn({
     return fmtMoney(totalValue, { compact: true });
   }, [totalValue, fmtMoney]);
 
-  // Compute logo URLs for deals
+  // Compute logo URLs only for visible deals
   const logoUrls = useMemo(() => {
     const urls: Record<string, string | null> = {};
-    deals.forEach((deal) => {
+    visibleDeals.forEach((deal) => {
       const domain = extractDomain(deal.company);
       urls[deal.id] = domain ? getLogoDevUrl(domain, { size: 64, format: 'png' }) : null;
     });
     return urls;
-  }, [deals]);
+  }, [visibleDeals]);
 
   // Create hex to rgba helper for stage color
   const stageColorAlpha = (alpha: number) => {
@@ -135,8 +158,12 @@ export function PipelineColumn({
       <Droppable droppableId={stage.id}>
         {(provided, snapshot) => (
           <div
-            ref={provided.innerRef}
+            ref={(el) => {
+              provided.innerRef(el);
+              scrollRef.current = el;
+            }}
             {...provided.droppableProps}
+            onScroll={handleScroll}
             className={`
               flex-1 overflow-y-auto p-2 flex flex-col gap-[7px]
               min-h-[120px]
@@ -157,7 +184,7 @@ export function PipelineColumn({
               </div>
             )}
 
-            {deals.map((deal, index) => {
+            {visibleDeals.map((deal, index) => {
               const dealId = String(deal.id);
               return (
                 <Draggable key={dealId} draggableId={dealId} index={index}>
@@ -180,6 +207,15 @@ export function PipelineColumn({
             })}
 
             {provided.placeholder}
+
+            {/* Scroll-to-load indicator */}
+            {hasMore && (
+              <div className="py-2 text-center">
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
+                  {deals.length - visibleCount} more
+                </span>
+              </div>
+            )}
           </div>
         )}
       </Droppable>

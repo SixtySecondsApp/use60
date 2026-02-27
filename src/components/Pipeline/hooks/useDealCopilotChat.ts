@@ -14,6 +14,7 @@ import { useCopilotChat, type ChatMessage } from '@/lib/hooks/useCopilotChat';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
 import { supabase } from '@/lib/supabase/clientV2';
+import { CopilotSessionService } from '@/lib/services/copilotSessionService';
 import { askMeeting } from '@/lib/services/meetingAnalyticsService';
 import type { PipelineDeal } from './usePipelineData';
 
@@ -208,9 +209,13 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
   const { userId } = useAuth();
   const activeOrgId = useOrgStore((s) => s.activeOrgId);
 
-  const enrichmentRef = useRef<EnrichmentData | null>(null);
+  const [enrichment, setEnrichment] = useState<EnrichmentData | null>(null);
+  const [enrichmentReady, setEnrichmentReady] = useState(false);
   const hasInjectedContextRef = useRef(false);
   const activeDealIdRef = useRef<string | null>(null);
+  // Track whether activate() was called so we can re-inject greeting when enrichment arrives
+  const pendingGreetingRef = useRef(false);
+  const sessionServiceRef = useRef(new CopilotSessionService(supabase));
 
   const chat = useCopilotChat({
     organizationId: activeOrgId || '',
@@ -228,17 +233,19 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (!deal) {
-      enrichmentRef.current = null;
+      setEnrichment(null);
+      setEnrichmentReady(false);
       return;
     }
 
     // Skip if we already enriched this deal
-    if (activeDealIdRef.current === deal.id && enrichmentRef.current) return;
+    if (activeDealIdRef.current === deal.id && enrichmentReady) return;
     activeDealIdRef.current = deal.id;
+    setEnrichmentReady(false);
 
     let cancelled = false;
 
-    async function fetchEnrichment() {
+    async function fetchEnrichmentData() {
       if (!deal) return;
       try {
         const companyName = deal.company || deal.name;
@@ -303,7 +310,7 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
 
         if (cancelled) return;
 
-        enrichmentRef.current = {
+        const data: EnrichmentData = {
           meetings: (meetingsRes.data || []) as MeetingRow[],
           activities: (activitiesRes.data || []) as ActivityRow[],
           overdueTasks: (overdueRes.data || []) as OverdueTaskRow[],
@@ -311,12 +318,15 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
           emailSignals: (signalsRes.data || []) as EmailSignalRow[],
           meetingIntelligence: meetingIntelRes?.answer || null,
         };
+        setEnrichment(data);
+        setEnrichmentReady(true);
       } catch {
-        // Non-blocking — context will still work without enrichment
+        // Non-blocking — mark ready even on failure so greeting isn't stuck
+        setEnrichmentReady(true);
       }
     }
 
-    fetchEnrichment();
+    fetchEnrichmentData();
     return () => { cancelled = true; };
   }, [deal]);
 
@@ -330,68 +340,74 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
   }, [chat.messages.length]);
 
   // -----------------------------------------------------------------------
+  // Build greeting from deal + enrichment
+  // -----------------------------------------------------------------------
+  const buildGreeting = useCallback(
+    (deal: PipelineDeal, enrichData: EnrichmentData | null): string => {
+      const companyName = deal.company || deal.name;
+      let greeting = `How can I help with the **${companyName}** deal?`;
+
+      // Add a quick status line based on health
+      if (deal.health_score !== null) {
+        const status = deal.health_status || 'unknown';
+        greeting += ` Health is **${deal.health_score}/100** (${status}).`;
+      }
+      if (deal.ghost_probability !== null && deal.ghost_probability > 30) {
+        greeting += ` Ghost risk is elevated at **${deal.ghost_probability}%**.`;
+      }
+
+      // Proactive alerts from enrichment
+      const alerts: string[] = [];
+
+      if (enrichData?.overdueTasks && enrichData.overdueTasks.length > 0) {
+        const count = enrichData.overdueTasks.length;
+        alerts.push(`${count} overdue task${count > 1 ? 's' : ''} need${count === 1 ? 's' : ''} attention`);
+      }
+
+      if (enrichData?.temperature) {
+        const temp = enrichData.temperature;
+        const pct = Math.round(temp.temperature * 100);
+        if (pct < 30) {
+          alerts.push(`Signal temperature is cold (${pct}%)${temp.trend ? ` — ${temp.trend}` : ''}`);
+        } else if (temp.trend === 'declining') {
+          alerts.push(`Signal temperature is declining (${pct}%)`);
+        }
+      }
+
+      if (enrichData?.emailSignals && enrichData.emailSignals.length > 0) {
+        const top = enrichData.emailSignals[0];
+        const signalLabel = (top.signal_type || '').replace(/_/g, ' ');
+        alerts.push(`Recent signal: ${signalLabel}`);
+      }
+
+      if (alerts.length > 0) {
+        greeting += '\n\n';
+        for (const alert of alerts) {
+          greeting += `- ${alert}\n`;
+        }
+      }
+
+      // Meeting intelligence one-liner
+      if (enrichData?.meetingIntelligence) {
+        greeting += `\n*${enrichData.meetingIntelligence}*`;
+      }
+
+      return greeting;
+    },
+    [],
+  );
+
+  // -----------------------------------------------------------------------
   // activate() — inject instant greeting, no API call
   // -----------------------------------------------------------------------
   const activate = useCallback(() => {
     if (!deal) return;
 
-    // If we already have persisted history, skip greeting injection
-    if (chat.messages.length > 0) {
-      return;
-    }
-
-    // Reset previous state
+    // Always start fresh
     chat.clearMessages();
     hasInjectedContextRef.current = false;
 
-    const companyName = deal.company || deal.name;
-    let greeting = `How can I help with the **${companyName}** deal?`;
-
-    // Add a quick status line based on health
-    if (deal.health_score !== null) {
-      const status = deal.health_status || 'unknown';
-      greeting += ` Health is **${deal.health_score}/100** (${status}).`;
-    }
-    if (deal.ghost_probability !== null && deal.ghost_probability > 30) {
-      greeting += ` Ghost risk is elevated at **${deal.ghost_probability}%**.`;
-    }
-
-    // Proactive alerts from enrichment
-    const enrichment = enrichmentRef.current;
-    const alerts: string[] = [];
-
-    if (enrichment?.overdueTasks && enrichment.overdueTasks.length > 0) {
-      const count = enrichment.overdueTasks.length;
-      alerts.push(`${count} overdue task${count > 1 ? 's' : ''} need${count === 1 ? 's' : ''} attention`);
-    }
-
-    if (enrichment?.temperature) {
-      const temp = enrichment.temperature;
-      const pct = Math.round(temp.temperature * 100);
-      if (pct < 30) {
-        alerts.push(`Signal temperature is cold (${pct}%)${temp.trend ? ` — ${temp.trend}` : ''}`);
-      } else if (temp.trend === 'declining') {
-        alerts.push(`Signal temperature is declining (${pct}%)`);
-      }
-    }
-
-    if (enrichment?.emailSignals && enrichment.emailSignals.length > 0) {
-      const top = enrichment.emailSignals[0];
-      const signalLabel = (top.signal_type || '').replace(/_/g, ' ');
-      alerts.push(`Recent signal: ${signalLabel}`);
-    }
-
-    if (alerts.length > 0) {
-      greeting += '\n\n';
-      for (const alert of alerts) {
-        greeting += `- ${alert}\n`;
-      }
-    }
-
-    // Meeting intelligence one-liner
-    if (enrichment?.meetingIntelligence) {
-      greeting += `\n*${enrichment.meetingIntelligence}*`;
-    }
+    const greeting = buildGreeting(deal, enrichment);
 
     const greetingMsg: ChatMessage = {
       id: generateId(),
@@ -401,7 +417,35 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
     };
 
     chat.injectMessages([greetingMsg]);
-  }, [deal, chat]);
+
+    // If enrichment hasn't loaded yet, flag for re-injection when it arrives
+    pendingGreetingRef.current = !enrichmentReady;
+  }, [deal, chat, enrichment, enrichmentReady, buildGreeting]);
+
+  // -----------------------------------------------------------------------
+  // Re-inject greeting when enrichment arrives after activate() was called
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (!enrichmentReady || !pendingGreetingRef.current || !deal) return;
+
+    // Enrichment just arrived and we have a pending greeting to upgrade
+    pendingGreetingRef.current = false;
+
+    // Only upgrade if the user hasn't sent a message yet (chat is still just the greeting)
+    const hasOnlyGreeting = chat.messages.length === 1 && chat.messages[0].role === 'assistant';
+    if (!hasOnlyGreeting) return;
+
+    const richGreeting = buildGreeting(deal, enrichment);
+
+    // Replace the bare greeting with the enriched one
+    chat.clearMessages();
+    chat.injectMessages([{
+      id: generateId(),
+      role: 'assistant',
+      content: richGreeting,
+      timestamp: new Date(),
+    }]);
+  }, [enrichmentReady, deal, enrichment, chat, buildGreeting]);
 
   // -----------------------------------------------------------------------
   // sendMessage() — inject user bubble + send enriched message silently
@@ -419,18 +463,27 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
       };
       chat.injectMessages([userMsg]);
 
+      // Persist the clean user text (not the enriched API message)
+      if (chat.conversationId) {
+        sessionServiceRef.current.addMessage({
+          conversation_id: chat.conversationId,
+          role: 'user',
+          content: text,
+        }).catch(() => {});
+      }
+
       // Build the actual API message — prepend deal context on first message
       let apiMessage = text;
       if (!hasInjectedContextRef.current) {
-        const contextBlock = buildDealContextBlock(deal, enrichmentRef.current);
+        const contextBlock = buildDealContextBlock(deal, enrichment);
         apiMessage = `${contextBlock}\n\n${text}`;
         hasInjectedContextRef.current = true;
       }
 
-      // Send silently — no duplicate user bubble
+      // Send silently — no duplicate user bubble, no duplicate persistence
       chat.sendMessage(apiMessage, { silent: true });
     },
-    [deal, chat],
+    [deal, chat, enrichment],
   );
 
   // -----------------------------------------------------------------------

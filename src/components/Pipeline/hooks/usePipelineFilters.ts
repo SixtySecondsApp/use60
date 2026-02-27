@@ -14,12 +14,15 @@ export type PipelineViewMode = 'kanban' | 'table';
 export type PipelineSortBy = 'value' | 'health_score' | 'days_in_stage' | 'close_date' | 'created_at' | 'name';
 export type PipelineSortDir = 'asc' | 'desc';
 
+export const PIPELINE_PAGE_SIZE = 25;
+
 interface UsePipelineFiltersReturn {
   // Current state
   filters: PipelineFilters;
   sortBy: PipelineSortBy;
   sortDir: PipelineSortDir;
   viewMode: PipelineViewMode;
+  page: number;
 
   // Update functions
   setStageIds: (ids: string[]) => void;
@@ -31,6 +34,7 @@ interface UsePipelineFiltersReturn {
   setSortBy: (sortBy: PipelineSortBy) => void;
   setSortDir: (sortDir: PipelineSortDir) => void;
   setViewMode: (mode: PipelineViewMode) => void;
+  setPage: (page: number) => void;
 
   // Utility functions
   clearFilters: () => void;
@@ -62,6 +66,7 @@ export function usePipelineFilters(): UsePipelineFiltersReturn {
   const sortBy = (searchParams.get('sort') as PipelineSortBy) || 'value';
   const sortDir = (searchParams.get('dir') as PipelineSortDir) || 'desc';
   const viewMode = (searchParams.get('view') as PipelineViewMode) || 'kanban';
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
 
   // Update functions
   const updateParam = useCallback(
@@ -83,48 +88,72 @@ export function usePipelineFilters(): UsePipelineFiltersReturn {
     [setSearchParams]
   );
 
+  // Helper: update a param and reset page to 1
+  const updateParamAndResetPage = useCallback(
+    (key: string, value: string | string[] | null | undefined) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (!value || (Array.isArray(value) && value.length === 0)) {
+          next.delete(key);
+        } else if (Array.isArray(value)) {
+          next.set(key, value.join(','));
+        } else {
+          next.set(key, value);
+        }
+        next.delete('page');
+        return next;
+      });
+    },
+    [setSearchParams]
+  );
+
   const setStageIds = useCallback(
-    (ids: string[]) => updateParam('stage', ids),
-    [updateParam]
+    (ids: string[]) => updateParamAndResetPage('stage', ids),
+    [updateParamAndResetPage]
   );
 
   const setHealthStatus = useCallback(
-    (statuses: string[]) => updateParam('health', statuses),
-    [updateParam]
+    (statuses: string[]) => updateParamAndResetPage('health', statuses),
+    [updateParamAndResetPage]
   );
 
   const setRiskLevel = useCallback(
-    (levels: string[]) => updateParam('risk', levels),
-    [updateParam]
+    (levels: string[]) => updateParamAndResetPage('risk', levels),
+    [updateParamAndResetPage]
   );
 
   const setOwnerIds = useCallback(
-    (ids: string[]) => updateParam('owner', ids),
-    [updateParam]
+    (ids: string[]) => updateParamAndResetPage('owner', ids),
+    [updateParamAndResetPage]
   );
 
   const setSearch = useCallback(
-    (search: string) => updateParam('search', search || null),
-    [updateParam]
+    (search: string) => updateParamAndResetPage('search', search || null),
+    [updateParamAndResetPage]
   );
 
   const setStatus = useCallback(
-    (status: string) => updateParam('status', status || 'active'),
-    [updateParam]
+    (status: string) => updateParamAndResetPage('status', status || 'active'),
+    [updateParamAndResetPage]
   );
 
   const setSortBy = useCallback(
-    (sortBy: PipelineSortBy) => updateParam('sort', sortBy),
-    [updateParam]
+    (sortBy: PipelineSortBy) => updateParamAndResetPage('sort', sortBy),
+    [updateParamAndResetPage]
   );
 
   const setSortDir = useCallback(
-    (sortDir: PipelineSortDir) => updateParam('dir', sortDir),
-    [updateParam]
+    (sortDir: PipelineSortDir) => updateParamAndResetPage('dir', sortDir),
+    [updateParamAndResetPage]
   );
 
   const setViewMode = useCallback(
     (mode: PipelineViewMode) => updateParam('view', mode),
+    [updateParam]
+  );
+
+  const setPage = useCallback(
+    (page: number) => updateParam('page', page <= 1 ? null : String(page)),
     [updateParam]
   );
 
@@ -136,6 +165,7 @@ export function usePipelineFilters(): UsePipelineFiltersReturn {
       next.delete('risk');
       next.delete('owner');
       next.delete('search');
+      next.delete('page');
       // Keep status, sort, dir, view
       return next;
     });
@@ -156,6 +186,7 @@ export function usePipelineFilters(): UsePipelineFiltersReturn {
     sortBy,
     sortDir,
     viewMode,
+    page,
     setStageIds,
     setHealthStatus,
     setRiskLevel,
@@ -165,6 +196,7 @@ export function usePipelineFilters(): UsePipelineFiltersReturn {
     setSortBy,
     setSortDir,
     setViewMode,
+    setPage,
     clearFilters,
     hasActiveFilters,
   };

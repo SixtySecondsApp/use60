@@ -16,7 +16,8 @@ import { DealForm } from './DealForm';
 import { HubSpotImportWizard } from '../ops/HubSpotImportWizard';
 import { AttioImportWizard } from '../ops/AttioImportWizard';
 import { usePipelineData } from './hooks/usePipelineData';
-import { usePipelineFilters } from './hooks/usePipelineFilters';
+import { usePipelineFilters, PIPELINE_PAGE_SIZE } from './hooks/usePipelineFilters';
+import { PipelinePagination } from './PipelinePagination';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useOrgStore } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
@@ -70,11 +71,17 @@ function PipelineSkeleton() {
 export function PipelineView() {
   const activeOrgId = useOrgStore((state) => state.activeOrgId);
   const filterState = usePipelineFilters();
+  const isTableView = filterState.viewMode === 'table';
   const pipelineData = usePipelineData({
     filters: filterState.filters,
     sortBy: filterState.sortBy as any,
     sortDir: filterState.sortDir,
+    // Table: paginated 25 at a time. Kanban: load all deals, lazy-render per column.
+    limit: isTableView ? PIPELINE_PAGE_SIZE : 200,
+    offset: isTableView ? (filterState.page - 1) * PIPELINE_PAGE_SIZE : 0,
   });
+
+  const totalPages = Math.max(1, Math.ceil(pipelineData.data.totalCount / PIPELINE_PAGE_SIZE));
 
   // Sheet state
   const [selectedDealId, setSelectedDealId] = React.useState<string | null>(null);
@@ -282,6 +289,16 @@ export function PipelineView() {
               filterState.setSortDir('desc');
             }
           }}
+        />
+      )}
+
+      {isTableView && totalPages > 1 && (
+        <PipelinePagination
+          currentPage={filterState.page}
+          totalPages={totalPages}
+          totalCount={pipelineData.data.totalCount}
+          pageSize={PIPELINE_PAGE_SIZE}
+          onPageChange={filterState.setPage}
         />
       )}
 

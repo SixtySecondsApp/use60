@@ -491,9 +491,13 @@ export function DealIntelligenceSheet({
                   </div>
                 </div>
               )}
-              {/* Suggestion chips — shown when only the greeting is visible */}
-              {dealChat.messages.length <= 1 && !dealChat.isLoading && (
-                <div className="flex flex-wrap gap-1.5 px-1">
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Suggestion chips — pinned above chat input */}
+            {dealChat.messages.length <= 1 && !dealChat.isLoading && (
+              <div className="flex-shrink-0 px-4 py-2 border-t border-gray-800/30">
+                <div className="flex flex-wrap gap-1.5">
                   {dealChat.suggestions.map((s) => (
                     <button
                       key={s.label}
@@ -504,9 +508,8 @@ export function DealIntelligenceSheet({
                     </button>
                   ))}
                 </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
+              </div>
+            )}
 
             {/* Chat input */}
             <div className="flex-shrink-0 px-4 py-3 border-t border-gray-800/50 bg-gray-900/80 backdrop-blur-sm">

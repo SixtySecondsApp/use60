@@ -132,10 +132,10 @@ async function fetchPipelineFallback(
     throw new Error(`Failed to load deal stages: ${stagesError.message}`);
   }
 
-  // 2. Build deals query
+  // 2. Build deals query (with exact count for pagination)
   let dealsQuery = supabase
     .from('deals')
-    .select('id, name, company, value, stage_id, owner_id, close_date, expected_close_date, probability, status, created_at, stage_changed_at, company_id, primary_contact_id, contact_name, contact_email, clerk_org_id')
+    .select('id, name, company, value, stage_id, owner_id, close_date, expected_close_date, probability, status, created_at, stage_changed_at, company_id, primary_contact_id, contact_name, contact_email, clerk_org_id', { count: 'exact' })
     .eq('clerk_org_id', orgId);
 
   // Apply status filter (default to open)
@@ -168,7 +168,7 @@ async function fetchPipelineFallback(
   // Apply pagination
   dealsQuery = dealsQuery.range(offset, offset + limit - 1);
 
-  const { data: rawDeals, error: dealsError } = await dealsQuery;
+  const { data: rawDeals, error: dealsError, count: rawCount } = await dealsQuery;
 
   if (dealsError) {
     throw new Error(`Failed to load deals: ${dealsError.message}`);
@@ -270,7 +270,7 @@ async function fetchPipelineFallback(
     deals,
     dealMap,
     stageMetrics,
-    totalCount: deals.length,
+    totalCount: rawCount ?? deals.length,
     summary,
   };
 }
