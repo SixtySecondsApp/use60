@@ -9,11 +9,12 @@
  *   - Ephemeral session (no persistence)
  */
 
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useMemo, useState } from 'react';
 import { useCopilotChat, type ChatMessage } from '@/lib/hooks/useCopilotChat';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
 import { supabase } from '@/lib/supabase/clientV2';
+import { askMeeting } from '@/lib/services/meetingAnalyticsService';
 import type { PipelineDeal } from './usePipelineData';
 
 // ---------------------------------------------------------------------------
@@ -35,11 +36,15 @@ function buildDealContextBlock(
 ): string {
   const parts: string[] = [];
   parts.push('[DEAL_CONTEXT]');
+  parts.push(`Deal ID: ${deal.id}`);
   parts.push(`Deal: ${deal.name}`);
   parts.push(`Company: ${deal.company || 'Unknown'}`);
   parts.push(`Value: ${formatCurrency(deal.value)}`);
   parts.push(`Stage: ${deal.stage_name || 'Unknown'}`);
   if (deal.close_date) parts.push(`Expected close: ${deal.close_date}`);
+  if (deal.primary_contact_id) parts.push(`Primary Contact ID: ${deal.primary_contact_id}`);
+  if (deal.contact_name) parts.push(`Contact Name: ${deal.contact_name}`);
+  if (deal.contact_email) parts.push(`Contact Email: ${deal.contact_email}`);
 
   if (deal.health_score !== null) {
     parts.push(`Deal Health: ${deal.health_score}/100 (${deal.health_status || 'unknown'})`);
@@ -90,6 +95,35 @@ function buildDealContextBlock(
         parts.push(`  - ${date}: [${a.type}] ${subject}`);
       }
     }
+
+    if (enrichment.overdueTasks && enrichment.overdueTasks.length > 0) {
+      parts.push('');
+      parts.push(`Overdue Tasks (${enrichment.overdueTasks.length}):`);
+      for (const t of enrichment.overdueTasks) {
+        parts.push(`  - ${t.title} (due: ${t.due_date}${t.priority ? `, ${t.priority}` : ''})`);
+      }
+    }
+
+    if (enrichment.temperature) {
+      const pct = Math.round(enrichment.temperature.temperature * 100);
+      parts.push(`Signal Temperature: ${pct}%${enrichment.temperature.trend ? ` (${enrichment.temperature.trend})` : ''}`);
+    }
+
+    if (enrichment.emailSignals && enrichment.emailSignals.length > 0) {
+      parts.push('');
+      parts.push(`Recent Email Signals (${enrichment.emailSignals.length}):`);
+      for (const s of enrichment.emailSignals) {
+        const date = s.created_at
+          ? new Date(s.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+          : '';
+        parts.push(`  - ${date}: ${s.signal_type.replace(/_/g, ' ')} (confidence: ${Math.round(s.confidence * 100)}%)`);
+      }
+    }
+
+    if (enrichment.meetingIntelligence) {
+      parts.push('');
+      parts.push(`Meeting Intelligence: ${enrichment.meetingIntelligence}`);
+    }
   }
 
   parts.push('[/DEAL_CONTEXT]');
@@ -115,9 +149,36 @@ interface ActivityRow {
   notes: unknown;
 }
 
+interface OverdueTaskRow {
+  title: string;
+  due_date: string;
+  priority: string | null;
+}
+
+interface TemperatureRow {
+  temperature: number;
+  trend: string | null;
+}
+
+interface EmailSignalRow {
+  signal_type: string;
+  context: unknown;
+  confidence: number;
+  created_at: string;
+}
+
 interface EnrichmentData {
   meetings: MeetingRow[];
   activities: ActivityRow[];
+  meetingIntelligence?: string | null;
+  overdueTasks?: OverdueTaskRow[];
+  temperature?: TemperatureRow | null;
+  emailSignals?: EmailSignalRow[];
+}
+
+export interface DealSuggestion {
+  label: string;
+  prompt: string;
 }
 
 export interface UseDealCopilotChatReturn {
@@ -129,10 +190,14 @@ export interface UseDealCopilotChatReturn {
   messages: ChatMessage[];
   /** Whether the copilot is streaming / thinking */
   isLoading: boolean;
+  /** Whether the session is loading from persistence */
+  isLoadingSession: boolean;
   /** Stop current generation */
   stopGeneration: () => void;
   /** Reset chat state */
   reset: () => void;
+  /** Context-aware suggested actions */
+  suggestions: DealSuggestion[];
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +215,8 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
   const chat = useCopilotChat({
     organizationId: activeOrgId || '',
     userId: userId || '',
-    persistSession: false,
+    persistSession: true,
+    dealId: deal?.id || undefined,
     initialContext: {
       currentView: 'pipeline',
       dealIds: deal ? [deal.id] : [],
@@ -175,7 +241,9 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
     async function fetchEnrichment() {
       if (!deal) return;
       try {
-        const [meetingsRes, activitiesRes] = await Promise.all([
+        const companyName = deal.company || deal.name;
+
+        const [meetingsRes, activitiesRes, overdueRes, tempRes, signalsRes, meetingIntelRes] = await Promise.all([
           supabase
             .from('meetings')
             .select('title, start_time, summary_oneliner')
@@ -190,6 +258,33 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
             .eq('deal_id', deal.id)
             .order('created_at', { ascending: false })
             .limit(8),
+          // Overdue tasks
+          supabase
+            .from('tasks')
+            .select('title, due_date, priority')
+            .eq('deal_id', deal.id)
+            .eq('completed', false)
+            .lt('due_date', new Date().toISOString())
+            .order('due_date', { ascending: true })
+            .limit(3),
+          // Deal signal temperature
+          supabase
+            .from('deal_signal_temperature')
+            .select('temperature, trend')
+            .eq('deal_id', deal.id)
+            .maybeSingle(),
+          // Email signal events
+          supabase
+            .from('email_signal_events')
+            .select('signal_type, context, confidence, created_at')
+            .eq('deal_id', deal.id)
+            .order('created_at', { ascending: false })
+            .limit(3),
+          // Meeting intelligence — non-blocking
+          askMeeting({
+            question: `What was last discussed with ${companyName}? One sentence.`,
+            maxMeetings: 3,
+          }).catch(() => null),
         ]);
 
         if (cancelled) return;
@@ -197,6 +292,10 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
         enrichmentRef.current = {
           meetings: (meetingsRes.data || []) as MeetingRow[],
           activities: (activitiesRes.data || []) as ActivityRow[],
+          overdueTasks: (overdueRes.data || []) as OverdueTaskRow[],
+          temperature: tempRes.data as TemperatureRow | null,
+          emailSignals: (signalsRes.data || []) as EmailSignalRow[],
+          meetingIntelligence: meetingIntelRes?.answer || null,
         };
       } catch {
         // Non-blocking — context will still work without enrichment
@@ -222,12 +321,17 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
   const activate = useCallback(() => {
     if (!deal) return;
 
+    // If we already have persisted history, skip greeting injection
+    if (chat.messages.length > 0) {
+      return;
+    }
+
     // Reset previous state
     chat.clearMessages();
     hasInjectedContextRef.current = false;
 
     const companyName = deal.company || deal.name;
-    let greeting = `I've loaded the **${companyName}** deal context.`;
+    let greeting = `How can I help with the **${companyName}** deal?`;
 
     // Add a quick status line based on health
     if (deal.health_score !== null) {
@@ -238,7 +342,42 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
       greeting += ` Ghost risk is elevated at **${deal.ghost_probability}%**.`;
     }
 
-    greeting += '\n\nWhat would you like to know? I can help with risk analysis, next steps, relationship health, or anything else about this deal.';
+    // Proactive alerts from enrichment
+    const enrichment = enrichmentRef.current;
+    const alerts: string[] = [];
+
+    if (enrichment?.overdueTasks && enrichment.overdueTasks.length > 0) {
+      const count = enrichment.overdueTasks.length;
+      alerts.push(`${count} overdue task${count > 1 ? 's' : ''} need${count === 1 ? 's' : ''} attention`);
+    }
+
+    if (enrichment?.temperature) {
+      const temp = enrichment.temperature;
+      const pct = Math.round(temp.temperature * 100);
+      if (pct < 30) {
+        alerts.push(`Signal temperature is cold (${pct}%)${temp.trend ? ` — ${temp.trend}` : ''}`);
+      } else if (temp.trend === 'declining') {
+        alerts.push(`Signal temperature is declining (${pct}%)`);
+      }
+    }
+
+    if (enrichment?.emailSignals && enrichment.emailSignals.length > 0) {
+      const top = enrichment.emailSignals[0];
+      const signalLabel = (top.signal_type || '').replace(/_/g, ' ');
+      alerts.push(`Recent signal: ${signalLabel}`);
+    }
+
+    if (alerts.length > 0) {
+      greeting += '\n\n';
+      for (const alert of alerts) {
+        greeting += `- ${alert}\n`;
+      }
+    }
+
+    // Meeting intelligence one-liner
+    if (enrichment?.meetingIntelligence) {
+      greeting += `\n*${enrichment.meetingIntelligence}*`;
+    }
 
     const greetingMsg: ChatMessage = {
       id: generateId(),
@@ -288,12 +427,43 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
     hasInjectedContextRef.current = false;
   }, [chat]);
 
+  // -----------------------------------------------------------------------
+  // suggestions — context-aware quick actions based on deal state
+  // -----------------------------------------------------------------------
+  const suggestions = useMemo<DealSuggestion[]>(() => {
+    if (!deal) return [];
+
+    const items: DealSuggestion[] = [];
+
+    // Always-useful actions
+    items.push({ label: 'Summarize deal', prompt: 'Give me a full summary of this deal' });
+    items.push({ label: 'Write follow-up', prompt: 'Draft a follow-up email for this deal' });
+    items.push({ label: 'Next best actions', prompt: 'What should I do next to advance this deal?' });
+
+    // Contextual actions based on deal state
+    if (deal.ghost_probability !== null && deal.ghost_probability > 30) {
+      items.push({ label: 'Re-engage', prompt: 'This deal has gone quiet. Help me re-engage the prospect.' });
+    }
+
+    if (deal.health_status === 'critical' || deal.risk_level === 'critical' || deal.risk_level === 'high') {
+      items.push({ label: 'Rescue plan', prompt: 'This deal is at risk. Create a rescue plan.' });
+    }
+
+    items.push({ label: 'Prep for meeting', prompt: 'Prep me for my next meeting on this deal' });
+    items.push({ label: 'Research company', prompt: `Research ${deal.company || deal.name} and give me key insights` });
+
+    // Cap at 5 suggestions
+    return items.slice(0, 5);
+  }, [deal]);
+
   return {
     activate,
     sendMessage,
     messages: chat.messages,
     isLoading: chat.isThinking || chat.isStreaming,
+    isLoadingSession: chat.isLoadingSession,
     stopGeneration: chat.stopGeneration,
     reset,
+    suggestions,
   };
 }

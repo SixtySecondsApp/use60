@@ -34,6 +34,8 @@ export interface PipelineDeal {
   stage_changed_at: string | null;
   company_id: string | null;
   primary_contact_id: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
 
   // Stage information
   stage_name: string | null;
@@ -200,6 +202,8 @@ async function fetchPipelineFallback(
       stage_changed_at: d.stage_changed_at,
       company_id: d.company_id,
       primary_contact_id: d.primary_contact_id,
+      contact_name: d.contact_name || null,
+      contact_email: d.contact_email || null,
       // Stage info from join
       stage_name: stage?.name || null,
       stage_color: stage?.color || null,

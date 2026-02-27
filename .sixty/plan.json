@@ -27,6 +27,12 @@
       "name": "Pipeline Real Deals Migration & Full Audit",
       "status": "complete",
       "createdAt": "2026-02-27"
+    },
+    {
+      "id": "deal-copilot-v2",
+      "name": "Deal Copilot V2 — Intelligence, Memory & Actions",
+      "status": "in_progress",
+      "createdAt": "2026-02-27"
     }
   ],
   "stories": [
@@ -865,10 +871,228 @@
       "completedAt": null
     }
   ],
+    {
+      "id": "DCV2-001",
+      "feature": "deal-copilot-v2",
+      "title": "Extend enrichment with meeting intelligence, overdue tasks, temperature, and email signals",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "acceptance": [
+        "askMeeting() called in parallel with existing meetings/activities fetch during enrichment",
+        "Overdue tasks fetched: tasks where deal_id match, completed=false, due_date < now()",
+        "Deal temperature fetched from deal_signal_temperature table",
+        "Email signals fetched from email_signal_events (latest 3 per deal)",
+        "All fetches non-blocking — .catch(() => null) so greeting works if any fail",
+        "EnrichmentData interface extended with meetingIntelligence, overdueTasks, temperature, emailSignals"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["DCV2-002"],
+      "parallelWith": ["DCV2-003", "DCV2-005"]
+    },
+    {
+      "id": "DCV2-002",
+      "feature": "deal-copilot-v2",
+      "title": "Build proactive alerts and meeting intel into greeting",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "acceptance": [
+        "Greeting includes meeting intelligence one-liner when available (e.g. 'Last discussed pricing on Feb 12')",
+        "Overdue tasks surfaced: '{count} overdue task(s) need attention'",
+        "Cold temperature flagged: 'Signal temperature is cold (18%)'",
+        "Declining trend flagged: 'Signals are declining'",
+        "Recent email signal surfaced for notable types (proposal_opened, positive_buying_signal)",
+        "Alerts render as markdown bullet list after the health line"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts"
+      ],
+      "dependencies": { "stories": ["DCV2-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-003",
+      "feature": "deal-copilot-v2",
+      "title": "Render structured response cards in deal copilot chat",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "acceptance": [
+        "Import CopilotResponse from @/components/copilot/CopilotResponse",
+        "Assistant messages check m.structuredResponse before rendering",
+        "Structured responses render CopilotResponse component instead of ReactMarkdown",
+        "Plain text responses still render as ReactMarkdown (fallback)",
+        "Dark theme (bg-gray-900 parent) doesn't break structured card styling"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/Pipeline/DealIntelligenceSheet.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DCV2-001", "DCV2-005"]
+    },
+    {
+      "id": "DCV2-004",
+      "feature": "deal-copilot-v2",
+      "title": "Add deal_id column to copilot_conversations and create migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "Migration adds deal_id UUID column to copilot_conversations referencing deals(id) ON DELETE SET NULL",
+        "Unique partial index on (user_id, deal_id) WHERE deal_id IS NOT NULL prevents duplicate deal sessions",
+        "Migration runs without errors on staging",
+        "Existing main sessions unaffected (deal_id is NULL for them)"
+      ],
+      "estimatedMinutes": 5,
+      "files": [
+        "supabase/migrations/20260227120000_add_deal_id_to_copilot_conversations.sql"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": ["copilot_conversations"] },
+      "blocks": ["DCV2-006"],
+      "parallelWith": ["DCV2-001", "DCV2-003", "DCV2-005"]
+    },
+    {
+      "id": "DCV2-005",
+      "feature": "deal-copilot-v2",
+      "title": "Add slash command dropdown to deal copilot input",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "acceptance": [
+        "DEAL_SLASH_COMMANDS constant defines 11 commands with command, label, description, prompt",
+        "Typing / in empty input shows dropdown with all commands",
+        "Typing /fo filters to /followup only",
+        "Arrow Up/Down navigates highlighted item, Enter/Tab selects, Escape closes",
+        "Commands ending with ': ' fill input for user to complete (e.g. /objection)",
+        "Other commands send immediately on selection",
+        "Dropdown renders above input with dark theme styling (bg-gray-800, violet highlight)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/Pipeline/DealIntelligenceSheet.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["DCV2-001", "DCV2-003"]
+    },
+    {
+      "id": "DCV2-006",
+      "feature": "deal-copilot-v2",
+      "title": "Add getDealSession to CopilotSessionService",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "acceptance": [
+        "CopilotConversation type updated with deal_id?: string | null",
+        "getDealSession(userId, dealId, orgId?) method queries by user_id + deal_id",
+        "If no existing session, creates one with is_main_session: false and deal_id set",
+        "Uses maybeSingle() for safe lookup"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/types/copilot.ts",
+        "src/lib/services/copilotSessionService.ts"
+      ],
+      "dependencies": { "stories": ["DCV2-004"], "files": [], "schema": ["copilot_conversations"] },
+      "blocks": ["DCV2-007"],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-007",
+      "feature": "deal-copilot-v2",
+      "title": "Add dealId option to useCopilotChat hook",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "acceptance": [
+        "dealId?: string added to UseCopilotChatOptions interface",
+        "Session loading useEffect branches: dealId → getDealSession, else → getMainSession",
+        "options.dealId added to useEffect dependency array",
+        "isLoadingSession correctly reflects deal session loading state"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/lib/hooks/useCopilotChat.ts"
+      ],
+      "dependencies": { "stories": ["DCV2-006"], "files": [], "schema": [] },
+      "blocks": ["DCV2-008"],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-008",
+      "feature": "deal-copilot-v2",
+      "title": "Wire deal copilot to use persistent per-deal sessions",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "acceptance": [
+        "useDealCopilotChat passes persistSession: true and dealId: deal.id to useCopilotChat",
+        "On activate(), if chat.messages.length > 0 (persisted history), skip greeting injection",
+        "Closing and reopening the same deal shows previous conversation",
+        "Opening a different deal shows a separate conversation (no cross-contamination)",
+        "isLoadingSession passed through for loading state in UI"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts",
+        "src/components/Pipeline/DealIntelligenceSheet.tsx"
+      ],
+      "dependencies": { "stories": ["DCV2-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-009",
+      "feature": "deal-copilot-v2",
+      "title": "Deploy migration and edge function to staging",
+      "type": "deployment",
+      "status": "pending",
+      "priority": 9,
+      "acceptance": [
+        "Migration pushed to staging: npx supabase db push --project-ref caerqjzvuerejfrdtygb",
+        "copilot-autonomous redeployed with --no-verify-jwt",
+        "Build succeeds: npx vite build with no errors"
+      ],
+      "estimatedMinutes": 5,
+      "files": [],
+      "dependencies": { "stories": ["DCV2-008", "DCV2-005", "DCV2-003", "DCV2-002"], "files": [], "schema": [] },
+      "blocks": ["DCV2-010"],
+      "parallelWith": []
+    },
+    {
+      "id": "DCV2-010",
+      "feature": "deal-copilot-v2",
+      "title": "End-to-end verification of all 5 features",
+      "type": "testing",
+      "status": "pending",
+      "priority": 10,
+      "acceptance": [
+        "Open deal → greeting shows health + proactive alerts + meeting intel one-liner",
+        "Type / → dropdown with 11 commands, keyboard navigation works, Enter selects",
+        "Select /summary → response renders as structured card (not plain markdown)",
+        "Close sheet, reopen same deal → previous conversation preserved",
+        "Open different deal → fresh conversation, no cross-contamination"
+      ],
+      "estimatedMinutes": 15,
+      "files": [],
+      "dependencies": { "stories": ["DCV2-009"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": []
+    }
+  ],
   "execution": {
-    "totalStories": 25,
+    "totalStories": 35,
     "completedStories": 25,
-    "currentFeature": "pipeline-migration",
-    "lastUpdated": "2026-02-27T00:00:00Z"
+    "currentFeature": "deal-copilot-v2",
+    "lastUpdated": "2026-02-27T12:00:00Z"
   }
 }

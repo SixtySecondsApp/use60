@@ -96,6 +96,7 @@ export interface CopilotConversation {
   id: string;
   user_id: string;
   org_id?: string | null;
+  deal_id?: string | null;
   title?: string | null;
   is_main_session: boolean;
   total_tokens_estimate: number;

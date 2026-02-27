@@ -72,6 +72,8 @@ export interface UseCopilotChatOptions {
   persistSession?: boolean;
   /** Number of historical messages to load (default: 50) */
   historyLimit?: number;
+  /** If set, use a per-deal session instead of the main session */
+  dealId?: string;
 }
 
 export interface RoutingContext {
@@ -608,7 +610,9 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
     async function loadSession() {
       try {
         const service = sessionServiceRef.current!;
-        const session = await service.getMainSession(options.userId, options.organizationId);
+        const session = options.dealId
+          ? await service.getDealSession(options.userId, options.dealId, options.organizationId)
+          : await service.getMainSession(options.userId, options.organizationId);
 
         if (cancelled) return;
         setConversationId(session.id);
@@ -656,7 +660,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
     return () => {
       cancelled = true;
     };
-  }, [options.userId, options.organizationId, persistSession, historyLimit]);
+  }, [options.userId, options.organizationId, options.dealId, persistSession, historyLimit]);
 
   // Cleanup on unmount
   useEffect(() => {

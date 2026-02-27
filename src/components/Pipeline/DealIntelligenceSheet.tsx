@@ -5,7 +5,7 @@
  * risk signals, and quick actions. Premium glass-morphism design.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,11 +27,11 @@ import {
   Calendar,
   Timer,
   Send,
-  Sparkles,
   StopCircle,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
+import { CopilotResponse } from '@/components/copilot/CopilotResponse';
 import type { PipelineDeal } from './hooks/usePipelineData';
 import { DealRiskFactors } from './DealRiskFactors';
 import { useDealCopilotChat } from './hooks/useDealCopilotChat';
@@ -150,6 +150,32 @@ function capitalize(str: string | null): string {
 }
 
 // =============================================================================
+// Slash Commands
+// =============================================================================
+
+interface SlashCommand {
+  command: string;
+  label: string;
+  prompt: string;
+  /** If true, fills input instead of sending immediately (user adds text) */
+  fillInput?: boolean;
+}
+
+const DEAL_SLASH_COMMANDS: SlashCommand[] = [
+  { command: '/summary', label: 'Summarize deal', prompt: 'Give me a full summary of this deal' },
+  { command: '/followup', label: 'Write follow-up', prompt: 'Draft a follow-up email for this deal' },
+  { command: '/next', label: 'Next actions', prompt: 'What should I do next to advance this deal?' },
+  { command: '/rescue', label: 'Rescue plan', prompt: 'This deal is at risk. Create a rescue plan.' },
+  { command: '/chase', label: 'Re-engage', prompt: 'This deal has gone quiet. Help me re-engage.' },
+  { command: '/prep', label: 'Meeting prep', prompt: 'Prep me for my next meeting on this deal' },
+  { command: '/research', label: 'Research company', prompt: 'Research this company and give me key insights' },
+  { command: '/proposal', label: 'Write proposal', prompt: 'Write a proposal for this deal' },
+  { command: '/objection', label: 'Handle objection', prompt: 'Help me handle this objection: ', fillInput: true },
+  { command: '/handoff', label: 'Handoff brief', prompt: 'Create a handoff brief for this deal' },
+  { command: '/battlecard', label: 'Battlecard', prompt: 'Create a competitive battlecard for ', fillInput: true },
+];
+
+// =============================================================================
 // Component
 // =============================================================================
 
@@ -166,8 +192,20 @@ export function DealIntelligenceSheet({
   const formatCurrency = (value: number | null) => fmtMoney(value ?? 0);
   const [chatMode, setChatMode] = useState(false);
   const [chatInput, setChatInput] = useState('');
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const chatEndRef = React.useRef<HTMLDivElement>(null);
   const chatInputRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Filtered slash commands based on current input
+  const filteredSlashCommands = useMemo(() => {
+    if (!showSlashMenu) return [];
+    const filter = chatInput.toLowerCase();
+    if (filter === '/') return DEAL_SLASH_COMMANDS;
+    return DEAL_SLASH_COMMANDS.filter(
+      (cmd) => cmd.command.startsWith(filter) || cmd.label.toLowerCase().includes(filter.slice(1)),
+    );
+  }, [chatInput, showSlashMenu]);
 
   // Reset chat mode when sheet closes or deal changes
   useEffect(() => {
@@ -289,19 +327,74 @@ export function DealIntelligenceSheet({
     setChatMode(true);
   }, [deal, dealChat]);
 
+  // Handle selecting a slash command
+  const handleSlashSelect = useCallback(
+    (cmd: SlashCommand) => {
+      setShowSlashMenu(false);
+      setSlashSelectedIndex(0);
+      if (cmd.fillInput) {
+        setChatInput(cmd.prompt);
+        setTimeout(() => chatInputRef.current?.focus(), 0);
+      } else {
+        setChatInput('');
+        dealChat.sendMessage(cmd.prompt);
+      }
+    },
+    [dealChat],
+  );
+
   // Handle sending a chat message
   const handleChatSend = useCallback(() => {
     if (!chatInput.trim() || dealChat.isLoading) return;
+    setShowSlashMenu(false);
     dealChat.sendMessage(chatInput);
     setChatInput('');
   }, [chatInput, dealChat]);
 
-  const handleChatKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleChatSend();
+  // Handle chat input changes — detect slash commands
+  const handleChatInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setChatInput(val);
+    if (val.startsWith('/') && val.length <= 20) {
+      setShowSlashMenu(true);
+      setSlashSelectedIndex(0);
+    } else {
+      setShowSlashMenu(false);
     }
-  }, [handleChatSend]);
+  }, []);
+
+  const handleChatKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (showSlashMenu && filteredSlashCommands.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSlashSelectedIndex((prev) => Math.min(prev + 1, filteredSlashCommands.length - 1));
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSlashSelectedIndex((prev) => Math.max(prev - 1, 0));
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          handleSlashSelect(filteredSlashCommands[slashSelectedIndex]);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setShowSlashMenu(false);
+          return;
+        }
+      }
+
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleChatSend();
+      }
+    },
+    [handleChatSend, showSlashMenu, filteredSlashCommands, slashSelectedIndex, handleSlashSelect],
+  );
 
   if (!deal) {
     return null;
@@ -355,8 +448,8 @@ export function DealIntelligenceSheet({
               {dealChat.messages.map((m) =>
                 m.role === 'assistant' ? (
                   <div key={m.id} className="flex gap-3">
-                    <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mt-0.5">
-                      <Sparkles className="w-3.5 h-3.5 text-white" />
+                    <div className="flex-shrink-0 w-7 h-7 rounded-lg overflow-hidden bg-gray-800 border border-gray-700 flex items-center justify-center mt-0.5">
+                      <img src="/favicon_0_64x64.png" alt="60" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="bg-gray-800/60 rounded-2xl rounded-tl-md px-4 py-3 text-sm text-gray-300 leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-1.5 prose-ul:my-1.5 prose-li:my-0.5 prose-headings:text-gray-200 prose-strong:text-gray-200">
@@ -366,6 +459,8 @@ export function DealIntelligenceSheet({
                             <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse [animation-delay:150ms]" />
                             <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse [animation-delay:300ms]" />
                           </span>
+                        ) : m.structuredResponse ? (
+                          <CopilotResponse response={m.structuredResponse} />
                         ) : (
                           <ReactMarkdown>{m.content}</ReactMarkdown>
                         )}
@@ -382,8 +477,8 @@ export function DealIntelligenceSheet({
               )}
               {dealChat.isLoading && dealChat.messages.at(-1)?.role !== 'assistant' && (
                 <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-                    <Sparkles className="w-3.5 h-3.5 text-white" />
+                  <div className="flex-shrink-0 w-7 h-7 rounded-lg overflow-hidden bg-gray-800 border border-gray-700 flex items-center justify-center">
+                    <img src="/favicon_0_64x64.png" alt="60" className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="bg-gray-800/60 rounded-2xl rounded-tl-md px-4 py-3">
@@ -396,18 +491,54 @@ export function DealIntelligenceSheet({
                   </div>
                 </div>
               )}
+              {/* Suggestion chips — shown when only the greeting is visible */}
+              {dealChat.messages.length <= 1 && !dealChat.isLoading && (
+                <div className="flex flex-wrap gap-1.5 px-1">
+                  {dealChat.suggestions.map((s) => (
+                    <button
+                      key={s.label}
+                      onClick={() => dealChat.sendMessage(s.prompt)}
+                      className="px-3 py-1.5 rounded-full text-[12px] font-medium bg-gray-800/60 border border-gray-700/40 text-gray-400 hover:text-gray-200 hover:bg-gray-800 hover:border-gray-600/50 transition-all"
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div ref={chatEndRef} />
             </div>
 
             {/* Chat input */}
             <div className="flex-shrink-0 px-4 py-3 border-t border-gray-800/50 bg-gray-900/80 backdrop-blur-sm">
-              <div className="flex items-end gap-2 bg-gray-800/60 border border-gray-700/40 rounded-xl px-3 py-2.5 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
+              <div className="relative">
+                {/* Slash command dropdown */}
+                {showSlashMenu && filteredSlashCommands.length > 0 && (
+                  <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-800 border border-gray-700 rounded-xl shadow-xl overflow-hidden z-10 max-h-64 overflow-y-auto">
+                    {filteredSlashCommands.map((cmd, i) => (
+                      <button
+                        key={cmd.command}
+                        type="button"
+                        onClick={() => handleSlashSelect(cmd)}
+                        onMouseEnter={() => setSlashSelectedIndex(i)}
+                        className={`w-full text-left px-3 py-2 flex items-center gap-3 text-sm transition-colors ${
+                          i === slashSelectedIndex
+                            ? 'bg-violet-500/20 text-gray-100'
+                            : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
+                        }`}
+                      >
+                        <span className="font-mono text-[11px] text-violet-400 min-w-[80px]">{cmd.command}</span>
+                        <span className="truncate">{cmd.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-end gap-2 bg-gray-800/60 border border-gray-700/40 rounded-xl px-3 py-2.5 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
                 <textarea
                   ref={chatInputRef}
                   value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
+                  onChange={handleChatInputChange}
                   onKeyDown={handleChatKeyDown}
-                  placeholder="Ask about this deal..."
+                  placeholder="Ask about this deal... (type / for commands)"
                   rows={1}
                   className="flex-1 bg-transparent resize-none text-sm text-gray-100 placeholder-gray-500 focus:outline-none max-h-24"
                   style={{ minHeight: '22px' }}
@@ -424,6 +555,7 @@ export function DealIntelligenceSheet({
                 >
                   <Send className="w-4 h-4" />
                 </button>
+              </div>
               </div>
               {dealChat.isLoading && (
                 <div className="mt-2 text-xs text-gray-500 flex items-center gap-2">
