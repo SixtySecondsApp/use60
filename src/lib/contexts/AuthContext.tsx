@@ -225,8 +225,18 @@ const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         logger.log('Auth state change:', event, !!session);
         
         if (mounted) {
-          setSession(session);
-          setUser(session?.user ?? null);
+          // Stabilize references: only update if identity actually changed.
+          // TOKEN_REFRESHED fires on tab focus — without this guard, every auth event
+          // creates new object refs that cascade through useCallback deps → re-fetches → skeleton flash.
+          setSession(prev => {
+            if (prev?.access_token === session?.access_token) return prev;
+            return session;
+          });
+          setUser(prev => {
+            const next = session?.user ?? null;
+            if (prev?.id === next?.id) return prev;
+            return next;
+          });
           
           // Handle specific auth events
           switch (event) {

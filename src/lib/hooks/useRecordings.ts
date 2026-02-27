@@ -116,6 +116,7 @@ export function useRecordings(filters: RecordingListFilters = {}): UseRecordings
     },
     enabled: !!orgId,
     staleTime: 30000, // 30 seconds
+    placeholderData: previousData => previousData, // Keep previous data visible during refetch
   });
 
   const loadMore = useCallback(() => {
