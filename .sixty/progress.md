@@ -1,4 +1,39 @@
-# Progress Log — Follow-Up Email v2
+# Progress Log — Pipeline Real Deals Migration & Full Audit
+
+## Feature: pipeline-migration (17 stories)
+
+### Codebase Patterns (Pipeline)
+- Pipeline components: `src/components/Pipeline/` (16 files + hooks subfolder)
+- Pipeline data: `usePipelineData.ts` calls `get_pipeline_with_health` RPC, falls back to direct table queries
+- CRM index: `crm_deal_index` table with `is_materialized`/`materialized_deal_id` — no materialization logic yet
+- Deal CRUD: `useDealCRUD.ts` tries Edge Function first via `apiCall`, falls back to direct Supabase
+- Seed data: 8 deals with patterned UUIDs (11111111- through 88888888-) in staging org `1d1b4274-c9c4-4cb7-9efc-243c90c86f4c`
+- HubSpot webhook: unpinned `@supabase/supabase-js@2` import (broken), uses `legacyCorsHeaders`
+- Attio webhook: correctly pinned `@2.43.4`, handles contacts+companies but NOT deals yet
+- upsertCrmIndex.ts: pinned to `@2.39.3` (should be `@2.43.4`)
+- DealIntelligenceSheet: SheetContent classes correct (`!top-16 !h-[calc(100vh-4rem)]`)
+- useDealStages.ts: has `select('*')` in fallback path — needs explicit columns
+
+### Dependency Graph
+```
+Phase 1 (Data):    PIPE-001 ─┬→ PIPE-003..008 (UI audit)
+                   PIPE-002 ─┘  (parallel, independent)
+
+Phase 2 (UI):      PIPE-003 ═══ PIPE-004 (parallel: Kanban + Table)
+                   PIPE-005 → PIPE-006 (Create → Edit/Delete)
+                   PIPE-007 ═══ PIPE-008 (parallel: Filters + Sheet)
+
+Phase 3 (Backend): PIPE-009 ─┬→ PIPE-010 (HubSpot webhook)
+                             ├→ PIPE-011 (Attio webhook)
+                             └→ PIPE-013 → PIPE-014 + PIPE-015 (Import UI)
+                   PIPE-012 ═══ (parallel: fix import version)
+
+Phase 5 (Verify):  PIPE-016 ═══ PIPE-017 (parallel verification)
+```
+
+---
+
+# Previous Feature: Follow-Up Email v2
 
 ## Codebase Patterns
 - Edge functions: `getCorsHeaders(req)` from `_shared/corsHelper.ts`, pin `@supabase/supabase-js@2.43.4`

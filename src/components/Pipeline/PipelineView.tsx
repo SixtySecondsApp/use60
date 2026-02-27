@@ -7,12 +7,14 @@
  * - Clean kanban/table view toggle
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { PipelineHeader } from './PipelineHeader';
 import { PipelineKanban } from './PipelineKanban';
 import { PipelineTable } from './PipelineTable';
 import { DealIntelligenceSheet } from './DealIntelligenceSheet';
 import { DealForm } from './DealForm';
+import { HubSpotImportWizard } from '../ops/HubSpotImportWizard';
+import { AttioImportWizard } from '../ops/AttioImportWizard';
 import { usePipelineData } from './hooks/usePipelineData';
 import { usePipelineFilters } from './hooks/usePipelineFilters';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -82,6 +84,23 @@ export function PipelineView() {
   const [initialStageId, setInitialStageId] = useState<string | null>(null);
   const [editingDeal, setEditingDeal] = useState<any>(null);
 
+  // CRM import state
+  const [importSource, setImportSource] = useState<'hubspot' | 'attio' | null>(null);
+  const [connectedCRMs, setConnectedCRMs] = useState({ hubspot: false, attio: false });
+
+  // Detect connected CRMs
+  useEffect(() => {
+    if (!activeOrgId) return;
+    async function checkCRMs() {
+      const [{ data: hs }, { data: at }] = await Promise.all([
+        supabase.from('hubspot_org_integrations').select('id').eq('clerk_org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
+        supabase.from('attio_org_integrations').select('id').eq('clerk_org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
+      ]);
+      setConnectedCRMs({ hubspot: !!hs, attio: !!at });
+    }
+    checkCRMs();
+  }, [activeOrgId]);
+
   // Get selected deal from dealMap
   const selectedDeal = selectedDealId ? pipelineData.data.dealMap[selectedDealId] || null : null;
 
@@ -121,13 +140,19 @@ export function PipelineView() {
   // Handle save deal (create or update)
   const handleSaveDeal = useCallback(async (formData: any) => {
     try {
+      // Compute value from revenue fields if not explicitly set
+      const computedValue = formData.value ??
+        (((formData.one_off_revenue || 0) + ((formData.monthly_mrr || 0) * 3)) || null);
+
+      const dataWithValue = { ...formData, value: computedValue };
+
       if (editingDeal) {
         // Update existing deal
         const { error } = await supabase
           .from('deals')
           .update({
-            ...formData,
-            ...(formData.stage_id !== editingDeal.stage_id ? { stage_changed_at: new Date().toISOString() } : {}),
+            ...dataWithValue,
+            ...(dataWithValue.stage_id !== editingDeal.stage_id ? { stage_changed_at: new Date().toISOString() } : {}),
           })
           .eq('id', editingDeal.id);
 
@@ -138,14 +163,17 @@ export function PipelineView() {
         pipelineData.refetch().catch((err) => logger.warn('Refetch after deal update failed:', err));
         toast.success('Deal updated successfully');
       } else {
-        // Create new deal
+        // Create new deal — ensure company fallback
+        const dataToInsert = {
+          ...dataWithValue,
+          company: dataWithValue.company || dataWithValue.name || 'Unknown',
+          clerk_org_id: activeOrgId,
+          stage_changed_at: new Date().toISOString(),
+        };
+
         const { error } = await supabase
           .from('deals')
-          .insert({
-            ...formData,
-            clerk_org_id: activeOrgId,
-            stage_changed_at: new Date().toISOString(),
-          });
+          .insert(dataToInsert);
 
         if (error) throw error;
 
@@ -159,6 +187,21 @@ export function PipelineView() {
       toast.error(`Failed to save deal: ${err?.message || 'Unknown error'}`);
     }
   }, [pipelineData, activeOrgId, editingDeal]);
+
+  // Handle delete deal
+  const handleDeleteDeal = useCallback(async (dealId: string) => {
+    const { error } = await supabase
+      .from('deals')
+      .delete()
+      .eq('id', dealId);
+
+    if (error) throw error;
+
+    setShowDealForm(false);
+    setEditingDeal(null);
+    setSelectedDealId(null);
+    pipelineData.refetch().catch((err) => logger.warn('Refetch after deal delete failed:', err));
+  }, [pipelineData]);
 
   // Handle deal stage change
   const handleDealStageChange = async (dealId: string, newStageId: string) => {
@@ -213,6 +256,8 @@ export function PipelineView() {
         onClearFilters={filterState.clearFilters}
         hasActiveFilters={filterState.hasActiveFilters}
         onAddDeal={() => handleAddDealClick(null)}
+        connectedCRMs={connectedCRMs}
+        onImportFromCRM={(source) => setImportSource(source)}
       />
 
       {filterState.viewMode === 'kanban' ? (
@@ -282,6 +327,7 @@ export function PipelineView() {
               key={editingDeal?.id || initialStageId || 'new-deal'}
               deal={editingDeal}
               onSave={handleSaveDeal}
+              onDelete={handleDeleteDeal}
               onCancel={() => {
                 setShowDealForm(false);
                 setInitialStageId(null);
@@ -292,6 +338,26 @@ export function PipelineView() {
           </div>
         </div>
       )}
+
+      {/* CRM Import Wizards (pipeline mode) */}
+      <HubSpotImportWizard
+        open={importSource === 'hubspot'}
+        onOpenChange={(open) => { if (!open) setImportSource(null); }}
+        importMode="pipeline"
+        onComplete={() => {
+          setImportSource(null);
+          pipelineData.refetch().catch((err) => logger.warn('Refetch after CRM import failed:', err));
+        }}
+      />
+      <AttioImportWizard
+        open={importSource === 'attio'}
+        onOpenChange={(open) => { if (!open) setImportSource(null); }}
+        importMode="pipeline"
+        onComplete={() => {
+          setImportSource(null);
+          pipelineData.refetch().catch((err) => logger.warn('Refetch after CRM import failed:', err));
+        }}
+      />
     </>
   );
 }

@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Users,
   Plus,
+  Download,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -39,6 +40,8 @@ interface PipelineHeaderProps {
   onClearFilters: () => void;
   hasActiveFilters: boolean;
   onAddDeal: () => void;
+  onImportFromCRM?: (source: 'hubspot' | 'attio') => void;
+  connectedCRMs?: { hubspot: boolean; attio: boolean };
 }
 
 function formatCurrency(value: number): string {
@@ -63,6 +66,8 @@ export function PipelineHeader({
   onClearFilters,
   hasActiveFilters,
   onAddDeal,
+  onImportFromCRM,
+  connectedCRMs = { hubspot: false, attio: false },
 }: PipelineHeaderProps) {
   const safeSummary = summary ?? {
     total_value: 0,
@@ -156,6 +161,41 @@ export function PipelineHeader({
             <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
             New Deal
           </button>
+
+          {/* Import from CRM dropdown */}
+          {(connectedCRMs.hubspot || connectedCRMs.attio) && onImportFromCRM && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-[10px] bg-white/60 dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] text-gray-600 dark:text-gray-300 text-[12.5px] font-medium backdrop-blur-xl hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-all">
+                  <Download className="w-3.5 h-3.5" />
+                  Import
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[180px] p-1.5" align="end">
+                <div className="space-y-0.5">
+                  {connectedCRMs.hubspot && (
+                    <button
+                      onClick={() => onImportFromCRM('hubspot')}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors text-left"
+                    >
+                      <span className="w-5 h-5 rounded bg-orange-500/10 flex items-center justify-center text-[10px] font-bold text-orange-600 dark:text-orange-400">H</span>
+                      HubSpot Deals
+                    </button>
+                  )}
+                  {connectedCRMs.attio && (
+                    <button
+                      onClick={() => onImportFromCRM('attio')}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors text-left"
+                    >
+                      <span className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">A</span>
+                      Attio Deals
+                    </button>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
       </div>
 
