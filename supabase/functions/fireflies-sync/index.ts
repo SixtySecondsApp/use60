@@ -1,11 +1,7 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { enrichFirefliesMeeting } from './enrichment.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 
 const FIREFLIES_API_URL = 'https://api.fireflies.ai/graphql'
 
@@ -194,9 +190,8 @@ function sentencesToText(sentences: FirefliesSentence[] | null | undefined): str
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const preflightResponse = handleCorsPreflightRequest(req)
+  if (preflightResponse) return preflightResponse
 
   try {
     // Parse body first (before checking auth) to handle errors gracefully
@@ -206,7 +201,7 @@ serve(async (req) => {
     } catch (e) {
       return new Response(
         JSON.stringify({ success: false, error: 'Invalid JSON body' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -242,7 +237,7 @@ serve(async (req) => {
             all_header_names: Array.from(req.headers.keys())
           }
         }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -255,14 +250,14 @@ serve(async (req) => {
     if (!supabaseUrl || !supabaseAnonKey) {
       return new Response(
         JSON.stringify({ success: false, error: 'Missing Supabase configuration' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
     if (!serviceRoleKey) {
       return new Response(
         JSON.stringify({ success: false, error: 'Missing service role key configuration' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -281,7 +276,7 @@ serve(async (req) => {
     if (userError || !user) {
       return new Response(
         JSON.stringify({ success: false, error: 'Invalid or expired session' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -298,7 +293,7 @@ serve(async (req) => {
       if (!testApiKey) {
         return new Response(
           JSON.stringify({ success: false, error: 'API key is required' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
 
@@ -331,12 +326,12 @@ serve(async (req) => {
             message: 'API key is valid',
             sample_count: data.transcripts?.length || 0,
           }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       } catch (err) {
         return new Response(
           JSON.stringify({ success: false, error: err instanceof Error ? err.message : 'Invalid API key' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -354,7 +349,7 @@ serve(async (req) => {
       if (integrationError || !integration) {
         return new Response(
           JSON.stringify({ success: false, error: 'No active Fireflies integration found' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
 
@@ -565,7 +560,7 @@ serve(async (req) => {
             total_found: transcripts.length,
             skipped: skippedCount,
           }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
 
       } catch (syncError) {
@@ -588,7 +583,7 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ success: false, error: syncError instanceof Error ? syncError.message : 'Sync failed' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -596,14 +591,14 @@ serve(async (req) => {
     // Unknown action
     return new Response(
       JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('Fireflies sync error:', error)
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })
