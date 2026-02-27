@@ -243,6 +243,17 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
       try {
         const companyName = deal.company || deal.name;
 
+        // Phase 1: Fetch meeting IDs for this deal (needed to scope RAG search)
+        const { data: dealMeetingRows } = await supabase
+          .from('meetings')
+          .select('id')
+          .eq('deal_id', deal.id)
+          .limit(50);
+        const dealMeetingIds = (dealMeetingRows || []).map((m: { id: string }) => m.id);
+
+        if (cancelled) return;
+
+        // Phase 2: Run all enrichment queries in parallel, scoping RAG by deal meeting IDs
         const [meetingsRes, activitiesRes, overdueRes, tempRes, signalsRes, meetingIntelRes] = await Promise.all([
           supabase
             .from('meetings')
@@ -280,11 +291,14 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
             .eq('deal_id', deal.id)
             .order('created_at', { ascending: false })
             .limit(3),
-          // Meeting intelligence — non-blocking
-          askMeeting({
-            question: `What was last discussed with ${companyName}? One sentence.`,
-            maxMeetings: 3,
-          }).catch(() => null),
+          // Meeting intelligence — scoped to this deal's meetings only
+          dealMeetingIds.length > 0
+            ? askMeeting({
+                question: `What was last discussed with ${companyName}? One sentence.`,
+                meetingIds: dealMeetingIds,
+                maxMeetings: 3,
+              }).catch(() => null)
+            : Promise.resolve(null),
         ]);
 
         if (cancelled) return;
