@@ -110,50 +110,8 @@ export class CopilotSessionService {
   }
 
   // ===========================================================================
-  // Main Session Management
+  // Conversation Management
   // ===========================================================================
-
-  /**
-   * Get or create the main session for a user
-   */
-  async getMainSession(userId: string, orgId?: string): Promise<CopilotConversation> {
-    // Try to get existing main session
-    const { data: existing, error: fetchError } = await this.supabase
-      .from('copilot_conversations')
-      .select('id, user_id, org_id, title, is_main_session, total_tokens_estimate, last_compaction_at, created_at, updated_at')
-      .eq('user_id', userId)
-      .eq('is_main_session', true)
-      .maybeSingle();
-
-    if (fetchError) {
-      console.error('[CopilotSessionService] Error fetching main session:', fetchError);
-      throw new Error(`Failed to fetch main session: ${fetchError.message}`);
-    }
-
-    if (existing) {
-      return existing as CopilotConversation;
-    }
-
-    // Create new main session
-    const { data: created, error: createError } = await this.supabase
-      .from('copilot_conversations')
-      .insert({
-        user_id: userId,
-        org_id: orgId,
-        title: 'Main Session',
-        is_main_session: true,
-        total_tokens_estimate: 0,
-      })
-      .select('id, user_id, org_id, title, is_main_session, total_tokens_estimate, last_compaction_at, created_at, updated_at')
-      .single();
-
-    if (createError) {
-      console.error('[CopilotSessionService] Error creating main session:', createError);
-      throw new Error(`Failed to create main session: ${createError.message}`);
-    }
-
-    return created as CopilotConversation;
-  }
 
   /**
    * Get a conversation by ID
@@ -189,6 +147,7 @@ export class CopilotSessionService {
         content: input.content,
         metadata: input.metadata || null,
         is_compacted: false,
+        created_at: new Date().toISOString(),
       })
       .select('id, conversation_id, role, content, metadata, is_compacted, created_at')
       .single();

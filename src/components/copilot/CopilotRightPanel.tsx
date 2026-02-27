@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown,
@@ -1021,43 +1022,43 @@ function ContextSection({ items = [], summary, isLoading = false }: ContextSecti
     </div>
   );
 
+  // Build title with summary
+  const contextTitle = summaryText && !isLoading
+    ? `Context (${summaryText})`
+    : 'Context';
+
   return (
-    <div className="border-b border-white/5 last:border-b-0">
-      <button
-        type="button"
-        onClick={() => {}}
-        className="w-full p-4 sm:p-5 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
-        style={{ pointerEvents: 'none' }}
-      >
-        {contextHeader}
-      </button>
-      <div className="px-4 pb-4 sm:px-5 sm:pb-5">
-        {hasItems ? (
-          <div className="space-y-2">
-            {items.map((item, index) => (
-              <ContextItemCard key={`${item.type}-${index}`} item={item} />
-            ))}
-          </div>
-        ) : (
-          <div className="p-4 rounded-xl bg-white/5 border border-white/5">
-            <div className="flex gap-2 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-500/5 flex items-center justify-center">
-                <Building2 className="w-5 h-5 text-orange-500/50" />
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-violet-500/5 flex items-center justify-center">
-                <Mic className="w-5 h-5 text-violet-500/50" />
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-emerald-500/50" />
-              </div>
+    <CollapsibleSection
+      title={contextTitle}
+      icon={isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+      iconColor="text-emerald-400"
+      defaultOpen={true}
+    >
+      {hasItems ? (
+        <div className="space-y-2">
+          {items.map((item, index) => (
+            <ContextItemCard key={`${item.type}-${index}`} item={item} />
+          ))}
+        </div>
+      ) : (
+        <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+          <div className="flex gap-2 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-500/5 flex items-center justify-center">
+              <Building2 className="w-5 h-5 text-orange-500/50" />
             </div>
-            <p className="text-sm text-slate-500">
-              Ask about a contact or deal to see relevant data here.
-            </p>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-violet-500/5 flex items-center justify-center">
+              <Mic className="w-5 h-5 text-violet-500/50" />
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-emerald-500/50" />
+            </div>
           </div>
-        )}
-      </div>
-    </div>
+          <p className="text-sm text-slate-500">
+            Ask about a contact or deal to see relevant data here.
+          </p>
+        </div>
+      )}
+    </CollapsibleSection>
   );
 }
 
@@ -1080,6 +1081,8 @@ interface IntegrationLogoProps {
 }
 
 function IntegrationLogo({ integrationId, connected }: IntegrationLogoProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+
   // Map integration IDs to the hook's expected format
   const logoIdMap: Record<string, string> = {
     hubspot: 'hubspot',
@@ -1093,16 +1096,13 @@ function IntegrationLogo({ integrationId, connected }: IntegrationLogoProps) {
   const logoId = logoIdMap[integrationId] || integrationId;
   const { logoUrl, isLoading } = useIntegrationLogo(logoId, { enableFetch: true });
 
-  // Fallback icon if logo isn't available
-  const FallbackIcon = Link2;
-
-  if (isLoading || !logoUrl) {
+  if (isLoading || !logoUrl || imgFailed) {
     return (
       <div className={cn(
         'w-6 h-6 rounded flex items-center justify-center',
         connected ? 'bg-white/10' : 'bg-white/5'
       )}>
-        <FallbackIcon className={cn('w-4 h-4', connected ? 'text-slate-300' : 'text-slate-500')} />
+        <Link2 className={cn('w-4 h-4', connected ? 'text-slate-300' : 'text-slate-500')} />
       </div>
     );
   }
@@ -1115,10 +1115,7 @@ function IntegrationLogo({ integrationId, connected }: IntegrationLogoProps) {
         'w-6 h-6 object-contain rounded',
         !connected && 'opacity-40 grayscale'
       )}
-      onError={(e) => {
-        // Hide broken images
-        (e.target as HTMLImageElement).style.display = 'none';
-      }}
+      onError={() => setImgFailed(true)}
     />
   );
 }
@@ -1134,6 +1131,7 @@ const brandColors: Record<string, string> = {
 };
 
 function ConnectedSection({ integrations, onAddConnector }: ConnectedSectionProps) {
+  const navigate = useNavigate();
   // Default to the 4 integrations in scope
   const defaultIntegrations: Integration[] = [
     { id: 'hubspot', name: 'HubSpot', connected: false, settingsUrl: '/settings/integrations/hubspot' },
@@ -1149,26 +1147,26 @@ function ConnectedSection({ integrations, onAddConnector }: ConnectedSectionProp
     if (onAddConnector) {
       onAddConnector();
     } else {
-      window.location.href = '/settings/integrations';
+      navigate('/settings/integrations');
     }
   };
 
   const handleIntegrationClick = (integration: Integration) => {
     if (integration.settingsUrl) {
-      window.location.href = integration.settingsUrl;
+      navigate(integration.settingsUrl);
     }
   };
 
   return (
-    <div className="p-4 sm:p-5 border-b border-white/5">
+    <CollapsibleSection
+      title="Connected"
+      icon={<Link2 className="w-4 h-4" />}
+      iconColor="text-purple-400"
+      count={connectedCount}
+      defaultOpen={true}
+    >
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-white text-sm flex items-center gap-2">
-          <Link2 className="w-4 h-4 text-purple-400" />
-          Connected
-          {connectedCount > 0 && (
-            <span className="text-xs text-slate-400">({connectedCount})</span>
-          )}
-        </h3>
+        <div />
         <button
           type="button"
           onClick={handleAddConnector}
@@ -1209,7 +1207,7 @@ function ConnectedSection({ integrations, onAddConnector }: ConnectedSectionProp
           );
         })}
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 

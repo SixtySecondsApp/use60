@@ -86,7 +86,7 @@ export const CopilotEmpty: React.FC<CopilotEmptyProps> = ({ onPromptClick }) => 
               <div
                 className={cn(
                   'w-12 h-12 rounded-xl flex items-center justify-center mb-4',
-                  'bg-white/5 dark:bg-white/[0.08] backdrop-blur-xl',
+                  'bg-gray-100 dark:bg-white/[0.08] backdrop-blur-xl',
                   'border border-gray-200/50 dark:border-white/10',
                   'group-hover:bg-white/10 dark:group-hover:bg-white/[0.12]',
                   'group-hover:border-gray-300/50 dark:group-hover:border-white/20',
@@ -120,7 +120,7 @@ export const CopilotEmpty: React.FC<CopilotEmptyProps> = ({ onPromptClick }) => 
         >
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[#37bd7e]/15 flex items-center justify-center">
-              <Sparkles className="w-4.5 h-4.5 text-[#37bd7e]" />
+              <Sparkles className="w-[18px] h-[18px] text-[#37bd7e]" />
             </div>
             <div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white">
