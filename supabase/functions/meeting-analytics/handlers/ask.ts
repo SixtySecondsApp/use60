@@ -105,6 +105,7 @@ export async function handleAsk(req: Request, orgId: string): Promise<Response> 
   if (!question) return errorResponse('question is required', 400, req);
 
   const transcriptId = body.transcriptId as string | undefined;
+  const meetingIds = Array.isArray(body.meetingIds) ? body.meetingIds.filter((id: unknown) => typeof id === 'string') as string[] : undefined;
   const maxMeetings = Math.min((body.maxMeetings as number) ?? 20, 50);
   const includeDemo = (body.includeDemo as boolean) ?? false;
   const demoOnly = (body.demoOnly as boolean) ?? false;
@@ -133,6 +134,13 @@ export async function handleAsk(req: Request, orgId: string): Promise<Response> 
       WHERE org_id = $1
     `;
     const transcriptParams: unknown[] = [orgId];
+
+    // Filter by specific meeting IDs (via external_id) when provided — scopes to a deal
+    if (meetingIds && meetingIds.length > 0) {
+      const placeholders = meetingIds.map((_, i) => `$${transcriptParams.length + i + 1}`).join(', ');
+      transcriptSql += ` AND external_id IN (${placeholders})`;
+      transcriptParams.push(...meetingIds);
+    }
 
     if (demoOnly) {
       transcriptSql += ' AND is_demo = true';

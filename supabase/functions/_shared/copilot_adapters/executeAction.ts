@@ -2164,9 +2164,21 @@ export async function executeAction(
       const contextPrefix = [
         params.contactName ? `Contact: ${String(params.contactName)}` : '',
         params.companyName ? `Company: ${String(params.companyName)}` : '',
-        params.deal_id ? `Deal ID: ${String(params.deal_id)}` : '',
       ].filter(Boolean).join(', ');
       const enrichedQuery = contextPrefix ? `${contextPrefix}. ${query}` : query;
+
+      // When deal_id is provided, pre-fetch meeting IDs for this deal to scope RAG search
+      let dealMeetingIds: string[] | undefined;
+      if (params.deal_id) {
+        const { data: dealMeetings } = await client
+          .from('meetings')
+          .select('id')
+          .eq('deal_id', String(params.deal_id))
+          .limit(50);
+        if (dealMeetings && dealMeetings.length > 0) {
+          dealMeetingIds = dealMeetings.map((m: { id: string }) => m.id);
+        }
+      }
 
       const meetingAnalyticsBaseUrl =
         Deno.env.get('MEETING_ANALYTICS_BASE_URL') ||
@@ -2174,6 +2186,16 @@ export async function executeAction(
       const authToken = options?.userAuthToken || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
       try {
+        const askBody: Record<string, unknown> = {
+          question: enrichedQuery,
+          maxMeetings: params.maxResults ? Number(params.maxResults) : 5,
+          includeDemo: false,
+        };
+        // Pass meeting IDs to scope RAG to only this deal's transcripts
+        if (dealMeetingIds) {
+          askBody.meetingIds = dealMeetingIds;
+        }
+
         const resp = await fetch(`${meetingAnalyticsBaseUrl}/api/search/ask`, {
           method: 'POST',
           headers: {
@@ -2181,11 +2203,7 @@ export async function executeAction(
             'Authorization': `Bearer ${authToken}`,
             'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '',
           },
-          body: JSON.stringify({
-            question: enrichedQuery,
-            maxMeetings: params.maxResults ? Number(params.maxResults) : 5,
-            includeDemo: false,
-          }),
+          body: JSON.stringify(askBody),
         });
 
         if (!resp.ok) {
