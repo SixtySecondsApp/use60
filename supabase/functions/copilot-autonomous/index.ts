@@ -171,7 +171,7 @@ ACTION PARAMETERS:
 - get_company_status: { company_id?, company_name?, domain? } - Holistic company view
 
 ## Meetings & Calendar
-- get_meetings: { contactEmail?, contactId?, limit? } - Get meetings with a contact
+- get_meetings: { deal_id?, contactEmail?, contactId?, limit? } - Get meetings. ALWAYS pass deal_id when in Deal Copilot Mode to scope results to the correct deal
 - get_meeting_count: { period?, timezone?, week_starts_on? } - Count meetings for a period
 - get_next_meeting: { include_context?, timezone? } - Get next upcoming meeting with CRM context
 - get_meetings_for_period: { period?, timezone?, week_starts_on?, include_context?, limit? } - Get meeting list for a period
@@ -184,7 +184,7 @@ ACTION PARAMETERS:
 - create_activity: { type, client_name, details?, amount?, date?, status?, priority? } - Create an activity (requires params.confirm=true)
 
 ## Email & Notifications
-- search_emails: { contact_email?, query?, limit? } - Search emails
+- search_emails: { deal_id?, contact_email?, contact_id?, query?, limit? } - Search emails. ALWAYS pass deal_id in Deal Copilot Mode to scope results to this deal
 - draft_email: { to, subject?, context?, tone? } - Draft an email
 - send_notification: { channel: 'slack', message, blocks? } - Send a Slack notification
 
@@ -571,6 +571,10 @@ This returns a lightweight summary of relevant meetings — use it to enrich you
         companyName: {
           type: 'string',
           description: 'Optional: filter by company name mentioned in meetings',
+        },
+        deal_id: {
+          type: 'string',
+          description: 'Deal ID to scope meeting search to a specific deal. ALWAYS pass this in Deal Copilot Mode.',
         },
         maxResults: {
           type: 'number',
@@ -1386,13 +1390,15 @@ Don't stop after completing just one step — complete the FULL workflow the use
 
 When the user message includes a [DEAL_CONTEXT] block, you are in **Deal Copilot Mode**. This means the user opened a specific deal and is asking for help with it. Be proactive, action-oriented, and use every tool available.
 
-**1. Always use the Deal ID for lookups:**
+**1. Always use the Deal ID for ALL lookups — this prevents cross-deal contamination:**
 - Use execute_action with get_deal { id: "<deal_id>", include_health: true } instead of searching by name
-- If a Contact Email is provided, use it for get_meetings { contactEmail } and search_emails { contact_email }
-- If a Primary Contact ID is provided, use it for get_contact { id }, get_lead { contact_id }
+- ALWAYS pass deal_id to get_meetings { deal_id: "<deal_id>" } — never rely on contactId alone, it returns meetings from OTHER deals
+- ALWAYS pass deal_id to search_emails { deal_id: "<deal_id>" } — scopes emails to this deal's contacts
+- ALWAYS pass deal_id to list_tasks { deal_id: "<deal_id>" } — only shows tasks for this deal
+- If a Primary Contact ID is provided, also use it for get_contact { id }, get_lead { contact_id }
 
 **2. Proactively enrich every response with meeting intelligence:**
-- ALWAYS call search_meeting_context { query: "<user question>", companyName: "<company>" } to find relevant meeting context
+- ALWAYS call search_meeting_context { query: "<user question>", companyName: "<company>", deal_id: "<deal_id>" } to find relevant meeting context
 - Include meeting insights naturally — "In your last call on Jan 15, they mentioned budget concerns..."
 - If the user asks about objections, sentiment, or history — search_meeting_context is your primary source
 
@@ -1413,10 +1419,10 @@ When the user message includes a [DEAL_CONTEXT] block, you are in **Deal Copilot
 | "we won!" / "deal closed" | execute_action("run_skill", { skill_key: "copilot-win", skill_context: { deal_id } }) |
 | "research this company" | execute_action("run_skill", { skill_key: "copilot-research", skill_context: { company_name } }) |
 
-**4. Combine tools for richer answers:**
-- When asked "tell me about this deal": call get_deal (full data) + search_meeting_context (meeting history) + list_tasks { deal_id } (open tasks) in parallel, then synthesize
-- When asked to write a follow-up: call search_meeting_context first to get meeting context, then run copilot-followup skill with that context
-- When asked about risk: use the health data from [DEAL_CONTEXT] + search_meeting_context for sentiment signals + get the latest activity
+**4. Combine tools for richer answers (always pass deal_id to every tool):**
+- When asked "tell me about this deal": call get_deal { id: deal_id } + search_meeting_context { query, companyName, deal_id } + list_tasks { deal_id } in parallel, then synthesize
+- When asked to write a follow-up: call get_meetings { deal_id } + search_meeting_context { query: "latest discussion", companyName, deal_id } first, then run copilot-followup skill with that context
+- When asked about risk: use the health data from [DEAL_CONTEXT] + search_meeting_context { deal_id } for sentiment signals + get the latest activity
 
 **5. Always flag risks proactively:**
 - Critical health (<40) or high ghost risk (>50%) — mention it and suggest the deal-rescue-plan skill

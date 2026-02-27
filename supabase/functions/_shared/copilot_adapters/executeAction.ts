@@ -322,6 +322,7 @@ export async function executeAction(
         meeting_id: (params.meeting_id ?? params.meetingId) ? String(params.meeting_id ?? params.meetingId) : undefined,
         contactEmail: params.contactEmail ? String(params.contactEmail) : undefined,
         contactId: params.contactId ? String(params.contactId) : undefined,
+        deal_id: params.deal_id ? String(params.deal_id) : undefined,
         limit: params.limit ? Number(params.limit) : undefined,
       }));
 
@@ -330,6 +331,7 @@ export async function executeAction(
         contact_email: params.contact_email ? String(params.contact_email) : undefined,
         contact_id: params.contact_id ? String(params.contact_id) : undefined,
         contact_name: params.contact_name ? String(params.contact_name) : undefined,
+        deal_id: params.deal_id ? String(params.deal_id) : undefined,
         query: params.query ? String(params.query) : undefined,
         limit: params.limit ? Number(params.limit) : undefined,
       }));
@@ -2158,10 +2160,11 @@ export async function executeAction(
         return { success: false, data: null, error: 'query is required for search_meeting_context' };
       }
 
-      // Build enriched question from optional name/company context
+      // Build enriched question from optional name/company/deal context
       const contextPrefix = [
         params.contactName ? `Contact: ${String(params.contactName)}` : '',
         params.companyName ? `Company: ${String(params.companyName)}` : '',
+        params.deal_id ? `Deal ID: ${String(params.deal_id)}` : '',
       ].filter(Boolean).join(', ');
       const enrichedQuery = contextPrefix ? `${contextPrefix}. ${query}` : query;
 
