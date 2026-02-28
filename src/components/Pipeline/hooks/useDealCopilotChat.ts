@@ -510,6 +510,25 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
           (deal as unknown as Record<string, unknown>).contact_email = contactEmail;
         }
 
+        // HEAL-001: Write back resolved links to deals table (fire-and-forget)
+        const healUpdates: Record<string, string> = {};
+        if (contactId && !deal.primary_contact_id) healUpdates.primary_contact_id = contactId;
+        if (companyId && !deal.company_id) healUpdates.company_id = companyId;
+        if (contactName && !deal.contact_name) healUpdates.contact_name = contactName;
+        if (contactEmail && !deal.contact_email) healUpdates.contact_email = contactEmail;
+
+        if (Object.keys(healUpdates).length > 0) {
+          debugLog('heal:write-back', healUpdates);
+          supabase
+            .from('deals')
+            .update(healUpdates)
+            .eq('id', deal.id)
+            .then(({ error }) => {
+              if (error) debugLog('heal:write-back:error', error.message);
+              else debugLog('heal:write-back:success', Object.keys(healUpdates));
+            });
+        }
+
         debugLog('enrichment:result', {
           meetings: data.meetings.length,
           activities: data.activities.length,
