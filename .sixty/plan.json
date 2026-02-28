@@ -1019,7 +1019,7 @@
       "feature": "landing-builder-v2",
       "title": "Reduce DiscoveryWizard to 5 questions + strategist probing",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 10,
       "acceptance": [
         "DiscoveryWizard reduced from 7 to 5 questions (remove tone and sections — strategist infers these)",
@@ -1045,7 +1045,7 @@
       "feature": "landing-builder-v2",
       "title": "Integrate Gemini SVG previews into visuals phase UI",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 11,
       "acceptance": [
         "Visuals phase shows SVG gallery: each section's SVG rendered via SvgPreview component",
@@ -1117,7 +1117,7 @@
   ],
   "execution": {
     "totalStories": 41,
-    "completedStories": 38,
+    "completedStories": 40,
     "currentFeature": "landing-builder-v2",
     "lastUpdated": "2026-02-28T12:00:00Z"
   }
