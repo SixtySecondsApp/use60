@@ -24,6 +24,10 @@ import { useLandingBuilderWorkspace } from '@/lib/hooks/useLandingBuilderWorkspa
 import { CopyPicker, parseCopySections } from './CopyPicker';
 import { HeroImageGenerator, parseVisualsForImage } from './HeroImageGenerator';
 import { PHASE_AGENT_MAP } from './types';
+import { STRATEGIST_SYSTEM_PROMPT } from './agents/strategistAgent';
+import { COPYWRITER_SYSTEM_PROMPT } from './agents/copywriterAgent';
+import { VISUAL_ARTIST_SYSTEM_PROMPT } from './agents/visualArtistAgent';
+import { BUILDER_AGENT_SYSTEM_PROMPT } from './agents/builderAgent';
 import type { WorkspacePhaseKey } from '@/lib/services/landingBuilderWorkspaceService';
 import type { FactProfile } from '@/lib/types/factProfile';
 import type { ProductProfile } from '@/lib/types/productProfile';
@@ -309,14 +313,23 @@ export const LandingPageBuilder: React.FC = () => {
     setGeneratedImageUrl(null);
   }, [startNewChat, setConversationId]);
 
+  // Agent system prompts by phase
+  const agentSystemPrompts: Record<number, string> = useMemo(() => ({
+    0: STRATEGIST_SYSTEM_PROMPT,
+    1: COPYWRITER_SYSTEM_PROMPT,
+    2: VISUAL_ARTIST_SYSTEM_PROMPT,
+    3: BUILDER_AGENT_SYSTEM_PROMPT,
+  }), []);
+
   // Build phase-aware context that gets injected into every message
   const builderApiTransform = useCallback((msg: string) => {
     const workspaceContext = buildWorkspaceContext(workspace, currentPhase);
     const agentRole = PHASE_AGENT_MAP[currentPhase];
     const agentLabel = agentRole ? `ACTIVE AGENT: ${agentRole}\n` : '';
+    const agentPrompt = agentSystemPrompts[currentPhase] || '';
     const phaseContext = `CURRENT PHASE: ${PHASE_PROMPTS[currentPhase]?.name || 'Unknown'} (phase ${currentPhase + 1} of 4)\n${agentLabel}\n`;
-    return BUILDER_CONTINUATION + businessContext + workspaceContext + phaseContext + msg;
-  }, [currentPhase, businessContext, workspace]);
+    return BUILDER_CONTINUATION + agentPrompt + '\n\n' + businessContext + workspaceContext + phaseContext + msg;
+  }, [currentPhase, businessContext, workspace, agentSystemPrompts]);
 
   // Handle approval — capture output, write to workspace, advance phase
   const handleApprove = useCallback(async (overrideContent?: string) => {
