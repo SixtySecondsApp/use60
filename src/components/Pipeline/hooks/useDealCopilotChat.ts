@@ -803,13 +803,72 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
   );
 
   // -----------------------------------------------------------------------
-  // reset()
+  // reset() — also triggers dossier synthesis if conversation was meaningful
   // -----------------------------------------------------------------------
   const reset = useCallback(() => {
+    // DOSS-002: Synthesize dossier if chat had >= 2 user messages
+    if (deal && activeOrgId) {
+      const userMsgCount = chat.messages.filter(m => m.role === 'user').length;
+      if (userMsgCount >= 2) {
+        // Build conversation summary for dossier extraction
+        const conversationText = chat.messages
+          .map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`)
+          .join('\n\n');
+
+        const dossierPrompt = [
+          '[SYSTEM_INTERNAL] Extract a structured deal dossier from this conversation.',
+          'Return ONLY valid JSON with this structure:',
+          '{ "narrative": "2-3 sentence deal summary",',
+          '  "key_facts": ["fact1", "fact2"],',
+          '  "stakeholders": [{"name": "...", "role": "...", "sentiment": "positive|neutral|negative"}],',
+          '  "commitments": ["commitment1"],',
+          '  "objections": ["objection1"],',
+          '  "timeline": [{"date": "...", "event": "..."}] }',
+          '',
+          'Conversation:',
+          conversationText,
+        ].join('\n');
+
+        // Fire-and-forget: send to copilot-autonomous and upsert result
+        debugLog('dossier:synthesize', { dealId: deal.id, userMessages: userMsgCount });
+        supabase.functions.invoke('copilot-autonomous', {
+          body: {
+            messages: [{ role: 'user', content: dossierPrompt }],
+            organizationId: activeOrgId,
+          },
+        }).then(async ({ data, error }) => {
+          if (error) {
+            debugLog('dossier:synthesize:error', error.message);
+            return;
+          }
+          // Parse the AI response to extract JSON
+          const responseText = data?.response || data?.content || '';
+          try {
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) return;
+            const snapshot = JSON.parse(jsonMatch[0]);
+            // Upsert into deal_dossiers
+            const { error: upsertError } = await supabase
+              .from('deal_dossiers')
+              .upsert({
+                deal_id: deal.id,
+                org_id: activeOrgId,
+                snapshot,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'deal_id' });
+            if (upsertError) debugLog('dossier:upsert:error', upsertError.message);
+            else debugLog('dossier:upsert:success', deal.id);
+          } catch {
+            debugLog('dossier:parse:error', 'Failed to parse dossier JSON from AI response');
+          }
+        }).catch(() => {});
+      }
+    }
+
     chat.clearMessages();
     hasInjectedContextRef.current = false;
     setIsActive(false);
-  }, [chat]);
+  }, [chat, deal, activeOrgId]);
 
   // -----------------------------------------------------------------------
   // suggestions — context-aware quick actions based on deal state
