@@ -860,7 +860,7 @@
       "feature": "landing-builder-v2",
       "title": "Refactor LandingPageBuilder to use workspace state instead of refs",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 4,
       "acceptance": [
         "LandingPageBuilder reads/writes phase outputs via workspace service instead of phaseOutputsRef",
@@ -1117,7 +1117,7 @@
   ],
   "execution": {
     "totalStories": 41,
-    "completedStories": 32,
+    "completedStories": 33,
     "currentFeature": "landing-builder-v2",
     "lastUpdated": "2026-02-28T12:00:00Z"
   }
