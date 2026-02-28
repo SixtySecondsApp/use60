@@ -10,7 +10,7 @@
  * 3. Produces the enriched strategy + section layout
  */
 
-import type { AgentRole } from '../types';
+import type { AgentRole, LandingResearchData } from '../types';
 
 export const STRATEGIST_ROLE: AgentRole = 'strategist';
 
@@ -53,6 +53,13 @@ Elements: [headline, subhead, image, form, button, stats, logos, etc.]
 CTA: [exact button text] (if applicable)
 Conversion lever: [social proof / urgency / authority / specificity]
 
+RESEARCH CONTEXT:
+- If MARKET RESEARCH data is provided below, use it instead of asking about competitors, social proof, or pricing
+- Only ask follow-up questions for gaps that research did NOT cover
+- Reference competitors by name in the strategy when research provides them
+- Use real social proof metrics and audience language from research
+- If research covers all gaps, skip follow-ups entirely and deliver strategy immediately
+
 RULES:
 - Be specific to THIS business — use real product names and outcomes from the brief
 - No generic marketing advice
@@ -65,7 +72,7 @@ RULES:
  * Detect gaps in a brief and generate follow-up questions.
  * Used by the DiscoveryWizard → Strategist handoff.
  */
-export function detectBriefGaps(brief: Record<string, string>): string[] {
+export function detectBriefGaps(brief: Record<string, string>, research?: LandingResearchData | null): string[] {
   const gaps: string[] = [];
 
   // Check for missing or weak fields
@@ -90,6 +97,22 @@ export function detectBriefGaps(brief: Record<string, string>): string[] {
 
   if (!allText.includes('price') && !allText.includes('pricing') && !allText.includes('cost') && !allText.includes('free')) {
     gaps.push('no_pricing_signal');
+  }
+
+  // Suppress gaps that research already filled
+  if (research?.status === 'complete') {
+    if (research.competitors.length > 0) {
+      const idx = gaps.indexOf('no_competitors');
+      if (idx !== -1) gaps.splice(idx, 1);
+    }
+    if (research.market_context.social_proof_examples.length > 0 || research.market_context.review_ratings.length > 0) {
+      const idx = gaps.indexOf('no_social_proof');
+      if (idx !== -1) gaps.splice(idx, 1);
+    }
+    if (research.market_context.pricing_signals.length > 0) {
+      const idx = gaps.indexOf('no_pricing_signal');
+      if (idx !== -1) gaps.splice(idx, 1);
+    }
   }
 
   return gaps;

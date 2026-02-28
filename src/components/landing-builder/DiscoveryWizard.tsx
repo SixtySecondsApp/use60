@@ -27,7 +27,7 @@ interface WizardQuestion {
 }
 
 interface DiscoveryWizardProps {
-  onComplete: (compiledBrief: string) => void;
+  onComplete: (compiledBrief: string, answers: Record<string, string>) => void;
   /** Pre-loaded company name from org profile */
   companyName?: string;
   /** Pre-loaded company description */
@@ -146,7 +146,7 @@ export const DiscoveryWizard: React.FC<DiscoveryWizardProps> = ({
 
   const advance = useCallback((newAnswers: Record<string, string>) => {
     if (isLastStep) {
-      setTimeout(() => onComplete(compileBrief(newAnswers)), 400);
+      setTimeout(() => onComplete(compileBrief(newAnswers), newAnswers), 400);
     } else {
       setTimeout(() => {
         setDirection(1);

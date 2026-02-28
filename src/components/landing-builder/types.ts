@@ -71,6 +71,43 @@ export function getDeliverableType(phase: number): DeliverableType {
   return map[phase] ?? 'strategy';
 }
 
+// ---------------------------------------------------------------------------
+// Auto-research types (populated by landing-research edge function)
+// ---------------------------------------------------------------------------
+
+export interface LandingResearchData {
+  status: 'pending' | 'running' | 'complete' | 'failed';
+  company: {
+    name: string;
+    description: string;
+    industry: string;
+    differentiators: string[];
+    products: string[];
+    customer_segments: string[];
+    pricing_approach: string;
+  } | null;
+  competitors: Array<{
+    name: string;
+    website: string;
+    tagline: string;
+    positioning: string;
+    landing_page_patterns: string[];
+  }>;
+  market_context: {
+    messaging_patterns: string[];
+    social_proof_examples: string[];
+    pricing_signals: string[];
+    audience_language: string[];
+    market_trends: string[];
+    buying_triggers: string[];
+    review_ratings: string[];
+    notable_customers: string[];
+  };
+  sources: Array<{ title: string; url: string; provider: string }>;
+  cost_credits: number;
+  duration_ms: number;
+}
+
 /** Agent role labels for visible agent badges in ChatMessage */
 export type AgentRole = 'strategist' | 'copywriter' | 'visual-artist' | 'builder';
 

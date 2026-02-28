@@ -8,6 +8,7 @@
 
 import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
+import type { LandingResearchData } from '@/components/landing-builder/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +24,7 @@ export interface LandingBuilderWorkspace {
   copy: Record<string, unknown>;
   visuals: Record<string, unknown>;
   code: string | null;
+  research: LandingResearchData | null;
   current_phase: number;
   phase_status: Record<string, string>;
   created_at: string;
@@ -49,7 +51,7 @@ export const landingBuilderWorkspaceService = {
   async get(conversationId: string): Promise<LandingBuilderWorkspace | null> {
     const { data, error } = await supabase
       .from('landing_builder_sessions')
-      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, current_phase, phase_status, created_at, updated_at')
+      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, current_phase, phase_status, created_at, updated_at')
       .eq('conversation_id', conversationId)
       .maybeSingle();
 
@@ -72,7 +74,7 @@ export const landingBuilderWorkspaceService = {
         user_id: params.user_id,
         org_id: params.org_id,
       })
-      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, current_phase, phase_status, created_at, updated_at')
+      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, current_phase, phase_status, created_at, updated_at')
       .single();
 
     if (error) {
@@ -145,6 +147,21 @@ export const landingBuilderWorkspaceService = {
 
     if (error) {
       logger.error('[workspace] Failed to advance phase:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update the research data for a workspace session.
+   */
+  async updateResearch(conversationId: string, research: LandingResearchData): Promise<void> {
+    const { error } = await supabase
+      .from('landing_builder_sessions')
+      .update({ research })
+      .eq('conversation_id', conversationId);
+
+    if (error) {
+      logger.error('[workspace] Failed to update research:', error);
       throw error;
     }
   },

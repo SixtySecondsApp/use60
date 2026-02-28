@@ -23,7 +23,8 @@ import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { useLandingBuilderWorkspace } from '@/lib/hooks/useLandingBuilderWorkspace';
 import { CopyPicker, parseCopySections } from './CopyPicker';
 import { HeroImageGenerator, parseVisualsForImage } from './HeroImageGenerator';
-import { PHASE_AGENT_MAP, AGENT_BADGES } from './types';
+import { PHASE_AGENT_MAP, AGENT_BADGES, type LandingResearchData } from './types';
+import { useLandingResearch } from '@/lib/hooks/useLandingResearch';
 import { STRATEGIST_SYSTEM_PROMPT } from './agents/strategistAgent';
 import { COPYWRITER_SYSTEM_PROMPT } from './agents/copywriterAgent';
 import { VISUAL_ARTIST_SYSTEM_PROMPT } from './agents/visualArtistAgent';
@@ -136,6 +137,43 @@ function buildWorkspaceContext(
 
   if (parts.length === 0) return '';
   return `\nPREVIOUS APPROVED OUTPUTS:\n${parts.join('\n\n')}\n`;
+}
+
+/**
+ * Build research context block for injection into AI messages.
+ * Only included in Phase 0 (Strategy) — capped at ~600 tokens.
+ */
+function buildResearchContext(research: LandingResearchData | null): string {
+  if (!research || research.status !== 'complete') return '';
+
+  const parts: string[] = ['\nMARKET RESEARCH (use this data — do not ask the user for info already covered here):'];
+
+  if (research.company) {
+    const c = research.company;
+    if (c.description) parts.push(`COMPANY: ${c.name} — ${c.description}`);
+    if (c.industry) parts.push(`INDUSTRY: ${c.industry}`);
+    if (c.differentiators?.length) parts.push(`DIFFERENTIATORS: ${c.differentiators.slice(0, 4).join(', ')}`);
+    if (c.pricing_approach) parts.push(`PRICING: ${c.pricing_approach}`);
+  }
+
+  if (research.competitors.length > 0) {
+    const compLines = research.competitors.slice(0, 5).map(
+      (c) => `  - ${c.name}${c.website ? ` (${c.website})` : ''}${c.tagline ? `: ${c.tagline}` : ''}${c.landing_page_patterns?.length ? ` [${c.landing_page_patterns.join(', ')}]` : ''}`,
+    );
+    parts.push(`COMPETITORS:\n${compLines.join('\n')}`);
+  }
+
+  const mc = research.market_context;
+  if (mc.social_proof_examples?.length) parts.push(`SOCIAL PROOF: ${mc.social_proof_examples.slice(0, 4).join('; ')}`);
+  if (mc.review_ratings?.length) parts.push(`REVIEWS: ${mc.review_ratings.slice(0, 3).join('; ')}`);
+  if (mc.notable_customers?.length) parts.push(`NOTABLE CUSTOMERS: ${mc.notable_customers.slice(0, 5).join(', ')}`);
+  if (mc.audience_language?.length) parts.push(`AUDIENCE LANGUAGE: ${mc.audience_language.slice(0, 4).join('; ')}`);
+  if (mc.buying_triggers?.length) parts.push(`BUYING TRIGGERS: ${mc.buying_triggers.slice(0, 3).join('; ')}`);
+  if (mc.pricing_signals?.length) parts.push(`PRICING BENCHMARKS: ${mc.pricing_signals.slice(0, 3).join('; ')}`);
+  if (mc.market_trends?.length) parts.push(`MARKET TRENDS: ${mc.market_trends.slice(0, 3).join('; ')}`);
+
+  if (parts.length <= 1) return ''; // Only header, no data
+  return parts.join('\n') + '\n';
 }
 
 /** Maps 0-based phase index to workspace field key */
@@ -259,6 +297,14 @@ export const LandingPageBuilder: React.FC = () => {
     [orgProfile, products],
   );
 
+  // Auto-research — runs in parallel with Strategist, never blocks
+  const {
+    research,
+    isResearching,
+    startResearch,
+    reset: resetResearch,
+  } = useLandingResearch({ conversationId });
+
   // Workspace — DB-backed state that persists across refreshes
   const {
     workspace,
@@ -288,10 +334,13 @@ export const LandingPageBuilder: React.FC = () => {
     }
   }, [workspace, currentPhase, messages.length]);
 
+  // Use live research if available, fallback to persisted workspace research
+  const effectiveResearch = research ?? (workspace?.research as LandingResearchData | null) ?? null;
+
   // Derive phase state for the right panel timeline
   const builderState = useLandingBuilderState(currentPhase, phaseOutputsRef.current, messages.length > 0);
 
-  const handleStart = useCallback((seedPrompt: string) => {
+  const handleStart = useCallback((seedPrompt: string, wizardAnswers?: Record<string, string>) => {
     // Extract brief from seed prompt for workspace storage
     const briefMatch = seedPrompt.match(/Here is the client's brief[\s\S]*?(?=Now move to)/);
     if (briefMatch && conversationId) {
@@ -299,11 +348,48 @@ export const LandingPageBuilder: React.FC = () => {
       phaseOutputsRef.current[-1] = briefText; // -1 = raw brief for display
       updatePhaseOutput({ phase: 'brief', output: { raw: briefText } });
     }
+
+    // Trigger auto-research in parallel (never blocks the user)
+    const orgDomain = orgProfile?.research_data?.company_overview?.website
+      || orgProfile?.company_domain
+      || undefined;
+    const orgName = orgProfile?.research_data?.company_overview?.name
+      || orgProfile?.company_name
+      || undefined;
+
+    if (wizardAnswers) {
+      // "Start from scratch" — use wizard answers as research seed
+      startResearch({
+        brief: wizardAnswers,
+        company_domain: orgDomain,
+        company_name: orgName,
+        org_id: activeOrgId ?? undefined,
+      });
+    } else {
+      // Other entry points — extract context from seed prompt + org profile
+      const offerMatch = seedPrompt.match(/offer\/product:\s*(.+)/i);
+      const audienceMatch = seedPrompt.match(/audience:\s*(.+)/i);
+      const briefFromSeed: Record<string, string> = {};
+      if (offerMatch) briefFromSeed.offer = offerMatch[1].trim();
+      if (audienceMatch) briefFromSeed.audience = audienceMatch[1].trim();
+      if (orgName) briefFromSeed.company = orgName;
+
+      // Only research if we have enough context
+      if (Object.keys(briefFromSeed).length > 0 || orgDomain) {
+        startResearch({
+          brief: briefFromSeed,
+          company_domain: orgDomain,
+          company_name: orgName,
+          org_id: activeOrgId ?? undefined,
+        });
+      }
+    }
+
     sendMessage('Build me a landing page', {
       apiContent: seedPrompt,
       silent: true,
     });
-  }, [sendMessage, conversationId, updatePhaseOutput]);
+  }, [sendMessage, conversationId, updatePhaseOutput, orgProfile, activeOrgId, startResearch]);
 
   const handleNewProject = useCallback(() => {
     startNewChat();
@@ -311,7 +397,8 @@ export const LandingPageBuilder: React.FC = () => {
     setCurrentPhase(0);
     phaseOutputsRef.current = {};
     setGeneratedImageUrl(null);
-  }, [startNewChat, setConversationId]);
+    resetResearch();
+  }, [startNewChat, setConversationId, resetResearch]);
 
   // Agent system prompts by phase
   const agentSystemPrompts: Record<number, string> = useMemo(() => ({
@@ -322,14 +409,19 @@ export const LandingPageBuilder: React.FC = () => {
   }), []);
 
   // Build phase-aware context that gets injected into every message
+  const researchContext = useMemo(
+    () => (currentPhase === 0 ? buildResearchContext(effectiveResearch) : ''),
+    [effectiveResearch, currentPhase],
+  );
+
   const builderApiTransform = useCallback((msg: string) => {
     const workspaceContext = buildWorkspaceContext(workspace, currentPhase);
     const agentRole = PHASE_AGENT_MAP[currentPhase];
     const agentLabel = agentRole ? `ACTIVE AGENT: ${agentRole}\n` : '';
     const agentPrompt = agentSystemPrompts[currentPhase] || '';
     const phaseContext = `CURRENT PHASE: ${PHASE_PROMPTS[currentPhase]?.name || 'Unknown'} (phase ${currentPhase + 1} of 4)\n${agentLabel}\n`;
-    return BUILDER_CONTINUATION + agentPrompt + '\n\n' + businessContext + workspaceContext + phaseContext + msg;
-  }, [currentPhase, businessContext, workspace, agentSystemPrompts]);
+    return BUILDER_CONTINUATION + agentPrompt + '\n\n' + businessContext + researchContext + workspaceContext + phaseContext + msg;
+  }, [currentPhase, businessContext, researchContext, workspace, agentSystemPrompts]);
 
   // Handle approval — capture output, write to workspace, advance phase
   const handleApprove = useCallback(async (overrideContent?: string) => {
@@ -487,6 +579,8 @@ export const LandingPageBuilder: React.FC = () => {
           phaseOutputs={phaseOutputsRef.current}
           activePhase={currentPhase}
           heroImageUrl={generatedImageUrl}
+          research={effectiveResearch}
+          isResearching={isResearching}
         />
       }
     >
