@@ -28,6 +28,20 @@
       "status": "complete",
       "consultReport": ".sixty/consult/skill-gold-standard-upgrade.md",
       "createdAt": "2026-02-26"
+    },
+    {
+      "id": "landing-page-builder-ui",
+      "name": "Landing Page Builder — Dedicated UI Screen",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-02-27"
+    },
+    {
+      "id": "landing-builder-v2",
+      "name": "Landing Builder v2 — Agent Teams + Gemini SVGs",
+      "status": "in_progress",
+      "consultReport": ".sixty/consult/landing-builder-v2.md",
+      "createdAt": "2026-02-28"
     }
   ],
   "stories": [
@@ -556,12 +570,555 @@
       "parallelWith": [],
       "startedAt": "2026-02-26T11:05:00Z",
       "completedAt": "2026-02-26T11:08:00Z"
+    },
+    {
+      "id": "LPB-001",
+      "feature": "landing-page-builder-ui",
+      "title": "Create types and useLandingBuilderState hook",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "types.ts defines PhaseStatus, BuilderPhase, PhaseDeliverable, LandingBuilderState, LandingPageGateData interfaces",
+        "useLandingBuilderState hook derives phase state from CopilotMessage[] via useMemo",
+        "Phase detection heuristics identify phase completions from assistant message content and structured responses",
+        "Hook returns { phases, currentPhase, deliverables, isExpressMode, skippedPhases }",
+        "TypeScript strict compliance — no any types"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts",
+        "src/components/landing-builder/useLandingBuilderState.ts"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["LPB-002", "LPB-004", "LPB-005"],
+      "parallelWith": ["LPB-003"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-002",
+      "feature": "landing-page-builder-ui",
+      "title": "Create page route, wrapper component, and register routes",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "LandingPageBuilderPage.tsx implements URL-based conversation routing (mirrors CopilotPage pattern)",
+        "LandingPageBuilder.tsx wraps CopilotLayout with custom right panel and AssistantShell",
+        "lazyPages.tsx exports LandingPageBuilderPage via lazyWithRetry",
+        "App.tsx registers /landing-page-builder and /landing-page-builder/:conversationId routes with InternalRouteGuard + AppLayout",
+        "Route loads without errors and redirects base path to /:conversationId"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/LandingPageBuilderPage.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ],
+      "dependencies": { "stories": ["LPB-001"], "files": [], "schema": [] },
+      "blocks": ["LPB-007"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-003",
+      "feature": "landing-page-builder-ui",
+      "title": "Build LandingBuilderEmpty welcome state with starter cards",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "LandingBuilderEmpty.tsx renders welcome state with heading, pipeline diagram, and 4 starter cards",
+        "Cards: Start from scratch, I have a brief, I have style + copy, Just build it",
+        "Each card calls onStart(seedPrompt) with appropriate pre-crafted prompt",
+        "Responsive layout: 2x2 grid on desktop, stack on mobile",
+        "Uses project design system (Card, Button from shadcn/ui)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingBuilderEmpty.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["LPB-007"],
+      "parallelWith": ["LPB-001"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-004",
+      "feature": "landing-page-builder-ui",
+      "title": "Build PhaseTimeline vertical stepper component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "PhaseTimeline.tsx renders 6 phases as vertical stepper with status icons (CheckCircle2, Circle, RefreshCw)",
+        "Status colors: complete=green, active=blue pulsing, pending=gray dimmed, iterating=amber",
+        "Each phase shows name and skill attribution label",
+        "Click on completed phase triggers onPhaseClick callback",
+        "Active phase has subtle animation (pulse or glow)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/PhaseTimeline.tsx"
+      ],
+      "dependencies": { "stories": ["LPB-001"], "files": [], "schema": [] },
+      "blocks": ["LPB-005"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-005",
+      "feature": "landing-page-builder-ui",
+      "title": "Build right panel with deliverable preview and session info",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "LandingBuilderRightPanel.tsx has 3 CollapsibleSections: Phase Timeline, Current Deliverable, Session",
+        "DeliverablePreview.tsx renders condensed preview per phase type (section list, wireframe thumbnail, color swatches, headline preview, image grid, file list)",
+        "Session section shows duration and New Project button",
+        "Panel width matches CopilotRightPanel (320px, collapsible)",
+        "Integrates PhaseTimeline component in first section"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingBuilderRightPanel.tsx",
+        "src/components/landing-builder/DeliverablePreview.tsx"
+      ],
+      "dependencies": { "stories": ["LPB-001", "LPB-004"], "files": [], "schema": [] },
+      "blocks": ["LPB-007"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-006",
+      "feature": "landing-page-builder-ui",
+      "title": "Build ApprovalGate response component with approve/iterate/go-back actions",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "ApprovalGate.tsx renders phase completion card with Approve, Iterate, Go Back buttons",
+        "Approve sends 'Approved. Proceed to Phase {N+1}.' as user message via onActionClick",
+        "Iterate opens inline text input for feedback, sends as user message",
+        "Go Back sends 'Go back to Phase {N-1}.' as user message",
+        "After user responds, gate becomes read-only showing the chosen action"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/ApprovalGate.tsx"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["LPB-007"],
+      "parallelWith": ["LPB-004", "LPB-005"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-007",
+      "feature": "landing-page-builder-ui",
+      "title": "Wire AssistantShell emptyComponent prop and CopilotResponse router",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "AssistantShell.tsx accepts optional emptyComponent prop, renders it instead of CopilotEmpty when provided",
+        "CopilotResponse.tsx adds 'landing_page_gate' case routing to ApprovalGate component",
+        "types.ts in copilot/ adds LandingPageGateData to CopilotResponseType union",
+        "LandingPageBuilder passes LandingBuilderEmpty as emptyComponent to AssistantShell",
+        "Full flow verified: navigate to /landing-page-builder → empty state → send message → chat loads"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/assistant/AssistantShell.tsx",
+        "src/components/copilot/CopilotResponse.tsx",
+        "src/components/copilot/types.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": { "stories": ["LPB-002", "LPB-003", "LPB-005", "LPB-006"], "files": [], "schema": [] },
+      "blocks": ["LPB-008"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-008",
+      "feature": "landing-page-builder-ui",
+      "title": "Integration verification and end-to-end flow testing",
+      "type": "validation",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "Route loads: /landing-page-builder redirects to /landing-page-builder/{uuid} and shows custom empty state",
+        "Empty state works: clicking starter card sends seed prompt and copilot begins Phase 1",
+        "Phase detection works: right panel updates phase status as conversation progresses",
+        "Approval gate renders: Approve/Iterate/Go Back buttons appear at phase boundaries",
+        "TypeScript build passes with no errors (npx tsc --noEmit)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [],
+      "dependencies": { "stories": ["LPB-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "LBV2-001",
+      "feature": "landing-builder-v2",
+      "title": "Create landing_builder_sessions table with workspace schema",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Migration creates landing_builder_sessions with id, conversation_id, user_id, org_id columns",
+        "JSONB columns: brief, strategy, copy, visuals, code (nullable)",
+        "Integer current_phase, JSONB phase_status, timestamps",
+        "RLS policies: users can CRUD own sessions, org members can read",
+        "Unique constraint on conversation_id"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260228000001_landing_builder_sessions.sql"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["LBV2-003"],
+      "parallelWith": ["LBV2-002"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-002",
+      "feature": "landing-builder-v2",
+      "title": "Create generate-svg edge function with Gemini 3.1 Pro",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Edge function accepts { description, brand_colors, complexity, viewbox? }",
+        "Calls Gemini 3.1 Pro (gemini-3.1-pro-preview) with thinking budgets: simple=2048, medium=8192, complex=16384",
+        "Uses prompt templates from gemini-svg-guide.md (narrative/sequential for hero, general for sections)",
+        "Returns { svg_code, description } with validated SVG (viewBox, xmlns, no SMIL, CSS @keyframes only)",
+        "Proper error handling, CORS via getCorsHeaders(req), JWT-protected"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/generate-svg/index.ts"
+      ],
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["LBV2-007"],
+      "parallelWith": ["LBV2-001"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-003",
+      "feature": "landing-builder-v2",
+      "title": "Build workspace service (CRUD + React hooks)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "landingBuilderWorkspaceService.ts with create, get, update, updatePhaseOutput methods",
+        "useLandingBuilderWorkspace hook wraps service with React Query (auto-refetch on mutations)",
+        "TypeScript interface LandingBuilderWorkspace matching DB schema exactly",
+        "Optimistic updates for phase transitions (instant UI, async DB write)",
+        "maybeSingle() for session lookup by conversation_id"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/services/landingBuilderWorkspaceService.ts",
+        "src/lib/hooks/useLandingBuilderWorkspace.ts",
+        "src/components/landing-builder/types.ts"
+      ],
+      "dependencies": { "stories": ["LBV2-001"], "files": [], "schema": ["landing_builder_sessions"] },
+      "blocks": ["LBV2-004"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-004",
+      "feature": "landing-builder-v2",
+      "title": "Refactor LandingPageBuilder to use workspace state instead of refs",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "LandingPageBuilder reads/writes phase outputs via workspace service instead of phaseOutputsRef",
+        "Phase transitions update workspace.current_phase and workspace.phase_status",
+        "builderApiTransform reads from workspace (brief, strategy, copy, visuals) instead of accumulated context",
+        "Each agent reads ONLY what it needs from workspace (token-efficient)",
+        "Session resumes correctly on page refresh (workspace loaded from DB)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/useLandingBuilderState.ts"
+      ],
+      "dependencies": { "stories": ["LBV2-003"], "files": [], "schema": [] },
+      "blocks": ["LBV2-005", "LBV2-006", "LBV2-007", "LBV2-008"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-005",
+      "feature": "landing-builder-v2",
+      "title": "Implement Strategist agent: brief enrichment + company research",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 5,
+      "acceptance": [
+        "Strategist system prompt focuses on landing page strategy, conversion psychology, competitor analysis",
+        "After DiscoveryWizard (5Q), Strategist asks 2-3 targeted follow-ups based on gaps in the brief",
+        "Uses gemini_research tool to analyze competitor websites and market positioning",
+        "Writes enriched brief + strategy + section_list to workspace",
+        "Agent badge shows '🎯 Strategist' on its messages in the chat"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/strategistAgent.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/DiscoveryWizard.tsx"
+      ],
+      "dependencies": { "stories": ["LBV2-004"], "files": [], "schema": [] },
+      "blocks": ["LBV2-006"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-006",
+      "feature": "landing-builder-v2",
+      "title": "Implement Copywriter agent: A/B copy per section from workspace",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 6,
+      "acceptance": [
+        "Copywriter system prompt: direct-response copy expert, PAS/AIDA frameworks, specific to business",
+        "Reads strategy + section_list from workspace (NOT full accumulated context)",
+        "Produces A/B copy per section in exact markdown format for CopyPicker parsing",
+        "Writes selected copy back to workspace.copy after CopyPicker confirmation",
+        "Agent badge shows '✍️ Copywriter' on its messages"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/copywriterAgent.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": { "stories": ["LBV2-005"], "files": [], "schema": [] },
+      "blocks": ["LBV2-007"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-007",
+      "feature": "landing-builder-v2",
+      "title": "Implement Visual Artist agent with parallel sub-tasks",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 7,
+      "acceptance": [
+        "Visual Artist orchestrates 3 parallel tasks: (1) Claude palette/typography/icons, (2) Gemini SVGs, (3) Nano Banana hero",
+        "Gemini SVG generation calls generate-svg edge function with rich prompts (isometric, detailed, brand-colored)",
+        "Generates 2-3 SVGs per section using workspace.strategy.section_list",
+        "Nano Banana hero generation uses parseVisualsForImage with workspace brand colors",
+        "All visual assets written to workspace.visuals; agent badge shows '🎨 Visual Artist'"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/visualArtistAgent.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/lib/services/geminiSvgService.ts"
+      ],
+      "dependencies": { "stories": ["LBV2-002", "LBV2-006"], "files": [], "schema": [] },
+      "blocks": ["LBV2-008"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-008",
+      "feature": "landing-builder-v2",
+      "title": "Implement Builder agent: reads full workspace, outputs production code",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 8,
+      "acceptance": [
+        "Builder system prompt: production React + Tailwind developer, never paraphrases approved content",
+        "Reads ALL workspace fields (brief, strategy, copy, visuals) to compose the final component",
+        "Embeds approved SVGs directly, uses exact hex colors, exact copy text, approved typography",
+        "Code renders in LandingCodePreview iframe (existing component)",
+        "Agent badge shows '⚙️ Builder' on its messages"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/builderAgent.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": { "stories": ["LBV2-007"], "files": [], "schema": [] },
+      "blocks": ["LBV2-009"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-009",
+      "feature": "landing-builder-v2",
+      "title": "Add agent badges to ChatMessage and PhaseTimeline",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "acceptance": [
+        "ChatMessage renders agent role badge (Strategist/Copywriter/Visual Artist/Builder) on assistant messages",
+        "Badge derived from message metadata (agentRole field) set by each agent",
+        "PhaseTimeline shows active agent name next to current phase",
+        "Visuals phase shows parallel progress: palette done, SVGs 2/3, hero generating",
+        "Badges are small, non-intrusive — role name in muted text above the message"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/copilot/ChatMessage.tsx",
+        "src/components/landing-builder/PhaseTimeline.tsx",
+        "src/components/landing-builder/LandingBuilderRightPanel.tsx"
+      ],
+      "dependencies": { "stories": ["LBV2-008"], "files": [], "schema": [] },
+      "blocks": ["LBV2-010", "LBV2-011"],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-010",
+      "feature": "landing-builder-v2",
+      "title": "Reduce DiscoveryWizard to 5 questions + strategist probing",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "acceptance": [
+        "DiscoveryWizard reduced from 7 to 5 questions (remove tone and sections — strategist infers these)",
+        "After wizard submit, Strategist agent asks 2-3 targeted follow-ups in the chat",
+        "Follow-ups are based on gaps: missing competitors, unclear audience, vague outcome",
+        "User responds in chat, Strategist incorporates answers into enriched brief",
+        "Strategist then produces strategy without further user input"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/DiscoveryWizard.tsx",
+        "src/components/landing-builder/agents/strategistAgent.ts"
+      ],
+      "dependencies": { "stories": ["LBV2-009"], "files": [], "schema": [] },
+      "blocks": ["LBV2-013"],
+      "parallelWith": ["LBV2-011"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-011",
+      "feature": "landing-builder-v2",
+      "title": "Integrate Gemini SVG previews into visuals phase UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "acceptance": [
+        "Visuals phase shows SVG gallery: each section's SVG rendered via SvgPreview component",
+        "SVGs are labelled by section name (Hero accent, Features divider, CTA background)",
+        "User can approve/reject individual SVGs (rejected ones get regenerated)",
+        "Approved SVGs stored in workspace.visuals.svg_assets array",
+        "Loading state shows per-SVG progress (Gemini takes 10-20s per SVG)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/SvgGallery.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": { "stories": ["LBV2-009"], "files": [], "schema": [] },
+      "blocks": ["LBV2-013"],
+      "parallelWith": ["LBV2-010"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-012",
+      "feature": "landing-builder-v2",
+      "title": "Create geminiSvgService for frontend Gemini SVG calls",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 12,
+      "acceptance": [
+        "geminiSvgService.ts wraps generate-svg edge function with typed request/response",
+        "Supports batch generation: generateSvgBatch(descriptions[]) calls edge function in parallel",
+        "Validates returned SVG (has viewBox, has xmlns, no script tags) before returning",
+        "Handles errors gracefully: returns null + toast for failed generations",
+        "Uses supabase.functions.invoke for auth (inherits user JWT)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/services/geminiSvgService.ts"
+      ],
+      "dependencies": { "stories": ["LBV2-002"], "files": [], "schema": [] },
+      "blocks": ["LBV2-007"],
+      "parallelWith": ["LBV2-003"],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-013",
+      "feature": "landing-builder-v2",
+      "title": "End-to-end integration test: full pipeline with agent team",
+      "type": "validation",
+      "status": "pending",
+      "priority": 13,
+      "acceptance": [
+        "Full flow: DiscoveryWizard → Strategist follow-ups → Strategy approval → Copywriter → CopyPicker → Visual Artist (parallel) → Builder",
+        "Agent badges appear correctly on each phase's messages",
+        "Workspace persists across page refreshes (session resumes)",
+        "Gemini SVGs render in SvgPreview with animation",
+        "Final code renders in LandingCodePreview iframe with embedded SVGs"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [],
+      "dependencies": { "stories": ["LBV2-010", "LBV2-011"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
     }
   ],
   "execution": {
-    "totalStories": 20,
-    "completedStories": 20,
-    "currentFeature": "skill-gold-standard",
-    "lastUpdated": "2026-02-26T00:00:00Z"
+    "totalStories": 41,
+    "completedStories": 32,
+    "currentFeature": "landing-builder-v2",
+    "lastUpdated": "2026-02-28T12:00:00Z"
   }
 }

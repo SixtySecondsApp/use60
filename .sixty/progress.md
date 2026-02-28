@@ -1,4 +1,10 @@
-# Progress Log — Follow-Up Email v2
+# Progress Log — Landing Builder v2
+
+## Current Feature: landing-builder-v2 (4/13 stories)
+
+---
+
+# Previous: Follow-Up Email v2 (COMPLETE)
 
 ## Codebase Patterns
 - Edge functions: `getCorsHeaders(req)` from `_shared/corsHelper.ts`, pin `@supabase/supabase-js@2.43.4`
