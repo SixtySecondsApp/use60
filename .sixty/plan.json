@@ -992,7 +992,7 @@
       "feature": "landing-builder-v2",
       "title": "Add agent badges to ChatMessage and PhaseTimeline",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 9,
       "acceptance": [
         "ChatMessage renders agent role badge (Strategist/Copywriter/Visual Artist/Builder) on assistant messages",
@@ -1117,7 +1117,7 @@
   ],
   "execution": {
     "totalStories": 41,
-    "completedStories": 37,
+    "completedStories": 38,
     "currentFeature": "landing-builder-v2",
     "lastUpdated": "2026-02-28T12:00:00Z"
   }

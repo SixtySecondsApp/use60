@@ -23,7 +23,7 @@ import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { useLandingBuilderWorkspace } from '@/lib/hooks/useLandingBuilderWorkspace';
 import { CopyPicker, parseCopySections } from './CopyPicker';
 import { HeroImageGenerator, parseVisualsForImage } from './HeroImageGenerator';
-import { PHASE_AGENT_MAP } from './types';
+import { PHASE_AGENT_MAP, AGENT_BADGES } from './types';
 import { STRATEGIST_SYSTEM_PROMPT } from './agents/strategistAgent';
 import { COPYWRITER_SYSTEM_PROMPT } from './agents/copywriterAgent';
 import { VISUAL_ARTIST_SYSTEM_PROMPT } from './agents/visualArtistAgent';
@@ -454,6 +454,18 @@ export const LandingPageBuilder: React.FC = () => {
     return actions;
   }, [messages, currentPhase, phaseComponent]);
 
+  // Agent badge for assistant messages
+  const agentBadge = useMemo(() => {
+    const role = PHASE_AGENT_MAP[currentPhase];
+    if (!role) return undefined;
+    const badge = AGENT_BADGES[role];
+    return (
+      <div className="ml-11 mb-1">
+        <span className={`text-xs font-medium ${badge.color}`}>{badge.label}</span>
+      </div>
+    );
+  }, [currentPhase]);
+
   // Intercept phase action clicks
   const handlePhaseAction = useCallback((prompt: string): boolean => {
     if (prompt === '__APPROVE__') {
@@ -498,6 +510,7 @@ export const LandingPageBuilder: React.FC = () => {
           phaseActions={phaseActions}
           onPhaseAction={handlePhaseAction}
           phaseComponent={phaseComponent}
+          messageBadge={agentBadge}
         />
       </div>
     </CopilotLayout>

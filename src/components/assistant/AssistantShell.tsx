@@ -17,13 +17,50 @@ import type { RichInputPayload, EntityReference } from '@/lib/types/entitySearch
 
 type AssistantShellMode = 'overlay' | 'page';
 
+export interface QuickAction {
+  label: string;
+  prompt: string;
+  variant: 'primary' | 'secondary' | 'ghost';
+}
+
 interface AssistantShellProps {
   mode: AssistantShellMode;
   onOpenQuickAdd?: (opts: { preselectAction: string; initialData?: Record<string, unknown> }) => void;
+  /** Custom empty state component — replaces CopilotEmpty when provided */
+  emptyComponent?: React.ReactNode;
+  /** Optional transform that produces alternative API content for every outgoing
+   *  message. The UI shows the original text; the API receives the transform output.
+   *  Used by landing page builder to re-inject context on each turn. */
+  apiContentTransform?: (message: string) => string;
+  /** Phase action chips shown above the chat input when AI is not loading */
+  phaseActions?: QuickAction[];
+  /** Custom handler for phase action clicks. Return true to prevent default sendMessage. */
+  onPhaseAction?: (prompt: string) => boolean;
+  /** Interactive component rendered between messages and input (e.g. CopyPicker, HeroImageGenerator) */
+  phaseComponent?: React.ReactNode;
+  /** Optional badge renderer for assistant messages (e.g. agent role labels) */
+  messageBadge?: React.ReactNode;
 }
 
-export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
-  const { messages, isLoading, sendMessage, cancelRequest, autonomousMode } = useCopilot();
+export function AssistantShell({ mode, onOpenQuickAdd, emptyComponent, apiContentTransform, phaseActions, onPhaseAction, phaseComponent, messageBadge }: AssistantShellProps) {
+  const { messages, isLoading, sendMessage: rawSendMessage, cancelRequest, autonomousMode } = useCopilot();
+  // Wrap sendMessage to inject apiContent when a transform is provided.
+  // If the caller already set apiContent (e.g. handleStart, handleApprove),
+  // pass it through as-is. Otherwise apply the transform.
+  const sendMessage = useCallback(
+    (msg: string, opts?: Parameters<typeof rawSendMessage>[1]) => {
+      // If caller already provided apiContent, pass through directly
+      if ((opts as any)?.apiContent) {
+        return rawSendMessage(msg, opts);
+      }
+      // Apply transform for regular user messages
+      if (apiContentTransform) {
+        return rawSendMessage(msg, { ...opts, apiContent: apiContentTransform(msg) });
+      }
+      return rawSendMessage(msg, opts);
+    },
+    [rawSendMessage, apiContentTransform]
+  );
   const [inputValue, setInputValue] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -407,6 +444,31 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
         />
       )}
 
+      {/* Phase action chips — shown when AI is idle and actions are provided */}
+      {phaseActions && phaseActions.length > 0 && !isLoading && !isEmpty && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {phaseActions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              onClick={() => {
+                if (onPhaseAction?.(action.prompt)) return;
+                sendMessage(action.prompt);
+              }}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                'border focus:outline-none focus:ring-2 focus:ring-violet-500/40',
+                action.variant === 'primary' && 'bg-violet-500/15 text-violet-400 border-violet-500/30 hover:bg-violet-500/25',
+                action.variant === 'secondary' && 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20',
+                action.variant === 'ghost' && 'bg-transparent text-gray-400 border-gray-700 hover:bg-gray-800 hover:text-gray-300',
+              )}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-end gap-3 bg-gray-800/60 border border-gray-700/40 rounded-xl px-4 py-3 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20 transition-all">
         <RichCopilotInput
           ref={richInputRef}
@@ -464,7 +526,7 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
     <div className={cn('flex flex-col min-h-0', shellClass)}>
       {/* Full-page welcome (page mode only) -- UX-004: no input here, shared input below */}
       {showFullWelcome && (
-        <CopilotEmpty onPromptClick={(prompt) => sendMessage(prompt)} />
+        emptyComponent || <CopilotEmpty onPromptClick={(prompt) => sendMessage(prompt)} />
       )}
 
       {/* Inline chat welcome (overlay mode, no messages) */}
@@ -512,9 +574,31 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
           {messages
             // Hide empty assistant placeholder while the typing indicator is showing
             .filter((m) => !(isLoading && m.role === 'assistant' && !m.content))
-            .map((m) => (
-              <ChatMessage key={m.id} message={m} onActionClick={handleActionClick} />
-            ))}
+            .map((m, _i, arr) => {
+              // When a phaseComponent handles the last assistant message content
+              // (e.g. CopyPicker, HeroImageGenerator), suppress the raw markdown
+              // and show a short summary instead so content isn't duplicated.
+              const isLastAssistant =
+                phaseComponent &&
+                m.role === 'assistant' &&
+                m.content &&
+                arr.filter(x => x.role === 'assistant' && x.content).pop()?.id === m.id;
+              if (isLastAssistant) {
+                const summaryMsg = { ...m, content: 'Pick your preferred option below.' };
+                return (
+                  <React.Fragment key={m.id}>
+                    {messageBadge}
+                    <ChatMessage message={summaryMsg} onActionClick={handleActionClick} />
+                  </React.Fragment>
+                );
+              }
+              return (
+                <React.Fragment key={m.id}>
+                  {m.role === 'assistant' && m.content && messageBadge}
+                  <ChatMessage message={m} onActionClick={handleActionClick} />
+                </React.Fragment>
+              );
+            })}
           {autonomousMode.activeAgents.length > 0 && (
             <AgentWorkingIndicator agents={autonomousMode.activeAgents} />
           )}
@@ -567,6 +651,13 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
               </motion.button>
             )}
           </AnimatePresence>
+        </div>
+      )}
+
+      {/* Phase-specific interactive component (CopyPicker, HeroImageGenerator, etc.) */}
+      {phaseComponent && !isEmpty && !isLoading && (
+        <div className="flex-shrink-0 px-5 py-3 border-t border-gray-800/30 max-h-[50vh] overflow-y-auto scrollbar-custom">
+          {phaseComponent}
         </div>
       )}
 
