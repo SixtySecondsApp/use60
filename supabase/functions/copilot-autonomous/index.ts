@@ -2308,7 +2308,11 @@ serve(async (req: Request) => {
     // comparison page. Normal copilot requests always attempt classification.
     const forceSingleAgent = !!context?.force_single_agent;
 
-    if (resolvedOrgForConfig && stream && !forceSingleAgent && !isLeadSearchQuery) {
+    // Skip multi-agent routing for UI-injected system prompts (e.g. landing page builder).
+    // These contain instruction keywords that collide with agent domain keywords.
+    const isSystemSeedPrompt = message.toLowerCase().includes('[instructions');
+
+    if (resolvedOrgForConfig && stream && !forceSingleAgent && !isLeadSearchQuery && !isSystemSeedPrompt) {
       const agentTeamConfig = await loadAgentTeamConfig(supabase, resolvedOrgForConfig);
 
       // Check budget before multi-agent delegation
