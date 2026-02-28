@@ -39,7 +39,7 @@
     {
       "id": "landing-builder-v2",
       "name": "Landing Builder v2 — Agent Teams + Gemini SVGs",
-      "status": "in_progress",
+      "status": "complete",
       "consultReport": ".sixty/consult/landing-builder-v2.md",
       "createdAt": "2026-02-28"
     }
@@ -1096,7 +1096,7 @@
       "feature": "landing-builder-v2",
       "title": "End-to-end integration test: full pipeline with agent team",
       "type": "validation",
-      "status": "pending",
+      "status": "complete",
       "priority": 13,
       "acceptance": [
         "Full flow: DiscoveryWizard → Strategist follow-ups → Strategy approval → Copywriter → CopyPicker → Visual Artist (parallel) → Builder",
@@ -1117,7 +1117,7 @@
   ],
   "execution": {
     "totalStories": 41,
-    "completedStories": 40,
+    "completedStories": 41,
     "currentFeature": "landing-builder-v2",
     "lastUpdated": "2026-02-28T12:00:00Z"
   }

@@ -1,6 +1,46 @@
 # Progress Log — Landing Builder v2
 
-## Current Feature: landing-builder-v2 (4/13 stories)
+## Current Feature: landing-builder-v2 (13/13 stories) COMPLETE
+
+---
+
+### 2026-02-28 — LBV2-001 + LBV2-002 (parallel) + LBV2-003 + LBV2-012 (parallel)
+**Stories**: Workspace schema + generate-svg edge function + workspace service + geminiSvgService
+**Files**: migration, generate-svg/index.ts, landingBuilderWorkspaceService.ts, geminiSvgService.ts, useLandingBuilderWorkspace.ts, types.ts
+**Gates**: lint pass | test: n/a (new files)
+**Learnings**: Gemini 3.1 Pro uses thinkingConfig.thinkingBudget for thinking models; response has parts with thought=true to filter
+
+---
+
+### 2026-02-28 — LBV2-004
+**Story**: Refactor LandingPageBuilder to workspace state
+**Files**: LandingPageBuilder.tsx
+**Gates**: lint pass
+**Learnings**: buildWorkspaceContext gives each phase only the data it needs; workspace.phase_status tracks per-phase state
+
+---
+
+### 2026-02-28 — LBV2-005 + LBV2-006 + LBV2-007 + LBV2-008 (4 agents)
+**Stories**: Strategist + Copywriter + Visual Artist + Builder agents
+**Files**: agents/strategistAgent.ts, copywriterAgent.ts, visualArtistAgent.ts, builderAgent.ts, LandingPageBuilder.tsx
+**Gates**: lint pass
+**Learnings**: Agents are system prompt configurations injected via builderApiTransform; gap detection logic in strategistAgent for follow-up questions
+
+---
+
+### 2026-02-28 — LBV2-009
+**Story**: Agent badges on ChatMessage and PhaseTimeline
+**Files**: AssistantShell.tsx, LandingPageBuilder.tsx, PhaseTimeline.tsx
+**Gates**: lint pass
+**Learnings**: messageBadge prop on AssistantShell renders above assistant messages; AGENT_BADGES maps role to color
+
+---
+
+### 2026-02-28 — LBV2-010 + LBV2-011 (parallel)
+**Stories**: Wizard reduction (7 to 5 questions) + SvgGallery component
+**Files**: DiscoveryWizard.tsx, SvgGallery.tsx
+**Gates**: lint pass
+**Learnings**: Tone and sections inferred by Strategist; SvgGallery uses approve/reject/regenerate pattern with geminiSvgService
 
 ---
 
