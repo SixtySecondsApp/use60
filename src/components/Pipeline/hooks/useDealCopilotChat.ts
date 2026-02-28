@@ -607,7 +607,12 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
   const buildGreeting = useCallback(
     (deal: PipelineDeal, enrichData: EnrichmentData | null): string => {
       const companyName = deal.company || deal.name;
-      let greeting = `How can I help with the **${companyName}** deal?`;
+      const contactName = deal.contact_name;
+
+      // Opening line — mention contact name when available
+      let greeting = contactName
+        ? `How can I help with **${contactName}** at **${companyName}**?`
+        : `How can I help with the **${companyName}** deal?`;
 
       // Add a quick status line based on health
       if (deal.health_score !== null) {
@@ -616,6 +621,38 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
       }
       if (deal.ghost_probability !== null && deal.ghost_probability > 30) {
         greeting += ` Ghost risk is elevated at **${deal.ghost_probability}%**.`;
+      }
+
+      // Last meeting date + key takeaway
+      if (enrichData?.meetings && enrichData.meetings.length > 0) {
+        const lastMeeting = enrichData.meetings[0];
+        if (lastMeeting.start_time) {
+          const meetingDate = new Date(lastMeeting.start_time).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          // Try to get a meaningful takeaway from the full summary, not just oneliner
+          let takeaway = '';
+          const extracted = extractMeetingSummary(lastMeeting.summary);
+          if (extracted) {
+            // Use first key takeaway segment (before the first pipe separator)
+            const firstSegment = extracted.split(' | ')[0];
+            takeaway = firstSegment.replace(/^Key takeaways: /, '');
+          } else if (lastMeeting.summary_oneliner) {
+            takeaway = lastMeeting.summary_oneliner;
+          }
+          if (takeaway) {
+            greeting += `\n\nLast meeting (**${meetingDate}**): *${takeaway}*`;
+          } else {
+            greeting += `\n\nLast meeting was on **${meetingDate}** — ${lastMeeting.title || 'untitled'}.`;
+          }
+        }
+      }
+
+      // Next step nudge from truth fields
+      if (enrichData?.truthFields) {
+        const nextStep = enrichData.truthFields.find(tf => tf.field_key === 'next_step' && tf.value);
+        if (nextStep) {
+          const dateSuffix = nextStep.next_step_date ? ` (by ${nextStep.next_step_date})` : '';
+          greeting += `\n\nNext step: **${nextStep.value}**${dateSuffix}`;
+        }
       }
 
       // Proactive alerts from enrichment
@@ -649,8 +686,8 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
         }
       }
 
-      // Meeting intelligence one-liner
-      if (enrichData?.meetingIntelligence) {
+      // Meeting intelligence one-liner (only if we didn't already show a takeaway above)
+      if (enrichData?.meetingIntelligence && !(enrichData.meetings?.length > 0 && enrichData.meetings[0].start_time)) {
         greeting += `\n*${enrichData.meetingIntelligence}*`;
       }
 
