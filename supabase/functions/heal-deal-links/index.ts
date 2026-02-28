@@ -19,12 +19,22 @@ Deno.serve(async (req: Request) => {
   }
 
   // Verify this is a service_role call (cron or internal)
+  // Check JWT role claim or match against known service_role key
   const authHeader = req.headers.get('Authorization') || '';
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   const cronSecret = req.headers.get('x-cron-secret');
   const expectedCronSecret = Deno.env.get('CRON_SECRET');
 
-  const isServiceRole = authHeader.includes(serviceRoleKey);
+  let isServiceRole = false;
+  if (serviceRoleKey && authHeader.includes(serviceRoleKey)) {
+    isServiceRole = true;
+  } else if (authHeader.startsWith('Bearer ')) {
+    // Decode JWT payload to check role claim
+    try {
+      const payload = JSON.parse(atob(authHeader.split('.')[1]));
+      isServiceRole = payload.role === 'service_role';
+    } catch { /* not a valid JWT */ }
+  }
   const isCronCall = cronSecret && expectedCronSecret && cronSecret === expectedCronSecret;
 
   if (!isServiceRole && !isCronCall) {
@@ -36,7 +46,7 @@ Deno.serve(async (req: Request) => {
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
-    serviceRoleKey,
+    serviceRoleKey || authHeader.replace('Bearer ', ''),
   );
 
   try {

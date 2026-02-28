@@ -27,9 +27,11 @@ Deno.serve(async (req: Request) => {
   }
 
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const authHeader = req.headers.get('Authorization') || '';
+  const effectiveKey = serviceRoleKey || authHeader.replace('Bearer ', '');
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
-    serviceRoleKey,
+    effectiveKey,
   );
 
   try {
@@ -71,7 +73,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: deals } = await supabase
       .from('deals')
-      .select('id, org_id')
+      .select('id, clerk_org_id')
       .or(dealFilters.join(','))
       .eq('status', 'active');
 

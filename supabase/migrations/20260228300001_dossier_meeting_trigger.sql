@@ -7,16 +7,18 @@ CREATE OR REPLACE FUNCTION public.notify_dossier_on_meeting_summary()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
-AS $$
+SET search_path = public
+AS $fn$
 DECLARE
   v_url TEXT;
   v_service_role_key TEXT;
 BEGIN
   -- Only fire when summary_status changes TO 'complete'
   IF NEW.summary_status = 'complete' AND
-     (OLD.summary_status IS NULL OR OLD.summary_status != 'complete') THEN
+     (OLD.summary_status IS NULL OR OLD.summary_status <> 'complete') THEN
 
-    v_url := get_system_config('supabase_url') || '/functions/v1/update-deal-dossier';
+    SELECT value INTO v_url FROM public.system_config WHERE key = 'supabase_url';
+    v_url := v_url || '/functions/v1/update-deal-dossier';
 
     SELECT decrypted_secret INTO v_service_role_key
     FROM vault.decrypted_secrets
@@ -36,7 +38,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$;
+$fn$;
 
 -- Attach trigger to meetings table
 DROP TRIGGER IF EXISTS trg_dossier_meeting_summary ON public.meetings;
