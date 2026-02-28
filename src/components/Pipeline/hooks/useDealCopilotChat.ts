@@ -18,6 +18,11 @@ import { CopilotSessionService } from '@/lib/services/copilotSessionService';
 import { askMeeting } from '@/lib/services/meetingAnalyticsService';
 import type { PipelineDeal } from './usePipelineData';
 
+const DEBUG = true; // flip to false once verified
+function debugLog(label: string, ...args: unknown[]) {
+  if (DEBUG) console.debug(`[DealCopilot] ${label}`, ...args);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -85,6 +90,26 @@ function buildDealContextBlock(
       }
     }
 
+    // Structured meeting summaries from Fathom (top 2)
+    const meetingsWithSummaries = enrichment.meetings
+      .filter((m) => m.summary)
+      .slice(0, 2);
+    if (meetingsWithSummaries.length > 0) {
+      parts.push('');
+      parts.push('Meeting Summaries:');
+      for (const m of meetingsWithSummaries) {
+        const date = m.start_time
+          ? new Date(m.start_time).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+          : '';
+        const extracted = extractMeetingSummary(m.summary);
+        if (extracted) {
+          parts.push(`  [${date}: ${m.title || 'Untitled'}]`);
+          parts.push(`  ${extracted}`);
+        }
+      }
+      debugLog('context:meetingSummaries', { count: meetingsWithSummaries.length });
+    }
+
     if (enrichment.activities.length > 0) {
       parts.push('');
       parts.push(`Recent Activity (${enrichment.activities.length}):`);
@@ -131,6 +156,57 @@ function buildDealContextBlock(
   return parts.join('\n');
 }
 
+/**
+ * Extract a condensed summary (~400 tokens) from a Fathom meeting summary JSON.
+ * Returns key takeaways, action items, and pricing mentions.
+ */
+function extractMeetingSummary(rawSummary: unknown): string | null {
+  if (!rawSummary) return null;
+  try {
+    const parsed = typeof rawSummary === 'string' ? JSON.parse(rawSummary) : rawSummary;
+    const markdown: string = parsed?.markdown_formatted || parsed?.text || '';
+    if (!markdown || markdown.length < 20) return null;
+
+    const lines = markdown.split('\n').filter((l: string) => l.trim());
+    const takeaways: string[] = [];
+    const actions: string[] = [];
+    const pricing: string[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Bold items are typically key takeaways in Fathom summaries
+      const boldMatch = trimmed.match(/\*\*(.+?)\*\*/);
+      if (boldMatch && takeaways.length < 4) {
+        takeaways.push(boldMatch[1].replace(/\[|\]/g, ''));
+        continue;
+      }
+      // Action items / next steps
+      if (/action|next step|follow[- ]?up|todo|to-do|will send|agreed to/i.test(trimmed) && actions.length < 3) {
+        actions.push(trimmed.replace(/^[-*•]\s*/, '').slice(0, 120));
+        continue;
+      }
+      // Pricing / budget mentions
+      if (/pric|budget|cost|\$\d|revenue|contract|proposal|quote/i.test(trimmed) && pricing.length < 2) {
+        pricing.push(trimmed.replace(/^[-*•]\s*/, '').slice(0, 120));
+      }
+    }
+
+    const parts: string[] = [];
+    if (takeaways.length > 0) parts.push(`Key takeaways: ${takeaways.join('; ')}`);
+    if (actions.length > 0) parts.push(`Actions: ${actions.join('; ')}`);
+    if (pricing.length > 0) parts.push(`Pricing: ${pricing.join('; ')}`);
+
+    if (parts.length === 0) {
+      // Fallback: first 400 chars of the markdown
+      return markdown.slice(0, 400).replace(/\n+/g, ' ').trim();
+    }
+
+    return parts.join(' | ');
+  } catch {
+    return null;
+  }
+}
+
 const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
 // ---------------------------------------------------------------------------
@@ -141,6 +217,7 @@ interface MeetingRow {
   title: string | null;
   start_time: string | null;
   summary_oneliner: string | null;
+  summary: unknown;
 }
 
 interface ActivityRow {
@@ -211,11 +288,16 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
 
   const [enrichment, setEnrichment] = useState<EnrichmentData | null>(null);
   const [enrichmentReady, setEnrichmentReady] = useState(false);
+  const [isActive, setIsActive] = useState(false);
   const hasInjectedContextRef = useRef(false);
   const activeDealIdRef = useRef<string | null>(null);
-  // Track whether activate() was called so we can re-inject greeting when enrichment arrives
-  const pendingGreetingRef = useRef(false);
+  const enrichmentRef = useRef<EnrichmentData | null>(null);
   const sessionServiceRef = useRef(new CopilotSessionService(supabase));
+
+  // Keep enrichmentRef in sync so sendMessage always has latest
+  useEffect(() => {
+    enrichmentRef.current = enrichment;
+  }, [enrichment]);
 
   const chat = useCopilotChat({
     organizationId: activeOrgId || '',
@@ -249,27 +331,64 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
       if (!deal) return;
       try {
         const companyName = deal.company || deal.name;
+        debugLog('enrichment:start', { dealId: deal.id, company: companyName, primaryContactId: deal.primary_contact_id, companyId: deal.company_id });
 
-        // Phase 1: Fetch meeting IDs for this deal (needed to scope RAG search)
-        const { data: dealMeetingRows } = await supabase
-          .from('meetings')
-          .select('id')
-          .eq('deal_id', deal.id)
-          .limit(50);
-        const dealMeetingIds = (dealMeetingRows || []).map((m: { id: string }) => m.id);
+        // Phase 1: Resolve contact + company links for meeting lookup
+        // The meetings table links via primary_contact_id and company_id, NOT deal_id.
+        // If the deal is missing these links, resolve them by matching on company name.
+        let contactId = deal.primary_contact_id;
+        let companyId = deal.company_id;
+        let contactName = deal.contact_name;
+        let contactEmail = deal.contact_email;
+
+        // If deal has no primary_contact_id, try to find a contact by company name
+        if (!contactId && companyName) {
+          const { data: contactMatch } = await supabase
+            .from('contacts')
+            .select('id, first_name, last_name, email')
+            .or(`company.ilike.%${companyName}%,email.ilike.%${companyName.toLowerCase().replace(/\s+/g, '')}%`)
+            .eq('owner_id', deal.owner_id)
+            .limit(1);
+          if (contactMatch && contactMatch.length > 0) {
+            contactId = contactMatch[0].id;
+            contactName = contactName || `${contactMatch[0].first_name || ''} ${contactMatch[0].last_name || ''}`.trim();
+            contactEmail = contactEmail || contactMatch[0].email;
+            debugLog('enrichment:contact-resolved', { contactId, contactName, contactEmail });
+          }
+        }
+
+        // If deal has no company_id, try to find company by domain/name
+        if (!companyId && companyName) {
+          const { data: companyMatch } = await supabase
+            .from('companies')
+            .select('id')
+            .or(`name.ilike.%${companyName}%,domain.ilike.%${companyName.toLowerCase().replace(/\s+/g, '')}%`)
+            .limit(1);
+          if (companyMatch && companyMatch.length > 0) {
+            companyId = companyMatch[0].id;
+            debugLog('enrichment:company-resolved', { companyId });
+          }
+        }
 
         if (cancelled) return;
 
-        // Phase 2: Run all enrichment queries in parallel, scoping RAG by deal meeting IDs
-        const [meetingsRes, activitiesRes, overdueRes, tempRes, signalsRes, meetingIntelRes] = await Promise.all([
-          supabase
-            .from('meetings')
-            .select('title, start_time, summary_oneliner')
-            .or(
-              `deal_id.eq.${deal.id}${deal.primary_contact_id ? `,contact_id.eq.${deal.primary_contact_id}` : ''}`,
-            )
-            .order('start_time', { ascending: false })
-            .limit(5),
+        // Phase 2: Find meetings by contact_id or company_id (meetings table has NO deal_id column)
+        const meetingFilters: string[] = [];
+        if (contactId) meetingFilters.push(`primary_contact_id.eq.${contactId}`);
+        if (companyId) meetingFilters.push(`company_id.eq.${companyId}`);
+
+        debugLog('enrichment:meeting-query', { contactId, companyId, filterCount: meetingFilters.length });
+
+        const [meetingsRes, activitiesRes, overdueRes, tempRes, signalsRes] = await Promise.all([
+          // Meetings — scoped by contact or company (NOT deal_id — column doesn't exist)
+          meetingFilters.length > 0
+            ? supabase
+                .from('meetings')
+                .select('id, title, start_time, summary_oneliner, summary, transcript_status')
+                .or(meetingFilters.join(','))
+                .order('start_time', { ascending: false })
+                .limit(5)
+            : Promise.resolve({ data: [], error: null }),
           supabase
             .from('activities')
             .select('type, subject, created_at, notes')
@@ -298,29 +417,114 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
             .eq('deal_id', deal.id)
             .order('created_at', { ascending: false })
             .limit(3),
-          // Meeting intelligence — scoped to this deal's meetings only
-          dealMeetingIds.length > 0
-            ? askMeeting({
-                question: `What was last discussed with ${companyName}? One sentence.`,
-                meetingIds: dealMeetingIds,
-                maxMeetings: 3,
-              }).catch(() => null)
-            : Promise.resolve(null),
         ]);
 
         if (cancelled) return;
 
+        // Fallback: if no meetings found by contact/company, search by company name in title
+        let meetings = ((meetingsRes.data || []) as (MeetingRow & { id?: string; transcript_status?: string })[]);
+        if (meetings.length === 0 && companyName) {
+          debugLog('enrichment:meetings-fallback', 'No meetings by contact/company, trying title match');
+          const { data: fallbackMeetings } = await supabase
+            .from('meetings')
+            .select('id, title, start_time, summary_oneliner, summary, transcript_status')
+            .ilike('title', `%${companyName}%`)
+            .order('start_time', { ascending: false })
+            .limit(5);
+          if (cancelled) return;
+          meetings = (fallbackMeetings || []) as (MeetingRow & { id?: string; transcript_status?: string })[];
+          debugLog('enrichment:meetings-fallback:result', { count: meetings.length });
+        }
+
+        // Extract meeting IDs for RAG search — only for meetings that have transcripts
+        // Use transcript_status (not summary_oneliner) since many meetings have transcripts but no oneliner
+        const meetingsWithTranscripts = meetings.filter(m => m.id && (m.transcript_status === 'complete' || m.summary_oneliner));
+        const meetingIds = meetingsWithTranscripts.map(m => m.id as string);
+
+        // Run meeting intelligence only if we have meetings with actual transcripts
+        // Without this guard, the RAG handler runs unscoped vector search and returns wrong results
+        let meetingIntelRes = null;
+        if (meetingIds.length > 0) {
+          debugLog('enrichment:askMeeting', { meetingIds, count: meetingIds.length });
+          meetingIntelRes = await askMeeting({
+            question: `What was last discussed with ${companyName}? One sentence.`,
+            meetingIds,
+            maxMeetings: 3,
+          }).catch(() => null);
+        } else {
+          debugLog('enrichment:askMeeting:skipped', 'No meetings with transcripts found');
+        }
+
+        // Fallback: if RAG returned nothing useful, extract a oneliner from the Supabase summary field
+        const ragAnswer = meetingIntelRes?.answer;
+        let meetingIntelligence: string | null = ragAnswer && !ragAnswer.includes('No transcripts found') ? ragAnswer : null;
+
+        if (!meetingIntelligence && meetings.length > 0) {
+          // Try to extract from summary_oneliner or the first meeting's Fathom summary
+          const bestMeeting = meetings.find(m => m.summary_oneliner) || meetings[0];
+          if (bestMeeting?.summary_oneliner) {
+            meetingIntelligence = bestMeeting.summary_oneliner;
+          } else if (bestMeeting?.id) {
+            // Fetch the summary JSON from the meeting record for a quick oneliner
+            const { data: summaryRow } = await supabase
+              .from('meetings')
+              .select('summary')
+              .eq('id', bestMeeting.id)
+              .maybeSingle();
+            if (cancelled) return;
+            if (summaryRow?.summary) {
+              try {
+                const parsed = typeof summaryRow.summary === 'string' ? JSON.parse(summaryRow.summary) : summaryRow.summary;
+                // Extract first key takeaway from the markdown
+                const markdown = parsed?.markdown_formatted || '';
+                const takeawayMatch = markdown.match(/\*\*(.+?)\*\*/);
+                if (takeawayMatch) {
+                  meetingIntelligence = takeawayMatch[1].replace(/\[|\]/g, '');
+                }
+              } catch {
+                // ignore parse errors
+              }
+            }
+          }
+          if (meetingIntelligence) {
+            debugLog('enrichment:meetingIntel:fallback', meetingIntelligence);
+          }
+        }
+
+        if (cancelled) return;
+
         const data: EnrichmentData = {
-          meetings: (meetingsRes.data || []) as MeetingRow[],
+          meetings: meetings as MeetingRow[],
           activities: (activitiesRes.data || []) as ActivityRow[],
           overdueTasks: (overdueRes.data || []) as OverdueTaskRow[],
           temperature: tempRes.data as TemperatureRow | null,
           emailSignals: (signalsRes.data || []) as EmailSignalRow[],
-          meetingIntelligence: meetingIntelRes?.answer || null,
+          meetingIntelligence,
         };
+
+        // Inject resolved contact info into deal context if we found it
+        if (contactName && !deal.contact_name) {
+          (deal as unknown as Record<string, unknown>).contact_name = contactName;
+        }
+        if (contactEmail && !deal.contact_email) {
+          (deal as unknown as Record<string, unknown>).contact_email = contactEmail;
+        }
+
+        debugLog('enrichment:result', {
+          meetings: data.meetings.length,
+          activities: data.activities.length,
+          overdueTasks: data.overdueTasks?.length ?? 0,
+          temperature: data.temperature ? `${Math.round(data.temperature.temperature * 100)}%` : 'none',
+          emailSignals: data.emailSignals?.length ?? 0,
+          meetingIntel: data.meetingIntelligence ? 'yes' : 'no',
+          resolvedContact: contactName || 'none',
+          resolvedCompanyId: companyId || 'none',
+        });
+
         setEnrichment(data);
         setEnrichmentReady(true);
-      } catch {
+      } catch (err) {
+        console.warn('[DealCopilot] enrichment fetch failed:', err);
         // Non-blocking — mark ready even on failure so greeting isn't stuck
         setEnrichmentReady(true);
       }
@@ -406,38 +610,48 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
     // Always start fresh
     chat.clearMessages();
     hasInjectedContextRef.current = false;
+    setIsActive(true);
 
-    const greeting = buildGreeting(deal, enrichment);
-
-    const greetingMsg: ChatMessage = {
-      id: generateId(),
-      role: 'assistant',
-      content: greeting,
-      timestamp: new Date(),
-    };
-
-    chat.injectMessages([greetingMsg]);
-
-    // If enrichment hasn't loaded yet, flag for re-injection when it arrives
-    pendingGreetingRef.current = !enrichmentReady;
+    if (enrichmentReady) {
+      // Enrichment already loaded — show full greeting immediately
+      debugLog('activate', 'enrichment ready, showing full greeting');
+      const greeting = buildGreeting(deal, enrichment);
+      chat.injectMessages([{
+        id: generateId(),
+        role: 'assistant',
+        content: greeting,
+        timestamp: new Date(),
+      }]);
+    } else {
+      // Enrichment still loading — show loading greeting, will be upgraded by useEffect
+      debugLog('activate', 'enrichment pending, showing loading greeting');
+      const companyName = deal.company || deal.name;
+      chat.injectMessages([{
+        id: generateId(),
+        role: 'assistant',
+        content: `Loading context for **${companyName}**...`,
+        timestamp: new Date(),
+      }]);
+    }
   }, [deal, chat, enrichment, enrichmentReady, buildGreeting]);
 
   // -----------------------------------------------------------------------
-  // Re-inject greeting when enrichment arrives after activate() was called
+  // Upgrade greeting when enrichment arrives after activate() was called
   // -----------------------------------------------------------------------
   useEffect(() => {
-    if (!enrichmentReady || !pendingGreetingRef.current || !deal) return;
+    if (!enrichmentReady || !isActive || !deal) return;
 
-    // Enrichment just arrived and we have a pending greeting to upgrade
-    pendingGreetingRef.current = false;
-
-    // Only upgrade if the user hasn't sent a message yet (chat is still just the greeting)
+    // Only upgrade if the user hasn't sent a message yet (chat is still just the greeting/loading)
     const hasOnlyGreeting = chat.messages.length === 1 && chat.messages[0].role === 'assistant';
     if (!hasOnlyGreeting) return;
 
+    const currentContent = chat.messages[0].content;
     const richGreeting = buildGreeting(deal, enrichment);
 
-    // Replace the bare greeting with the enriched one
+    // Skip if content is already the rich greeting (avoid infinite loop)
+    if (currentContent === richGreeting) return;
+
+    debugLog('greeting:upgrade', 'Replacing greeting with enriched version');
     chat.clearMessages();
     chat.injectMessages([{
       id: generateId(),
@@ -445,7 +659,7 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
       content: richGreeting,
       timestamp: new Date(),
     }]);
-  }, [enrichmentReady, deal, enrichment, chat, buildGreeting]);
+  }, [enrichmentReady, isActive, deal, enrichment, chat, buildGreeting]);
 
   // -----------------------------------------------------------------------
   // sendMessage() — inject user bubble + send enriched message silently
@@ -473,9 +687,16 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
       }
 
       // Build the actual API message — prepend deal context on first message
+      // Use enrichmentRef to always get the latest enrichment (not stale closure value)
       let apiMessage = text;
       if (!hasInjectedContextRef.current) {
-        const contextBlock = buildDealContextBlock(deal, enrichment);
+        const latestEnrichment = enrichmentRef.current;
+        debugLog('sendMessage:context', {
+          hasEnrichment: !!latestEnrichment,
+          meetings: latestEnrichment?.meetings.length ?? 0,
+          activities: latestEnrichment?.activities.length ?? 0,
+        });
+        const contextBlock = buildDealContextBlock(deal, latestEnrichment);
         apiMessage = `${contextBlock}\n\n${text}`;
         hasInjectedContextRef.current = true;
       }
@@ -483,7 +704,7 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
       // Send silently — no duplicate user bubble, no duplicate persistence
       chat.sendMessage(apiMessage, { silent: true });
     },
-    [deal, chat, enrichment],
+    [deal, chat],
   );
 
   // -----------------------------------------------------------------------
@@ -492,6 +713,7 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
   const reset = useCallback(() => {
     chat.clearMessages();
     hasInjectedContextRef.current = false;
+    setIsActive(false);
   }, [chat]);
 
   // -----------------------------------------------------------------------
