@@ -78,6 +78,29 @@ function buildDealContextBlock(
 
   // Enrichment data
   if (enrichment) {
+    // Deal truth fields (MEDDICC)
+    if (enrichment.truthFields && enrichment.truthFields.length > 0) {
+      parts.push('');
+      parts.push('Deal Intelligence:');
+      const labels: Record<string, string> = {
+        pain: 'Pain',
+        champion: 'Champion',
+        economic_buyer: 'Economic Buyer',
+        success_metric: 'Success Metric',
+        next_step: 'Next Step',
+        top_risks: 'Top Risks',
+      };
+      for (const tf of enrichment.truthFields) {
+        if (!tf.value) continue;
+        const label = labels[tf.field_key] || tf.field_key;
+        let line = `  - ${label}: ${tf.value}`;
+        if (tf.field_key === 'next_step' && tf.next_step_date) {
+          line += ` (by ${tf.next_step_date})`;
+        }
+        parts.push(line);
+      }
+    }
+
     if (enrichment.meetings.length > 0) {
       parts.push('');
       parts.push(`Recent Meetings (${enrichment.meetings.length}):`);
@@ -245,6 +268,14 @@ interface EmailSignalRow {
   created_at: string;
 }
 
+interface TruthFieldRow {
+  field_key: string;
+  value: string | null;
+  confidence: number;
+  contact_id: string | null;
+  next_step_date: string | null;
+}
+
 interface EnrichmentData {
   meetings: MeetingRow[];
   activities: ActivityRow[];
@@ -252,6 +283,7 @@ interface EnrichmentData {
   overdueTasks?: OverdueTaskRow[];
   temperature?: TemperatureRow | null;
   emailSignals?: EmailSignalRow[];
+  truthFields?: TruthFieldRow[];
 }
 
 export interface DealSuggestion {
@@ -379,7 +411,7 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
 
         debugLog('enrichment:meeting-query', { contactId, companyId, filterCount: meetingFilters.length });
 
-        const [meetingsRes, activitiesRes, overdueRes, tempRes, signalsRes] = await Promise.all([
+        const [meetingsRes, activitiesRes, overdueRes, tempRes, signalsRes, truthRes] = await Promise.all([
           // Meetings — scoped by contact or company (NOT deal_id — column doesn't exist)
           meetingFilters.length > 0
             ? supabase
@@ -417,6 +449,12 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
             .eq('deal_id', deal.id)
             .order('created_at', { ascending: false })
             .limit(3),
+          // Deal truth fields (MEDDICC-style)
+          supabase
+            .from('deal_truth_fields')
+            .select('field_key, value, confidence, contact_id, next_step_date')
+            .eq('deal_id', deal.id)
+            .gte('confidence', 0.3),
         ]);
 
         if (cancelled) return;
@@ -499,6 +537,7 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
           overdueTasks: (overdueRes.data || []) as OverdueTaskRow[],
           temperature: tempRes.data as TemperatureRow | null,
           emailSignals: (signalsRes.data || []) as EmailSignalRow[],
+          truthFields: (truthRes.data || []) as TruthFieldRow[],
           meetingIntelligence,
         };
 
