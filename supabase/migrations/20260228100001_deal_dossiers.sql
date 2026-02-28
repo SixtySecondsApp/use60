@@ -25,7 +25,7 @@ CREATE POLICY "Users can read dossiers in their org"
   ON public.deal_dossiers FOR SELECT
   USING (
     org_id IN (
-      SELECT organization_id FROM public.organization_members
+      SELECT org_id FROM public.organization_memberships
       WHERE user_id = auth.uid()
     )
   );
@@ -35,7 +35,7 @@ CREATE POLICY "Users can insert dossiers in their org"
   ON public.deal_dossiers FOR INSERT
   WITH CHECK (
     org_id IN (
-      SELECT organization_id FROM public.organization_members
+      SELECT org_id FROM public.organization_memberships
       WHERE user_id = auth.uid()
     )
   );
@@ -45,7 +45,7 @@ CREATE POLICY "Users can update dossiers in their org"
   ON public.deal_dossiers FOR UPDATE
   USING (
     org_id IN (
-      SELECT organization_id FROM public.organization_members
+      SELECT org_id FROM public.organization_memberships
       WHERE user_id = auth.uid()
     )
   );
