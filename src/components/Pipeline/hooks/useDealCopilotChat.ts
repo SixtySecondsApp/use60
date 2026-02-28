@@ -173,6 +173,30 @@ function buildDealContextBlock(
       parts.push('');
       parts.push(`Meeting Intelligence: ${enrichment.meetingIntelligence}`);
     }
+
+    // Persistent dossier from previous copilot sessions
+    if (enrichment.dossier?.snapshot) {
+      const s = enrichment.dossier.snapshot;
+      parts.push('');
+      parts.push('[DEAL_HISTORY]');
+      if (s.narrative) parts.push(`Summary: ${s.narrative}`);
+      if (s.key_facts && s.key_facts.length > 0) {
+        parts.push(`Key facts: ${s.key_facts.join('; ')}`);
+      }
+      if (s.commitments && s.commitments.length > 0) {
+        parts.push(`Commitments: ${s.commitments.join('; ')}`);
+      }
+      if (s.objections && s.objections.length > 0) {
+        parts.push(`Objections raised: ${s.objections.join('; ')}`);
+      }
+      if (s.stakeholders && s.stakeholders.length > 0) {
+        parts.push('Stakeholders:');
+        for (const sh of s.stakeholders) {
+          parts.push(`  - ${sh.name} (${sh.role}, ${sh.sentiment})`);
+        }
+      }
+      parts.push('[/DEAL_HISTORY]');
+    }
   }
 
   parts.push('[/DEAL_CONTEXT]');
@@ -276,6 +300,20 @@ interface TruthFieldRow {
   next_step_date: string | null;
 }
 
+interface DossierSnapshot {
+  narrative?: string;
+  key_facts?: string[];
+  stakeholders?: { name: string; role: string; sentiment: string }[];
+  commitments?: string[];
+  objections?: string[];
+  timeline?: { date: string; event: string }[];
+}
+
+interface DossierRow {
+  snapshot: DossierSnapshot;
+  updated_at: string;
+}
+
 interface EnrichmentData {
   meetings: MeetingRow[];
   activities: ActivityRow[];
@@ -284,6 +322,7 @@ interface EnrichmentData {
   temperature?: TemperatureRow | null;
   emailSignals?: EmailSignalRow[];
   truthFields?: TruthFieldRow[];
+  dossier?: DossierRow | null;
 }
 
 export interface DealSuggestion {
@@ -411,7 +450,7 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
 
         debugLog('enrichment:meeting-query', { contactId, companyId, filterCount: meetingFilters.length });
 
-        const [meetingsRes, activitiesRes, overdueRes, tempRes, signalsRes, truthRes] = await Promise.all([
+        const [meetingsRes, activitiesRes, overdueRes, tempRes, signalsRes, truthRes, dossierRes] = await Promise.all([
           // Meetings — scoped by contact or company (NOT deal_id — column doesn't exist)
           meetingFilters.length > 0
             ? supabase
@@ -455,6 +494,12 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
             .select('field_key, value, confidence, contact_id, next_step_date')
             .eq('deal_id', deal.id)
             .gte('confidence', 0.3),
+          // Deal dossier (persistent AI-synthesized context)
+          supabase
+            .from('deal_dossiers')
+            .select('snapshot, updated_at')
+            .eq('deal_id', deal.id)
+            .maybeSingle(),
         ]);
 
         if (cancelled) return;
@@ -538,6 +583,7 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
           temperature: tempRes.data as TemperatureRow | null,
           emailSignals: (signalsRes.data || []) as EmailSignalRow[],
           truthFields: (truthRes.data || []) as TruthFieldRow[],
+          dossier: dossierRes.data as DossierRow | null,
           meetingIntelligence,
         };
 
@@ -653,6 +699,11 @@ export function useDealCopilotChat(deal: PipelineDeal | null): UseDealCopilotCha
           const dateSuffix = nextStep.next_step_date ? ` (by ${nextStep.next_step_date})` : '';
           greeting += `\n\nNext step: **${nextStep.value}**${dateSuffix}`;
         }
+      }
+
+      // Dossier context from previous sessions
+      if (enrichData?.dossier?.snapshot?.narrative) {
+        greeting += `\n\n*${enrichData.dossier.snapshot.narrative}*`;
       }
 
       // Proactive alerts from enrichment
