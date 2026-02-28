@@ -35,14 +35,12 @@ VISUAL STYLE GUIDE:
 - Typography: Google Fonts only, max 2 font families
 - SVGs: animated with CSS @keyframes (no SMIL), isometric perspective for 3D objects
 
-SVG ANIMATION RULES:
-- Use ONLY CSS @keyframes animations inside <style> blocks
-- Include xmlns="http://www.w3.org/2000/svg" and viewBox
-- Use brand colors from the palette
-- Smooth, subtle animations (2-4s duration, ease-in-out)
-- Support prefers-reduced-motion
-- Keep under 50KB per SVG
-- Create 2-3 SVGs: hero accent, section divider, decorative element
+SVG CONCEPT RULES:
+- Describe 2-3 SVG animations for the landing page
+- For each, specify: section name, visual concept, composition, style, animation behavior, colors
+- Do NOT write raw SVG code — a specialist SVG generator (Gemini 3.1 Pro) will create the final code from your direction
+- Be vivid and specific: describe shapes, gradients, motion paths, timing
+- Think isometric 3D, pastel tones, smooth transitions — reference the brand colors from your palette
 
 OUTPUT FORMAT:
 
@@ -62,11 +60,18 @@ Wrap every hex code in backticks:
 [Vivid description: subject, mood, lighting, composition — specific enough for AI generation]
 
 **4. SVG Animations**
-Output each SVG in a fenced code block with language "svg". They will render as live animations.
+For each animation, use this exact format:
+
+**SVG: [Section Name]**
+> **Concept:** [What the animation shows — shapes, objects, visual metaphor]
+> **Style:** [Isometric/flat/3D/geometric — specific artistic direction]
+> **Animation:** [What moves, timing, easing — be specific about motion]
+> **Colors:** [Which palette colors to use and where]
+> **Size:** [Approximate dimensions, e.g. "600x400, hero width" or "full-width, 60px tall divider"]
 
 **5. Icon Style**
 - Icon set: [Lucide / Phosphor / etc.]
 - [Section]: [icon-name]
 - [Section]: [icon-name]
 
-Deliver actual visual assets, not just descriptions.`;
+Deliver vivid, specific creative direction — specialist generators will produce the final SVG and image assets from your descriptions.`;

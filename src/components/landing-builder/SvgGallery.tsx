@@ -135,7 +135,7 @@ export const SvgGallery: React.FC<SvgGalleryProps> = ({
                     <span className="ml-2 text-sm text-gray-500">Regenerating...</span>
                   </div>
                 ) : (
-                  <SvgPreview svgContent={asset.svgCode} />
+                  <SvgPreview svg={asset.svgCode} />
                 )}
               </div>
 
