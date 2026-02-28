@@ -2426,13 +2426,16 @@ serve(async (req: Request) => {
             const forceToolChoice = (isLeadSearchQuery && iterations === 1 && hasSearchLeads)
               ? { type: 'tool' as const, name: 'search_leads' }
               : undefined;
+            // System seed prompts (e.g. landing page builder) inject their own instructions
+            // and must not call tools — strip tools so Claude responds with text only.
+            const iterationTools = isSystemSeedPrompt ? [] : claudeTools;
             const stream = anthropic.messages.stream({
               model: iterationModel,
               max_tokens: MAX_TOKENS,
               system: systemPrompt,
-              tools: claudeTools,
+              ...(iterationTools.length > 0 ? { tools: iterationTools } : {}),
               messages: claudeMessages,
-              ...(forceToolChoice && { tool_choice: forceToolChoice }),
+              ...(forceToolChoice && !isSystemSeedPrompt && { tool_choice: forceToolChoice }),
             });
 
             // Track content blocks as they stream
