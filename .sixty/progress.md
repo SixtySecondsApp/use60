@@ -1,6 +1,64 @@
-# Progress Log — Landing Builder v2
+# Progress Log — Landing Builder Progressive Assembly
 
-## Current Feature: landing-builder-v2 (13/13 stories) COMPLETE
+## Current Feature: landing-builder-progressive (16/16 stories) COMPLETE
+
+**PRD:** `docs/landing-page-builder/landing-page-builder-improvements.md`
+
+### Execution Phases
+
+```
+Phase A — Foundation (EDIT-001 → 002 → 003)
+  Schema migration → Types + workspace CRUD → Section renderer (16 templates)
+
+Phase B — Progressive Assembly Engine (EDIT-004 → 005 → 006)
+  Assembly orchestrator → Asset queue + retry → Progressive preview component
+
+Phase C — Chat Editing + Pipeline Wiring (EDIT-007 ∥ 004, then 008 → 012 → 013 → 014)
+  Section edit agent (clarify-first) → Preview-first layout → Phase restructure → Remove visuals → Builder agent JSON
+
+Phase D — Advanced Editor (EDIT-009 → 010 ∥ 011)
+  Editor toolbar → Section list (dnd-kit) ∥ Properties panel
+
+Phase E — Polish (EDIT-015 ∥ 016)
+  Export polish agent (AI pass + cache) ∥ Session recovery
+```
+
+**Critical path:** A → B → C → ship. Phases D and E can follow.
+
+**Key decisions (from consult):**
+1. Launch with 2 layout variants per section type (16 templates total), expand post-launch
+2. Assembly phase collapses to full-width preview with floating chat panel (no right panel)
+3. Section edit agent always clarifies ambiguous requests (creative director role)
+4. Asset failures auto-retry with simplified prompt, then fall back to placeholder
+5. Export triggers AI polish pass (Sonnet) for production-quality code, cached until sections change
+
+### 2026-03-01 — EDIT-001 through EDIT-016 (all 16 stories)
+**Feature**: Progressive Assembly Pipeline — Landing Page Builder
+**Stories completed**: 16/16
+**Time**: ~2 hours
+**Gates**: lint 0 errors | test: pass (no test files changed)
+
+**Phase A — Foundation**: Migration, types, workspace CRUD, section renderer (16 templates)
+**Phase B — Assembly Engine**: Orchestrator (strategy+copy→sections), asset queue (priority, retry, placeholder), AssemblyPreview
+**Phase C — Pipeline Wiring**: Section edit agent (clarify-first), 3-phase pipeline, floating chat panel, removed Visuals phase
+**Phase D — Advanced Editor**: EditorToolbar (device toggles, mode switch), SectionListPanel (dnd-kit), PropertiesPanel (copy/layout/style)
+**Phase E — Polish**: Export polish agent (cache, HTML download, clipboard), session recovery (detects workspace sections, restores assembly)
+
+**Key architectural decisions**:
+- parseWorkspaceToSections converts strategy+copy into LandingSection[] with brand config extraction
+- AssetGenerationQueue processes serially: hero image → above-fold SVGs → remaining images → remaining SVGs
+- sectionRenderer is pure (no side effects): 8 section types × 2 layout variants = 16 templates
+- Section edit agent returns JSON ops (not prose), applied by phaseComponent in LandingPageBuilder
+- Assembly mode: CopilotLayout replaced with full-width preview + 380px floating chat panel
+- Session recovery: workspace.sections persisted every 2s, generating statuses reset to idle on reload
+
+**Commits**:
+- b1f399ac: feat: landing page builder — progressive assembly pipeline (EDIT-001 through EDIT-013)
+- df1dd124: feat: landing builder — editor panels, export agent, session recovery (EDIT-009 through EDIT-016)
+
+---
+
+## Previous Feature: landing-builder-v2 (13/13 stories) COMPLETE
 
 ---
 
