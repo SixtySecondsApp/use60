@@ -1,0 +1,225 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <title>Living Network - Brand Constellation</title>
+  <defs>
+    <style>
+      /* --- Node breathing --- */
+      .bc-node { opacity: 0.5; }
+      .bc-n1 { animation: bc-breathe 3.5s ease-in-out infinite 0s; }
+      .bc-n2 { animation: bc-breathe 3.5s ease-in-out infinite 0.5s; }
+      .bc-n3 { animation: bc-breathe 3.5s ease-in-out infinite 1.0s; }
+      .bc-n4 { animation: bc-breathe 3.5s ease-in-out infinite 1.5s; }
+      .bc-n5 { animation: bc-breathe 3.5s ease-in-out infinite 2.0s; }
+      .bc-n6 { animation: bc-breathe 3.5s ease-in-out infinite 2.5s; }
+      .bc-n7 { animation: bc-breathe 3.5s ease-in-out infinite 3.0s; }
+
+      /* --- Organic curve connections --- */
+      .bc-curve {
+        fill: none;
+        stroke: rgba(255,255,255,0.06);
+        stroke-width: 0.8;
+      }
+
+      /* --- Highway paths (slightly brighter) --- */
+      .bc-highway {
+        fill: none;
+        stroke-width: 1.2;
+      }
+      .bc-hw1 { stroke: rgba(129,41,215,0.12); }
+      .bc-hw2 { stroke: rgba(42,94,219,0.12); }
+      .bc-hw3 { stroke: rgba(3,173,156,0.12); }
+      .bc-hw4 { stroke: rgba(168,85,247,0.10); }
+
+      /* --- Traveling light pulses along highways --- */
+      .bc-pulse {
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-dasharray: 10 300;
+      }
+      .bc-p1 { stroke: rgba(168,85,247,0.6); animation: bc-flow 7s linear infinite; }
+      .bc-p2 { stroke: rgba(96,165,250,0.5); animation: bc-flow 9s linear infinite 2s; }
+      .bc-p3 { stroke: rgba(45,212,191,0.5); animation: bc-flow 8s linear infinite 4s; }
+      .bc-p4 { stroke: rgba(168,85,247,0.5); animation: bc-flow 10s linear infinite 1s; }
+
+      /* --- Nebula effects --- */
+      .bc-nebula {
+        opacity: 0.5;
+        animation: bc-nebula-drift 12s ease-in-out infinite;
+      }
+      .bc-nebula2 { animation-delay: 4s; }
+      .bc-nebula3 { animation-delay: 8s; }
+
+      @keyframes bc-breathe {
+        0%, 100% { opacity: 0.35; }
+        50% { opacity: 0.85; }
+      }
+      @keyframes bc-flow {
+        from { stroke-dashoffset: 0; }
+        to { stroke-dashoffset: -310; }
+      }
+      @keyframes bc-nebula-drift {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 0.7; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .bc-n1, .bc-n2, .bc-n3, .bc-n4, .bc-n5, .bc-n6, .bc-n7,
+        .bc-p1, .bc-p2, .bc-p3, .bc-p4,
+        .bc-nebula, .bc-nebula2, .bc-nebula3 {
+          animation: none !important;
+        }
+        .bc-node { opacity: 0.6; }
+      }
+    </style>
+
+    <!-- Node glow filters -->
+    <filter id="bc-gv" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0.5  0 0 0 0 0.16  0 0 0 0 0.84  0 0 0 0.5 0"/>
+    </filter>
+    <filter id="bc-gb" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0.16  0 0 0 0 0.37  0 0 0 0 0.86  0 0 0 0.5 0"/>
+    </filter>
+    <filter id="bc-gt" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0.01  0 0 0 0 0.68  0 0 0 0 0.61  0 0 0 0.5 0"/>
+    </filter>
+
+    <!-- Nebula gradients -->
+    <radialGradient id="bc-neb1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#8129D7" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bc-neb2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2A5EDB" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#2A5EDB" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bc-neb3" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#03AD9C" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#03AD9C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Nebula depth effects -->
+  <circle class="bc-nebula" cx="200" cy="180" r="120" fill="url(#bc-neb1)"/>
+  <circle class="bc-nebula bc-nebula2" cx="520" cy="150" r="100" fill="url(#bc-neb2)"/>
+  <circle class="bc-nebula bc-nebula3" cx="650" cy="280" r="90" fill="url(#bc-neb3)"/>
+
+  <!-- Organic curved connections between nodes -->
+  <g>
+    <!-- Left cluster curves -->
+    <path class="bc-curve" d="M70,130 C100,150 130,165 155,178"/>
+    <path class="bc-curve" d="M155,178 C140,210 128,240 115,265"/>
+    <path class="bc-curve" d="M70,130 C110,120 150,108 185,98"/>
+    <path class="bc-curve" d="M115,265 C150,245 175,230 200,218"/>
+    <path class="bc-curve" d="M155,178 C170,195 185,208 200,218"/>
+    <path class="bc-curve" d="M70,130 C60,180 55,230 52,280"/>
+    <path class="bc-curve" d="M52,280 C75,275 95,270 115,265"/>
+
+    <!-- Center-left curves -->
+    <path class="bc-curve" d="M200,218 C230,195 255,178 285,162"/>
+    <path class="bc-curve" d="M185,98 C220,120 255,142 285,162"/>
+    <path class="bc-curve" d="M285,162 C295,200 305,240 318,278"/>
+    <path class="bc-curve" d="M200,218 C240,240 280,260 318,278"/>
+    <path class="bc-curve" d="M185,98 C230,90 280,84 325,78"/>
+    <path class="bc-curve" d="M285,162 C260,140 240,120 220,100"/>
+
+    <!-- Center curves -->
+    <path class="bc-curve" d="M325,78 C350,100 375,120 400,142"/>
+    <path class="bc-curve" d="M285,162 C320,152 360,145 400,142"/>
+    <path class="bc-curve" d="M400,142 C400,175 400,210 400,248"/>
+    <path class="bc-curve" d="M318,278 C345,268 370,258 400,248"/>
+    <path class="bc-curve" d="M400,142 C425,160 450,178 478,198"/>
+    <path class="bc-curve" d="M400,248 C425,240 450,230 478,198"/>
+
+    <!-- Center-right curves -->
+    <path class="bc-curve" d="M478,198 C500,170 518,145 540,118"/>
+    <path class="bc-curve" d="M478,198 C510,230 535,260 558,298"/>
+    <path class="bc-curve" d="M540,118 C570,135 595,150 622,162"/>
+    <path class="bc-curve" d="M400,248 C450,270 510,285 558,298"/>
+    <path class="bc-curve" d="M478,198 C500,220 520,240 540,260"/>
+
+    <!-- Right cluster curves -->
+    <path class="bc-curve" d="M622,162 C640,140 656,120 678,102"/>
+    <path class="bc-curve" d="M622,162 C650,190 675,215 700,238"/>
+    <path class="bc-curve" d="M558,298 C620,275 660,258 700,238"/>
+    <path class="bc-curve" d="M678,102 C695,135 708,158 718,180"/>
+    <path class="bc-curve" d="M700,238 C708,215 714,198 718,180"/>
+    <path class="bc-curve" d="M678,102 C700,120 720,145 740,170"/>
+    <path class="bc-curve" d="M700,238 C720,230 735,215 750,195"/>
+  </g>
+
+  <!-- Highway paths (main data arteries) -->
+  <path class="bc-highway bc-hw1" d="M70,130 C130,155 200,175 285,162 C350,150 380,142 400,142 C430,142 460,170 478,198"/>
+  <path class="bc-highway bc-hw2" d="M718,180 C700,238 620,280 558,298 C480,260 420,250 400,248 C370,260 330,275 318,278"/>
+  <path class="bc-highway bc-hw3" d="M185,98 C260,85 325,78 400,142 C440,165 478,198 540,118 C580,140 622,162"/>
+  <path class="bc-highway bc-hw4" d="M115,265 C180,240 250,230 318,278 C360,300 450,280 558,298 C630,260 700,238"/>
+
+  <!-- Traveling pulses along highways -->
+  <path class="bc-pulse bc-p1" d="M70,130 C130,155 200,175 285,162 C350,150 380,142 400,142 C430,142 460,170 478,198"/>
+  <path class="bc-pulse bc-p2" d="M718,180 C700,238 620,280 558,298 C480,260 420,250 400,248 C370,260 330,275 318,278"/>
+  <path class="bc-pulse bc-p3" d="M185,98 C260,85 325,78 400,142 C440,165 478,198 540,118 C580,140 622,162"/>
+  <path class="bc-pulse bc-p4" d="M115,265 C180,240 250,230 318,278 C360,300 450,280 558,298 C630,260 700,238"/>
+
+  <!-- Node glow layers -->
+  <circle filter="url(#bc-gv)" cx="70" cy="130" r="3" fill="#A855F7" opacity="0.3"/>
+  <circle filter="url(#bc-gb)" cx="155" cy="178" r="2.5" fill="#60A5FA" opacity="0.3"/>
+  <circle filter="url(#bc-gt)" cx="115" cy="265" r="2.5" fill="#2DD4BF" opacity="0.3"/>
+  <circle filter="url(#bc-gv)" cx="185" cy="98" r="2" fill="#A855F7" opacity="0.3"/>
+  <circle filter="url(#bc-gb)" cx="200" cy="218" r="2.5" fill="#60A5FA" opacity="0.3"/>
+  <circle filter="url(#bc-gt)" cx="285" cy="162" r="3" fill="#2DD4BF" opacity="0.3"/>
+  <circle filter="url(#bc-gv)" cx="318" cy="278" r="2.5" fill="#A855F7" opacity="0.3"/>
+  <circle filter="url(#bc-gb)" cx="325" cy="78" r="2" fill="#60A5FA" opacity="0.3"/>
+  <circle filter="url(#bc-gv)" cx="400" cy="142" r="3.5" fill="#A855F7" opacity="0.3"/>
+  <circle filter="url(#bc-gt)" cx="400" cy="248" r="2.5" fill="#2DD4BF" opacity="0.3"/>
+  <circle filter="url(#bc-gb)" cx="478" cy="198" r="3" fill="#60A5FA" opacity="0.3"/>
+  <circle filter="url(#bc-gv)" cx="540" cy="118" r="2.5" fill="#A855F7" opacity="0.3"/>
+  <circle filter="url(#bc-gt)" cx="558" cy="298" r="2.5" fill="#2DD4BF" opacity="0.3"/>
+  <circle filter="url(#bc-gb)" cx="622" cy="162" r="2.5" fill="#60A5FA" opacity="0.3"/>
+  <circle filter="url(#bc-gv)" cx="678" cy="102" r="3" fill="#A855F7" opacity="0.3"/>
+  <circle filter="url(#bc-gt)" cx="700" cy="238" r="2.5" fill="#2DD4BF" opacity="0.3"/>
+  <circle filter="url(#bc-gb)" cx="718" cy="180" r="2" fill="#60A5FA" opacity="0.3"/>
+
+  <!-- Nodes (visible dots) -->
+  <!-- Left cluster -->
+  <circle class="bc-node bc-n1" cx="70" cy="130" r="4.5" fill="#8129D7"/>
+  <circle class="bc-node bc-n3" cx="155" cy="178" r="3" fill="#2A5EDB"/>
+  <circle class="bc-node bc-n5" cx="115" cy="265" r="3.5" fill="#03AD9C"/>
+  <circle class="bc-node bc-n2" cx="185" cy="98" r="2.5" fill="#A855F7"/>
+  <circle class="bc-node bc-n6" cx="52" cy="280" r="2" fill="#8129D7"/>
+
+  <!-- Center-left cluster -->
+  <circle class="bc-node bc-n4" cx="200" cy="218" r="3" fill="#2A5EDB"/>
+  <circle class="bc-node bc-n6" cx="285" cy="162" r="4.5" fill="#03AD9C"/>
+  <circle class="bc-node bc-n1" cx="318" cy="278" r="3.5" fill="#8129D7"/>
+  <circle class="bc-node bc-n7" cx="325" cy="78" r="2.5" fill="#2A5EDB"/>
+  <circle class="bc-node bc-n3" cx="220" cy="100" r="2" fill="#03AD9C"/>
+
+  <!-- Center cluster -->
+  <circle class="bc-node bc-n2" cx="400" cy="142" r="6" fill="#8129D7"/>
+  <circle class="bc-node bc-n5" cx="400" cy="248" r="4" fill="#03AD9C"/>
+
+  <!-- Center-right cluster -->
+  <circle class="bc-node bc-n3" cx="478" cy="198" r="4.5" fill="#2A5EDB"/>
+  <circle class="bc-node bc-n6" cx="540" cy="118" r="3" fill="#A855F7"/>
+  <circle class="bc-node bc-n1" cx="558" cy="298" r="3.5" fill="#03AD9C"/>
+  <circle class="bc-node bc-n4" cx="540" cy="260" r="2" fill="#2A5EDB"/>
+
+  <!-- Right cluster -->
+  <circle class="bc-node bc-n4" cx="622" cy="162" r="3.5" fill="#2A5EDB"/>
+  <circle class="bc-node bc-n7" cx="678" cy="102" r="4.5" fill="#8129D7"/>
+  <circle class="bc-node bc-n2" cx="700" cy="238" r="3.5" fill="#03AD9C"/>
+  <circle class="bc-node bc-n5" cx="718" cy="180" r="2.5" fill="#2A5EDB"/>
+  <circle class="bc-node bc-n1" cx="740" cy="170" r="2" fill="#A855F7"/>
+  <circle class="bc-node bc-n3" cx="750" cy="195" r="2" fill="#03AD9C"/>
+
+  <!-- Extra scattered small nodes for density -->
+  <circle class="bc-node bc-n3" cx="45" cy="320" r="2" fill="#8129D7"/>
+  <circle class="bc-node bc-n6" cx="240" cy="340" r="2.5" fill="#03AD9C"/>
+  <circle class="bc-node bc-n1" cx="460" cy="58" r="2" fill="#2A5EDB"/>
+  <circle class="bc-node bc-n4" cx="750" cy="320" r="2" fill="#8129D7"/>
+  <circle class="bc-node bc-n7" cx="130" cy="50" r="2" fill="#2A5EDB"/>
+  <circle class="bc-node bc-n2" cx="600" cy="50" r="2.5" fill="#03AD9C"/>
+  <circle class="bc-node bc-n5" cx="350" cy="340" r="2" fill="#A855F7"/>
+</svg>

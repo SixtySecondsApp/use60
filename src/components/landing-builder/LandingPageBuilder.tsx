@@ -20,6 +20,7 @@ import { useLandingBuilderState } from './useLandingBuilderState';
 import { useOrgProfile } from '@/lib/hooks/useFactProfiles';
 import { useProductProfiles } from '@/lib/hooks/useProductProfiles';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
+import { useOrg } from '@/lib/contexts/OrgContext';
 import { useLandingBuilderWorkspace } from '@/lib/hooks/useLandingBuilderWorkspace';
 import { CopyPicker, parseCopySections } from './CopyPicker';
 import { HeroImageGenerator, parseVisualsForImage } from './HeroImageGenerator';
@@ -31,27 +32,67 @@ import { STRATEGIST_SYSTEM_PROMPT } from './agents/strategistAgent';
 import { COPYWRITER_SYSTEM_PROMPT } from './agents/copywriterAgent';
 import { VISUAL_ARTIST_SYSTEM_PROMPT } from './agents/visualArtistAgent';
 import { BUILDER_AGENT_SYSTEM_PROMPT } from './agents/builderAgent';
+import { toast } from 'sonner';
 import type { WorkspacePhaseKey } from '@/lib/services/landingBuilderWorkspaceService';
 import type { FactProfile } from '@/lib/types/factProfile';
 import type { ProductProfile } from '@/lib/types/productProfile';
 
+/** SVG type → complexity and default viewBox mapping */
+const SVG_TYPE_MAP: Record<string, { complexity: 'simple' | 'medium' | 'complex'; viewbox: string }> = {
+  'section-divider': { complexity: 'simple', viewbox: '0 0 1440 80' },
+  'animated-icon':   { complexity: 'simple', viewbox: '0 0 48 48' },
+  'hero-accent':     { complexity: 'medium', viewbox: '0 0 800 400' },
+  'isometric-scene': { complexity: 'complex', viewbox: '0 0 600 400' },
+  'narrative':       { complexity: 'complex', viewbox: '0 0 600 400' },
+};
+
+interface ParsedSvgConcept {
+  sectionName: string;
+  description: string;
+  type: string;
+  complexity: 'simple' | 'medium' | 'complex';
+  viewbox: string;
+}
+
 /**
  * Parse SVG concept blocks from Visual Artist output.
  * Looks for: **SVG: [Section Name]** followed by blockquoted fields.
+ * Extracts the Type field to map to complexity and viewbox.
  */
-function parseSvgConcepts(content: string): Array<{ sectionName: string; description: string }> {
+function parseSvgConcepts(content: string): ParsedSvgConcept[] {
   const regex = /\*\*SVG:\s*(.+?)\*\*\s*\n((?:>\s*.+\n?)+)/g;
-  const concepts: Array<{ sectionName: string; description: string }> = [];
+  const concepts: ParsedSvgConcept[] = [];
   let match: RegExpExecArray | null;
   while ((match = regex.exec(content)) !== null) {
     const sectionName = match[1].trim();
-    // Strip blockquote markers and join into a single description
-    const description = match[2]
+    const lines = match[2]
       .split('\n')
       .map(line => line.replace(/^>\s*/, '').trim())
-      .filter(Boolean)
-      .join('\n');
-    concepts.push({ sectionName, description });
+      .filter(Boolean);
+
+    // Extract Type field from blockquote lines
+    const typeLine = lines.find(l => /^\*\*Type:\*\*/i.test(l));
+    const rawType = typeLine
+      ? typeLine.replace(/^\*\*Type:\*\*\s*/i, '').trim().toLowerCase().split(/[\s|,]/)[0]
+      : '';
+    const typeConfig = SVG_TYPE_MAP[rawType] ?? SVG_TYPE_MAP['hero-accent'];
+
+    // Check if Size field specifies a custom viewBox
+    const sizeLine = lines.find(l => /^\*\*Size:\*\*/i.test(l));
+    let viewbox = typeConfig.viewbox;
+    if (sizeLine) {
+      const vbMatch = sizeLine.match(/(\d+\s+\d+\s+\d+\s+\d+)/);
+      if (vbMatch) viewbox = vbMatch[1];
+    }
+
+    const description = lines.join('\n');
+    concepts.push({
+      sectionName,
+      description,
+      type: rawType || 'hero-accent',
+      complexity: typeConfig.complexity,
+      viewbox,
+    });
   }
   return concepts;
 }
@@ -63,8 +104,9 @@ function parseSvgConcepts(content: string): Array<{ sectionName: string; descrip
 function buildBusinessContext(
   orgProfile: FactProfile | null | undefined,
   products: ProductProfile[] | undefined,
+  brandGuidelines?: Record<string, unknown> | null,
 ): string {
-  if (!orgProfile?.research_data && (!products || products.length === 0)) return '';
+  if (!orgProfile?.research_data && (!products || products.length === 0) && !brandGuidelines) return '';
 
   const parts: string[] = [];
   const rd = orgProfile?.research_data;
@@ -111,6 +153,28 @@ function buildBusinessContext(
     }
     if (prd?.differentiators?.key_differentiators?.length) {
       parts.push(`PRODUCT DIFFERENTIATORS: ${prd.differentiators.key_differentiators.join(', ')}`);
+    }
+  }
+
+  // Brand guidelines — from org settings or research
+  if (brandGuidelines && Object.keys(brandGuidelines).length > 0) {
+    const bg = brandGuidelines as Record<string, any>;
+    const brandParts: string[] = [];
+    if (bg.colors?.length) {
+      const colorList = bg.colors.map((c: { hex: string; role: string }) => `${c.role}: ${c.hex}`).join(', ');
+      brandParts.push(`Colors: ${colorList}`);
+    }
+    if (bg.heading_font) brandParts.push(`Heading Font: ${bg.heading_font}`);
+    if (bg.body_font) brandParts.push(`Body Font: ${bg.body_font}`);
+    if (bg.tone) brandParts.push(`Tone: ${bg.tone}`);
+    if (bg.typography?.length) {
+      const typo = bg.typography.map((t: { family: string; usage: string }) => `${t.usage}: ${t.family}`).join(', ');
+      brandParts.push(`Typography: ${typo}`);
+    }
+    if (bg.visual_style) brandParts.push(`Visual Style: ${bg.visual_style}`);
+    if (bg.logo_url) brandParts.push(`Logo: ${bg.logo_url}`);
+    if (brandParts.length > 0) {
+      parts.push(`\nBRAND GUIDELINES (use these exact colors, fonts, and tone — do not invent new ones):\n${brandParts.join('\n')}`);
     }
   }
 
@@ -195,6 +259,26 @@ function buildResearchContext(research: LandingResearchData | null): string {
   if (mc.pricing_signals?.length) parts.push(`PRICING BENCHMARKS: ${mc.pricing_signals.slice(0, 3).join('; ')}`);
   if (mc.market_trends?.length) parts.push(`MARKET TRENDS: ${mc.market_trends.slice(0, 3).join('; ')}`);
 
+  // Include brand guidelines from research
+  if (research.brand_guidelines) {
+    const bg = research.brand_guidelines;
+    const brandParts: string[] = [];
+    if (bg.colors?.length) {
+      const colorList = bg.colors.map(c => `${c.role}: ${c.hex}`).join(', ');
+      brandParts.push(`Colors: ${colorList}`);
+    }
+    if (bg.typography?.length) {
+      const typo = bg.typography.map(t => `${t.usage}: ${t.family}`).join(', ');
+      brandParts.push(`Typography: ${typo}`);
+    }
+    if (bg.tone) brandParts.push(`Tone: ${bg.tone}`);
+    if (bg.visual_style) brandParts.push(`Visual Style: ${bg.visual_style}`);
+    if (bg.logo_url) brandParts.push(`Logo: ${bg.logo_url}`);
+    if (brandParts.length > 0) {
+      parts.push(`BRAND GUIDELINES (extracted from website — use these exact colors and fonts):\n${brandParts.join('\n')}`);
+    }
+  }
+
   if (parts.length <= 1) return ''; // Only header, no data
   return parts.join('\n') + '\n';
 }
@@ -269,21 +353,28 @@ Describe the hero image in vivid detail (what it shows, the mood, the lighting, 
 **4. SVG Animations**
 Describe 2-3 SVG animation concepts. A specialist SVG generator (Gemini 3.1 Pro) will create the final code from your direction.
 
-For each animation, use this exact format:
+For each animation, use this EXACT format (every field is required):
 
 **SVG: [Section Name]**
-> **Concept:** [What the animation shows — shapes, objects, visual metaphor]
-> **Style:** [Isometric/flat/3D/geometric — specific artistic direction]
-> **Animation:** [What moves, timing, easing — be specific about motion]
-> **Colors:** [Which palette colors to use and where]
-> **Size:** [Approximate dimensions, e.g. "600x400, hero width" or "full-width, 60px tall divider"]
+> **Type:** section-divider | hero-accent | isometric-scene | animated-icon | narrative
+> **Concept:** [What the animation shows — shapes, layers, visual metaphor]
+> **Composition:** [Number of layers, depth planes, foreground vs background elements]
+> **Animation:**
+> 1. [Element] — [property] [from → to], [duration], [easing curve with cubic-bezier()]
+> 2. [Element] — [property] [from → to], [duration], [timing relationship to #1]
+> 3. [Loop/hover behavior] — [direction], [iteration count], [alternate or normal]
+> **Physics:** [Object type → motion character, e.g. "liquid: sine-wave morphing, 4s loops"]
+> **Colors:** [Exact hex values with gradient definitions, opacity per layer]
+> **Filters:** [Filter effect — with exact stdDeviation/radius values]
+> **Size:** [viewBox dimensions e.g. "0 0 1440 80", preserveAspectRatio if needed, KB budget]
+> **Accessibility:** [<title> text, prefers-reduced-motion fallback state]
 
-Do NOT write raw SVG code — describe the concepts vividly and the SVG generator will build them.
+Do NOT write raw SVG code — describe the concepts with technical precision and the SVG generator will build them.
 
 **5. Icon Style**
 Recommend an icon set (Lucide, Phosphor, etc.) and list the specific icon names for each section.
 
-Deliver vivid, specific creative direction — the SVG generator and image generator will produce the final assets from your descriptions.`,
+Deliver vivid, technically precise creative direction — the SVG generator and image generator will produce the final assets from your descriptions.`,
   },
   {
     name: 'Visuals & Animation',
@@ -308,17 +399,32 @@ Output the complete code in a single code block. No explanation needed.`,
   },
 ];
 
-export const LandingPageBuilder: React.FC = () => {
+interface LandingPageBuilderProps {
+  /** Resume at a specific phase (from session recovery) */
+  initialPhase?: number;
+  /** Resume a specific conversation (from session recovery) */
+  initialConversationId?: string;
+}
+
+export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
+  initialPhase,
+  initialConversationId,
+}) => {
   const { messages, isLoading, sendMessage, startNewChat, setConversationId, conversationId } = useCopilot();
   const { userId } = useAuth();
 
   // Load business context from org profile + products
   const activeOrgId = useActiveOrgId();
+  const { activeOrg } = useOrg();
   const { data: orgProfile } = useOrgProfile(activeOrgId ?? undefined);
   const { data: products } = useProductProfiles(activeOrgId ?? undefined);
+
+  // Brand guidelines from org settings (or research will supply them)
+  const orgBrandGuidelines = (activeOrg as any)?.brand_guidelines ?? null;
+
   const businessContext = useMemo(
-    () => buildBusinessContext(orgProfile, products),
-    [orgProfile, products],
+    () => buildBusinessContext(orgProfile, products, orgBrandGuidelines),
+    [orgProfile, products, orgBrandGuidelines],
   );
 
   // Auto-research — runs in parallel with Strategist, never blocks
@@ -342,7 +448,7 @@ export const LandingPageBuilder: React.FC = () => {
   });
 
   // Track current phase (0-based: 0=Strategy, 1=Copy, 2=Visuals, 3=Build)
-  const [currentPhase, setCurrentPhase] = useState(workspace?.current_phase ?? 0);
+  const [currentPhase, setCurrentPhase] = useState(initialPhase ?? workspace?.current_phase ?? 0);
   // Keep a ref of phase outputs for the right panel (also synced to workspace)
   const phaseOutputsRef = useRef<Record<number, string>>({});
   // Use a ref for messages to avoid stale closure in handleApprove
@@ -386,13 +492,18 @@ export const LandingPageBuilder: React.FC = () => {
     const colorMap: Record<string, string> = {};
     brandColors.forEach((hex, i) => { colorMap[`color${i + 1}`] = hex; });
 
+    // Save params for retry
+    lastSvgParamsRef.current = { concepts, colorMap };
+
     const params = concepts.map(c => ({
       description: `${c.sectionName}: ${c.description}`,
       brand_colors: Object.keys(colorMap).length > 0 ? colorMap : undefined,
-      complexity: 'medium' as const,
+      complexity: c.complexity,
+      viewbox: c.viewbox,
     }));
 
     geminiSvgService.generateBatch(params).then(results => {
+      const failedCount = results.filter(r => r === null).length;
       const assets: SvgAsset[] = results
         .map((result, i) => {
           if (!result) return null;
@@ -402,14 +513,69 @@ export const LandingPageBuilder: React.FC = () => {
             svgCode: result.svg_code,
             status: 'pending' as const,
             description: concepts[i].description,
+            complexity: concepts[i].complexity,
+            viewbox: concepts[i].viewbox,
           };
         })
         .filter((a): a is SvgAsset => a !== null);
+
+      if (failedCount === concepts.length) {
+        toast.error('SVG generation failed. Click "Retry All" to try again.');
+      } else if (failedCount > 0) {
+        toast.warning(`${failedCount} of ${concepts.length} SVGs failed. You can regenerate individually.`);
+      }
 
       setSvgAssets(assets);
       setIsGeneratingSvgs(false);
     });
   }, [currentPhase, isLoading, messages]);
+
+  // Store last SVG params for retry capability
+  const lastSvgParamsRef = useRef<{ concepts: ParsedSvgConcept[]; colorMap: Record<string, string> } | null>(null);
+
+  const retryAllSvgs = useCallback(() => {
+    const saved = lastSvgParamsRef.current;
+    if (!saved) return;
+
+    setIsGeneratingSvgs(true);
+    setSvgAssets([]);
+
+    const params = saved.concepts.map(c => ({
+      description: `${c.sectionName}: ${c.description}`,
+      brand_colors: Object.keys(saved.colorMap).length > 0 ? saved.colorMap : undefined,
+      complexity: c.complexity,
+      viewbox: c.viewbox,
+    }));
+
+    geminiSvgService.generateBatch(params).then(results => {
+      const failedCount = results.filter(r => r === null).length;
+      const assets: SvgAsset[] = results
+        .map((result, i) => {
+          if (!result) return null;
+          return {
+            id: `svg-retry-${i}-${Date.now()}`,
+            sectionName: saved.concepts[i].sectionName,
+            svgCode: result.svg_code,
+            status: 'pending' as const,
+            description: saved.concepts[i].description,
+            complexity: saved.concepts[i].complexity,
+            viewbox: saved.concepts[i].viewbox,
+          };
+        })
+        .filter((a): a is SvgAsset => a !== null);
+
+      if (failedCount === saved.concepts.length) {
+        toast.error('SVG generation failed again. Check your Gemini API key in Settings.');
+      } else if (failedCount > 0) {
+        toast.warning(`${failedCount} of ${saved.concepts.length} SVGs failed.`);
+      } else {
+        toast.success('All SVGs regenerated successfully.');
+      }
+
+      setSvgAssets(assets);
+      setIsGeneratingSvgs(false);
+    });
+  }, []);
 
   // Derive phase state for the right panel timeline
   const builderState = useLandingBuilderState(currentPhase, phaseOutputsRef.current, messages.length > 0);
@@ -467,7 +633,9 @@ export const LandingPageBuilder: React.FC = () => {
 
   const handleNewProject = useCallback(() => {
     startNewChat();
-    setConversationId(uuidv4());
+    const newId = uuidv4();
+    setConversationId(newId);
+    try { localStorage.setItem('sixty_landing_builder_cid', newId); } catch { /* quota */ }
     setCurrentPhase(0);
     phaseOutputsRef.current = {};
     setGeneratedImageUrl(null);
@@ -497,8 +665,19 @@ export const LandingPageBuilder: React.FC = () => {
     const agentLabel = agentRole ? `ACTIVE AGENT: ${agentRole}\n` : '';
     const agentPrompt = agentSystemPrompts[currentPhase] || '';
     const phaseContext = `CURRENT PHASE: ${PHASE_PROMPTS[currentPhase]?.name || 'Unknown'} (phase ${currentPhase + 1} of 4)\n${agentLabel}\n`;
-    return BUILDER_CONTINUATION + agentPrompt + '\n\n' + businessContext + researchContext + workspaceContext + phaseContext + msg;
-  }, [currentPhase, businessContext, researchContext, workspace, agentSystemPrompts]);
+
+    // Inject recent conversation history so the agent sees its own questions and user answers.
+    // The edge function receives each message in isolation — without this, Claude re-asks the same questions.
+    const recentHistory = messages
+      .slice(-8) // last 8 messages (4 turns)
+      .map(m => `[${m.role === 'user' ? 'USER' : 'ASSISTANT'}]: ${m.content.slice(0, 2000)}`)
+      .join('\n\n');
+    const historyBlock = recentHistory
+      ? `\n[CONVERSATION HISTORY — DO NOT repeat questions already answered below]\n${recentHistory}\n[END CONVERSATION HISTORY]\n\n`
+      : '';
+
+    return BUILDER_CONTINUATION + agentPrompt + '\n\n' + businessContext + researchContext + workspaceContext + phaseContext + historyBlock + msg;
+  }, [currentPhase, businessContext, researchContext, workspace, agentSystemPrompts, messages]);
 
   // Handle approval — capture output, write to workspace, advance phase
   const handleApprove = useCallback(async (overrideContent?: string) => {
@@ -598,11 +777,13 @@ export const LandingPageBuilder: React.FC = () => {
                 Generating SVG animations with Gemini...
               </div>
             )}
-            {svgAssets.length > 0 && (
+            {(svgAssets.length > 0 || (!isGeneratingSvgs && lastSvgParamsRef.current)) && (
               <SvgGallery
                 assets={svgAssets}
                 brandColors={colorMap}
                 onAssetsChange={setSvgAssets}
+                onRetryAll={retryAllSvgs}
+                isGenerating={isGeneratingSvgs}
               />
             )}
           </div>
@@ -640,6 +821,15 @@ export const LandingPageBuilder: React.FC = () => {
       variant: 'secondary',
     });
 
+    // Edit previous phase button
+    if (currentPhase > 0) {
+      actions.push({
+        label: `Edit ${PHASE_PROMPTS[currentPhase - 1]?.name || 'previous phase'}`,
+        prompt: '__EDIT_PREV__',
+        variant: 'ghost',
+      });
+    }
+
     actions.push({
       label: 'Start over',
       prompt: 'Let\'s start over from the beginning with a different approach.',
@@ -661,14 +851,25 @@ export const LandingPageBuilder: React.FC = () => {
     );
   }, [currentPhase]);
 
+  // Navigate back to a completed phase for editing
+  const handleEditPhase = useCallback((phaseNum: number) => {
+    if (phaseNum >= currentPhase) return;
+    setCurrentPhase(phaseNum);
+    toast.info(`Editing ${PHASE_PROMPTS[phaseNum]?.name || 'phase'}. Approve to continue — later phases will be regenerated.`);
+  }, [currentPhase]);
+
   // Intercept phase action clicks
   const handlePhaseAction = useCallback((prompt: string): boolean => {
     if (prompt === '__APPROVE__') {
       handleApprove();
       return true;
     }
+    if (prompt === '__EDIT_PREV__') {
+      handleEditPhase(currentPhase - 1);
+      return true;
+    }
     return false;
-  }, [handleApprove]);
+  }, [handleApprove, handleEditPhase, currentPhase]);
 
   return (
     <CopilotLayout
@@ -684,6 +885,7 @@ export const LandingPageBuilder: React.FC = () => {
           heroImageUrl={generatedImageUrl}
           research={effectiveResearch}
           isResearching={isResearching}
+          onPhaseClick={(phaseId) => handleEditPhase(phaseId - 1)}
         />
       }
     >

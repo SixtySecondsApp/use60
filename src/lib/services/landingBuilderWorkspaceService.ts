@@ -167,6 +167,28 @@ export const landingBuilderWorkspaceService = {
   },
 
   /**
+   * Get the most recent workspace with actual progress for a user.
+   * Used for session recovery — returns null if nothing resumable.
+   */
+  async getLatestByUser(userId: string): Promise<LandingBuilderWorkspace | null> {
+    const { data, error } = await supabase
+      .from('landing_builder_sessions')
+      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, current_phase, phase_status, created_at, updated_at')
+      .eq('user_id', userId)
+      .gt('current_phase', 0)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      logger.error('[workspace] Failed to get latest session:', error);
+      return null;
+    }
+
+    return data as LandingBuilderWorkspace | null;
+  },
+
+  /**
    * Delete a workspace session.
    */
   async remove(conversationId: string): Promise<void> {

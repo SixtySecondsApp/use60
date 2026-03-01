@@ -18,6 +18,8 @@ export interface SvgAsset {
   svgCode: string;
   status: 'pending' | 'approved' | 'rejected' | 'regenerating';
   description: string;
+  complexity?: 'simple' | 'medium' | 'complex';
+  viewbox?: string;
 }
 
 interface SvgGalleryProps {
@@ -25,6 +27,10 @@ interface SvgGalleryProps {
   brandColors?: Record<string, string>;
   onAssetsChange: (assets: SvgAsset[]) => void;
   onAllApproved?: (approvedAssets: SvgAsset[]) => void;
+  /** Called when user clicks "Retry All" after total failure */
+  onRetryAll?: () => void;
+  /** True if SVGs are currently being generated */
+  isGenerating?: boolean;
 }
 
 export const SvgGallery: React.FC<SvgGalleryProps> = ({
@@ -32,6 +38,8 @@ export const SvgGallery: React.FC<SvgGalleryProps> = ({
   brandColors,
   onAssetsChange,
   onAllApproved,
+  onRetryAll,
+  isGenerating,
 }) => {
   const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
 
@@ -64,7 +72,8 @@ export const SvgGallery: React.FC<SvgGalleryProps> = ({
     const params: GenerateSvgParams = {
       description: asset.description,
       brand_colors: brandColors,
-      complexity: 'medium',
+      complexity: asset.complexity ?? 'medium',
+      viewbox: asset.viewbox,
     };
 
     const result = await geminiSvgService.generate(params);
@@ -86,6 +95,8 @@ export const SvgGallery: React.FC<SvgGalleryProps> = ({
   const approvedCount = assets.filter(a => a.status === 'approved').length;
   const totalCount = assets.length;
 
+  const hasRejected = assets.some(a => a.status === 'rejected');
+
   return (
     <div className="space-y-4">
       {/* Progress header */}
@@ -93,10 +104,38 @@ export const SvgGallery: React.FC<SvgGalleryProps> = ({
         <h3 className="text-sm font-medium text-gray-900 dark:text-white">
           SVG Animations
         </h3>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          {approvedCount}/{totalCount} approved
-        </span>
+        <div className="flex items-center gap-2">
+          {(hasRejected || (totalCount === 0 && !isGenerating)) && onRetryAll && (
+            <button
+              type="button"
+              onClick={onRetryAll}
+              disabled={isGenerating}
+              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg bg-violet-500/10 text-violet-500 hover:bg-violet-500/20 transition-colors disabled:opacity-40"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Retry All
+            </button>
+          )}
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {approvedCount}/{totalCount} approved
+          </span>
+        </div>
       </div>
+
+      {/* Empty failure state */}
+      {totalCount === 0 && !isGenerating && onRetryAll && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-6 text-center">
+          <p className="text-sm text-gray-400 mb-3">All SVG generations failed.</p>
+          <button
+            type="button"
+            onClick={onRetryAll}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-violet-500 text-white hover:bg-violet-600 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Retry All SVGs
+          </button>
+        </div>
+      )}
 
       {/* SVG grid */}
       <div className="grid grid-cols-1 gap-4">

@@ -3,8 +3,8 @@
  * Phase timeline, current deliverable preview, and session info
  */
 
-import React, { useState } from 'react';
-import { ChevronDown, Layers, FileOutput, Clock, Plus, Eye, Search, CheckCircle2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ChevronDown, Layers, FileOutput, Clock, Plus, Eye, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BuilderPhase, PhaseDeliverable, LandingResearchData } from './types';
 import { PhaseTimeline } from './PhaseTimeline';
@@ -27,6 +27,8 @@ interface LandingBuilderRightPanelProps {
   research?: LandingResearchData | null;
   /** Whether auto-research is currently running */
   isResearching?: boolean;
+  /** Called when user clicks a completed phase to go back and edit */
+  onPhaseClick?: (phaseId: number) => void;
 }
 
 interface CollapsibleSectionProps {
@@ -76,6 +78,7 @@ export const LandingBuilderRightPanel: React.FC<LandingBuilderRightPanelProps> =
   heroImageUrl,
   research,
   isResearching,
+  onPhaseClick,
 }) => {
   const completedPhases = phases.filter((p) => p.status === 'complete').length;
   const latestDeliverableKey = Object.keys(deliverables)
@@ -109,14 +112,51 @@ export const LandingBuilderRightPanel: React.FC<LandingBuilderRightPanelProps> =
             <span className="text-[11px] text-blue-500 dark:text-blue-400">Researching your market...</span>
           </div>
         )}
-        {research?.status === 'complete' && !isResearching && (
-          <div className="mt-2 flex items-center gap-2">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
-              Market research ready{research.competitors.length > 0 ? ` (${research.competitors.length} competitors found)` : ''}
-            </span>
-          </div>
-        )}
+        {research?.status === 'complete' && !isResearching && (() => {
+          const ds = research.data_sources;
+          if (ds) {
+            const total = Object.keys(ds).length;
+            const succeeded = Object.values(ds).filter(Boolean).length;
+            const isPartial = succeeded < total;
+            const failedSources = Object.entries(ds)
+              .filter(([, v]) => !v)
+              .map(([k]) => k.replace('_', ' '));
+
+            return (
+              <div className="mt-2 flex items-center gap-2 group relative">
+                {isPartial ? (
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                )}
+                <span className={cn(
+                  'text-[11px]',
+                  isPartial ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+                )}>
+                  {isPartial
+                    ? `Partial research (${succeeded}/${total} sources)`
+                    : `Full research complete${research.competitors.length > 0 ? ` (${research.competitors.length} competitors)` : ''}`
+                  }
+                </span>
+                {isPartial && failedSources.length > 0 && (
+                  <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 bg-gray-900 text-gray-300 text-[10px] rounded-lg px-3 py-2 shadow-lg border border-gray-700 whitespace-nowrap">
+                    <p className="font-medium text-gray-400 mb-1">Timed out:</p>
+                    {failedSources.map(s => <p key={s}>{s}</p>)}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <div className="mt-2 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                Market research ready{research.competitors.length > 0 ? ` (${research.competitors.length} competitors found)` : ''}
+              </span>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Scrollable sections */}
@@ -131,6 +171,7 @@ export const LandingBuilderRightPanel: React.FC<LandingBuilderRightPanelProps> =
           <PhaseTimeline
             phases={phases}
             currentPhase={currentPhase}
+            onPhaseClick={onPhaseClick}
           />
         </CollapsibleSection>
 

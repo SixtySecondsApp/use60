@@ -2428,11 +2428,15 @@ serve(async (req: Request) => {
               : undefined;
             // System seed prompts (e.g. landing page builder) inject their own instructions
             // and must not call tools — strip tools so Claude responds with text only.
+            // Also swap to a minimal system prompt so CRM/lead/pipeline content doesn't bleed in.
             const iterationTools = isSystemSeedPrompt ? [] : claudeTools;
+            const iterationSystemPrompt = isSystemSeedPrompt
+              ? `You are a landing page specialist. Follow the [INSTRUCTIONS] provided in the user message exactly. Today is ${new Date().toISOString().split('T')[0]}. Respond in markdown.`
+              : systemPrompt;
             const stream = anthropic.messages.stream({
               model: iterationModel,
               max_tokens: MAX_TOKENS,
-              system: systemPrompt,
+              system: iterationSystemPrompt,
               ...(iterationTools.length > 0 ? { tools: iterationTools } : {}),
               messages: claudeMessages,
               ...(forceToolChoice && !isSystemSeedPrompt && { tool_choice: forceToolChoice }),

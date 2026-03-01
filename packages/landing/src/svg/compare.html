@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SVG Comparison — Old vs New Direction</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #09090b;
+      color: #f3f4f6;
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+    header {
+      text-align: center;
+      padding: 40px 20px 20px;
+    }
+    header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a855f7, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    header p {
+      color: #9ca3af;
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+    .card {
+      border: 1px solid #27272a;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #18181b;
+    }
+    .card-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid #27272a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .card-header p {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+    .badge-old {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .badge-new {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    .svg-container {
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 500px;
+      background: #09090b;
+    }
+    .svg-container svg {
+      width: 100%;
+      height: auto;
+      max-height: 500px;
+    }
+    .card-footer {
+      padding: 12px 24px;
+      border-top: 1px solid #27272a;
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .stat-label { color: #6b7280; }
+    .stat-value { color: #d1d5db; font-weight: 500; }
+
+    /* Simulated hero text overlay for the new version */
+    .hero-preview {
+      position: relative;
+    }
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px;
+      pointer-events: none;
+    }
+    .hero-overlay .eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #a855f7;
+      margin-bottom: 12px;
+    }
+    .hero-overlay h3 {
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 12px;
+      color: #f3f4f6;
+    }
+    .hero-overlay .sub {
+      font-size: 14px;
+      color: #9ca3af;
+      max-width: 360px;
+    }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Hero Background — Old Concept vs New Direction</h1>
+    <p>Left: literal "orbital command center" illustration. Right: subtle ambient gradient mesh (professional, complementary).</p>
+  </header>
+
+  <div class="grid">
+    <!-- Old Version -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h2>Generic Command Center</h2>
+          <p>Good illustration, but generic features</p>
+        </div>
+        <span class="badge badge-old">Generic</span>
+      </div>
+      <div class="svg-container" id="old-svg"></div>
+      <div class="card-footer">
+        <div class="stat">
+          <span class="stat-label">File:</span>
+          <span class="stat-value">hero-command.gemini.svg</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Size:</span>
+          <span class="stat-value" id="old-size">-</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Version -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h2>60 Product Features</h2>
+          <p>Follow-ups, Meeting Prep, Pipeline, Contacts, AI</p>
+        </div>
+        <span class="badge badge-new">After</span>
+      </div>
+      <div class="svg-container" id="new-svg"></div>
+      <div class="card-footer">
+        <div class="stat">
+          <span class="stat-label">File:</span>
+          <span class="stat-value">hero-60.gemini.svg</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Size:</span>
+          <span class="stat-value" id="new-size">-</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function loadSvg(file, containerId, sizeId) {
+      try {
+        const res = await fetch(file);
+        const text = await res.text();
+        document.getElementById(containerId).innerHTML = text;
+        const sizeKB = (new Blob([text]).size / 1024).toFixed(1);
+        document.getElementById(sizeId).textContent = sizeKB + ' KB';
+      } catch (e) {
+        document.getElementById(containerId).innerHTML =
+          '<p style="color:#ef4444">Failed to load ' + file + '</p>';
+      }
+    }
+    loadSvg('hero-command.gemini.svg', 'old-svg', 'old-size');
+    loadSvg('hero-60.gemini.svg', 'new-svg', 'new-size');
+  </script>
+</body>
+</html>

@@ -1,0 +1,339 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" aria-labelledby="hero-60-title">
+  <title id="hero-60-title">60 - AI Sales Command Center</title>
+  
+  <defs>
+    <style>
+      .hero-60-float-center { animation: hero-60-float 6s ease-in-out infinite; }
+      .hero-60-float-1 { animation: hero-60-float 4.5s ease-in-out infinite 0.5s; }
+      .hero-60-float-2 { animation: hero-60-float 5s ease-in-out infinite 1.2s; }
+      .hero-60-float-3 { animation: hero-60-float 4.2s ease-in-out infinite 2s; }
+      .hero-60-float-4 { animation: hero-60-float 5.5s ease-in-out infinite 0.8s; }
+      .hero-60-float-5 { animation: hero-60-float 4.8s ease-in-out infinite 1.5s; }
+      
+      @keyframes hero-60-float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-8px); }
+      }
+
+      .hero-60-glow-breathe {
+        animation: hero-60-breathe 4s ease-in-out infinite;
+        transform-origin: center;
+      }
+      
+      @keyframes hero-60-breathe {
+        0%, 100% { opacity: 0.4; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.05); }
+      }
+
+      .hero-60-pulse {
+        animation: hero-60-pulse-anim 3s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        transform-origin: 40px 40px;
+      }
+      
+      @keyframes hero-60-pulse-anim {
+        0% { transform: scale(1); opacity: 1; stroke-width: 2px; }
+        100% { transform: scale(3); opacity: 0; stroke-width: 0.5px; }
+      }
+
+      .hero-60-line {
+        stroke: #27272a;
+        stroke-width: 2;
+        stroke-dasharray: 4 4;
+        fill: none;
+      }
+
+      .hero-60-energy {
+        stroke: #60A5FA;
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-dasharray: 12 300;
+        fill: none;
+        animation: hero-60-flow 3s linear infinite;
+      }
+
+      .hero-60-energy-alt {
+        stroke: #A855F7;
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-dasharray: 12 300;
+        fill: none;
+        animation: hero-60-flow 3s linear infinite;
+      }
+
+      @keyframes hero-60-flow {
+        0% { stroke-dashoffset: 300; opacity: 0; }
+        15% { opacity: 1; }
+        85% { opacity: 1; }
+        100% { stroke-dashoffset: 0; opacity: 0; }
+      }
+
+      .hero-60-text-primary { fill: #FFFFFF; font-family: system-ui, -apple-system, sans-serif; }
+      .hero-60-text-secondary { fill: #9CA3AF; font-family: system-ui, -apple-system, sans-serif; }
+
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; }
+      }
+    </style>
+
+    <filter id="hero-60-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="8" flood-color="#000" flood-opacity="0.7"/>
+    </filter>
+
+    <radialGradient id="hero-60-glow-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#8129D7" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="hero-60-chart-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#A855F7" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="hero-60-header-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#8129D7"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+
+    <pattern id="hero-60-grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#27272a" stroke-width="1"/>
+    </pattern>
+
+    <radialGradient id="hero-60-grid-mask-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="20%" stop-color="#FFF" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#FFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <mask id="hero-60-grid-mask">
+      <rect width="800" height="600" fill="url(#hero-60-grid-mask-grad)"/>
+    </mask>
+
+    <clipPath id="hero-60-dash-clip">
+      <rect width="240" height="200" rx="8"/>
+    </clipPath>
+    <clipPath id="hero-60-meet-clip">
+      <rect width="130" height="120" rx="6"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="#09090b"/>
+
+  <!-- Isometric Grid Floor -->
+  <g mask="url(#hero-60-grid-mask)">
+    <g transform="translate(400, 300) matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+      <rect x="-600" y="-600" width="1200" height="1200" fill="url(#hero-60-grid-pattern)"/>
+    </g>
+  </g>
+
+  <!-- Central Breathing Glow -->
+  <ellipse cx="417" cy="270" rx="200" ry="120" fill="url(#hero-60-glow-grad)" class="hero-60-glow-breathe"/>
+
+  <!-- Connection Lines (Screen Space) -->
+  <g>
+    <!-- Path D: Contact (Upper-Left) to Center -->
+    <path d="M 253 122.5 L 417 270" class="hero-60-line"/>
+    <path d="M 253 122.5 L 417 270" class="hero-60-energy" style="animation-delay: 0s;"/>
+    
+    <!-- Path A: Email (Upper-Right) to Center -->
+    <path d="M 613 122.5 L 417 270" class="hero-60-line"/>
+    <path d="M 613 122.5 L 417 270" class="hero-60-energy-alt" style="animation-delay: 1.5s;"/>
+    
+    <!-- Path B: Meeting (Left) to Center -->
+    <path d="M 224 302.5 L 417 270" class="hero-60-line"/>
+    <path d="M 224 302.5 L 417 270" class="hero-60-energy" style="animation-delay: 0.8s;"/>
+    
+    <!-- Path C: Kanban (Lower-Right) to Center -->
+    <path d="M 593 387.5 L 417 270" class="hero-60-line"/>
+    <path d="M 593 387.5 L 417 270" class="hero-60-energy-alt" style="animation-delay: 2.2s;"/>
+    
+    <!-- Path E: AI Chip (Bottom-Center) to Center -->
+    <path d="M 434 470 L 417 270" class="hero-60-line"/>
+    <path d="M 434 470 L 417 270" class="hero-60-energy" style="animation-delay: 0.4s;"/>
+    <path d="M 434 470 L 417 270" class="hero-60-energy-alt" style="animation-delay: 1.9s;"/>
+  </g>
+
+  <!-- ================= FLOATING CARDS ================= -->
+
+  <!-- Card D: Contact List (Upper-Left) -->
+  <g transform="translate(240, 60)">
+    <g class="hero-60-float-4">
+      <!-- Extrusion -->
+      <g transform="translate(0, 4) matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="140" height="110" rx="6" fill="#27272a" filter="url(#hero-60-shadow)"/>
+      </g>
+      <!-- Surface -->
+      <g transform="matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="140" height="110" rx="6" fill="#18181b" stroke="#3f3f46"/>
+        <rect x="12" y="12" width="50" height="6" rx="3" fill="#3f3f46"/>
+        <!-- Row 1 -->
+        <circle cx="24" cy="34" r="8" fill="#3f3f46"/>
+        <rect x="40" y="29" width="60" height="4" rx="2" fill="#9CA3AF"/>
+        <rect x="40" y="37" width="35" height="4" rx="2" fill="#3f3f46"/>
+        <!-- Row 2 (Highlighted) -->
+        <rect x="6" y="48" width="128" height="28" rx="4" fill="#2A5EDB" opacity="0.2"/>
+        <circle cx="24" cy="62" r="8" fill="#60A5FA"/>
+        <rect x="40" y="57" width="70" height="4" rx="2" fill="#FFFFFF"/>
+        <rect x="40" y="65" width="45" height="4" rx="2" fill="#60A5FA"/>
+        <!-- Row 3 -->
+        <circle cx="24" cy="90" r="8" fill="#3f3f46"/>
+        <rect x="40" y="85" width="55" height="4" rx="2" fill="#9CA3AF"/>
+        <rect x="40" y="93" width="40" height="4" rx="2" fill="#3f3f46"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Card A: Email Follow-up (Upper-Right) -->
+  <g transform="translate(600, 60)">
+    <g class="hero-60-float-1">
+      <g transform="translate(0, 4) matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="140" height="110" rx="6" fill="#27272a" filter="url(#hero-60-shadow)"/>
+      </g>
+      <g transform="matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="140" height="110" rx="6" fill="#18181b" stroke="#3f3f46"/>
+        <!-- 'To:' Line -->
+        <rect x="12" y="16" width="116" height="16" rx="4" fill="#27272a"/>
+        <text x="20" y="27" font-size="9" class="hero-60-text-secondary">To:</text>
+        <rect x="38" y="22" width="60" height="4" rx="2" fill="#FFFFFF"/>
+        <!-- Body -->
+        <rect x="12" y="44" width="116" height="5" rx="2.5" fill="#3f3f46"/>
+        <rect x="12" y="56" width="96" height="5" rx="2.5" fill="#3f3f46"/>
+        <rect x="12" y="68" width="106" height="5" rx="2.5" fill="#3f3f46"/>
+        <!-- Button -->
+        <rect x="12" y="84" width="50" height="16" rx="4" fill="#8129D7"/>
+        <text x="37" y="95" font-size="9" font-weight="bold" text-anchor="middle" class="hero-60-text-primary">Send</text>
+        <!-- Badge -->
+        <circle cx="140" cy="0" r="10" fill="#10B981"/>
+        <path d="M 136 0 L 139 3 L 144 -3" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- CENTRAL DASHBOARD -->
+  <g transform="translate(400, 160)">
+    <g class="hero-60-float-center">
+      <!-- Extrusion -->
+      <g transform="translate(0, 6) matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="240" height="200" rx="8" fill="#27272a" filter="url(#hero-60-shadow)"/>
+      </g>
+      <!-- Surface -->
+      <g transform="matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <g clip-path="url(#hero-60-dash-clip)">
+          <rect width="240" height="200" fill="#18181b"/>
+          <!-- Header -->
+          <rect width="240" height="44" fill="url(#hero-60-header-grad)"/>
+          <text x="120" y="30" font-size="20" font-weight="800" letter-spacing="1" text-anchor="middle" class="hero-60-text-primary">60</text>
+          
+          <!-- Mini Stat Cards -->
+          <!-- Card 1: Bar Chart -->
+          <rect x="16" y="56" width="60" height="40" rx="4" fill="#27272a"/>
+          <rect x="24" y="78" width="8" height="10" rx="1" fill="#A855F7"/>
+          <rect x="38" y="68" width="8" height="20" rx="1" fill="#A855F7"/>
+          <rect x="52" y="74" width="8" height="14" rx="1" fill="#A855F7"/>
+          
+          <!-- Card 2: Percentage -->
+          <rect x="90" y="56" width="60" height="40" rx="4" fill="#27272a"/>
+          <path d="M 106 78 L 106 72 M 106 72 L 102 76 M 106 72 L 110 76" stroke="#10B981" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="116" y="80" font-size="12" font-weight="bold" fill="#10B981" class="hero-60-text-primary">14%</text>
+
+          <!-- Card 3: Time -->
+          <rect x="164" y="56" width="60" height="40" rx="4" fill="#27272a"/>
+          <circle cx="180" cy="76" r="7" stroke="#60A5FA" stroke-width="2" fill="none"/>
+          <path d="M 180 72 L 180 76 L 183 76" stroke="#60A5FA" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="194" y="80" font-size="12" font-weight="bold" class="hero-60-text-primary">2h</text>
+
+          <!-- Line Chart Area -->
+          <rect x="16" y="112" width="208" height="72" rx="4" fill="#27272a"/>
+          <path d="M 16 184 L 16 160 L 40 165 L 70 140 L 100 150 L 140 120 L 180 135 L 224 115 L 224 184 Z" fill="url(#hero-60-chart-grad)"/>
+          <path d="M 16 160 L 40 165 L 70 140 L 100 150 L 140 120 L 180 135 L 224 115" stroke="#A855F7" stroke-width="2" fill="none" stroke-linejoin="round"/>
+          <circle cx="224" cy="115" r="3" fill="#FFFFFF" stroke="#A855F7" stroke-width="2"/>
+        </g>
+        <!-- Border drawn after clip to ensure it's fully visible -->
+        <rect width="240" height="200" rx="8" fill="none" stroke="#3f3f46" stroke-width="2"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Card B: Meeting Prep (Left) -->
+  <g transform="translate(220, 240)">
+    <g class="hero-60-float-2">
+      <g transform="translate(0, 4) matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="130" height="120" rx="6" fill="#27272a" filter="url(#hero-60-shadow)"/>
+      </g>
+      <g transform="matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <g clip-path="url(#hero-60-meet-clip)">
+          <rect width="130" height="120" fill="#18181b"/>
+          <rect width="130" height="24" fill="#2A5EDB"/>
+          <circle cx="24" cy="46" r="10" fill="#8129D7"/>
+          <rect x="42" y="40" width="50" height="4" rx="2" fill="#FFFFFF"/>
+          <rect x="42" y="48" width="30" height="4" rx="2" fill="#9CA3AF"/>
+          
+          <circle cx="20" cy="70" r="2.5" fill="#60A5FA"/>
+          <rect x="30" y="68" width="80" height="4" rx="2" fill="#3f3f46"/>
+          
+          <circle cx="20" cy="84" r="2.5" fill="#60A5FA"/>
+          <rect x="30" y="82" width="60" height="4" rx="2" fill="#3f3f46"/>
+          
+          <circle cx="20" cy="98" r="2.5" fill="#60A5FA"/>
+          <rect x="30" y="96" width="70" height="4" rx="2" fill="#3f3f46"/>
+        </g>
+        <rect width="130" height="120" rx="6" fill="none" stroke="#3f3f46" stroke-width="1.5"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Card C: Pipeline Kanban (Lower-Right) -->
+  <g transform="translate(580, 320)">
+    <g class="hero-60-float-3">
+      <g transform="translate(0, 4) matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="150" height="120" rx="6" fill="#27272a" filter="url(#hero-60-shadow)"/>
+      </g>
+      <g transform="matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="150" height="120" rx="6" fill="#18181b" stroke="#3f3f46"/>
+        <!-- Col 1 -->
+        <rect x="10" y="10" width="38" height="100" rx="4" fill="#27272a"/>
+        <rect x="14" y="14" width="30" height="24" rx="2" fill="#8129D7"/>
+        <rect x="18" y="18" width="16" height="2" fill="#FFFFFF" opacity="0.6"/>
+        <rect x="14" y="42" width="30" height="32" rx="2" fill="#3f3f46"/>
+        <rect x="18" y="46" width="20" height="2" fill="#9CA3AF"/>
+        <!-- Col 2 -->
+        <rect x="56" y="10" width="38" height="100" rx="4" fill="#27272a"/>
+        <rect x="60" y="14" width="30" height="36" rx="2" fill="#2A5EDB"/>
+        <rect x="64" y="18" width="20" height="2" fill="#FFFFFF" opacity="0.6"/>
+        <!-- Col 3 -->
+        <rect x="102" y="10" width="38" height="100" rx="4" fill="#27272a"/>
+        <rect x="106" y="14" width="30" height="20" rx="2" fill="#03AD9C"/>
+        <rect x="110" y="18" width="14" height="2" fill="#FFFFFF" opacity="0.6"/>
+        <rect x="106" y="38" width="30" height="28" rx="2" fill="#3f3f46"/>
+        <rect x="110" y="42" width="18" height="2" fill="#9CA3AF"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Card E: AI Chip (Bottom-Center) -->
+  <g transform="translate(434, 430)">
+    <g class="hero-60-float-5">
+      <g transform="translate(0, 4) matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="80" height="80" rx="12" fill="#27272a" filter="url(#hero-60-shadow)"/>
+      </g>
+      <g transform="matrix(0.866, 0.5, -0.866, 0.5, 0, 0)">
+        <rect width="80" height="80" rx="12" fill="#18181b" stroke="#3f3f46" stroke-width="2"/>
+        
+        <!-- Circuit Traces -->
+        <path d="M 30 16 L 30 6 M 40 16 L 40 6 M 50 16 L 50 6" stroke="#3f3f46" stroke-width="2" stroke-linecap="round"/>
+        <path d="M 30 64 L 30 74 M 40 64 L 40 74 M 50 64 L 50 74" stroke="#3f3f46" stroke-width="2" stroke-linecap="round"/>
+        <path d="M 16 30 L 6 30 M 16 40 L 6 40 M 16 50 L 6 50" stroke="#3f3f46" stroke-width="2" stroke-linecap="round"/>
+        <path d="M 64 30 L 74 30 M 64 40 L 74 40 M 64 50 L 74 50" stroke="#3f3f46" stroke-width="2" stroke-linecap="round"/>
+        
+        <!-- Inner Square -->
+        <rect x="16" y="16" width="48" height="48" rx="8" fill="#27272a" stroke="#8129D7" stroke-width="1.5"/>
+        
+        <!-- Animated Pulse Ring -->
+        <circle cx="40" cy="40" r="6" fill="none" stroke="#A855F7" class="hero-60-pulse"/>
+        
+        <!-- Center Dot -->
+        <circle cx="40" cy="40" r="5" fill="#A855F7"/>
+      </g>
+    </g>
+  </g>
+
+</svg>

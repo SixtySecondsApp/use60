@@ -1,6 +1,6 @@
 // supabase/functions/landing-research/index.ts
 // Auto-research for the Landing Page Builder: company, competitors, social proof, market context
-// Runs 5 parallel queries (4 Gemini Search-grounded + 1 Exa enrichment) with 12s timeout
+// Runs 6 parallel queries (5 Gemini Search-grounded + 1 Exa enrichment) with 25s timeout
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
@@ -48,6 +48,14 @@ interface MarketTrendsData {
   audience_pain_language: string[];
   pricing_benchmarks: string[];
   buying_triggers: string[];
+}
+
+interface BrandGuidelinesData {
+  colors: Array<{ hex: string; role: string }>;
+  typography: Array<{ family: string; usage: string }>;
+  logo_url: string;
+  tone: string;
+  visual_style: string;
 }
 
 interface ResearchSource {
@@ -179,7 +187,7 @@ serve(async (req) => {
     // Run 5 queries in parallel with 12s timeout
     // -----------------------------------------------------------------------
 
-    const TIMEOUT_MS = 12_000;
+    const TIMEOUT_MS = 25_000;
 
     const withTimeout = <T>(promise: Promise<T>, label: string): Promise<T | null> =>
       Promise.race([
@@ -192,7 +200,7 @@ serve(async (req) => {
         ),
       ]);
 
-    const [companyResult, competitorsResult, socialProofResult, marketResult, exaResult] =
+    const [companyResult, competitorsResult, socialProofResult, marketResult, exaResult, brandResult] =
       await Promise.allSettled([
         // Query 1: Company profile + positioning
         withTimeout(
@@ -267,6 +275,24 @@ serve(async (req) => {
             ? executeExaSearch(company_domain)
             : Promise.resolve(null),
           'exa-enrichment',
+        ),
+
+        // Query 6: Brand identity extraction
+        withTimeout(
+          company_domain
+            ? geminiSearchQuery<BrandGuidelinesData>(
+                GEMINI_API_KEY,
+                `Analyze the website ${company_domain} and extract brand identity:\n${searchContext}\n\nFind: primary brand colors (exact hex codes from CSS, meta tags, or visible design), typography (font families used for headings and body), logo URL (from og:image, favicon, or header img), tone of voice (formal/conversational/playful — with evidence from copy), and visual style (minimal/bold/corporate/creative). Provide hex codes and font names exactly as found on the site.`,
+                {
+                  colors: [{ hex: 'string', role: 'string' }],
+                  typography: [{ family: 'string', usage: 'string' }],
+                  logo_url: 'string',
+                  tone: 'string',
+                  visual_style: 'string',
+                },
+              )
+            : Promise.resolve(null),
+          'brand-guidelines',
         ),
       ]);
 
@@ -356,6 +382,26 @@ serve(async (req) => {
       }
     }
 
+    // Brand guidelines
+    let brandGuidelines = null;
+    if (brandResult.status === 'fulfilled' && brandResult.value?.result) {
+      const r = brandResult.value;
+      brandGuidelines = r.result;
+      allSources.push(...r.sources);
+      totalInputTokens += r.inputTokens;
+      totalOutputTokens += r.outputTokens;
+    }
+
+    // Data sources completeness tracking
+    const dataSources = {
+      company: companyResult.status === 'fulfilled' && !!companyResult.value?.result,
+      competitors: competitorsResult.status === 'fulfilled' && !!competitorsResult.value?.result,
+      social_proof: socialProofResult.status === 'fulfilled' && !!socialProofResult.value?.result,
+      market_trends: marketResult.status === 'fulfilled' && !!marketResult.value?.result,
+      exa: exaResult.status === 'fulfilled' && !!exaResult.value,
+      brand_guidelines: brandResult.status === 'fulfilled' && !!brandResult.value?.result,
+    };
+
     // Competitor messaging patterns (extracted from landing page patterns)
     const messagingPatterns = competitors
       .flatMap((c) => c.landing_page_patterns || [])
@@ -380,7 +426,7 @@ serve(async (req) => {
       totalInputTokens,
       totalOutputTokens,
       'landing-research',
-      { company: company_name || brief.offer, queries: 5 },
+      { company: company_name || brief.offer, queries: 6 },
     );
 
     console.log(
@@ -415,6 +461,8 @@ serve(async (req) => {
         notable_customers: notableCustomers,
       },
       sources: allSources.slice(0, 20), // Cap sources
+      data_sources: dataSources,
+      brand_guidelines: brandGuidelines,
       cost_credits: costCredits,
       duration_ms: durationMs,
     };

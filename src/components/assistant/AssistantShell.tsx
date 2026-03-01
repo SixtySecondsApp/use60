@@ -656,7 +656,7 @@ export function AssistantShell({ mode, onOpenQuickAdd, emptyComponent, apiConten
 
       {/* Phase-specific interactive component (CopyPicker, HeroImageGenerator, etc.) */}
       {phaseComponent && !isEmpty && !isLoading && (
-        <div className="flex-shrink-0 px-5 py-3 border-t border-gray-800/30 max-h-[35vh] overflow-y-auto scrollbar-custom">
+        <div className="flex-shrink-0 px-5 py-3 border-t border-gray-800/30 max-h-[50vh] overflow-y-auto scrollbar-custom">
           {phaseComponent}
         </div>
       )}

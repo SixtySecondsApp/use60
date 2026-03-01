@@ -1,0 +1,257 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <title>Neural Command Center Visualization for 60</title>
+  
+  <defs>
+    <style>
+      /* ENTRANCE ANIMATIONS */
+      @keyframes hero-orbital-fade-scale {
+        0% { opacity: 0; transform: scale(0.85); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      @keyframes hero-orbital-fade {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+      }
+      
+      .hero-orbital-entrance {
+        animation: hero-orbital-fade-scale 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        transform-origin: 300px 300px;
+        opacity: 0;
+      }
+      .hero-orbital-entrance-fade {
+        animation: hero-orbital-fade 2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        opacity: 0;
+      }
+      
+      .hero-orbital-delay-1 { animation-delay: 0s; }
+      .hero-orbital-delay-2 { animation-delay: 0.3s; }
+      .hero-orbital-delay-3 { animation-delay: 0.6s; }
+      .hero-orbital-delay-4 { animation-delay: 0.9s; }
+
+      /* BREATHING & PULSING */
+      @keyframes hero-orbital-breathe {
+        0% { transform: scale(0.95); opacity: 0.8; }
+        100% { transform: scale(1.05); opacity: 1; }
+      }
+      @keyframes hero-orbital-halo-breathe {
+        0% { transform: scale(0.9); opacity: 0.4; }
+        100% { transform: scale(1.1); opacity: 0.8; }
+      }
+      @keyframes hero-orbital-opacity-pulse {
+        0% { opacity: 0.15; }
+        100% { opacity: 0.5; }
+      }
+      
+      .hero-orbital-pulse-center {
+        animation: hero-orbital-breathe 4s ease-in-out infinite alternate;
+        transform-origin: 300px 300px;
+      }
+      .hero-orbital-pulse-halo {
+        animation: hero-orbital-halo-breathe 7s ease-in-out infinite alternate;
+        transform-origin: 300px 300px;
+      }
+      .hero-orbital-pulse-link {
+        animation: hero-orbital-opacity-pulse 3s ease-in-out infinite alternate;
+      }
+
+      /* ROTATION (ATMOSPHERE) */
+      @keyframes hero-orbital-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes hero-orbital-spin-reverse {
+        0% { transform: rotate(360deg); }
+        100% { transform: rotate(0deg); }
+      }
+      
+      .hero-orbital-spin-slow {
+        animation: hero-orbital-spin 40s linear infinite;
+        transform-origin: 300px 300px;
+      }
+      .hero-orbital-spin-slow-reverse {
+        animation: hero-orbital-spin-reverse 45s linear infinite;
+        transform-origin: 300px 300px;
+      }
+      .hero-orbital-spin-slower {
+        animation: hero-orbital-spin 60s linear infinite;
+        transform-origin: 300px 300px;
+      }
+
+      /* ORBITAL MOTION */
+      @keyframes hero-orbital-orbit {
+        0% { offset-distance: 0%; }
+        100% { offset-distance: 100%; }
+      }
+      
+      /* Track 1: 30s */
+      .hero-orbital-node-1 { offset-path: path('M 460 300 A 160 60 0 1 1 140 300 A 160 60 0 1 1 460 300'); animation: hero-orbital-orbit 30s linear infinite; }
+      .hero-orbital-node-2 { offset-path: path('M 460 300 A 160 60 0 1 1 140 300 A 160 60 0 1 1 460 300'); animation: hero-orbital-orbit 30s linear infinite; animation-delay: -15s; }
+      
+      /* Track 2: 40s */
+      .hero-orbital-node-3 { offset-path: path('M 520 300 A 220 90 0 1 1 80 300 A 220 90 0 1 1 520 300'); animation: hero-orbital-orbit 40s linear infinite; }
+      .hero-orbital-node-4 { offset-path: path('M 520 300 A 220 90 0 1 1 80 300 A 220 90 0 1 1 520 300'); animation: hero-orbital-orbit 40s linear infinite; animation-delay: -20s; }
+      
+      /* Track 3: 50s */
+      .hero-orbital-node-5 { offset-path: path('M 560 300 A 260 120 0 1 1 40 300 A 260 120 0 1 1 560 300'); animation: hero-orbital-orbit 50s linear infinite; }
+      .hero-orbital-node-6 { offset-path: path('M 560 300 A 260 120 0 1 1 40 300 A 260 120 0 1 1 560 300'); animation: hero-orbital-orbit 50s linear infinite; animation-delay: -25s; }
+
+      /* ENERGY PARTICLES */
+      @keyframes hero-orbital-dash {
+        0% { stroke-dashoffset: 8; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { stroke-dashoffset: -100; opacity: 0; }
+      }
+      
+      .hero-orbital-particle-1 { animation: hero-orbital-dash 4s cubic-bezier(0.37, 0, 0.63, 1) infinite; animation-delay: 0.5s; }
+      .hero-orbital-particle-2 { animation: hero-orbital-dash 5s cubic-bezier(0.37, 0, 0.63, 1) infinite; animation-delay: 1.2s; }
+      .hero-orbital-particle-3 { animation: hero-orbital-dash 4.5s cubic-bezier(0.37, 0, 0.63, 1) infinite; animation-delay: 2.8s; }
+      .hero-orbital-particle-4 { animation: hero-orbital-dash 6s cubic-bezier(0.37, 0, 0.63, 1) infinite; animation-delay: 0.2s; }
+      .hero-orbital-particle-5 { animation: hero-orbital-dash 5.5s cubic-bezier(0.37, 0, 0.63, 1) infinite; animation-delay: 3.5s; }
+
+      /* ACCESSIBILITY */
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; }
+      }
+    </style>
+
+    <!-- FILTERS -->
+    <filter id="hero-orbital-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="hero-orbital-glow-strong" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- GRADIENTS -->
+    <radialGradient id="hero-orbital-halo-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#8129D7" stop-opacity="0.15" />
+      <stop offset="60%" stop-color="#8129D7" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0" />
+    </radialGradient>
+
+    <radialGradient id="hero-orbital-center-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#8129D7" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0" />
+    </radialGradient>
+
+    <radialGradient id="hero-orbital-center-core" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#A855F7" />
+      <stop offset="50%" stop-color="#8129D7" />
+      <stop offset="100%" stop-color="#6D28D9" />
+    </radialGradient>
+
+    <linearGradient id="hero-orbital-track-grad-1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.05" />
+    </linearGradient>
+
+    <linearGradient id="hero-orbital-track-grad-2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.05" />
+    </linearGradient>
+
+    <linearGradient id="hero-orbital-track-grad-3" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.05" />
+    </linearGradient>
+  </defs>
+
+  <!-- OUTER HALO -->
+  <g class="hero-orbital-entrance hero-orbital-delay-3">
+    <circle cx="300" cy="300" r="280" fill="url(#hero-orbital-halo-grad)" class="hero-orbital-pulse-halo" />
+  </g>
+
+  <!-- BACKGROUND ATMOSPHERE (WAVE PATTERN) -->
+  <g class="hero-orbital-entrance hero-orbital-delay-3">
+    <circle cx="300" cy="300" r="270" stroke="#A855F7" stroke-width="2" fill="none" stroke-linecap="round" stroke-dasharray="3 20" class="hero-orbital-spin-slow" opacity="0.4" />
+    <circle cx="300" cy="300" r="270" stroke="#8129D7" stroke-width="2" fill="none" stroke-linecap="round" stroke-dasharray="3 24" class="hero-orbital-spin-slow-reverse" opacity="0.4" />
+    <circle cx="300" cy="300" r="255" stroke="#60A5FA" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-dasharray="1 15" class="hero-orbital-spin-slower" opacity="0.2" />
+  </g>
+
+  <!-- ENERGY ARCS (NEURAL PATHWAYS) -->
+  <g class="hero-orbital-entrance hero-orbital-delay-2">
+    <!-- Base Neural Links -->
+    <g class="hero-orbital-pulse-link">
+      <path d="M 340 280 C 400 220, 480 250, 500 120" stroke="#A855F7" stroke-width="1.5" fill="none" stroke-dasharray="4 4" />
+      <path d="M 260 320 C 200 380, 120 350, 100 480" stroke="#A855F7" stroke-width="1.5" fill="none" stroke-dasharray="4 4" />
+      <path d="M 320 340 C 350 420, 420 460, 520 420" stroke="#A855F7" stroke-width="1.5" fill="none" stroke-dasharray="4 4" />
+      <path d="M 280 260 C 250 180, 180 140, 80 180" stroke="#A855F7" stroke-width="1.5" fill="none" stroke-dasharray="4 4" />
+      <path d="M 300 250 C 300 150, 400 100, 450 50" stroke="#A855F7" stroke-width="1.5" fill="none" stroke-dasharray="4 4" />
+    </g>
+
+    <!-- Traveling Light Particles -->
+    <path d="M 340 280 C 400 220, 480 250, 500 120" stroke="#60A5FA" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="8 100" pathLength="100" class="hero-orbital-particle-1" filter="url(#hero-orbital-glow)" />
+    <path d="M 260 320 C 200 380, 120 350, 100 480" stroke="#2DD4BF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="8 100" pathLength="100" class="hero-orbital-particle-2" filter="url(#hero-orbital-glow)" />
+    <path d="M 320 340 C 350 420, 420 460, 520 420" stroke="#A855F7" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="8 100" pathLength="100" class="hero-orbital-particle-3" filter="url(#hero-orbital-glow)" />
+    <path d="M 280 260 C 250 180, 180 140, 80 180" stroke="#60A5FA" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="8 100" pathLength="100" class="hero-orbital-particle-4" filter="url(#hero-orbital-glow)" />
+    <path d="M 300 250 C 300 150, 400 100, 450 50" stroke="#2DD4BF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="8 100" pathLength="100" class="hero-orbital-particle-5" filter="url(#hero-orbital-glow)" />
+  </g>
+
+  <!-- ORBITAL TRACKS & SATELLITE NODES -->
+  <g class="hero-orbital-entrance hero-orbital-delay-2">
+    
+    <!-- Track 1 (Inner) -->
+    <g transform="rotate(30 300 300)">
+      <path d="M 460 300 A 160 60 0 1 1 140 300 A 160 60 0 1 1 460 300" stroke="url(#hero-orbital-track-grad-1)" stroke-width="1.5" stroke-dasharray="4 6" fill="none" />
+      <g class="hero-orbital-entrance-fade hero-orbital-delay-4 hero-orbital-node-1">
+        <circle r="6" fill="#2A5EDB" filter="url(#hero-orbital-glow)" />
+        <circle r="2" fill="#FFFFFF" />
+      </g>
+      <g class="hero-orbital-entrance-fade hero-orbital-delay-4 hero-orbital-node-2">
+        <circle r="5" fill="#03AD9C" filter="url(#hero-orbital-glow)" />
+        <circle r="2" fill="#FFFFFF" />
+      </g>
+    </g>
+
+    <!-- Track 2 (Middle) -->
+    <g transform="rotate(-40 300 300)">
+      <path d="M 520 300 A 220 90 0 1 1 80 300 A 220 90 0 1 1 520 300" stroke="url(#hero-orbital-track-grad-2)" stroke-width="1.5" stroke-dasharray="4 8" fill="none" />
+      <g class="hero-orbital-entrance-fade hero-orbital-delay-4 hero-orbital-node-3">
+        <circle r="7" fill="#03AD9C" filter="url(#hero-orbital-glow)" />
+        <circle r="2.5" fill="#FFFFFF" />
+      </g>
+      <g class="hero-orbital-entrance-fade hero-orbital-delay-4 hero-orbital-node-4">
+        <circle r="4" fill="#2A5EDB" filter="url(#hero-orbital-glow)" />
+        <circle r="1.5" fill="#FFFFFF" />
+      </g>
+    </g>
+
+    <!-- Track 3 (Outer) -->
+    <g transform="rotate(15 300 300)">
+      <path d="M 560 300 A 260 120 0 1 1 40 300 A 260 120 0 1 1 560 300" stroke="url(#hero-orbital-track-grad-3)" stroke-width="1.5" stroke-dasharray="4 10" fill="none" />
+      <g class="hero-orbital-entrance-fade hero-orbital-delay-4 hero-orbital-node-5">
+        <circle r="8" fill="#2A5EDB" filter="url(#hero-orbital-glow)" />
+        <circle r="3" fill="#FFFFFF" />
+      </g>
+      <g class="hero-orbital-entrance-fade hero-orbital-delay-4 hero-orbital-node-6">
+        <circle r="5" fill="#03AD9C" filter="url(#hero-orbital-glow)" />
+        <circle r="2" fill="#FFFFFF" />
+      </g>
+    </g>
+  </g>
+
+  <!-- CENTRAL PULSING ORB -->
+  <g class="hero-orbital-entrance hero-orbital-delay-1">
+    <g class="hero-orbital-pulse-center">
+      <!-- Outer Glow -->
+      <circle cx="300" cy="300" r="80" fill="url(#hero-orbital-center-glow)" />
+      
+      <!-- Core Sphere -->
+      <circle cx="300" cy="300" r="45" fill="url(#hero-orbital-center-core)" filter="url(#hero-orbital-glow-strong)" />
+      <circle cx="300" cy="300" r="45" fill="url(#hero-orbital-center-core)" />
+      
+      <!-- Text '60' -->
+      <text x="300" y="312" font-family="system-ui, -apple-system, sans-serif" font-size="34" font-weight="800" fill="#FFFFFF" text-anchor="middle" letter-spacing="-1">60</text>
+    </g>
+  </g>
+
+</svg>

@@ -104,6 +104,21 @@ export interface LandingResearchData {
     notable_customers: string[];
   };
   sources: Array<{ title: string; url: string; provider: string }>;
+  data_sources?: {
+    company: boolean;
+    competitors: boolean;
+    social_proof: boolean;
+    market_trends: boolean;
+    exa: boolean;
+    brand_guidelines?: boolean;
+  };
+  brand_guidelines?: {
+    colors: Array<{ hex: string; role: string }>;
+    typography: Array<{ family: string; usage: string }>;
+    logo_url?: string;
+    tone: string;
+    visual_style: string;
+  };
   cost_credits: number;
   duration_ms: number;
 }

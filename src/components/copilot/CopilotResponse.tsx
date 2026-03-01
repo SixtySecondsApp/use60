@@ -53,6 +53,7 @@ import { TaskDeliverableResponse } from './responses/TaskDeliverableResponse';
 import type { TaskDeliverableResponseData } from './responses/TaskDeliverableResponse';
 import MeetingContextResponse from './responses/MeetingContextResponse';
 import MeetingIntelligenceResponse from './responses/MeetingIntelligenceResponse';
+import { ApprovalGate as LandingPageGate } from '@/components/landing-builder/ApprovalGate';
 import { MeetingCountResponse } from './responses/MeetingCountResponse';
 import { MeetingBriefingResponse } from './responses/MeetingBriefingResponse';
 import { MeetingListResponse } from './responses/MeetingListResponse';
@@ -314,6 +315,9 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
 
     case 'meeting_intelligence':
       return <MeetingIntelligenceResponse data={response as any} onActionClick={onActionClick} />;
+
+    case 'landing_page_gate':
+      return <LandingPageGate data={(response as any).data} onActionClick={onActionClick} />;
 
     default:
       // Fallback to text response if type is unknown
