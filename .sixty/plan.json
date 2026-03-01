@@ -56,6 +56,13 @@
       "status": "complete",
       "consultReport": ".sixty/consult/landing-builder-ux-redesign.md",
       "createdAt": "2026-03-01"
+    },
+    {
+      "id": "landing-builder-react-components",
+      "name": "Landing Builder — React Component Upgrade + Design Improvements",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-01"
     }
   ],
   "stories": [
@@ -2204,23 +2211,935 @@
       "startedAt": "2026-03-01T17:33:26.961Z",
       "completedAt": "2026-03-01T17:33:26.961Z",
       "actualMinutes": 8
+    },
+    {
+      "id": "RC-001",
+      "feature": "landing-builder-react-components",
+      "title": "Extend type system with new section types, content blocks, asset strategy, dividers, and icons",
+      "type": "types",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "SectionType union includes pricing | comparison | stats | how-it-works",
+        "LandingSection has optional content_blocks, asset_strategy, divider, icon_name fields",
+        "ContentBlock type defined with type (stat | bullet | quote | step), label, value, icon fields",
+        "AssetStrategy type: image | svg | icon | none",
+        "SectionDividerType type: wave | diagonal | curve | mesh | none",
+        "LayoutVariant includes metrics-bar | case-study | review-badges"
+      ],
+      "estimatedMinutes": 12,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-002",
+        "RC-004",
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012",
+        "RC-017",
+        "RC-019",
+        "RC-023",
+        "RC-025",
+        "RC-026"
+      ],
+      "parallelWith": [
+        "RC-003",
+        "RC-005"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-002",
+      "feature": "landing-builder-react-components",
+      "title": "Create shared section subcomponents (SectionWrapper, CtaButton, AssetSlot, ContentBlockRenderer, SectionDivider)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "SectionWrapper renders <section> with brand styles, data-section-id, scroll-reveal class, click handler",
+        "CtaButton renders gradient button with hover lift animation",
+        "AssetSlot renders image/SVG/Lucide icon/nothing based on asset_strategy",
+        "ContentBlockRenderer renders ContentBlock[] or falls back to flat copy string",
+        "SectionDivider renders wave/diagonal/curve/mesh SVG between sections with optional animation",
+        "All components exported from sections/shared/index.ts barrel"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/shared/SectionWrapper.tsx",
+        "src/components/landing-builder/sections/shared/CtaButton.tsx",
+        "src/components/landing-builder/sections/shared/AssetSlot.tsx",
+        "src/components/landing-builder/sections/shared/ContentBlockRenderer.tsx",
+        "src/components/landing-builder/sections/shared/SectionDivider.tsx",
+        "src/components/landing-builder/sections/shared/MicroCopy.tsx",
+        "src/components/landing-builder/sections/shared/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-004"
+      ],
+      "parallelWith": [
+        "RC-003"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-003",
+      "feature": "landing-builder-react-components",
+      "title": "Create micro-animation CSS library for section components",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "animations.css contains counter, icon-bounce, table-row-slide, gradient-shimmer, typing-effect, hover-card-lift, fade-in-up, stagger-child keyframes",
+        "All animations are CSS-only (no JS runtime)",
+        "File size under 3KB"
+      ],
+      "estimatedMinutes": 12,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/shared/animations.css"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-013"
+      ],
+      "parallelWith": [
+        "RC-001",
+        "RC-002",
+        "RC-005"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-004",
+      "feature": "landing-builder-react-components",
+      "title": "Create component registry with getSectionComponent(type, variant) lookup and fallbacks",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "getSectionComponent(type, variant) returns the correct React component",
+        "Per-type fallback when exact variant not found",
+        "Global fallback to HeroCentered for completely unknown types",
+        "Registry exported from sections/index.ts barrel"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/registry.ts",
+        "src/components/landing-builder/sections/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012",
+        "RC-013"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-005",
+      "feature": "landing-builder-react-components",
+      "title": "Install react-frame-component package",
+      "type": "config",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "react-frame-component added to package.json dependencies",
+        "npm install succeeds without errors"
+      ],
+      "estimatedMinutes": 3,
+      "actualMinutes": null,
+      "files": [
+        "package.json"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-013"
+      ],
+      "parallelWith": [
+        "RC-001",
+        "RC-002",
+        "RC-003"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-006",
+      "feature": "landing-builder-react-components",
+      "title": "Create Hero section React components (HeroCentered, HeroSplitLeft, HeroGradient)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "HeroCentered, HeroSplitLeft, HeroGradient components render identically to HTML templates",
+        "Use shared SectionWrapper, CtaButton, AssetSlot, MicroCopy",
+        "Orb animations and gradient backgrounds work correctly",
+        "Components registered in registry.ts"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/hero/HeroCentered.tsx",
+        "src/components/landing-builder/sections/hero/HeroSplitLeft.tsx",
+        "src/components/landing-builder/sections/hero/HeroGradient.tsx",
+        "src/components/landing-builder/sections/hero/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-013"
+      ],
+      "parallelWith": [
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-007",
+      "feature": "landing-builder-react-components",
+      "title": "Create Problem section React components (3 variants)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "ProblemCentered, ProblemSplitRight, ProblemSplitLeft render matching HTML templates",
+        "Use shared subcomponents",
+        "Components registered in registry.ts"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/problem/ProblemCentered.tsx",
+        "src/components/landing-builder/sections/problem/ProblemSplitRight.tsx",
+        "src/components/landing-builder/sections/problem/ProblemSplitLeft.tsx",
+        "src/components/landing-builder/sections/problem/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-008",
+      "feature": "landing-builder-react-components",
+      "title": "Create Solution section React components (3 variants)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "SolutionSplitLeft, SolutionSplitRight, SolutionCentered render matching HTML templates",
+        "Numbered steps in centered variant work correctly",
+        "Components registered in registry.ts"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/solution/SolutionSplitLeft.tsx",
+        "src/components/landing-builder/sections/solution/SolutionSplitRight.tsx",
+        "src/components/landing-builder/sections/solution/SolutionCentered.tsx",
+        "src/components/landing-builder/sections/solution/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-009",
+      "feature": "landing-builder-react-components",
+      "title": "Create Features section React components (CardsGrid, Centered, Alternating)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "FeaturesCardsGrid, FeaturesCentered, FeaturesAlternating render matching HTML templates",
+        "Staggered card animations work",
+        "Components registered in registry.ts"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/features/FeaturesCardsGrid.tsx",
+        "src/components/landing-builder/sections/features/FeaturesCentered.tsx",
+        "src/components/landing-builder/sections/features/FeaturesAlternating.tsx",
+        "src/components/landing-builder/sections/features/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-010",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-010",
+      "feature": "landing-builder-react-components",
+      "title": "Create Social Proof section React components (3 existing + 3 new: MetricsBar, CaseStudy, ReviewBadges)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "SocialProofCentered, SocialProofCardsGrid, SocialProofLogoBanner render matching HTML templates",
+        "MetricsBar variant shows animated counter stats",
+        "CaseStudy variant shows logo + quote + attribution",
+        "ReviewBadges variant shows star ratings with platform badges"
+      ],
+      "estimatedMinutes": 28,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/social-proof/SocialProofCentered.tsx",
+        "src/components/landing-builder/sections/social-proof/SocialProofCardsGrid.tsx",
+        "src/components/landing-builder/sections/social-proof/SocialProofLogoBanner.tsx",
+        "src/components/landing-builder/sections/social-proof/MetricsBar.tsx",
+        "src/components/landing-builder/sections/social-proof/CaseStudy.tsx",
+        "src/components/landing-builder/sections/social-proof/ReviewBadges.tsx",
+        "src/components/landing-builder/sections/social-proof/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-011",
+      "feature": "landing-builder-react-components",
+      "title": "Create CTA, FAQ, and Footer section React components (9 variants total)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "CTA: CtaCentered, CtaSplitLeft, CtaGradient",
+        "FAQ: FaqCentered, FaqSplitLeft, FaqCardsGrid with working <details> toggle",
+        "Footer: FooterCentered, FooterCardsGrid, FooterSplitLeft",
+        "All 9 variants registered in registry.ts"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/cta/index.ts",
+        "src/components/landing-builder/sections/faq/index.ts",
+        "src/components/landing-builder/sections/footer/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-012",
+      "feature": "landing-builder-react-components",
+      "title": "Create new section type components (Pricing, Comparison, Stats, HowItWorks)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "Pricing: PricingCentered with tiered cards (Free/Pro/Enterprise), highlight on recommended tier",
+        "Comparison: ComparisonGrid with check/X feature matrix table",
+        "Stats: StatsCentered with animated counter numbers + labels",
+        "HowItWorks: StepsCentered with numbered vertical timeline",
+        "All registered in registry.ts"
+      ],
+      "estimatedMinutes": 28,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/pricing/index.ts",
+        "src/components/landing-builder/sections/comparison/index.ts",
+        "src/components/landing-builder/sections/stats/index.ts",
+        "src/components/landing-builder/sections/how-it-works/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-013",
+      "feature": "landing-builder-react-components",
+      "title": "Create ReactSectionRenderer with react-frame-component iframe and brandStyles utility",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "ReactSectionRenderer maps sorted sections through registry, renders inside <Frame> component",
+        "Tailwind CDN, Google Fonts link, and animations.css injected into iframe <head>",
+        "SectionDivider inserted between sections with appropriate types",
+        "brandStyles.ts extracts CSS generation (fonts, base styles, keyframes) from sectionRenderer.ts for reuse",
+        "Click handler on sections calls onSectionClick prop"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/ReactSectionRenderer.tsx",
+        "src/components/landing-builder/brandStyles.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-003",
+          "RC-004",
+          "RC-005",
+          "RC-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-014",
+        "RC-015"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-014",
+      "feature": "landing-builder-react-components",
+      "title": "Update ProgressivePreview to use ReactSectionRenderer instead of srcDoc iframe",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "ProgressivePreview renders <ReactSectionRenderer> instead of raw HTML srcDoc",
+        "Device width toggles (mobile/tablet/desktop) still work",
+        "Status badges, completion highlights, AI polish toggle preserved",
+        "Section click handler wired through to parent"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/ProgressivePreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-024"
+      ],
+      "parallelWith": [
+        "RC-015"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-015",
+      "feature": "landing-builder-react-components",
+      "title": "Update AssemblyPreview to use ReactSectionRenderer",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "AssemblyPreview renders <ReactSectionRenderer> instead of LandingCodePreview + srcDoc",
+        "Device width toggles and progress stats preserved",
+        "Section status badges overlay still works"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/AssemblyPreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-024"
+      ],
+      "parallelWith": [
+        "RC-014"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-016",
+      "feature": "landing-builder-react-components",
+      "title": "Add coexistence header to sectionRenderer.ts — keep as HTML export fallback",
+      "type": "docs",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "sectionRenderer.ts has header comment noting React renderer is primary, this file kept for HTML export + AI polish",
+        "No functional changes to existing templates"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sectionRenderer.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-021"
+      ],
+      "parallelWith": [
+        "RC-013",
+        "RC-014",
+        "RC-015"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-017",
+      "feature": "landing-builder-react-components",
+      "title": "Add smart asset strategy assignment to assemblyOrchestrator",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "assignAssetStrategy() sets hero→image, features→icon, social-proof→none, pricing→none, stats→none, comparison→none",
+        "Assigns icon_name from Lucide icon set per section type",
+        "Assigns divider type between key section transitions (hero→problem=wave, etc.)",
+        "Called during parseWorkspaceToSections()"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assemblyOrchestrator.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-018"
+      ],
+      "parallelWith": [
+        "RC-019"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-018",
+      "feature": "landing-builder-react-components",
+      "title": "Update assetQueue to skip generation for icon/none strategy sections",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "populateFromSections only queues sections with asset_strategy image or svg",
+        "Sections with strategy icon or none are skipped entirely",
+        "Queue stats reflect reduced total count"
+      ],
+      "estimatedMinutes": 12,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assetQueue.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-017"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-024"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-019",
+      "feature": "landing-builder-react-components",
+      "title": "Add new section type keywords to assemblyOrchestrator",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "SECTION_TYPE_KEYWORDS includes pricing, comparison, stats, how-it-works entries",
+        "isValidSectionType() accepts the 4 new types",
+        "inferSectionType correctly matches keywords like pricing, plan, tier, versus, compare, metric, number, step, process"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assemblyOrchestrator.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-017"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-020",
+      "feature": "landing-builder-react-components",
+      "title": "Create IntelligenceToggle and wire into LandingPageBuilder + FloatingChatBar",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "IntelligenceToggle component with 3 segments: Fast (Haiku) / Balanced (Sonnet) / Creative (Opus)",
+        "Brain icon from Lucide, active segment highlighted",
+        "Model tier state in LandingPageBuilder, passed to agent calls via apiContentTransform",
+        "Toggle rendered in FloatingChatBar expanded header"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/IntelligenceToggle.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/FloatingChatBar.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-024"
+      ],
+      "parallelWith": [
+        "RC-013",
+        "RC-017"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-021",
+      "feature": "landing-builder-react-components",
+      "title": "Add React TSX export format to exportPolishAgent",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "ExportFormat type: html | react",
+        "React export generates self-contained TSX with Lucide imports and Tailwind classes",
+        "downloadReactTsx() function creates .tsx file download",
+        "Export format selector in EditorToolbar or download modal"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/exportPolishAgent.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-016"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-023"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-023",
+      "feature": "landing-builder-react-components",
+      "title": "Update editor panels — new section icons, asset strategy selector, divider picker",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "SectionListPanel has icons + labels for pricing, comparison, stats, how-it-works",
+        "PropertiesPanel has asset strategy selector (image/svg/icon/none dropdown)",
+        "PropertiesPanel has icon name text field (when strategy is icon)",
+        "PropertiesPanel has divider type selector (wave/diagonal/curve/mesh/none)",
+        "PropertiesPanel Layout section includes new variant options (metrics-bar, case-study, review-badges)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/SectionListPanel.tsx",
+        "src/components/landing-builder/PropertiesPanel.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-012"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-021"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-024",
+      "feature": "landing-builder-react-components",
+      "title": "Wire React preview, intelligence toggle, and new pipeline into LandingPageBuilder",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "Assembly mode uses ReactSectionRenderer via updated AssemblyPreview",
+        "ProgressivePreview uses React components instead of HTML srcDoc",
+        "Intelligence toggle visible and functional in FloatingChatBar",
+        "New section types (pricing, stats, etc.) flow through full pipeline correctly",
+        "npm run build passes with no type errors"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-014",
+          "RC-015",
+          "RC-018",
+          "RC-020"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-025",
+      "feature": "landing-builder-react-components",
+      "title": "Extend sectionEditAgent system prompt for new types, content blocks, and asset strategy",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "System prompt includes pricing/comparison/stats/how-it-works as valid section types for add op",
+        "Content blocks mentioned as editable field in ops documentation",
+        "Asset strategy and icon_name mentioned as editable fields",
+        "Divider type mentioned as editable",
+        "update_layout variant list extended with new variants"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/sectionEditAgent.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-021",
+        "RC-023"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-026",
+      "feature": "landing-builder-react-components",
+      "title": "Add HTML templates for new section types to sectionRenderer (export parity)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "Pricing HTML template with tiered cards layout",
+        "Comparison HTML template with feature matrix table",
+        "Stats HTML template with metric number + label grid",
+        "HowItWorks HTML template with numbered steps",
+        "New social proof variants (metrics-bar, case-study, review-badges) templates added",
+        "TEMPLATES and FALLBACK_TYPE maps updated"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sectionRenderer.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-025",
+        "RC-021"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
     }
   ],
   "execution": {
-    "totalStories": 62,
-    "completedStories": 62,
-    "currentFeature": "landing-builder-ux-redesign",
-    "estimatedRemainingMinutes": 110,
-    "parallelGroups": [
-      {
-        "stories": [
-          "LB-UX-002",
-          "LB-UX-003"
-        ],
-        "reason": "Separate components, no file overlap"
-      }
-    ],
-    "criticalPathMinutes": 85,
-    "lastUpdated": "2026-03-01T17:33:26.961Z"
+    "totalStories": 87,
+    "completedStories": 87,
+    "currentFeature": "landing-builder-react-components",
+    "lastUpdated": "2026-03-01T21:14:29.895Z"
   }
 }

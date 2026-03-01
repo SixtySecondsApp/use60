@@ -151,9 +151,34 @@ export type SectionType =
   | 'social-proof'
   | 'cta'
   | 'faq'
-  | 'footer';
+  | 'footer'
+  | 'pricing'
+  | 'comparison'
+  | 'stats'
+  | 'how-it-works';
 
-export type LayoutVariant = 'centered' | 'split-left' | 'split-right' | 'cards-grid';
+export type LayoutVariant =
+  | 'centered'
+  | 'split-left'
+  | 'split-right'
+  | 'cards-grid'
+  | 'gradient'
+  | 'alternating'
+  | 'logo-banner'
+  | 'metrics-bar'
+  | 'case-study'
+  | 'review-badges';
+
+export type AssetStrategy = 'image' | 'svg' | 'icon' | 'none';
+
+export type SectionDividerType = 'wave' | 'diagonal' | 'curve' | 'mesh' | 'none';
+
+export interface ContentBlock {
+  type: 'stat' | 'bullet' | 'quote' | 'step';
+  label: string;
+  value: string;
+  icon?: string;
+}
 
 export type AssetStatus = 'idle' | 'generating' | 'complete' | 'failed';
 
@@ -166,6 +191,7 @@ export interface LandingSection {
     subhead: string;
     body: string;
     cta: string;
+    micro_copy?: string;
   };
   layout_variant: LayoutVariant;
   image_url: string | null;
@@ -177,6 +203,10 @@ export interface LandingSection {
     text_color: string;
     accent_color: string;
   };
+  content_blocks?: ContentBlock[];
+  asset_strategy?: AssetStrategy;
+  divider?: SectionDividerType;
+  icon_name?: string;
 }
 
 export interface BrandConfig {

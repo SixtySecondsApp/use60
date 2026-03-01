@@ -32,6 +32,10 @@ import {
   MousePointerClick,
   HelpCircle,
   PanelBottom,
+  DollarSign,
+  GitCompare,
+  BarChart3,
+  ListOrdered,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LandingSection, SectionType, AssetStatus } from './types';
@@ -60,6 +64,10 @@ const SECTION_ICONS: Record<SectionType, React.FC<{ className?: string }>> = {
   cta: MousePointerClick,
   faq: HelpCircle,
   footer: PanelBottom,
+  pricing: DollarSign,
+  comparison: GitCompare,
+  stats: BarChart3,
+  'how-it-works': ListOrdered,
 };
 
 const SECTION_LABELS: Record<SectionType, string> = {
@@ -71,6 +79,10 @@ const SECTION_LABELS: Record<SectionType, string> = {
   cta: 'CTA',
   faq: 'FAQ',
   footer: 'Footer',
+  pricing: 'Pricing',
+  comparison: 'Comparison',
+  stats: 'Stats',
+  'how-it-works': 'How It Works',
 };
 
 // ---------------------------------------------------------------------------

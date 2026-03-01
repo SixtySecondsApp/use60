@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Type, Layout, Image, Palette, ChevronDown, Loader2, Trash2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { LandingSection, LayoutVariant, AssetStatus } from './types';
+import type { LandingSection, LayoutVariant, AssetStatus, AssetStrategy, SectionDividerType } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,6 +26,27 @@ const LAYOUT_OPTIONS: { value: LayoutVariant; label: string }[] = [
   { value: 'split-left', label: 'Split Left' },
   { value: 'split-right', label: 'Split Right' },
   { value: 'cards-grid', label: 'Cards Grid' },
+  { value: 'gradient', label: 'Gradient' },
+  { value: 'alternating', label: 'Alternating' },
+  { value: 'logo-banner', label: 'Logo Banner' },
+  { value: 'metrics-bar', label: 'Metrics Bar' },
+  { value: 'case-study', label: 'Case Study' },
+  { value: 'review-badges', label: 'Review Badges' },
+];
+
+const ASSET_STRATEGY_OPTIONS: { value: AssetStrategy; label: string }[] = [
+  { value: 'image', label: 'Image' },
+  { value: 'svg', label: 'SVG' },
+  { value: 'icon', label: 'Icon' },
+  { value: 'none', label: 'None' },
+];
+
+const DIVIDER_OPTIONS: { value: SectionDividerType; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'wave', label: 'Wave' },
+  { value: 'diagonal', label: 'Diagonal' },
+  { value: 'curve', label: 'Curve' },
+  { value: 'mesh', label: 'Mesh' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -355,6 +376,71 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               {opt.label}
             </button>
           ))}
+        </div>
+      </CollapsibleSection>
+
+      {/* ---- Asset Strategy + Divider ---- */}
+      <CollapsibleSection id="advanced" title="Advanced" icon={Layout} defaultOpen={false}>
+        {/* Asset strategy selector */}
+        <div>
+          <FieldLabel>Asset Strategy</FieldLabel>
+          <div className="grid grid-cols-2 gap-1.5">
+            {ASSET_STRATEGY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  if (!section) return;
+                  onSectionUpdate(section.id, { asset_strategy: opt.value });
+                }}
+                className={cn(
+                  'px-2 py-1.5 text-[11px] rounded-md border transition-colors text-center',
+                  section.asset_strategy === opt.value
+                    ? 'border-violet-500 bg-violet-500/10 text-violet-400 font-medium'
+                    : 'border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 hover:border-gray-300 dark:hover:border-white/20',
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Icon name — only when strategy is icon */}
+        {section.asset_strategy === 'icon' && (
+          <TextInput
+            label="Icon Name (Lucide)"
+            value={section.icon_name ?? ''}
+            onChange={(v) => {
+              if (!section) return;
+              onSectionUpdate(section.id, { icon_name: v });
+            }}
+          />
+        )}
+
+        {/* Divider selector */}
+        <div>
+          <FieldLabel>Section Divider</FieldLabel>
+          <div className="grid grid-cols-3 gap-1.5">
+            {DIVIDER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  if (!section) return;
+                  onSectionUpdate(section.id, { divider: opt.value });
+                }}
+                className={cn(
+                  'px-2 py-1.5 text-[11px] rounded-md border transition-colors text-center',
+                  (section.divider ?? 'none') === opt.value
+                    ? 'border-violet-500 bg-violet-500/10 text-violet-400 font-medium'
+                    : 'border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 hover:border-gray-300 dark:hover:border-white/20',
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </CollapsibleSection>
 

@@ -9,9 +9,11 @@
  */
 
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2, Check, AlertTriangle, Smartphone, Monitor, Tablet } from 'lucide-react';
+import { Loader2, Check, AlertTriangle, Smartphone, Monitor, Tablet, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ReactSectionRenderer } from './ReactSectionRenderer';
 import { renderSectionsToCode } from './sectionRenderer';
+import { generateExport, invalidateExportCache } from './agents/exportPolishAgent';
 import type { LandingSection, BrandConfig, AssetStatus } from './types';
 
 export interface ProgressivePreviewProps {
@@ -43,14 +45,45 @@ export function ProgressivePreview({
   onSectionClick,
 }: ProgressivePreviewProps) {
   const [deviceWidth, setDeviceWidth] = useState<DeviceWidth>('desktop');
+  const [isPolished, setIsPolished] = useState(false);
+  const [polishedCode, setPolishedCode] = useState<string | null>(null);
+  const [isPolishing, setIsPolishing] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const prevStatusRef = useRef<Map<string, AssetStatus>>(new Map());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
 
-  const code = useMemo(
+  const rawCode = useMemo(
     () => renderSectionsToCode(sections, brandConfig),
     [sections, brandConfig],
   );
+
+  // Invalidate polished code when sections change
+  useEffect(() => {
+    setPolishedCode(null);
+    invalidateExportCache();
+  }, [sections, brandConfig]);
+
+  // Run AI polish when toggled on
+  useEffect(() => {
+    if (!isPolished || polishedCode) return;
+    let cancelled = false;
+    setIsPolishing(true);
+    generateExport({
+      sections,
+      brandConfig,
+      polishWithAI: true,
+    }).then((result) => {
+      if (!cancelled) {
+        setPolishedCode(result.code);
+        setIsPolishing(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setIsPolishing(false);
+    });
+    return () => { cancelled = true; };
+  }, [isPolished, polishedCode, sections, brandConfig]);
+
+  const code = (isPolished && polishedCode) ? polishedCode : rawCode;
 
   // Inject a scroll-to-section script when highlightSectionId changes
   const codeWithScroll = useMemo(() => {
@@ -123,10 +156,36 @@ export function ProgressivePreview({
         'flex items-center justify-between px-3 py-2 border-b',
         'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700',
       )}>
-        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
           Preview
+          {isPolished && polishedCode && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 text-[10px]">
+              <Sparkles className="w-2.5 h-2.5" />
+              AI Polished
+            </span>
+          )}
         </span>
         <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setIsPolished(!isPolished)}
+            className={cn(
+              'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors mr-2',
+              isPolished
+                ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
+                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300',
+            )}
+            title="Polish with AI"
+            disabled={isPolishing}
+          >
+            {isPolishing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Sparkles className="w-3 h-3" />
+            )}
+            <span>{isPolishing ? 'Polishing...' : 'Polish'}</span>
+          </button>
+          <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mr-1" />
           <button
             type="button"
             onClick={() => setDeviceWidth('mobile')}
@@ -165,15 +224,26 @@ export function ProgressivePreview({
 
       {/* Preview area with overlay badges */}
       <div className="relative flex-1 flex justify-center bg-gray-100 dark:bg-gray-950 overflow-hidden">
-        <iframe
-          ref={iframeRef}
-          srcDoc={codeWithScroll}
-          sandbox="allow-scripts allow-same-origin"
-          title="Landing Page Preview"
-          className="bg-white border-0 h-full"
-          style={{ width: DEVICE_WIDTHS[deviceWidth] }}
-          onLoad={handleIframeLoad}
-        />
+        {/* Use React renderer for live preview, fall back to iframe for AI-polished code */}
+        {isPolished && polishedCode ? (
+          <iframe
+            ref={iframeRef}
+            srcDoc={codeWithScroll}
+            sandbox="allow-scripts allow-same-origin"
+            title="Landing Page Preview (Polished)"
+            className="bg-white border-0 h-full"
+            style={{ width: DEVICE_WIDTHS[deviceWidth] }}
+            onLoad={handleIframeLoad}
+          />
+        ) : (
+          <div className="h-full" style={{ width: DEVICE_WIDTHS[deviceWidth] }}>
+            <ReactSectionRenderer
+              sections={sections}
+              brandConfig={brandConfig}
+              onSectionClick={onSectionClick}
+            />
+          </div>
+        )}
 
         {/* Section status badges — positioned absolutely over the iframe */}
         <div className="absolute inset-0 pointer-events-none">

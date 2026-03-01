@@ -32,7 +32,9 @@ import { parseWorkspaceToSections } from './assemblyOrchestrator';
 import { AssetGenerationQueue } from './assetQueue';
 import { AssemblyPreview } from './AssemblyPreview';
 import { LandingEditorPanel } from './LandingEditorPanel';
-import { FloatingChatBar } from './FloatingChatBar';
+import { FloatingChatBar, type ChatOverlayState } from './FloatingChatBar';
+import type { ModelTier } from './IntelligenceToggle';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { WorkspacePhaseKey } from '@/lib/services/landingBuilderWorkspaceService';
 import type { FactProfile } from '@/lib/types/factProfile';
@@ -343,6 +345,10 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
   const [assemblyBrandConfig, setAssemblyBrandConfig] = useState<BrandConfig | null>(null);
   const [highlightSectionId, setHighlightSectionId] = useState<string | undefined>();
   const assetQueueRef = useRef<AssetGenerationQueue | null>(null);
+  // Chat overlay state for the 3-state floating chat bar
+  const [chatOverlayState, setChatOverlayState] = useState<ChatOverlayState>('collapsed');
+  // Model tier for intelligence toggle
+  const [modelTier, setModelTier] = useState<ModelTier>('balanced');
 
   // Sync phase from workspace on load
   React.useEffect(() => {
@@ -760,6 +766,30 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     );
   }, [currentPhase]);
 
+  // Agent identity for the floating chat bar header
+  const agentBadgeData = useMemo(() => {
+    const role = PHASE_AGENT_MAP[currentPhase];
+    if (!role) return { label: 'Assistant', color: 'text-gray-400' };
+    return AGENT_BADGES[role];
+  }, [currentPhase]);
+
+  // Status text for the chat header
+  const chatStatusText = useMemo(() => {
+    if (isLoading) return 'is thinking\u2026';
+    if (isAssemblyMode && assemblySections.length > 0) {
+      return `Building ${assemblySections.length} sections\u2026`;
+    }
+    return 'Ready';
+  }, [isLoading, isAssemblyMode, assemblySections.length]);
+
+  // Last assistant message preview (truncated, stripped of markdown)
+  const lastAssistantPreview = useMemo(() => {
+    const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+    if (!lastAssistant?.content) return undefined;
+    const text = lastAssistant.content.replace(/[#*_`>\n\r]/g, ' ').replace(/\s+/g, ' ').trim();
+    return text.length > 55 ? text.slice(0, 55) + '\u2026' : text;
+  }, [messages]);
+
   // Navigate back to a completed phase for editing
   const handleEditPhase = useCallback((phaseNum: number) => {
     if (phaseNum >= currentPhase) return;
@@ -796,12 +826,19 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     assetQueueRef.current.process();
   }, []);
 
+  // Dynamic preview padding based on chat overlay state
+  const previewPadding = chatOverlayState === 'collapsed'
+    ? 'pb-20'
+    : chatOverlayState === 'expanded'
+      ? 'pb-[68vh]'
+      : 'pb-4';
+
   // Assembly mode: preview (flex-1) + right editor panel (w-80) + floating chat bar overlay
   if (isAssemblyMode && assemblyBrandConfig) {
     return (
       <div className="relative h-[calc(100dvh-var(--app-top-offset))] w-full flex">
         {/* Preview — fills remaining space */}
-        <div className="flex-1 min-w-0 relative pb-36">
+        <div className={cn('flex-1 min-w-0 relative', previewPadding)}>
           <AssemblyPreview
             sections={assemblySections}
             brandConfig={assemblyBrandConfig}
@@ -821,12 +858,21 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
           />
         </div>
 
-        {/* Floating chat bar — centered bottom overlay */}
+        {/* Floating chat bar — 3-state overlay */}
         <FloatingChatBar
           apiContentTransform={builderApiTransform}
           phaseActions={phaseActions}
           onPhaseAction={handlePhaseAction}
           phaseComponent={phaseComponent}
+          agentLabel={agentBadgeData.label}
+          agentColor={agentBadgeData.color}
+          statusText={chatStatusText}
+          sectionCount={assemblySections.length}
+          isAgentWorking={isLoading}
+          onChatStateChange={setChatOverlayState}
+          lastMessagePreview={lastAssistantPreview}
+          modelTier={modelTier}
+          onModelTierChange={setModelTier}
         />
       </div>
     );

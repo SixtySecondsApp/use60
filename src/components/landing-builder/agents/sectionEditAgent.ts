@@ -97,8 +97,10 @@ RULES FOR THE JSON:
 - "highlight_section_id" is the id of the most relevant section to scroll to in the preview, or null if not applicable.
 - For "update_copy": include only the field you're changing (headline, subhead, body, or cta), not all four.
 - For "reorder": section_ids must include ALL section ids in the new order.
-- For "add": section_type must be one of: hero, problem, solution, features, social-proof, cta, faq, footer.
-- For "update_layout": variant must be one of: centered, split-left, split-right, cards-grid.
+- For "add": section_type must be one of: hero, problem, solution, features, social-proof, cta, faq, footer, pricing, comparison, stats, how-it-works.
+- For "update_layout": variant must be one of: centered, split-left, split-right, cards-grid, gradient, alternating, logo-banner, metrics-bar, case-study, review-badges.
+- For "update_copy": you can also set field to "content_blocks" with value as a JSON array of {type, value, label} objects (type: stat|bullet|quote|step).
+- For "update_style": style_patch can also include "asset_strategy" (image|svg|icon|none), "icon_name" (Lucide icon name), and "divider" (wave|diagonal|curve|mesh|none).
 - For "regenerate_asset": include a descriptive prompt_override for the new asset.
 
 CONVERSATION STYLE:
@@ -129,6 +131,10 @@ export function buildSectionEditContext(sections: LandingSection[]): string {
       `    Body: ${s.copy.body.length > 120 ? s.copy.body.slice(0, 120) + '...' : s.copy.body}`,
       `    CTA: ${s.copy.cta}`,
       `    Style: bg=${s.style.bg_color}, text=${s.style.text_color}, accent=${s.style.accent_color}`,
+      `    Asset Strategy: ${s.asset_strategy ?? 'image'}`,
+      ...(s.icon_name ? [`    Icon: ${s.icon_name}`] : []),
+      ...(s.divider && s.divider !== 'none' ? [`    Divider: ${s.divider}`] : []),
+      ...(s.content_blocks?.length ? [`    Content Blocks: ${s.content_blocks.length} items`] : []),
       `    Image: ${s.image_status === 'complete' ? 'yes' : s.image_status}`,
       `    SVG: ${s.svg_status === 'complete' ? 'yes' : s.svg_status}`,
     ];

@@ -10,10 +10,13 @@
 
 import type { LandingSection, BrandConfig } from '../types';
 import { renderSectionsToCode } from '../sectionRenderer';
+import { CopilotService } from '@/lib/services/copilotService';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+export type ExportFormat = 'html' | 'react';
 
 export interface ExportResult {
   code: string;
@@ -27,6 +30,7 @@ interface ExportPolishParams {
   companyName?: string;
   polishWithAI?: boolean;
   onProgress?: (status: string) => void;
+  format?: ExportFormat;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,26 +129,69 @@ function computeCacheKey(sections: LandingSection[], brandConfig: BrandConfig): 
 }
 
 // ---------------------------------------------------------------------------
-// In-memory cache
+// In-memory cache (separate entries for raw vs polished)
 // ---------------------------------------------------------------------------
 
 let cachedResult: ExportResult | null = null;
 let cachedKey: string | null = null;
+let cachedPolishedResult: ExportResult | null = null;
+let cachedPolishedKey: string | null = null;
+
+// ---------------------------------------------------------------------------
+// AI polish pass
+// ---------------------------------------------------------------------------
+
+async function polishWithAI(
+  baseCode: string,
+  onProgress?: (status: string) => void,
+): Promise<string> {
+  onProgress?.('Polishing with AI...');
+
+  try {
+    const response = await CopilotService.sendMessage(
+      `${EXPORT_POLISH_SYSTEM_PROMPT}\n\n--- BASE CODE ---\n${baseCode}\n--- END BASE CODE ---\n\nPolish this landing page for production. Output only the complete HTML code.`,
+      {
+        currentView: 'dashboard',
+        userId: '', // Extracted from JWT server-side
+      } as any,
+    );
+
+    const polished = response.response?.content;
+    if (typeof polished === 'string' && polished.length > 100) {
+      // Strip markdown code fences if AI wrapped the output
+      const cleaned = polished
+        .replace(/^```(?:html|tsx|jsx)?\n?/gm, '')
+        .replace(/\n?```$/gm, '')
+        .trim();
+      return cleaned;
+    }
+  } catch (error) {
+    onProgress?.('AI polish failed — using base code');
+    console.warn('Export polish AI call failed, falling back to base code:', error);
+  }
+
+  return baseCode;
+}
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /**
- * Generate polished export code from sections.
+ * Generate export code from sections.
+ * When polishWithAI is true, sends the base code through the AI polish pass.
  * Returns cached result if sections haven't changed.
  */
 export async function generateExport(params: ExportPolishParams): Promise<ExportResult> {
-  const { sections, brandConfig, companyName, onProgress } = params;
+  const { sections, brandConfig, companyName, polishWithAI: shouldPolish, onProgress } = params;
   const key = computeCacheKey(sections, brandConfig);
 
-  // Return cache hit
-  if (cachedKey === key && cachedResult) {
+  // Return cache hit for polished
+  if (shouldPolish && cachedPolishedKey === key && cachedPolishedResult) {
+    return cachedPolishedResult;
+  }
+  // Return cache hit for raw
+  if (!shouldPolish && cachedKey === key && cachedResult) {
     return cachedResult;
   }
 
@@ -153,12 +200,13 @@ export async function generateExport(params: ExportPolishParams): Promise<Export
   // Generate base code from section renderer (deterministic, instant)
   const baseCode = generateBaseCode(sections, brandConfig);
 
-  onProgress?.('Preparing export...');
+  let code = baseCode;
 
-  // For now, use the deterministic renderer output directly.
-  // AI polish pass can be added later by sending baseCode to the AI
-  // with EXPORT_POLISH_SYSTEM_PROMPT and using the response instead.
-  const code = baseCode;
+  if (shouldPolish) {
+    code = await polishWithAI(baseCode, onProgress);
+  }
+
+  onProgress?.('Preparing export...');
 
   const title = companyName ? `${companyName} — Landing Page` : 'Landing Page';
   const html = wrapInHtml(code, brandConfig, title);
@@ -169,9 +217,14 @@ export async function generateExport(params: ExportPolishParams): Promise<Export
     cachedAt: Date.now(),
   };
 
-  // Cache result
-  cachedKey = key;
-  cachedResult = result;
+  // Cache result in appropriate slot
+  if (shouldPolish) {
+    cachedPolishedKey = key;
+    cachedPolishedResult = result;
+  } else {
+    cachedKey = key;
+    cachedResult = result;
+  }
 
   return result;
 }
@@ -182,6 +235,8 @@ export async function generateExport(params: ExportPolishParams): Promise<Export
 export function invalidateExportCache(): void {
   cachedKey = null;
   cachedResult = null;
+  cachedPolishedKey = null;
+  cachedPolishedResult = null;
 }
 
 /**
@@ -189,6 +244,56 @@ export function invalidateExportCache(): void {
  */
 export function downloadHtml(html: string, filename: string = 'landing-page.html'): void {
   const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Generate self-contained React TSX from sections.
+ */
+function generateReactTsx(sections: LandingSection[], brandConfig: BrandConfig): string {
+  const sorted = [...sections].sort((a, b) => a.order - b.order);
+  const sectionBlocks = sorted.map((s) => {
+    const bodyLines = s.copy.body.split('\n').filter(Boolean);
+    const bodyJsx = bodyLines.length > 1
+      ? bodyLines.map((line, i) => `          <p key={${i}} className="text-base opacity-70 mb-2">${line}</p>`).join('\n')
+      : `          <p className="text-base opacity-60 max-w-xl mx-auto">${s.copy.body}</p>`;
+
+    return `      {/* ${s.type} — ${s.layout_variant} */}
+      <section className="py-16 md:py-24 px-6" style={{ backgroundColor: '${s.style.bg_color}', color: '${s.style.text_color}' }}>
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">${s.copy.headline}</h2>
+          <p className="text-lg opacity-80 mb-4">${s.copy.subhead}</p>
+${bodyJsx}
+          ${s.copy.cta ? `<a href="#" className="mt-8 inline-block px-8 py-4 rounded-full text-white font-semibold" style={{ background: '${s.style.accent_color}' }}>${s.copy.cta}</a>` : ''}
+        </div>
+      </section>`;
+  }).join('\n\n');
+
+  return `import React from 'react';
+
+export default function LandingPage() {
+  return (
+    <div style={{ fontFamily: "'${brandConfig.font_body}', sans-serif" }}>
+${sectionBlocks}
+    </div>
+  );
+}
+`;
+}
+
+/**
+ * Download React TSX as a file.
+ */
+export function downloadReactTsx(sections: LandingSection[], brandConfig: BrandConfig, filename = 'LandingPage.tsx'): void {
+  const tsx = generateReactTsx(sections, brandConfig);
+  const blob = new Blob([tsx], { type: 'text/typescript' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

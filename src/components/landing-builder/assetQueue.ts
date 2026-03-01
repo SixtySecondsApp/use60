@@ -146,9 +146,18 @@ export class AssetGenerationQueue {
 
     const sorted = [...sections].sort((a, b) => a.order - b.order);
 
+    // Skip sections with asset_strategy 'icon' or 'none' — they don't need generation
+    const needsAsset = (section: LandingSection, type: 'image' | 'svg'): boolean => {
+      const strategy = section.asset_strategy;
+      if (strategy === 'icon' || strategy === 'none') return false;
+      if (strategy === 'image' && type === 'svg') return false;
+      if (strategy === 'svg' && type === 'image') return false;
+      return true;
+    };
+
     // Hero image first
     const hero = sorted.find(s => s.type === 'hero');
-    if (hero) {
+    if (hero && needsAsset(hero, 'image')) {
       this.queue.push({
         sectionId: hero.id,
         assetType: 'image',
@@ -165,6 +174,7 @@ export class AssetGenerationQueue {
 
     // Above-fold SVGs (first 2 sections)
     for (const section of sorted.slice(0, 2)) {
+      if (!needsAsset(section, 'svg')) continue;
       this.queue.push({
         sectionId: section.id,
         assetType: 'svg',
@@ -182,6 +192,7 @@ export class AssetGenerationQueue {
     // Remaining images (skip hero if already added)
     for (const section of sorted) {
       if (section.type === 'hero') continue; // already added
+      if (!needsAsset(section, 'image')) continue;
       this.queue.push({
         sectionId: section.id,
         assetType: 'image',
@@ -198,6 +209,7 @@ export class AssetGenerationQueue {
 
     // Remaining SVGs (skip first 2)
     for (const section of sorted.slice(2)) {
+      if (!needsAsset(section, 'svg')) continue;
       this.queue.push({
         sectionId: section.id,
         assetType: 'svg',

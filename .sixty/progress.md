@@ -1,6 +1,50 @@
-# Progress Log — Landing Builder UX Redesign
+# Progress Log — Landing Builder React Component Upgrade
 
-## Current Feature: landing-builder-ux-redesign (5/5 stories) COMPLETE
+## Current Feature: landing-builder-react-components (25/25 stories) COMPLETE
+
+### Plan Generated: 2026-03-01
+
+**Feature**: React Component Upgrade + Design Improvements
+**Stories**: 24 (RC-001 → RC-026, skipping RC-022)
+**Estimated**: ~6 hours sequential, ~3 hours with parallelism
+
+**Phases**:
+1. Foundation (RC-001 → RC-005): Types, shared components, animations, registry, install
+2. Section Components (RC-006 → RC-012): Port all 8 types + 4 new types to React
+3. React Preview Renderer (RC-013 → RC-016): react-frame-component iframe, update previews
+4. Orchestrator + Features (RC-017 → RC-020): Smart assets, new keywords, intelligence toggle
+5. Export + Editor (RC-021 → RC-026): React export, updated panels, agent prompt, HTML parity
+
+**Parallel Groups**:
+- Group 1 (no deps): RC-001, RC-003, RC-005
+- Group 2 (after RC-001 + RC-002): RC-006 through RC-012 (all 7 section story groups)
+- Group 3 (after RC-001): RC-017, RC-019, RC-020
+- Group 4 (after sections): RC-021, RC-023, RC-025, RC-026
+
+### 2026-03-01 — RC-001 through RC-026 (all 25 stories)
+**Feature**: React Component Upgrade + Design Improvements
+**Stories completed**: 25/25
+**Files created**: 40+ (sections/, shared/, registry, brandStyles, ReactSectionRenderer, IntelligenceToggle)
+**Files modified**: 10 (types, sectionRenderer, assemblyOrchestrator, assetQueue, AssemblyPreview, ProgressivePreview, exportPolishAgent, SectionListPanel, PropertiesPanel, FloatingChatBar, LandingPageBuilder, sectionEditAgent)
+**Quality gates**: lint 0 errors, pre-existing warnings only
+**Key changes**:
+- Extended type system: 12 section types, 10 layout variants, AssetStrategy, SectionDividerType, ContentBlock
+- Created shared subcomponents: SectionWrapper, CtaButton, AssetSlot, ContentBlockRenderer, SectionDivider, MicroCopy
+- Created CSS micro-animation library (8 keyframe animations + utility classes)
+- Self-registering component registry with getSectionComponent(type, variant) + fallback chain
+- Installed react-frame-component for iframe-based React rendering with injected styles
+- Built all 12 section types as React components (30+ variants total)
+- React renderer is primary for preview; HTML renderer kept for export/polish
+- Smart asset strategy: sections with icon/none strategy skip asset generation
+- IntelligenceToggle: 3-tier model selector wired into FloatingChatBar
+- React TSX export added to exportPolishAgent
+- HTML export parity: 31 templates (was 24) including pricing, comparison, stats, how-it-works
+- sectionEditAgent prompt extended for new types, content blocks, asset strategy, dividers
+- PropertiesPanel: asset strategy selector, icon name field, divider picker, extended layout options
+
+---
+
+## Previous Feature: landing-builder-ux-redesign (5/5 stories) COMPLETE
 
 ### 2026-03-01 — LB-UX-001 through LB-UX-005 (all 5 stories)
 **Feature**: Landing Builder UX Redesign (Preview Fix + Layout Overhaul)

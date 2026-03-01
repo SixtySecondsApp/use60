@@ -8,11 +8,10 @@
  * - Device width toggles (mobile/tablet/desktop)
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, AlertTriangle, Monitor, Tablet, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { LandingCodePreview } from './LandingCodePreview';
-import { renderSectionsToCode } from './sectionRenderer';
+import { ReactSectionRenderer } from './ReactSectionRenderer';
 import type { LandingSection, BrandConfig, AssetStatus } from './types';
 
 // ---------------------------------------------------------------------------
@@ -103,12 +102,6 @@ export const AssemblyPreview: React.FC<AssemblyPreviewProps> = ({
       return () => clearTimeout(timeout);
     }
   }, [sections]);
-
-  // Generate code from sections
-  const code = useMemo(
-    () => renderSectionsToCode(sections, brandConfig),
-    [sections, brandConfig],
-  );
 
   // Overall stats
   const stats = useMemo(() => {
@@ -208,12 +201,16 @@ export const AssemblyPreview: React.FC<AssemblyPreviewProps> = ({
           })}
         </div>
 
-        {/* Iframe preview */}
+        {/* React component preview */}
         <div
           className="mx-auto h-full transition-all duration-300"
           style={{ maxWidth: typeof width === 'number' ? `${width}px` : width }}
         >
-          <LandingCodePreview code={code} />
+          <ReactSectionRenderer
+            sections={sections}
+            brandConfig={brandConfig}
+            onSectionClick={onSectionClick}
+          />
         </div>
       </div>
     </div>

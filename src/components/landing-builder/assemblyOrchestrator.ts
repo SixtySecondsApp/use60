@@ -8,7 +8,7 @@
  * startAssembly: kicks off asset generation queue (shell — wired in EDIT-005)
  */
 
-import type { LandingSection, SectionType, LayoutVariant, BrandConfig } from './types';
+import type { LandingSection, SectionType, LayoutVariant, BrandConfig, AssetStrategy, SectionDividerType } from './types';
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -50,6 +50,10 @@ const SECTION_TYPE_KEYWORDS: Record<SectionType, string[]> = {
   cta: ['cta', 'call to action', 'get started', 'sign up', 'final', 'closing'],
   faq: ['faq', 'question', 'objection'],
   footer: ['footer'],
+  pricing: ['pricing', 'plan', 'tier', 'price', 'subscription', 'free trial'],
+  comparison: ['comparison', 'versus', 'compare', 'vs', 'alternative'],
+  stats: ['stats', 'statistic', 'metric', 'number', 'data point', 'by the numbers'],
+  'how-it-works': ['how it works', 'step', 'process', 'workflow', 'getting started'],
 };
 
 function inferSectionType(section: StrategySection, index: number, total: number): SectionType {
@@ -74,7 +78,70 @@ function inferSectionType(section: StrategySection, index: number, total: number
 }
 
 function isValidSectionType(value: string): value is SectionType {
-  return ['hero', 'problem', 'solution', 'features', 'social-proof', 'cta', 'faq', 'footer'].includes(value);
+  return [
+    'hero', 'problem', 'solution', 'features', 'social-proof',
+    'cta', 'faq', 'footer', 'pricing', 'comparison', 'stats', 'how-it-works',
+  ].includes(value);
+}
+
+// ---------------------------------------------------------------------------
+// Smart asset strategy assignment
+// ---------------------------------------------------------------------------
+
+const ASSET_STRATEGY_MAP: Record<SectionType, AssetStrategy> = {
+  hero: 'image',
+  problem: 'svg',
+  solution: 'image',
+  features: 'icon',
+  'social-proof': 'none',
+  cta: 'svg',
+  faq: 'none',
+  footer: 'none',
+  pricing: 'none',
+  comparison: 'none',
+  stats: 'none',
+  'how-it-works': 'icon',
+};
+
+const DEFAULT_ICON_MAP: Record<SectionType, string> = {
+  hero: '',
+  problem: '',
+  solution: '',
+  features: '→',
+  'social-proof': '',
+  cta: '',
+  faq: '',
+  footer: '',
+  pricing: '',
+  comparison: '',
+  stats: '',
+  'how-it-works': '→',
+};
+
+const DIVIDER_TRANSITIONS: Record<string, SectionDividerType> = {
+  'hero→problem': 'wave',
+  'problem→solution': 'curve',
+  'solution→features': 'diagonal',
+  'features→social-proof': 'wave',
+  'social-proof→cta': 'curve',
+  'features→pricing': 'diagonal',
+  'pricing→cta': 'wave',
+  'stats→cta': 'curve',
+};
+
+function assignAssetStrategy(sectionType: SectionType): AssetStrategy {
+  return ASSET_STRATEGY_MAP[sectionType] ?? 'none';
+}
+
+function assignIconName(sectionType: SectionType): string | undefined {
+  const icon = DEFAULT_ICON_MAP[sectionType];
+  return icon || undefined;
+}
+
+function assignDivider(prevType: SectionType | null, currentType: SectionType): SectionDividerType | undefined {
+  if (!prevType) return undefined;
+  const key = `${prevType}→${currentType}`;
+  return DIVIDER_TRANSITIONS[key] ?? undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +151,9 @@ function isValidSectionType(value: string): value is SectionType {
 function selectLayoutVariant(copy: { body: string }, section: StrategySection): LayoutVariant {
   // Check for explicit layout hint from strategy
   const layoutHint = (section.layout ?? '').toLowerCase();
+  if (layoutHint.includes('gradient')) return 'gradient';
+  if (layoutHint.includes('alternating')) return 'alternating';
+  if (layoutHint.includes('logo') || layoutHint.includes('banner')) return 'logo-banner';
   if (layoutHint.includes('bento') || layoutHint.includes('grid') || layoutHint.includes('cards')) {
     return 'cards-grid';
   }
@@ -116,6 +186,72 @@ interface ExtractedCopy {
   subhead: string;
   body: string;
   cta: string;
+  micro_copy?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Parse compiled raw copy into structured sections
+// ---------------------------------------------------------------------------
+
+interface ParsedCopySection {
+  headline: string;
+  subhead: string;
+  body: string;
+  cta: string;
+  micro_copy: string;
+}
+
+function parseCompiledCopyToStructured(
+  copyData: Record<string, unknown>,
+): Record<string, unknown> {
+  // Check if copy is in the { raw: "APPROVED COPY SELECTIONS:\n\n## Hero\n..." } format
+  const rawValue = copyData.raw;
+  if (typeof rawValue !== 'string' || !rawValue.includes('APPROVED COPY SELECTIONS')) {
+    return copyData;
+  }
+
+  // Split by ## headings to get section blocks
+  const blocks = rawValue.split(/\n##\s+/);
+  const result: Record<string, ParsedCopySection> = {};
+
+  for (const block of blocks) {
+    if (!block.trim()) continue;
+
+    // First line is the section name
+    const lines = block.split('\n');
+    const sectionName = lines[0].replace(/[*#]/g, '').trim().toLowerCase();
+    if (!sectionName || sectionName.includes('approved copy')) continue;
+
+    const extract = (label: string): string => {
+      const regex = new RegExp(`^${label}:\\s*(.+)`, 'im');
+      const match = block.match(regex);
+      return match?.[1]?.trim() ?? '';
+    };
+
+    // Extract body: everything between Body: and the next label or end
+    const extractBody = (): string => {
+      const bodyMatch = block.match(/^Body:\s*([\s\S]*?)(?=^(?:Headline|Subhead|CTA|Micro-copy):|$)/im);
+      if (bodyMatch) {
+        return bodyMatch[1].trim();
+      }
+      return extract('Body');
+    };
+
+    result[sectionName] = {
+      headline: extract('Headline'),
+      subhead: extract('Subhead'),
+      body: extractBody(),
+      cta: extract('CTA'),
+      micro_copy: extract('Micro-copy'),
+    };
+  }
+
+  // If we parsed at least one section, return structured data
+  if (Object.keys(result).length > 0) {
+    return result;
+  }
+
+  return copyData;
 }
 
 function extractSectionCopy(
@@ -145,10 +281,11 @@ function extractSectionCopy(
           subhead: String(obj.subhead ?? obj.subtitle ?? obj.h2 ?? ''),
           body: String(obj.body ?? obj.text ?? obj.description ?? obj.content ?? ''),
           cta: String(obj.cta ?? obj.button ?? obj.cta_text ?? fallback.cta),
+          micro_copy: String(obj.micro_copy ?? obj.microcopy ?? ''),
         };
       }
       if (typeof value === 'string') {
-        return { ...fallback, body: value };
+        return { ...fallback, body: value, micro_copy: undefined };
       }
     }
   }
@@ -164,6 +301,7 @@ function extractSectionCopy(
           subhead: String(s.subhead ?? s.subtitle ?? ''),
           body: String(s.body ?? s.text ?? s.description ?? ''),
           cta: String(s.cta ?? s.button ?? fallback.cta),
+          micro_copy: String(s.micro_copy ?? s.microcopy ?? ''),
         };
       }
     }
@@ -358,12 +496,14 @@ export function parseWorkspaceToSections(workspace: {
 }): { sections: LandingSection[]; brandConfig: BrandConfig } {
   const brandConfig = extractBrandConfig(workspace.visuals, workspace.research);
   const strategySections = extractStrategySections(workspace.strategy);
+  const structuredCopy = parseCompiledCopyToStructured(workspace.copy);
 
   const sections: LandingSection[] = strategySections.map((ss, index) => {
     const sectionName = ss.name ?? ss.title ?? `Section ${index + 1}`;
     const sectionType = inferSectionType(ss, index, strategySections.length);
-    const copy = extractSectionCopy(sectionName, sectionType, ss, workspace.copy);
+    const copy = extractSectionCopy(sectionName, sectionType, ss, structuredCopy);
     const layoutVariant = selectLayoutVariant(copy, ss);
+    const prevType = index > 0 ? inferSectionType(strategySections[index - 1], index - 1, strategySections.length) : null;
 
     return {
       id: crypto.randomUUID(),
@@ -376,6 +516,9 @@ export function parseWorkspaceToSections(workspace: {
       svg_code: null,
       svg_status: 'idle',
       style: assignSectionStyle(sectionType, index, brandConfig),
+      asset_strategy: assignAssetStrategy(sectionType),
+      icon_name: assignIconName(sectionType),
+      divider: assignDivider(prevType, sectionType),
     };
   });
 
