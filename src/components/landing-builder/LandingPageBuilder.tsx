@@ -8,8 +8,9 @@
  * Auto-loads org profile + products to give the AI real business context.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { MessageSquare, Minimize2, GripVertical } from 'lucide-react';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { CopilotLayout } from '@/components/copilot/CopilotLayout';
@@ -23,79 +24,20 @@ import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useLandingBuilderWorkspace } from '@/lib/hooks/useLandingBuilderWorkspace';
 import { CopyPicker, parseCopySections } from './CopyPicker';
-import { HeroImageGenerator, parseVisualsForImage } from './HeroImageGenerator';
-import { SvgGallery, type SvgAsset } from './SvgGallery';
-import { geminiSvgService } from '@/lib/services/geminiSvgService';
-import { PHASE_AGENT_MAP, AGENT_BADGES, type LandingResearchData } from './types';
+import { PHASE_AGENT_MAP, AGENT_BADGES, type LandingResearchData, type LandingSection, type BrandConfig } from './types';
 import { useLandingResearch } from '@/lib/hooks/useLandingResearch';
 import { STRATEGIST_SYSTEM_PROMPT } from './agents/strategistAgent';
 import { COPYWRITER_SYSTEM_PROMPT } from './agents/copywriterAgent';
-import { VISUAL_ARTIST_SYSTEM_PROMPT } from './agents/visualArtistAgent';
-import { BUILDER_AGENT_SYSTEM_PROMPT } from './agents/builderAgent';
+import { SECTION_EDIT_AGENT_SYSTEM_PROMPT, buildSectionEditContext, parseSectionEditResponse } from './agents/sectionEditAgent';
+import { parseWorkspaceToSections } from './assemblyOrchestrator';
+import { AssetGenerationQueue } from './assetQueue';
+import { AssemblyPreview } from './AssemblyPreview';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import type { WorkspacePhaseKey } from '@/lib/services/landingBuilderWorkspaceService';
 import type { FactProfile } from '@/lib/types/factProfile';
 import type { ProductProfile } from '@/lib/types/productProfile';
 
-/** SVG type → complexity and default viewBox mapping */
-const SVG_TYPE_MAP: Record<string, { complexity: 'simple' | 'medium' | 'complex'; viewbox: string }> = {
-  'section-divider': { complexity: 'simple', viewbox: '0 0 1440 80' },
-  'animated-icon':   { complexity: 'simple', viewbox: '0 0 48 48' },
-  'hero-accent':     { complexity: 'medium', viewbox: '0 0 800 400' },
-  'isometric-scene': { complexity: 'complex', viewbox: '0 0 600 400' },
-  'narrative':       { complexity: 'complex', viewbox: '0 0 600 400' },
-};
-
-interface ParsedSvgConcept {
-  sectionName: string;
-  description: string;
-  type: string;
-  complexity: 'simple' | 'medium' | 'complex';
-  viewbox: string;
-}
-
-/**
- * Parse SVG concept blocks from Visual Artist output.
- * Looks for: **SVG: [Section Name]** followed by blockquoted fields.
- * Extracts the Type field to map to complexity and viewbox.
- */
-function parseSvgConcepts(content: string): ParsedSvgConcept[] {
-  const regex = /\*\*SVG:\s*(.+?)\*\*\s*\n((?:>\s*.+\n?)+)/g;
-  const concepts: ParsedSvgConcept[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(content)) !== null) {
-    const sectionName = match[1].trim();
-    const lines = match[2]
-      .split('\n')
-      .map(line => line.replace(/^>\s*/, '').trim())
-      .filter(Boolean);
-
-    // Extract Type field from blockquote lines
-    const typeLine = lines.find(l => /^\*\*Type:\*\*/i.test(l));
-    const rawType = typeLine
-      ? typeLine.replace(/^\*\*Type:\*\*\s*/i, '').trim().toLowerCase().split(/[\s|,]/)[0]
-      : '';
-    const typeConfig = SVG_TYPE_MAP[rawType] ?? SVG_TYPE_MAP['hero-accent'];
-
-    // Check if Size field specifies a custom viewBox
-    const sizeLine = lines.find(l => /^\*\*Size:\*\*/i.test(l));
-    let viewbox = typeConfig.viewbox;
-    if (sizeLine) {
-      const vbMatch = sizeLine.match(/(\d+\s+\d+\s+\d+\s+\d+)/);
-      if (vbMatch) viewbox = vbMatch[1];
-    }
-
-    const description = lines.join('\n');
-    concepts.push({
-      sectionName,
-      description,
-      type: rawType || 'hero-accent',
-      complexity: typeConfig.complexity,
-      viewbox,
-    });
-  }
-  return concepts;
-}
 
 /**
  * Compile org profile + products into a concise context block
@@ -215,11 +157,14 @@ function buildWorkspaceContext(
     parts.push(`--- COPY (approved) ---\n${truncated}`);
   }
 
-  // Visuals — needed by build phase
-  if (currentPhase >= 3 && workspace.visuals && Object.keys(workspace.visuals).length > 0) {
-    const visStr = JSON.stringify(workspace.visuals);
-    const truncated = visStr.length > 2500 ? visStr.slice(0, 2500) + '...' : visStr;
-    parts.push(`--- VISUALS (approved) ---\n${truncated}`);
+  // Visuals/brand config — injected during assembly phase if available
+  if (currentPhase >= 2 && workspace.visuals && Object.keys(workspace.visuals).length > 0) {
+    const vis = workspace.visuals as Record<string, unknown>;
+    const raw = vis.raw as string | undefined;
+    if (raw) {
+      const truncated = raw.length > 1500 ? raw.slice(0, 1500) + '...' : raw;
+      parts.push(`--- BRAND CONFIG ---\n${truncated}`);
+    }
   }
 
   if (parts.length === 0) return '';
@@ -287,11 +232,10 @@ function buildResearchContext(research: LandingResearchData | null): string {
 const PHASE_KEY_MAP: Record<number, WorkspacePhaseKey> = {
   0: 'brief',
   1: 'copy',
-  2: 'visuals',
-  3: 'visuals', // Build phase doesn't have its own key; code is stored separately
+  2: 'visuals', // Assembly stores code via updateCode; visuals key holds brand config
 };
 
-// 4 phases — each approval gate shows something visual, not text walls.
+// 3 phases — Strategy → Copy → Assembly (progressive build)
 const PHASE_PROMPTS = [
   {
     name: 'Strategy & Layout',
@@ -329,72 +273,10 @@ Write the actual words. Be specific to this business — use real product names,
   },
   {
     name: 'Copy',
-    approveNext: `The client approved the copy.
-
-Now deliver the VISUAL DIRECTION with actual visual examples. Include ALL of these:
-
-**1. Color Palette**
-IMPORTANT: Wrap every hex code in backticks so they render as color swatches.
-Show the exact palette using this format — each color on its own line:
-- Primary: \`#0A0A0F\` — [what it's used for]
-- Secondary: \`#1A1A2E\` — [what it's used for]
-- Accent: \`#5B5BD6\` — [what it's used for]
-- Background: \`#F5F5F5\`
-- Text: \`#1A1A1A\`
-(Replace the example hex values above with the actual colors for this brand.)
-
-**2. Typography**
-- Headings: [Google Font name], [weight] — [why this font]
-- Body: [Google Font name], [weight]
-
-**3. Hero Image Concept**
-Describe the hero image in vivid detail (what it shows, the mood, the lighting, the composition). Be specific enough that an AI image generator could create it.
-
-**4. SVG Animations**
-Describe 2-3 SVG animation concepts. A specialist SVG generator (Gemini 3.1 Pro) will create the final code from your direction.
-
-For each animation, use this EXACT format (every field is required):
-
-**SVG: [Section Name]**
-> **Type:** section-divider | hero-accent | isometric-scene | animated-icon | narrative
-> **Concept:** [What the animation shows — shapes, layers, visual metaphor]
-> **Composition:** [Number of layers, depth planes, foreground vs background elements]
-> **Animation:**
-> 1. [Element] — [property] [from → to], [duration], [easing curve with cubic-bezier()]
-> 2. [Element] — [property] [from → to], [duration], [timing relationship to #1]
-> 3. [Loop/hover behavior] — [direction], [iteration count], [alternate or normal]
-> **Physics:** [Object type → motion character, e.g. "liquid: sine-wave morphing, 4s loops"]
-> **Colors:** [Exact hex values with gradient definitions, opacity per layer]
-> **Filters:** [Filter effect — with exact stdDeviation/radius values]
-> **Size:** [viewBox dimensions e.g. "0 0 1440 80", preserveAspectRatio if needed, KB budget]
-> **Accessibility:** [<title> text, prefers-reduced-motion fallback state]
-
-Do NOT write raw SVG code — describe the concepts with technical precision and the SVG generator will build them.
-
-**5. Icon Style**
-Recommend an icon set (Lucide, Phosphor, etc.) and list the specific icon names for each section.
-
-Deliver vivid, technically precise creative direction — the SVG generator and image generator will produce the final assets from your descriptions.`,
+    approveNext: '', // Copy approval triggers assembly mode — handled in handleApprove
   },
   {
-    name: 'Visuals & Animation',
-    approveNext: `The client approved the visual direction and animations.
-
-Now BUILD the landing page. Write a single production-ready React + Tailwind component that includes:
-- All sections from the approved layout with the EXACT approved copy (headlines, subheads, body, CTAs)
-- The exact colors, fonts, and visual style from the approved direction
-- The SVG animations from the approved visuals — embed them directly
-- Responsive breakpoints (mobile-first)
-- Working form with proper validation
-- Icons from the approved icon set (lucide-react)
-- Smooth scroll-triggered animations using CSS or framer-motion
-
-IMPORTANT: Use the exact copy from the APPROVED COPY SELECTIONS above. Do not rewrite or paraphrase.
-
-Output the complete code in a single code block. No explanation needed.`,
-  },
-  {
-    name: 'Build',
+    name: 'Assembly',
     approveNext: '', // Final phase — no next
   },
 ];
@@ -454,11 +336,13 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
   // Use a ref for messages to avoid stale closure in handleApprove
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
-  // Generated hero image URL from Nano Banana
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
-  // SVG assets generated by Gemini from Visual Artist concepts
-  const [svgAssets, setSvgAssets] = useState<SvgAsset[]>([]);
-  const [isGeneratingSvgs, setIsGeneratingSvgs] = useState(false);
+  // Assembly mode state — activated after copy approval
+  const [isAssemblyMode, setIsAssemblyMode] = useState(false);
+  const [assemblySections, setAssemblySections] = useState<LandingSection[]>([]);
+  const [assemblyBrandConfig, setAssemblyBrandConfig] = useState<BrandConfig | null>(null);
+  const [highlightSectionId, setHighlightSectionId] = useState<string | undefined>();
+  const [chatMinimized, setChatMinimized] = useState(false);
+  const assetQueueRef = useRef<AssetGenerationQueue | null>(null);
 
   // Sync phase from workspace on load
   React.useEffect(() => {
@@ -469,113 +353,6 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
 
   // Use live research if available, fallback to persisted workspace research
   const effectiveResearch = research ?? (workspace?.research as LandingResearchData | null) ?? null;
-
-  // Trigger Gemini SVG generation when Visual Artist (phase 2) emits SVG concepts
-  const svgGenTriggeredRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (currentPhase !== 2 || isLoading || messages.length === 0) return;
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg?.role !== 'assistant' || !lastMsg?.content) return;
-
-    // Avoid re-triggering for the same message
-    const msgKey = lastMsg.content.slice(0, 100);
-    if (svgGenTriggeredRef.current === msgKey) return;
-
-    const concepts = parseSvgConcepts(lastMsg.content);
-    if (concepts.length === 0) return;
-
-    svgGenTriggeredRef.current = msgKey;
-    setIsGeneratingSvgs(true);
-
-    // Extract brand colors from same message
-    const { brandColors } = parseVisualsForImage(lastMsg.content);
-    const colorMap: Record<string, string> = {};
-    brandColors.forEach((hex, i) => { colorMap[`color${i + 1}`] = hex; });
-
-    // Save params for retry
-    lastSvgParamsRef.current = { concepts, colorMap };
-
-    const params = concepts.map(c => ({
-      description: `${c.sectionName}: ${c.description}`,
-      brand_colors: Object.keys(colorMap).length > 0 ? colorMap : undefined,
-      complexity: c.complexity,
-      viewbox: c.viewbox,
-    }));
-
-    geminiSvgService.generateBatch(params).then(results => {
-      const failedCount = results.filter(r => r === null).length;
-      const assets: SvgAsset[] = results
-        .map((result, i) => {
-          if (!result) return null;
-          return {
-            id: `svg-${i}-${Date.now()}`,
-            sectionName: concepts[i].sectionName,
-            svgCode: result.svg_code,
-            status: 'pending' as const,
-            description: concepts[i].description,
-            complexity: concepts[i].complexity,
-            viewbox: concepts[i].viewbox,
-          };
-        })
-        .filter((a): a is SvgAsset => a !== null);
-
-      if (failedCount === concepts.length) {
-        toast.error('SVG generation failed. Click "Retry All" to try again.');
-      } else if (failedCount > 0) {
-        toast.warning(`${failedCount} of ${concepts.length} SVGs failed. You can regenerate individually.`);
-      }
-
-      setSvgAssets(assets);
-      setIsGeneratingSvgs(false);
-    });
-  }, [currentPhase, isLoading, messages]);
-
-  // Store last SVG params for retry capability
-  const lastSvgParamsRef = useRef<{ concepts: ParsedSvgConcept[]; colorMap: Record<string, string> } | null>(null);
-
-  const retryAllSvgs = useCallback(() => {
-    const saved = lastSvgParamsRef.current;
-    if (!saved) return;
-
-    setIsGeneratingSvgs(true);
-    setSvgAssets([]);
-
-    const params = saved.concepts.map(c => ({
-      description: `${c.sectionName}: ${c.description}`,
-      brand_colors: Object.keys(saved.colorMap).length > 0 ? saved.colorMap : undefined,
-      complexity: c.complexity,
-      viewbox: c.viewbox,
-    }));
-
-    geminiSvgService.generateBatch(params).then(results => {
-      const failedCount = results.filter(r => r === null).length;
-      const assets: SvgAsset[] = results
-        .map((result, i) => {
-          if (!result) return null;
-          return {
-            id: `svg-retry-${i}-${Date.now()}`,
-            sectionName: saved.concepts[i].sectionName,
-            svgCode: result.svg_code,
-            status: 'pending' as const,
-            description: saved.concepts[i].description,
-            complexity: saved.concepts[i].complexity,
-            viewbox: saved.concepts[i].viewbox,
-          };
-        })
-        .filter((a): a is SvgAsset => a !== null);
-
-      if (failedCount === saved.concepts.length) {
-        toast.error('SVG generation failed again. Check your Gemini API key in Settings.');
-      } else if (failedCount > 0) {
-        toast.warning(`${failedCount} of ${saved.concepts.length} SVGs failed.`);
-      } else {
-        toast.success('All SVGs regenerated successfully.');
-      }
-
-      setSvgAssets(assets);
-      setIsGeneratingSvgs(false);
-    });
-  }, []);
 
   // Derive phase state for the right panel timeline
   const builderState = useLandingBuilderState(currentPhase, phaseOutputsRef.current, messages.length > 0);
@@ -638,10 +415,11 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     try { localStorage.setItem('sixty_landing_builder_cid', newId); } catch { /* quota */ }
     setCurrentPhase(0);
     phaseOutputsRef.current = {};
-    setGeneratedImageUrl(null);
-    setSvgAssets([]);
-    setIsGeneratingSvgs(false);
-    svgGenTriggeredRef.current = null;
+    setIsAssemblyMode(false);
+    setAssemblySections([]);
+    setAssemblyBrandConfig(null);
+    assetQueueRef.current?.cancelAll();
+    assetQueueRef.current = null;
     resetResearch();
   }, [startNewChat, setConversationId, resetResearch]);
 
@@ -649,8 +427,7 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
   const agentSystemPrompts: Record<number, string> = useMemo(() => ({
     0: STRATEGIST_SYSTEM_PROMPT,
     1: COPYWRITER_SYSTEM_PROMPT,
-    2: VISUAL_ARTIST_SYSTEM_PROMPT,
-    3: BUILDER_AGENT_SYSTEM_PROMPT,
+    2: SECTION_EDIT_AGENT_SYSTEM_PROMPT,
   }), []);
 
   // Build phase-aware context that gets injected into every message
@@ -664,10 +441,14 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     const agentRole = PHASE_AGENT_MAP[currentPhase];
     const agentLabel = agentRole ? `ACTIVE AGENT: ${agentRole}\n` : '';
     const agentPrompt = agentSystemPrompts[currentPhase] || '';
-    const phaseContext = `CURRENT PHASE: ${PHASE_PROMPTS[currentPhase]?.name || 'Unknown'} (phase ${currentPhase + 1} of 4)\n${agentLabel}\n`;
+    const phaseContext = `CURRENT PHASE: ${PHASE_PROMPTS[currentPhase]?.name || 'Unknown'} (phase ${currentPhase + 1} of 3)\n${agentLabel}\n`;
+
+    // During assembly, inject current section state so the editor agent can operate on them
+    const sectionContext = isAssemblyMode && assemblySections.length > 0
+      ? `\n${buildSectionEditContext(assemblySections)}\n`
+      : '';
 
     // Inject recent conversation history so the agent sees its own questions and user answers.
-    // The edge function receives each message in isolation — without this, Claude re-asks the same questions.
     const recentHistory = messages
       .slice(-8) // last 8 messages (4 turns)
       .map(m => `[${m.role === 'user' ? 'USER' : 'ASSISTANT'}]: ${m.content.slice(0, 2000)}`)
@@ -676,13 +457,12 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
       ? `\n[CONVERSATION HISTORY — DO NOT repeat questions already answered below]\n${recentHistory}\n[END CONVERSATION HISTORY]\n\n`
       : '';
 
-    return BUILDER_CONTINUATION + agentPrompt + '\n\n' + businessContext + researchContext + workspaceContext + phaseContext + historyBlock + msg;
-  }, [currentPhase, businessContext, researchContext, workspace, agentSystemPrompts, messages]);
+    return BUILDER_CONTINUATION + agentPrompt + '\n\n' + businessContext + researchContext + workspaceContext + sectionContext + phaseContext + historyBlock + msg;
+  }, [currentPhase, businessContext, researchContext, workspace, agentSystemPrompts, messages, isAssemblyMode, assemblySections]);
 
   // Handle approval — capture output, write to workspace, advance phase
   const handleApprove = useCallback(async (overrideContent?: string) => {
     const phase = PHASE_PROMPTS[currentPhase];
-    if (!phase?.approveNext) return;
 
     // Capture phase output (use override or last assistant message)
     if (!overrideContent) {
@@ -690,12 +470,6 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
       overrideContent = lastAssistantMsg?.content || '';
     }
     phaseOutputsRef.current[currentPhase] = overrideContent;
-
-    // Include generated hero image URL in visuals output
-    if (generatedImageUrl && currentPhase === 2) {
-      overrideContent += `\n\nGENERATED HERO IMAGE URL: ${generatedImageUrl}`;
-      phaseOutputsRef.current[currentPhase] = overrideContent;
-    }
 
     const nextPhase = currentPhase + 1;
 
@@ -706,11 +480,6 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
         updatePhaseOutput({ phase: phaseKey, output: { raw: overrideContent } });
       }
 
-      // If build phase, store as code
-      if (currentPhase === 3) {
-        updateCode(overrideContent);
-      }
-
       // Advance phase in workspace
       const newStatus: Record<string, string> = { ...workspace?.phase_status };
       newStatus[String(currentPhase)] = 'complete';
@@ -719,19 +488,91 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     }
 
     setCurrentPhase(nextPhase);
-    setGeneratedImageUrl(null);
-    setSvgAssets([]);
-    setIsGeneratingSvgs(false);
-    svgGenTriggeredRef.current = null;
 
-    // Build context from workspace for next phase
-    const workspaceContext = buildWorkspaceContext(workspace, nextPhase);
-    const fullMessage = BUILDER_CONTINUATION + businessContext + workspaceContext + phase.approveNext;
+    // Copy phase approval (phase 1) → trigger assembly mode
+    if (currentPhase === 1) {
+      const ws = workspace;
+      if (ws) {
+        try {
+          const { sections, brandConfig } = parseWorkspaceToSections({
+            strategy: (ws.brief ?? {}) as Record<string, unknown>,
+            copy: { raw: overrideContent, ...(ws.copy ?? {}) } as Record<string, unknown>,
+            research: (ws.research ?? null) as Record<string, unknown> | null,
+            visuals: {},
+          });
 
-    sendMessage('Approved. Moving to next phase.', {
-      apiContent: fullMessage,
-    });
-  }, [currentPhase, sendMessage, businessContext, generatedImageUrl, conversationId, workspace, updatePhaseOutput, updateCode, advancePhase]);
+          setAssemblySections(sections);
+          setAssemblyBrandConfig(brandConfig);
+          setIsAssemblyMode(true);
+
+          // Start asset generation queue
+          const queue = new AssetGenerationQueue({
+            onStart: (sectionId, assetType) => {
+              setAssemblySections(prev => prev.map(s =>
+                s.id === sectionId
+                  ? { ...s, [assetType === 'image' ? 'image_status' : 'svg_status']: 'generating' as const }
+                  : s
+              ));
+            },
+            onComplete: (sectionId, assetType, result) => {
+              setAssemblySections(prev => prev.map(s =>
+                s.id === sectionId
+                  ? {
+                    ...s,
+                    [assetType === 'image' ? 'image_url' : 'svg_code']: result,
+                    [assetType === 'image' ? 'image_status' : 'svg_status']: 'complete' as const,
+                  }
+                  : s
+              ));
+            },
+            onError: (sectionId, assetType, _error, willRetry) => {
+              if (!willRetry) {
+                setAssemblySections(prev => prev.map(s =>
+                  s.id === sectionId
+                    ? { ...s, [assetType === 'image' ? 'image_status' : 'svg_status']: 'failed' as const }
+                    : s
+                ));
+              }
+            },
+            onQueueComplete: (stats) => {
+              if (stats.failed > 0) {
+                toast.warning(`${stats.completed} assets generated, ${stats.failed} failed (using placeholders).`);
+              } else {
+                toast.success(`All ${stats.completed} assets generated.`);
+              }
+            },
+          });
+
+          queue.populateFromSections(sections, brandConfig);
+          assetQueueRef.current = queue;
+          queue.process();
+
+          // Send assembly intro message
+          sendMessage('Copy approved — assembling your landing page.', {
+            apiContent: BUILDER_CONTINUATION + SECTION_EDIT_AGENT_SYSTEM_PROMPT +
+              '\n\nThe page is now being assembled with the approved strategy and copy. ' +
+              'Assets (images and SVG animations) are generating in the background. ' +
+              'The user can now chat to refine individual sections.\n\n' +
+              buildSectionEditContext(sections),
+            silent: true,
+          });
+        } catch (err) {
+          toast.error('Failed to start assembly. Try approving again.');
+          console.error('Assembly failed:', err);
+        }
+      }
+      return;
+    }
+
+    // Other phases: send approval prompt to move to next phase
+    if (phase?.approveNext) {
+      const workspaceContext = buildWorkspaceContext(workspace, nextPhase);
+      const fullMessage = BUILDER_CONTINUATION + businessContext + workspaceContext + phase.approveNext;
+      sendMessage('Approved. Moving to next phase.', {
+        apiContent: fullMessage,
+      });
+    }
+  }, [currentPhase, sendMessage, businessContext, conversationId, workspace, updatePhaseOutput, updateCode, advancePhase]);
 
   // CopyPicker: user confirmed their A/B selections
   const handleCopyConfirm = useCallback((_selections: Record<string, 'A' | 'B'>, compiledCopy: string) => {
@@ -752,47 +593,40 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
       }
     }
 
-    // Visuals phase: show HeroImageGenerator + SvgGallery
-    if (currentPhase === 2) {
-      const { heroDescription, brandColors } = parseVisualsForImage(lastMsg.content);
-      const colorMap: Record<string, string> = {};
-      brandColors.forEach((hex, i) => { colorMap[`color${i + 1}`] = hex; });
-
-      const hasHero = !!heroDescription;
-      const hasSvgs = svgAssets.length > 0 || isGeneratingSvgs;
-
-      if (hasHero || hasSvgs) {
-        return (
-          <div className="space-y-4">
-            {hasHero && (
-              <HeroImageGenerator
-                description={heroDescription}
-                brandColors={brandColors}
-                onSelected={setGeneratedImageUrl}
-              />
-            )}
-            {isGeneratingSvgs && svgAssets.length === 0 && (
-              <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-                Generating SVG animations with Gemini...
-              </div>
-            )}
-            {(svgAssets.length > 0 || (!isGeneratingSvgs && lastSvgParamsRef.current)) && (
-              <SvgGallery
-                assets={svgAssets}
-                brandColors={colorMap}
-                onAssetsChange={setSvgAssets}
-                onRetryAll={retryAllSvgs}
-                isGenerating={isGeneratingSvgs}
-              />
-            )}
-          </div>
-        );
+    // Assembly phase: parse section edit responses from AI and apply ops
+    if (currentPhase === 2 && isAssemblyMode) {
+      try {
+        const editResponse = parseSectionEditResponse(lastMsg.content);
+        if (editResponse.ops.length > 0) {
+          // Apply operations to sections
+          setAssemblySections(prev => {
+            const updated = [...prev];
+            for (const op of editResponse.ops) {
+              const idx = updated.findIndex(s => s.id === op.section_id);
+              if (idx === -1) continue;
+              if (op.field === 'copy.headline') updated[idx] = { ...updated[idx], copy: { ...updated[idx].copy, headline: op.value } };
+              else if (op.field === 'copy.subhead') updated[idx] = { ...updated[idx], copy: { ...updated[idx].copy, subhead: op.value } };
+              else if (op.field === 'copy.body') updated[idx] = { ...updated[idx], copy: { ...updated[idx].copy, body: op.value } };
+              else if (op.field === 'copy.cta') updated[idx] = { ...updated[idx], copy: { ...updated[idx].copy, cta: op.value } };
+              else if (op.field === 'style.bg_color') updated[idx] = { ...updated[idx], style: { ...updated[idx].style, bg_color: op.value } };
+              else if (op.field === 'style.text_color') updated[idx] = { ...updated[idx], style: { ...updated[idx].style, text_color: op.value } };
+              else if (op.field === 'style.accent_color') updated[idx] = { ...updated[idx], style: { ...updated[idx].style, accent_color: op.value } };
+              else if (op.field === 'layout_variant') updated[idx] = { ...updated[idx], layout_variant: op.value as any };
+            }
+            return updated;
+          });
+          if (editResponse.highlight_section_id) {
+            setHighlightSectionId(editResponse.highlight_section_id);
+            setTimeout(() => setHighlightSectionId(undefined), 3000);
+          }
+        }
+      } catch {
+        // Not a structured edit response — just a chat message
       }
     }
 
     return undefined;
-  }, [messages, isLoading, currentPhase, handleCopyConfirm, svgAssets, isGeneratingSvgs]);
+  }, [messages, isLoading, currentPhase, handleCopyConfirm, isAssemblyMode]);
 
   // Phase-aware quick actions
   const phaseActions = useMemo<QuickAction[]>(() => {
@@ -804,6 +638,26 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     const isLastPhase = currentPhase >= PHASE_PROMPTS.length - 1;
 
     const actions: QuickAction[] = [];
+
+    // In assembly mode, show editor-specific actions
+    if (isAssemblyMode) {
+      actions.push({
+        label: 'Change colours',
+        prompt: 'I want to change the colour palette.',
+        variant: 'secondary',
+      });
+      actions.push({
+        label: 'Edit copy',
+        prompt: 'I want to edit some of the copy.',
+        variant: 'secondary',
+      });
+      actions.push({
+        label: 'Rearrange sections',
+        prompt: 'I want to reorder or remove some sections.',
+        variant: 'secondary',
+      });
+      return actions;
+    }
 
     // Hide Approve button when CopyPicker handles it (phase 1 with valid sections)
     const copyPickerActive = currentPhase === 1 && !!phaseComponent;
@@ -837,7 +691,7 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     });
 
     return actions;
-  }, [messages, currentPhase, phaseComponent]);
+  }, [messages, currentPhase, phaseComponent, isAssemblyMode]);
 
   // Agent badge for assistant messages
   const agentBadge = useMemo(() => {
@@ -871,6 +725,78 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     return false;
   }, [handleApprove, handleEditPhase, currentPhase]);
 
+  // Assembly mode: full-width preview + floating chat panel
+  if (isAssemblyMode && assemblyBrandConfig) {
+    return (
+      <div className="relative h-[calc(100dvh-var(--app-top-offset))] w-full">
+        {/* Full-width assembly preview */}
+        <AssemblyPreview
+          sections={assemblySections}
+          brandConfig={assemblyBrandConfig}
+          highlightSectionId={highlightSectionId}
+          onSectionClick={(id) => setHighlightSectionId(id)}
+        />
+
+        {/* Floating chat panel (bottom-left) */}
+        <div
+          className={cn(
+            'absolute bottom-4 left-4 z-20 transition-all duration-300 ease-in-out',
+            chatMinimized ? 'w-12 h-12' : 'w-[380px] h-[480px]',
+          )}
+        >
+          {chatMinimized ? (
+            <button
+              type="button"
+              onClick={() => setChatMinimized(false)}
+              className="w-12 h-12 rounded-full bg-violet-600 text-white shadow-lg hover:bg-violet-700 transition-colors flex items-center justify-center"
+              title="Open chat"
+            >
+              <MessageSquare className="w-5 h-5" />
+            </button>
+          ) : (
+            <div className="flex flex-col h-full bg-white dark:bg-gray-950 rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
+              {/* Chat header */}
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5">
+                <div className="flex items-center gap-2">
+                  <GripVertical className="w-3.5 h-3.5 text-gray-400" />
+                  <span className="text-xs font-semibold text-gray-700 dark:text-slate-300">
+                    Section Editor
+                  </span>
+                  {(() => {
+                    const role = PHASE_AGENT_MAP[currentPhase];
+                    const badge = role ? AGENT_BADGES[role] : null;
+                    return badge ? (
+                      <span className={cn('text-[10px] font-medium', badge.color)}>{badge.label}</span>
+                    ) : null;
+                  })()}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChatMinimized(true)}
+                  className="p-1 rounded hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
+                  title="Minimize chat"
+                >
+                  <Minimize2 className="w-3.5 h-3.5 text-gray-500" />
+                </button>
+              </div>
+              {/* Chat body */}
+              <div className="flex-1 overflow-hidden">
+                <AssistantShell
+                  mode="page"
+                  apiContentTransform={builderApiTransform}
+                  phaseActions={phaseActions}
+                  onPhaseAction={handlePhaseAction}
+                  phaseComponent={phaseComponent}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Standard mode: CopilotLayout with right panel (Strategy + Copy phases)
   return (
     <CopilotLayout
       rightPanel={
@@ -882,7 +808,6 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
           isProcessing={isLoading}
           phaseOutputs={phaseOutputsRef.current}
           activePhase={currentPhase}
-          heroImageUrl={generatedImageUrl}
           research={effectiveResearch}
           isResearching={isResearching}
           onPhaseClick={(phaseId) => handleEditPhase(phaseId - 1)}

@@ -3,7 +3,7 @@
  * Phase timeline, current deliverable preview, and session info
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, Layers, FileOutput, Clock, Plus, Eye, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BuilderPhase, PhaseDeliverable, LandingResearchData } from './types';
@@ -21,8 +21,6 @@ interface LandingBuilderRightPanelProps {
   phaseOutputs?: Record<number, string>;
   /** Current active phase (0-based) */
   activePhase?: number;
-  /** Generated hero image URL */
-  heroImageUrl?: string | null;
   /** Auto-research data from landing-research edge function */
   research?: LandingResearchData | null;
   /** Whether auto-research is currently running */
@@ -75,7 +73,6 @@ export const LandingBuilderRightPanel: React.FC<LandingBuilderRightPanelProps> =
   isProcessing,
   phaseOutputs,
   activePhase,
-  heroImageUrl,
   research,
   isResearching,
   onPhaseClick,
@@ -186,7 +183,6 @@ export const LandingBuilderRightPanel: React.FC<LandingBuilderRightPanelProps> =
             <ProgressivePreview
               phaseOutputs={phaseOutputs}
               currentPhase={activePhase ?? 0}
-              heroImageUrl={heroImageUrl}
             />
           </CollapsibleSection>
         )}

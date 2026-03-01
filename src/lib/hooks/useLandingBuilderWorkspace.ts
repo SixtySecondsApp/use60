@@ -12,6 +12,7 @@ import {
   type LandingBuilderWorkspace,
   type WorkspacePhaseKey,
 } from '@/lib/services/landingBuilderWorkspaceService';
+import type { LandingSection, AssetStatus } from '@/components/landing-builder/types';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 
@@ -145,6 +146,110 @@ export function useLandingBuilderWorkspace({
     onSettled: () => invalidate(),
   });
 
+  // --- Mutation: update all sections ---
+  const updateSections = useMutation({
+    mutationFn: async (sections: LandingSection[]) => {
+      if (!conversationId) throw new Error('No conversationId');
+      await landingBuilderWorkspaceService.updateSections(conversationId, sections);
+    },
+    onMutate: async (sections) => {
+      if (!conversationId) return;
+      const key = workspaceKeys.byConversation(conversationId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<LandingBuilderWorkspace>(key);
+      if (previous) {
+        queryClient.setQueryData<LandingBuilderWorkspace>(key, { ...previous, sections });
+      }
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous && conversationId) {
+        queryClient.setQueryData(workspaceKeys.byConversation(conversationId), context.previous);
+      }
+      logger.error('[useWorkspace] updateSections failed:', err);
+      toast.error('Failed to save sections');
+    },
+    onSettled: () => invalidate(),
+  });
+
+  // --- Mutation: update single section ---
+  const updateSection = useMutation({
+    mutationFn: async ({ sectionId, patch }: { sectionId: string; patch: Partial<LandingSection> }) => {
+      if (!conversationId) throw new Error('No conversationId');
+      await landingBuilderWorkspaceService.updateSection(conversationId, sectionId, patch);
+    },
+    onMutate: async ({ sectionId, patch }) => {
+      if (!conversationId) return;
+      const key = workspaceKeys.byConversation(conversationId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<LandingBuilderWorkspace>(key);
+      if (previous) {
+        const sections = (previous.sections ?? []).map((s) =>
+          s.id === sectionId ? { ...s, ...patch } : s,
+        );
+        queryClient.setQueryData<LandingBuilderWorkspace>(key, { ...previous, sections });
+      }
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous && conversationId) {
+        queryClient.setQueryData(workspaceKeys.byConversation(conversationId), context.previous);
+      }
+      logger.error('[useWorkspace] updateSection failed:', err);
+      toast.error('Failed to save section');
+    },
+    onSettled: () => invalidate(),
+  });
+
+  // --- Mutation: update section asset ---
+  const updateSectionAsset = useMutation({
+    mutationFn: async ({
+      sectionId,
+      assetType,
+      status,
+      value,
+    }: {
+      sectionId: string;
+      assetType: 'image' | 'svg';
+      status: AssetStatus;
+      value?: string;
+    }) => {
+      if (!conversationId) throw new Error('No conversationId');
+      await landingBuilderWorkspaceService.updateSectionAsset(
+        conversationId,
+        sectionId,
+        assetType,
+        status,
+        value,
+      );
+    },
+    onMutate: async ({ sectionId, assetType, status, value }) => {
+      if (!conversationId) return;
+      const key = workspaceKeys.byConversation(conversationId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<LandingBuilderWorkspace>(key);
+      if (previous) {
+        const sections = (previous.sections ?? []).map((s) => {
+          if (s.id !== sectionId) return s;
+          if (assetType === 'image') {
+            return { ...s, image_status: status, ...(value !== undefined && { image_url: value }) };
+          }
+          return { ...s, svg_status: status, ...(value !== undefined && { svg_code: value }) };
+        });
+        queryClient.setQueryData<LandingBuilderWorkspace>(key, { ...previous, sections });
+      }
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous && conversationId) {
+        queryClient.setQueryData(workspaceKeys.byConversation(conversationId), context.previous);
+      }
+      logger.error('[useWorkspace] updateSectionAsset failed:', err);
+      toast.error('Failed to update asset');
+    },
+    onSettled: () => invalidate(),
+  });
+
   // --- Mutation: delete workspace ---
   const removeWorkspace = useMutation({
     mutationFn: async () => {
@@ -166,6 +271,9 @@ export function useLandingBuilderWorkspace({
     updatePhaseOutput: updatePhaseOutput.mutateAsync,
     updateCode: updateCode.mutateAsync,
     advancePhase: advancePhase.mutateAsync,
+    updateSections: updateSections.mutateAsync,
+    updateSection: updateSection.mutateAsync,
+    updateSectionAsset: updateSectionAsset.mutateAsync,
     removeWorkspace: removeWorkspace.mutateAsync,
   };
 }

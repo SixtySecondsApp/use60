@@ -44,12 +44,11 @@ export interface LandingPageGateData {
   }>;
 }
 
-/** 4-phase pipeline definition matching LandingPageBuilder.tsx PHASE_PROMPTS */
+/** 3-phase pipeline definition (v2: progressive assembly replaces Visuals + Build) */
 export const PIPELINE_PHASES: ReadonlyArray<{ id: number; name: string; skill: string }> = [
   { id: 1, name: 'Strategy & Layout', skill: 'website-strategist' },
   { id: 2, name: 'Copy', skill: 'copywriting' },
-  { id: 3, name: 'Visuals & Animation', skill: 'visual-assets' },
-  { id: 4, name: 'Build', skill: 'frontend-design' },
+  { id: 3, name: 'Assembly', skill: 'progressive-assembly' },
 ];
 
 export function createDefaultPhases(): BuilderPhase[] {
@@ -65,8 +64,7 @@ export function getDeliverableType(phase: number): DeliverableType {
   const map: Record<number, DeliverableType> = {
     1: 'strategy',
     2: 'copy',
-    3: 'style',
-    4: 'code',
+    3: 'code',
   };
   return map[phase] ?? 'strategy';
 }
@@ -124,19 +122,69 @@ export interface LandingResearchData {
 }
 
 /** Agent role labels for visible agent badges in ChatMessage */
-export type AgentRole = 'strategist' | 'copywriter' | 'visual-artist' | 'builder';
+export type AgentRole = 'strategist' | 'copywriter' | 'visual-artist' | 'builder' | 'editor';
 
 export const AGENT_BADGES: Record<AgentRole, { label: string; color: string }> = {
   strategist: { label: 'Strategist', color: 'text-blue-500' },
   copywriter: { label: 'Copywriter', color: 'text-violet-500' },
   'visual-artist': { label: 'Visual Artist', color: 'text-pink-500' },
   builder: { label: 'Builder', color: 'text-emerald-500' },
+  editor: { label: 'Editor', color: 'text-amber-500' },
 };
 
 /** Maps phase index (0-based) to the agent responsible */
 export const PHASE_AGENT_MAP: Record<number, AgentRole> = {
   0: 'strategist',
   1: 'copywriter',
-  2: 'visual-artist',
-  3: 'builder',
+  2: 'editor',
 };
+
+// ---------------------------------------------------------------------------
+// Section data model (progressive assembly)
+// ---------------------------------------------------------------------------
+
+export type SectionType =
+  | 'hero'
+  | 'problem'
+  | 'solution'
+  | 'features'
+  | 'social-proof'
+  | 'cta'
+  | 'faq'
+  | 'footer';
+
+export type LayoutVariant = 'centered' | 'split-left' | 'split-right' | 'cards-grid';
+
+export type AssetStatus = 'idle' | 'generating' | 'complete' | 'failed';
+
+export interface LandingSection {
+  id: string;
+  type: SectionType;
+  order: number;
+  copy: {
+    headline: string;
+    subhead: string;
+    body: string;
+    cta: string;
+  };
+  layout_variant: LayoutVariant;
+  image_url: string | null;
+  image_status: AssetStatus;
+  svg_code: string | null;
+  svg_status: AssetStatus;
+  style: {
+    bg_color: string;
+    text_color: string;
+    accent_color: string;
+  };
+}
+
+export interface BrandConfig {
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  bg_color: string;
+  text_color: string;
+  font_heading: string;
+  font_body: string;
+}

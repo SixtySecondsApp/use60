@@ -8,7 +8,7 @@
 
 import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
-import type { LandingResearchData } from '@/components/landing-builder/types';
+import type { LandingResearchData, LandingSection, AssetStatus } from '@/components/landing-builder/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,6 +25,7 @@ export interface LandingBuilderWorkspace {
   visuals: Record<string, unknown>;
   code: string | null;
   research: LandingResearchData | null;
+  sections: LandingSection[];
   current_phase: number;
   phase_status: Record<string, string>;
   created_at: string;
@@ -51,7 +52,7 @@ export const landingBuilderWorkspaceService = {
   async get(conversationId: string): Promise<LandingBuilderWorkspace | null> {
     const { data, error } = await supabase
       .from('landing_builder_sessions')
-      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, current_phase, phase_status, created_at, updated_at')
+      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, sections, current_phase, phase_status, created_at, updated_at')
       .eq('conversation_id', conversationId)
       .maybeSingle();
 
@@ -74,7 +75,7 @@ export const landingBuilderWorkspaceService = {
         user_id: params.user_id,
         org_id: params.org_id,
       })
-      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, current_phase, phase_status, created_at, updated_at')
+      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, sections, current_phase, phase_status, created_at, updated_at')
       .single();
 
     if (error) {
@@ -173,7 +174,7 @@ export const landingBuilderWorkspaceService = {
   async getLatestByUser(userId: string): Promise<LandingBuilderWorkspace | null> {
     const { data, error } = await supabase
       .from('landing_builder_sessions')
-      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, current_phase, phase_status, created_at, updated_at')
+      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, sections, current_phase, phase_status, created_at, updated_at')
       .eq('user_id', userId)
       .gt('current_phase', 0)
       .order('updated_at', { ascending: false })
@@ -186,6 +187,61 @@ export const landingBuilderWorkspaceService = {
     }
 
     return data as LandingBuilderWorkspace | null;
+  },
+
+  // -------------------------------------------------------------------------
+  // Section CRUD (progressive assembly)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Bulk update all sections (reorder, initial creation).
+   */
+  async updateSections(conversationId: string, sections: LandingSection[]): Promise<void> {
+    const { error } = await supabase
+      .from('landing_builder_sessions')
+      .update({ sections })
+      .eq('conversation_id', conversationId);
+
+    if (error) {
+      logger.error('[workspace] Failed to update sections:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update a single section by patching the sections array.
+   */
+  async updateSection(
+    conversationId: string,
+    sectionId: string,
+    patch: Partial<LandingSection>,
+  ): Promise<void> {
+    const ws = await this.get(conversationId);
+    if (!ws) throw new Error('Workspace not found');
+
+    const sections = (ws.sections ?? []).map((s: LandingSection) =>
+      s.id === sectionId ? { ...s, ...patch } : s,
+    );
+
+    await this.updateSections(conversationId, sections);
+  },
+
+  /**
+   * Update asset status + URL/code for a specific section.
+   */
+  async updateSectionAsset(
+    conversationId: string,
+    sectionId: string,
+    assetType: 'image' | 'svg',
+    status: AssetStatus,
+    value?: string,
+  ): Promise<void> {
+    const patch: Partial<LandingSection> =
+      assetType === 'image'
+        ? { image_status: status, ...(value !== undefined && { image_url: value }) }
+        : { svg_status: status, ...(value !== undefined && { svg_code: value }) };
+
+    await this.updateSection(conversationId, sectionId, patch);
   },
 
   /**
