@@ -273,9 +273,28 @@ function extractStrategySections(strategy: Record<string, unknown>): StrategySec
   }
   if (numbered.length > 0) return numbered;
 
-  // Fallback: generate minimal hero + cta
+  // Parse from raw markdown text (strategy stored as { raw: "## Section 1: Hero\n..." })
+  const rawText = typeof strategy.raw === 'string' ? strategy.raw : '';
+  if (rawText) {
+    const headingRegex = /^#{1,3}\s*(?:\d+[.):]?\s*)?(.+)/gm;
+    const parsed: StrategySection[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = headingRegex.exec(rawText)) !== null) {
+      const name = match[1].replace(/\*\*/g, '').trim();
+      // Skip meta headings
+      if (/^(summary|overview|notes|strategy|layout|approach)/i.test(name)) continue;
+      parsed.push({ name, title: name });
+    }
+    if (parsed.length >= 2) return parsed;
+  }
+
+  // Fallback: standard landing page structure
   return [
     { name: 'Hero', type: 'hero' },
+    { name: 'Problem', type: 'problem' },
+    { name: 'Solution', type: 'solution' },
+    { name: 'Features', type: 'features' },
+    { name: 'Social Proof', type: 'social-proof' },
     { name: 'CTA', type: 'cta' },
   ];
 }

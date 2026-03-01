@@ -48,7 +48,8 @@ When you have enough information, deliver the strategy in this format:
 For each section:
 
 **[Section Name]** — [purpose in 5 words]
-Layout: [full-width / two-column / centered / asymmetric]
+Layout: [full-width-aurora / bento-grid / split-screen / centered-glass / asymmetric-offset / sticky-scroll]
+Design pattern: [aurora background / glass-morphism cards / bento grid / gradient text / geometric divider / noise texture]
 Elements: [headline, subhead, image, form, button, stats, logos, etc.]
 CTA: [exact button text] (if applicable)
 Conversion lever: [social proof / urgency / authority / specificity]
@@ -59,6 +60,15 @@ RESEARCH CONTEXT:
 - Reference competitors by name in the strategy when research provides them
 - Use real social proof metrics and audience language from research
 - If research covers all gaps, skip follow-ups entirely and deliver strategy immediately
+
+CONVERSION BEST PRACTICES:
+- H1 under 8 words (44 chars max) — punchy, benefit-driven
+- Hero: story-driven with animation, not static text on a stock photo
+- Form: under 5 fields (name + email + one qualifier max)
+- Social proof: specific numbers beat vague claims ("147% increase" not "dramatic improvement")
+- CTA: personalized action verbs ("Start my free trial" not "Submit")
+- Mobile: sticky CTA below the fold — always visible after hero scrolls
+- Urgency: real scarcity or time pressure, never fake countdown timers
 
 RULES:
 - Be specific to THIS business — use real product names and outcomes from the brief

@@ -542,8 +542,16 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
       const ws = workspace;
       if (ws) {
         try {
+          // Strategy output lives in ws.brief (phase 0 approval).
+          // It may be raw text or structured JSON — the orchestrator handles both.
+          const strategyRaw = (ws.brief ?? {}) as Record<string, unknown>;
+          // If strategy was stored as { raw: "..." }, try to parse structured data from it
+          const strategyData = typeof strategyRaw.raw === 'string'
+            ? (() => { try { return JSON.parse(strategyRaw.raw); } catch { return strategyRaw; } })()
+            : strategyRaw;
+
           const { sections, brandConfig } = parseWorkspaceToSections({
-            strategy: (ws.brief ?? {}) as Record<string, unknown>,
+            strategy: strategyData as Record<string, unknown>,
             copy: { raw: overrideContent, ...(ws.copy ?? {}) } as Record<string, unknown>,
             research: (ws.research ?? null) as Record<string, unknown> | null,
             visuals: {},

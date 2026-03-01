@@ -251,22 +251,130 @@ export const LandingCodePreview: React.FC<LandingCodePreviewProps> = ({ code }) 
   <div id="root"></div>
   <div id="error-overlay"><span class="dismiss" onclick="this.parentElement.style.display='none'">&times;</span></div>
   <script>
-    // Stub framer-motion
+    // Stub framer-motion with real CSS animations
+    // Converts framer-motion initial/animate/whileInView props into CSS transitions
+    var fmProps = ['initial','animate','exit','transition','whileInView','viewport',
+      'whileHover','whileTap','whileFocus','whileDrag','variants','layout',
+      'layoutId','onAnimationStart','onAnimationComplete','drag','dragConstraints',
+      'dragElastic','dragMomentum'];
+
+    function fmStyleFromProps(animProps) {
+      if (!animProps || typeof animProps !== 'object') return {};
+      var style = {};
+      if (animProps.opacity !== undefined) style.opacity = animProps.opacity;
+      if (animProps.y !== undefined) style.transform = (style.transform || '') + ' translateY(' + animProps.y + 'px)';
+      if (animProps.x !== undefined) style.transform = (style.transform || '') + ' translateX(' + animProps.x + 'px)';
+      if (animProps.scale !== undefined) style.transform = (style.transform || '') + ' scale(' + animProps.scale + ')';
+      if (animProps.rotate !== undefined) style.transform = (style.transform || '') + ' rotate(' + animProps.rotate + 'deg)';
+      return style;
+    }
+
+    function fmTransitionCSS(trans) {
+      var dur = (trans && trans.duration) || 0.5;
+      var delay = (trans && trans.delay) || 0;
+      var ease = 'cubic-bezier(0.4, 0, 0.2, 1)';
+      if (trans && trans.ease === 'easeOut') ease = 'cubic-bezier(0, 0, 0.2, 1)';
+      if (trans && trans.ease === 'easeIn') ease = 'cubic-bezier(0.4, 0, 1, 1)';
+      if (trans && trans.ease === 'easeInOut') ease = 'cubic-bezier(0.4, 0, 0.6, 1)';
+      if (trans && trans.type === 'spring') { dur = trans.duration || 0.6; ease = 'cubic-bezier(0.34, 1.56, 0.64, 1)'; }
+      return 'all ' + dur + 's ' + ease + ' ' + delay + 's';
+    }
+
     window.motion = new Proxy({}, {
       get: function(target, prop) {
         return function(props) {
+          if (!props) props = {};
           var children = props.children;
-          delete props.children;
-          // Remove framer-motion specific props
-          delete props.initial; delete props.animate; delete props.exit;
-          delete props.transition; delete props.whileInView; delete props.viewport;
-          delete props.whileHover; delete props.whileTap; delete props.variants;
-          return React.createElement(prop, props, children);
+          var cleaned = {};
+          for (var key in props) {
+            if (key !== 'children' && key !== 'style' && fmProps.indexOf(key) === -1) {
+              cleaned[key] = props[key];
+            }
+          }
+
+          var initialStyle = fmStyleFromProps(props.initial);
+          var animateStyle = fmStyleFromProps(props.animate || props.whileInView);
+          var transCSS = fmTransitionCSS(props.transition);
+          var userStyle = props.style || {};
+          var useInView = !!props.whileInView;
+          var viewOnce = props.viewport && props.viewport.once !== false;
+
+          // Start with initial styles, transition to animate on mount or in-view
+          var startStyle = Object.assign({}, userStyle, initialStyle, { transition: transCSS });
+
+          var ref = React.useRef(null);
+          var mountedRef = React.useRef(false);
+          var triggeredRef = React.useRef(false);
+          var forceUpdate = React.useState(0)[1];
+
+          React.useEffect(function() {
+            var el = ref.current;
+            if (!el) return;
+
+            if (useInView) {
+              // Use IntersectionObserver for whileInView
+              var obs = new IntersectionObserver(function(entries) {
+                entries.forEach(function(entry) {
+                  if (entry.isIntersecting && !triggeredRef.current) {
+                    triggeredRef.current = true;
+                    requestAnimationFrame(function() {
+                      var s = fmStyleFromProps(props.whileInView);
+                      el.style.transition = transCSS;
+                      if (s.opacity !== undefined) el.style.opacity = s.opacity;
+                      if (s.transform) el.style.transform = s.transform;
+                    });
+                    if (viewOnce) obs.disconnect();
+                  }
+                });
+              }, { threshold: 0.1 });
+              obs.observe(el);
+              return function() { obs.disconnect(); };
+            } else if (!mountedRef.current) {
+              // Animate on mount
+              mountedRef.current = true;
+              requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                  var s = fmStyleFromProps(props.animate);
+                  el.style.transition = transCSS;
+                  if (s.opacity !== undefined) el.style.opacity = s.opacity;
+                  if (s.transform) el.style.transform = s.transform;
+                });
+              });
+            }
+          }, []);
+
+          cleaned.ref = ref;
+          cleaned.style = startStyle;
+
+          return React.createElement(prop, cleaned, children);
         };
       }
     });
     // Stub AnimatePresence
     window.AnimatePresence = function(props) { return props.children; };
+    // Stub useInView (framer-motion hook)
+    window.useInView = function(ref, opts) {
+      var inView = React.useState(false);
+      React.useEffect(function() {
+        if (!ref || !ref.current) return;
+        var obs = new IntersectionObserver(function(entries) {
+          entries.forEach(function(e) { if (e.isIntersecting) inView[1](true); });
+        }, { threshold: 0.1 });
+        obs.observe(ref.current);
+        return function() { obs.disconnect(); };
+      }, [ref]);
+      return inView[0];
+    };
+    // Stub useAnimation
+    window.useAnimation = function() { return { start: function() {} }; };
+    // Stub useScroll
+    window.useScroll = function() { return { scrollY: { get: function() { return 0; } }, scrollYProgress: { get: function() { return 0; } } }; };
+    // Stub useTransform
+    window.useTransform = function(val, inp, out) { return out ? out[0] : 0; };
+    // Stub useMotionValue
+    window.useMotionValue = function(v) { return { get: function() { return v; }, set: function() {} }; };
+    // Stub useSpring
+    window.useSpring = function(v) { return v; };
   </script>
   <script type="text/babel" data-presets="react">
     const { useState, useEffect, useRef, useCallback, useMemo, Fragment, createContext, useContext } = React;

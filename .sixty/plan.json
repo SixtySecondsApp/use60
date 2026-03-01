@@ -42,6 +42,13 @@
       "status": "complete",
       "consultReport": ".sixty/consult/landing-builder-v2.md",
       "createdAt": "2026-02-28"
+    },
+    {
+      "id": "landing-builder-progressive",
+      "name": "Landing Builder — Progressive Assembly + Chat Editor",
+      "status": "pending",
+      "prd": "docs/landing-page-builder/landing-page-builder-improvements.md",
+      "createdAt": "2026-03-01"
     }
   ],
   "stories": [
@@ -64,9 +71,19 @@
       "files": [
         "supabase/functions/generate-follow-up/index.ts"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["FUV2-002", "FUV2-008"],
-      "parallelWith": ["FUV2-003", "FUV2-006"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FUV2-002",
+        "FUV2-008"
+      ],
+      "parallelWith": [
+        "FUV2-003",
+        "FUV2-006"
+      ],
       "startedAt": "2026-02-25T15:10:00Z",
       "completedAt": "2026-02-25T15:22:00Z"
     },
@@ -91,9 +108,17 @@
         "supabase/functions/_shared/follow-up/composer.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "FUV2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-004"],
+      "parallelWith": [
+        "FUV2-004"
+      ],
       "startedAt": "2026-02-25T16:00:00Z",
       "completedAt": "2026-02-25T16:18:00Z"
     },
@@ -116,9 +141,18 @@
       "files": [
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["FUV2-004"],
-      "parallelWith": ["FUV2-001", "FUV2-006"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FUV2-004"
+      ],
+      "parallelWith": [
+        "FUV2-001",
+        "FUV2-006"
+      ],
       "startedAt": "2026-02-25T15:10:00Z",
       "completedAt": "2026-02-25T15:25:00Z"
     },
@@ -141,9 +175,19 @@
       "files": [
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-003"], "files": [], "schema": [] },
-      "blocks": ["FUV2-005"],
-      "parallelWith": ["FUV2-002"],
+      "dependencies": {
+        "stories": [
+          "FUV2-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FUV2-005"
+      ],
+      "parallelWith": [
+        "FUV2-002"
+      ],
       "startedAt": "2026-02-25T16:20:00Z",
       "completedAt": "2026-02-25T16:32:00Z"
     },
@@ -167,7 +211,13 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-004"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "FUV2-004"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": [],
       "startedAt": "2026-02-25T16:35:00Z",
@@ -193,9 +243,16 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-001", "FUV2-003"],
+      "parallelWith": [
+        "FUV2-001",
+        "FUV2-003"
+      ],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:42:00Z"
     },
@@ -219,9 +276,15 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-008"],
+      "parallelWith": [
+        "FUV2-008"
+      ],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:40:00Z"
     },
@@ -245,9 +308,17 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "FUV2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-007"],
+      "parallelWith": [
+        "FUV2-007"
+      ],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:40:00Z"
     },
@@ -272,9 +343,16 @@
         ".claude/skills/copilot-proposal/references/proposal-templates.md",
         ".claude/skills/copilot-proposal/references/pricing-strategy.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["SGS-002", "SGS-003"],
+      "parallelWith": [
+        "SGS-002",
+        "SGS-003"
+      ],
       "startedAt": "2026-02-26T10:00:00Z",
       "completedAt": "2026-02-26T10:06:00Z"
     },
@@ -299,9 +377,16 @@
         ".claude/skills/copilot-followup/references/followup-templates.md",
         ".claude/skills/copilot-followup/references/personalization-guide.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["SGS-001", "SGS-003"],
+      "parallelWith": [
+        "SGS-001",
+        "SGS-003"
+      ],
       "startedAt": "2026-02-26T10:00:00Z",
       "completedAt": "2026-02-26T10:06:00Z"
     },
@@ -326,9 +411,16 @@
         ".claude/skills/copilot-battlecard/references/battlecard-frameworks.md",
         ".claude/skills/copilot-battlecard/references/competitive-intel-guide.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["SGS-001", "SGS-002"],
+      "parallelWith": [
+        "SGS-001",
+        "SGS-002"
+      ],
       "startedAt": "2026-02-26T10:00:00Z",
       "completedAt": "2026-02-26T10:07:00Z"
     },
@@ -353,9 +445,16 @@
         ".claude/skills/copilot-objection/references/objection-playbooks.md",
         ".claude/skills/copilot-objection/references/proof-point-library.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["SGS-005", "SGS-006"],
+      "parallelWith": [
+        "SGS-005",
+        "SGS-006"
+      ],
       "startedAt": "2026-02-26T10:30:00Z",
       "completedAt": "2026-02-26T10:38:00Z"
     },
@@ -380,9 +479,16 @@
         ".claude/skills/copilot-chase/references/chase-templates.md",
         ".claude/skills/copilot-chase/references/reengagement-playbook.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["SGS-004", "SGS-006"],
+      "parallelWith": [
+        "SGS-004",
+        "SGS-006"
+      ],
       "startedAt": "2026-02-26T10:10:00Z",
       "completedAt": "2026-02-26T10:16:00Z"
     },
@@ -406,9 +512,16 @@
         ".claude/skills/sales-sequence/SKILL.md",
         ".claude/skills/sales-sequence/references/win-loss-patterns.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["SGS-004", "SGS-005"],
+      "parallelWith": [
+        "SGS-004",
+        "SGS-005"
+      ],
       "startedAt": "2026-02-26T10:10:00Z",
       "completedAt": "2026-02-26T10:15:00Z"
     },
@@ -433,9 +546,16 @@
         ".claude/skills/deal-next-best-actions/references/action-library.md",
         ".claude/skills/deal-next-best-actions/references/stage-playbooks.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["SGS-008", "SGS-009"],
+      "parallelWith": [
+        "SGS-008",
+        "SGS-009"
+      ],
       "startedAt": "2026-02-26T10:30:00Z",
       "completedAt": "2026-02-26T10:39:00Z"
     },
@@ -460,9 +580,16 @@
         ".claude/skills/lead-qualification/references/scoring-frameworks.md",
         ".claude/skills/lead-qualification/references/icp-templates.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["SGS-007", "SGS-009"],
+      "parallelWith": [
+        "SGS-007",
+        "SGS-009"
+      ],
       "startedAt": "2026-02-26T10:30:00Z",
       "completedAt": "2026-02-26T10:38:00Z"
     },
@@ -487,9 +614,16 @@
         ".claude/skills/daily-focus-planner/references/focus-frameworks.md",
         ".claude/skills/daily-focus-planner/references/capacity-guide.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["SGS-007", "SGS-008"],
+      "parallelWith": [
+        "SGS-007",
+        "SGS-008"
+      ],
       "startedAt": "2026-02-26T10:30:00Z",
       "completedAt": "2026-02-26T10:38:00Z"
     },
@@ -514,7 +648,11 @@
         ".claude/skills/post-meeting-followup-pack-builder/references/pack-templates.md",
         ".claude/skills/post-meeting-followup-pack-builder/references/artifact-examples.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": [],
       "startedAt": "2026-02-26T10:30:00Z",
@@ -540,8 +678,25 @@
         "scripts/validate-skills.ts",
         "scripts/sync-skills.ts"
       ],
-      "dependencies": { "stories": ["SGS-001", "SGS-002", "SGS-003", "SGS-004", "SGS-005", "SGS-006", "SGS-007", "SGS-008", "SGS-009", "SGS-010"], "files": [], "schema": [] },
-      "blocks": ["SGS-012"],
+      "dependencies": {
+        "stories": [
+          "SGS-001",
+          "SGS-002",
+          "SGS-003",
+          "SGS-004",
+          "SGS-005",
+          "SGS-006",
+          "SGS-007",
+          "SGS-008",
+          "SGS-009",
+          "SGS-010"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SGS-012"
+      ],
       "parallelWith": [],
       "startedAt": "2026-02-26T11:00:00Z",
       "completedAt": "2026-02-26T11:03:00Z"
@@ -565,7 +720,13 @@
       "files": [
         "scripts/sync-skills.ts"
       ],
-      "dependencies": { "stories": ["SGS-011"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "SGS-011"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": [],
       "startedAt": "2026-02-26T11:05:00Z",
@@ -591,9 +752,19 @@
         "src/components/landing-builder/types.ts",
         "src/components/landing-builder/useLandingBuilderState.ts"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["LPB-002", "LPB-004", "LPB-005"],
-      "parallelWith": ["LPB-003"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-002",
+        "LPB-004",
+        "LPB-005"
+      ],
+      "parallelWith": [
+        "LPB-003"
+      ],
       "startedAt": null,
       "completedAt": null
     },
@@ -619,8 +790,16 @@
         "src/routes/lazyPages.tsx",
         "src/App.tsx"
       ],
-      "dependencies": { "stories": ["LPB-001"], "files": [], "schema": [] },
-      "blocks": ["LPB-007"],
+      "dependencies": {
+        "stories": [
+          "LPB-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-007"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -644,9 +823,17 @@
       "files": [
         "src/components/landing-builder/LandingBuilderEmpty.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["LPB-007"],
-      "parallelWith": ["LPB-001"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-007"
+      ],
+      "parallelWith": [
+        "LPB-001"
+      ],
       "startedAt": null,
       "completedAt": null
     },
@@ -669,8 +856,16 @@
       "files": [
         "src/components/landing-builder/PhaseTimeline.tsx"
       ],
-      "dependencies": { "stories": ["LPB-001"], "files": [], "schema": [] },
-      "blocks": ["LPB-005"],
+      "dependencies": {
+        "stories": [
+          "LPB-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-005"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -695,8 +890,17 @@
         "src/components/landing-builder/LandingBuilderRightPanel.tsx",
         "src/components/landing-builder/DeliverablePreview.tsx"
       ],
-      "dependencies": { "stories": ["LPB-001", "LPB-004"], "files": [], "schema": [] },
-      "blocks": ["LPB-007"],
+      "dependencies": {
+        "stories": [
+          "LPB-001",
+          "LPB-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-007"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -720,9 +924,18 @@
       "files": [
         "src/components/landing-builder/ApprovalGate.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["LPB-007"],
-      "parallelWith": ["LPB-004", "LPB-005"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-007"
+      ],
+      "parallelWith": [
+        "LPB-004",
+        "LPB-005"
+      ],
       "startedAt": null,
       "completedAt": null
     },
@@ -748,8 +961,19 @@
         "src/components/copilot/types.ts",
         "src/components/landing-builder/LandingPageBuilder.tsx"
       ],
-      "dependencies": { "stories": ["LPB-002", "LPB-003", "LPB-005", "LPB-006"], "files": [], "schema": [] },
-      "blocks": ["LPB-008"],
+      "dependencies": {
+        "stories": [
+          "LPB-002",
+          "LPB-003",
+          "LPB-005",
+          "LPB-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-008"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -771,13 +995,18 @@
       "estimatedMinutes": 15,
       "actualMinutes": null,
       "files": [],
-      "dependencies": { "stories": ["LPB-007"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "LPB-007"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
     },
-
     {
       "id": "LBV2-001",
       "feature": "landing-builder-v2",
@@ -797,9 +1026,17 @@
       "files": [
         "supabase/migrations/20260228000001_landing_builder_sessions.sql"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["LBV2-003"],
-      "parallelWith": ["LBV2-002"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-003"
+      ],
+      "parallelWith": [
+        "LBV2-002"
+      ],
       "startedAt": null,
       "completedAt": null
     },
@@ -822,9 +1059,17 @@
       "files": [
         "supabase/functions/generate-svg/index.ts"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["LBV2-007"],
-      "parallelWith": ["LBV2-001"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-007"
+      ],
+      "parallelWith": [
+        "LBV2-001"
+      ],
       "startedAt": null,
       "completedAt": null
     },
@@ -849,8 +1094,18 @@
         "src/lib/hooks/useLandingBuilderWorkspace.ts",
         "src/components/landing-builder/types.ts"
       ],
-      "dependencies": { "stories": ["LBV2-001"], "files": [], "schema": ["landing_builder_sessions"] },
-      "blocks": ["LBV2-004"],
+      "dependencies": {
+        "stories": [
+          "LBV2-001"
+        ],
+        "files": [],
+        "schema": [
+          "landing_builder_sessions"
+        ]
+      },
+      "blocks": [
+        "LBV2-004"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -875,8 +1130,19 @@
         "src/components/landing-builder/LandingPageBuilder.tsx",
         "src/components/landing-builder/useLandingBuilderState.ts"
       ],
-      "dependencies": { "stories": ["LBV2-003"], "files": [], "schema": [] },
-      "blocks": ["LBV2-005", "LBV2-006", "LBV2-007", "LBV2-008"],
+      "dependencies": {
+        "stories": [
+          "LBV2-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-005",
+        "LBV2-006",
+        "LBV2-007",
+        "LBV2-008"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -902,8 +1168,16 @@
         "src/components/landing-builder/LandingPageBuilder.tsx",
         "src/components/landing-builder/DiscoveryWizard.tsx"
       ],
-      "dependencies": { "stories": ["LBV2-004"], "files": [], "schema": [] },
-      "blocks": ["LBV2-006"],
+      "dependencies": {
+        "stories": [
+          "LBV2-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-006"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -928,8 +1202,16 @@
         "src/components/landing-builder/agents/copywriterAgent.ts",
         "src/components/landing-builder/LandingPageBuilder.tsx"
       ],
-      "dependencies": { "stories": ["LBV2-005"], "files": [], "schema": [] },
-      "blocks": ["LBV2-007"],
+      "dependencies": {
+        "stories": [
+          "LBV2-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-007"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -955,8 +1237,17 @@
         "src/components/landing-builder/LandingPageBuilder.tsx",
         "src/lib/services/geminiSvgService.ts"
       ],
-      "dependencies": { "stories": ["LBV2-002", "LBV2-006"], "files": [], "schema": [] },
-      "blocks": ["LBV2-008"],
+      "dependencies": {
+        "stories": [
+          "LBV2-002",
+          "LBV2-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-008"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -981,8 +1272,16 @@
         "src/components/landing-builder/agents/builderAgent.ts",
         "src/components/landing-builder/LandingPageBuilder.tsx"
       ],
-      "dependencies": { "stories": ["LBV2-007"], "files": [], "schema": [] },
-      "blocks": ["LBV2-009"],
+      "dependencies": {
+        "stories": [
+          "LBV2-007"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-009"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -1008,8 +1307,17 @@
         "src/components/landing-builder/PhaseTimeline.tsx",
         "src/components/landing-builder/LandingBuilderRightPanel.tsx"
       ],
-      "dependencies": { "stories": ["LBV2-008"], "files": [], "schema": [] },
-      "blocks": ["LBV2-010", "LBV2-011"],
+      "dependencies": {
+        "stories": [
+          "LBV2-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-010",
+        "LBV2-011"
+      ],
       "parallelWith": [],
       "startedAt": null,
       "completedAt": null
@@ -1034,9 +1342,19 @@
         "src/components/landing-builder/DiscoveryWizard.tsx",
         "src/components/landing-builder/agents/strategistAgent.ts"
       ],
-      "dependencies": { "stories": ["LBV2-009"], "files": [], "schema": [] },
-      "blocks": ["LBV2-013"],
-      "parallelWith": ["LBV2-011"],
+      "dependencies": {
+        "stories": [
+          "LBV2-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-013"
+      ],
+      "parallelWith": [
+        "LBV2-011"
+      ],
       "startedAt": null,
       "completedAt": null
     },
@@ -1060,9 +1378,19 @@
         "src/components/landing-builder/SvgGallery.tsx",
         "src/components/landing-builder/LandingPageBuilder.tsx"
       ],
-      "dependencies": { "stories": ["LBV2-009"], "files": [], "schema": [] },
-      "blocks": ["LBV2-013"],
-      "parallelWith": ["LBV2-010"],
+      "dependencies": {
+        "stories": [
+          "LBV2-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-013"
+      ],
+      "parallelWith": [
+        "LBV2-010"
+      ],
       "startedAt": null,
       "completedAt": null
     },
@@ -1085,9 +1413,19 @@
       "files": [
         "src/lib/services/geminiSvgService.ts"
       ],
-      "dependencies": { "stories": ["LBV2-002"], "files": [], "schema": [] },
-      "blocks": ["LBV2-007"],
-      "parallelWith": ["LBV2-003"],
+      "dependencies": {
+        "stories": [
+          "LBV2-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-007"
+      ],
+      "parallelWith": [
+        "LBV2-003"
+      ],
       "startedAt": null,
       "completedAt": null
     },
@@ -1108,17 +1446,585 @@
       "estimatedMinutes": 20,
       "actualMinutes": null,
       "files": [],
-      "dependencies": { "stories": ["LBV2-010", "LBV2-011"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "LBV2-010",
+          "LBV2-011"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-001",
+      "feature": "landing-builder-progressive",
+      "title": "Add sections JSONB column to landing_builder_sessions",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "acceptance": [
+        "Migration adds sections jsonb column with DEFAULT '[]'::jsonb to landing_builder_sessions",
+        "Migration runs without error on dev environment",
+        "Existing sessions retain all current data (non-destructive)",
+        "Column is queryable via Supabase client"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260301000001_add_landing_sections.sql"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "landing_builder_sessions"
+        ]
+      },
+      "blocks": [
+        "EDIT-002"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-002",
+      "feature": "landing-builder-progressive",
+      "title": "Add LandingSection types and workspace sections CRUD",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 2,
+      "acceptance": [
+        "LandingSection, AssetStatus, SectionType, LayoutVariant interfaces exported from types.ts",
+        "LandingBuilderWorkspace type includes sections field",
+        "workspaceService has updateSections(), updateSection(), updateSectionAsset() methods",
+        "useLandingBuilderWorkspace hook exposes updateSections, updateSection, updateSectionAsset mutations",
+        "Workspace select queries include sections column"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts",
+        "src/lib/services/landingBuilderWorkspaceService.ts",
+        "src/lib/hooks/useLandingBuilderWorkspace.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-001"
+        ],
+        "files": [],
+        "schema": [
+          "landing_builder_sessions"
+        ]
+      },
+      "blocks": [
+        "EDIT-003",
+        "EDIT-004",
+        "EDIT-007",
+        "EDIT-012"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-003",
+      "feature": "landing-builder-progressive",
+      "title": "Build deterministic section renderer (16 templates)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "acceptance": [
+        "renderSectionsToCode() pure function takes LandingSection[] + BrandConfig, returns React+Tailwind string",
+        "8 section types each have 2 layout variants (16 templates total)",
+        "renderImageSlot() renders shimmer for generating, img for complete, empty for idle",
+        "renderSvgSlot() renders placeholder for generating, inline SVG for complete",
+        "Output renders correctly in existing LandingCodePreview iframe sandbox",
+        "Templates are responsive (mobile-first with Tailwind breakpoints)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sectionRenderer.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-006",
+        "EDIT-014"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-004",
+      "feature": "landing-builder-progressive",
+      "title": "Build assembly orchestrator",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "startAssembly() parses workspace copy+strategy into LandingSection[] with brand colours",
+        "Sections created with image_status/svg_status = idle, copy slotted from approved copy",
+        "Layout variants selected per section based on content characteristics",
+        "onSectionUpdate callback fires for each section change",
+        "regenerateAsset() re-queues a specific asset with optional prompt override",
+        "cancelAll() stops pending generations"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assemblyOrchestrator.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-005"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-005",
+      "feature": "landing-builder-progressive",
+      "title": "Build asset generation queue with retry strategy",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "acceptance": [
+        "AssetGenerationQueue processes items serially via priority (hero image first)",
+        "User-requested regenerations jump to front of queue",
+        "On failure: auto-retries with simplified prompt (strips complexity keywords)",
+        "On second failure: falls back to static placeholder, fires onError callback",
+        "Queue integrates with existing nanoBananaService and geminiSvgService",
+        "promptSimplifier strips intricate/complex/multi-step/particle keywords"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assetQueue.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-004"
+        ],
+        "files": [
+          "src/lib/services/nanoBananaService.ts",
+          "src/lib/services/geminiSvgService.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-006"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-006",
+      "feature": "landing-builder-progressive",
+      "title": "Build progressive preview component with choreography",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "acceptance": [
+        "ProgressivePreview wraps LandingCodePreview iframe with section overlays",
+        "Asset status badges render per section (spinner for generating, checkmark for complete)",
+        "Shimmer → image/SVG crossfade at 300ms ease-out on asset completion",
+        "Section highlight pulse (800ms green ring) on completion",
+        "Scroll-to-section when highlightSectionId prop changes",
+        "Device width toggles (mobile/tablet/desktop) work correctly"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/ProgressivePreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-003",
+          "EDIT-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-008"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-007",
+      "feature": "landing-builder-progressive",
+      "title": "Build section edit agent with clarify-first philosophy",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "acceptance": [
+        "Agent prompt receives current sections array + user message, returns JSON ops + message + highlight_section_id",
+        "Supports all 8 operation types: update_copy, update_layout, update_style, regenerate_asset, reorder, remove, add",
+        "Ambiguous requests return clarifying questions with specific options (not open-ended)",
+        "Uses Haiku for intent classification, Sonnet only for new copy generation",
+        "Agent response includes highlight_section_id for preview scroll targeting",
+        "Credit-metered through creditLedger"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/sectionEditAgent.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-008"
+      ],
+      "parallelWith": [
+        "EDIT-004"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-008",
+      "feature": "landing-builder-progressive",
+      "title": "Wire preview-first layout with floating chat panel",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 8,
+      "acceptance": [
+        "After copy approval, layout collapses right panel and chat sidebar entirely",
+        "Preview renders full-width with EditorToolbar at top",
+        "Floating chat panel anchored bottom-left (~380px wide, max 50% viewport height)",
+        "Chat panel collapsible to just input bar, draggable height handle",
+        "Semi-transparent background on chat panel so preview shows through",
+        "Full conversation history (strategy/copy/edits) scrollable in chat panel",
+        "On screens < 1024px, chat becomes bottom sheet with swipe gestures"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-006",
+          "EDIT-007"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-012"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-012",
+      "feature": "landing-builder-progressive",
+      "title": "Restructure pipeline to 3 phases (Strategy, Copy, Assembly)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "acceptance": [
+        "PIPELINE_PHASES updated to 3 phases: Strategy, Copy, Assembly",
+        "Phase numbering updated throughout types.ts and dependent code",
+        "LandingBuilderRightPanel collapses/hides during assembly phase",
+        "After copy approval: sections parsed, assembly orchestrator starts, layout transitions to preview-first",
+        "PhaseTimeline shows 3 phases (not 4)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/LandingBuilderRightPanel.tsx",
+        "src/components/landing-builder/PhaseTimeline.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-013"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-013",
+      "feature": "landing-builder-progressive",
+      "title": "Remove standalone Visuals phase from pipeline",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "acceptance": [
+        "Visuals phase enum value removed from types",
+        "Auto-invocation of visual artist agent removed from LandingPageBuilder",
+        "SVG batch generation and hero image generation removed from chat flow",
+        "visualArtistAgent.ts kept but no longer auto-invoked (asset generation via assetQueue)",
+        "HeroImageGenerator and SvgGallery no longer triggered by phase transition"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/useLandingBuilderState.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-012"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-014"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-014",
+      "feature": "landing-builder-progressive",
+      "title": "Update builder agent to output sections JSON (not code)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "acceptance": [
+        "Builder agent system prompt updated to output LandingSection[] JSON",
+        "Agent reads workspace (strategy + copy + brand config) and produces structured sections",
+        "Each section has copy slotted, layout_variant selected, brand colours applied",
+        "All sections have image_status: idle and svg_status: idle",
+        "No code generation in agent — sectionRenderer handles code output",
+        "Agent output is parseable as valid JSON array"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/builderAgent.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-003",
+          "EDIT-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-009",
+      "feature": "landing-builder-progressive",
+      "title": "Build editor toolbar with device toggles and export buttons",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 12,
+      "acceptance": [
+        "EditorToolbar renders at top of preview panel",
+        "Device width toggles (mobile 375px, tablet 768px, desktop 100%)",
+        "Edit Mode toggle switches between preview-first and 3-panel editor",
+        "Copy Code button triggers export polish agent with loading state",
+        "Download HTML button triggers export polish agent + file download",
+        "Back to Chat button collapses editor and returns to floating chat layout"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/EditorToolbar.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-010",
+        "EDIT-011",
+        "EDIT-015"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-010",
+      "feature": "landing-builder-progressive",
+      "title": "Build section list panel with drag-and-drop",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 13,
+      "acceptance": [
+        "SectionListPanel renders with @dnd-kit/sortable for reorder",
+        "Each row shows: drag handle, Lucide section icon, section name, asset status badges",
+        "Click to select populates properties panel",
+        "Drag-drop reorder updates sections array and re-renders preview instantly",
+        "Selected section highlighted in both list and preview"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/SectionListPanel.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EDIT-011"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-011",
+      "feature": "landing-builder-progressive",
+      "title": "Build properties panel for direct section editing",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 14,
+      "acceptance": [
+        "PropertiesPanel shows copy fields (headline, subhead, body, CTA) as textareas with live preview",
+        "Layout variant radio group shows available variants for selected section type",
+        "Image controls: Generate/Regenerate/Upload buttons, current image preview",
+        "SVG controls: Generate/Remove buttons, SvgPreview component",
+        "Style controls: background/text colour pickers with brand defaults",
+        "All changes save to sections array and preview re-renders instantly"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/PropertiesPanel.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EDIT-010"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-015",
+      "feature": "landing-builder-progressive",
+      "title": "Build export polish agent with caching",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 15,
+      "acceptance": [
+        "exportPolishAgent takes LandingSection[] + BrandConfig + workspace context, returns polished React+Tailwind code",
+        "Uses Sonnet to generate production code with custom animations, refined spacing, responsive breakpoints",
+        "Export result cached in workspace.polished_code — instant on re-export until sections change",
+        "Any section edit invalidates the cache (next export triggers fresh AI pass)",
+        "Copy Code: clipboard contains polished component, toast confirms",
+        "Download HTML: standalone file with CDN dependencies downloads correctly",
+        "Credit-metered through creditLedger"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/exportPolishAgent.ts",
+        "src/components/landing-builder/EditorToolbar.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EDIT-016"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-016",
+      "feature": "landing-builder-progressive",
+      "title": "Add session recovery for assembly phase",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 16,
+      "acceptance": [
+        "On workspace load with sections data: skip Strategy/Copy, render sections into preview immediately",
+        "Sections with generating status reset to idle on load (interrupted generation)",
+        "Chat shows resume prompt: Welcome back, N sections, M need images, continue or edit?",
+        "User says continue → asset queue restarts for idle/failed sections",
+        "User can jump straight to editing without regenerating"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EDIT-015"
+      ],
       "startedAt": null,
       "completedAt": null
     }
   ],
   "execution": {
-    "totalStories": 41,
+    "totalStories": 57,
     "completedStories": 41,
-    "currentFeature": "landing-builder-v2",
-    "lastUpdated": "2026-02-28T12:00:00Z"
+    "currentFeature": "landing-builder-progressive",
+    "lastUpdated": "2026-03-01T12:00:00Z"
   }
 }

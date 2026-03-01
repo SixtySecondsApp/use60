@@ -21,8 +21,6 @@ interface PropertiesPanelProps {
   onRegenerateAsset: (sectionId: string, assetType: 'image' | 'svg') => void;
 }
 
-type CollapsibleId = 'copy' | 'layout' | 'assets' | 'style';
-
 const LAYOUT_OPTIONS: { value: LayoutVariant; label: string }[] = [
   { value: 'centered', label: 'Centered' },
   { value: 'split-left', label: 'Split Left' },
@@ -34,7 +32,8 @@ const LAYOUT_OPTIONS: { value: LayoutVariant; label: string }[] = [
 // Debounce hook
 // ---------------------------------------------------------------------------
 
-function useDebouncedCallback<T extends (...args: unknown[]) => void>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function useDebouncedCallback<T extends (...args: any[]) => void>(
   callback: T,
   delay: number,
 ): T {
@@ -49,7 +48,8 @@ function useDebouncedCallback<T extends (...args: unknown[]) => void>(
   }, []);
 
   return useCallback(
-    (...args: unknown[]) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (...args: any[]) => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => callbackRef.current(...args), delay);
     },

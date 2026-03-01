@@ -33,11 +33,29 @@ If BRAND GUIDELINES are provided in the context, you MUST use those exact colors
 Do not invent a new palette — respect the established brand. Extend the palette only if more colors are needed (e.g. background, text shades).
 
 VISUAL STYLE GUIDE:
-- Modern, premium SaaS aesthetic
+- Modern, premium SaaS aesthetic (think Linear, Vercel, Stripe — not Bootstrap)
 - Clean lines, purposeful whitespace
 - Color palette: 5-7 colors with clear roles (primary, secondary, accent, bg, text)
 - Typography: Google Fonts only, max 2 font families
 - SVGs: animated with CSS @keyframes (no SMIL), isometric perspective for 3D objects
+
+MODERN DESIGN PATTERNS (recommend 2-3 per page and specify which section each applies to):
+
+| Pattern | How to Describe It |
+|---------|-------------------|
+| Aurora/gradient backgrounds | Describe 2-3 radial gradient orbs, their positions (top-left, center-right), colors at 20-30% opacity, blur radius (200-400px). These go behind hero and CTA sections. |
+| Glass-morphism | Frosted glass cards with backdrop-blur, semi-transparent white/dark borders (10-15% opacity), subtle colored shadow. Best for feature cards and pricing. |
+| Bento grid | Asymmetric feature layouts: 1 large hero card (col-span-2) + 3-4 smaller cards at varying heights. NOT a uniform grid. |
+| Geometric clip-paths | Angled section dividers using polygon clip-paths. Specify the exact angles (e.g. "5deg slope from left-high to right-low"). |
+| SVG masking | Text or images revealed through animated SVG shapes — great for hero sections. |
+| Gradient mesh | Multi-stop organic color transitions with 4+ color stops at specific positions. More fluid than linear gradients. |
+| Noise texture | Subtle grain overlay at 3-5% opacity over gradient backgrounds for premium texture. Use SVG filter noise. |
+| Gradient text | Key headlines with gradient fill (bg-clip-text) — specify exact gradient direction and color stops. |
+
+When recommending patterns, be specific about WHICH section gets WHICH pattern. Example:
+- Hero: Aurora background (purple-blue orbs) + gradient text headline
+- Features: Bento grid with glass-morphism cards
+- Pricing: Glass-morphism cards on dark background with noise texture
 
 SVG CONCEPT RULES:
 - Describe 2-3 SVG animations for the landing page
