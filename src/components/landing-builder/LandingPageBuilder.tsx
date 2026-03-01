@@ -854,8 +854,6 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
           deliverables={builderState.deliverables}
           onNewProject={handleNewProject}
           isProcessing={isLoading}
-          phaseOutputs={phaseOutputsRef.current}
-          activePhase={currentPhase}
           research={effectiveResearch}
           isResearching={isResearching}
           onPhaseClick={(phaseId) => handleEditPhase(phaseId - 1)}

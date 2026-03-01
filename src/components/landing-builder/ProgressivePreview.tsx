@@ -1,260 +1,213 @@
 /**
- * ProgressivePreview — Evolving page preview in the right panel
+ * Progressive Preview
  *
- * Builds up a visual miniature preview as each phase completes:
- * - After Strategy: Section wireframe skeleton
- * - After Copy: Headlines laid out in sections
- * - After Visuals: Styled with colors from palette
- * - After Build: Shows "Preview ready" with link to scroll
+ * Wraps the deterministic section renderer with an iframe preview and adds:
+ * - Section status overlay badges (generating/complete/failed)
+ * - Completion highlight animation (green ring that fades after 800ms)
+ * - Scroll-to-section when highlightSectionId changes
+ * - Device width toggles (mobile/tablet/desktop)
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { Loader2, Check, AlertTriangle, Smartphone, Monitor, Tablet } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { renderSectionsToCode } from './sectionRenderer';
+import type { LandingSection, BrandConfig, AssetStatus } from './types';
 
-interface ProgressivePreviewProps {
-  /** Accumulated outputs from each completed phase (0-indexed) */
-  phaseOutputs: Record<number, string>;
-  /** Current phase index (0-based) */
-  currentPhase: number;
-  /** Generated hero image URL (if any) */
-  heroImageUrl?: string | null;
+export interface ProgressivePreviewProps {
+  sections: LandingSection[];
+  brandConfig: BrandConfig;
+  highlightSectionId?: string;
+  onSectionClick?: (sectionId: string) => void;
 }
 
-/**
- * Extract section names from Strategy phase output.
- */
-function extractSections(strategyOutput: string): string[] {
-  const sections: string[] = [];
-  const patterns = [
-    /(?:^|\n)\d+\.\s*\*\*([^*\n]+)\*\*/g,
-    /(?:^|\n)###\s+([^\n]+)/g,
-    /(?:^|\n)[-*]\s*\*\*([^*]+)\*\*/g,
-  ];
+type DeviceWidth = 'mobile' | 'tablet' | 'desktop';
 
-  for (const pattern of patterns) {
-    for (const match of strategyOutput.matchAll(pattern)) {
-      const name = match[1].trim().replace(/\*\*/g, '');
-      if (name && !sections.includes(name) && name.length < 60) {
-        sections.push(name);
+const DEVICE_WIDTHS: Record<DeviceWidth, string> = {
+  mobile: '375px',
+  tablet: '768px',
+  desktop: '100%',
+};
+
+function getOverallStatus(section: LandingSection): AssetStatus {
+  if (section.image_status === 'generating' || section.svg_status === 'generating') return 'generating';
+  if (section.image_status === 'failed' || section.svg_status === 'failed') return 'failed';
+  if (section.image_status === 'complete' || section.svg_status === 'complete') return 'complete';
+  return 'idle';
+}
+
+export function ProgressivePreview({
+  sections,
+  brandConfig,
+  highlightSectionId,
+  onSectionClick,
+}: ProgressivePreviewProps) {
+  const [deviceWidth, setDeviceWidth] = useState<DeviceWidth>('desktop');
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const prevStatusRef = useRef<Map<string, AssetStatus>>(new Map());
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+
+  const code = useMemo(
+    () => renderSectionsToCode(sections, brandConfig),
+    [sections, brandConfig],
+  );
+
+  // Inject a scroll-to-section script when highlightSectionId changes
+  const codeWithScroll = useMemo(() => {
+    if (!highlightSectionId) return code;
+    const scrollScript = `<script>
+      (function() {
+        var el = document.querySelector('[data-section-id="${highlightSectionId}"]');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      })();
+    <\/script>`;
+    return code.replace('</body>', scrollScript + '</body>');
+  }, [code, highlightSectionId]);
+
+  // Track status transitions: generating -> complete triggers highlight
+  useEffect(() => {
+    const newCompleted = new Set<string>();
+    for (const section of sections) {
+      const currentStatus = getOverallStatus(section);
+      const prevStatus = prevStatusRef.current.get(section.id);
+      if (prevStatus === 'generating' && currentStatus === 'complete') {
+        newCompleted.add(section.id);
       }
     }
-    if (sections.length >= 3) break;
-  }
 
-  return sections.length > 0
-    ? sections
-    : ['Hero', 'Problem', 'Solution', 'Social Proof', 'CTA'];
-}
-
-/**
- * Extract hex colors from Visuals phase output.
- */
-function extractColors(visualsOutput: string): string[] {
-  const colors: string[] = [];
-  const matches = visualsOutput.matchAll(/`(#[0-9A-Fa-f]{3,8})`/g);
-  for (const match of matches) {
-    if (!colors.includes(match[1]) && colors.length < 8) {
-      colors.push(match[1]);
+    // Update prev status map every render
+    const nextMap = new Map<string, AssetStatus>();
+    for (const section of sections) {
+      nextMap.set(section.id, getOverallStatus(section));
     }
-  }
-  return colors;
-}
+    prevStatusRef.current = nextMap;
 
-/**
- * Extract copy headlines from Copy phase output (approved selections).
- */
-function extractHeadlines(copyOutput: string): Record<string, string> {
-  const headlines: Record<string, string> = {};
-
-  // Try approved format: "## Section Name\nHeadline: ..."
-  const approvedBlocks = copyOutput.split(/(?=##\s+[^\n]+)/);
-  for (const block of approvedBlocks) {
-    const headerMatch = block.match(/##\s+(.+)/);
-    if (!headerMatch) continue;
-    const headlineMatch = block.match(/Headline:\s*(.+)/);
-    if (headlineMatch) {
-      headlines[headerMatch[1].trim()] = headlineMatch[1].trim();
+    if (newCompleted.size > 0) {
+      setCompletedIds((prev) => new Set([...prev, ...newCompleted]));
+      const timer = setTimeout(() => {
+        setCompletedIds((prev) => {
+          const next = new Set(prev);
+          for (const id of newCompleted) next.delete(id);
+          return next;
+        });
+      }, 800);
+      return () => clearTimeout(timer);
     }
-  }
+  }, [sections]);
 
-  // Fallback: try "### Section Name" with blockquote headline
-  if (Object.keys(headlines).length === 0) {
-    const sectionBlocks = copyOutput.split(/(?=###\s+[^\n]+)/);
-    for (const block of sectionBlocks) {
-      const headerMatch = block.match(/###\s+(.+)/);
-      if (!headerMatch) continue;
-      const headlineMatch = block.match(/>\s*\*\*([^*]+)\*\*/);
-      if (headlineMatch) {
-        headlines[headerMatch[1].trim()] = headlineMatch[1].trim();
-      }
-    }
-  }
-
-  return headlines;
-}
-
-export const ProgressivePreview: React.FC<ProgressivePreviewProps> = ({
-  phaseOutputs,
-  currentPhase,
-  heroImageUrl,
-}) => {
-  const strategyOutput = phaseOutputs[0];
-  const copyOutput = phaseOutputs[1];
-  const visualsOutput = phaseOutputs[2];
-
-  const sections = useMemo(
-    () => (strategyOutput ? extractSections(strategyOutput) : []),
-    [strategyOutput],
+  const sorted = useMemo(
+    () => [...sections].sort((a, b) => a.order - b.order),
+    [sections],
   );
 
-  const headlines = useMemo(
-    () => (copyOutput ? extractHeadlines(copyOutput) : {}),
-    [copyOutput],
-  );
-
-  const colors = useMemo(
-    () => (visualsOutput ? extractColors(visualsOutput) : []),
-    [visualsOutput],
-  );
-
-  const hasColors = colors.length > 0;
-  const primaryColor = colors[0] || '#6C63FF';
-  const bgDark = colors.find(c => {
-    // Find a dark color for background
-    const hex = c.replace('#', '');
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-    return (r + g + b) / 3 < 50;
-  }) || '#0D0D1A';
-
-  if (sections.length === 0) {
-    return (
-      <div className="text-center py-6">
-        <p className="text-xs text-gray-500">
-          Preview builds as you approve each phase
-        </p>
-      </div>
-    );
-  }
+  const handleIframeLoad = useCallback(() => {
+    if (!onSectionClick || !iframeRef.current) return;
+    try {
+      const doc = iframeRef.current.contentDocument;
+      if (!doc) return;
+      doc.querySelectorAll('[data-section-id]').forEach((el) => {
+        el.addEventListener('click', () => {
+          const id = el.getAttribute('data-section-id');
+          if (id) onSectionClick(id);
+        });
+      });
+    } catch {
+      // cross-origin restriction — ignore
+    }
+  }, [onSectionClick]);
 
   return (
-    <div
-      className="rounded-lg border border-gray-700/50 overflow-hidden"
-      style={hasColors ? { backgroundColor: bgDark } : undefined}
-    >
-      {/* Mini page preview */}
-      <div className="p-2.5 space-y-1.5">
-        {sections.map((section, i) => {
-          const headline = headlines[section];
-          const isHero = i === 0;
-
-          return (
-            <div
-              key={section}
-              className={cn(
-                'rounded-md transition-all',
-                isHero ? 'p-2.5' : 'p-2',
-                hasColors
-                  ? 'border border-gray-600/20'
-                  : 'bg-gray-800/40 border border-gray-700/30',
-              )}
-              style={
-                hasColors
-                  ? {
-                      backgroundColor:
-                        i % 2 === 0
-                          ? 'rgba(255,255,255,0.03)'
-                          : 'rgba(255,255,255,0.01)',
-                      borderColor: isHero ? primaryColor + '30' : undefined,
-                    }
-                  : undefined
-              }
-            >
-              {/* Hero image thumbnail */}
-              {isHero && heroImageUrl && (
-                <div className="mb-1.5 rounded overflow-hidden">
-                  <img
-                    src={heroImageUrl}
-                    alt="Hero"
-                    className="w-full h-10 object-cover opacity-80"
-                  />
-                </div>
-              )}
-
-              {/* Section label */}
-              <div className="flex items-center gap-1 mb-0.5">
-                <div
-                  className="w-1 h-1 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: hasColors ? primaryColor : '#6B7280' }}
-                />
-                <span
-                  className="text-[9px] font-medium uppercase tracking-wider"
-                  style={{ color: hasColors ? primaryColor + 'AA' : '#6B7280' }}
-                >
-                  {section}
-                </span>
-              </div>
-
-              {/* Content preview */}
-              {headline ? (
-                <p
-                  className={cn(
-                    'text-[10px] font-semibold truncate leading-tight',
-                    hasColors ? 'text-gray-200' : 'text-gray-400',
-                  )}
-                >
-                  {headline}
-                </p>
-              ) : (
-                <div className="space-y-0.5">
-                  <div
-                    className={cn(
-                      'h-1.5 rounded-full',
-                      isHero ? 'w-3/4' : 'w-1/2',
-                      'bg-gray-700/40',
-                    )}
-                  />
-                  <div className="h-1 rounded-full w-2/3 bg-gray-700/25" />
-                </div>
-              )}
-            </div>
-          );
-        })}
+    <div className="relative flex flex-col h-full">
+      {/* Toolbar */}
+      <div className={cn(
+        'flex items-center justify-between px-3 py-2 border-b',
+        'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700',
+      )}>
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          Preview
+        </span>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setDeviceWidth('mobile')}
+            className={cn(
+              'p-1.5 rounded transition-colors',
+              deviceWidth === 'mobile' ? 'text-blue-500' : 'text-gray-400 hover:text-gray-600',
+            )}
+            title="Mobile (375px)"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeviceWidth('tablet')}
+            className={cn(
+              'p-1.5 rounded transition-colors',
+              deviceWidth === 'tablet' ? 'text-blue-500' : 'text-gray-400 hover:text-gray-600',
+            )}
+            title="Tablet (768px)"
+          >
+            <Tablet className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeviceWidth('desktop')}
+            className={cn(
+              'p-1.5 rounded transition-colors',
+              deviceWidth === 'desktop' ? 'text-blue-500' : 'text-gray-400 hover:text-gray-600',
+            )}
+            title="Desktop (full width)"
+          >
+            <Monitor className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
-      {/* Color palette strip */}
-      {colors.length > 0 && (
-        <div className="flex border-t border-gray-700/30">
-          {colors.slice(0, 6).map((color) => (
-            <div
-              key={color}
-              className="flex-1 h-2.5"
-              style={{ backgroundColor: color }}
-              title={color}
-            />
-          ))}
-        </div>
-      )}
+      {/* Preview area with overlay badges */}
+      <div className="relative flex-1 flex justify-center bg-gray-100 dark:bg-gray-950 overflow-hidden">
+        <iframe
+          ref={iframeRef}
+          srcDoc={codeWithScroll}
+          sandbox="allow-scripts allow-same-origin"
+          title="Landing Page Preview"
+          className="bg-white border-0 h-full"
+          style={{ width: DEVICE_WIDTHS[deviceWidth] }}
+          onLoad={handleIframeLoad}
+        />
 
-      {/* Phase indicator */}
-      <div className="px-2.5 py-1.5 border-t border-gray-700/20">
-        <div className="flex items-center gap-1">
-          {[0, 1, 2, 3].map((phase) => (
-            <div
-              key={phase}
-              className={cn(
-                'flex-1 h-0.5 rounded-full transition-all',
-                phase < currentPhase
-                  ? 'bg-violet-500'
-                  : phase === currentPhase
-                    ? 'bg-violet-500/40'
-                    : 'bg-gray-700/40',
-              )}
-            />
-          ))}
+        {/* Section status badges — positioned absolutely over the iframe */}
+        <div className="absolute inset-0 pointer-events-none">
+          {sorted.map((section, index) => {
+            const status = getOverallStatus(section);
+            if (status === 'idle') return null;
+
+            const isJustCompleted = completedIds.has(section.id);
+            // Approximate vertical offset based on section order
+            const topPercent = sorted.length > 0
+              ? (index / sorted.length) * 100
+              : 0;
+
+            return (
+              <div
+                key={section.id}
+                className={cn(
+                  'absolute right-3 flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium shadow-sm transition-all duration-300',
+                  status === 'generating' && 'bg-white/90 dark:bg-gray-800/90 text-blue-600',
+                  status === 'complete' && 'bg-white/90 dark:bg-gray-800/90 text-green-600',
+                  status === 'failed' && 'bg-white/90 dark:bg-gray-800/90 text-red-600',
+                  isJustCompleted && 'ring-2 ring-green-400 animate-pulse',
+                )}
+                style={{ top: `calc(${topPercent}% + 8px)` }}
+              >
+                {status === 'generating' && <Loader2 className="w-3 h-3 animate-spin" />}
+                {status === 'complete' && <Check className="w-3 h-3" />}
+                {status === 'failed' && <AlertTriangle className="w-3 h-3" />}
+                <span className="capitalize">{section.type}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
-};
+}

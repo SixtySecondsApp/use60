@@ -4,12 +4,11 @@
  */
 
 import React, { useState } from 'react';
-import { ChevronDown, Layers, FileOutput, Clock, Plus, Eye, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ChevronDown, Layers, FileOutput, Clock, Plus, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BuilderPhase, PhaseDeliverable, LandingResearchData } from './types';
 import { PhaseTimeline } from './PhaseTimeline';
 import { DeliverablePreview } from './DeliverablePreview';
-import { ProgressivePreview } from './ProgressivePreview';
 
 interface LandingBuilderRightPanelProps {
   phases: BuilderPhase[];
@@ -17,10 +16,6 @@ interface LandingBuilderRightPanelProps {
   deliverables: Record<number, PhaseDeliverable>;
   onNewProject?: () => void;
   isProcessing?: boolean;
-  /** Accumulated approved phase outputs for progressive preview */
-  phaseOutputs?: Record<number, string>;
-  /** Current active phase (0-based) */
-  activePhase?: number;
   /** Auto-research data from landing-research edge function */
   research?: LandingResearchData | null;
   /** Whether auto-research is currently running */
@@ -71,8 +66,6 @@ export const LandingBuilderRightPanel: React.FC<LandingBuilderRightPanelProps> =
   deliverables,
   onNewProject,
   isProcessing,
-  phaseOutputs,
-  activePhase,
   research,
   isResearching,
   onPhaseClick,
@@ -172,20 +165,6 @@ export const LandingBuilderRightPanel: React.FC<LandingBuilderRightPanelProps> =
           />
         </CollapsibleSection>
 
-        {/* Progressive Preview */}
-        {phaseOutputs && Object.keys(phaseOutputs).length > 0 && (
-          <CollapsibleSection
-            title="Preview"
-            icon={<Eye className="w-4 h-4" />}
-            iconColor="text-violet-400"
-            defaultOpen={true}
-          >
-            <ProgressivePreview
-              phaseOutputs={phaseOutputs}
-              currentPhase={activePhase ?? 0}
-            />
-          </CollapsibleSection>
-        )}
 
         {/* Current Deliverable */}
         {latestDeliverable && (
