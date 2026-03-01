@@ -170,14 +170,24 @@ function buildIconStubs(code: string): string {
   return stubs.join('\n');
 }
 
+/**
+ * Detect if code is raw HTML (from sectionRenderer) vs React JSX component code.
+ * Raw HTML starts with <!DOCTYPE or <html> and should bypass Babel/React pipeline.
+ */
+function isRawHtml(code: string): boolean {
+  const trimmed = code.trimStart();
+  return trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
+}
+
 export const LandingCodePreview: React.FC<LandingCodePreviewProps> = ({ code }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [expanded, setExpanded] = useState(false);
   const [deviceWidth, setDeviceWidth] = useState<DeviceWidth>('desktop');
   const [copied, setCopied] = useState(false);
 
-  const { cleaned, componentName } = useMemo(() => prepareForPreview(code), [code]);
-  const iconStubs = useMemo(() => buildIconStubs(cleaned), [cleaned]);
+  const rawHtml = useMemo(() => isRawHtml(code), [code]);
+  const { cleaned, componentName } = useMemo(() => rawHtml ? { cleaned: '', componentName: 'App' } : prepareForPreview(code), [code, rawHtml]);
+  const iconStubs = useMemo(() => rawHtml ? '' : buildIconStubs(cleaned), [cleaned, rawHtml]);
   const googleFonts = useMemo(() => extractGoogleFonts(code), [code]);
 
   // Build Google Fonts link
@@ -196,6 +206,11 @@ export const LandingCodePreview: React.FC<LandingCodePreviewProps> = ({ code }) 
   }, [cleaned]);
 
   const srcDoc = useMemo(() => {
+    // Raw HTML from sectionRenderer: render directly, no Babel/React pipeline
+    if (rawHtml) {
+      return code;
+    }
+
     // Use template with explicit string concatenation to avoid escaping issues
     const escapedIconStubs = iconStubs
       .replace(new RegExp('</scr' + 'ipt>', 'gi'), '</scr' + 'ipt>');
@@ -406,7 +421,7 @@ export const LandingCodePreview: React.FC<LandingCodePreviewProps> = ({ code }) 
   ${endScript}
 </body>
 </html>`;
-  }, [escapedCode, iconStubs, componentName, fontsLink, googleFonts]);
+  }, [rawHtml, code, escapedCode, iconStubs, componentName, fontsLink, googleFonts]);
 
   const handleCopy = useCallback(async () => {
     try {

@@ -10,7 +10,6 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { MessageSquare, Minimize2, GripVertical } from 'lucide-react';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { CopilotLayout } from '@/components/copilot/CopilotLayout';
@@ -32,8 +31,9 @@ import { SECTION_EDIT_AGENT_SYSTEM_PROMPT, buildSectionEditContext, parseSection
 import { parseWorkspaceToSections } from './assemblyOrchestrator';
 import { AssetGenerationQueue } from './assetQueue';
 import { AssemblyPreview } from './AssemblyPreview';
+import { LandingEditorPanel } from './LandingEditorPanel';
+import { FloatingChatBar } from './FloatingChatBar';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import type { WorkspacePhaseKey } from '@/lib/services/landingBuilderWorkspaceService';
 import type { FactProfile } from '@/lib/types/factProfile';
 import type { ProductProfile } from '@/lib/types/productProfile';
@@ -342,7 +342,6 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
   const [assemblySections, setAssemblySections] = useState<LandingSection[]>([]);
   const [assemblyBrandConfig, setAssemblyBrandConfig] = useState<BrandConfig | null>(null);
   const [highlightSectionId, setHighlightSectionId] = useState<string | undefined>();
-  const [chatMinimized, setChatMinimized] = useState(false);
   const assetQueueRef = useRef<AssetGenerationQueue | null>(null);
 
   // Sync phase from workspace on load
@@ -781,73 +780,54 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     return false;
   }, [handleApprove, handleEditPhase, currentPhase]);
 
-  // Assembly mode: full-width preview + floating chat panel
+  // Handle asset regeneration from editor panel
+  const handleRegenerateAsset = useCallback((sectionId: string, assetType: 'image' | 'svg') => {
+    if (!assetQueueRef.current) return;
+
+    // Mark as generating
+    setAssemblySections(prev => prev.map(s =>
+      s.id === sectionId
+        ? { ...s, [assetType === 'image' ? 'image_status' : 'svg_status']: 'generating' as const }
+        : s
+    ));
+
+    // Prioritise puts the item at the front of the queue and restarts processing
+    assetQueueRef.current.prioritise(sectionId, assetType);
+    assetQueueRef.current.process();
+  }, []);
+
+  // Assembly mode: preview (flex-1) + right editor panel (w-80) + floating chat bar overlay
   if (isAssemblyMode && assemblyBrandConfig) {
     return (
-      <div className="relative h-[calc(100dvh-var(--app-top-offset))] w-full">
-        {/* Full-width assembly preview */}
-        <AssemblyPreview
-          sections={assemblySections}
-          brandConfig={assemblyBrandConfig}
-          highlightSectionId={highlightSectionId}
-          onSectionClick={(id) => setHighlightSectionId(id)}
-        />
-
-        {/* Floating chat panel (bottom-left) */}
-        <div
-          className={cn(
-            'absolute bottom-4 left-4 z-20 transition-all duration-300 ease-in-out',
-            chatMinimized ? 'w-12 h-12' : 'w-[380px] h-[480px]',
-          )}
-        >
-          {chatMinimized ? (
-            <button
-              type="button"
-              onClick={() => setChatMinimized(false)}
-              className="w-12 h-12 rounded-full bg-violet-600 text-white shadow-lg hover:bg-violet-700 transition-colors flex items-center justify-center"
-              title="Open chat"
-            >
-              <MessageSquare className="w-5 h-5" />
-            </button>
-          ) : (
-            <div className="flex flex-col h-full bg-white dark:bg-gray-950 rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
-              {/* Chat header */}
-              <div className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5">
-                <div className="flex items-center gap-2">
-                  <GripVertical className="w-3.5 h-3.5 text-gray-400" />
-                  <span className="text-xs font-semibold text-gray-700 dark:text-slate-300">
-                    Section Editor
-                  </span>
-                  {(() => {
-                    const role = PHASE_AGENT_MAP[currentPhase];
-                    const badge = role ? AGENT_BADGES[role] : null;
-                    return badge ? (
-                      <span className={cn('text-[10px] font-medium', badge.color)}>{badge.label}</span>
-                    ) : null;
-                  })()}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setChatMinimized(true)}
-                  className="p-1 rounded hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
-                  title="Minimize chat"
-                >
-                  <Minimize2 className="w-3.5 h-3.5 text-gray-500" />
-                </button>
-              </div>
-              {/* Chat body */}
-              <div className="flex-1 overflow-hidden">
-                <AssistantShell
-                  mode="page"
-                  apiContentTransform={builderApiTransform}
-                  phaseActions={phaseActions}
-                  onPhaseAction={handlePhaseAction}
-                  phaseComponent={phaseComponent}
-                />
-              </div>
-            </div>
-          )}
+      <div className="relative h-[calc(100dvh-var(--app-top-offset))] w-full flex">
+        {/* Preview — fills remaining space */}
+        <div className="flex-1 min-w-0 relative pb-36">
+          <AssemblyPreview
+            sections={assemblySections}
+            brandConfig={assemblyBrandConfig}
+            highlightSectionId={highlightSectionId}
+            onSectionClick={(id) => setHighlightSectionId(id)}
+          />
         </div>
+
+        {/* Right editor panel — section list + properties */}
+        <div className="w-80 flex-shrink-0">
+          <LandingEditorPanel
+            sections={assemblySections}
+            onSectionsChange={setAssemblySections}
+            onRegenerateAsset={handleRegenerateAsset}
+            selectedSectionId={highlightSectionId}
+            onSelectSection={(id) => setHighlightSectionId(id)}
+          />
+        </div>
+
+        {/* Floating chat bar — centered bottom overlay */}
+        <FloatingChatBar
+          apiContentTransform={builderApiTransform}
+          phaseActions={phaseActions}
+          onPhaseAction={handlePhaseAction}
+          phaseComponent={phaseComponent}
+        />
       </div>
     );
   }

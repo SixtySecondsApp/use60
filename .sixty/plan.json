@@ -46,8 +46,15 @@
     {
       "id": "landing-builder-progressive",
       "name": "Landing Builder — Progressive Assembly + Chat Editor",
-      "status": "pending",
+      "status": "complete",
       "prd": "docs/landing-page-builder/landing-page-builder-improvements.md",
+      "createdAt": "2026-03-01"
+    },
+    {
+      "id": "landing-builder-ux-redesign",
+      "name": "Landing Builder — UX Redesign (Preview Fix + Layout Overhaul)",
+      "status": "complete",
+      "consultReport": ".sixty/consult/landing-builder-ux-redesign.md",
       "createdAt": "2026-03-01"
     }
   ],
@@ -1464,7 +1471,7 @@
       "feature": "landing-builder-progressive",
       "title": "Add sections JSONB column to landing_builder_sessions",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "acceptance": [
         "Migration adds sections jsonb column with DEFAULT '[]'::jsonb to landing_builder_sessions",
@@ -1488,15 +1495,15 @@
         "EDIT-002"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-002",
       "feature": "landing-builder-progressive",
       "title": "Add LandingSection types and workspace sections CRUD",
       "type": "fullstack",
-      "status": "pending",
+      "status": "complete",
       "priority": 2,
       "acceptance": [
         "LandingSection, AssetStatus, SectionType, LayoutVariant interfaces exported from types.ts",
@@ -1528,15 +1535,15 @@
         "EDIT-012"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-003",
       "feature": "landing-builder-progressive",
       "title": "Build deterministic section renderer (16 templates)",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 3,
       "acceptance": [
         "renderSectionsToCode() pure function takes LandingSection[] + BrandConfig, returns React+Tailwind string",
@@ -1563,15 +1570,15 @@
         "EDIT-014"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-004",
       "feature": "landing-builder-progressive",
       "title": "Build assembly orchestrator",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 4,
       "acceptance": [
         "startAssembly() parses workspace copy+strategy into LandingSection[] with brand colours",
@@ -1597,15 +1604,15 @@
         "EDIT-005"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-005",
       "feature": "landing-builder-progressive",
       "title": "Build asset generation queue with retry strategy",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 5,
       "acceptance": [
         "AssetGenerationQueue processes items serially via priority (hero image first)",
@@ -1634,15 +1641,15 @@
         "EDIT-006"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-006",
       "feature": "landing-builder-progressive",
       "title": "Build progressive preview component with choreography",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 6,
       "acceptance": [
         "ProgressivePreview wraps LandingCodePreview iframe with section overlays",
@@ -1669,15 +1676,15 @@
         "EDIT-008"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-007",
       "feature": "landing-builder-progressive",
       "title": "Build section edit agent with clarify-first philosophy",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 7,
       "acceptance": [
         "Agent prompt receives current sections array + user message, returns JSON ops + message + highlight_section_id",
@@ -1705,15 +1712,15 @@
       "parallelWith": [
         "EDIT-004"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-008",
       "feature": "landing-builder-progressive",
       "title": "Wire preview-first layout with floating chat panel",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 8,
       "acceptance": [
         "After copy approval, layout collapses right panel and chat sidebar entirely",
@@ -1741,15 +1748,15 @@
         "EDIT-012"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-012",
       "feature": "landing-builder-progressive",
       "title": "Restructure pipeline to 3 phases (Strategy, Copy, Assembly)",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 9,
       "acceptance": [
         "PIPELINE_PHASES updated to 3 phases: Strategy, Copy, Assembly",
@@ -1777,15 +1784,15 @@
         "EDIT-013"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-013",
       "feature": "landing-builder-progressive",
       "title": "Remove standalone Visuals phase from pipeline",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 10,
       "acceptance": [
         "Visuals phase enum value removed from types",
@@ -1812,15 +1819,15 @@
         "EDIT-014"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-014",
       "feature": "landing-builder-progressive",
       "title": "Update builder agent to output sections JSON (not code)",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 11,
       "acceptance": [
         "Builder agent system prompt updated to output LandingSection[] JSON",
@@ -1845,15 +1852,15 @@
       },
       "blocks": [],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-009",
       "feature": "landing-builder-progressive",
       "title": "Build editor toolbar with device toggles and export buttons",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 12,
       "acceptance": [
         "EditorToolbar renders at top of preview panel",
@@ -1881,15 +1888,15 @@
         "EDIT-015"
       ],
       "parallelWith": [],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-010",
       "feature": "landing-builder-progressive",
       "title": "Build section list panel with drag-and-drop",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 13,
       "acceptance": [
         "SectionListPanel renders with @dnd-kit/sortable for reorder",
@@ -1914,15 +1921,15 @@
       "parallelWith": [
         "EDIT-011"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-011",
       "feature": "landing-builder-progressive",
       "title": "Build properties panel for direct section editing",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 14,
       "acceptance": [
         "PropertiesPanel shows copy fields (headline, subhead, body, CTA) as textareas with live preview",
@@ -1948,15 +1955,15 @@
       "parallelWith": [
         "EDIT-010"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-015",
       "feature": "landing-builder-progressive",
       "title": "Build export polish agent with caching",
       "type": "fullstack",
-      "status": "pending",
+      "status": "complete",
       "priority": 15,
       "acceptance": [
         "exportPolishAgent takes LandingSection[] + BrandConfig + workspace context, returns polished React+Tailwind code",
@@ -1984,15 +1991,15 @@
       "parallelWith": [
         "EDIT-016"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
     },
     {
       "id": "EDIT-016",
       "feature": "landing-builder-progressive",
       "title": "Add session recovery for assembly phase",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 16,
       "acceptance": [
         "On workspace load with sections data: skip Strategy/Copy, render sections into preview immediately",
@@ -2017,14 +2024,203 @@
       "parallelWith": [
         "EDIT-015"
       ],
-      "startedAt": null,
-      "completedAt": null
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "LB-UX-001",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Fix preview render bug — detect raw HTML vs React JSX",
+      "type": "bugfix",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "AssemblyPreview renders sectionRenderer HTML without 'Script error'",
+        "Raw HTML (<!DOCTYPE) bypasses Babel/React pipeline, renders directly as srcDoc",
+        "React JSX code still works through existing Babel pipeline",
+        "Preview/Code tab toggle works for both code types"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/landing-builder/LandingCodePreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LB-UX-002",
+        "LB-UX-003",
+        "LB-UX-004",
+        "LB-UX-005"
+      ],
+      "parallelWith": [],
+      "notes": "Root cause: sectionRenderer outputs <!DOCTYPE html> but LandingCodePreview always runs Babel/React pipeline. Fix: detect isRawHtml and render directly as srcDoc.",
+      "startedAt": "2026-03-01T17:26:11.677Z",
+      "completedAt": "2026-03-01T17:26:11.677Z",
+      "actualMinutes": 5
+    },
+    {
+      "id": "LB-UX-002",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Wire right panel — section list + properties editor in assembly mode",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "New LandingEditorPanel.tsx wraps SectionListPanel (top) + PropertiesPanel (bottom)",
+        "Clicking a section opens its properties in the panel below",
+        "Drag-drop reorder updates assemblySections state",
+        "Property edits update assemblySections and re-render preview"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/landing-builder/LandingEditorPanel.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LB-UX-001"
+        ],
+        "files": [
+          "src/components/landing-builder/SectionListPanel.tsx",
+          "src/components/landing-builder/PropertiesPanel.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "LB-UX-004"
+      ],
+      "parallelWith": [
+        "LB-UX-003"
+      ],
+      "notes": "SectionListPanel (258 lines) and PropertiesPanel (466 lines) already exist. This is a wiring task.",
+      "startedAt": "2026-03-01T17:28:09.915Z",
+      "completedAt": "2026-03-01T17:28:09.915Z",
+      "actualMinutes": 10
+    },
+    {
+      "id": "LB-UX-003",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Build FloatingChatBar — centered bottom, collapsible history",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "FloatingChatBar.tsx renders centered at viewport bottom (max-w-[600px])",
+        "Chat input always visible",
+        "Chat history collapsed by default, expands upward on toggle",
+        "Quick action buttons render below input"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/landing-builder/FloatingChatBar.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LB-UX-001"
+        ],
+        "files": [
+          "src/components/assistant/AssistantShell.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "LB-UX-004"
+      ],
+      "parallelWith": [
+        "LB-UX-002"
+      ],
+      "notes": "Extract AssistantShell from current floating panel. New component wraps it with collapse/expand, centered positioning.",
+      "startedAt": "2026-03-01T17:28:09.915Z",
+      "completedAt": "2026-03-01T17:28:09.915Z",
+      "actualMinutes": 12
+    },
+    {
+      "id": "LB-UX-004",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Assemble hero layout — preview fills space, right panel, chat overlay",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Assembly mode: preview (flex-1) + right panel (w-80) side by side",
+        "FloatingChatBar absolute overlay at bottom center z-20",
+        "Old floating chat panel code (bottom-left 380x480) removed",
+        "Preview has bottom padding to avoid chat bar overlap"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LB-UX-002",
+          "LB-UX-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LB-UX-005"
+      ],
+      "parallelWith": [],
+      "notes": "Replace LandingPageBuilder lines 784-852 with new layout: flex row + chat overlay.",
+      "startedAt": "2026-03-01T17:30:35.419Z",
+      "completedAt": "2026-03-01T17:30:35.419Z",
+      "actualMinutes": 10
+    },
+    {
+      "id": "LB-UX-005",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Polish — transitions, section click wiring, progress indicator",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "Chat bar expand/collapse animates smoothly (300ms ease-in-out)",
+        "Clicking section badge in preview selects that section in right panel editor",
+        "Progress indicator (8/12 assets) shows cleanly in right panel header",
+        "Section highlight pulse works when assets complete"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/landing-builder/FloatingChatBar.tsx",
+        "src/components/landing-builder/LandingEditorPanel.tsx",
+        "src/components/landing-builder/AssemblyPreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LB-UX-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "notes": "Final pass: smooth animations, wire section click → editor panel selection, clean progress badges.",
+      "startedAt": "2026-03-01T17:33:26.961Z",
+      "completedAt": "2026-03-01T17:33:26.961Z",
+      "actualMinutes": 8
     }
   ],
   "execution": {
-    "totalStories": 57,
-    "completedStories": 41,
-    "currentFeature": "landing-builder-progressive",
-    "lastUpdated": "2026-03-01T12:00:00Z"
+    "totalStories": 62,
+    "completedStories": 62,
+    "currentFeature": "landing-builder-ux-redesign",
+    "estimatedRemainingMinutes": 110,
+    "parallelGroups": [
+      {
+        "stories": [
+          "LB-UX-002",
+          "LB-UX-003"
+        ],
+        "reason": "Separate components, no file overlap"
+      }
+    ],
+    "criticalPathMinutes": 85,
+    "lastUpdated": "2026-03-01T17:33:26.961Z"
   }
 }

@@ -1,6 +1,28 @@
-# Progress Log — Landing Builder Progressive Assembly
+# Progress Log — Landing Builder UX Redesign
 
-## Current Feature: landing-builder-progressive (16/16 stories) COMPLETE
+## Current Feature: landing-builder-ux-redesign (5/5 stories) COMPLETE
+
+### 2026-03-01 — LB-UX-001 through LB-UX-005 (all 5 stories)
+**Feature**: Landing Builder UX Redesign (Preview Fix + Layout Overhaul)
+**Stories completed**: 5/5
+**Time**: ~25 minutes
+**Gates**: lint 0 errors | test: pass (no test files changed)
+
+**LB-UX-001 — Fix preview render bug**: `LandingCodePreview.tsx` now detects raw HTML (`<!DOCTYPE`) vs React JSX. Raw HTML renders directly as `srcDoc` bypassing Babel/React pipeline. Fixes "Script error" in assembly mode.
+
+**LB-UX-002 — Wire right panel (LandingEditorPanel.tsx)**: New component wraps `SectionListPanel` (top) + `PropertiesPanel` (bottom). Clicking section → properties load. Drag-drop reorder → sections update. Progress indicator shows asset count.
+
+**LB-UX-003 — FloatingChatBar.tsx**: Spotlight-style chat overlay — centered bottom, max-w-[600px], input always visible. Collapsed (120px) by default, expands upward to 50vh. Backdrop blur, smooth 300ms transition.
+
+**LB-UX-004 — Hero layout assembly**: Assembly mode now: `flex row` with `AssemblyPreview` (flex-1) + `LandingEditorPanel` (w-80) side by side. FloatingChatBar absolute overlay at bottom center z-20. Old bottom-left 380x480 floating panel removed. Preview gets bottom padding to avoid chat overlap.
+
+**LB-UX-005 — Polish**: Section click in preview → selects in editor panel (via shared `highlightSectionId`). Asset regeneration wired via `assetQueue.prioritise()`. Expand/collapse animates via `transition-all duration-300 ease-in-out`. Progress badge in editor header.
+
+**Commits**: pending (uncommitted)
+
+---
+
+## Previous Feature: landing-builder-progressive (16/16 stories) COMPLETE
 
 **PRD:** `docs/landing-page-builder/landing-page-builder-improvements.md`
 
