@@ -41,6 +41,22 @@ export interface CreateWorkspaceParams {
 }
 
 // ---------------------------------------------------------------------------
+// Column selection — gracefully handles missing `sections` column on older DBs
+// ---------------------------------------------------------------------------
+
+const COLUMNS_WITH_SECTIONS = 'id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, sections, current_phase, phase_status, created_at, updated_at';
+const COLUMNS_WITHOUT_SECTIONS = 'id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, current_phase, phase_status, created_at, updated_at';
+
+let hasSectionsColumn = true; // optimistic — flip on first 42703
+
+function withDefaultSections(row: Record<string, unknown>): LandingBuilderWorkspace {
+  if (!('sections' in row)) {
+    (row as Record<string, unknown>).sections = [];
+  }
+  return row as LandingBuilderWorkspace;
+}
+
+// ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
@@ -50,24 +66,31 @@ export const landingBuilderWorkspaceService = {
    * Returns null if not found.
    */
   async get(conversationId: string): Promise<LandingBuilderWorkspace | null> {
+    const cols = hasSectionsColumn ? COLUMNS_WITH_SECTIONS : COLUMNS_WITHOUT_SECTIONS;
     const { data, error } = await supabase
       .from('landing_builder_sessions')
-      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, sections, current_phase, phase_status, created_at, updated_at')
+      .select(cols)
       .eq('conversation_id', conversationId)
       .maybeSingle();
 
     if (error) {
+      // Column doesn't exist yet — retry without it
+      if (error.code === '42703' && hasSectionsColumn) {
+        hasSectionsColumn = false;
+        return this.get(conversationId);
+      }
       logger.error('[workspace] Failed to get session:', error);
       throw error;
     }
 
-    return data as LandingBuilderWorkspace | null;
+    return data ? withDefaultSections(data as Record<string, unknown>) : null;
   },
 
   /**
    * Create a new workspace session.
    */
   async create(params: CreateWorkspaceParams): Promise<LandingBuilderWorkspace> {
+    const cols = hasSectionsColumn ? COLUMNS_WITH_SECTIONS : COLUMNS_WITHOUT_SECTIONS;
     const { data, error } = await supabase
       .from('landing_builder_sessions')
       .insert({
@@ -75,15 +98,19 @@ export const landingBuilderWorkspaceService = {
         user_id: params.user_id,
         org_id: params.org_id,
       })
-      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, sections, current_phase, phase_status, created_at, updated_at')
+      .select(cols)
       .single();
 
     if (error) {
+      if (error.code === '42703' && hasSectionsColumn) {
+        hasSectionsColumn = false;
+        return this.create(params);
+      }
       logger.error('[workspace] Failed to create session:', error);
       throw error;
     }
 
-    return data as LandingBuilderWorkspace;
+    return withDefaultSections(data as Record<string, unknown>);
   },
 
   /**
@@ -172,9 +199,10 @@ export const landingBuilderWorkspaceService = {
    * Used for session recovery — returns null if nothing resumable.
    */
   async getLatestByUser(userId: string): Promise<LandingBuilderWorkspace | null> {
+    const cols = hasSectionsColumn ? COLUMNS_WITH_SECTIONS : COLUMNS_WITHOUT_SECTIONS;
     const { data, error } = await supabase
       .from('landing_builder_sessions')
-      .select('id, conversation_id, user_id, org_id, brief, strategy, copy, visuals, code, research, sections, current_phase, phase_status, created_at, updated_at')
+      .select(cols)
       .eq('user_id', userId)
       .gt('current_phase', 0)
       .order('updated_at', { ascending: false })
@@ -182,11 +210,15 @@ export const landingBuilderWorkspaceService = {
       .maybeSingle();
 
     if (error) {
+      if (error.code === '42703' && hasSectionsColumn) {
+        hasSectionsColumn = false;
+        return this.getLatestByUser(userId);
+      }
       logger.error('[workspace] Failed to get latest session:', error);
       return null;
     }
 
-    return data as LandingBuilderWorkspace | null;
+    return data ? withDefaultSections(data as Record<string, unknown>) : null;
   },
 
   // -------------------------------------------------------------------------
@@ -197,12 +229,14 @@ export const landingBuilderWorkspaceService = {
    * Bulk update all sections (reorder, initial creation).
    */
   async updateSections(conversationId: string, sections: LandingSection[]): Promise<void> {
+    if (!hasSectionsColumn) return; // Column not migrated yet — skip silently
     const { error } = await supabase
       .from('landing_builder_sessions')
       .update({ sections })
       .eq('conversation_id', conversationId);
 
     if (error) {
+      if (error.code === '42703') { hasSectionsColumn = false; return; }
       logger.error('[workspace] Failed to update sections:', error);
       throw error;
     }
