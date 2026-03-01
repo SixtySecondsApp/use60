@@ -323,6 +323,7 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     updatePhaseOutput,
     updateCode,
     advancePhase,
+    updateSections,
   } = useLandingBuilderWorkspace({
     conversationId,
     userId: userId ?? undefined,
@@ -350,6 +351,53 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
       setCurrentPhase(workspace.current_phase);
     }
   }, [workspace, currentPhase, messages.length]);
+
+  // Session recovery: restore assembly mode from persisted workspace sections
+  const sessionRecoveredRef = useRef(false);
+  React.useEffect(() => {
+    if (sessionRecoveredRef.current || isAssemblyMode) return;
+    if (!workspace) return;
+
+    const savedSections = workspace.sections as LandingSection[] | undefined;
+    if (!savedSections || savedSections.length === 0) return;
+    if (workspace.current_phase < 2) return;
+
+    sessionRecoveredRef.current = true;
+
+    // Reset interrupted generation statuses to idle
+    const recovered = savedSections.map(s => ({
+      ...s,
+      image_status: s.image_status === 'generating' ? 'idle' as const : s.image_status,
+      svg_status: s.svg_status === 'generating' ? 'idle' as const : s.svg_status,
+    }));
+
+    // Extract brand config from workspace visuals or use defaults
+    const vis = (workspace.visuals ?? {}) as Record<string, unknown>;
+    const palette = (vis.palette ?? vis.color_palette ?? {}) as Record<string, unknown>;
+    const brandConfig: BrandConfig = {
+      primary_color: String(palette.primary ?? '#6366f1'),
+      secondary_color: String(palette.secondary ?? '#8b5cf6'),
+      accent_color: String(palette.accent ?? '#f59e0b'),
+      bg_color: String(palette.background ?? palette.bg ?? '#0f172a'),
+      text_color: String(palette.text ?? '#f8fafc'),
+      font_heading: String((vis.typography as Record<string, unknown>)?.heading ?? 'Inter'),
+      font_body: String((vis.typography as Record<string, unknown>)?.body ?? 'Inter'),
+    };
+
+    setAssemblySections(recovered);
+    setAssemblyBrandConfig(brandConfig);
+    setCurrentPhase(2);
+    setIsAssemblyMode(true);
+  }, [workspace, isAssemblyMode]);
+
+  // Persist assembly sections to workspace (debounced) for session recovery
+  React.useEffect(() => {
+    if (!isAssemblyMode || assemblySections.length === 0) return;
+    const timer = setTimeout(() => {
+      updateSections(assemblySections);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [assemblySections, isAssemblyMode, updateSections]);
 
   // Use live research if available, fallback to persisted workspace research
   const effectiveResearch = research ?? (workspace?.research as LandingResearchData | null) ?? null;
