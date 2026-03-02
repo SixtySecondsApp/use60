@@ -112,35 +112,64 @@ serve(async (req) => {
       );
     }
 
-    // --- Step 2: Create auth user ---
-    // email_confirm: false means they'll need to verify email
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: request.email.toLowerCase(),
-      password: request.password,
-      email_confirm: false,
-      user_metadata: {
-        first_name: request.first_name.trim(),
-        last_name: request.last_name.trim(),
-        full_name: `${request.first_name.trim()} ${request.last_name.trim()}`,
-      },
-    });
+    // --- Step 2: Check if user already exists ---
+    let userId: string;
+    let isExistingUser = false;
 
-    if (authError) {
-      console.error('Auth user creation error:', authError);
-      // Check if user already exists
-      if (authError.message?.includes('already been registered') || authError.message?.includes('already exists')) {
+    // Look up existing user by email via profiles table (service role, no pagination issues)
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', request.email.toLowerCase())
+      .maybeSingle();
+
+    if (existingProfile) {
+      // User exists — reset them for a fresh start with the magic link org
+      userId = existingProfile.id;
+      isExistingUser = true;
+      console.log('Existing user found:', userId, 'for email:', request.email);
+
+      // Update their password to what they entered on the signup form
+      const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: request.password,
+      });
+      if (updateErr) {
+        console.error('Password update error (non-fatal):', updateErr);
+      }
+
+      // Remove all existing org memberships so they start fresh
+      const { error: cleanupErr } = await supabaseAdmin
+        .from('organization_memberships')
+        .delete()
+        .eq('user_id', userId);
+      if (cleanupErr) {
+        console.error('Membership cleanup error (non-fatal):', cleanupErr);
+      } else {
+        console.log('Cleaned up old memberships for user:', userId);
+      }
+    } else {
+      // New user — create auth account with email auto-confirmed (admin vouches for them)
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: request.email.toLowerCase(),
+        password: request.password,
+        email_confirm: true,
+        user_metadata: {
+          first_name: request.first_name.trim(),
+          last_name: request.last_name.trim(),
+          full_name: `${request.first_name.trim()} ${request.last_name.trim()}`,
+        },
+      });
+
+      if (authError) {
+        console.error('Auth user creation error:', authError);
         return new Response(
-          JSON.stringify({ success: false, error: 'An account with this email already exists. Please log in instead.' }),
-          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ success: false, error: 'Failed to create account: ' + authError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      return new Response(
-        JSON.stringify({ success: false, error: 'Failed to create account: ' + authError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
-    const userId = authData.user.id;
+      userId = authData.user.id;
+    }
 
     // --- Step 3: Create profile (defensive upsert) ---
     const { error: profileError } = await supabaseAdmin
@@ -161,11 +190,11 @@ serve(async (req) => {
     // --- Step 4: Create organization membership as owner ---
     const { error: membershipError } = await supabaseAdmin
       .from('organization_memberships')
-      .insert({
+      .upsert({
         org_id: tokenData.org_id,
         user_id: userId,
         role: 'owner',
-      });
+      }, { onConflict: 'org_id,user_id' });
 
     if (membershipError) {
       console.error('Membership creation error:', membershipError);
@@ -228,32 +257,18 @@ serve(async (req) => {
       // Non-fatal — token validation checks used_at anyway
     }
 
-    // --- Step 8: Send email verification ---
-    try {
-      const frontendUrl = Deno.env.get('FRONTEND_URL') || 'https://app.use60.com';
-      const { error: verifyError } = await supabaseAdmin.auth.admin.generateLink({
-        type: 'signup',
-        email: request.email.toLowerCase(),
-        options: {
-          redirectTo: `${frontendUrl}/auth/callback`,
-        },
-      });
+    // No email verification needed — admin-created test users are auto-confirmed
 
-      if (verifyError) {
-        console.error('Email verification link error:', verifyError);
-        // Still return success — user created, just needs manual verification
-      }
-    } catch (verifyErr) {
-      console.error('Email verification exception:', verifyErr);
-    }
-
-    console.log('Test user signup complete:', request.email, 'org:', tokenData.org_id);
+    console.log('Test user signup complete:', request.email, 'org:', tokenData.org_id, 'existing:', isExistingUser);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Account created! Please check your email to verify your account, then log in.',
+        message: isExistingUser
+          ? 'Your account has been linked to the organization. You can log in now.'
+          : 'Account created! You can log in now.',
         org_id: tokenData.org_id,
+        existing_user: isExistingUser,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

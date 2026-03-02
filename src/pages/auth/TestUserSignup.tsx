@@ -5,7 +5,7 @@
  * - Token extracted from URL params
  * - Email pre-filled and locked from token
  * - Only collects: password, first name, last name
- * - Skips onboarding entirely — goes straight to dashboard after email verification
+ * - Skips onboarding entirely — auto-signs in and goes straight to dashboard
  */
 
 import { useState, useEffect } from 'react';
@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 
-type SignupStatus = 'loading' | 'ready' | 'submitting' | 'complete' | 'error';
+type SignupStatus = 'loading' | 'ready' | 'submitting' | 'error';
 
 interface TokenInfo {
   email: string;
@@ -116,15 +116,53 @@ export default function TestUserSignup() {
       });
 
       if (response.error) {
-        throw new Error(response.error.message || 'Signup failed');
+        // Extract error message from edge function response body
+        let errorMsg = 'Signup failed';
+        try {
+          const ctx = response.error?.context;
+          if (ctx && typeof ctx.json === 'function') {
+            const body = await ctx.json();
+            errorMsg = body?.error || errorMsg;
+          }
+        } catch {
+          errorMsg = response.error.message || errorMsg;
+        }
+        throw new Error(errorMsg);
       }
 
       const result = response.data;
-      if (!result.success) {
-        throw new Error(result.error || 'Signup failed');
+      if (!result?.success) {
+        throw new Error(result?.error || 'Signup failed');
       }
 
-      setStatus('complete');
+      // Set the magic link org as active BEFORE sign-in so orgStore picks it up
+      try {
+        const stored = JSON.parse(localStorage.getItem('org-store') || '{}');
+        stored.state = { ...stored.state, activeOrgId: result.org_id, activeOrgRole: 'owner' };
+        localStorage.setItem('org-store', JSON.stringify(stored));
+      } catch {
+        // Fallback: create fresh store state
+        localStorage.setItem('org-store', JSON.stringify({
+          state: { activeOrgId: result.org_id, activeOrgRole: 'owner' },
+          version: 0,
+        }));
+      }
+
+      // Auto-sign in with the credentials they just set
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: tokenInfo.email,
+        password: formData.password,
+      });
+
+      if (signInError) {
+        console.error('Auto sign-in failed:', signInError);
+        toast.error('Account created but auto-login failed. Please log in manually.');
+        navigate('/auth/login');
+        return;
+      }
+
+      // Signed in — go straight to dashboard
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       setStatus('ready');
       toast.error(err.message || 'Failed to create account');
@@ -167,46 +205,6 @@ export default function TestUserSignup() {
             <Button
               onClick={() => navigate('/auth/login')}
               className="bg-[#37bd7e] hover:bg-[#2da76c] text-white"
-            >
-              Go to Login
-            </Button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Success — check email
-  if (status === 'complete') {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(74,74,117,0.25),transparent)] pointer-events-none" />
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md"
-        >
-          <div className="relative bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-green-500/30 p-8 text-center">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', delay: 0.2 }}
-              className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6"
-            >
-              <Mail className="w-8 h-8 text-green-400" />
-            </motion.div>
-            <h1 className="text-2xl font-bold text-white mb-4">Check Your Email</h1>
-            <p className="text-gray-400 mb-2">
-              Your account has been created and you've been added to{' '}
-              <span className="text-white font-medium">{tokenInfo?.org_name}</span>.
-            </p>
-            <p className="text-gray-500 text-sm mb-8">
-              Please verify your email address by clicking the link we sent to{' '}
-              <span className="font-medium">{tokenInfo?.email}</span>. After verification, you can log in.
-            </p>
-            <Button
-              onClick={() => navigate('/auth/login')}
-              className="bg-[#37bd7e] hover:bg-[#2da76c] text-white w-full"
             >
               Go to Login
             </Button>
@@ -340,10 +338,10 @@ export default function TestUserSignup() {
               {status === 'submitting' ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin inline" />
-                  Creating account...
+                  Setting up your account...
                 </>
               ) : (
-                'Create Account'
+                'Create Account & Get Started'
               )}
             </button>
           </form>
