@@ -34,7 +34,7 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate, Package, Pencil, Trash2, Loader2, X, Bot, TrendingUp, ShieldCheck, ThumbsUp, ThumbsDown, Lock } from 'lucide-react';
+import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate, Package, Pencil, Trash2, Loader2, X, Bot, TrendingUp, ShieldCheck, Shield, Zap, Lock } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import TemplateManager from '@/components/proposals/TemplateManager';
 import OfferingUploader from '@/components/proposals/OfferingUploader';
@@ -743,7 +743,16 @@ function ConfidenceBar({ score, nextTierThreshold }: { score: number; nextTierTh
   );
 }
 
+// Signal counts per type, used for history breakdown
+interface SignalHistoryRow {
+  action_type: string;
+  signal: string;
+  count: number;
+}
+
 function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: string }) {
+  const queryClient = useQueryClient();
+
   const { data: proposalAutopilot, isLoading, error } = useQuery<ProposalConfidenceRow[]>({
     queryKey: ['autopilot-proposal', orgId, userId],
     queryFn: async () => {
@@ -760,6 +769,62 @@ function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: st
       return (data ?? []) as ProposalConfidenceRow[];
     },
     enabled: !!orgId && !!userId,
+  });
+
+  // AUT-003: Signal history — counts of each signal type per action
+  const { data: signalHistory } = useQuery<SignalHistoryRow[]>({
+    queryKey: ['autopilot-signals-summary', userId],
+    queryFn: async () => {
+      const { data, error: fetchError } = await supabase
+        .from('autopilot_signals')
+        .select('action_type, signal_type, created_at')
+        .eq('user_id', userId)
+        .in('action_type', [...PROPOSAL_ACTION_TYPES]);
+      if (fetchError) throw fetchError;
+      // Group and count client-side (avoids needing a DB view or RPC)
+      const counts: Record<string, Record<string, number>> = {};
+      for (const row of data ?? []) {
+        const at = row.action_type as string;
+        const sig = (row.signal_type ?? 'unknown') as string;
+        if (!counts[at]) counts[at] = {};
+        counts[at][sig] = (counts[at][sig] ?? 0) + 1;
+      }
+      const result: SignalHistoryRow[] = [];
+      for (const [actionType, signals] of Object.entries(counts)) {
+        for (const [signal, count] of Object.entries(signals)) {
+          result.push({ action_type: actionType, signal, count });
+        }
+      }
+      return result;
+    },
+    enabled: !!userId,
+  });
+
+  // AUT-003: Tier override mutation — writes a lower max tier to autopilot_confidence
+  const overrideMutation = useMutation({
+    mutationFn: async ({ actionType, maxTier }: { actionType: string; maxTier: AutonomyTier }) => {
+      const { error: upsertError } = await supabase
+        .from('autopilot_confidence')
+        .upsert(
+          {
+            user_id: userId,
+            org_id: orgId,
+            action_type: actionType,
+            current_tier: maxTier,
+            // never_promote prevents the system from auto-promoting past the chosen cap
+            never_promote: maxTier !== 'auto',
+          },
+          { onConflict: 'user_id,action_type' },
+        );
+      if (upsertError) throw upsertError;
+    },
+    onSuccess: () => {
+      toast.success('Autonomy tier updated');
+      queryClient.invalidateQueries({ queryKey: ['autopilot-proposal', orgId, userId] });
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to update tier: ${err.message}`);
+    },
   });
 
   if (isLoading) {
@@ -785,6 +850,8 @@ function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: st
   // If a row doesn't exist yet, show it as disabled with no signals.
   const actionRows = PROPOSAL_ACTION_TYPES.map((actionType) => {
     const row = proposalAutopilot?.find((r) => r.action_type === actionType);
+    const signals = signalHistory?.filter((s) => s.action_type === actionType) ?? [];
+    const getCount = (sig: string) => signals.find((s) => s.signal === sig)?.count ?? 0;
     return {
       action_type: actionType,
       displayName: PROPOSAL_ACTION_DISPLAY[actionType],
@@ -796,6 +863,10 @@ function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: st
       promotionEligible: row?.promotion_eligible ?? false,
       cleanApprovalRate: row?.clean_approval_rate ?? null,
       daysActive: row?.days_active ?? 0,
+      // Signal history breakdown
+      approvedCount: getCount('approved'),
+      editedCount: getCount('approved_edited'),
+      rejectedCount: getCount('rejected'),
     };
   });
 
@@ -808,6 +879,23 @@ function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: st
 
   return (
     <div className="space-y-5">
+      {/* Promotion criteria info */}
+      <Card className="bg-blue-50/50 dark:bg-blue-500/5 border-blue-200 dark:border-blue-500/20">
+        <CardContent className="py-4">
+          <div className="flex items-start gap-3">
+            <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">How autonomy tiers work</p>
+              <p className="text-gray-600 dark:text-gray-400">
+                60 starts in <strong>Suggest</strong> mode. Reach <strong>Approve</strong> after 10+ signals with a 60%+ confidence score.
+                Reach <strong>Auto</strong> (fully autonomous) after 25+ signals with an 85%+ score.
+                You can cap the maximum tier at any time — 60 will never promote beyond your chosen limit.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           60's autopilot system learns from your feedback to progressively automate proposal actions.
