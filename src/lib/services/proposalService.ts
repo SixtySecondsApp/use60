@@ -2044,6 +2044,17 @@ export async function getOrgLogos(orgId: string): Promise<Array<{
 // Upload Example → Auto-Create Template (UPL-003)
 // ==========================================
 
+// Writing style metadata extracted from uploaded proposal examples (STY-002)
+export interface TemplateStyleAnalysis {
+  avg_sentence_length: number;
+  vocabulary_formality: 'casual' | 'professional' | 'technical' | 'academic';
+  tone_formality: 'formal' | 'semi-formal' | 'casual';
+  tone_directness: 'direct' | 'diplomatic';
+  tone_warmth: 'warm' | 'neutral' | 'cool';
+  common_transition_phrases: string[];
+  style_summary: string;
+}
+
 export interface TemplateExtraction {
   sections: Array<{
     id: string;
@@ -2056,6 +2067,7 @@ export interface TemplateExtraction {
     primary_color: string | null;
     secondary_color: string | null;
     font_family: string | null;
+    style_analysis: TemplateStyleAnalysis | null;
   };
   metadata: {
     page_count: number | null;
@@ -2437,6 +2449,8 @@ export async function createTemplateFromExtraction(
   if (extraction.brand_config.primary_color) brandConfig.primary_color = extraction.brand_config.primary_color;
   if (extraction.brand_config.secondary_color) brandConfig.secondary_color = extraction.brand_config.secondary_color;
   if (extraction.brand_config.font_family) brandConfig.font_family = extraction.brand_config.font_family;
+  // STY-002: persist writing style metadata extracted by analyzeWritingStyle
+  if (extraction.brand_config.style_analysis) brandConfig.style_analysis = extraction.brand_config.style_analysis;
 
   const { data, error } = await supabase
     .from('proposal_templates')
