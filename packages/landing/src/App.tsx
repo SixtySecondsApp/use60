@@ -30,6 +30,7 @@ import DemoExperienceV2 from './demo-v2/DemoExperience';
 import { LandingPageV5 } from './pages/LandingPageV5';
 import { getAppUrl } from './lib/utils/siteUrl';
 import { trackPageView } from './lib/pageViewTracker';
+import { CookieConsentBanner } from './lib/consent/CookieConsentBanner';
 
 // Initialize i18next for internationalization
 import './lib/i18n/config';
@@ -50,6 +51,7 @@ function App() {
   return (
     <BrowserRouter>
       <PageViewTracker />
+      <CookieConsentBanner />
       <Toaster position="top-center" richColors closeButton />
       <Routes>
         <Route path="/landing" element={<MeetingsLandingV4 />} />
