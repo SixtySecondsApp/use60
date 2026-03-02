@@ -243,7 +243,6 @@ export function MeetingDetail() {
   const primaryExternal = attendees.find(a => a.is_external);
 
   const [showProposalWizard, setShowProposalWizard] = useState(false);
-  const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
@@ -1010,7 +1009,6 @@ export function MeetingDetail() {
                       contactId={meeting.primary_contact_id}
                       hasRecording={!!meeting.fathom_recording_id}
                       hasNotes={!!meeting.transcript_text}
-                      onProposalStarted={(proposalId) => setActiveProposalId(proposalId)}
                     />
                   </div>
 

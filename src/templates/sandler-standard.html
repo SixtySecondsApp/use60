@@ -13,13 +13,126 @@
    Targeted at Gotenberg headless Chromium → A4 PDF
    ============================================================ */
 
+/* ---------- @page overrides for Sandler Standard ---------- */
+@page {
+  size: 210mm 297mm;
+  margin: 20mm 15mm 20mm 15mm;
+}
+
+@page cover-page {
+  margin: 0;
+}
+
+/* ---------- Print media baseline for this template ---------- */
+@media print {
+  html, body {
+    font-size: 11pt;
+    line-height: 1.6;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Prevent content overflow on cover page */
+  .ss-cover {
+    overflow: hidden;
+    max-height: 297mm;
+  }
+
+  /* Ensure heading print sizes are readable */
+  .ss-section-title {
+    font-size: 16pt;
+  }
+
+  .ss-section-body {
+    font-size: 11pt;
+  }
+
+  .ss-section-body h3 {
+    font-size: 14pt;
+  }
+
+  .ss-section-body h4 {
+    font-size: 12pt;
+  }
+
+  /* Ensure text passes WCAG AA contrast — prevent light-grey body text */
+  .ss-section-body,
+  .ss-section-body p,
+  .ss-milestone-detail,
+  .ss-feature-desc {
+    color: #1f2937;
+  }
+
+  /* Prevent tables from splitting across pages */
+  .ss-pricing-table,
+  .ss-pricing-wrapper {
+    break-inside: avoid;
+  }
+
+  /* Keep table rows together */
+  .ss-pricing-table tbody tr {
+    break-inside: avoid;
+  }
+
+  /* Prevent timeline items from splitting */
+  .ss-timeline-item {
+    break-inside: avoid;
+  }
+
+  /* Keep feature cards together */
+  .ss-feature-card {
+    break-inside: avoid;
+  }
+
+  /* Stats row must not split */
+  .ss-stats-row {
+    break-inside: avoid;
+  }
+
+  /* Action items must not split */
+  .ss-action-item {
+    break-inside: avoid;
+  }
+
+  /* Signature block stays together */
+  .ss-signature-block {
+    break-inside: avoid;
+  }
+
+  /* Section headers stay with following content */
+  .ss-section-header {
+    break-after: avoid;
+  }
+
+  /* Headings stay with content */
+  .ss-section-body h3,
+  .ss-section-body h4 {
+    break-after: avoid;
+  }
+
+  /* Callouts don't split */
+  .ss-callout,
+  .ss-callout-case-study {
+    break-inside: avoid;
+  }
+
+  /* Orphan/widow control for body text */
+  .ss-section-body p,
+  .ss-section-body li {
+    orphans: 3;
+    widows: 3;
+  }
+}
+
 /* ---------- Cover page — full-bleed brand treatment ---------- */
 .ss-cover {
   page: cover-page;
   page-break-after: always;
+  break-after: page;
   display: flex;
   flex-direction: column;
   min-height: 297mm;
+  max-height: 297mm;
   background: #ffffff;
   overflow: hidden;
 }
@@ -157,6 +270,7 @@
 /* ---------- Table of contents ---------- */
 .ss-toc {
   page-break-after: always;
+  break-after: page;
   padding: 10mm 0 8mm 0;
 }
 
@@ -213,12 +327,39 @@
   height: 1px;
 }
 
+/* Page number for TOC entries — uses target-counter in Chromium */
+.ss-toc-page {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ca3af;
+  min-width: 20px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Chromium target-counter for automatic page numbers */
+.ss-toc-page-link {
+  color: #9ca3af;
+  text-decoration: none;
+}
+
+.ss-toc-page-link::after {
+  content: target-counter(attr(href), page);
+}
+
 /* ---------- Section layout ---------- */
 .ss-section {
   page-break-before: always;
+  break-before: page;
   padding: 0 0 12mm 0;
   orphans: 3;
   widows: 3;
+}
+
+/* First content section after TOC — no forced break needed */
+.ss-toc + .ss-section {
+  page-break-before: auto;
+  break-before: auto;
 }
 
 .ss-section-header {
@@ -304,6 +445,7 @@
   padding: 14px 18px;
   margin: 16px 0;
   page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 .ss-callout p {
@@ -392,7 +534,8 @@
   width: 100%;
   border-collapse: collapse;
   page-break-inside: avoid;
-  border: 1px solid #e5e7eb;
+  break-inside: avoid;
+  border: 1px solid #d1d5db;
   border-radius: 6px;
   overflow: hidden;
 }
@@ -420,10 +563,23 @@
 }
 
 .ss-pricing-table tbody td {
-  padding: 10px 16px;
+  padding: 11px 16px;
   font-size: 13px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #d1d5db;
+  border-right: 1px solid #e5e7eb;
   vertical-align: middle;
+}
+
+.ss-pricing-table tbody td:last-child {
+  border-right: none;
+}
+
+.ss-pricing-table thead th {
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.ss-pricing-table thead th:last-child {
+  border-right: none;
 }
 
 .ss-pricing-table .ss-price-amount {
@@ -434,11 +590,46 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Ensure any numeric/price columns are right-aligned */
+.ss-pricing-table td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .ss-pricing-table .ss-item-desc small {
   display: block;
   font-size: 11px;
   color: #9ca3af;
   margin-top: 2px;
+}
+
+/* Subtotal / intermediate rows */
+.ss-pricing-table .ss-subtotal-row td {
+  font-weight: 600;
+  border-top: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #374151;
+}
+
+/* Footer total row inside table */
+.ss-pricing-table tfoot tr {
+  background: #f9fafb;
+}
+
+.ss-pricing-table tfoot td {
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+  border-top: 2px solid {{brand.primary_color}};
+}
+
+.ss-pricing-table tfoot td:last-child {
+  text-align: right;
+  font-size: 16px;
+  font-weight: 800;
+  color: {{brand.primary_color}};
+  font-variant-numeric: tabular-nums;
 }
 
 .ss-total-row {
@@ -460,7 +651,7 @@
 }
 
 .ss-total-value {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
   color: {{brand.primary_color}};
   letter-spacing: -0.02em;
@@ -469,17 +660,28 @@
 
 .ss-payment-terms {
   margin-top: 14px;
-  padding: 12px 16px;
+  padding: 14px 18px;
   background: #f9fafb;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   font-size: 12px;
   color: #6b7280;
   line-height: 1.6;
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 .ss-payment-terms strong {
   color: #374151;
+  font-weight: 600;
+}
+
+.ss-payment-terms p {
+  margin: 0 0 6px;
+}
+
+.ss-payment-terms p:last-child {
+  margin-bottom: 0;
 }
 
 /* ---------- Timeline milestones ---------- */
@@ -831,6 +1033,9 @@
         <span class="ss-toc-num">{{section.order}}</span>
         <span class="ss-toc-label">{{section.title}}</span>
         <span class="ss-toc-dots"></span>
+        <span class="ss-toc-page">
+          <a class="ss-toc-page-link" href="#section-{{section.id}}"></a>
+        </span>
       </li>
     {{/unless}}
     {{/each}}

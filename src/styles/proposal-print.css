@@ -236,6 +236,7 @@ hr {
 .cover-page {
   page: cover-page;
   page-break-after: always;
+  break-after: page;
   display: flex;
   flex-direction: column;
   min-height: 297mm;
@@ -367,6 +368,7 @@ hr {
 
 .toc-section {
   page-break-after: always;
+  break-after: page;
   padding: 12mm 0 8mm 0;
 }
 
@@ -418,6 +420,7 @@ hr {
 
 .proposal-section {
   page-break-before: always;
+  break-before: page;
   padding: 0 0 10mm 0;
   orphans: 3;
   widows: 3;
@@ -548,6 +551,10 @@ tbody tr:nth-child(odd) {
   background: #ffffff;
 }
 
+tbody tr {
+  break-inside: avoid;
+}
+
 tbody td {
   padding: 9pt 14pt;
   border-bottom: 1px solid var(--proposal-border-color);
@@ -557,6 +564,7 @@ tbody td {
 tfoot tr {
   background: var(--proposal-bg-subtle);
   font-weight: 700;
+  break-inside: avoid;
 }
 
 tfoot td {
@@ -603,6 +611,10 @@ tfoot td {
 
 .pricing-table tbody tr:nth-child(odd) {
   background: #ffffff;
+}
+
+.pricing-table tbody tr {
+  break-inside: avoid;
 }
 
 .pricing-table tbody td {
@@ -696,6 +708,7 @@ tfoot td {
   gap: 16pt;
   padding: 8pt 0;
   page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 /* Marker column: dot + connecting line */
@@ -830,6 +843,7 @@ tfoot td {
 
 .acceptance-block {
   page-break-inside: avoid;
+  break-inside: avoid;
   margin-top: 24pt;
   padding: 20pt;
   border: 1px solid var(--proposal-border-color);
@@ -1050,8 +1064,17 @@ tfoot td {
   img,
   .callout,
   .acceptance-block,
-  .stats-row {
+  .stats-row,
+  .stat-card,
+  .team-member {
     page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Table rows should not split */
+  tbody tr,
+  .pricing-table tbody tr {
+    break-inside: avoid;
   }
 
   /* Orphan/widow control */
@@ -1063,6 +1086,12 @@ tfoot td {
   /* Headings should stay with following content */
   h1, h2, h3, h4 {
     page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* Section headers must not be orphaned from content */
+  .section-header {
+    break-after: avoid;
   }
 
   /* Images don't overflow margins */
@@ -1074,10 +1103,12 @@ tfoot td {
   /* Sections get proper breaks */
   .proposal-section {
     page-break-before: always;
+    break-before: page;
   }
 
   .proposal-section:first-of-type {
     page-break-before: auto;
+    break-before: auto;
   }
 
   /* No background on body in print (save ink if someone physically prints) */
