@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -11,6 +11,7 @@ import { useMeetingIntelligence } from '@/lib/hooks/useMeetingIntelligence';
 import { format } from 'date-fns';
 import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import type { TimePeriod } from '@/lib/hooks/useTeamAnalytics';
+import { useTourStore } from '@/lib/stores/tourStore';
 
 import { SearchHero } from '@/components/meeting-analytics/SearchHero';
 import { DashboardTab } from '@/components/meeting-analytics/DashboardTab';
@@ -94,6 +95,15 @@ export default function MeetingAnalyticsPage() {
   const { indexStatus, isLoadingStatus, triggerFullIndex } = useMeetingIntelligence();
 
   const activeTab = searchParams.get('tab') || 'dashboard';
+
+  // Tour-awareness: reset to dashboard tab when the tour is on this page
+  // (steps 8–10) so SearchHero and intelligence-dashboard are in the DOM.
+  const { isTourActive, currentTourStep } = useTourStore();
+  useEffect(() => {
+    if (isTourActive && currentTourStep >= 8 && currentTourStep <= 10 && activeTab !== 'dashboard') {
+      setSearchParams({ tab: 'dashboard' });
+    }
+  }, [isTourActive, currentTourStep, activeTab, setSearchParams]);
 
   // Date range state (shared across tabs) — must be above early return to respect Rules of Hooks
   const dateFilter = useDateRangeFilter();
@@ -239,7 +249,7 @@ export default function MeetingAnalyticsPage() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <div className="mb-4 sm:mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <TabsList className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl p-1 shadow-sm">
+            <TabsList data-tour="analytics-tabs" className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl p-1 shadow-sm">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -284,7 +294,9 @@ export default function MeetingAnalyticsPage() {
               transition={{ duration: 0.2 }}
             >
               <TabsContent value="dashboard" className="mt-0">
-                <DashboardTab period={period} dateRange={dateRange} />
+                <div data-tour="intelligence-dashboard">
+                  <DashboardTab period={period} dateRange={dateRange} />
+                </div>
               </TabsContent>
 
               <TabsContent value="transcripts" className="mt-0">
