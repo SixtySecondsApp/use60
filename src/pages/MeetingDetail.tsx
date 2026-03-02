@@ -1009,6 +1009,7 @@ export function MeetingDetail() {
                       contactId={meeting.primary_contact_id}
                       hasRecording={!!meeting.fathom_recording_id}
                       hasNotes={!!meeting.transcript_text}
+                      onCustomise={() => setShowProposalWizard(true)}
                     />
                   </div>
 
