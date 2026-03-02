@@ -16,6 +16,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import {
+  getCorsHeaders,
   handleCorsPreflightRequest,
   jsonResponse,
   errorResponse,
@@ -157,6 +158,61 @@ function mergeBrandConfig(
 }
 
 /**
+ * AUT-006: Determine the optimal Gotenberg waitDelay for the given HTML.
+ *
+ * If the HTML contains no external images or scripts, we can skip the full
+ * 500ms font-load delay and use 100ms instead, saving ~400ms per render.
+ *
+ * Heuristic: look for <img src="http and <script src= tags that reference
+ * remote resources (base64 and data: URIs are inline and don't need a wait).
+ */
+function resolveWaitDelay(html: string): string {
+  const hasRemoteImages = /<img\s[^>]*src=["']https?:\/\//i.test(html)
+  const hasRemoteScripts = /<script\s[^>]*src=["']https?:\/\//i.test(html)
+  if (!hasRemoteImages && !hasRemoteScripts) {
+    return '100ms'
+  }
+  return '500ms'
+}
+
+/**
+ * AUT-006: Send a POST request to a Gotenberg endpoint with:
+ *   - Connection: keep-alive header (reuse TCP connection between PDF + thumbnail calls)
+ *   - 30-second AbortSignal timeout (prevent hanging on cold starts)
+ *   - Single retry when Gotenberg returns 503 (container starting up)
+ */
+async function fetchGotenberg(endpoint: string, body: FormData): Promise<Response> {
+  const TIMEOUT_MS = 30_000
+
+  const attempt = async (): Promise<Response> => {
+    try {
+      return await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Connection: 'keep-alive',
+        },
+        body,
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      })
+    } catch (fetchErr) {
+      const message = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+      throw new Error(`Gotenberg unreachable: ${message}`)
+    }
+  }
+
+  let response = await attempt()
+
+  // Gotenberg returns 503 while Chrome is still warming up — wait 2s and retry once
+  if (response.status === 503) {
+    console.warn(`${LOG_PREFIX} AUT-006: Gotenberg 503 — waiting 2s and retrying`)
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+    response = await attempt()
+  }
+
+  return response
+}
+
+/**
  * Send the merged HTML to Gotenberg and receive raw PDF bytes.
  * Uses multipart/form-data as required by the Gotenberg Chromium HTML endpoint.
  */
@@ -180,23 +236,18 @@ async function renderWithGotenberg(html: string, gotenbergUrl: string): Promise<
   // Required for brand colors and background fills
   formData.append('printBackground', 'true')
 
-  // Allow 500ms for web fonts to load
-  formData.append('waitDelay', '500ms')
+  // AUT-006: Use reduced waitDelay (100ms) when HTML has no remote images/scripts;
+  // only wait 500ms when external resources need to load.
+  const waitDelay = resolveWaitDelay(html)
+  console.log(`${LOG_PREFIX} Gotenberg waitDelay: ${waitDelay}`)
+  formData.append('waitDelay', waitDelay)
 
   const gotenbergEndpoint = `${gotenbergUrl}/forms/chromium/convert/html`
 
   console.log(`${LOG_PREFIX} Sending HTML to Gotenberg: ${gotenbergEndpoint}`)
 
-  let gotenbergResponse: Response
-  try {
-    gotenbergResponse = await fetch(gotenbergEndpoint, {
-      method: 'POST',
-      body: formData,
-    })
-  } catch (fetchErr) {
-    const message = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
-    throw new Error(`Gotenberg unreachable: ${message}`)
-  }
+  // AUT-006: fetchGotenberg adds keep-alive, 30s timeout, and 503 retry
+  const gotenbergResponse = await fetchGotenberg(gotenbergEndpoint, formData)
 
   if (!gotenbergResponse.ok) {
     const errorText = await gotenbergResponse.text().catch(() => '(no body)')
@@ -247,19 +298,17 @@ async function generateThumbnail(html: string, gotenbergUrl: string): Promise<Ui
   // Required for brand colors and background fills
   formData.append('printBackground', 'true')
 
-  // Allow 500ms for web fonts to load (same as PDF render)
-  formData.append('waitDelay', '500ms')
+  // AUT-006: Apply same waitDelay optimisation as the PDF render
+  formData.append('waitDelay', resolveWaitDelay(html))
 
   const screenshotEndpoint = `${gotenbergUrl}/forms/chromium/screenshot/html`
 
   console.log(`${LOG_PREFIX} Requesting thumbnail from Gotenberg: ${screenshotEndpoint}`)
 
+  // AUT-006: fetchGotenberg adds keep-alive, 30s timeout, and 503 retry
   let response: Response
   try {
-    response = await fetch(screenshotEndpoint, {
-      method: 'POST',
-      body: formData,
-    })
+    response = await fetchGotenberg(screenshotEndpoint, formData)
   } catch (fetchErr) {
     const message = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
     throw new Error(`Gotenberg screenshot unreachable: ${message}`)
@@ -297,6 +346,9 @@ serve(async (req: Request) => {
   }
 
   try {
+    // AUT-006: Track total render time for X-Render-Timing header
+    const renderStart = Date.now()
+
     // --------------------------
     // Parse request
     // --------------------------
@@ -570,10 +622,13 @@ serve(async (req: Request) => {
     // -------------------------------------------------------------------------
     // Step 10: Return result
     // -------------------------------------------------------------------------
-    console.log(`${LOG_PREFIX} Render complete for proposal ${proposal.id}`)
+    const renderTotalMs = Date.now() - renderStart
+    console.log(`${LOG_PREFIX} Render complete for proposal ${proposal.id} in ${renderTotalMs}ms`)
 
-    return jsonResponse(
-      {
+    // AUT-006: Add X-Render-Timing header for monitoring
+    const corsHeaders = getCorsHeaders(req)
+    return new Response(
+      JSON.stringify({
         success: true,
         proposal_id: proposal.id,
         pdf_url: pdfUrl,
@@ -586,8 +641,15 @@ serve(async (req: Request) => {
           reference_number: metadata.reference_number,
           sections_count: sections.length,
         },
+      }),
+      {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'X-Render-Timing': `total=${renderTotalMs}ms, wait_delay=${resolveWaitDelay(htmlDocument)}`,
+        },
       },
-      req,
     )
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

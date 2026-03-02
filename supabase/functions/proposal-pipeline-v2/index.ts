@@ -473,6 +473,13 @@ serve(async (req: Request) => {
   const stageTiming: StageTiming = {}
   const monitor = new PipelineMonitor()
 
+  // AUT-006: 120-second hard timeout guard to prevent runaway pipelines
+  const pipelineAbort = new AbortController()
+  const pipelineTimeoutId = setTimeout(() => {
+    pipelineAbort.abort()
+    console.error(`${LOG_PREFIX} Pipeline timeout (120s) exceeded for proposal=${proposalId ?? 'pending'}`)
+  }, 120_000)
+
   // --------------------------------------------------------------------------
   // Step 0: Resolve a proposal title from the deal/meeting (best-effort)
   // --------------------------------------------------------------------------
@@ -552,7 +559,41 @@ serve(async (req: Request) => {
   })
 
   // ==========================================================================
+  // AUT-006 — Context caching
+  //   If the same deal_id had a proposal generated within the last hour, copy
+  //   its context_payload so we can skip Stage 1's DB assembly (~5-10s saving).
+  //   Only applies when a deal_id is present (meeting-only pipelines must assemble).
+  // ==========================================================================
+  let cachedContextPayload: Record<string, unknown> | null = null
+
+  if (deal_id) {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { data: recentProposal } = await supabase
+      .from('proposals')
+      .select('id, context_payload, created_at')
+      .eq('deal_id', deal_id)
+      .neq('id', proposalId) // exclude the one we just created
+      .gte('created_at', oneHourAgo)
+      .not('context_payload', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (recentProposal?.context_payload) {
+      cachedContextPayload = recentProposal.context_payload as Record<string, unknown>
+      console.log(
+        `${LOG_PREFIX} AUT-006: Context cache HIT for deal=${deal_id}`,
+        `(source proposal=${recentProposal.id}, created=${recentProposal.created_at})`,
+      )
+    } else {
+      console.log(`${LOG_PREFIX} AUT-006: Context cache MISS for deal=${deal_id} — will assemble`)
+    }
+  }
+
+  // ==========================================================================
   // STAGE 1 — Assemble context
+  //   If context_payload was found in cache, write it directly and skip the
+  //   full assembly invocation. Otherwise, assemble normally.
   //   Graceful degradation: offering profile and transcript are optional;
   //   assembleProposalContext handles their absence internally.
   //   Retry: 2x with 1s/3s/9s backoff — DB only, fast.
@@ -561,30 +602,59 @@ serve(async (req: Request) => {
   s1.start()
   const stage1Start = Date.now()
 
-  try {
-    await retryWithBackoff(
-      () => invokeStage(supabase, 'proposal-assemble-context', {
-        proposal_id: proposalId,
-        meeting_id: meeting_id ?? undefined,
-        deal_id: deal_id ?? undefined,
-        contact_id: contact_id ?? undefined,
-        user_id,
-      }),
-      2,
-      [1000, 3000, 9000],
-    )
-    monitor.recordStage(s1.finish('ok'))
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.error(`${LOG_PREFIX} Stage 1 (assemble-context) failed:`, message)
-    monitor.recordStage(s1.finish('failed', message))
+  if (cachedContextPayload) {
+    // Write cached context directly to the new proposal row — skip remote assembly
+    try {
+      const { error: cacheWriteError } = await supabase
+        .from('proposals')
+        .update({
+          context_payload: cachedContextPayload,
+          generation_status: 'context_assembled',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', proposalId)
 
-    await Promise.all([
-      flushMetrics(supabase, proposalId, monitor.finalise()),
-      markFailed(supabase, proposalId, 'stage_1_context', message),
-    ])
+      if (cacheWriteError) {
+        throw new Error(`Cache write failed: ${cacheWriteError.message}`)
+      }
 
-    return jsonResponse(partialResult('failed', 'assemble', message), req, 500)
+      monitor.recordStage(s1.finish('ok'))
+      console.log(`${LOG_PREFIX} Stage 1 (cached) complete — context written from cache`)
+    } catch (err) {
+      // Cache write failure is unexpected but non-fatal: fall through to normal assembly
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn(`${LOG_PREFIX} AUT-006: Cache write failed, falling back to assembly: ${message}`)
+      cachedContextPayload = null // force normal path below
+    }
+  }
+
+  if (!cachedContextPayload) {
+    try {
+      await retryWithBackoff(
+        () => invokeStage(supabase, 'proposal-assemble-context', {
+          proposal_id: proposalId,
+          meeting_id: meeting_id ?? undefined,
+          deal_id: deal_id ?? undefined,
+          contact_id: contact_id ?? undefined,
+          user_id,
+        }),
+        2,
+        [1000, 3000, 9000],
+      )
+      monitor.recordStage(s1.finish('ok'))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`${LOG_PREFIX} Stage 1 (assemble-context) failed:`, message)
+      monitor.recordStage(s1.finish('failed', message))
+
+      clearTimeout(pipelineTimeoutId)
+      await Promise.all([
+        flushMetrics(supabase, proposalId, monitor.finalise()),
+        markFailed(supabase, proposalId, 'stage_1_context', message),
+      ])
+
+      return jsonResponse(partialResult('failed', 'assemble', message), req, 500)
+    }
   }
 
   stageTiming.assemble_ms = Date.now() - stage1Start
@@ -625,6 +695,7 @@ serve(async (req: Request) => {
     console.error(`${LOG_PREFIX} Stage 2 (compose-v2) failed:`, message)
     monitor.recordStage(s2.finish('failed', message))
 
+    clearTimeout(pipelineTimeoutId)
     await Promise.all([
       flushMetrics(supabase, proposalId, monitor.finalise()),
       markFailed(supabase, proposalId, 'stage_2_compose', message),
@@ -671,6 +742,30 @@ serve(async (req: Request) => {
   })
 
   // ==========================================================================
+  // AUT-006 — Gotenberg warm-up ping (fire before Stage 3)
+  //   Warms up the Gotenberg container so the actual render call is faster.
+  //   Failure is non-fatal — we proceed even if the health check fails.
+  // ==========================================================================
+  const gotenbergUrl = Deno.env.get('GOTENBERG_URL')
+  if (gotenbergUrl) {
+    try {
+      const warmupStart = Date.now()
+      const warmupResponse = await fetch(`${gotenbergUrl}/health`, {
+        signal: AbortSignal.timeout(5000), // 5s max for health check
+      })
+      console.log(
+        `${LOG_PREFIX} AUT-006: Gotenberg warm-up ping`,
+        `status=${warmupResponse.status} in ${Date.now() - warmupStart}ms`,
+      )
+    } catch (warmupErr) {
+      const msg = warmupErr instanceof Error ? warmupErr.message : String(warmupErr)
+      console.warn(`${LOG_PREFIX} AUT-006: Gotenberg warm-up ping failed (non-fatal): ${msg}`)
+    }
+  } else {
+    console.warn(`${LOG_PREFIX} AUT-006: GOTENBERG_URL not set — skipping warm-up ping`)
+  }
+
+  // ==========================================================================
   // STAGE 3+4 — Render to PDF via Gotenberg (status: rendering → rendered)
   //   Retry: 2x with 1s/3s/9s backoff — Gotenberg warmup resilience.
   // ==========================================================================
@@ -696,6 +791,7 @@ serve(async (req: Request) => {
     console.error(`${LOG_PREFIX} Stage 3+4 (render-gotenberg) failed:`, message)
     monitor.recordStage(s3.finish('failed', message))
 
+    clearTimeout(pipelineTimeoutId)
     await Promise.all([
       flushMetrics(supabase, proposalId, monitor.finalise()),
       markFailed(supabase, proposalId, 'stage_3_render', message),
@@ -750,6 +846,7 @@ serve(async (req: Request) => {
       `${LOG_PREFIX} Delivery failed but PDF is ready — marking as 'ready' anyway`,
     )
 
+    clearTimeout(pipelineTimeoutId)
     stageTiming.deliver_ms = Date.now() - stage5Start
 
     const finalMetrics = monitor.finalise()
@@ -768,8 +865,18 @@ serve(async (req: Request) => {
       `| total_ms=${total}`,
     )
 
-    return jsonResponse(
-      {
+    // AUT-006: Include X-Pipeline-Timing header for monitoring
+    const timingHeaderWarn = [
+      `total=${total}`,
+      `assemble=${stageTiming.assemble_ms ?? 0}`,
+      `compose=${stageTiming.compose_ms ?? 0}`,
+      `render=${stageTiming.render_ms ?? 0}`,
+      `deliver=${stageTiming.deliver_ms ?? 0}`,
+    ].join(', ')
+
+    const corsHeadersWarn = getCorsHeaders(req)
+    return new Response(
+      JSON.stringify({
         success: true,
         proposal_id: proposalId,
         pdf_url: pdfUrl,
@@ -778,9 +885,15 @@ serve(async (req: Request) => {
         total_ms: total,
         total_credits: finalMetrics.total_credits_used,
         warnings: [`Delivery notification failed: ${message}`],
-      } satisfies Omit<PipelineResult, 'total_credits'> & { warnings: string[]; total_credits: number },
-      req,
-      200,
+      } satisfies Omit<PipelineResult, 'total_credits'> & { warnings: string[]; total_credits: number }),
+      {
+        status: 200,
+        headers: {
+          ...corsHeadersWarn,
+          'Content-Type': 'application/json',
+          'X-Pipeline-Timing': timingHeaderWarn,
+        },
+      },
     )
   }
 
@@ -845,6 +958,9 @@ serve(async (req: Request) => {
     `| deliver=${stageTiming.deliver_ms}ms`,
   )
 
+  // AUT-006: Clear the pipeline timeout — we completed successfully
+  clearTimeout(pipelineTimeoutId)
+
   const finalResult: PipelineResult = {
     success: true,
     proposal_id: proposalId,
@@ -855,5 +971,22 @@ serve(async (req: Request) => {
     total_credits: finalMetrics.total_credits_used,
   }
 
-  return jsonResponse(finalResult, req, 200)
+  // AUT-006: Include X-Pipeline-Timing header for monitoring
+  const timingHeader = [
+    `total=${total}`,
+    `assemble=${stageTiming.assemble_ms ?? 0}`,
+    `compose=${stageTiming.compose_ms ?? 0}`,
+    `render=${stageTiming.render_ms ?? 0}`,
+    `deliver=${stageTiming.deliver_ms ?? 0}`,
+  ].join(', ')
+
+  const corsHeaders = getCorsHeaders(req)
+  return new Response(JSON.stringify(finalResult), {
+    status: 200,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+      'X-Pipeline-Timing': timingHeader,
+    },
+  })
 })
