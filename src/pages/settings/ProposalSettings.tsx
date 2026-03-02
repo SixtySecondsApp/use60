@@ -5,6 +5,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   getProposalTemplates,
   updateProposalTemplate,
@@ -15,10 +29,15 @@ import {
   type ProposalModelSettings
 } from '@/lib/services/proposalService';
 import { AIProviderService } from '@/lib/services/aiProvider';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
-import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate } from 'lucide-react';
+import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate, Package, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import TemplateManager from '@/components/proposals/TemplateManager';
+import OfferingUploader from '@/components/proposals/OfferingUploader';
+import OfferingReviewPanel from '@/components/proposals/OfferingReviewPanel';
 
 // Template type descriptions and guidance
 const TEMPLATE_GUIDANCE = {
@@ -300,7 +319,280 @@ This Statement of Work outlines the scope, deliverables, and terms for [Project 
   },
 };
 
+// =============================================================================
+// Offering Profiles Tab — OFR-006
+// =============================================================================
+
+interface OfferingProfile {
+  id: string;
+  name: string;
+  description: string | null;
+  source_document_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  proposal_assets?: { file_name: string | null } | null;
+}
+
+function OfferingProfilesTab({ orgId }: { orgId: string }) {
+  const queryClient = useQueryClient();
+
+  // State for upload flow
+  const [showUploader, setShowUploader] = useState(false);
+  const [pendingProfileId, setPendingProfileId] = useState<string | null>(null);
+
+  // State for review sheet
+  const [reviewProfileId, setReviewProfileId] = useState<string | null>(null);
+
+  // State for delete confirmation
+  const [deleteProfileId, setDeleteProfileId] = useState<string | null>(null);
+
+  // ----- Query -----
+  const { data: profiles = [], isLoading } = useQuery<OfferingProfile[]>({
+    queryKey: ['offering-profiles', orgId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('org_offering_profiles')
+        .select('id, name, description, source_document_id, is_active, created_at, proposal_assets(file_name)')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as OfferingProfile[];
+    },
+    enabled: !!orgId,
+  });
+
+  // ----- Toggle active -----
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase
+        .from('org_offering_profiles')
+        .update({ is_active })
+        .eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to update: ${err.message}`);
+    },
+  });
+
+  // ----- Delete -----
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('org_offering_profiles')
+        .delete()
+        .eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success('Offering profile deleted');
+      setDeleteProfileId(null);
+      queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+    },
+    onError: (err: Error) => {
+      toast.error(`Delete failed: ${err.message}`);
+      setDeleteProfileId(null);
+    },
+  });
+
+  const handleAnalysisComplete = (profileId: string) => {
+    setPendingProfileId(profileId);
+    setShowUploader(false);
+    // Open review panel immediately
+    setReviewProfileId(profileId);
+    queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+  };
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Upload sales collateral (PDFs, decks, brochures) and 60 will extract your products,
+            services, case studies, and pricing to use when writing proposals.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => { setShowUploader(true); setPendingProfileId(null); }}
+          className="shrink-0 gap-1.5"
+        >
+          <Upload className="h-4 w-4" />
+          Upload Collateral
+        </Button>
+      </div>
+
+      {/* Uploader inline section */}
+      {showUploader && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Upload Sales Collateral</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowUploader(false)} className="h-7 w-7 p-0">
+                <span className="sr-only">Close</span>
+                ×
+              </Button>
+            </div>
+            <CardDescription>
+              Supported: PDF, DOCX, PPTX — max 25MB. 60 will automatically extract your offering data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <OfferingUploader
+              orgId={orgId}
+              onAnalysisComplete={handleAnalysisComplete}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Profile list */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2].map((n) => (
+            <Skeleton key={n} className="h-16 w-full rounded-lg" />
+          ))}
+        </div>
+      ) : profiles.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Package className="w-10 h-10 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              No offering profiles yet. Upload your sales collateral to get started.
+            </p>
+            <Button size="sm" onClick={() => setShowUploader(true)} className="gap-1.5">
+              <Upload className="h-4 w-4" />
+              Upload Collateral
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {profiles.map((profile) => {
+            const sourceFileName = profile.proposal_assets?.file_name ?? null;
+            return (
+              <Card key={profile.id} className="overflow-hidden">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    {/* Active toggle */}
+                    <Switch
+                      checked={profile.is_active}
+                      onCheckedChange={(checked) =>
+                        toggleMutation.mutate({ id: profile.id, is_active: checked })
+                      }
+                      disabled={toggleMutation.isPending}
+                      aria-label={`Toggle ${profile.name} active`}
+                    />
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {profile.name}
+                        </span>
+                        {profile.is_active ? (
+                          <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border-0">
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs text-gray-400 border-0">
+                            Inactive
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
+                        {sourceFileName ? sourceFileName : 'No source document'} &middot; {formatDate(profile.created_at)}
+                      </p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setReviewProfileId(profile.id)}
+                        className="h-8 w-8 p-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                        title="Edit profile"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteProfileId(profile.id)}
+                        className="h-8 w-8 p-0 text-gray-400 hover:text-red-500"
+                        title="Delete profile"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Review Sheet */}
+      <Sheet open={!!reviewProfileId} onOpenChange={(open) => { if (!open) setReviewProfileId(null); }}>
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto !top-16 !h-[calc(100vh-4rem)]">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Review Offering Profile</SheetTitle>
+          </SheetHeader>
+          {reviewProfileId && (
+            <OfferingReviewPanel
+              profileId={reviewProfileId}
+              orgId={orgId}
+              onApprove={() => {
+                setReviewProfileId(null);
+                queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+              }}
+              onReject={() => {
+                setReviewProfileId(null);
+                queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+              }}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteProfileId} onOpenChange={(open) => { if (!open) setDeleteProfileId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete offering profile?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the profile and its extracted data. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteProfileId && deleteMutation.mutate(deleteProfileId)}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Deleting...</>
+              ) : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 export default function ProposalSettings() {
+  const orgId = useActiveOrgId();
   const [templates, setTemplates] = useState<ProposalTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -751,6 +1043,10 @@ export default function ProposalSettings() {
       <Tabs defaultValue="design_system" className="space-y-6">
         <TabsList className="bg-white border border-transparent shadow-sm dark:bg-gray-900/50 dark:backdrop-blur-xl dark:border-gray-800/50">
           <TabsTrigger value="models">AI Models</TabsTrigger>
+          <TabsTrigger value="offering_profiles" className="flex items-center gap-1">
+            <Package className="w-3 h-3" />
+            Offerings
+          </TabsTrigger>
           <TabsTrigger value="structured_templates" className="flex items-center gap-1">
             <LayoutTemplate className="w-3 h-3" />
             Templates
@@ -894,6 +1190,16 @@ export default function ProposalSettings() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="offering_profiles">
+          {orgId ? (
+            <OfferingProfilesTab orgId={orgId} />
+          ) : (
+            <div className="py-8 text-center text-sm text-gray-400">
+              No active organisation selected.
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="structured_templates">
