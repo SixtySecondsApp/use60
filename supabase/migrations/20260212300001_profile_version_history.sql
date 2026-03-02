@@ -198,7 +198,8 @@ ALTER TABLE public.product_profile_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.icp_profile_versions ENABLE ROW LEVEL SECURITY;
 
 -- Fact profile versions: org members can SELECT
-CREATE POLICY "Org members can view fact profile versions"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view fact profile versions"
   ON public.fact_profile_versions
   FOR SELECT
   USING (
@@ -209,9 +210,12 @@ CREATE POLICY "Org members can view fact profile versions"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Product profile versions: org members can SELECT
-CREATE POLICY "Org members can view product profile versions"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view product profile versions"
   ON public.product_profile_versions
   FOR SELECT
   USING (
@@ -222,9 +226,12 @@ CREATE POLICY "Org members can view product profile versions"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ICP profile versions: org members can SELECT
-CREATE POLICY "Org members can view icp profile versions"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view icp profile versions"
   ON public.icp_profile_versions
   FOR SELECT
   USING (
@@ -235,20 +242,31 @@ CREATE POLICY "Org members can view icp profile versions"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- INSERT policies for trigger (SECURITY DEFINER triggers bypass RLS,
 -- but we add INSERT policies for service role / direct inserts)
-CREATE POLICY "Service role can insert fact profile versions"
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert fact profile versions"
   ON public.fact_profile_versions
   FOR INSERT
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can insert product profile versions"
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert product profile versions"
   ON public.product_profile_versions
   FOR INSERT
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role can insert icp profile versions"
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert icp profile versions"
   ON public.icp_profile_versions
   FOR INSERT
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

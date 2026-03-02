@@ -1,0 +1,239 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400">
+  <title>Unity Core - Tools Connected to 60</title>
+  <defs>
+    <style>
+      /* --- Central Hub --- */
+      .ch-hub {
+        animation: ch-hub-breathe 4s ease-in-out infinite;
+      }
+      .ch-hub-bright {
+        animation: ch-hub-flash 5s ease-in-out infinite;
+      }
+
+      /* --- Connection lines --- */
+      .ch-conn {
+        fill: none;
+        stroke-width: 1.5;
+      }
+
+      /* --- Energy pulses traveling to center --- */
+      .ch-pulse {
+        fill: none;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-dasharray: 8 120;
+      }
+      .ch-pulse1 { stroke: url(#ch-pulse-g1); animation: ch-travel 5s linear infinite; }
+      .ch-pulse2 { stroke: url(#ch-pulse-g2); animation: ch-travel 5s linear infinite 1s; }
+      .ch-pulse3 { stroke: url(#ch-pulse-g3); animation: ch-travel 5s linear infinite 2s; }
+      .ch-pulse4 { stroke: url(#ch-pulse-g4); animation: ch-travel 5s linear infinite 3s; }
+      .ch-pulse5 { stroke: url(#ch-pulse-g5); animation: ch-travel 5s linear infinite 4s; }
+
+      /* --- Icon styles --- */
+      .ch-icon { fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+      /* --- Checkmarks --- */
+      .ch-check {
+        fill: none;
+        stroke: #10B981;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 14;
+        stroke-dashoffset: 14;
+      }
+      .ch-chk1 { animation: ch-check-draw 8s ease-in-out infinite 0.5s; }
+      .ch-chk2 { animation: ch-check-draw 8s ease-in-out infinite 1.5s; }
+      .ch-chk3 { animation: ch-check-draw 8s ease-in-out infinite 2.5s; }
+      .ch-chk4 { animation: ch-check-draw 8s ease-in-out infinite 3.5s; }
+      .ch-chk5 { animation: ch-check-draw 8s ease-in-out infinite 4.5s; }
+
+      /* --- Sun rays behind hub --- */
+      .ch-ray {
+        fill: none;
+        stroke: rgba(129,41,215,0.06);
+        stroke-width: 1;
+      }
+
+      /* --- Keyframes --- */
+      @keyframes ch-hub-breathe {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.8; }
+      }
+      @keyframes ch-hub-flash {
+        0%, 15%, 25%, 35%, 45%, 55%, 100% { opacity: 0; }
+        20% { opacity: 0.4; }
+        30% { opacity: 0.3; }
+        40% { opacity: 0.35; }
+        50% { opacity: 0.3; }
+      }
+      @keyframes ch-travel {
+        from { stroke-dashoffset: 128; }
+        to { stroke-dashoffset: 0; }
+      }
+      @keyframes ch-check-draw {
+        0%, 8% { stroke-dashoffset: 14; }
+        16%, 88% { stroke-dashoffset: 0; }
+        96%, 100% { stroke-dashoffset: 14; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ch-hub, .ch-hub-bright,
+        .ch-pulse1, .ch-pulse2, .ch-pulse3, .ch-pulse4, .ch-pulse5,
+        .ch-chk1, .ch-chk2, .ch-chk3, .ch-chk4, .ch-chk5 {
+          animation: none !important;
+        }
+        .ch-check { stroke-dashoffset: 0; }
+      }
+    </style>
+
+    <!-- Hub gradient -->
+    <radialGradient id="ch-hub-rg" cx="45%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="1"/>
+      <stop offset="40%" stop-color="#8129D7" stop-opacity="0.9"/>
+      <stop offset="70%" stop-color="#2A5EDB" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#2A5EDB" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ch-hub-inner" cx="42%" cy="38%" r="50%">
+      <stop offset="0%" stop-color="#fff" stop-opacity="0.3"/>
+      <stop offset="50%" stop-color="#A855F7" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ch-hub-halo" cx="50%" cy="50%" r="50%">
+      <stop offset="40%" stop-color="#8129D7" stop-opacity="0"/>
+      <stop offset="70%" stop-color="#8129D7" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ch-flash" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Connection line gradients -->
+    <linearGradient id="ch-conn-g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2A5EDB" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="ch-conn-g2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#03AD9C" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="ch-conn-g3" x1="0%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="#8129D7" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="ch-conn-g4" x1="100%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.4)"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="ch-conn-g5" x1="50%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="#2A5EDB" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.3"/>
+    </linearGradient>
+
+    <!-- Pulse gradients -->
+    <linearGradient id="ch-pulse-g1"><stop offset="0%" stop-color="#60A5FA"/><stop offset="100%" stop-color="#fff" stop-opacity="0.8"/></linearGradient>
+    <linearGradient id="ch-pulse-g2"><stop offset="0%" stop-color="#2DD4BF"/><stop offset="100%" stop-color="#fff" stop-opacity="0.8"/></linearGradient>
+    <linearGradient id="ch-pulse-g3"><stop offset="0%" stop-color="#A855F7"/><stop offset="100%" stop-color="#fff" stop-opacity="0.8"/></linearGradient>
+    <linearGradient id="ch-pulse-g4"><stop offset="0%" stop-color="#fff" stop-opacity="0.6"/><stop offset="100%" stop-color="#fff" stop-opacity="0.8"/></linearGradient>
+    <linearGradient id="ch-pulse-g5"><stop offset="0%" stop-color="#60A5FA"/><stop offset="100%" stop-color="#fff" stop-opacity="0.8"/></linearGradient>
+
+    <filter id="ch-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0.5  0 0 0 0 0.16  0 0 0 0 0.84  0 0 0 0.4 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Subtle radial rays behind hub -->
+  <g opacity="0.5">
+    <line class="ch-ray" x1="300" y1="200" x2="300" y2="40"/>
+    <line class="ch-ray" x1="300" y1="200" x2="420" y2="60"/>
+    <line class="ch-ray" x1="300" y1="200" x2="500" y2="140"/>
+    <line class="ch-ray" x1="300" y1="200" x2="500" y2="260"/>
+    <line class="ch-ray" x1="300" y1="200" x2="420" y2="340"/>
+    <line class="ch-ray" x1="300" y1="200" x2="300" y2="360"/>
+    <line class="ch-ray" x1="300" y1="200" x2="180" y2="340"/>
+    <line class="ch-ray" x1="300" y1="200" x2="100" y2="260"/>
+    <line class="ch-ray" x1="300" y1="200" x2="100" y2="140"/>
+    <line class="ch-ray" x1="300" y1="200" x2="180" y2="60"/>
+  </g>
+
+  <!-- Connection lines (solid gradient strokes) -->
+  <path class="ch-conn" stroke="url(#ch-conn-g1)" d="M118,95 C180,130 240,170 300,200"/>
+  <path class="ch-conn" stroke="url(#ch-conn-g2)" d="M482,95 C420,130 360,170 300,200"/>
+  <path class="ch-conn" stroke="url(#ch-conn-g3)" d="M98,278 C160,260 230,230 300,200"/>
+  <path class="ch-conn" stroke="url(#ch-conn-g4)" d="M502,278 C440,260 370,230 300,200"/>
+  <path class="ch-conn" stroke="url(#ch-conn-g5)" d="M300,350 C300,310 300,260 300,200"/>
+
+  <!-- Energy pulses along connections -->
+  <path class="ch-pulse ch-pulse1" d="M118,95 C180,130 240,170 300,200"/>
+  <path class="ch-pulse ch-pulse2" d="M482,95 C420,130 360,170 300,200"/>
+  <path class="ch-pulse ch-pulse3" d="M98,278 C160,260 230,230 300,200"/>
+  <path class="ch-pulse ch-pulse4" d="M502,278 C440,260 370,230 300,200"/>
+  <path class="ch-pulse ch-pulse5" d="M300,350 C300,310 300,260 300,200"/>
+
+  <!-- Icon 1: Email (healed arcs) — top left -->
+  <g transform="translate(96,76)">
+    <path class="ch-icon" stroke="#2A5EDB" d="M0,10 L18,24 L36,10"/>
+    <rect class="ch-icon" stroke="#2A5EDB" x="0" y="6" width="36" height="28" rx="3"/>
+    <polyline class="ch-check ch-chk1" points="40,2 44,6 50,-2"/>
+  </g>
+
+  <!-- Icon 2: Calendar (healed grid) — top right -->
+  <g transform="translate(462,76)">
+    <rect class="ch-icon" stroke="#03AD9C" x="0" y="6" width="32" height="28" rx="3"/>
+    <line class="ch-icon" stroke="#03AD9C" x1="0" y1="14" x2="32" y2="14"/>
+    <line class="ch-icon" stroke="#03AD9C" x1="8" y1="2" x2="8" y2="10"/>
+    <line class="ch-icon" stroke="#03AD9C" x1="24" y1="2" x2="24" y2="10"/>
+    <rect x="6" y="18" width="6" height="5" rx="1" fill="rgba(3,173,156,0.25)"/>
+    <rect x="14" y="18" width="6" height="5" rx="1" fill="rgba(3,173,156,0.25)"/>
+    <rect x="22" y="18" width="6" height="5" rx="1" fill="rgba(3,173,156,0.25)"/>
+    <rect x="6" y="26" width="6" height="5" rx="1" fill="rgba(3,173,156,0.15)"/>
+    <rect x="14" y="26" width="6" height="5" rx="1" fill="rgba(3,173,156,0.15)"/>
+    <polyline class="ch-check ch-chk2" points="36,2 40,6 46,-2"/>
+  </g>
+
+  <!-- Icon 3: Data (solid stacked lines) — bottom left -->
+  <g transform="translate(78,260)">
+    <line class="ch-icon" stroke="#8129D7" x1="2" y1="6" x2="34" y2="6"/>
+    <line class="ch-icon" stroke="#8129D7" x1="6" y1="14" x2="38" y2="14"/>
+    <line class="ch-icon" stroke="#8129D7" x1="0" y1="22" x2="32" y2="22"/>
+    <line class="ch-icon" stroke="#8129D7" x1="4" y1="30" x2="30" y2="30"/>
+    <polyline class="ch-check ch-chk3" points="40,2 44,6 50,-2"/>
+  </g>
+
+  <!-- Icon 4: Tasks (complete checkboxes) — bottom right -->
+  <g transform="translate(482,260)">
+    <rect class="ch-icon" stroke="rgba(255,255,255,0.6)" x="0" y="4" width="14" height="14" rx="2"/>
+    <line class="ch-icon" stroke="rgba(255,255,255,0.4)" x1="20" y1="10" x2="38" y2="10"/>
+    <rect class="ch-icon" stroke="rgba(255,255,255,0.6)" x="0" y="24" width="14" height="14" rx="2"/>
+    <line class="ch-icon" stroke="rgba(255,255,255,0.4)" x1="20" y1="30" x2="34" y2="30"/>
+    <polyline class="ch-check ch-chk4" points="42,2 46,6 52,-2"/>
+  </g>
+
+  <!-- Icon 5: Analytics (solid bars) — bottom center -->
+  <g transform="translate(282,332)">
+    <rect class="ch-icon" stroke="#2A5EDB" x="2" y="18" width="8" height="16" rx="1"/>
+    <rect class="ch-icon" stroke="#03AD9C" x="14" y="10" width="8" height="24" rx="1"/>
+    <rect class="ch-icon" stroke="#8129D7" x="26" y="4" width="8" height="30" rx="1"/>
+    <line stroke="rgba(255,255,255,0.15)" stroke-width="1" x1="0" y1="34" x2="36" y2="34"/>
+    <polyline class="ch-check ch-chk5" points="38,2 42,6 48,-2"/>
+  </g>
+
+  <!-- Hub halo -->
+  <circle cx="300" cy="200" r="80" fill="url(#ch-hub-halo)"/>
+
+  <!-- Central hub -->
+  <g class="ch-hub" filter="url(#ch-glow)">
+    <circle cx="300" cy="200" r="42" fill="url(#ch-hub-rg)"/>
+    <circle cx="300" cy="200" r="28" fill="url(#ch-hub-inner)"/>
+    <circle cx="300" cy="200" r="18" fill="#8129D7" opacity="0.9"/>
+  </g>
+
+  <!-- Hub flash on pulse arrival -->
+  <circle class="ch-hub-bright" cx="300" cy="200" r="36" fill="url(#ch-flash)"/>
+
+  <!-- 60 text -->
+  <text x="300" y="201" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="central" opacity="0.95">60</text>
+</svg>

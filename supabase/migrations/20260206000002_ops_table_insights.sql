@@ -16,11 +16,20 @@ CREATE INDEX idx_ops_insights_table ON ops_table_insights(table_id);
 CREATE INDEX idx_ops_insights_active ON ops_table_insights(table_id) WHERE dismissed_at IS NULL;
 ALTER TABLE ops_table_insights ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view insights in their org" ON ops_table_insights FOR SELECT
+DO $$ BEGIN
+  CREATE POLICY "Users can view insights in their org" ON ops_table_insights FOR SELECT
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can create insights in their org" ON ops_table_insights FOR INSERT
+DO $$ BEGIN
+  CREATE POLICY "Users can create insights in their org" ON ops_table_insights FOR INSERT
   WITH CHECK (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update insights in their org" ON ops_table_insights FOR UPDATE
+DO $$ BEGIN
+  CREATE POLICY "Users can update insights in their org" ON ops_table_insights FOR UPDATE
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

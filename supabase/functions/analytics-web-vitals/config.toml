@@ -1,0 +1,4 @@
+[function]
+# verify_jwt = false: OPTIONS preflight from staging.use60.com must succeed for CORS.
+# Frontend sends anon key on actual requests; telemetry is low-sensitivity.
+verify_jwt = false

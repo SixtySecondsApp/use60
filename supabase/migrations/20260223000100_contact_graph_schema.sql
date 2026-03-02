@@ -122,29 +122,41 @@ ALTER TABLE contact_company_history ENABLE ROW LEVEL SECURITY;
 
 -- contact_graph: org members can read, service role can write
 DROP POLICY IF EXISTS "org_members_select_contact_graph" ON contact_graph;
-CREATE POLICY "org_members_select_contact_graph"
+DO $$ BEGIN
+  CREATE POLICY "org_members_select_contact_graph"
   ON contact_graph FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "service_role_all_contact_graph" ON contact_graph;
-CREATE POLICY "service_role_all_contact_graph"
+DO $$ BEGIN
+  CREATE POLICY "service_role_all_contact_graph"
   ON contact_graph FOR ALL
   USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- contact_company_history: org members can read, service role can write
 DROP POLICY IF EXISTS "org_members_select_contact_company_history" ON contact_company_history;
-CREATE POLICY "org_members_select_contact_company_history"
+DO $$ BEGIN
+  CREATE POLICY "org_members_select_contact_company_history"
   ON contact_company_history FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "service_role_all_contact_company_history" ON contact_company_history;
-CREATE POLICY "service_role_all_contact_company_history"
+DO $$ BEGIN
+  CREATE POLICY "service_role_all_contact_company_history"
   ON contact_company_history FOR ALL
   USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ----------------------------------------------------------------------------
 -- 5. Helper RPCs

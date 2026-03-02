@@ -19,14 +19,26 @@ CREATE INDEX idx_ops_recipes_table ON ops_table_recipes(table_id);
 CREATE INDEX idx_ops_recipes_shared ON ops_table_recipes(table_id) WHERE is_shared = true;
 ALTER TABLE ops_table_recipes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view recipes in their org" ON ops_table_recipes FOR SELECT
+DO $$ BEGIN
+  CREATE POLICY "Users can view recipes in their org" ON ops_table_recipes FOR SELECT
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can create recipes in their org" ON ops_table_recipes FOR INSERT
+DO $$ BEGIN
+  CREATE POLICY "Users can create recipes in their org" ON ops_table_recipes FOR INSERT
   WITH CHECK (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update recipes in their org" ON ops_table_recipes FOR UPDATE
+DO $$ BEGIN
+  CREATE POLICY "Users can update recipes in their org" ON ops_table_recipes FOR UPDATE
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can delete recipes in their org" ON ops_table_recipes FOR DELETE
+DO $$ BEGIN
+  CREATE POLICY "Users can delete recipes in their org" ON ops_table_recipes FOR DELETE
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

@@ -31,6 +31,7 @@ import { AttioImportWizard } from '@/components/ops/AttioImportWizard';
 import { CrossOpImportWizard } from '@/components/ops/CrossOpImportWizard';
 import { ApolloSearchWizard } from '@/components/ops/ApolloSearchWizard';
 import { AiArkSearchWizard } from '@/components/prospecting/AiArkSearchWizard';
+import { ExplloriumSearchWizard } from '@/components/ops/ExplloriumSearchWizard';
 import { CreateTableModal } from '@/components/ops/CreateTableModal';
 import { StandardTablesGallery } from '@/components/ops/StandardTablesGallery';
 import { StandardTablesHealth } from '@/components/ops/StandardTablesHealth';
@@ -73,6 +74,7 @@ function SourceBadge({ source }: { source: string | null }) {
   const label = source ?? 'manual';
   const config: Record<string, { bg: string; text: string; label: string }> = {
     hubspot: { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'hubspot' },
+    explorium: { bg: 'bg-teal-500/20', text: 'text-teal-400', label: 'Explorium' },
     manual: { bg: 'bg-zinc-500/20', text: 'text-zinc-400', label: 'manual' },
     csv_import: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'csv' },
     csv: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'csv' },
@@ -204,6 +206,7 @@ function OpsPage() {
   const [showApolloSearch, setShowApolloSearch] = useState(false);
   const [showCrossOpImport, setShowCrossOpImport] = useState(false);
   const [showAiArkSearch, setShowAiArkSearch] = useState(false);
+  const [showExplloriumSearch, setShowExplloriumSearch] = useState(false);
   const [showWorkflowPrompt, setShowWorkflowPrompt] = useState(false);
   const [workflowInput, setWorkflowInput] = useState('');
   const [standardTab, setStandardTab] = useState<'tables' | 'history'>('tables');
@@ -607,6 +610,7 @@ function OpsPage() {
         onSelectAttio={() => setShowAttioImport(true)}
         onSelectApollo={() => setShowApolloSearch(true)}
         onSelectAiArk={() => setShowAiArkSearch(true)}
+        onSelectExplorium={() => setShowExplloriumSearch(true)}
         onSelectOpsTable={() => setShowCrossOpImport(true)}
         onSelectBlank={() => createTableMutation.mutate()}
         onSelectWorkflow={() => setShowWorkflowPrompt(true)}
@@ -658,6 +662,15 @@ function OpsPage() {
         onOpenChange={setShowAiArkSearch}
         onComplete={(tableId) => {
           setShowAiArkSearch(false);
+          navigate(`/ops/${tableId}`);
+        }}
+      />
+
+      <ExplloriumSearchWizard
+        open={showExplloriumSearch}
+        onOpenChange={setShowExplloriumSearch}
+        onComplete={(tableId) => {
+          setShowExplloriumSearch(false);
           navigate(`/ops/${tableId}`);
         }}
       />

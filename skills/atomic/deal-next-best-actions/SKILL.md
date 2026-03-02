@@ -2,12 +2,14 @@
 name: Deal Next Best Actions
 description: |
   Generate a ranked action plan for advancing a specific deal based on its stage,
-  recent activity, and your capacity. Use when a user asks "what should I do next
-  on this deal", "next steps for the Acme deal", or "how do I move this deal forward".
-  Returns prioritized actions with ROI rationale and time estimates.
+  recent activity, historical conversation context (via RAG transcript search), and
+  external trigger events (via web research). Use when a user asks "what should I do
+  next on this deal", "next steps for the Acme deal", or "how do I move this deal
+  forward". Returns prioritized actions grounded in real conversation history and
+  enriched with company intelligence, with ROI rationale and time estimates.
 metadata:
   author: sixty-ai
-  version: "2"
+  version: "3"
   category: sales-ai
   skill_type: atomic
   is_active: true
@@ -76,8 +78,18 @@ metadata:
     - name: minimum_viable_action
       type: object
       description: "Single most important action if user is busy"
+    - name: rag_context_used
+      type: array
+      description: "Specific transcript findings that informed the recommended actions"
+    - name: confidence_level
+      type: string
+      description: "high/medium/low — based on data richness across all intelligence layers"
+    - name: trigger_events
+      type: array
+      description: "External events creating action opportunities (from web search enrichment)"
   requires_capabilities:
     - crm
+    - web_search
   priority: high
   tags:
     - sales-ai
@@ -94,29 +106,37 @@ metadata:
 # Deal Next Best Actions
 
 ## Goal
-Generate a ranked, prioritized action plan for advancing a deal based on stage, activity patterns, and capacity. This is not a generic checklist -- it is a situational analysis that reads the deal's signals, diagnoses what is blocking progress, and prescribes the specific actions with the highest probability of moving this deal to close.
+Generate a ranked, prioritized action plan for advancing a deal based on stage, activity patterns, conversation history, external intelligence, and capacity. This is not a generic checklist -- it is a 5-layer situational analysis that reads the deal's signals from CRM data, past transcripts, and external triggers, diagnoses what is blocking progress, and prescribes specific actions with the highest probability of moving this deal to close.
 
 ## Why Prescriptive Actions Matter
 
-The difference between a good rep and a great rep is not effort -- it is allocation. Data consistently shows:
+The difference between a good rep and a great rep is not effort -- it is allocation:
 
 - **Top-performing reps spend 65% of their time on deals they will win** (Salesforce State of Sales, 2023). Average reps spread time evenly, wasting 40%+ on dead deals.
-- **The #1 reason deals stall is inaction, not objections** (Gong Labs, analysis of 70,000+ deals). 56% of "lost" deals were actually "abandoned" -- the rep stopped doing things, not because the buyer said no.
+- **The #1 reason deals stall is inaction, not objections** (Gong Labs, analysis of 70,000+ deals). 56% of "lost" deals were actually "abandoned."
 - **Deals that receive a meaningful seller action every 5-7 business days close at 2.3x the rate** of deals with gaps longer than 14 days (InsightSquared pipeline analytics).
-- **The right action at the right time matters more than volume.** A single well-timed executive introduction outperforms 10 follow-up emails (RAIN Group, What Sales Winners Do Differently).
+- **The right action at the right time matters more than volume.** A single well-timed executive introduction outperforms 10 follow-up emails (RAIN Group).
 - **Reps who follow a next-best-action framework achieve 23% higher quota attainment** than reps who rely on intuition alone (CSO Insights, 2022).
 
 The goal is not "do more" -- it is "do the one thing that moves the needle most, right now."
 
 ## Required Capabilities
 - **CRM**: To fetch deal data, stage, recent activity, and related records
+- **Web Search**: To discover company news, trigger events, and stakeholder changes that create action opportunities
 
 ## Inputs
 - `deal_id`: The deal identifier (required)
 - `user_capacity` (optional): "busy" | "normal" | "available" -- affects action volume
 - `organization_id`: Current organization context (from session)
 
-## Data Gathering (via execute_action)
+## The 5-Layer Intelligence Model
+
+Work through these layers in order. Each layer builds on the previous. Skip layers only when data is unavailable (see Graceful Degradation).
+
+### Layer 1: Deal Context (CRM Data)
+
+Gather the foundational deal state from CRM:
+
 1. Fetch deal: `execute_action("get_deal", { id: deal_id, include_health: true })` -- stage, value, close date, contacts, health score
 2. Fetch deal health score: Check `deal_health_scores` table for `overall_health_score`, `risk_factors`, `risk_level`, `days_in_current_stage`, `sentiment_trend`, `meeting_count_last_30_days`
 3. Fetch pipeline summary: `execute_action("get_pipeline_summary", {})` -- overall pipeline context
@@ -127,6 +147,44 @@ The goal is not "do more" -- it is "do the one thing that moves the needle most,
 **Health data integration**: Use `deal_health_score.overall_health_score` and `deal_health_score.risk_factors` to inform action prioritization. Low health scores (< 50) should trigger rescue actions before advancement actions. High ghost risk on the primary contact should trigger multi-threading or channel-switching actions.
 
 If any data call fails, proceed with available data. Note the gap and adjust recommendations accordingly.
+
+### Layer 2: Enrichment (Web Search)
+
+Search for external intelligence that creates action opportunities:
+
+1. **Company news**: Search for `"{company_name}" news` -- funding rounds, acquisitions, leadership changes, product launches, layoffs, earnings reports within last 90 days
+2. **Trigger events**: Look for events that change buying urgency -- new executive hire (budget holder), competitor deal, regulatory change, expansion announcement
+3. **Contact enrichment**: For key stakeholders, check for role changes, promotions, public speaking, published content that reveals priorities
+4. **Industry signals**: Relevant market trends, competitor moves, or regulatory changes affecting the buyer's business
+
+**How to use enrichment in actions**: A funding round means budget unlocked -- propose a larger deal. A leadership change means priorities may shift -- re-qualify. A competitor announcement creates urgency -- position against it. Every trigger event maps to a specific action (see `references/action-library.md` for the trigger-to-action mapping).
+
+### Layer 3: Historical Context (RAG Transcript Search)
+
+Before generating actions, search meeting transcripts for conversation history that should ground recommendations:
+
+1. **Commitments made**: Search transcripts for promises by either side -- "I will send you...", "We agreed to...", "Next step is..."
+2. **Concerns raised**: Search for objections, hesitations, risk language -- "Our concern is...", "We are worried about...", "The challenge is..."
+3. **Agreed next steps**: Search for explicit action items from past meetings
+4. **Competitive mentions**: Search for competitor names or comparison language
+5. **Buying signals**: Search for positive intent -- "We would like to...", "When can we start...", "What does pricing look like..."
+6. **Decision criteria**: Search for how the buyer evaluates -- "What matters most is...", "We need to see...", "The key requirement is..."
+
+**How to use RAG context**: Every action should reference specific transcript findings where available. Instead of "Send a follow-up email," say "Send a follow-up addressing Sarah's concern from the Jan 15 call about data migration timelines." Ground actions in real conversation history, not generic playbook advice.
+
+### Layer 4: Intelligence Signals (Health + Pattern Analysis)
+
+Synthesize Layers 1-3 into diagnostic signals. Enhance the existing health and pattern analysis with RAG insights:
+
+- **Health-informed prioritization**: See the Action Prioritization Framework section below
+- **Activity pattern analysis**: See the Activity Pattern Analysis section below
+- **RAG-enhanced signals**: If transcripts reveal an unaddressed objection, that becomes a top-priority action. If a commitment was made and not fulfilled, flag it. If competitive mentions are increasing, address the competitive threat.
+
+### Layer 5: Action Strategy (Stage Playbooks + RAG-Grounded Specifics)
+
+See `references/action-library.md` for the full action catalog with impact ratings, effort levels, and templates for each action type. See `references/stage-playbooks.md` for complete stage-by-stage playbooks with exit criteria, risk indicators, time limits, and worked examples.
+
+Select and rank actions using the prioritization framework, but personalize them with specifics from Layers 2-3. Every action should be grounded in something concrete: a transcript quote, a trigger event, a health signal, or a pattern from the activity timeline.
 
 ## Action Prioritization Framework
 
@@ -139,10 +197,10 @@ Before applying the Impact-Urgency-Effort matrix, check the deal's health score 
 - **Healthy (60+)**: Focus on advancement actions. Optimize for speed to close.
 
 **Risk factor mapping to actions**:
-- `stage_stall` → Identify and remove the blocker, propose next milestone
-- `no_activity` → Re-engagement action (value-add email or call)
-- `sentiment_decline` → Address objection or concern, introduce reference customer
-- `no_meetings` → Schedule discovery or check-in meeting
+- `stage_stall` -> Identify and remove the blocker, propose next milestone
+- `no_activity` -> Re-engagement action (value-add email or call)
+- `sentiment_decline` -> Address objection or concern, introduce reference customer
+- `no_meetings` -> Schedule discovery or check-in meeting
 
 **Ghost risk consideration**: If primary contact has `is_ghost_risk: true` or `ghost_probability_percent > 50`, multi-threading becomes the #1 priority action regardless of other factors.
 
@@ -151,25 +209,25 @@ Before applying the Impact-Urgency-Effort matrix, check the deal's health score 
 Every potential action is scored on three dimensions:
 
 **Impact (1-5):** How much does this action advance the deal toward close?
-- 5: Directly creates a commitment or removes a blocker (executive meeting, contract sent, objection resolved)
-- 4: Builds significant momentum (demo, reference call, business case delivered)
-- 3: Maintains engagement and advances understanding (follow-up email with value, discovery call)
-- 2: Administrative or preparatory (CRM update, internal alignment, research)
-- 1: Low-value activity (generic check-in, non-specific follow-up)
+- 5: Directly creates a commitment or removes a blocker
+- 4: Builds significant momentum (demo, reference call, business case)
+- 3: Maintains engagement and advances understanding
+- 2: Administrative or preparatory
+- 1: Low-value activity
 
 **Urgency (1-5):** What is the cost of delay?
-- 5: Window closing within 48 hours (competitor eval ending, budget cycle closing, champion leaving)
-- 4: Overdue or time-sensitive (close date approaching, no activity in 14+ days, stakeholder requested response)
-- 3: Should happen this week (scheduled follow-up, pending deliverable, next milestone approaching)
-- 2: Important but not time-critical (relationship building, long-term positioning)
-- 1: Can wait without consequence (nice-to-have research, optional optimization)
+- 5: Window closing within 48 hours
+- 4: Overdue or time-sensitive (close date approaching, 14+ day gap)
+- 3: Should happen this week
+- 2: Important but not time-critical
+- 1: Can wait without consequence
 
-**Effort (inverted, 1-5):** How easy is it to execute? Lower effort scores higher.
-- 5: Under 15 minutes (send email, make call, update CRM)
-- 4: 15-30 minutes (prepare brief, schedule meeting, send document)
-- 3: 30-60 minutes (build presentation, write proposal section, conduct research)
-- 2: 1-3 hours (create ROI model, prepare custom demo, build business case)
-- 1: Half-day or more (full proposal, executive presentation, POC setup)
+**Effort (inverted, 1-5):** How easy is it to execute?
+- 5: Under 15 minutes
+- 4: 15-30 minutes
+- 3: 30-60 minutes
+- 2: 1-3 hours
+- 1: Half-day or more
 
 **Priority Score = Impact x Urgency x Effort (inverted)**
 - Score 75-125: **Urgent** -- do today
@@ -179,110 +237,82 @@ Every potential action is scored on three dimensions:
 
 ### Capacity Adjustment
 
-Adjust action volume based on user capacity:
-
 | Capacity | Max Actions | Focus |
 |----------|-------------|-------|
 | **busy** | 1 (minimum_viable_action only) | Highest-impact single action that takes <15 min |
 | **normal** | 3-5 | Top actions across impact/urgency spectrum |
 | **available** | 5-8 | Full action plan including preparation and optimization |
 
-When capacity is "busy," the minimum_viable_action MUST be executable in under 15 minutes and have the highest combined impact + urgency score. Reps drowning in work need one clear thing to do, not a list.
+When capacity is "busy," the minimum_viable_action MUST be executable in under 15 minutes and have the highest combined impact + urgency score.
 
 ## Stage-Specific Action Playbooks
 
-See `references/action-library.md` for the full action catalog with impact ratings, effort levels, and templates for each action type. See `references/stage-playbooks.md` for complete stage-by-stage playbooks with exit criteria, risk indicators, and time limits.
+See `references/action-library.md` for the full action catalog and `references/stage-playbooks.md` for complete stage-by-stage playbooks with exit criteria, risk indicators, time limits, and worked examples.
 
 ### Stage 1-2: Discovery / Qualification
-
-**Primary objective:** Validate that this deal is worth pursuing and establish the buying process.
-
-**Highest-impact actions at this stage:**
-1. **Multi-thread into the account** (Impact: 5). Connect with 3+ stakeholders. Single-threaded deals close at 5% vs. 17% for multi-threaded (Gong). Specific action: identify the economic buyer, technical evaluator, and end-user champion.
-2. **Quantify the pain** (Impact: 5). Move from "we have a problem" to "this problem costs us $X/month." Without a number, there is no urgency and no budget justification.
-3. **Map the buying process** (Impact: 4). Ask explicitly: "Walk me through how your company evaluates and purchases solutions like this." This question alone accelerates deals by 12% (Corporate Visions research).
-4. **Confirm BANT/MEDDIC criteria** (Impact: 4). Budget: is there money? Authority: who decides? Need: is the pain real? Timeline: is there a forcing function?
-5. **Send a meeting recap with insights** (Impact: 3, Effort: 5). Within 24 hours of a discovery call, send a recap that demonstrates you listened and adds insight they did not have.
-
-**Red flags to check:** No response after discovery call (48h), only one contact engaged, no mention of budget or timeline, "just exploring" language without specifics.
+**Primary objective:** Validate the deal is worth pursuing and establish the buying process.
+**Top actions:** Multi-thread into the account, quantify the pain, map the buying process, confirm BANT/MEDDIC criteria, send meeting recap with insights.
+**Red flags:** No response after discovery (48h), single-threaded, no budget/timeline mention, "just exploring" language.
 
 ### Stage 3-4: Evaluation / Demo
-
 **Primary objective:** Prove ${company_name}'s solution solves their specific problem better than alternatives.
-
-**Highest-impact actions at this stage:**
-1. **Deliver a customized demo** (Impact: 5). Generic demos close at 20% vs. 45% for demos tailored to the buyer's specific use case and data (Consensus benchmark data).
-2. **Introduce a reference customer** (Impact: 5). Peer validation is the #1 trust accelerator. Same industry, same problem, measurable results. Time it for after the demo, before the proposal.
-3. **Create the business case / ROI model** (Impact: 5). Shift the conversation from "does this work?" to "how much is it worth?" Quantify cost of inaction, implementation cost, time to value, and 3-year return.
-4. **Engage the economic buyer** (Impact: 4). If you have only been talking to evaluators, the deal is at risk. Request an executive alignment meeting: "We want to make sure ${company_name}'s solution aligns with [exec name]'s priorities."
-5. **Identify and address the competitor** (Impact: 4). If you do not know who else they are evaluating, ask directly. Then position: do not attack the competitor, differentiate on the buyer's specific criteria.
-
-**Red flags to check:** Demo requested but keeps getting postponed, technical team engaged but no executive sponsor, evaluation criteria not shared, "we need to see more" without specific asks.
+**Top actions:** Deliver customized demo, introduce reference customer, create business case/ROI model, engage economic buyer, identify and address competitor.
+**Red flags:** Demo keeps being postponed, no executive sponsor, evaluation criteria not shared.
 
 ### Stage 5-6: Negotiation / Proposal
-
 **Primary objective:** Remove obstacles between "yes" and signature.
-
-**Highest-impact actions at this stage:**
-1. **Send the proposal/contract** (Impact: 5, Urgency: 5). Every day without a proposal in hand is a day the deal can die. If you are waiting to "make it perfect," send it now and iterate.
-2. **Pre-wire the negotiation** (Impact: 5). Before formal negotiation, have an informal conversation with your champion: "What concerns do you think [economic buyer] will have? What would make this a no-brainer?" This prevents surprises.
-3. **Map procurement requirements** (Impact: 4). Ask: "What does your procurement process look like? Do you need vendor registration, security review, legal review? How long does each take?" Then build those into the timeline.
-4. **Offer a concession strategy** (Impact: 4). Have 2-3 concessions ready (extended payment terms, additional training, pilot period) that cost you little but give the buyer something to "win" in negotiation.
-5. **Create urgency with a deadline** (Impact: 3). Use a real constraint: pricing validity, implementation team availability, or fiscal year alignment. Artificial urgency backfires.
-
-**Red flags to check:** "Let me think about it" without a next step, new stakeholders appearing late, legal review expanding scope, radio silence after proposal sent.
+**Top actions:** Send proposal/contract, pre-wire negotiation, map procurement requirements, prepare concession strategy, create urgency with real constraint.
+**Red flags:** "Let me think about it" without next step, new stakeholders appearing late, radio silence after proposal.
 
 ### Stage 7+: Closing
-
 **Primary objective:** Get to signature and set up for successful implementation.
-
-**Highest-impact actions at this stage:**
-1. **Resolve the final objection** (Impact: 5). There is always one last thing. Find it and address it directly. Call your champion: "Is there anything between us and getting this signed this week?"
-2. **Make signing frictionless** (Impact: 5). E-sign link, not a PDF to print. Pre-filled where possible. Clear instructions on who signs and where.
-3. **Preview the implementation plan** (Impact: 4). Show them what happens AFTER they sign. This reduces the perceived risk of commitment and makes signing feel like progress, not a leap of faith.
-4. **Align on success metrics** (Impact: 3). Before they sign, agree on how you will both measure success in the first 90 days. This sets up the relationship and reduces post-purchase regret.
-
-**Red flags to check:** Contract sent but not opened, champion going quiet, new decision-maker surfaced, "we need one more meeting," close date pushed for the second time.
+**Top actions:** Resolve final objection, make signing frictionless, preview implementation plan, align on success metrics.
+**Red flags:** Contract sent but not opened, champion going quiet, close date pushed second time.
 
 ## Activity Pattern Analysis
 
-Read `references/action-library.md` for the complete re-engagement action catalog with templates for each silence duration (7-day, 14-day, 21-day, 30+ day gaps).
-
-Beyond stage-specific actions, analyze the deal's activity patterns to detect systemic issues:
+Read `references/action-library.md` for the complete re-engagement action catalog with templates for each silence duration.
 
 ### Staleness Detection
-- **No activity in 7+ days**: Engagement is cooling. Priority action: re-engage with a value-add (insight, article, introduction), NOT a "just checking in" email.
-- **No activity in 14+ days**: Deal is at risk of dying. Priority action: direct outreach to champion with a specific question that requires a response. If no response in 48 hours, call.
-- **No activity in 21+ days**: Deal is likely dead. Priority action: send a "breakup" email -- "I have not heard back, so I am going to assume the timing is not right. If things change, I am here." This paradoxically re-engages 15-20% of stalled deals (Gong).
+- **7+ days**: Re-engage with value-add, NOT "just checking in."
+- **14+ days**: Direct outreach to champion with specific question. If no response in 48h, call.
+- **21+ days**: Breakup email. Paradoxically re-engages 15-20% of stalled deals (Gong).
 
 ### Ghosting Detection
-- **You sent 2+ messages with no response**: Stop emailing. Switch channels (call, LinkedIn, text). Or go around the contact to a different stakeholder.
-- **Meetings keep getting rescheduled**: The buyer is deprioritizing you. Escalate urgency by introducing a constraint or new value.
-- **"Let me get back to you" repeated 3+ times**: The buyer is avoiding a "no." Address it directly: "I want to be respectful of your time. Are you still considering this, or has something changed?"
+- **2+ messages, no response**: Switch channels (call, LinkedIn, text) or go around to different stakeholder.
+- **Meetings keep rescheduling**: Buyer is deprioritizing. Introduce constraint or new value.
+- **"Let me get back to you" 3+ times**: Address directly -- "Are you still considering this, or has something changed?"
 
 ### Multithreading Analysis
-- **Only 1 contact engaged**: Critical risk. Multi-threaded deals close at 3x the rate. Action: ask your contact to introduce you to the technical evaluator and the economic buyer.
-- **2-3 contacts engaged**: Good but not safe. Action: identify who is missing (usually the economic buyer or the end-user champion) and find a path to them.
-- **4+ contacts engaged**: Strong position. Action: ensure all stakeholders are aligned on the same evaluation criteria and timeline.
+- **1 contact**: Critical risk. Multi-threaded deals close at 3x the rate. Ask for introductions.
+- **2-3 contacts**: Good but not safe. Identify who is missing (usually economic buyer or end-user champion).
+- **4+ contacts**: Strong. Ensure stakeholder alignment on criteria and timeline.
 
-### Engagement Momentum
-- **Increasing activity (more meetings, faster responses)**: The deal has momentum. Do not slow it down. Match the buyer's pace.
-- **Decreasing activity (longer gaps, shorter responses)**: Momentum is dying. Diagnose why: competing priorities? Unresolved objection? New competitor? Address the root cause, not the symptom.
-- **Sporadic activity (intense burst, then silence, then burst)**: The buyer is evaluating multiple vendors in rounds. You need to win each round. Ask where you stand relative to alternatives.
+## Confidence Level
 
-## ROI Rationale Framework
+Assess the data richness across all 5 layers and assign a confidence level to the overall recommendation:
 
-Every recommended action must include a rationale explaining WHY this action will advance the deal. The rationale should connect the action to a measurable outcome:
+| Level | Criteria | How It Affects Output |
+|-------|----------|----------------------|
+| **High** | CRM data complete + RAG transcripts found + web enrichment available. 3+ layers with rich data. | Actions are specific and grounded. Rationales cite transcript quotes, trigger events, and health signals. |
+| **Medium** | CRM data available + at least one of RAG or web enrichment. 2 layers with data. | Actions are informed but some are stage-generic. Flag which layers are missing. |
+| **Low** | CRM data only, or CRM data is sparse. Only 1 layer has meaningful data. | Actions default to stage playbook recommendations. Prominently flag: "Limited data -- these are playbook defaults, not deal-specific recommendations. Enrich this deal for better actions." |
 
-**Good Rationale Examples:**
-- "Schedule a reference call because peer validation reduces evaluation time by 35% and the buyer has been in evaluation for 3 weeks with no clear movement toward a decision."
-- "Send the ROI model because the economic buyer has not been engaged and cannot justify the budget without quantified value. Deals without a business case close at 12% vs. 38% with one."
-- "Multi-thread into engineering because the champion is the only contact. If they go on vacation, change roles, or get overruled, this deal dies. Adding 2 contacts reduces single-point-of-failure risk."
+Always include the confidence level in the output and explain what data informed the recommendation (and what was missing).
 
-**Bad Rationale Examples:**
-- "Follow up because it's been a while" (no insight, no data, no specificity)
-- "Update the CRM" (administrative, not deal-advancing)
-- "Check in with the prospect" (what will this accomplish?)
+## Graceful Degradation
+
+| Missing Data | Fallback Behavior | User-Facing Note |
+|---|---|---|
+| CRM deal record incomplete | Proceed with available fields; first action = "Update deal stage and close date in CRM" | "Deal record is missing [fields]. Recommendations are based on available data." |
+| No activity history | Default to stage-appropriate actions from playbook | "No activity history available. Recommendations based on deal stage only." |
+| RAG returns no transcripts | Proceed without transcript grounding; actions are stage-generic | "No meeting transcripts found. Actions are not grounded in conversation history." |
+| Web search fails or returns nothing | Proceed without trigger events; skip Layer 2 | "External enrichment unavailable. No trigger events detected." |
+| Contact not enriched | Skip stakeholder mapping; recommend enrichment | "Contact details are thin. Consider running enrichment before next outreach." |
+| Health scores unavailable | Skip health-informed prioritization; use stage + activity only | "Health scoring unavailable. Prioritization based on stage and activity patterns." |
+| Conflicting signals (verbal vs. behavioral) | Prioritize behavioral signals over verbal ones | "Buyer says [X] but activity shows [Y]. Behavioral data is more predictive." |
+| 10+ open tasks already exist | Do not add more; prioritize existing tasks | "You have [X] open tasks. Complete or close the top 3 before adding new actions." |
+| Deal appears dead (30+ days, past close date) | Honest assessment + single reactivation action | "This deal shows no activity in [X] days. Confirm viability before investing time." |
 
 ## Output Contract
 
@@ -293,15 +323,19 @@ Return a SkillResult with:
   - `description`: What to do (detailed enough to execute without follow-up questions)
   - `priority`: "urgent" | "high" | "medium" | "low"
   - `priority_score`: number (Impact x Urgency x Effort)
-  - `roi_rationale`: Why this action matters -- connect to data or deal-specific signal
+  - `roi_rationale`: Why this action matters -- connect to data, transcript quotes, or trigger events
   - `estimated_time`: Time estimate in minutes
   - `deadline`: Recommended deadline (ISO date)
   - `owner`: Suggested owner (user's name or role)
   - `dependencies`: Other actions this depends on (array of action titles or empty)
+  - `source_layer`: Which intelligence layer informed this action (e.g., "RAG: Jan 15 call", "Web: funding round", "Health: ghost risk")
 - `data.priorities`: Summary of priority distribution (how many urgent/high/medium/low)
 - `data.roi_rationale`: Overall rationale for the action plan (2-3 sentences explaining the strategy)
 - `data.minimum_viable_action`: The single most important action if user is busy (must be <15 min effort)
 - `data.stage_insights`: Insights about deal stage and what typically works at this stage
+- `data.rag_context_used`: Array of specific transcript findings that informed actions (quote, date, speaker, relevance)
+- `data.confidence_level`: "high" | "medium" | "low" with explanation of data richness
+- `data.trigger_events`: Array of external events creating action opportunities (event, source, recommended_action, urgency_impact)
 
 ## Quality Checklist
 
@@ -319,6 +353,10 @@ Before returning the action plan, verify:
 - [ ] Deadlines are specific dates, not "soon" or "next week"
 - [ ] If the deal has a close date, actions are aligned to that timeline
 - [ ] The overall rationale tells a coherent story about WHERE this deal is and WHAT moves it forward
+- [ ] RAG transcript findings are cited in action rationales where available (quote + date)
+- [ ] Trigger events from web search are connected to specific actions (not just listed)
+- [ ] Confidence level accurately reflects data richness across the 5 layers
+- [ ] Every data claim has a source (CRM field, transcript quote, web search result, health signal)
 
 ## Error Handling
 
@@ -326,27 +364,22 @@ Before returning the action plan, verify:
 If the deal record is missing critical fields (stage, value, close date), return actions focused on data completion: "Update deal stage and close date in CRM" as the first action, then provide best-effort recommendations based on available data.
 
 ### No activity history available
-Without activity data, you cannot detect staleness or ghosting. Default to stage-appropriate actions and flag: "No activity history available. These recommendations are based on deal stage only. Connect activity tracking for more precise prioritization."
+Without activity data, you cannot detect staleness or ghosting. Default to stage-appropriate actions and flag: "No activity history available. These recommendations are based on deal stage only."
 
 ### Deal is in a very early stage with minimal data
-If the deal is in Stage 1 with only a name and company, the actions should focus entirely on discovery: research the company, identify stakeholders, prepare discovery questions, schedule the first call. Do not recommend evaluation or closing actions.
+If the deal is in Stage 1 with only a name and company, focus entirely on discovery: research the company, identify stakeholders, prepare discovery questions, schedule the first call.
 
 ### Deal appears to be dead (no activity 30+ days, past close date)
-Be honest: "This deal shows no activity in [X] days and the close date has passed. Before investing time, confirm with the buyer that the opportunity is still active. If no response in 48 hours, mark as lost and reallocate your time." Provide a "reactivation" action as the minimum_viable_action, not a full plan for a potentially dead deal.
+Be honest: "This deal shows no activity in [X] days and the close date has passed. Before investing time, confirm with the buyer that the opportunity is still active." Provide a single reactivation action, not a full plan.
 
 ### User capacity is "busy" but the deal is critical
-If the deal is high-value and high-urgency but the user is busy, note the tension: "This is your most critical deal, but you indicated limited capacity. The minimum viable action is [X]. However, this deal is at risk of slipping if [Y] is not addressed this week. Consider delegating [Z] to free up 30 minutes."
-
-### Multiple conflicting signals
-When data signals conflict (e.g., buyer says "we're excited" but activity is declining), prioritize behavioral signals over verbal ones. What people DO is more predictive than what they SAY. Note the discrepancy in the rationale.
-
-### Too many open tasks already
-If the deal already has 10+ open tasks, do not add more. Instead, prioritize the existing tasks: "You have [X] open tasks on this deal. Before adding new actions, complete or close these: [top 3 by impact]. Task overload causes paralysis, not progress."
+Note the tension: "This is your most critical deal, but you indicated limited capacity. The minimum viable action is [X]. However, this deal is at risk if [Y] is not addressed this week. Consider delegating [Z] to free up 30 minutes."
 
 ## Tone and Presentation
 
-- Be direct and specific. "Send a 3-bullet email to Sarah Chen summarizing the ROI model" not "Consider reaching out to the prospect."
-- Explain the WHY in plain language. Reps follow advice they understand and believe, not advice that sounds generic.
-- Be honest about dead or dying deals. Reps waste enormous time on deals they should abandon. Saying "this deal may not be worth your time" is valuable advice.
-- Frame actions as experiments, not mandates. "Try this because the data shows..." not "You must do this."
-- Acknowledge trade-offs. "This action takes 45 minutes, which is significant when you are busy, but it addresses the #1 blocker on your highest-value deal."
+- Be direct and specific. "Send a 3-bullet email to Sarah Chen addressing her data migration concern from the Jan 15 call" not "Consider reaching out to the prospect."
+- Explain the WHY in plain language. Reps follow advice they understand and believe.
+- Be honest about dead or dying deals. Saying "this deal may not be worth your time" is valuable advice.
+- Frame actions as experiments. "Try this because the data shows..." not "You must do this."
+- Acknowledge trade-offs. "This action takes 45 minutes, but it addresses the #1 blocker on your highest-value deal."
+- Ground in specifics. Reference transcript quotes, trigger events, and health signals -- not generic playbook advice.

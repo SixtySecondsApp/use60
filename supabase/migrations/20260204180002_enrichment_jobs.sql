@@ -59,7 +59,8 @@ ALTER TABLE public.enrichment_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.enrichment_job_results ENABLE ROW LEVEL SECURITY;
 
 -- Jobs: Inherit access from parent table
-CREATE POLICY "Users can view enrichment jobs of accessible tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can view enrichment jobs of accessible tables"
   ON public.enrichment_jobs
   FOR SELECT
   USING (
@@ -71,8 +72,11 @@ CREATE POLICY "Users can view enrichment jobs of accessible tables"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can manage enrichment jobs of own tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can manage enrichment jobs of own tables"
   ON public.enrichment_jobs
   FOR ALL
   USING (
@@ -81,9 +85,12 @@ CREATE POLICY "Users can manage enrichment jobs of own tables"
       WHERE created_by = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Results: Inherit from job → table
-CREATE POLICY "Users can view job results of accessible tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can view job results of accessible tables"
   ON public.enrichment_job_results
   FOR SELECT
   USING (
@@ -96,8 +103,11 @@ CREATE POLICY "Users can view job results of accessible tables"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can manage job results of own tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can manage job results of own tables"
   ON public.enrichment_job_results
   FOR ALL
   USING (
@@ -107,6 +117,8 @@ CREATE POLICY "Users can manage job results of own tables"
       WHERE t.created_by = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role policies
 DO $$

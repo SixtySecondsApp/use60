@@ -75,7 +75,8 @@ CREATE TRIGGER trigger_update_product_profiles_updated_at
 ALTER TABLE public.product_profiles ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: org members can view profiles in their org
-CREATE POLICY "Org members can view product_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Org members can view product_profiles"
   ON public.product_profiles
   FOR SELECT
   USING (
@@ -84,9 +85,12 @@ CREATE POLICY "Org members can view product_profiles"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- INSERT: org members can create profiles (with created_by = auth.uid())
-CREATE POLICY "Org members can create product_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Org members can create product_profiles"
   ON public.product_profiles
   FOR INSERT
   WITH CHECK (
@@ -96,9 +100,12 @@ CREATE POLICY "Org members can create product_profiles"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- UPDATE: creator or org admins can update
-CREATE POLICY "Creator or admin can update product_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Creator or admin can update product_profiles"
   ON public.product_profiles
   FOR UPDATE
   USING (
@@ -109,9 +116,12 @@ CREATE POLICY "Creator or admin can update product_profiles"
       AND role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- DELETE: creator or org admins can delete
-CREATE POLICY "Creator or admin can delete product_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Creator or admin can delete product_profiles"
   ON public.product_profiles
   FOR DELETE
   USING (
@@ -122,12 +132,17 @@ CREATE POLICY "Creator or admin can delete product_profiles"
       AND role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access
-CREATE POLICY "Service role full access to product_profiles"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to product_profiles"
   ON public.product_profiles
   FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Done

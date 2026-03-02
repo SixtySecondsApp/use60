@@ -54,7 +54,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_created_at ON public.agent_runs(create
 ALTER TABLE public.agent_runs ENABLE ROW LEVEL SECURITY;
 
 -- Users can view agent runs for tables in their org (via agent_column join)
-CREATE POLICY "Users can view org agent runs"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org agent runs"
   ON public.agent_runs
   FOR SELECT
   USING (
@@ -67,9 +68,12 @@ CREATE POLICY "Users can view org agent runs"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can create agent runs for their org's tables
-CREATE POLICY "Users can create org agent runs"
+DO $$ BEGIN
+  CREATE POLICY "Users can create org agent runs"
   ON public.agent_runs
   FOR INSERT
   WITH CHECK (
@@ -82,9 +86,12 @@ CREATE POLICY "Users can create org agent runs"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update agent runs for their org's tables
-CREATE POLICY "Users can update org agent runs"
+DO $$ BEGIN
+  CREATE POLICY "Users can update org agent runs"
   ON public.agent_runs
   FOR UPDATE
   USING (
@@ -97,9 +104,12 @@ CREATE POLICY "Users can update org agent runs"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can delete agent runs for their org's tables
-CREATE POLICY "Users can delete org agent runs"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete org agent runs"
   ON public.agent_runs
   FOR DELETE
   USING (
@@ -112,6 +122,8 @@ CREATE POLICY "Users can delete org agent runs"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Service role policies (for edge functions)

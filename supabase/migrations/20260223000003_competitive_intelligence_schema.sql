@@ -123,44 +123,62 @@ ALTER TABLE competitor_profiles ENABLE ROW LEVEL SECURITY;
 
 -- competitive_mentions: org members can read, service role can write
 DROP POLICY IF EXISTS "org_members_select_competitive_mentions" ON competitive_mentions;
-CREATE POLICY "org_members_select_competitive_mentions"
+DO $$ BEGIN
+  CREATE POLICY "org_members_select_competitive_mentions"
   ON competitive_mentions FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "org_members_insert_competitive_mentions" ON competitive_mentions;
-CREATE POLICY "org_members_insert_competitive_mentions"
+DO $$ BEGIN
+  CREATE POLICY "org_members_insert_competitive_mentions"
   ON competitive_mentions FOR INSERT
   WITH CHECK (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "service_role_all_competitive_mentions" ON competitive_mentions;
-CREATE POLICY "service_role_all_competitive_mentions"
+DO $$ BEGIN
+  CREATE POLICY "service_role_all_competitive_mentions"
   ON competitive_mentions FOR ALL
   USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- competitor_profiles: org members can read + admin can update battlecard, service role full
 DROP POLICY IF EXISTS "org_members_select_competitor_profiles" ON competitor_profiles;
-CREATE POLICY "org_members_select_competitor_profiles"
+DO $$ BEGIN
+  CREATE POLICY "org_members_select_competitor_profiles"
   ON competitor_profiles FOR SELECT
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om WHERE om.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "org_admins_update_competitor_profiles" ON competitor_profiles;
-CREATE POLICY "org_admins_update_competitor_profiles"
+DO $$ BEGIN
+  CREATE POLICY "org_admins_update_competitor_profiles"
   ON competitor_profiles FOR UPDATE
   USING (org_id IN (
     SELECT om.org_id FROM organization_memberships om
     WHERE om.user_id = auth.uid() AND om.role IN ('owner', 'admin')
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "service_role_all_competitor_profiles" ON competitor_profiles;
-CREATE POLICY "service_role_all_competitor_profiles"
+DO $$ BEGIN
+  CREATE POLICY "service_role_all_competitor_profiles"
   ON competitor_profiles FOR ALL
   USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ----------------------------------------------------------------------------
 -- 5. Helper RPCs

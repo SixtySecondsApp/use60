@@ -43,41 +43,62 @@ ALTER TABLE public.slack_copilot_threads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.slack_copilot_messages ENABLE ROW LEVEL SECURITY;
 
 -- Threads: users can only see their own
-CREATE POLICY "Users can view own slack copilot threads"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own slack copilot threads"
   ON public.slack_copilot_threads FOR SELECT
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own slack copilot threads"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own slack copilot threads"
   ON public.slack_copilot_threads FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own slack copilot threads"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own slack copilot threads"
   ON public.slack_copilot_threads FOR UPDATE
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Messages: users can see messages in their threads
-CREATE POLICY "Users can view own slack copilot messages"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own slack copilot messages"
   ON public.slack_copilot_messages FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM public.slack_copilot_threads t
     WHERE t.id = thread_id AND t.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert into own slack copilot threads"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert into own slack copilot threads"
   ON public.slack_copilot_messages FOR INSERT
   WITH CHECK (EXISTS (
     SELECT 1 FROM public.slack_copilot_threads t
     WHERE t.id = thread_id AND t.user_id = auth.uid()
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role bypass for edge functions
-CREATE POLICY "Service role full access to slack_copilot_threads"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to slack_copilot_threads"
   ON public.slack_copilot_threads FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role full access to slack_copilot_messages"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to slack_copilot_messages"
   ON public.slack_copilot_messages FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Helper RPC to increment message count atomically
 CREATE OR REPLACE FUNCTION public.increment_slack_copilot_thread_count(p_thread_id uuid)

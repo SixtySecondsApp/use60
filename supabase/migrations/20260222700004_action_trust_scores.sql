@@ -101,33 +101,45 @@ ALTER TABLE public.action_trust_scores ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own trust score rows
 DROP POLICY IF EXISTS "Users can view own trust scores" ON public.action_trust_scores;
-CREATE POLICY "Users can view own trust scores"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own trust scores"
   ON public.action_trust_scores FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own trust score rows (threshold edits from UI)
 DROP POLICY IF EXISTS "Users can update own trust scores" ON public.action_trust_scores;
-CREATE POLICY "Users can update own trust scores"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own trust scores"
   ON public.action_trust_scores FOR UPDATE
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert their own rows (edge function may call on first encounter)
 DROP POLICY IF EXISTS "Users can insert own trust scores" ON public.action_trust_scores;
-CREATE POLICY "Users can insert own trust scores"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own trust scores"
   ON public.action_trust_scores FOR INSERT
   TO authenticated
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access for edge functions / trust scorer
 DROP POLICY IF EXISTS "Service role full access" ON public.action_trust_scores;
-CREATE POLICY "Service role full access"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access"
   ON public.action_trust_scores FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Seed: default thresholds per action_type

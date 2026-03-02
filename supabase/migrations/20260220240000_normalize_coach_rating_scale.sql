@@ -20,8 +20,11 @@ WHERE coach_rating > 10;
 -- Step 4: Tighten the constraint on meetings to prevent future 0-100 values
 -- Drop old constraint and add new one (1-10 scale)
 ALTER TABLE meetings DROP CONSTRAINT IF EXISTS "meetings_coach_rating_check";
-ALTER TABLE meetings ADD CONSTRAINT "meetings_coach_rating_check"
+DO $$ BEGIN
+  ALTER TABLE meetings ADD CONSTRAINT "meetings_coach_rating_check"
   CHECK (coach_rating >= 0 AND coach_rating <= 10);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Step 5: Update the team analytics RPC to normalize as a safety net
 -- (in case any edge case writes a value > 10 before the constraint catches it)

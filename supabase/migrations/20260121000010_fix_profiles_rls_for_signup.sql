@@ -7,7 +7,8 @@ DROP POLICY IF EXISTS "profiles_insert" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_update" ON public.profiles;
 
 -- Create new INSERT policy (permissive - allows various scenarios)
-CREATE POLICY "profiles_insert" ON public.profiles
+DO $$ BEGIN
+  CREATE POLICY "profiles_insert" ON public.profiles
 FOR INSERT
 WITH CHECK (
   public.is_service_role()
@@ -19,10 +20,13 @@ WITH CHECK (
     AND created_at > NOW() - INTERVAL '1 hour'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Create new UPDATE policy that allows users to update their own profile
 -- This is needed for the upsert to work during signup when adding first_name/last_name
-CREATE POLICY "profiles_update" ON public.profiles
+DO $$ BEGIN
+  CREATE POLICY "profiles_update" ON public.profiles
 FOR UPDATE
 USING (
   public.is_service_role()
@@ -43,6 +47,8 @@ WITH CHECK (
     AND created_at > NOW() - INTERVAL '1 hour'
   ))
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comments
 COMMENT ON POLICY "profiles_insert" ON public.profiles IS 'Allows service role, authenticated users, and users with recently created auth accounts to insert profiles.';

@@ -43,7 +43,8 @@ ALTER TABLE autonomy_policy_ceilings ENABLE ROW LEVEL SECURITY;
 
 -- Org members can read ceilings
 DROP POLICY IF EXISTS "autonomy_policy_ceilings_read" ON autonomy_policy_ceilings;
-CREATE POLICY "autonomy_policy_ceilings_read" ON autonomy_policy_ceilings
+DO $$ BEGIN
+  CREATE POLICY "autonomy_policy_ceilings_read" ON autonomy_policy_ceilings
   FOR SELECT
   USING (
     org_id IN (
@@ -51,10 +52,13 @@ CREATE POLICY "autonomy_policy_ceilings_read" ON autonomy_policy_ceilings
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners can manage ceilings
 DROP POLICY IF EXISTS "autonomy_policy_ceilings_admin_write" ON autonomy_policy_ceilings;
-CREATE POLICY "autonomy_policy_ceilings_admin_write" ON autonomy_policy_ceilings
+DO $$ BEGIN
+  CREATE POLICY "autonomy_policy_ceilings_admin_write" ON autonomy_policy_ceilings
   FOR ALL
   USING (
     org_id IN (
@@ -70,6 +74,8 @@ CREATE POLICY "autonomy_policy_ceilings_admin_write" ON autonomy_policy_ceilings
         AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- RPC: get_team_autonomy_stats

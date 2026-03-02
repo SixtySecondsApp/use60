@@ -1,0 +1,167 @@
+{
+  "project": {
+    "name": "V2 Credit Governance — creditLedger + creditBudgetService + fleetThrottle",
+    "description": "Close the three gaps in the V2 credit governance layer: add source_agent attribution to ai_cost_events, create a client-side creditLedger service, and a creditBudgetService with fleetThrottle logic. Wire autonomousExecutor.ts into the credit system.",
+    "createdAt": "2026-02-26T10:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "credit-ledger",
+      "name": "Credit Ledger & Budget Enforcement",
+      "status": "complete",
+      "description": "Source agent attribution, client-side logging service, pre-flight budget check with fleetThrottle, and wiring of autonomousExecutor into the credit system"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "CREDIT-001",
+      "feature": "credit-ledger",
+      "title": "Add source_agent column to ai_cost_events",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CREDIT-002", "CREDIT-003"],
+      "acceptance": [
+        "ALTER TABLE ai_cost_events ADD COLUMN IF NOT EXISTS source_agent TEXT",
+        "Index on source_agent (partial, where NOT NULL)",
+        "Composite index on (org_id, source_agent) for per-agent breakdowns",
+        "Column comment documenting known values: copilot-autonomous, api-copilot, autonomous-executor, workflow-node, ar-agent"
+      ],
+      "estimatedMinutes": 10,
+      "files": ["supabase/migrations/20260227000001_add_source_agent_to_ai_cost_events.sql"]
+    },
+    {
+      "id": "CREDIT-002",
+      "feature": "credit-ledger",
+      "title": "Add sourceAgent param to logAICostEvent in costTracking.ts",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["CREDIT-001"], "files": [], "schema": ["ai_cost_events"] },
+      "blocks": ["CREDIT-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Add optional sourceAgent?: string as last parameter to logAICostEvent() — non-breaking, all 33 existing callers unchanged",
+        "Include source_agent: sourceAgent || null in the ai_cost_events insert",
+        "Same change applied to logFlatRateCostEvent()"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/_shared/costTracking.ts"]
+    },
+    {
+      "id": "CREDIT-003",
+      "feature": "credit-ledger",
+      "title": "Pass source_agent in copilot-autonomous edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["CREDIT-001", "CREDIT-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "Pass 'copilot-autonomous' as sourceAgent arg to logAICostEvent() call at ~line 2496 in copilot-autonomous/index.ts",
+        "Deploy to staging: npx supabase functions deploy copilot-autonomous --project-ref caerqjzvuerejfrdtygb --no-verify-jwt",
+        "Verify: after a copilot chat, query ai_cost_events WHERE source_agent = 'copilot-autonomous' returns rows"
+      ],
+      "estimatedMinutes": 10,
+      "files": ["supabase/functions/copilot-autonomous/index.ts"]
+    },
+    {
+      "id": "CREDIT-004",
+      "feature": "credit-ledger",
+      "title": "Create creditLedger.ts client-side logging service",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["CREDIT-001"], "files": ["src/lib/supabase/clientV2.ts"], "schema": ["ai_cost_events"] },
+      "blocks": ["CREDIT-006"],
+      "parallelWith": ["CREDIT-002", "CREDIT-003"],
+      "acceptance": [
+        "Singleton class CreditLedger with logCall(params: LogCallParams): void — fire-and-forget, never throws",
+        "Writes to ai_cost_events via user-scoped Supabase client (respects RLS, no service role key)",
+        "Sets estimated_cost: 0 and credits_charged: 0 — attribution only, no double-counting with edge fn deductions",
+        "Export: export const creditLedger = CreditLedger.getInstance()",
+        "LogCallParams interface: { userId, orgId, provider, model, inputTokens, outputTokens, feature?, sourceAgent?, metadata? }"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["src/lib/services/creditLedger.ts"]
+    },
+    {
+      "id": "CREDIT-005",
+      "feature": "credit-ledger",
+      "title": "Create creditBudgetService.ts with fleetThrottle logic",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": ["src/lib/supabase/clientV2.ts"], "schema": ["org_credit_balance"] },
+      "blocks": ["CREDIT-006"],
+      "parallelWith": ["CREDIT-002", "CREDIT-003", "CREDIT-004"],
+      "acceptance": [
+        "Singleton class CreditBudgetService with checkBudget(orgId, opts?) → Promise<BudgetCheckResult>",
+        "BudgetCheckResult: { allowed: boolean, percentUsed: number, softWarn: boolean, reason?: string }",
+        "fleetThrottle: percentUsed >= 80% → softWarn=true, non-critical calls blocked (isCritical bypasses); percentUsed >= 100% → hard kill all",
+        "60-second per-org in-memory cache (Map) to avoid DB round-trips on every iteration",
+        "Fail open: any DB error returns { allowed: true } — never block on monitoring failure",
+        "Reads balance_credits, grace_threshold_credits, lifetime_purchased, lifetime_consumed from org_credit_balance",
+        "Export: export const creditBudgetService, export class CreditExhaustedError"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["src/lib/services/creditBudgetService.ts"]
+    },
+    {
+      "id": "CREDIT-006",
+      "feature": "credit-ledger",
+      "title": "Wire autonomousExecutor.ts with budget check and cost logging",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["CREDIT-004", "CREDIT-005"], "files": ["src/lib/copilot/agent/autonomousExecutor.ts"], "schema": [] },
+      "blocks": [],
+      "acceptance": [
+        "ExecutorConfig gets optional sourceAgent?: string field (default: 'autonomous-executor')",
+        "ExecutorResult gets optional totalInputTokens?: number and totalOutputTokens?: number",
+        "Before each anthropic.messages.create() call: await creditBudgetService.checkBudget(orgId, { isCritical: false }) — throw CreditExhaustedError if not allowed",
+        "After each anthropic.messages.create() returns: call creditLedger.logCall() with token counts from response.usage, accumulate into totalInputTokens/totalOutputTokens",
+        "Same budget check + logging applied in executeTool() for skill sub-calls",
+        "CreditExhaustedError caught in execute() catch block → return { success: false, error: 'credit_exhausted' }",
+        "Verify: trigger autonomousExecutor path → query ai_cost_events WHERE source_agent = 'autonomous-executor' → see non-zero token rows"
+      ],
+      "estimatedMinutes": 30,
+      "files": ["src/lib/copilot/agent/autonomousExecutor.ts"]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 6,
+    "currentFeature": "credit-ledger",
+    "lastUpdated": "2026-02-26T10:00:00Z",
+    "parallelGroups": [
+      { "group": 1, "stories": ["CREDIT-001"], "description": "DB migration — unblocks everything" },
+      { "group": 2, "stories": ["CREDIT-002", "CREDIT-004", "CREDIT-005"], "description": "costTracking update + two new TS services — all can run in parallel" },
+      { "group": 3, "stories": ["CREDIT-003"], "description": "Wire edge function (needs CREDIT-002)" },
+      { "group": 4, "stories": ["CREDIT-006"], "description": "Wire autonomousExecutor (needs CREDIT-004 + CREDIT-005)" }
+    ],
+    "estimatedTotalMinutes": 115,
+    "estimatedWithParallel": 70
+  },
+
+  "notes": {
+    "existingInfrastructure": [
+      "logAICostEvent() in _shared/costTracking.ts — already used by 33 edge functions, DO NOT rebuild",
+      "credit_transactions table — immutable org-level ledger (edge fns handle deduction via deduct_credits() SQL fn)",
+      "org_credit_balance table — has balance_credits, grace_threshold_credits, lifetime_purchased, lifetime_consumed",
+      "check_ar_budget() SQL fn — AR-specific budget check pattern to follow",
+      "check-credit-alerts edge fn — Slack alert sender with cooldown tracking"
+    ],
+    "keyConstraints": [
+      "Client-side creditLedger logs estimated_cost=0 and credits_charged=0 to avoid double-counting — edge fns already deduct",
+      "creditBudgetService must fail open (return allowed:true) on DB error — never block UI on monitoring failure",
+      "All 33 existing logAICostEvent() callers must remain unchanged — sourceAgent param goes at the end",
+      "autonomousExecutor.ts is NOT the live production copilot path (copilot-autonomous edge fn is) — but is used by Skill Test Console and future direct callers",
+      "Deploy edge functions to staging with --no-verify-jwt (ES256 JWT issue)"
+    ]
+  }
+}

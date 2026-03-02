@@ -52,36 +52,48 @@ ALTER TABLE skill_links ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can read links for active skills
 DROP POLICY IF EXISTS "Anyone can read skill links" ON skill_links;
-CREATE POLICY "Anyone can read skill links"
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read skill links"
   ON skill_links FOR SELECT
   USING (EXISTS (
     SELECT 1 FROM platform_skills ps
     WHERE ps.id = parent_skill_id AND ps.is_active = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only platform admins can create skill links
 DROP POLICY IF EXISTS "Only platform admins can insert skill links" ON skill_links;
-CREATE POLICY "Only platform admins can insert skill links"
+DO $$ BEGIN
+  CREATE POLICY "Only platform admins can insert skill links"
   ON skill_links FOR INSERT
   WITH CHECK (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only platform admins can update skill links
 DROP POLICY IF EXISTS "Only platform admins can update skill links" ON skill_links;
-CREATE POLICY "Only platform admins can update skill links"
+DO $$ BEGIN
+  CREATE POLICY "Only platform admins can update skill links"
   ON skill_links FOR UPDATE
   USING (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only platform admins can delete skill links
 DROP POLICY IF EXISTS "Only platform admins can delete skill links" ON skill_links;
-CREATE POLICY "Only platform admins can delete skill links"
+DO $$ BEGIN
+  CREATE POLICY "Only platform admins can delete skill links"
   ON skill_links FOR DELETE
   USING (EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Trigger: Auto-update updated_at

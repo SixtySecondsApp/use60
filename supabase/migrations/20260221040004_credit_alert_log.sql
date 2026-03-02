@@ -37,11 +37,14 @@ ALTER TABLE credit_alert_log ENABLE ROW LEVEL SECURITY;
 
 -- Service role has unrestricted access (internal use only)
 DROP POLICY IF EXISTS "Service role has full access to credit_alert_log" ON credit_alert_log;
-CREATE POLICY "Service role has full access to credit_alert_log"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to credit_alert_log"
   ON credit_alert_log FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 4. Comments

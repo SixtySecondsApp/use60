@@ -12,7 +12,8 @@
 -- ─── INSERT ──────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "meeting_index_queue_insert" ON meeting_index_queue;
 
-CREATE POLICY "meeting_index_queue_insert" ON meeting_index_queue
+DO $$ BEGIN
+  CREATE POLICY "meeting_index_queue_insert" ON meeting_index_queue
 FOR INSERT WITH CHECK (
   "public"."is_service_role"()
   OR EXISTS (
@@ -29,11 +30,14 @@ FOR INSERT WITH CHECK (
     )
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ─── SELECT ──────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "meeting_index_queue_select" ON meeting_index_queue;
 
-CREATE POLICY "meeting_index_queue_select" ON meeting_index_queue
+DO $$ BEGIN
+  CREATE POLICY "meeting_index_queue_select" ON meeting_index_queue
 FOR SELECT USING (
   "public"."is_service_role"()
   OR "public"."is_admin_optimized"()
@@ -47,11 +51,14 @@ FOR SELECT USING (
     )
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ─── UPDATE ──────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "meeting_index_queue_update" ON meeting_index_queue;
 
-CREATE POLICY "meeting_index_queue_update" ON meeting_index_queue
+DO $$ BEGIN
+  CREATE POLICY "meeting_index_queue_update" ON meeting_index_queue
 FOR UPDATE USING (
   "public"."is_service_role"()
   OR "public"."is_admin_optimized"()
@@ -65,11 +72,14 @@ FOR UPDATE USING (
     )
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ─── DELETE ──────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "meeting_index_queue_delete" ON meeting_index_queue;
 
-CREATE POLICY "meeting_index_queue_delete" ON meeting_index_queue
+DO $$ BEGIN
+  CREATE POLICY "meeting_index_queue_delete" ON meeting_index_queue
 FOR DELETE USING (
   "public"."is_service_role"()
   OR "public"."is_admin_optimized"()
@@ -83,3 +93,5 @@ FOR DELETE USING (
     )
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

@@ -138,12 +138,16 @@ CREATE TRIGGER trg_crm_approval_queue_set_expiry
 ALTER TABLE crm_approval_queue ENABLE ROW LEVEL SECURITY;
 
 -- Service role: unrestricted (edge functions use service-role client)
-CREATE POLICY "crm_approval_queue_service_all"
+DO $$ BEGIN
+  CREATE POLICY "crm_approval_queue_service_all"
   ON crm_approval_queue FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org members: read their org's approval queue
-CREATE POLICY "crm_approval_queue_org_read"
+DO $$ BEGIN
+  CREATE POLICY "crm_approval_queue_org_read"
   ON crm_approval_queue FOR SELECT
   TO authenticated
   USING (
@@ -153,20 +157,28 @@ CREATE POLICY "crm_approval_queue_org_read"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners: approve/reject/edit any item in their org
-CREATE POLICY "crm_approval_queue_org_admin_write"
+DO $$ BEGIN
+  CREATE POLICY "crm_approval_queue_org_admin_write"
   ON crm_approval_queue FOR UPDATE
   TO authenticated
   USING (
     get_org_role(auth.uid(), org_id) IN ('admin', 'owner')
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- The owning rep can see and act on their own pending items
-CREATE POLICY "crm_approval_queue_owner_write"
+DO $$ BEGIN
+  CREATE POLICY "crm_approval_queue_owner_write"
   ON crm_approval_queue FOR UPDATE
   TO authenticated
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 6. Grants

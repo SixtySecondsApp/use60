@@ -8,6 +8,21 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
 
+/**
+ * Decode JWT payload without verification to check the role claim.
+ * Used as a fallback when string comparison against SUPABASE_SERVICE_ROLE_KEY fails.
+ */
+function isServiceRoleJwt(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return false;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role === 'service_role';
+  } catch {
+    return false;
+  }
+}
+
 export interface AuthContext {
   userId: string;
   orgId: string;
@@ -33,17 +48,17 @@ export async function extractAuthContext(req: Request): Promise<AuthContext | nu
 
   if (!supabaseUrl || !serviceRoleKey) return null;
 
-  // Service role (server-to-server, e.g. pg_net sync, RAG client)
-  // Also accepts x-edge-function-secret header for inter-function calls
-  const edgeFunctionSecret = Deno.env.get('EDGE_FUNCTION_SECRET');
-  const internalSecret = req.headers.get('x-edge-function-secret')?.trim();
-  const isEdgeFunctionCall = edgeFunctionSecret && internalSecret && internalSecret === edgeFunctionSecret;
-
-  if (token === serviceRoleKey || isEdgeFunctionCall) {
-    const requestedOrgId = req.headers.get('X-Org-Id')?.trim();
+  // Service role detection: compare token OR decode JWT role claim.
+  // On Supabase hosted functions, the gateway may re-sign the token, so
+  // string comparison against the env var can fail. Decode the payload
+  // to check the `role` claim as a reliable fallback.
+  const isServiceRole = token === serviceRoleKey || isServiceRoleJwt(token);
+  if (isServiceRole) {
+    // Allow server-to-server callers to specify org scope via X-Org-Id header
+    const serviceOrgId = req.headers.get('X-Org-Id')?.trim() || '';
     return {
       userId: '',
-      orgId: requestedOrgId || '',
+      orgId: serviceOrgId,
       isServiceRole: true,
     };
   }

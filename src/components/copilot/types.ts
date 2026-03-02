@@ -185,7 +185,8 @@ export type CopilotResponseType =
   | 'unified_task_list'
   | 'task_deliverable'
   | 'meeting_intelligence'
-  | 'meeting_context';
+  | 'meeting_context'
+  | 'landing_page_gate';
 
 export interface CopilotResponse {
   type: CopilotResponseType;

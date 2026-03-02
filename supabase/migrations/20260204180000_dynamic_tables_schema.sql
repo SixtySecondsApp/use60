@@ -82,7 +82,8 @@ ALTER TABLE public.dynamic_tables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dynamic_table_columns ENABLE ROW LEVEL SECURITY;
 
 -- dynamic_tables: Users can see tables in their org
-CREATE POLICY "Users can view org dynamic tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org dynamic tables"
   ON public.dynamic_tables
   FOR SELECT
   USING (
@@ -91,9 +92,12 @@ CREATE POLICY "Users can view org dynamic tables"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- dynamic_tables: Users can create tables in their org
-CREATE POLICY "Users can create dynamic tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can create dynamic tables"
   ON public.dynamic_tables
   FOR INSERT
   WITH CHECK (
@@ -103,21 +107,30 @@ CREATE POLICY "Users can create dynamic tables"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- dynamic_tables: Users can update their own tables
-CREATE POLICY "Users can update own dynamic tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own dynamic tables"
   ON public.dynamic_tables
   FOR UPDATE
   USING (created_by = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- dynamic_tables: Users can delete their own tables
-CREATE POLICY "Users can delete own dynamic tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own dynamic tables"
   ON public.dynamic_tables
   FOR DELETE
   USING (created_by = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- dynamic_table_columns: Inherit access from parent table
-CREATE POLICY "Users can view columns of accessible tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can view columns of accessible tables"
   ON public.dynamic_table_columns
   FOR SELECT
   USING (
@@ -129,8 +142,11 @@ CREATE POLICY "Users can view columns of accessible tables"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can manage columns of own tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can manage columns of own tables"
   ON public.dynamic_table_columns
   FOR ALL
   USING (
@@ -139,6 +155,8 @@ CREATE POLICY "Users can manage columns of own tables"
       WHERE created_by = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Service role policies (for edge functions)

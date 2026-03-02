@@ -11,9 +11,12 @@ ALTER TABLE public.autonomy_audit_log
 ALTER TABLE public.autonomy_audit_log
   DROP CONSTRAINT IF EXISTS autonomy_audit_log_change_type_check;
 
-ALTER TABLE public.autonomy_audit_log
+DO $$ BEGIN
+  ALTER TABLE public.autonomy_audit_log
   ADD CONSTRAINT autonomy_audit_log_change_type_check
   CHECK (change_type IN ('promotion', 'demotion', 'manual_change', 'cooldown_start', 'cooldown_end', 'ceiling_set'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 3. Index for cooldown lookups (demotions by org + action + recency)
 CREATE INDEX IF NOT EXISTS idx_autonomy_audit_demotion_cooldown

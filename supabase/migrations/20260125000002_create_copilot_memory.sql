@@ -64,19 +64,25 @@ CREATE INDEX IF NOT EXISTS idx_copilot_memory_conversation
 ALTER TABLE copilot_memory ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access
-CREATE POLICY "Service role has full access to copilot_memory"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to copilot_memory"
   ON copilot_memory
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can view their own memory
-CREATE POLICY "Users can view own copilot memory"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own copilot memory"
   ON copilot_memory
   FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Comment
 COMMENT ON TABLE copilot_memory IS 'Stores 7-day conversation memory for AI context continuity';

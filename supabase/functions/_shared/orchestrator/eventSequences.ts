@@ -61,6 +61,24 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['detect-intents'],
     },
+    // Wave 2b: Detect send_proposal intent and kick off proposal generation (PROP-001)
+    {
+      skill: 'detect-proposal-intent',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['detect-intents'],
+    },
+    // Wave 3: PROP-002 — Slack HITL DM for proposal approval; pauses sequence for rep action
+    {
+      skill: 'proposal-approval',
+      requires_context: ['tier1'],
+      requires_approval: true,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['detect-proposal-intent'],
+    },
     // Wave 2b: Detect verbal commitment / buying signals
     {
       skill: 'detect-verbal-commitment',
@@ -88,6 +106,15 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['extract-action-items'],
     },
+    // Wave 2b: Infer attendee stakeholder roles from transcript (REL-003)
+    {
+      skill: 'infer-attendee-roles',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['classify-call-type'],
+    },
     // Wave 3: These depend on extract/detect outputs
     {
       skill: 'suggest-next-actions',
@@ -104,6 +131,24 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       criticality: 'best-effort',
       available: true,
       depends_on: ['extract-action-items', 'detect-intents', 'extract-pricing-discussion'],
+    },
+    // Wave 3: CAL-002 — Slack HITL DM with top 3 slot options; pauses sequence for rep approval
+    {
+      skill: 'calendar-slot-approval',
+      requires_context: ['tier1'],
+      requires_approval: true,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['detect-scheduling-intent'],
+    },
+    // Wave 3.5: HITL approval gate — pauses the sequence until the rep acts on the email draft
+    {
+      skill: 'email-draft-approval',
+      requires_context: ['tier1'],
+      requires_approval: true,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['draft-followup-email'],
     },
     {
       skill: 'update-crm-from-meeting',
@@ -130,14 +175,14 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['extract-action-items'],
     },
-    // Wave 5: Slack summary after all substantive steps complete
+    // Wave 5: Slack summary after all substantive steps complete (including email-draft-approval gate)
     {
       skill: 'notify-slack-summary',
       requires_context: ['tier1'],
       requires_approval: false,
       criticality: 'best-effort',
       available: true,
-      depends_on: ['suggest-next-actions', 'draft-followup-email', 'create-tasks-from-actions', 'signal-task-processor'],
+      depends_on: ['suggest-next-actions', 'create-tasks-from-actions', 'signal-task-processor'],
     },
   ],
 

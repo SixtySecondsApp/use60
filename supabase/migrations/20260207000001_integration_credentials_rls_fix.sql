@@ -3,7 +3,8 @@
 -- so regular users got "new row violates row-level security policy" on upsert.
 
 -- Org admins/owners can insert credentials
-CREATE POLICY "Org admins can insert integration credentials"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can insert integration credentials"
   ON public.integration_credentials
   FOR INSERT
   WITH CHECK (
@@ -13,9 +14,12 @@ CREATE POLICY "Org admins can insert integration credentials"
         AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners can update credentials
-CREATE POLICY "Org admins can update integration credentials"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update integration credentials"
   ON public.integration_credentials
   FOR UPDATE
   USING (
@@ -32,9 +36,12 @@ CREATE POLICY "Org admins can update integration credentials"
         AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners can delete credentials
-CREATE POLICY "Org admins can delete integration credentials"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can delete integration credentials"
   ON public.integration_credentials
   FOR DELETE
   USING (
@@ -44,5 +51,7 @@ CREATE POLICY "Org admins can delete integration credentials"
         AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 NOTIFY pgrst, 'reload schema';

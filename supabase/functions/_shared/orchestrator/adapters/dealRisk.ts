@@ -10,6 +10,7 @@
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { getServiceClient } from './contextEnrichment.ts';
 import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
+import { logAgentAction } from '../../memory/dailyLog.ts';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
 // =============================================================================
@@ -482,6 +483,141 @@ export const scoreDealRisksAdapter: SkillAdapter = {
           totalScore += score;
         }
 
+        // --- REL-010: Graph-based risk factors from deal_contacts / get_deal_stakeholder_map ---
+        try {
+          const { data: stakeholderMap, error: smError } = await supabase.rpc(
+            'get_deal_stakeholder_map',
+            { p_deal_id: deal.deal_id }
+          );
+
+          if (!smError && stakeholderMap && Array.isArray(stakeholderMap) && stakeholderMap.length > 0) {
+            const now = Date.now();
+
+            // --- GRAPH SIGNAL 1: Champion Engagement Frequency (20pts max) ---
+            // Find champion or primary contact in the stakeholder map
+            const champion = stakeholderMap.find(
+              (s: any) => s.role === 'champion' || s.role === 'primary_contact' || s.is_primary === true
+            ) || stakeholderMap[0];
+
+            if (champion) {
+              const championName = champion.name || champion.email || 'Champion';
+              if (champion.last_active) {
+                const lastActiveDate = new Date(champion.last_active);
+                const daysSinceChampionActive = Math.floor(
+                  (now - lastActiveDate.getTime()) / (1000 * 60 * 60 * 24)
+                );
+
+                if (daysSinceChampionActive >= 21) {
+                  const score = 20;
+                  signals.push({
+                    type: 'champion_disengaged',
+                    score,
+                    max_score: 20,
+                    description: `Champion (${championName}) hasn't engaged in ${daysSinceChampionActive} days`,
+                  });
+                  totalScore += score;
+                } else if (daysSinceChampionActive >= 14) {
+                  const score = 12;
+                  signals.push({
+                    type: 'champion_disengaged',
+                    score,
+                    max_score: 20,
+                    description: `Champion (${championName}) hasn't engaged in ${daysSinceChampionActive} days`,
+                  });
+                  totalScore += score;
+                }
+              }
+            }
+
+            // --- GRAPH SIGNAL 2: Multi-threading Score (15pts max) ---
+            // Check if there is a multi_thread_score field on the map result
+            const mapSummary = stakeholderMap.find((r: any) => 'multi_thread_score' in r);
+            let multiThreadScore: number | null = null;
+            let activeContactCount = 0;
+
+            if (mapSummary && typeof mapSummary.multi_thread_score === 'number') {
+              multiThreadScore = mapSummary.multi_thread_score;
+              activeContactCount = mapSummary.active_contact_count ?? stakeholderMap.length;
+            } else {
+              // Infer from the map: count stakeholders with recent activity (< 30 days)
+              const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+              activeContactCount = stakeholderMap.filter((s: any) => {
+                if (!s.last_active) return false;
+                return new Date(s.last_active).getTime() > thirtyDaysAgo;
+              }).length;
+              multiThreadScore = stakeholderMap.length > 0
+                ? Math.min(activeContactCount / Math.max(stakeholderMap.length, 1), 1)
+                : null;
+            }
+
+            // Only flag as single-threaded when contact_count from the scan showed > 0 contacts
+            // (graceful degradation: skip if no deal_contacts data existed)
+            if (deal.contact_count > 0 && activeContactCount <= 1) {
+              // Only add graph signal if simple SIGNAL 4 (single_threaded) wasn't already triggered
+              const alreadySingleThreaded = signals.some(s => s.type === 'single_threaded');
+              if (!alreadySingleThreaded) {
+                const score = 15;
+                signals.push({
+                  type: 'single_threaded',
+                  score,
+                  max_score: 15,
+                  description: `Deal is single-threaded — only ${activeContactCount} contact${activeContactCount === 1 ? '' : 's'} engaged`,
+                });
+                totalScore += score;
+              }
+            } else if (multiThreadScore !== null && multiThreadScore < 0.5 && deal.contact_count > 1) {
+              const score = 8;
+              signals.push({
+                type: 'low_multi_thread',
+                score,
+                max_score: 15,
+                description: `Low multi-threading score (${Math.round(multiThreadScore * 100)}%) — only ${activeContactCount} of ${deal.contact_count} contacts actively engaged`,
+              });
+              totalScore += score;
+            }
+
+            // --- GRAPH SIGNAL 3: Blocker Influence (15pts max) ---
+            const blockers = stakeholderMap.filter(
+              (s: any) => s.role === 'blocker' && s.confidence_score != null && s.confidence_score >= 0.6
+            );
+
+            if (blockers.length > 0) {
+              const highConfidenceBlockers = blockers.filter(
+                (s: any) => s.confidence_score >= 0.75
+              );
+              const topBlocker = blockers.reduce((a: any, b: any) =>
+                (a.confidence_score || 0) >= (b.confidence_score || 0) ? a : b
+              );
+              const blockerName = topBlocker.name || topBlocker.email || 'Unknown blocker';
+              const blockerConfidence = Math.round((topBlocker.confidence_score || 0) * 100);
+
+              if (highConfidenceBlockers.length > 0) {
+                const score = 15;
+                signals.push({
+                  type: 'blocker_identified',
+                  score,
+                  max_score: 15,
+                  description: `High-influence blocker identified: ${blockerName} (${blockerConfidence}% confidence) — address their concerns before progressing`,
+                });
+                totalScore += score;
+              } else {
+                const score = 8;
+                signals.push({
+                  type: 'blocker_identified',
+                  score,
+                  max_score: 15,
+                  description: `Potential blocker detected: ${blockerName} (${blockerConfidence}% confidence) — monitor engagement`,
+                });
+                totalScore += score;
+              }
+            }
+          }
+        } catch (graphErr) {
+          // Graceful degradation — graph signals are optional enrichment
+          console.warn(`[score-deal-risks] REL-010: Graph risk factors skipped for deal ${deal.deal_id}:`, graphErr);
+        }
+        // --- END REL-010 ---
+
         // Cap total at 100
         const finalScore = Math.min(totalScore, 100);
 
@@ -539,6 +675,27 @@ export const scoreDealRisksAdapter: SkillAdapter = {
         `${highRiskCount} high-risk (≥60), ${mediumRiskCount} medium-risk (40-59), ` +
         `${scoredDeals.length - highRiskCount - mediumRiskCount} healthy (<40)`
       );
+
+      const topRiskDeal = scoredDeals.length > 0
+        ? scoredDeals.reduce((a, b) => (a.score > b.score ? a : b))
+        : null;
+      logAgentAction({
+        supabaseClient: getServiceClient() as any,
+        orgId,
+        userId: state.event.user_id ?? null,
+        agentType: 'deal_risk',
+        actionType: 'risk_assessed',
+        actionDetail: {
+          deals_scored: scoredDeals.length,
+          high_risk_count: highRiskCount,
+          medium_risk_count: mediumRiskCount,
+          top_risk_deal_id: topRiskDeal?.deal_id ?? null,
+          top_risk_score: topRiskDeal?.score ?? null,
+          top_risk_factors: topRiskDeal?.signals.slice(0, 3).map((s) => s.type) ?? [],
+        },
+        outcome: 'success',
+        chainId: state.event.parent_job_id ?? null,
+      });
 
       return {
         success: true,

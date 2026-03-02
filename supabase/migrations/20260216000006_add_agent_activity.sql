@@ -59,26 +59,35 @@ ALTER TABLE agent_activity ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own activity
 DROP POLICY IF EXISTS "Users can read own agent activity" ON agent_activity;
-CREATE POLICY "Users can read own agent activity"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own agent activity"
   ON agent_activity FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can mark their own activity as read
 DROP POLICY IF EXISTS "Users can mark own agent activity read" ON agent_activity;
-CREATE POLICY "Users can mark own agent activity read"
+DO $$ BEGIN
+  CREATE POLICY "Users can mark own agent activity read"
   ON agent_activity FOR UPDATE
   TO authenticated
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (for edge functions that insert activity)
 DROP POLICY IF EXISTS "Service role has full access to agent_activity" ON agent_activity;
-CREATE POLICY "Service role has full access to agent_activity"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to agent_activity"
   ON agent_activity FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Comments

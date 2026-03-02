@@ -39,7 +39,8 @@ ALTER TABLE public.ops_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ops_rule_executions ENABLE ROW LEVEL SECURITY;
 
 -- Rules: org-scoped via table
-CREATE POLICY "org_members_crud_rules"
+DO $$ BEGIN
+  CREATE POLICY "org_members_crud_rules"
   ON public.ops_rules
   FOR ALL
   USING (
@@ -50,9 +51,12 @@ CREATE POLICY "org_members_crud_rules"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Executions: org-scoped via rule → table
-CREATE POLICY "org_members_read_executions"
+DO $$ BEGIN
+  CREATE POLICY "org_members_read_executions"
   ON public.ops_rule_executions
   FOR SELECT
   USING (
@@ -64,11 +68,16 @@ CREATE POLICY "org_members_read_executions"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Allow service role insert for executions
-CREATE POLICY "service_insert_executions"
+DO $$ BEGIN
+  CREATE POLICY "service_insert_executions"
   ON public.ops_rule_executions
   FOR INSERT
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 NOTIFY pgrst, 'reload schema';

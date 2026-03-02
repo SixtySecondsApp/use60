@@ -67,7 +67,8 @@ CREATE INDEX IF NOT EXISTS idx_autonomy_action_stats_calculated
 ALTER TABLE public.autonomy_action_stats ENABLE ROW LEVEL SECURITY;
 
 -- Org members can read their own org's stats
-CREATE POLICY "autonomy_action_stats_org_read"
+DO $$ BEGIN
+  CREATE POLICY "autonomy_action_stats_org_read"
   ON public.autonomy_action_stats FOR SELECT
   TO authenticated
   USING (
@@ -77,13 +78,18 @@ CREATE POLICY "autonomy_action_stats_org_read"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role: full access (edge functions use service-role client)
-CREATE POLICY "autonomy_action_stats_service_all"
+DO $$ BEGIN
+  CREATE POLICY "autonomy_action_stats_service_all"
   ON public.autonomy_action_stats FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 4. Grants

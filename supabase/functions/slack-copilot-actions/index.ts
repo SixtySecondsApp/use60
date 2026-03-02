@@ -14,8 +14,15 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import {
+  executeSendEmail,
+  executeCreateTask,
+  executeUpdateCrm,
+} from '../_shared/slack-copilot/actionExecutor.ts';
+import { recordFeedback } from '../_shared/slack-copilot/analytics.ts';
+import { updateActiveEntities } from '../_shared/slack-copilot/threadMemory.ts';
 
 // ============================================================================
 // Types
@@ -225,6 +232,130 @@ async function processAction(
 
   if (actionId === 'meeting_prep_skip') {
     await handleMeetingPrepSkip(supabase, slackAuth, interaction, value);
+    return;
+  }
+
+  // ============================================================================
+  // CC-014: Conversational Copilot action buttons
+  // ============================================================================
+
+  const userId = slackAuth.user_id;
+  const orgId = slackAuth.organization_id;
+  const channelId = interaction.channel.id;
+  const threadTs = interaction.message?.thread_ts || interaction.message?.ts;
+
+  if (actionId === 'copilot_send_email') {
+    const payload = value as {
+      recipientEmail: string;
+      subject: string;
+      body: string;
+      dealId?: string;
+      contactId?: string;
+    };
+    const result = await executeSendEmail(supabase, userId, orgId, payload);
+    await sendSlackMessage(
+      slackAuth.access_token,
+      channelId,
+      result.success ? `Email sent to ${payload.recipientEmail}.` : `Failed to send email: ${result.error || result.message}`,
+      threadTs
+    );
+    return;
+  }
+
+  if (actionId === 'copilot_edit_email' || actionId === 'copilot_edit_draft') {
+    await sendSlackMessage(
+      slackAuth.access_token,
+      channelId,
+      "Reply in this thread with your edits and I'll regenerate the draft.",
+      threadTs
+    );
+    return;
+  }
+
+  if (actionId === 'copilot_regenerate_email') {
+    await sendSlackMessage(
+      slackAuth.access_token,
+      channelId,
+      'Regenerating... Reply with any guidance (e.g., "make it shorter", "more formal").',
+      threadTs
+    );
+    return;
+  }
+
+  if (actionId === 'copilot_skip_email' || actionId === 'copilot_dismiss') {
+    await sendSlackMessage(
+      slackAuth.access_token,
+      channelId,
+      'Skipped.',
+      threadTs
+    );
+    return;
+  }
+
+  if (actionId === 'copilot_create_task') {
+    const payload = value as {
+      title: string;
+      dueDate?: string;
+      dealId?: string;
+      contactId?: string;
+    };
+    const result = await executeCreateTask(supabase, userId, orgId, payload);
+    await sendSlackMessage(
+      slackAuth.access_token,
+      channelId,
+      result.success ? `Task created: ${payload.title}` : `Failed to create task: ${result.error || result.message}`,
+      threadTs
+    );
+    return;
+  }
+
+  if (actionId === 'copilot_update_crm') {
+    const payload = value as {
+      dealId: string;
+      field: string;
+      value: string;
+    };
+    const result = await executeUpdateCrm(supabase, userId, orgId, payload);
+    await sendSlackMessage(
+      slackAuth.access_token,
+      channelId,
+      result.success ? `Deal updated to ${payload.value}` : `Failed to update CRM: ${result.error || result.message}`,
+      threadTs
+    );
+    return;
+  }
+
+  if (
+    actionId === 'copilot_feedback_positive' ||
+    actionId === 'copilot_feedback_negative'
+  ) {
+    const feedback = actionId === 'copilot_feedback_positive' ? 'positive' : 'negative';
+    const payload = value as { query_id?: string };
+    if (payload.query_id) {
+      await recordFeedback(supabase, payload.query_id, feedback);
+    }
+    return;
+  }
+
+  if (
+    actionId === 'disambiguate_entity_deal' ||
+    actionId === 'disambiguate_entity_contact' ||
+    actionId === 'disambiguate_entity_company'
+  ) {
+    const payload = value as { id: string; name: string; type: string; threadId?: string };
+    if (payload.threadId) {
+      await updateActiveEntities(
+        payload.threadId,
+        { [`active_${payload.type}_id`]: payload.id },
+        supabase
+      );
+    }
+    await sendSlackMessage(
+      slackAuth.access_token,
+      channelId,
+      `Got it — ${payload.name}. Let me look that up...`,
+      threadTs
+    );
     return;
   }
 

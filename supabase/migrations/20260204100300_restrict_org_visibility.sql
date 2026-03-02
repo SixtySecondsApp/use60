@@ -16,7 +16,8 @@ DROP POLICY IF EXISTS "allow_public_select" ON organizations;
 DROP POLICY IF EXISTS "Allow platform admins to view all organizations" ON organizations;
 
 -- Members can view organizations they belong to
-CREATE POLICY "Members can view their organizations"
+DO $$ BEGIN
+  CREATE POLICY "Members can view their organizations"
   ON organizations
   FOR SELECT
   USING (
@@ -25,9 +26,12 @@ CREATE POLICY "Members can view their organizations"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can view all organizations (for admin panel)
-CREATE POLICY "Platform admins can view all organizations"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can view all organizations"
   ON organizations
   FOR SELECT
   USING (
@@ -35,9 +39,12 @@ CREATE POLICY "Platform admins can view all organizations"
       SELECT id FROM profiles WHERE is_platform_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users with pending join requests can see the org they requested to join
-CREATE POLICY "Users can view orgs they have pending join requests for"
+DO $$ BEGIN
+  CREATE POLICY "Users can view orgs they have pending join requests for"
   ON organizations
   FOR SELECT
   USING (
@@ -47,3 +54,5 @@ CREATE POLICY "Users can view orgs they have pending join requests for"
       AND status = 'pending'
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

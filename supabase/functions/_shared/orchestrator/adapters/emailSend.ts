@@ -19,6 +19,7 @@
  */
 
 import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
+import { logAgentAction } from '../../memory/dailyLog.ts';
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import {
   getServiceClient,
@@ -315,6 +316,22 @@ export const draftFollowupEmailAdapter: SkillAdapter = {
               };
 
               console.log(`[draft-followup-email] AI email generated — tone=${emailDraft.tone}, framework=${emailDraft.framework}`);
+
+              logAgentAction({
+                supabaseClient: supabase as any,
+                orgId: state.event.org_id,
+                userId: state.event.user_id ?? null,
+                agentType: 'meeting_ended',
+                actionType: 'draft_generated',
+                actionDetail: {
+                  subject_preview: emailDraft.subject,
+                  to: emailDraft.to,
+                  ai_generated: true,
+                  tone: emailDraft.tone,
+                },
+                outcome: 'success',
+                chainId: state.event.parent_job_id ?? null,
+              });
 
               return {
                 success: true,

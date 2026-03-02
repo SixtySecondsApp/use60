@@ -1,0 +1,71 @@
+/* Micro-animation library for landing page section components */
+
+/* Counter number animation (stats, metrics) */
+@keyframes counter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Icon bounce on hover/reveal */
+@keyframes icon-bounce {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-6px); }
+  60% { transform: translateY(-3px); }
+}
+
+/* Table row slide-in (comparison grids) */
+@keyframes table-row-slide {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Gradient shimmer (loading, hover accents) */
+@keyframes gradient-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Typing effect cursor blink */
+@keyframes typing-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Card lift on hover */
+@keyframes hover-card-lift {
+  from { transform: translateY(0) scale(1); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  to { transform: translateY(-4px) scale(1.01); box-shadow: 0 12px 24px rgba(0,0,0,0.12); }
+}
+
+/* Fade in up (general reveal) */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Staggered child entrance */
+@keyframes stagger-child {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Utility classes */
+.animate-counter { animation: counter 0.6s ease-out both; }
+.animate-icon-bounce { animation: icon-bounce 0.5s ease-out; }
+.animate-table-row-slide { animation: table-row-slide 0.4s ease-out both; }
+.animate-gradient-shimmer {
+  background-size: 200% 100%;
+  animation: gradient-shimmer 2s linear infinite;
+}
+.animate-typing-cursor { animation: typing-cursor 1s step-end infinite; }
+.animate-fade-in-up { animation: fade-in-up 0.6s ease-out both; }
+.animate-stagger-child { animation: stagger-child 0.5s ease-out both; }
+
+/* Hover card lift (apply via group-hover or direct) */
+.hover-lift {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.12);
+}

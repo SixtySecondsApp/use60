@@ -23,10 +23,46 @@
       "createdAt": "2026-02-25"
     },
     {
-      "id": "followup-email-v3",
-      "name": "Follow-Up Email v3 — Zero-Friction Delivery",
+      "id": "skill-gold-standard",
+      "name": "Skill Gold Standard Upgrade — Top 10 Sales Skills",
       "status": "complete",
-      "createdAt": "2026-02-25"
+      "consultReport": ".sixty/consult/skill-gold-standard-upgrade.md",
+      "createdAt": "2026-02-26"
+    },
+    {
+      "id": "landing-page-builder-ui",
+      "name": "Landing Page Builder — Dedicated UI Screen",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-02-27"
+    },
+    {
+      "id": "landing-builder-v2",
+      "name": "Landing Builder v2 — Agent Teams + Gemini SVGs",
+      "status": "complete",
+      "consultReport": ".sixty/consult/landing-builder-v2.md",
+      "createdAt": "2026-02-28"
+    },
+    {
+      "id": "landing-builder-progressive",
+      "name": "Landing Builder — Progressive Assembly + Chat Editor",
+      "status": "complete",
+      "prd": "docs/landing-page-builder/landing-page-builder-improvements.md",
+      "createdAt": "2026-03-01"
+    },
+    {
+      "id": "landing-builder-ux-redesign",
+      "name": "Landing Builder — UX Redesign (Preview Fix + Layout Overhaul)",
+      "status": "complete",
+      "consultReport": ".sixty/consult/landing-builder-ux-redesign.md",
+      "createdAt": "2026-03-01"
+    },
+    {
+      "id": "landing-builder-react-components",
+      "name": "Landing Builder — React Component Upgrade + Design Improvements",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-01"
     }
   ],
   "stories": [
@@ -49,9 +85,19 @@
       "files": [
         "supabase/functions/generate-follow-up/index.ts"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["FUV2-002", "FUV2-008"],
-      "parallelWith": ["FUV2-003", "FUV2-006"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FUV2-002",
+        "FUV2-008"
+      ],
+      "parallelWith": [
+        "FUV2-003",
+        "FUV2-006"
+      ],
       "startedAt": "2026-02-25T15:10:00Z",
       "completedAt": "2026-02-25T15:22:00Z"
     },
@@ -76,9 +122,17 @@
         "supabase/functions/_shared/follow-up/composer.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "FUV2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-004"],
+      "parallelWith": [
+        "FUV2-004"
+      ],
       "startedAt": "2026-02-25T16:00:00Z",
       "completedAt": "2026-02-25T16:18:00Z"
     },
@@ -101,9 +155,18 @@
       "files": [
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["FUV2-004"],
-      "parallelWith": ["FUV2-001", "FUV2-006"],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FUV2-004"
+      ],
+      "parallelWith": [
+        "FUV2-001",
+        "FUV2-006"
+      ],
       "startedAt": "2026-02-25T15:10:00Z",
       "completedAt": "2026-02-25T15:25:00Z"
     },
@@ -126,9 +189,19 @@
       "files": [
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-003"], "files": [], "schema": [] },
-      "blocks": ["FUV2-005"],
-      "parallelWith": ["FUV2-002"],
+      "dependencies": {
+        "stories": [
+          "FUV2-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FUV2-005"
+      ],
+      "parallelWith": [
+        "FUV2-002"
+      ],
       "startedAt": "2026-02-25T16:20:00Z",
       "completedAt": "2026-02-25T16:32:00Z"
     },
@@ -152,7 +225,13 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-004"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "FUV2-004"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": [],
       "startedAt": "2026-02-25T16:35:00Z",
@@ -178,9 +257,16 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-001", "FUV2-003"],
+      "parallelWith": [
+        "FUV2-001",
+        "FUV2-003"
+      ],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:42:00Z"
     },
@@ -204,9 +290,15 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-008"],
+      "parallelWith": [
+        "FUV2-008"
+      ],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:40:00Z"
     },
@@ -230,145 +322,2824 @@
         "supabase/functions/generate-follow-up/index.ts",
         "src/pages/platform/FollowUpDemoPage.tsx"
       ],
-      "dependencies": { "stories": ["FUV2-001"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "FUV2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV2-007"],
+      "parallelWith": [
+        "FUV2-007"
+      ],
       "startedAt": "2026-02-25T15:30:00Z",
       "completedAt": "2026-02-25T15:40:00Z"
     },
     {
-      "id": "FUV3-001",
-      "feature": "followup-email-v3",
-      "title": "Add 'Open in Gmail' deep link to Slack confirmation after draft creation",
-      "type": "fullstack",
+      "id": "SGS-001",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-proposal: add references/, RAG integration, competitive context",
+      "type": "skill",
       "status": "complete",
       "priority": 1,
       "acceptance": [
-        "followup_approve and followup_draft handlers in slack-interactive return draftId from google-gmail response",
-        "Confirmation message includes an 'Open in Gmail' button linking to https://mail.google.com/mail/u/0/#drafts?compose=<messageId>",
-        "generate-follow-up Slack delivery also includes a pre-emptive note: 'After approving, click Open in Gmail to send'",
-        "Link opens in browser (Slack external link button with url type)"
+        "SKILL.md rewritten with 5-layer data model: deal + company enrichment + contact intel + interaction history (RAG) + pricing strategy",
+        "references/proposal-templates.md added with templates by deal stage (discovery, evaluation, negotiation, renewal) — annotated good vs bad examples",
+        "references/pricing-strategy.md added with 3-tier anchoring framework, discount guidelines, competitive pricing context",
+        "Instructions include RAG queries: 'pricing discussions with {company}', 'objections about cost from {contact}', 'ROI mentioned in meetings'",
+        "Output contract expanded: pricing_rationale, competitive_positioning, roi_metrics, personalization_signals fields added"
       ],
-      "estimatedMinutes": 20,
-      "actualMinutes": 18,
+      "estimatedMinutes": 25,
+      "actualMinutes": 6,
       "files": [
-        "supabase/functions/slack-interactive/index.ts",
-        "supabase/functions/generate-follow-up/index.ts"
+        ".claude/skills/copilot-proposal/SKILL.md",
+        ".claude/skills/copilot-proposal/references/proposal-templates.md",
+        ".claude/skills/copilot-proposal/references/pricing-strategy.md"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV3-002", "FUV3-005"],
-      "startedAt": "2026-02-25T19:00:00Z",
-      "completedAt": "2026-02-25T19:18:00Z"
+      "parallelWith": [
+        "SGS-002",
+        "SGS-003"
+      ],
+      "startedAt": "2026-02-26T10:00:00Z",
+      "completedAt": "2026-02-26T10:06:00Z"
     },
     {
-      "id": "FUV3-002",
-      "feature": "followup-email-v3",
-      "title": "Auto-trigger follow-up generation after every meeting via slack-post-meeting",
+      "id": "SGS-002",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-followup: add references/, RAG transcript context, multi-threading",
+      "type": "skill",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: contact + deal context + meeting RAG (commitments, decisions, concerns) + activity signals + email strategy",
+        "references/followup-templates.md added with templates by type: post-discovery, post-demo, post-proposal, post-negotiation, re-engagement — with annotated examples",
+        "references/personalization-guide.md added with value-add strategies by deal stage, multi-threading guidance (when to switch contacts), send timing research",
+        "Instructions include RAG queries: 'commitments made to {contact}', 'concerns raised by {company}', 'next steps discussed'",
+        "Output contract expanded: rag_context_used, personalization_signals (min 3), multi_thread_suggestion, confidence_level fields added"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 6,
+      "files": [
+        ".claude/skills/copilot-followup/SKILL.md",
+        ".claude/skills/copilot-followup/references/followup-templates.md",
+        ".claude/skills/copilot-followup/references/personalization-guide.md"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SGS-001",
+        "SGS-003"
+      ],
+      "startedAt": "2026-02-26T10:00:00Z",
+      "completedAt": "2026-02-26T10:06:00Z"
+    },
+    {
+      "id": "SGS-003",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-battlecard: add references/, web search enrichment, win theme framework",
+      "type": "skill",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: competitor profile + deal-specific positioning + web research (news, pricing, reviews) + RAG (competitor mentions in calls) + win strategy",
+        "references/battlecard-frameworks.md added with ABD response templates, feature comparison matrix format, pricing position guide, strength confidence levels",
+        "references/competitive-intel-guide.md added with web research methodology, review site extraction patterns, how to handle when competitor is actually stronger",
+        "Instructions include RAG queries: '{competitor} mentioned in meetings with {company}', 'competitive objections from {contact}'",
+        "Output contract expanded: evidence_confidence (high/medium/low per claim), timing_guidance (when to surface which win theme), deal_specific_angles"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 7,
+      "files": [
+        ".claude/skills/copilot-battlecard/SKILL.md",
+        ".claude/skills/copilot-battlecard/references/battlecard-frameworks.md",
+        ".claude/skills/copilot-battlecard/references/competitive-intel-guide.md"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SGS-001",
+        "SGS-002"
+      ],
+      "startedAt": "2026-02-26T10:00:00Z",
+      "completedAt": "2026-02-26T10:07:00Z"
+    },
+    {
+      "id": "SGS-004",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-objection: add references/, RAG pattern matching, proof point library",
+      "type": "skill",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: objection classification + contact/deal context + RAG (how this objection was handled before) + competitive context + response strategy",
+        "references/objection-playbooks.md added with detailed playbooks for all 7 categories (Price, Timing, Competition, Status Quo, Authority, Need, Trust) — each with 3-5 response templates, bridge questions, proof points",
+        "references/response-patterns.md added with ACE framework deep dive, multi-turn handling (objection to your response), fake objection detection, when to concede vs push back",
+        "Instructions include RAG queries: 'objections from {contact}', 'how {objection_type} was resolved', 'proof points used for {industry}'",
+        "Output contract expanded: objection_category, confidence_this_is_real_concern, historical_success_rate, escalation_recommendation fields"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 8,
+      "files": [
+        ".claude/skills/copilot-objection/SKILL.md",
+        ".claude/skills/copilot-objection/references/objection-playbooks.md",
+        ".claude/skills/copilot-objection/references/proof-point-library.md"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SGS-005",
+        "SGS-006"
+      ],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:38:00Z"
+    },
+    {
+      "id": "SGS-005",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade copilot-chase: add references/, silence-duration templates, multi-channel strategy",
+      "type": "skill",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: contact + deal health/ghost risk + RAG (last real conversation context) + activity decay signals + re-engagement strategy",
+        "references/chase-templates.md added with templates by silence duration (7-day, 14-day, 21-day, 30+ day) — each with 3 tone variants and annotated examples of great vs mediocre re-engagement emails",
+        "references/reengagement-playbook.md added with multi-channel escalation, pattern detection, value-add library by deal stage",
+        "Instructions include RAG queries: 'last substantive conversation with {contact}', 'commitments {contact} made', 'topics {contact} engaged with'",
+        "Output contract expanded: silence_analysis, channel_recommendation, multi_thread_option, rag_context_used, confidence_level, escalation_path"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 6,
+      "files": [
+        ".claude/skills/copilot-chase/SKILL.md",
+        ".claude/skills/copilot-chase/references/chase-templates.md",
+        ".claude/skills/copilot-chase/references/reengagement-playbook.md"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SGS-004",
+        "SGS-006"
+      ],
+      "startedAt": "2026-02-26T10:10:00Z",
+      "completedAt": "2026-02-26T10:16:00Z"
+    },
+    {
+      "id": "SGS-006",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade sales-sequence: add RAG win/loss context, CRM history integration, adaptive timing",
+      "type": "skill",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: contact enrichment + company research + competitive angles + RAG (win/loss patterns by vertical) + sequence strategy",
+        "Existing references/ enhanced: frameworks.md updated with RAG-informed personalization section, cold-email-playbook.md updated with data-driven timing guidance",
+        "references/sequence-analytics.md added with performance benchmarks, adaptive timing logic (adjust Day X based on industry/seniority), A/B testing methodology with measurement criteria",
+        "Instructions include RAG queries: 'what worked for {industry} prospects', 'why we won/lost deals with {company_type}', 'objections from {seniority_level} contacts'",
+        "Output contract expanded: sequence_confidence, personalization_depth_score, competitive_angle_used, timing_rationale fields"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 5,
+      "files": [
+        ".claude/skills/sales-sequence/SKILL.md",
+        ".claude/skills/sales-sequence/references/win-loss-patterns.md"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SGS-004",
+        "SGS-005"
+      ],
+      "startedAt": "2026-02-26T10:10:00Z",
+      "completedAt": "2026-02-26T10:15:00Z"
+    },
+    {
+      "id": "SGS-007",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade deal-next-best-actions: add worked examples, manager escalation logic, action dependencies",
+      "type": "skill",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: deal health + contact engagement + RAG (what actions moved similar deals) + competitive threats + capacity-aware strategy",
+        "references/action-library.md enhanced with worked CVHS score calculation examples, annotated real-world action sequences showing before/after deal movement",
+        "references/stage-playbooks.md enhanced with manager escalation decision tree, action dependency chains (do X before Y), tie-breaking logic for same-score actions",
+        "Instructions include RAG queries: 'what advanced deals at {stage}', 'actions that worked for {deal_size} deals', 'engagement patterns before deals closed'",
+        "Output contract expanded: action_dependencies, escalation_recommendation, historical_success_signal, rep_preference_adjustment fields"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 9,
+      "files": [
+        ".claude/skills/deal-next-best-actions/SKILL.md",
+        ".claude/skills/deal-next-best-actions/references/action-library.md",
+        ".claude/skills/deal-next-best-actions/references/stage-playbooks.md"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SGS-008",
+        "SGS-009"
+      ],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:39:00Z"
+    },
+    {
+      "id": "SGS-008",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade lead-qualification: add web research, behavioral signals, enrichment chaining",
+      "type": "skill",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: lead data + company web research (funding, tech stack, hiring) + contact enrichment (AI Ark/Apollo) + CRM relationship history + qualification strategy",
+        "references/scoring-frameworks.md enhanced with web-research-informed scoring (tech stack match, funding stage, hiring signals), behavioral data integration guidance",
+        "references/icp-templates.md enhanced with vertical-specific ICP examples (SaaS, healthcare, fintech, agency), enrichment chaining workflow (lead → AI Ark → Apollo → score)",
+        "Instructions include web search queries: '{company} funding', '{company} tech stack', '{company} hiring' and enrichment tool calls for contact depth",
+        "Output contract expanded: enrichment_data_used, web_research_signals, tech_stack_match, funding_stage_fit, behavioral_score fields"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 8,
+      "files": [
+        ".claude/skills/lead-qualification/SKILL.md",
+        ".claude/skills/lead-qualification/references/scoring-frameworks.md",
+        ".claude/skills/lead-qualification/references/icp-templates.md"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SGS-007",
+        "SGS-009"
+      ],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:38:00Z"
+    },
+    {
+      "id": "SGS-009",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade daily-focus-planner: add historical pattern analysis, action clustering, daily rhythm",
+      "type": "skill",
+      "status": "complete",
+      "priority": 9,
+      "acceptance": [
+        "SKILL.md rewritten with 5-layer data model: pipeline health + contact staleness + RAG (what actions moved deals this week) + competitive threats + capacity-aware daily plan",
+        "references/focus-frameworks.md enhanced with Focusing Question deep dive, action clustering methodology (group calls, group emails, group research), recommended daily rhythm (morning = outbound, afternoon = follow-up)",
+        "references/capacity-guide.md enhanced with historical pattern learning (if rep ignores call actions, suggest emails), non-completion tracking, weekly trend analysis",
+        "Instructions include RAG queries: 'deals that advanced this week', 'actions completed vs skipped', 'engagement changes in last 7 days'",
+        "Output contract expanded: action_clusters, recommended_rhythm, pattern_insights, weekly_trend_comparison fields"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 8,
+      "files": [
+        ".claude/skills/daily-focus-planner/SKILL.md",
+        ".claude/skills/daily-focus-planner/references/focus-frameworks.md",
+        ".claude/skills/daily-focus-planner/references/capacity-guide.md"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SGS-007",
+        "SGS-008"
+      ],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:38:00Z"
+    },
+    {
+      "id": "SGS-010",
+      "feature": "skill-gold-standard",
+      "title": "Upgrade post-meeting-followup-pack-builder: add meeting outcome confidence, consistency checking",
+      "type": "skill",
+      "status": "complete",
+      "priority": 10,
+      "acceptance": [
+        "SKILL.md enhanced with meeting outcome confidence scoring (how certain are we about each decision/commitment extracted)",
+        "references/pack-templates.md enhanced with templates by meeting type (discovery, demo, negotiation, renewal) — currently generic",
+        "references/artifact-examples.md enhanced with cross-pack consistency checking (does this follow-up align with last meeting's follow-up?)",
+        "Instructions include RAG queries: 'previous follow-up packs for {company}', 'commitments tracking for {deal}' to ensure consistency across touchpoints",
+        "Output contract expanded: decision_confidence_scores, consistency_check (vs previous pack), stripped_down_option (when meeting lacked clear decisions)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 8,
+      "files": [
+        ".claude/skills/post-meeting-followup-pack-builder/SKILL.md",
+        ".claude/skills/post-meeting-followup-pack-builder/references/pack-templates.md",
+        ".claude/skills/post-meeting-followup-pack-builder/references/artifact-examples.md"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-02-26T10:30:00Z",
+      "completedAt": "2026-02-26T10:38:00Z"
+    },
+    {
+      "id": "SGS-011",
+      "feature": "skill-gold-standard",
+      "title": "Validate all 10 upgraded skills pass sync-skills validation and token budgets",
+      "type": "validation",
+      "status": "complete",
+      "priority": 11,
+      "acceptance": [
+        "scripts/validate-skills.ts passes for all 10 upgraded skills (valid frontmatter, required fields, token budget under 5000)",
+        "scripts/sync-skills.ts --dry-run shows all 10 skills would sync successfully with references/ loaded",
+        "Each skill's references/ files are under individual file size limits and total combined skill+refs under token budget",
+        "No broken YAML frontmatter, no missing required fields, no orphaned references",
+        "Output contracts for all 10 skills have consistent structure (status, data, references, meta fields)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 3,
+      "files": [
+        "scripts/validate-skills.ts",
+        "scripts/sync-skills.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "SGS-001",
+          "SGS-002",
+          "SGS-003",
+          "SGS-004",
+          "SGS-005",
+          "SGS-006",
+          "SGS-007",
+          "SGS-008",
+          "SGS-009",
+          "SGS-010"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SGS-012"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-02-26T11:00:00Z",
+      "completedAt": "2026-02-26T11:03:00Z"
+    },
+    {
+      "id": "SGS-012",
+      "feature": "skill-gold-standard",
+      "title": "Sync all 10 upgraded skills to organization_skills table with embeddings",
+      "type": "deployment",
+      "status": "complete",
+      "priority": 12,
+      "acceptance": [
+        "scripts/sync-skills.ts run successfully syncs all 10 skills to organization_skills table",
+        "All references/ documents loaded into skill_documents table with doc_type='reference'",
+        "Embeddings generated for all 10 updated skill descriptions via generate-embedding edge function",
+        "Semantic routing test: each skill routes correctly from natural language queries at confidence >= 0.6",
+        "Lazy-loading confirmed: autonomousExecutor loads metadata only at init, full content on first execution"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 3,
+      "files": [
+        "scripts/sync-skills.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "SGS-011"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-02-26T11:05:00Z",
+      "completedAt": "2026-02-26T11:08:00Z"
+    },
+    {
+      "id": "LPB-001",
+      "feature": "landing-page-builder-ui",
+      "title": "Create types and useLandingBuilderState hook",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "types.ts defines PhaseStatus, BuilderPhase, PhaseDeliverable, LandingBuilderState, LandingPageGateData interfaces",
+        "useLandingBuilderState hook derives phase state from CopilotMessage[] via useMemo",
+        "Phase detection heuristics identify phase completions from assistant message content and structured responses",
+        "Hook returns { phases, currentPhase, deliverables, isExpressMode, skippedPhases }",
+        "TypeScript strict compliance — no any types"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts",
+        "src/components/landing-builder/useLandingBuilderState.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-002",
+        "LPB-004",
+        "LPB-005"
+      ],
+      "parallelWith": [
+        "LPB-003"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-002",
+      "feature": "landing-page-builder-ui",
+      "title": "Create page route, wrapper component, and register routes",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "LandingPageBuilderPage.tsx implements URL-based conversation routing (mirrors CopilotPage pattern)",
+        "LandingPageBuilder.tsx wraps CopilotLayout with custom right panel and AssistantShell",
+        "lazyPages.tsx exports LandingPageBuilderPage via lazyWithRetry",
+        "App.tsx registers /landing-page-builder and /landing-page-builder/:conversationId routes with InternalRouteGuard + AppLayout",
+        "Route loads without errors and redirects base path to /:conversationId"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/LandingPageBuilderPage.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/routes/lazyPages.tsx",
+        "src/App.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LPB-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-007"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-003",
+      "feature": "landing-page-builder-ui",
+      "title": "Build LandingBuilderEmpty welcome state with starter cards",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "LandingBuilderEmpty.tsx renders welcome state with heading, pipeline diagram, and 4 starter cards",
+        "Cards: Start from scratch, I have a brief, I have style + copy, Just build it",
+        "Each card calls onStart(seedPrompt) with appropriate pre-crafted prompt",
+        "Responsive layout: 2x2 grid on desktop, stack on mobile",
+        "Uses project design system (Card, Button from shadcn/ui)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingBuilderEmpty.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-007"
+      ],
+      "parallelWith": [
+        "LPB-001"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-004",
+      "feature": "landing-page-builder-ui",
+      "title": "Build PhaseTimeline vertical stepper component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "PhaseTimeline.tsx renders 6 phases as vertical stepper with status icons (CheckCircle2, Circle, RefreshCw)",
+        "Status colors: complete=green, active=blue pulsing, pending=gray dimmed, iterating=amber",
+        "Each phase shows name and skill attribution label",
+        "Click on completed phase triggers onPhaseClick callback",
+        "Active phase has subtle animation (pulse or glow)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/PhaseTimeline.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LPB-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-005"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-005",
+      "feature": "landing-page-builder-ui",
+      "title": "Build right panel with deliverable preview and session info",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "LandingBuilderRightPanel.tsx has 3 CollapsibleSections: Phase Timeline, Current Deliverable, Session",
+        "DeliverablePreview.tsx renders condensed preview per phase type (section list, wireframe thumbnail, color swatches, headline preview, image grid, file list)",
+        "Session section shows duration and New Project button",
+        "Panel width matches CopilotRightPanel (320px, collapsible)",
+        "Integrates PhaseTimeline component in first section"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingBuilderRightPanel.tsx",
+        "src/components/landing-builder/DeliverablePreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LPB-001",
+          "LPB-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-007"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-006",
+      "feature": "landing-page-builder-ui",
+      "title": "Build ApprovalGate response component with approve/iterate/go-back actions",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "ApprovalGate.tsx renders phase completion card with Approve, Iterate, Go Back buttons",
+        "Approve sends 'Approved. Proceed to Phase {N+1}.' as user message via onActionClick",
+        "Iterate opens inline text input for feedback, sends as user message",
+        "Go Back sends 'Go back to Phase {N-1}.' as user message",
+        "After user responds, gate becomes read-only showing the chosen action"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/ApprovalGate.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-007"
+      ],
+      "parallelWith": [
+        "LPB-004",
+        "LPB-005"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-007",
+      "feature": "landing-page-builder-ui",
+      "title": "Wire AssistantShell emptyComponent prop and CopilotResponse router",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "AssistantShell.tsx accepts optional emptyComponent prop, renders it instead of CopilotEmpty when provided",
+        "CopilotResponse.tsx adds 'landing_page_gate' case routing to ApprovalGate component",
+        "types.ts in copilot/ adds LandingPageGateData to CopilotResponseType union",
+        "LandingPageBuilder passes LandingBuilderEmpty as emptyComponent to AssistantShell",
+        "Full flow verified: navigate to /landing-page-builder → empty state → send message → chat loads"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/assistant/AssistantShell.tsx",
+        "src/components/copilot/CopilotResponse.tsx",
+        "src/components/copilot/types.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LPB-002",
+          "LPB-003",
+          "LPB-005",
+          "LPB-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LPB-008"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LPB-008",
+      "feature": "landing-page-builder-ui",
+      "title": "Integration verification and end-to-end flow testing",
+      "type": "validation",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "Route loads: /landing-page-builder redirects to /landing-page-builder/{uuid} and shows custom empty state",
+        "Empty state works: clicking starter card sends seed prompt and copilot begins Phase 1",
+        "Phase detection works: right panel updates phase status as conversation progresses",
+        "Approval gate renders: Approve/Iterate/Go Back buttons appear at phase boundaries",
+        "TypeScript build passes with no errors (npx tsc --noEmit)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [],
+      "dependencies": {
+        "stories": [
+          "LPB-007"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-001",
+      "feature": "landing-builder-v2",
+      "title": "Create landing_builder_sessions table with workspace schema",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Migration creates landing_builder_sessions with id, conversation_id, user_id, org_id columns",
+        "JSONB columns: brief, strategy, copy, visuals, code (nullable)",
+        "Integer current_phase, JSONB phase_status, timestamps",
+        "RLS policies: users can CRUD own sessions, org members can read",
+        "Unique constraint on conversation_id"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260228000001_landing_builder_sessions.sql"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-003"
+      ],
+      "parallelWith": [
+        "LBV2-002"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-002",
+      "feature": "landing-builder-v2",
+      "title": "Create generate-svg edge function with Gemini 3.1 Pro",
       "type": "backend",
       "status": "complete",
       "priority": 2,
       "acceptance": [
-        "slack-post-meeting calls generate-follow-up with delivery='slack' after debrief analysis completes",
-        "Follow-up draft lands in user's Slack DM within 2 minutes of transcript indexing",
-        "Debrief message and follow-up draft are separate Slack messages (not combined)",
-        "Respects proactive notification policy (quiet hours, rate limits)",
-        "Skips auto-generation if meeting has no external attendees (internal meetings)"
+        "Edge function accepts { description, brand_colors, complexity, viewbox? }",
+        "Calls Gemini 3.1 Pro (gemini-3.1-pro-preview) with thinking budgets: simple=2048, medium=8192, complex=16384",
+        "Uses prompt templates from gemini-svg-guide.md (narrative/sequential for hero, general for sections)",
+        "Returns { svg_code, description } with validated SVG (viewBox, xmlns, no SMIL, CSS @keyframes only)",
+        "Proper error handling, CORS via getCorsHeaders(req), JWT-protected"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": 20,
+      "actualMinutes": null,
       "files": [
-        "supabase/functions/slack-post-meeting/index.ts"
+        "supabase/functions/generate-svg/index.ts"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["FUV3-001", "FUV3-005"],
-      "startedAt": "2026-02-25T19:00:00Z",
-      "completedAt": "2026-02-25T19:20:00Z"
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-007"
+      ],
+      "parallelWith": [
+        "LBV2-001"
+      ],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "FUV3-003",
-      "feature": "followup-email-v3",
-      "title": "Replace 'Edit in App' with inline Slack modal for email editing",
-      "type": "backend",
+      "id": "LBV2-003",
+      "feature": "landing-builder-v2",
+      "title": "Build workspace service (CRUD + React hooks)",
+      "type": "frontend",
       "status": "complete",
       "priority": 3,
       "acceptance": [
-        "followup_edit action opens a Slack modal (views.open) pre-filled with subject, recipient, and email body",
-        "Modal uses plain_text_input blocks: single-line for To and Subject, multi-line for Body",
-        "On submit, modal calls google-gmail?action=draft with edited content and updates the original message with confirmation",
-        "Modal title shows 'Edit Follow-Up' with Save Draft and Cancel buttons",
-        "Original Slack message buttons replaced with confirmation after modal submit"
+        "landingBuilderWorkspaceService.ts with create, get, update, updatePhaseOutput methods",
+        "useLandingBuilderWorkspace hook wraps service with React Query (auto-refetch on mutations)",
+        "TypeScript interface LandingBuilderWorkspace matching DB schema exactly",
+        "Optimistic updates for phase transitions (instant UI, async DB write)",
+        "maybeSingle() for session lookup by conversation_id"
       ],
-      "estimatedMinutes": 30,
-      "actualMinutes": 22,
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
       "files": [
-        "supabase/functions/slack-interactive/index.ts"
+        "src/lib/services/landingBuilderWorkspaceService.ts",
+        "src/lib/hooks/useLandingBuilderWorkspace.ts",
+        "src/components/landing-builder/types.ts"
       ],
-      "dependencies": { "stories": ["FUV3-001"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["FUV3-004"],
-      "startedAt": "2026-02-25T21:30:00Z",
-      "completedAt": "2026-02-25T21:52:00Z"
+      "dependencies": {
+        "stories": [
+          "LBV2-001"
+        ],
+        "files": [],
+        "schema": [
+          "landing_builder_sessions"
+        ]
+      },
+      "blocks": [
+        "LBV2-004"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "FUV3-004",
-      "feature": "followup-email-v3",
-      "title": "Add tone/length quick-adjust buttons to Slack follow-up message",
-      "type": "fullstack",
+      "id": "LBV2-004",
+      "feature": "landing-builder-v2",
+      "title": "Refactor LandingPageBuilder to use workspace state instead of refs",
+      "type": "frontend",
       "status": "complete",
       "priority": 4,
       "acceptance": [
-        "Slack follow-up message includes a second action row with 4 buttons: Shorter, More Formal, More Casual, Add Next Steps",
-        "Each button calls generate-follow-up with regenerate_guidance set to the adjustment instruction and cached_rag_context from original",
-        "Slack message is replaced (chat.update) with regenerated email content and same action buttons",
-        "A small counter shows 'v2', 'v3' etc. after each regeneration in the message header",
-        "Quick-adjust buttons are compact (style: default) to not visually compete with primary approve/draft buttons"
+        "LandingPageBuilder reads/writes phase outputs via workspace service instead of phaseOutputsRef",
+        "Phase transitions update workspace.current_phase and workspace.phase_status",
+        "builderApiTransform reads from workspace (brief, strategy, copy, visuals) instead of accumulated context",
+        "Each agent reads ONLY what it needs from workspace (token-efficient)",
+        "Session resumes correctly on page refresh (workspace loaded from DB)"
       ],
-      "estimatedMinutes": 25,
-      "actualMinutes": 20,
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
       "files": [
-        "supabase/functions/generate-follow-up/index.ts",
-        "supabase/functions/slack-interactive/index.ts"
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/useLandingBuilderState.ts"
       ],
-      "dependencies": { "stories": ["FUV3-001"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["FUV3-003"],
-      "startedAt": "2026-02-25T21:30:00Z",
-      "completedAt": "2026-02-25T21:50:00Z"
+      "dependencies": {
+        "stories": [
+          "LBV2-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-005",
+        "LBV2-006",
+        "LBV2-007",
+        "LBV2-008"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
     },
     {
-      "id": "FUV3-005",
-      "feature": "followup-email-v3",
-      "title": "Create Gmail draft as reply-in-thread when prior thread exists with recipient",
+      "id": "LBV2-005",
+      "feature": "landing-builder-v2",
+      "title": "Implement Strategist agent: brief enrichment + company research",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "Strategist system prompt focuses on landing page strategy, conversion psychology, competitor analysis",
+        "After DiscoveryWizard (5Q), Strategist asks 2-3 targeted follow-ups based on gaps in the brief",
+        "Uses gemini_research tool to analyze competitor websites and market positioning",
+        "Writes enriched brief + strategy + section_list to workspace",
+        "Agent badge shows '🎯 Strategist' on its messages in the chat"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/strategistAgent.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/DiscoveryWizard.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LBV2-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-006"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-006",
+      "feature": "landing-builder-v2",
+      "title": "Implement Copywriter agent: A/B copy per section from workspace",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "Copywriter system prompt: direct-response copy expert, PAS/AIDA frameworks, specific to business",
+        "Reads strategy + section_list from workspace (NOT full accumulated context)",
+        "Produces A/B copy per section in exact markdown format for CopyPicker parsing",
+        "Writes selected copy back to workspace.copy after CopyPicker confirmation",
+        "Agent badge shows '✍️ Copywriter' on its messages"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/copywriterAgent.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LBV2-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-007"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-007",
+      "feature": "landing-builder-v2",
+      "title": "Implement Visual Artist agent with parallel sub-tasks",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "Visual Artist orchestrates 3 parallel tasks: (1) Claude palette/typography/icons, (2) Gemini SVGs, (3) Nano Banana hero",
+        "Gemini SVG generation calls generate-svg edge function with rich prompts (isometric, detailed, brand-colored)",
+        "Generates 2-3 SVGs per section using workspace.strategy.section_list",
+        "Nano Banana hero generation uses parseVisualsForImage with workspace brand colors",
+        "All visual assets written to workspace.visuals; agent badge shows '🎨 Visual Artist'"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/visualArtistAgent.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/lib/services/geminiSvgService.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "LBV2-002",
+          "LBV2-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-008"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-008",
+      "feature": "landing-builder-v2",
+      "title": "Implement Builder agent: reads full workspace, outputs production code",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "Builder system prompt: production React + Tailwind developer, never paraphrases approved content",
+        "Reads ALL workspace fields (brief, strategy, copy, visuals) to compose the final component",
+        "Embeds approved SVGs directly, uses exact hex colors, exact copy text, approved typography",
+        "Code renders in LandingCodePreview iframe (existing component)",
+        "Agent badge shows '⚙️ Builder' on its messages"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/builderAgent.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LBV2-007"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-009"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-009",
+      "feature": "landing-builder-v2",
+      "title": "Add agent badges to ChatMessage and PhaseTimeline",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 9,
+      "acceptance": [
+        "ChatMessage renders agent role badge (Strategist/Copywriter/Visual Artist/Builder) on assistant messages",
+        "Badge derived from message metadata (agentRole field) set by each agent",
+        "PhaseTimeline shows active agent name next to current phase",
+        "Visuals phase shows parallel progress: palette done, SVGs 2/3, hero generating",
+        "Badges are small, non-intrusive — role name in muted text above the message"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/copilot/ChatMessage.tsx",
+        "src/components/landing-builder/PhaseTimeline.tsx",
+        "src/components/landing-builder/LandingBuilderRightPanel.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LBV2-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-010",
+        "LBV2-011"
+      ],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-010",
+      "feature": "landing-builder-v2",
+      "title": "Reduce DiscoveryWizard to 5 questions + strategist probing",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "acceptance": [
+        "DiscoveryWizard reduced from 7 to 5 questions (remove tone and sections — strategist infers these)",
+        "After wizard submit, Strategist agent asks 2-3 targeted follow-ups in the chat",
+        "Follow-ups are based on gaps: missing competitors, unclear audience, vague outcome",
+        "User responds in chat, Strategist incorporates answers into enriched brief",
+        "Strategist then produces strategy without further user input"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/DiscoveryWizard.tsx",
+        "src/components/landing-builder/agents/strategistAgent.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "LBV2-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-013"
+      ],
+      "parallelWith": [
+        "LBV2-011"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-011",
+      "feature": "landing-builder-v2",
+      "title": "Integrate Gemini SVG previews into visuals phase UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "acceptance": [
+        "Visuals phase shows SVG gallery: each section's SVG rendered via SvgPreview component",
+        "SVGs are labelled by section name (Hero accent, Features divider, CTA background)",
+        "User can approve/reject individual SVGs (rejected ones get regenerated)",
+        "Approved SVGs stored in workspace.visuals.svg_assets array",
+        "Loading state shows per-SVG progress (Gemini takes 10-20s per SVG)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/SvgGallery.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LBV2-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-013"
+      ],
+      "parallelWith": [
+        "LBV2-010"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-012",
+      "feature": "landing-builder-v2",
+      "title": "Create geminiSvgService for frontend Gemini SVG calls",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 12,
+      "acceptance": [
+        "geminiSvgService.ts wraps generate-svg edge function with typed request/response",
+        "Supports batch generation: generateSvgBatch(descriptions[]) calls edge function in parallel",
+        "Validates returned SVG (has viewBox, has xmlns, no script tags) before returning",
+        "Handles errors gracefully: returns null + toast for failed generations",
+        "Uses supabase.functions.invoke for auth (inherits user JWT)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/lib/services/geminiSvgService.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "LBV2-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LBV2-007"
+      ],
+      "parallelWith": [
+        "LBV2-003"
+      ],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "LBV2-013",
+      "feature": "landing-builder-v2",
+      "title": "End-to-end integration test: full pipeline with agent team",
+      "type": "validation",
+      "status": "complete",
+      "priority": 13,
+      "acceptance": [
+        "Full flow: DiscoveryWizard → Strategist follow-ups → Strategy approval → Copywriter → CopyPicker → Visual Artist (parallel) → Builder",
+        "Agent badges appear correctly on each phase's messages",
+        "Workspace persists across page refreshes (session resumes)",
+        "Gemini SVGs render in SvgPreview with animation",
+        "Final code renders in LandingCodePreview iframe with embedded SVGs"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [],
+      "dependencies": {
+        "stories": [
+          "LBV2-010",
+          "LBV2-011"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EDIT-001",
+      "feature": "landing-builder-progressive",
+      "title": "Add sections JSONB column to landing_builder_sessions",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Migration adds sections jsonb column with DEFAULT '[]'::jsonb to landing_builder_sessions",
+        "Migration runs without error on dev environment",
+        "Existing sessions retain all current data (non-destructive)",
+        "Column is queryable via Supabase client"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260301000001_add_landing_sections.sql"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "landing_builder_sessions"
+        ]
+      },
+      "blocks": [
+        "EDIT-002"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-002",
+      "feature": "landing-builder-progressive",
+      "title": "Add LandingSection types and workspace sections CRUD",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "LandingSection, AssetStatus, SectionType, LayoutVariant interfaces exported from types.ts",
+        "LandingBuilderWorkspace type includes sections field",
+        "workspaceService has updateSections(), updateSection(), updateSectionAsset() methods",
+        "useLandingBuilderWorkspace hook exposes updateSections, updateSection, updateSectionAsset mutations",
+        "Workspace select queries include sections column"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts",
+        "src/lib/services/landingBuilderWorkspaceService.ts",
+        "src/lib/hooks/useLandingBuilderWorkspace.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-001"
+        ],
+        "files": [],
+        "schema": [
+          "landing_builder_sessions"
+        ]
+      },
+      "blocks": [
+        "EDIT-003",
+        "EDIT-004",
+        "EDIT-007",
+        "EDIT-012"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-003",
+      "feature": "landing-builder-progressive",
+      "title": "Build deterministic section renderer (16 templates)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "renderSectionsToCode() pure function takes LandingSection[] + BrandConfig, returns React+Tailwind string",
+        "8 section types each have 2 layout variants (16 templates total)",
+        "renderImageSlot() renders shimmer for generating, img for complete, empty for idle",
+        "renderSvgSlot() renders placeholder for generating, inline SVG for complete",
+        "Output renders correctly in existing LandingCodePreview iframe sandbox",
+        "Templates are responsive (mobile-first with Tailwind breakpoints)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sectionRenderer.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-006",
+        "EDIT-014"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-004",
+      "feature": "landing-builder-progressive",
+      "title": "Build assembly orchestrator",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "startAssembly() parses workspace copy+strategy into LandingSection[] with brand colours",
+        "Sections created with image_status/svg_status = idle, copy slotted from approved copy",
+        "Layout variants selected per section based on content characteristics",
+        "onSectionUpdate callback fires for each section change",
+        "regenerateAsset() re-queues a specific asset with optional prompt override",
+        "cancelAll() stops pending generations"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assemblyOrchestrator.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-005"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-005",
+      "feature": "landing-builder-progressive",
+      "title": "Build asset generation queue with retry strategy",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "AssetGenerationQueue processes items serially via priority (hero image first)",
+        "User-requested regenerations jump to front of queue",
+        "On failure: auto-retries with simplified prompt (strips complexity keywords)",
+        "On second failure: falls back to static placeholder, fires onError callback",
+        "Queue integrates with existing nanoBananaService and geminiSvgService",
+        "promptSimplifier strips intricate/complex/multi-step/particle keywords"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assetQueue.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-004"
+        ],
+        "files": [
+          "src/lib/services/nanoBananaService.ts",
+          "src/lib/services/geminiSvgService.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-006"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-006",
+      "feature": "landing-builder-progressive",
+      "title": "Build progressive preview component with choreography",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "ProgressivePreview wraps LandingCodePreview iframe with section overlays",
+        "Asset status badges render per section (spinner for generating, checkmark for complete)",
+        "Shimmer → image/SVG crossfade at 300ms ease-out on asset completion",
+        "Section highlight pulse (800ms green ring) on completion",
+        "Scroll-to-section when highlightSectionId prop changes",
+        "Device width toggles (mobile/tablet/desktop) work correctly"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/ProgressivePreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-003",
+          "EDIT-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-008"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-007",
+      "feature": "landing-builder-progressive",
+      "title": "Build section edit agent with clarify-first philosophy",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "Agent prompt receives current sections array + user message, returns JSON ops + message + highlight_section_id",
+        "Supports all 8 operation types: update_copy, update_layout, update_style, regenerate_asset, reorder, remove, add",
+        "Ambiguous requests return clarifying questions with specific options (not open-ended)",
+        "Uses Haiku for intent classification, Sonnet only for new copy generation",
+        "Agent response includes highlight_section_id for preview scroll targeting",
+        "Credit-metered through creditLedger"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/sectionEditAgent.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-008"
+      ],
+      "parallelWith": [
+        "EDIT-004"
+      ],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-008",
+      "feature": "landing-builder-progressive",
+      "title": "Wire preview-first layout with floating chat panel",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "After copy approval, layout collapses right panel and chat sidebar entirely",
+        "Preview renders full-width with EditorToolbar at top",
+        "Floating chat panel anchored bottom-left (~380px wide, max 50% viewport height)",
+        "Chat panel collapsible to just input bar, draggable height handle",
+        "Semi-transparent background on chat panel so preview shows through",
+        "Full conversation history (strategy/copy/edits) scrollable in chat panel",
+        "On screens < 1024px, chat becomes bottom sheet with swipe gestures"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-006",
+          "EDIT-007"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-012"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-012",
+      "feature": "landing-builder-progressive",
+      "title": "Restructure pipeline to 3 phases (Strategy, Copy, Assembly)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 9,
+      "acceptance": [
+        "PIPELINE_PHASES updated to 3 phases: Strategy, Copy, Assembly",
+        "Phase numbering updated throughout types.ts and dependent code",
+        "LandingBuilderRightPanel collapses/hides during assembly phase",
+        "After copy approval: sections parsed, assembly orchestrator starts, layout transitions to preview-first",
+        "PhaseTimeline shows 3 phases (not 4)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/LandingBuilderRightPanel.tsx",
+        "src/components/landing-builder/PhaseTimeline.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-013"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-013",
+      "feature": "landing-builder-progressive",
+      "title": "Remove standalone Visuals phase from pipeline",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "acceptance": [
+        "Visuals phase enum value removed from types",
+        "Auto-invocation of visual artist agent removed from LandingPageBuilder",
+        "SVG batch generation and hero image generation removed from chat flow",
+        "visualArtistAgent.ts kept but no longer auto-invoked (asset generation via assetQueue)",
+        "HeroImageGenerator and SvgGallery no longer triggered by phase transition"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/useLandingBuilderState.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-012"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-014"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-014",
+      "feature": "landing-builder-progressive",
+      "title": "Update builder agent to output sections JSON (not code)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "acceptance": [
+        "Builder agent system prompt updated to output LandingSection[] JSON",
+        "Agent reads workspace (strategy + copy + brand config) and produces structured sections",
+        "Each section has copy slotted, layout_variant selected, brand colours applied",
+        "All sections have image_status: idle and svg_status: idle",
+        "No code generation in agent — sectionRenderer handles code output",
+        "Agent output is parseable as valid JSON array"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/builderAgent.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-003",
+          "EDIT-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-009",
+      "feature": "landing-builder-progressive",
+      "title": "Build editor toolbar with device toggles and export buttons",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 12,
+      "acceptance": [
+        "EditorToolbar renders at top of preview panel",
+        "Device width toggles (mobile 375px, tablet 768px, desktop 100%)",
+        "Edit Mode toggle switches between preview-first and 3-panel editor",
+        "Copy Code button triggers export polish agent with loading state",
+        "Download HTML button triggers export polish agent + file download",
+        "Back to Chat button collapses editor and returns to floating chat layout"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/EditorToolbar.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EDIT-010",
+        "EDIT-011",
+        "EDIT-015"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-010",
+      "feature": "landing-builder-progressive",
+      "title": "Build section list panel with drag-and-drop",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 13,
+      "acceptance": [
+        "SectionListPanel renders with @dnd-kit/sortable for reorder",
+        "Each row shows: drag handle, Lucide section icon, section name, asset status badges",
+        "Click to select populates properties panel",
+        "Drag-drop reorder updates sections array and re-renders preview instantly",
+        "Selected section highlighted in both list and preview"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/SectionListPanel.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EDIT-011"
+      ],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-011",
+      "feature": "landing-builder-progressive",
+      "title": "Build properties panel for direct section editing",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 14,
+      "acceptance": [
+        "PropertiesPanel shows copy fields (headline, subhead, body, CTA) as textareas with live preview",
+        "Layout variant radio group shows available variants for selected section type",
+        "Image controls: Generate/Regenerate/Upload buttons, current image preview",
+        "SVG controls: Generate/Remove buttons, SvgPreview component",
+        "Style controls: background/text colour pickers with brand defaults",
+        "All changes save to sections array and preview re-renders instantly"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/PropertiesPanel.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EDIT-010"
+      ],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-015",
+      "feature": "landing-builder-progressive",
+      "title": "Build export polish agent with caching",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 15,
+      "acceptance": [
+        "exportPolishAgent takes LandingSection[] + BrandConfig + workspace context, returns polished React+Tailwind code",
+        "Uses Sonnet to generate production code with custom animations, refined spacing, responsive breakpoints",
+        "Export result cached in workspace.polished_code — instant on re-export until sections change",
+        "Any section edit invalidates the cache (next export triggers fresh AI pass)",
+        "Copy Code: clipboard contains polished component, toast confirms",
+        "Download HTML: standalone file with CDN dependencies downloads correctly",
+        "Credit-metered through creditLedger"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/exportPolishAgent.ts",
+        "src/components/landing-builder/EditorToolbar.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EDIT-016"
+      ],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "EDIT-016",
+      "feature": "landing-builder-progressive",
+      "title": "Add session recovery for assembly phase",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 16,
+      "acceptance": [
+        "On workspace load with sections data: skip Strategy/Copy, render sections into preview immediately",
+        "Sections with generating status reset to idle on load (interrupted generation)",
+        "Chat shows resume prompt: Welcome back, N sections, M need images, continue or edit?",
+        "User says continue → asset queue restarts for idle/failed sections",
+        "User can jump straight to editing without regenerating"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "EDIT-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EDIT-015"
+      ],
+      "startedAt": "2026-03-01T10:00:00Z",
+      "completedAt": "2026-03-01T12:00:00Z"
+    },
+    {
+      "id": "LB-UX-001",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Fix preview render bug — detect raw HTML vs React JSX",
+      "type": "bugfix",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "AssemblyPreview renders sectionRenderer HTML without 'Script error'",
+        "Raw HTML (<!DOCTYPE) bypasses Babel/React pipeline, renders directly as srcDoc",
+        "React JSX code still works through existing Babel pipeline",
+        "Preview/Code tab toggle works for both code types"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/landing-builder/LandingCodePreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LB-UX-002",
+        "LB-UX-003",
+        "LB-UX-004",
+        "LB-UX-005"
+      ],
+      "parallelWith": [],
+      "notes": "Root cause: sectionRenderer outputs <!DOCTYPE html> but LandingCodePreview always runs Babel/React pipeline. Fix: detect isRawHtml and render directly as srcDoc.",
+      "startedAt": "2026-03-01T17:26:11.677Z",
+      "completedAt": "2026-03-01T17:26:11.677Z",
+      "actualMinutes": 5
+    },
+    {
+      "id": "LB-UX-002",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Wire right panel — section list + properties editor in assembly mode",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "New LandingEditorPanel.tsx wraps SectionListPanel (top) + PropertiesPanel (bottom)",
+        "Clicking a section opens its properties in the panel below",
+        "Drag-drop reorder updates assemblySections state",
+        "Property edits update assemblySections and re-render preview"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/landing-builder/LandingEditorPanel.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LB-UX-001"
+        ],
+        "files": [
+          "src/components/landing-builder/SectionListPanel.tsx",
+          "src/components/landing-builder/PropertiesPanel.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "LB-UX-004"
+      ],
+      "parallelWith": [
+        "LB-UX-003"
+      ],
+      "notes": "SectionListPanel (258 lines) and PropertiesPanel (466 lines) already exist. This is a wiring task.",
+      "startedAt": "2026-03-01T17:28:09.915Z",
+      "completedAt": "2026-03-01T17:28:09.915Z",
+      "actualMinutes": 10
+    },
+    {
+      "id": "LB-UX-003",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Build FloatingChatBar — centered bottom, collapsible history",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "FloatingChatBar.tsx renders centered at viewport bottom (max-w-[600px])",
+        "Chat input always visible",
+        "Chat history collapsed by default, expands upward on toggle",
+        "Quick action buttons render below input"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/landing-builder/FloatingChatBar.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LB-UX-001"
+        ],
+        "files": [
+          "src/components/assistant/AssistantShell.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "LB-UX-004"
+      ],
+      "parallelWith": [
+        "LB-UX-002"
+      ],
+      "notes": "Extract AssistantShell from current floating panel. New component wraps it with collapse/expand, centered positioning.",
+      "startedAt": "2026-03-01T17:28:09.915Z",
+      "completedAt": "2026-03-01T17:28:09.915Z",
+      "actualMinutes": 12
+    },
+    {
+      "id": "LB-UX-004",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Assemble hero layout — preview fills space, right panel, chat overlay",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Assembly mode: preview (flex-1) + right panel (w-80) side by side",
+        "FloatingChatBar absolute overlay at bottom center z-20",
+        "Old floating chat panel code (bottom-left 380x480) removed",
+        "Preview has bottom padding to avoid chat bar overlap"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LB-UX-002",
+          "LB-UX-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LB-UX-005"
+      ],
+      "parallelWith": [],
+      "notes": "Replace LandingPageBuilder lines 784-852 with new layout: flex row + chat overlay.",
+      "startedAt": "2026-03-01T17:30:35.419Z",
+      "completedAt": "2026-03-01T17:30:35.419Z",
+      "actualMinutes": 10
+    },
+    {
+      "id": "LB-UX-005",
+      "feature": "landing-builder-ux-redesign",
+      "title": "Polish — transitions, section click wiring, progress indicator",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "Chat bar expand/collapse animates smoothly (300ms ease-in-out)",
+        "Clicking section badge in preview selects that section in right panel editor",
+        "Progress indicator (8/12 assets) shows cleanly in right panel header",
+        "Section highlight pulse works when assets complete"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/landing-builder/FloatingChatBar.tsx",
+        "src/components/landing-builder/LandingEditorPanel.tsx",
+        "src/components/landing-builder/AssemblyPreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LB-UX-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "notes": "Final pass: smooth animations, wire section click → editor panel selection, clean progress badges.",
+      "startedAt": "2026-03-01T17:33:26.961Z",
+      "completedAt": "2026-03-01T17:33:26.961Z",
+      "actualMinutes": 8
+    },
+    {
+      "id": "RC-001",
+      "feature": "landing-builder-react-components",
+      "title": "Extend type system with new section types, content blocks, asset strategy, dividers, and icons",
+      "type": "types",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "SectionType union includes pricing | comparison | stats | how-it-works",
+        "LandingSection has optional content_blocks, asset_strategy, divider, icon_name fields",
+        "ContentBlock type defined with type (stat | bullet | quote | step), label, value, icon fields",
+        "AssetStrategy type: image | svg | icon | none",
+        "SectionDividerType type: wave | diagonal | curve | mesh | none",
+        "LayoutVariant includes metrics-bar | case-study | review-badges"
+      ],
+      "estimatedMinutes": 12,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/types.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-002",
+        "RC-004",
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012",
+        "RC-017",
+        "RC-019",
+        "RC-023",
+        "RC-025",
+        "RC-026"
+      ],
+      "parallelWith": [
+        "RC-003",
+        "RC-005"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-002",
+      "feature": "landing-builder-react-components",
+      "title": "Create shared section subcomponents (SectionWrapper, CtaButton, AssetSlot, ContentBlockRenderer, SectionDivider)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "SectionWrapper renders <section> with brand styles, data-section-id, scroll-reveal class, click handler",
+        "CtaButton renders gradient button with hover lift animation",
+        "AssetSlot renders image/SVG/Lucide icon/nothing based on asset_strategy",
+        "ContentBlockRenderer renders ContentBlock[] or falls back to flat copy string",
+        "SectionDivider renders wave/diagonal/curve/mesh SVG between sections with optional animation",
+        "All components exported from sections/shared/index.ts barrel"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/shared/SectionWrapper.tsx",
+        "src/components/landing-builder/sections/shared/CtaButton.tsx",
+        "src/components/landing-builder/sections/shared/AssetSlot.tsx",
+        "src/components/landing-builder/sections/shared/ContentBlockRenderer.tsx",
+        "src/components/landing-builder/sections/shared/SectionDivider.tsx",
+        "src/components/landing-builder/sections/shared/MicroCopy.tsx",
+        "src/components/landing-builder/sections/shared/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-004"
+      ],
+      "parallelWith": [
+        "RC-003"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-003",
+      "feature": "landing-builder-react-components",
+      "title": "Create micro-animation CSS library for section components",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "animations.css contains counter, icon-bounce, table-row-slide, gradient-shimmer, typing-effect, hover-card-lift, fade-in-up, stagger-child keyframes",
+        "All animations are CSS-only (no JS runtime)",
+        "File size under 3KB"
+      ],
+      "estimatedMinutes": 12,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/shared/animations.css"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-013"
+      ],
+      "parallelWith": [
+        "RC-001",
+        "RC-002",
+        "RC-005"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-004",
+      "feature": "landing-builder-react-components",
+      "title": "Create component registry with getSectionComponent(type, variant) lookup and fallbacks",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "getSectionComponent(type, variant) returns the correct React component",
+        "Per-type fallback when exact variant not found",
+        "Global fallback to HeroCentered for completely unknown types",
+        "Registry exported from sections/index.ts barrel"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/registry.ts",
+        "src/components/landing-builder/sections/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012",
+        "RC-013"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-005",
+      "feature": "landing-builder-react-components",
+      "title": "Install react-frame-component package",
+      "type": "config",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "react-frame-component added to package.json dependencies",
+        "npm install succeeds without errors"
+      ],
+      "estimatedMinutes": 3,
+      "actualMinutes": null,
+      "files": [
+        "package.json"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-013"
+      ],
+      "parallelWith": [
+        "RC-001",
+        "RC-002",
+        "RC-003"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-006",
+      "feature": "landing-builder-react-components",
+      "title": "Create Hero section React components (HeroCentered, HeroSplitLeft, HeroGradient)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "HeroCentered, HeroSplitLeft, HeroGradient components render identically to HTML templates",
+        "Use shared SectionWrapper, CtaButton, AssetSlot, MicroCopy",
+        "Orb animations and gradient backgrounds work correctly",
+        "Components registered in registry.ts"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/hero/HeroCentered.tsx",
+        "src/components/landing-builder/sections/hero/HeroSplitLeft.tsx",
+        "src/components/landing-builder/sections/hero/HeroGradient.tsx",
+        "src/components/landing-builder/sections/hero/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-013"
+      ],
+      "parallelWith": [
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-007",
+      "feature": "landing-builder-react-components",
+      "title": "Create Problem section React components (3 variants)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "ProblemCentered, ProblemSplitRight, ProblemSplitLeft render matching HTML templates",
+        "Use shared subcomponents",
+        "Components registered in registry.ts"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/problem/ProblemCentered.tsx",
+        "src/components/landing-builder/sections/problem/ProblemSplitRight.tsx",
+        "src/components/landing-builder/sections/problem/ProblemSplitLeft.tsx",
+        "src/components/landing-builder/sections/problem/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-008",
+      "feature": "landing-builder-react-components",
+      "title": "Create Solution section React components (3 variants)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "SolutionSplitLeft, SolutionSplitRight, SolutionCentered render matching HTML templates",
+        "Numbered steps in centered variant work correctly",
+        "Components registered in registry.ts"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/solution/SolutionSplitLeft.tsx",
+        "src/components/landing-builder/sections/solution/SolutionSplitRight.tsx",
+        "src/components/landing-builder/sections/solution/SolutionCentered.tsx",
+        "src/components/landing-builder/sections/solution/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-009",
+        "RC-010",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-009",
+      "feature": "landing-builder-react-components",
+      "title": "Create Features section React components (CardsGrid, Centered, Alternating)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "FeaturesCardsGrid, FeaturesCentered, FeaturesAlternating render matching HTML templates",
+        "Staggered card animations work",
+        "Components registered in registry.ts"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/features/FeaturesCardsGrid.tsx",
+        "src/components/landing-builder/sections/features/FeaturesCentered.tsx",
+        "src/components/landing-builder/sections/features/FeaturesAlternating.tsx",
+        "src/components/landing-builder/sections/features/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-010",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-010",
+      "feature": "landing-builder-react-components",
+      "title": "Create Social Proof section React components (3 existing + 3 new: MetricsBar, CaseStudy, ReviewBadges)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "SocialProofCentered, SocialProofCardsGrid, SocialProofLogoBanner render matching HTML templates",
+        "MetricsBar variant shows animated counter stats",
+        "CaseStudy variant shows logo + quote + attribution",
+        "ReviewBadges variant shows star ratings with platform badges"
+      ],
+      "estimatedMinutes": 28,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/social-proof/SocialProofCentered.tsx",
+        "src/components/landing-builder/sections/social-proof/SocialProofCardsGrid.tsx",
+        "src/components/landing-builder/sections/social-proof/SocialProofLogoBanner.tsx",
+        "src/components/landing-builder/sections/social-proof/MetricsBar.tsx",
+        "src/components/landing-builder/sections/social-proof/CaseStudy.tsx",
+        "src/components/landing-builder/sections/social-proof/ReviewBadges.tsx",
+        "src/components/landing-builder/sections/social-proof/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-011",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-011",
+      "feature": "landing-builder-react-components",
+      "title": "Create CTA, FAQ, and Footer section React components (9 variants total)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "CTA: CtaCentered, CtaSplitLeft, CtaGradient",
+        "FAQ: FaqCentered, FaqSplitLeft, FaqCardsGrid with working <details> toggle",
+        "Footer: FooterCentered, FooterCardsGrid, FooterSplitLeft",
+        "All 9 variants registered in registry.ts"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/cta/index.ts",
+        "src/components/landing-builder/sections/faq/index.ts",
+        "src/components/landing-builder/sections/footer/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-012"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-012",
+      "feature": "landing-builder-react-components",
+      "title": "Create new section type components (Pricing, Comparison, Stats, HowItWorks)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "Pricing: PricingCentered with tiered cards (Free/Pro/Enterprise), highlight on recommended tier",
+        "Comparison: ComparisonGrid with check/X feature matrix table",
+        "Stats: StatsCentered with animated counter numbers + labels",
+        "HowItWorks: StepsCentered with numbered vertical timeline",
+        "All registered in registry.ts"
+      ],
+      "estimatedMinutes": 28,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sections/pricing/index.ts",
+        "src/components/landing-builder/sections/comparison/index.ts",
+        "src/components/landing-builder/sections/stats/index.ts",
+        "src/components/landing-builder/sections/how-it-works/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-006",
+        "RC-007",
+        "RC-008",
+        "RC-009",
+        "RC-010",
+        "RC-011"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-013",
+      "feature": "landing-builder-react-components",
+      "title": "Create ReactSectionRenderer with react-frame-component iframe and brandStyles utility",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "ReactSectionRenderer maps sorted sections through registry, renders inside <Frame> component",
+        "Tailwind CDN, Google Fonts link, and animations.css injected into iframe <head>",
+        "SectionDivider inserted between sections with appropriate types",
+        "brandStyles.ts extracts CSS generation (fonts, base styles, keyframes) from sectionRenderer.ts for reuse",
+        "Click handler on sections calls onSectionClick prop"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/ReactSectionRenderer.tsx",
+        "src/components/landing-builder/brandStyles.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-003",
+          "RC-004",
+          "RC-005",
+          "RC-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-014",
+        "RC-015"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-014",
+      "feature": "landing-builder-react-components",
+      "title": "Update ProgressivePreview to use ReactSectionRenderer instead of srcDoc iframe",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "ProgressivePreview renders <ReactSectionRenderer> instead of raw HTML srcDoc",
+        "Device width toggles (mobile/tablet/desktop) still work",
+        "Status badges, completion highlights, AI polish toggle preserved",
+        "Section click handler wired through to parent"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/ProgressivePreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-024"
+      ],
+      "parallelWith": [
+        "RC-015"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-015",
+      "feature": "landing-builder-react-components",
+      "title": "Update AssemblyPreview to use ReactSectionRenderer",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "AssemblyPreview renders <ReactSectionRenderer> instead of LandingCodePreview + srcDoc",
+        "Device width toggles and progress stats preserved",
+        "Section status badges overlay still works"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/AssemblyPreview.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-013"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-024"
+      ],
+      "parallelWith": [
+        "RC-014"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-016",
+      "feature": "landing-builder-react-components",
+      "title": "Add coexistence header to sectionRenderer.ts — keep as HTML export fallback",
+      "type": "docs",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "sectionRenderer.ts has header comment noting React renderer is primary, this file kept for HTML export + AI polish",
+        "No functional changes to existing templates"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sectionRenderer.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-021"
+      ],
+      "parallelWith": [
+        "RC-013",
+        "RC-014",
+        "RC-015"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-017",
+      "feature": "landing-builder-react-components",
+      "title": "Add smart asset strategy assignment to assemblyOrchestrator",
       "type": "backend",
       "status": "complete",
       "priority": 5,
       "acceptance": [
-        "Before creating draft, query Gmail API for recent threads with recipient email (q: 'to:{email} OR from:{email}' maxResults: 1)",
-        "If thread found, create draft with threadId set and In-Reply-To/References headers from last message",
-        "If no thread found, create draft as new email (current behavior)",
-        "generate-follow-up SSE step 'compose' metadata includes threadDetected: boolean for frontend display",
-        "google-gmail draft action accepts optional threadId param and sets it on the draft message"
+        "assignAssetStrategy() sets hero→image, features→icon, social-proof→none, pricing→none, stats→none, comparison→none",
+        "Assigns icon_name from Lucide icon set per section type",
+        "Assigns divider type between key section transitions (hero→problem=wave, etc.)",
+        "Called during parseWorkspaceToSections()"
+      ],
+      "estimatedMinutes": 18,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assemblyOrchestrator.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-018"
+      ],
+      "parallelWith": [
+        "RC-019"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-018",
+      "feature": "landing-builder-react-components",
+      "title": "Update assetQueue to skip generation for icon/none strategy sections",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "populateFromSections only queues sections with asset_strategy image or svg",
+        "Sections with strategy icon or none are skipped entirely",
+        "Queue stats reflect reduced total count"
+      ],
+      "estimatedMinutes": 12,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assetQueue.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-017"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-024"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-019",
+      "feature": "landing-builder-react-components",
+      "title": "Add new section type keywords to assemblyOrchestrator",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "SECTION_TYPE_KEYWORDS includes pricing, comparison, stats, how-it-works entries",
+        "isValidSectionType() accepts the 4 new types",
+        "inferSectionType correctly matches keywords like pricing, plan, tier, versus, compare, metric, number, step, process"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/assemblyOrchestrator.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-017"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-020",
+      "feature": "landing-builder-react-components",
+      "title": "Create IntelligenceToggle and wire into LandingPageBuilder + FloatingChatBar",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "IntelligenceToggle component with 3 segments: Fast (Haiku) / Balanced (Sonnet) / Creative (Opus)",
+        "Brain icon from Lucide, active segment highlighted",
+        "Model tier state in LandingPageBuilder, passed to agent calls via apiContentTransform",
+        "Toggle rendered in FloatingChatBar expanded header"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/IntelligenceToggle.tsx",
+        "src/components/landing-builder/LandingPageBuilder.tsx",
+        "src/components/landing-builder/FloatingChatBar.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "RC-024"
+      ],
+      "parallelWith": [
+        "RC-013",
+        "RC-017"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-021",
+      "feature": "landing-builder-react-components",
+      "title": "Add React TSX export format to exportPolishAgent",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "ExportFormat type: html | react",
+        "React export generates self-contained TSX with Lucide imports and Tailwind classes",
+        "downloadReactTsx() function creates .tsx file download",
+        "Export format selector in EditorToolbar or download modal"
       ],
       "estimatedMinutes": 25,
-      "actualMinutes": 22,
+      "actualMinutes": null,
       "files": [
-        "supabase/functions/google-gmail/index.ts",
-        "supabase/functions/generate-follow-up/index.ts",
-        "supabase/functions/slack-interactive/index.ts"
+        "src/components/landing-builder/agents/exportPolishAgent.ts"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "RC-016"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["FUV3-001", "FUV3-002"],
-      "startedAt": "2026-02-25T19:00:00Z",
-      "completedAt": "2026-02-25T19:22:00Z"
+      "parallelWith": [
+        "RC-023"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-023",
+      "feature": "landing-builder-react-components",
+      "title": "Update editor panels — new section icons, asset strategy selector, divider picker",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "SectionListPanel has icons + labels for pricing, comparison, stats, how-it-works",
+        "PropertiesPanel has asset strategy selector (image/svg/icon/none dropdown)",
+        "PropertiesPanel has icon name text field (when strategy is icon)",
+        "PropertiesPanel has divider type selector (wave/diagonal/curve/mesh/none)",
+        "PropertiesPanel Layout section includes new variant options (metrics-bar, case-study, review-badges)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/SectionListPanel.tsx",
+        "src/components/landing-builder/PropertiesPanel.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001",
+          "RC-012"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-021"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-024",
+      "feature": "landing-builder-react-components",
+      "title": "Wire React preview, intelligence toggle, and new pipeline into LandingPageBuilder",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "Assembly mode uses ReactSectionRenderer via updated AssemblyPreview",
+        "ProgressivePreview uses React components instead of HTML srcDoc",
+        "Intelligence toggle visible and functional in FloatingChatBar",
+        "New section types (pricing, stats, etc.) flow through full pipeline correctly",
+        "npm run build passes with no type errors"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/LandingPageBuilder.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-014",
+          "RC-015",
+          "RC-018",
+          "RC-020"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-025",
+      "feature": "landing-builder-react-components",
+      "title": "Extend sectionEditAgent system prompt for new types, content blocks, and asset strategy",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "System prompt includes pricing/comparison/stats/how-it-works as valid section types for add op",
+        "Content blocks mentioned as editable field in ops documentation",
+        "Asset strategy and icon_name mentioned as editable fields",
+        "Divider type mentioned as editable",
+        "update_layout variant list extended with new variants"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/agents/sectionEditAgent.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-021",
+        "RC-023"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "RC-026",
+      "feature": "landing-builder-react-components",
+      "title": "Add HTML templates for new section types to sectionRenderer (export parity)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "Pricing HTML template with tiered cards layout",
+        "Comparison HTML template with feature matrix table",
+        "Stats HTML template with metric number + label grid",
+        "HowItWorks HTML template with numbered steps",
+        "New social proof variants (metrics-bar, case-study, review-badges) templates added",
+        "TEMPLATES and FALLBACK_TYPE maps updated"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/components/landing-builder/sectionRenderer.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "RC-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "RC-025",
+        "RC-021"
+      ],
+      "startedAt": "2026-03-01T21:14:29.895Z",
+      "completedAt": "2026-03-01T21:14:29.895Z"
     }
   ],
   "execution": {
-    "totalStories": 13,
-    "completedStories": 13,
-    "currentFeature": "followup-email-v3",
-    "lastUpdated": "2026-02-25T18:00:00Z"
+    "totalStories": 87,
+    "completedStories": 87,
+    "currentFeature": "landing-builder-react-components",
+    "lastUpdated": "2026-03-01T21:14:29.895Z"
   }
 }

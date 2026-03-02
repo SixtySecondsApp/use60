@@ -40,6 +40,7 @@ interface SendEmailRequest {
   in_reply_to?: string; // Message-ID header for threading
   references?: string; // Message-ID chain for threading
   job_id?: string; // sequence_jobs ID for audit trail
+  draft?: boolean; // Create a draft instead of sending
 }
 
 const DEFAULT_DAILY_LIMIT = 50;
@@ -192,13 +193,25 @@ serve(async (req) => {
     // Join with CRLF (RFC 2822 requirement)
     const rawMessage = messageParts.filter(Boolean).join('\r\n');
 
-    // Base64url encode (Gmail API requirement)
-    const encodedMessage = btoa(rawMessage)
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
+    // Base64url encode — use UTF-8 safe path to handle non-Latin1 chars
+    // (btoa() crashes on curly quotes, em-dashes, and other Unicode > 0xFF)
+    function toBase64Url(str: string): string {
+      const bytes = new TextEncoder().encode(str);
+      const binary = Array.from(bytes).map((b: number) => String.fromCharCode(b)).join('');
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    const encodedMessage = toBase64Url(rawMessage);
 
-    console.log('[email-send-as-rep] Sending email:', {
+    // Send or create draft via Gmail API
+    const isDraft = body.draft === true;
+    const gmailApiUrl = isDraft
+      ? 'https://gmail.googleapis.com/gmail/v1/users/me/drafts'
+      : 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
+    const gmailBody = isDraft
+      ? JSON.stringify({ message: { raw: encodedMessage } })
+      : JSON.stringify({ raw: encodedMessage });
+
+    console.log(`[email-send-as-rep] ${isDraft ? 'Creating draft' : 'Sending email'}:`, {
       to: body.to,
       subject: body.subject,
       hasSignature: !!emailSignature,
@@ -206,20 +219,18 @@ serve(async (req) => {
       repEmail,
     });
 
-    // Send via Gmail API
-    const gmailApiUrl = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
     const resp = await fetch(gmailApiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ raw: encodedMessage }),
+      body: gmailBody,
     });
 
     if (!resp.ok) {
       const errorData = await resp.json().catch(() => ({}));
-      console.error('[email-send-as-rep] Gmail API error:', {
+      console.error(`[email-send-as-rep] Gmail API error (${isDraft ? 'draft' : 'send'}):`, {
         status: resp.status,
         statusText: resp.statusText,
         error: errorData.error || errorData,
@@ -238,27 +249,32 @@ serve(async (req) => {
     }
 
     const sentMessage = await resp.json();
+    // For drafts, the message is nested: { id, message: { id, threadId } }
+    const messageId = isDraft ? (sentMessage.message?.id || sentMessage.id) : sentMessage.id;
+    const threadId = isDraft ? (sentMessage.message?.threadId || sentMessage.threadId) : sentMessage.threadId;
 
-    console.log('[email-send-as-rep] Email sent successfully:', {
-      messageId: sentMessage.id,
-      threadId: sentMessage.threadId,
+    console.log(`[email-send-as-rep] ${isDraft ? 'Draft created' : 'Email sent'} successfully:`, {
+      messageId,
+      threadId,
     });
 
-    // Log to email_send_log table
-    await supabase
-      .from('email_send_log')
-      .insert({
-        user_id: userId,
-        org_id: body.org_id || null,
-        message_id: sentMessage.id,
-        thread_id: sentMessage.threadId || body.thread_id || null,
-        to_email: body.to,
-        subject: body.subject,
-        sent_at: new Date().toISOString(),
-        job_id: body.job_id || null,
-      })
-      .select()
-      .maybeSingle();
+    // Log to email_send_log table (send only, not drafts)
+    if (!isDraft) {
+      await supabase
+        .from('email_send_log')
+        .insert({
+          user_id: userId,
+          org_id: body.org_id || null,
+          message_id: messageId,
+          thread_id: threadId || body.thread_id || null,
+          to_email: body.to,
+          subject: body.subject,
+          sent_at: new Date().toISOString(),
+          job_id: body.job_id || null,
+        })
+        .select()
+        .maybeSingle();
+    }
 
     // If job_id provided, log to sequence_jobs for audit trail
     if (body.job_id) {
@@ -272,8 +288,8 @@ serve(async (req) => {
         const auditTrail = job?.audit_trail || [];
         auditTrail.push({
           timestamp: new Date().toISOString(),
-          event: 'email_sent',
-          message_id: sentMessage.id,
+          event: isDraft ? 'draft_created' : 'email_sent',
+          message_id: messageId,
           to: body.to,
           subject: body.subject,
         });
@@ -290,8 +306,9 @@ serve(async (req) => {
 
     return jsonResponse({
       success: true,
-      message_id: sentMessage.id,
-      thread_id: sentMessage.threadId,
+      draft: isDraft,
+      message_id: messageId,
+      thread_id: threadId,
       sent_at: new Date().toISOString(),
       to: body.to,
       subject: body.subject,

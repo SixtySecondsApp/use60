@@ -64,7 +64,8 @@ CREATE INDEX idx_writeback_dedup_lookup ON crm_writeback_queue(org_id, crm_sourc
 ALTER TABLE crm_writeback_queue ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their organization's queue items (for monitoring/debugging)
-CREATE POLICY "Users can read org queue items"
+DO $$ BEGIN
+  CREATE POLICY "Users can read org queue items"
   ON crm_writeback_queue
   FOR SELECT
   USING (
@@ -74,11 +75,16 @@ CREATE POLICY "Users can read org queue items"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access for queue operations
-CREATE POLICY "Service role full access"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access"
   ON crm_writeback_queue
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

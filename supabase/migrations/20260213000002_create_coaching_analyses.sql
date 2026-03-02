@@ -92,16 +92,22 @@ ALTER TABLE coaching_analyses ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access (for AI analysis generation)
 DROP POLICY IF EXISTS "Service role has full access" ON coaching_analyses;
-CREATE POLICY "Service role has full access"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access"
   ON coaching_analyses
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can read their own coaching analyses
 DROP POLICY IF EXISTS "Users can view own coaching analyses" ON coaching_analyses;
-CREATE POLICY "Users can view own coaching analyses"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own coaching analyses"
   ON coaching_analyses FOR SELECT
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Helper Function: Get latest coaching analysis for user

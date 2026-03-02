@@ -68,13 +68,17 @@ ALTER TABLE ai_feature_config ENABLE ROW LEVEL SECURITY;
 
 -- Everyone can read feature config
 DROP POLICY IF EXISTS "Anyone can read ai_feature_config" ON ai_feature_config;
-CREATE POLICY "Anyone can read ai_feature_config"
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read ai_feature_config"
   ON ai_feature_config FOR SELECT
   USING (auth.role() = 'authenticated');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only platform admins can modify
 DROP POLICY IF EXISTS "Platform admins can manage ai_feature_config" ON ai_feature_config;
-CREATE POLICY "Platform admins can manage ai_feature_config"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can manage ai_feature_config"
   ON ai_feature_config FOR ALL
   USING (
     EXISTS (
@@ -83,6 +87,8 @@ CREATE POLICY "Platform admins can manage ai_feature_config"
       AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- Helper Function to Get Model for Feature

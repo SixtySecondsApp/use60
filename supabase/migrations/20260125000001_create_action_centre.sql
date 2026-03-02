@@ -74,27 +74,36 @@ CREATE INDEX IF NOT EXISTS idx_action_centre_source
 ALTER TABLE action_centre_items ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access
-CREATE POLICY "Service role has full access to action_centre_items"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to action_centre_items"
   ON action_centre_items
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can view their own items
-CREATE POLICY "Users can view own action centre items"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own action centre items"
   ON action_centre_items
   FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own items (approve/dismiss)
-CREATE POLICY "Users can update own action centre items"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own action centre items"
   ON action_centre_items
   FOR UPDATE
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Comment
 COMMENT ON TABLE action_centre_items IS 'Personal inbox for AI-generated suggestions awaiting user approval';

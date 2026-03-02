@@ -30,17 +30,23 @@ CREATE TABLE IF NOT EXISTS agent_methodology_templates (
 ALTER TABLE agent_methodology_templates ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access (for seeding, admin tooling, orchestrator)
-CREATE POLICY "Service role full access to agent_methodology_templates"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_methodology_templates"
 ON agent_methodology_templates FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Authenticated users may read templates (needed for org settings UI)
-CREATE POLICY "Authenticated users can read agent_methodology_templates"
+DO $$ BEGIN
+  CREATE POLICY "Authenticated users can read agent_methodology_templates"
 ON agent_methodology_templates FOR SELECT
 TO authenticated
 USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Trigger: keep updated_at current
 CREATE OR REPLACE FUNCTION update_agent_methodology_templates_updated_at()

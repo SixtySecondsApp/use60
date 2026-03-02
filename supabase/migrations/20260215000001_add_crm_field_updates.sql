@@ -91,7 +91,8 @@ ALTER TABLE crm_field_updates ENABLE ROW LEVEL SECURITY;
 
 -- Users in the same org can view updates
 DROP POLICY IF EXISTS "Users can view org CRM field updates" ON crm_field_updates;
-CREATE POLICY "Users can view org CRM field updates"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org CRM field updates"
   ON crm_field_updates FOR SELECT
   TO authenticated
   USING (
@@ -101,14 +102,19 @@ CREATE POLICY "Users can view org CRM field updates"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (for edge functions)
 DROP POLICY IF EXISTS "Service role has full access to crm_field_updates" ON crm_field_updates;
-CREATE POLICY "Service role has full access to crm_field_updates"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to crm_field_updates"
   ON crm_field_updates FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Comments

@@ -1,0 +1,298 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <title>Neural Command Center - 60 AI Hub</title>
+  <defs>
+    <style>
+      /* --- Central Orb --- */
+      .ho-core {
+        animation: ho-breathe 4s ease-in-out infinite;
+        transform-origin: 300px 300px;
+      }
+      .ho-core-halo {
+        animation: ho-halo 6s ease-in-out infinite;
+      }
+      .ho-outer-ring {
+        animation: ho-ring-breathe 5s ease-in-out infinite;
+      }
+
+      /* --- Orbital Paths --- */
+      .ho-orbit {
+        fill: none;
+        stroke-width: 0.8;
+        stroke-dasharray: 4 8;
+      }
+      .ho-orbit1 {
+        stroke: url(#ho-orbit-grad1);
+        animation: ho-spin-slow 48s linear infinite;
+        transform-origin: 300px 300px;
+      }
+      .ho-orbit2 {
+        stroke: url(#ho-orbit-grad2);
+        animation: ho-spin-slow 56s linear infinite reverse;
+        transform-origin: 300px 300px;
+      }
+      .ho-orbit3 {
+        stroke: url(#ho-orbit-grad3);
+        animation: ho-spin-slow 64s linear infinite;
+        transform-origin: 300px 300px;
+      }
+
+      /* --- Nodes --- */
+      .ho-node {
+        animation: ho-node-pulse 3s ease-in-out infinite;
+      }
+      .ho-node-d1 { animation-delay: 0s; }
+      .ho-node-d2 { animation-delay: 0.5s; }
+      .ho-node-d3 { animation-delay: 1.0s; }
+      .ho-node-d4 { animation-delay: 1.5s; }
+      .ho-node-d5 { animation-delay: 2.0s; }
+      .ho-node-d6 { animation-delay: 2.5s; }
+
+      /* --- Energy Arcs --- */
+      .ho-arc {
+        fill: none;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-dasharray: 6 40;
+      }
+      .ho-arc1 { stroke: url(#ho-arc-grad1); animation: ho-flow 3s linear infinite; }
+      .ho-arc2 { stroke: url(#ho-arc-grad2); animation: ho-flow 3.5s linear infinite 0.5s; }
+      .ho-arc3 { stroke: url(#ho-arc-grad3); animation: ho-flow 4s linear infinite 1s; }
+      .ho-arc4 { stroke: url(#ho-arc-grad1); animation: ho-flow 3.2s linear infinite 1.5s; }
+      .ho-arc5 { stroke: url(#ho-arc-grad2); animation: ho-flow 3.8s linear infinite 2s; }
+      .ho-arc6 { stroke: url(#ho-arc-grad3); animation: ho-flow 4.2s linear infinite 0.8s; }
+
+      /* --- Background Dot Grid --- */
+      .ho-dot {
+        fill: rgba(129, 41, 215, 0.08);
+      }
+      .ho-dot-wave1 { animation: ho-dot-pulse 6s ease-in-out infinite 0s; }
+      .ho-dot-wave2 { animation: ho-dot-pulse 6s ease-in-out infinite 1s; }
+      .ho-dot-wave3 { animation: ho-dot-pulse 6s ease-in-out infinite 2s; }
+      .ho-dot-wave4 { animation: ho-dot-pulse 6s ease-in-out infinite 3s; }
+      .ho-dot-wave5 { animation: ho-dot-pulse 6s ease-in-out infinite 4s; }
+
+      /* --- Keyframes --- */
+      @keyframes ho-breathe {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.85; }
+      }
+      @keyframes ho-halo {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.6; }
+      }
+      @keyframes ho-ring-breathe {
+        0%, 100% { opacity: 0.15; }
+        50% { opacity: 0.35; }
+      }
+      @keyframes ho-spin-slow {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes ho-node-pulse {
+        0%, 100% { opacity: 0.6; }
+        50% { opacity: 1; }
+      }
+      @keyframes ho-flow {
+        from { stroke-dashoffset: 0; }
+        to { stroke-dashoffset: -46; }
+      }
+      @keyframes ho-dot-pulse {
+        0%, 100% { opacity: 0.04; }
+        50% { opacity: 0.15; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ho-core, .ho-core-halo, .ho-outer-ring,
+        .ho-orbit1, .ho-orbit2, .ho-orbit3,
+        .ho-node, .ho-node-d1, .ho-node-d2, .ho-node-d3,
+        .ho-node-d4, .ho-node-d5, .ho-node-d6,
+        .ho-arc1, .ho-arc2, .ho-arc3, .ho-arc4, .ho-arc5, .ho-arc6,
+        .ho-dot-wave1, .ho-dot-wave2, .ho-dot-wave3,
+        .ho-dot-wave4, .ho-dot-wave5 {
+          animation: none !important;
+        }
+      }
+    </style>
+
+    <!-- Gradients -->
+    <radialGradient id="ho-core-rg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="1"/>
+      <stop offset="40%" stop-color="#8129D7" stop-opacity="0.9"/>
+      <stop offset="70%" stop-color="#6D28D9" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#6D28D9" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ho-core-inner" cx="45%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#fff" stop-opacity="0.35"/>
+      <stop offset="50%" stop-color="#A855F7" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ho-halo-rg" cx="50%" cy="50%" r="50%">
+      <stop offset="40%" stop-color="#8129D7" stop-opacity="0"/>
+      <stop offset="70%" stop-color="#8129D7" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ho-outer-halo" cx="50%" cy="50%" r="50%">
+      <stop offset="60%" stop-color="#8129D7" stop-opacity="0"/>
+      <stop offset="80%" stop-color="#6D28D9" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Orbit path gradients -->
+    <linearGradient id="ho-orbit-grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8129D7" stop-opacity="0.3"/>
+      <stop offset="50%" stop-color="#A855F7" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="ho-orbit-grad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2A5EDB" stop-opacity="0.25"/>
+      <stop offset="50%" stop-color="#60A5FA" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#2A5EDB" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="ho-orbit-grad3" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#03AD9C" stop-opacity="0.25"/>
+      <stop offset="50%" stop-color="#2DD4BF" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#03AD9C" stop-opacity="0.05"/>
+    </linearGradient>
+
+    <!-- Arc gradients -->
+    <linearGradient id="ho-arc-grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#A855F7" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ho-arc-grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#60A5FA" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#60A5FA" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ho-arc-grad3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Node gradients -->
+    <radialGradient id="ho-node-violet" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#8129D7"/>
+    </radialGradient>
+    <radialGradient id="ho-node-blue" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#2A5EDB"/>
+    </radialGradient>
+    <radialGradient id="ho-node-teal" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#2DD4BF"/>
+      <stop offset="100%" stop-color="#03AD9C"/>
+    </radialGradient>
+
+    <!-- Filters -->
+    <filter id="ho-glow-v" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0.5  0 0 0 0 0.16  0 0 0 0 0.84  0 0 0 0.7 0"/>
+    </filter>
+    <filter id="ho-glow-b" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0.16  0 0 0 0 0.37  0 0 0 0 0.86  0 0 0 0.6 0"/>
+    </filter>
+    <filter id="ho-glow-t" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0.01  0 0 0 0 0.68  0 0 0 0 0.61  0 0 0 0.6 0"/>
+    </filter>
+    <filter id="ho-core-glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0.5  0 0 0 0 0.16  0 0 0 0 0.84  0 0 0 0.5 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background dot grid with wave pulses -->
+  <g>
+    <circle class="ho-dot ho-dot-wave1" cx="100" cy="100" r="1.5"/><circle class="ho-dot ho-dot-wave2" cx="160" cy="100" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave3" cx="220" cy="100" r="1.5"/><circle class="ho-dot ho-dot-wave4" cx="280" cy="100" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave5" cx="340" cy="100" r="1.5"/><circle class="ho-dot ho-dot-wave1" cx="400" cy="100" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave2" cx="460" cy="100" r="1.5"/><circle class="ho-dot ho-dot-wave3" cx="520" cy="100" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave1" cx="100" cy="160" r="1.2"/><circle class="ho-dot ho-dot-wave2" cx="160" cy="160" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave3" cx="220" cy="160" r="1.2"/><circle class="ho-dot ho-dot-wave4" cx="280" cy="160" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave5" cx="340" cy="160" r="1.2"/><circle class="ho-dot ho-dot-wave1" cx="400" cy="160" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave2" cx="460" cy="160" r="1.2"/><circle class="ho-dot ho-dot-wave3" cx="520" cy="160" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave2" cx="100" cy="220" r="1.5"/><circle class="ho-dot ho-dot-wave3" cx="160" cy="220" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave4" cx="220" cy="220" r="1.5"/><circle class="ho-dot ho-dot-wave5" cx="280" cy="220" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave1" cx="340" cy="220" r="1.5"/><circle class="ho-dot ho-dot-wave2" cx="400" cy="220" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave3" cx="460" cy="220" r="1.5"/><circle class="ho-dot ho-dot-wave4" cx="520" cy="220" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave3" cx="100" cy="280" r="1.2"/><circle class="ho-dot ho-dot-wave4" cx="160" cy="280" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave5" cx="220" cy="280" r="1.2"/><circle class="ho-dot ho-dot-wave1" cx="280" cy="280" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave2" cx="340" cy="280" r="1.2"/><circle class="ho-dot ho-dot-wave3" cx="400" cy="280" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave4" cx="460" cy="280" r="1.2"/><circle class="ho-dot ho-dot-wave5" cx="520" cy="280" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave4" cx="100" cy="340" r="1.5"/><circle class="ho-dot ho-dot-wave5" cx="160" cy="340" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave1" cx="220" cy="340" r="1.5"/><circle class="ho-dot ho-dot-wave2" cx="280" cy="340" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave3" cx="340" cy="340" r="1.5"/><circle class="ho-dot ho-dot-wave4" cx="400" cy="340" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave5" cx="460" cy="340" r="1.5"/><circle class="ho-dot ho-dot-wave1" cx="520" cy="340" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave5" cx="100" cy="400" r="1.2"/><circle class="ho-dot ho-dot-wave1" cx="160" cy="400" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave2" cx="220" cy="400" r="1.2"/><circle class="ho-dot ho-dot-wave3" cx="280" cy="400" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave4" cx="340" cy="400" r="1.2"/><circle class="ho-dot ho-dot-wave5" cx="400" cy="400" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave1" cx="460" cy="400" r="1.2"/><circle class="ho-dot ho-dot-wave2" cx="520" cy="400" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave1" cx="100" cy="460" r="1.5"/><circle class="ho-dot ho-dot-wave2" cx="160" cy="460" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave3" cx="220" cy="460" r="1.5"/><circle class="ho-dot ho-dot-wave4" cx="280" cy="460" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave5" cx="340" cy="460" r="1.5"/><circle class="ho-dot ho-dot-wave1" cx="400" cy="460" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave2" cx="460" cy="460" r="1.5"/><circle class="ho-dot ho-dot-wave3" cx="520" cy="460" r="1.2"/>
+    <circle class="ho-dot ho-dot-wave2" cx="100" cy="520" r="1.2"/><circle class="ho-dot ho-dot-wave3" cx="160" cy="520" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave4" cx="220" cy="520" r="1.2"/><circle class="ho-dot ho-dot-wave5" cx="280" cy="520" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave1" cx="340" cy="520" r="1.2"/><circle class="ho-dot ho-dot-wave2" cx="400" cy="520" r="1.5"/>
+    <circle class="ho-dot ho-dot-wave3" cx="460" cy="520" r="1.2"/><circle class="ho-dot ho-dot-wave4" cx="520" cy="520" r="1.5"/>
+  </g>
+
+  <!-- Outer breathing halo -->
+  <circle class="ho-outer-ring" cx="300" cy="300" r="250" fill="url(#ho-outer-halo)"/>
+
+  <!-- Orbital paths as tilted ellipses -->
+  <g class="ho-orbit1">
+    <ellipse class="ho-orbit" cx="300" cy="300" rx="170" ry="110" transform="rotate(-15 300 300)"/>
+  </g>
+  <g class="ho-orbit2">
+    <ellipse class="ho-orbit" cx="300" cy="300" rx="200" ry="130" transform="rotate(25 300 300)"/>
+  </g>
+  <g class="ho-orbit3">
+    <ellipse class="ho-orbit" cx="300" cy="300" rx="230" ry="100" transform="rotate(-40 300 300)"/>
+  </g>
+
+  <!-- Energy arcs between node positions -->
+  <path class="ho-arc ho-arc1" d="M195,225 C230,200 270,210 300,255"/>
+  <path class="ho-arc ho-arc2" d="M410,230 C380,200 340,195 300,245"/>
+  <path class="ho-arc ho-arc3" d="M250,400 C270,370 290,340 300,300"/>
+  <path class="ho-arc ho-arc4" d="M380,390 C360,350 330,320 300,300"/>
+  <path class="ho-arc ho-arc5" d="M175,330 C210,310 260,300 300,290"/>
+  <path class="ho-arc ho-arc6" d="M440,310 C400,300 350,290 300,290"/>
+
+  <!-- Nodes along orbital paths with glow -->
+  <!-- Orbit 1 nodes -->
+  <g class="ho-orbit1">
+    <circle filter="url(#ho-glow-v)" cx="470" cy="290" r="3" fill="#A855F7" opacity="0.4"/>
+    <circle class="ho-node ho-node-d1" cx="470" cy="290" r="6" fill="url(#ho-node-violet)"/>
+    <circle filter="url(#ho-glow-b)" cx="140" cy="250" r="2.5" fill="#60A5FA" opacity="0.4"/>
+    <circle class="ho-node ho-node-d2" cx="140" cy="250" r="4.5" fill="url(#ho-node-blue)"/>
+  </g>
+  <!-- Orbit 2 nodes -->
+  <g class="ho-orbit2">
+    <circle filter="url(#ho-glow-t)" cx="500" cy="310" r="3" fill="#2DD4BF" opacity="0.4"/>
+    <circle class="ho-node ho-node-d3" cx="500" cy="310" r="7" fill="url(#ho-node-teal)"/>
+    <circle filter="url(#ho-glow-v)" cx="110" cy="340" r="2" fill="#A855F7" opacity="0.4"/>
+    <circle class="ho-node ho-node-d4" cx="110" cy="340" r="5" fill="url(#ho-node-violet)"/>
+  </g>
+  <!-- Orbit 3 nodes -->
+  <g class="ho-orbit3">
+    <circle filter="url(#ho-glow-b)" cx="530" cy="280" r="2.5" fill="#60A5FA" opacity="0.4"/>
+    <circle class="ho-node ho-node-d5" cx="530" cy="280" r="8" fill="url(#ho-node-blue)"/>
+    <circle filter="url(#ho-glow-t)" cx="80" cy="280" r="2" fill="#2DD4BF" opacity="0.4"/>
+    <circle class="ho-node ho-node-d6" cx="80" cy="280" r="5" fill="url(#ho-node-teal)"/>
+  </g>
+
+  <!-- Mid-range halo -->
+  <circle class="ho-core-halo" cx="300" cy="300" r="120" fill="url(#ho-halo-rg)"/>
+
+  <!-- Central orb -->
+  <g class="ho-core" filter="url(#ho-core-glow)">
+    <circle cx="300" cy="300" r="55" fill="url(#ho-core-rg)"/>
+    <circle cx="300" cy="300" r="36" fill="url(#ho-core-inner)"/>
+    <circle cx="300" cy="300" r="22" fill="#8129D7" opacity="0.9"/>
+  </g>
+
+  <!-- 60 text -->
+  <text x="300" y="301" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="central" opacity="0.95">60</text>
+</svg>

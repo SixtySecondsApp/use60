@@ -17,9 +17,12 @@
 ALTER TABLE public.meetings
   DROP CONSTRAINT IF EXISTS meetings_source_type_check;
 
-ALTER TABLE public.meetings
+DO $$ BEGIN
+  ALTER TABLE public.meetings
   ADD CONSTRAINT meetings_source_type_check
   CHECK (source_type IN ('fathom', 'voice', '60_notetaker'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- 2) Allow non-Fathom meetings to exist without a Fathom recording id
@@ -62,12 +65,15 @@ EXCEPTION
   WHEN undefined_object THEN NULL;
 END $$;
 
-ALTER TABLE public.meetings
+DO $$ BEGIN
+  ALTER TABLE public.meetings
   ADD CONSTRAINT meetings_meeting_platform_check
   CHECK (
     meeting_platform IS NULL OR
     meeting_platform IN ('zoom', 'google_meet', 'microsoft_teams', 'fathom', 'voice')
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE public.meetings
   ADD COLUMN IF NOT EXISTS meeting_url text;
@@ -87,9 +93,12 @@ EXCEPTION
   WHEN undefined_object THEN NULL;
 END $$;
 
-ALTER TABLE public.meetings
+DO $$ BEGIN
+  ALTER TABLE public.meetings
   ADD CONSTRAINT meetings_processing_status_check
   CHECK (processing_status IN ('pending', 'bot_joining', 'recording', 'processing', 'ready', 'failed'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE public.meetings
   ADD COLUMN IF NOT EXISTS error_message text;

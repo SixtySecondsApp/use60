@@ -244,7 +244,8 @@ You can use these actions via execute_action: ${config.allowedActions.join(', ')
       totalInputTokens += response.usage.input_tokens;
       totalOutputTokens += response.usage.output_tokens;
 
-      // Log cost
+      // Log cost — sourceAgent = 'copilot-autonomous' attributes fleet agent calls
+      // back to the parent function for credit governance attribution.
       await logAICostEvent(
         deps.supabase,
         deps.userId,
@@ -253,7 +254,10 @@ You can use these actions via execute_action: ${config.allowedActions.join(', ')
         config.model,
         response.usage.input_tokens,
         response.usage.output_tokens,
-        `agent_${config.name}`
+        `agent_${config.name}`,
+        undefined,
+        undefined,
+        'copilot-autonomous'
       );
 
       if (response.stop_reason === 'end_turn') {

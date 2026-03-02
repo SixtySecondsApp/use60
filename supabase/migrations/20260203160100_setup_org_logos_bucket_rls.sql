@@ -28,15 +28,19 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- Policy 1: Public read access for all org logos
 -- Anyone can view organization logos (they are non-sensitive)
-CREATE POLICY "Public read access for org logos"
+DO $$ BEGIN
+  CREATE POLICY "Public read access for org logos"
   ON storage.objects FOR SELECT
   TO public
   USING (bucket_id = 'org-logos');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Policy 2: Org owners/admins can upload logos
 -- Files must be named as {orgId}-{timestamp}.{ext}
 -- We check if the user has owner or admin role in the organization
-CREATE POLICY "Org owners and admins can upload logos"
+DO $$ BEGIN
+  CREATE POLICY "Org owners and admins can upload logos"
   ON storage.objects FOR INSERT
   TO authenticated
   WITH CHECK (
@@ -54,9 +58,12 @@ CREATE POLICY "Org owners and admins can upload logos"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Policy 3: Org owners/admins can update their org's logos
-CREATE POLICY "Org owners and admins can update their org logos"
+DO $$ BEGIN
+  CREATE POLICY "Org owners and admins can update their org logos"
   ON storage.objects FOR UPDATE
   TO authenticated
   USING (
@@ -81,9 +88,12 @@ CREATE POLICY "Org owners and admins can update their org logos"
         AND (om.member_status IS NULL OR om.member_status = 'active')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Policy 4: Org owners/admins can delete their org's logos
-CREATE POLICY "Org owners and admins can delete their org logos"
+DO $$ BEGIN
+  CREATE POLICY "Org owners and admins can delete their org logos"
   ON storage.objects FOR DELETE
   TO authenticated
   USING (
@@ -97,6 +107,8 @@ CREATE POLICY "Org owners and admins can delete their org logos"
         AND (om.member_status IS NULL OR om.member_status = 'active')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- Comments for documentation

@@ -29,14 +29,23 @@ CREATE INDEX idx_slack_snoozed_items_user
 -- RLS
 ALTER TABLE slack_snoozed_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can read own snoozed items"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own snoozed items"
   ON slack_snoozed_items FOR SELECT
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own snoozed items"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own snoozed items"
   ON slack_snoozed_items FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Service role has full access to snoozed items"
+DO $$ BEGIN
+  CREATE POLICY "Service role has full access to snoozed items"
   ON slack_snoozed_items FOR ALL
   USING (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

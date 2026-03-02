@@ -36,13 +36,17 @@ CREATE INDEX idx_join_requests_user
 ALTER TABLE "public"."organization_join_requests" ENABLE ROW LEVEL SECURITY;
 
 -- Policy 1: Users can view their own join requests
-CREATE POLICY "users_view_own_join_requests"
+DO $$ BEGIN
+  CREATE POLICY "users_view_own_join_requests"
   ON organization_join_requests
   FOR SELECT
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Policy 2: Org admins can view requests for their org
-CREATE POLICY "org_admins_view_join_requests"
+DO $$ BEGIN
+  CREATE POLICY "org_admins_view_join_requests"
   ON organization_join_requests
   FOR SELECT
   USING (
@@ -52,15 +56,21 @@ CREATE POLICY "org_admins_view_join_requests"
       AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Policy 3: Users can create join requests (INSERT handled by RPC)
-CREATE POLICY "users_create_join_requests"
+DO $$ BEGIN
+  CREATE POLICY "users_create_join_requests"
   ON organization_join_requests
   FOR INSERT
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Policy 4: Org admins can update (approve/reject) requests
-CREATE POLICY "org_admins_update_join_requests"
+DO $$ BEGIN
+  CREATE POLICY "org_admins_update_join_requests"
   ON organization_join_requests
   FOR UPDATE
   USING (
@@ -70,6 +80,8 @@ CREATE POLICY "org_admins_update_join_requests"
       AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RPC Function: create_join_request
 CREATE OR REPLACE FUNCTION "public"."create_join_request"(

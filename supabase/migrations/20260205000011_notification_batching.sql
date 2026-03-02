@@ -37,8 +37,11 @@ WHERE sent_at IS NULL;
 ALTER TABLE notification_batches ENABLE ROW LEVEL SECURITY;
 
 -- Only service role can access batches
-CREATE POLICY "Service role only" ON notification_batches
+DO $$ BEGIN
+  CREATE POLICY "Service role only" ON notification_batches
 FOR ALL USING (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ========================================
 -- FUNCTION: Add Event to Batch

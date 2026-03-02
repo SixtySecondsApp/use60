@@ -85,7 +85,8 @@ ALTER TABLE autonomy_policies ENABLE ROW LEVEL SECURITY;
 
 -- Org admins can read all org policies
 DROP POLICY IF EXISTS "autonomy_policies_read_org" ON autonomy_policies;
-CREATE POLICY "autonomy_policies_read_org" ON autonomy_policies
+DO $$ BEGIN
+  CREATE POLICY "autonomy_policies_read_org" ON autonomy_policies
   FOR SELECT
   USING (
     org_id IN (
@@ -93,10 +94,13 @@ CREATE POLICY "autonomy_policies_read_org" ON autonomy_policies
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can manage org-wide policies (user_id IS NULL)
 DROP POLICY IF EXISTS "autonomy_policies_admin_write" ON autonomy_policies;
-CREATE POLICY "autonomy_policies_admin_write" ON autonomy_policies
+DO $$ BEGIN
+  CREATE POLICY "autonomy_policies_admin_write" ON autonomy_policies
   FOR ALL
   USING (
     user_id IS NULL
@@ -114,10 +118,13 @@ CREATE POLICY "autonomy_policies_admin_write" ON autonomy_policies
         AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can read and write their own overrides (when admin has enabled override)
 DROP POLICY IF EXISTS "autonomy_policies_user_override" ON autonomy_policies;
-CREATE POLICY "autonomy_policies_user_override" ON autonomy_policies
+DO $$ BEGIN
+  CREATE POLICY "autonomy_policies_user_override" ON autonomy_policies
   FOR ALL
   USING (
     user_id = auth.uid()
@@ -125,6 +132,8 @@ CREATE POLICY "autonomy_policies_user_override" ON autonomy_policies
   WITH CHECK (
     user_id = auth.uid()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =====================================================================
 -- RLS: approval_statistics
@@ -133,7 +142,8 @@ ALTER TABLE approval_statistics ENABLE ROW LEVEL SECURITY;
 
 -- Org admins can read all org stats
 DROP POLICY IF EXISTS "approval_statistics_admin_read" ON approval_statistics;
-CREATE POLICY "approval_statistics_admin_read" ON approval_statistics
+DO $$ BEGIN
+  CREATE POLICY "approval_statistics_admin_read" ON approval_statistics
   FOR SELECT
   USING (
     org_id IN (
@@ -142,18 +152,26 @@ CREATE POLICY "approval_statistics_admin_read" ON approval_statistics
         AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can read their own stats
 DROP POLICY IF EXISTS "approval_statistics_user_read" ON approval_statistics;
-CREATE POLICY "approval_statistics_user_read" ON approval_statistics
+DO $$ BEGIN
+  CREATE POLICY "approval_statistics_user_read" ON approval_statistics
   FOR SELECT
   USING (
     user_id = auth.uid()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role writes stats (via edge functions)
 DROP POLICY IF EXISTS "approval_statistics_service_write" ON approval_statistics;
-CREATE POLICY "approval_statistics_service_write" ON approval_statistics
+DO $$ BEGIN
+  CREATE POLICY "approval_statistics_service_write" ON approval_statistics
   FOR ALL
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

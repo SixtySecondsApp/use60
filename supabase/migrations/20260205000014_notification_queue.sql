@@ -47,8 +47,11 @@ WHERE delivered_at IS NULL AND failed_at IS NULL;
 ALTER TABLE notification_queue ENABLE ROW LEVEL SECURITY;
 
 -- Only service role can access queue
-CREATE POLICY "Service role only" ON notification_queue
+DO $$ BEGIN
+  CREATE POLICY "Service role only" ON notification_queue
 FOR ALL USING (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ========================================
 -- FUNCTION: Enqueue Notification

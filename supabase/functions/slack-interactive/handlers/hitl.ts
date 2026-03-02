@@ -3,15 +3,41 @@
  *
  * Handles button clicks and interactions for sequence HITL requests.
  * SS-001: Also syncs Slack interactions to Action Centre status.
+ * AP-007: Records autopilot approval signals on approve/reject actions.
  *
  * @see docs/project-requirements/PRD_ACTION_CENTRE.md
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { recordSignal, ApprovalEvent } from '../../_shared/autopilot/signals.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://app.use60.com';
+
+// =============================================================================
+// AP-007: Action type mapping for autopilot signal recording
+// =============================================================================
+
+const ACTION_TYPE_MAP: Record<string, string> = {
+  crm_stage_change: 'crm.deal_stage_change',
+  crm_field_update: 'crm.deal_field_update',
+  crm_contact_create: 'crm.contact_enrich',
+  send_email: 'email.send',
+  send_slack: 'slack.notification_send',
+  create_task: 'task.create',
+  enrich_contact: 'crm.contact_enrich',
+  draft_proposal: 'email.draft_save',
+};
+
+/**
+ * Maps a raw HITL action_type string to the dot-notation format used by autopilot.
+ * Falls back to replacing underscores with dots if no explicit mapping found.
+ */
+function mapActionType(rawType: string): string {
+  if (!rawType) return 'unknown';
+  return ACTION_TYPE_MAP[rawType] ?? rawType.replace(/_/g, '.');
+}
 
 // =============================================================================
 // Types
@@ -191,6 +217,34 @@ export async function handleHITLApprove(
       payload.user.id
     );
 
+    // AP-007: Record autopilot approval signal (fire-and-forget)
+    const nowMs = Date.now();
+    supabase
+      .from('hitl_requests')
+      .select('created_at, organization_id, requested_by_user_id, execution_context')
+      .eq('id', requestId)
+      .maybeSingle()
+      .then(({ data: hitlRow }) => {
+        if (!hitlRow) return;
+        const ctx = (hitlRow.execution_context ?? {}) as Record<string, unknown>;
+        const rawActionType = (ctx['action_type'] as string | undefined) ?? 'unknown';
+        const autonomyTier = (ctx['autonomy_tier'] as string | undefined) ?? 'approve';
+        const timeToRespondMs = hitlRow.created_at
+          ? nowMs - new Date(hitlRow.created_at).getTime()
+          : undefined;
+        const event: ApprovalEvent = {
+          user_id: userId ?? (hitlRow.requested_by_user_id as string),
+          org_id: hitlRow.organization_id as string,
+          action_type: mapActionType(rawActionType),
+          agent_name: 'slack-hitl',
+          signal: 'approved',
+          time_to_respond_ms: timeToRespondMs,
+          autonomy_tier_at_time: autonomyTier,
+        };
+        recordSignal(supabase, event).catch(() => {});
+      })
+      .catch(() => {});
+
     // Return updated message
     return {
       success: true,
@@ -250,6 +304,34 @@ export async function handleHITLReject(
       'dismissed',
       payload.user.id
     );
+
+    // AP-007: Record autopilot rejection signal (fire-and-forget)
+    const nowMs = Date.now();
+    supabase
+      .from('hitl_requests')
+      .select('created_at, organization_id, requested_by_user_id, execution_context')
+      .eq('id', requestId)
+      .maybeSingle()
+      .then(({ data: hitlRow }) => {
+        if (!hitlRow) return;
+        const ctx = (hitlRow.execution_context ?? {}) as Record<string, unknown>;
+        const rawActionType = (ctx['action_type'] as string | undefined) ?? 'unknown';
+        const autonomyTier = (ctx['autonomy_tier'] as string | undefined) ?? 'approve';
+        const timeToRespondMs = hitlRow.created_at
+          ? nowMs - new Date(hitlRow.created_at).getTime()
+          : undefined;
+        const event: ApprovalEvent = {
+          user_id: userId ?? (hitlRow.requested_by_user_id as string),
+          org_id: hitlRow.organization_id as string,
+          action_type: mapActionType(rawActionType),
+          agent_name: 'slack-hitl',
+          signal: 'rejected',
+          time_to_respond_ms: timeToRespondMs,
+          autonomy_tier_at_time: autonomyTier,
+        };
+        recordSignal(supabase, event).catch(() => {});
+      })
+      .catch(() => {});
 
     // Return updated message
     return {

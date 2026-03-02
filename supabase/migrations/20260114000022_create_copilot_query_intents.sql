@@ -70,19 +70,25 @@ CREATE TRIGGER trg_query_intents_updated_at
 ALTER TABLE copilot_query_intents ENABLE ROW LEVEL SECURITY;
 
 -- Platform-wide visibility: All authenticated users can read
-CREATE POLICY "Authenticated users can view query intents"
+DO $$ BEGIN
+  CREATE POLICY "Authenticated users can view query intents"
   ON copilot_query_intents
   FOR SELECT
   TO authenticated
   USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only service role can insert/update (edge functions)
-CREATE POLICY "Service role can manage query intents"
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage query intents"
   ON copilot_query_intents
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Helper function to upsert query intent
 CREATE OR REPLACE FUNCTION upsert_query_intent(

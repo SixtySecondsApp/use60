@@ -33,19 +33,26 @@ ON public.rejoin_requests(user_id, status);
 ALTER TABLE public.rejoin_requests ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policy: Users can view their own rejoin requests
-CREATE POLICY "Users can view own rejoin requests"
+DO $$ BEGIN
+  CREATE POLICY "Users can view own rejoin requests"
 ON public.rejoin_requests
 FOR SELECT
 USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policy: Users can insert their own rejoin requests
-CREATE POLICY "Users can create own rejoin requests"
+DO $$ BEGIN
+  CREATE POLICY "Users can create own rejoin requests"
 ON public.rejoin_requests
 FOR INSERT
 WITH CHECK (auth.uid() = user_id AND status = 'pending');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policy: Org admins can view all requests for their org
-CREATE POLICY "Org admins can view org rejoin requests"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can view org rejoin requests"
 ON public.rejoin_requests
 FOR SELECT
 USING (
@@ -57,9 +64,12 @@ USING (
       AND member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS Policy: Org admins can update request status
-CREATE POLICY "Org admins can update rejoin requests"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update rejoin requests"
 ON public.rejoin_requests
 FOR UPDATE
 USING (
@@ -80,6 +90,8 @@ WITH CHECK (
       AND member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comments
 COMMENT ON TABLE public.rejoin_requests IS 'Tracks requests from removed users to rejoin organizations';

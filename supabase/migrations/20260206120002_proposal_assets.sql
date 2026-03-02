@@ -49,7 +49,8 @@ CREATE INDEX IF NOT EXISTS idx_proposal_assets_type ON proposal_assets (asset_ty
 ALTER TABLE proposal_assets ENABLE ROW LEVEL SECURITY;
 
 -- Users can view assets they created, or assets for proposals they own, or assets in their org
-CREATE POLICY "Users can view proposal assets" ON proposal_assets
+DO $$ BEGIN
+  CREATE POLICY "Users can view proposal assets" ON proposal_assets
     FOR SELECT USING (
         created_by = auth.uid()
         OR proposal_id IN (SELECT id FROM proposals WHERE user_id = auth.uid())
@@ -57,24 +58,35 @@ CREATE POLICY "Users can view proposal assets" ON proposal_assets
             SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
         )
     );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Authenticated users can create assets
-CREATE POLICY "Users can create proposal assets" ON proposal_assets
+DO $$ BEGIN
+  CREATE POLICY "Users can create proposal assets" ON proposal_assets
     FOR INSERT WITH CHECK (
         auth.uid() IS NOT NULL
     );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own assets
-CREATE POLICY "Users can update own proposal assets" ON proposal_assets
+DO $$ BEGIN
+  CREATE POLICY "Users can update own proposal assets" ON proposal_assets
     FOR UPDATE USING (
         created_by = auth.uid()
     );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can delete their own assets
-CREATE POLICY "Users can delete own proposal assets" ON proposal_assets
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own proposal assets" ON proposal_assets
     FOR DELETE USING (
         created_by = auth.uid()
     );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 4. Supabase Storage bucket: proposal-assets (private)

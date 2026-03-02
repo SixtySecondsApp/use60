@@ -18,7 +18,8 @@
 -- Update the RLS policy to be clearer about the member visibility rules
 DROP POLICY IF EXISTS "organization_memberships_select" ON "public"."organization_memberships";
 
-CREATE POLICY "organization_memberships_select" ON "public"."organization_memberships"
+DO $$ BEGIN
+  CREATE POLICY "organization_memberships_select" ON "public"."organization_memberships"
 FOR SELECT
 USING (
   -- Case 1: Service role (edge functions, server-side operations)
@@ -35,6 +36,8 @@ USING (
   -- Case 4: Users can always see their own membership row
   ("user_id" = "auth"."uid"())
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update policy comment for clarity
 COMMENT ON POLICY "organization_memberships_select" ON "public"."organization_memberships" IS

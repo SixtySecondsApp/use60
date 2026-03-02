@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 140">
+  <title>Auto-Complete - Task Execution Engine</title>
+  <defs>
+    <style>
+      /* --- Checkbox circles --- */
+      .se-circle {
+        fill: none;
+        stroke: rgba(255,255,255,0.2);
+        stroke-width: 1.5;
+      }
+      .se-circle-done {
+        fill: rgba(16,185,129,0.1);
+        stroke: #10B981;
+        stroke-width: 1.5;
+        opacity: 0;
+      }
+      .se-cd1 { animation: se-fill 7s ease-in-out infinite 0.2s; }
+      .se-cd2 { animation: se-fill 7s ease-in-out infinite 0.6s; }
+      .se-cd3 { animation: se-fill 7s ease-in-out infinite 1.0s; }
+      .se-cd4 { animation: se-fill 7s ease-in-out infinite 1.4s; }
+
+      /* --- Checkmarks --- */
+      .se-check {
+        fill: none;
+        stroke: #10B981;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 14;
+        stroke-dashoffset: 14;
+      }
+      .se-ck1 { animation: se-draw 7s ease-in-out infinite 0.3s; }
+      .se-ck2 { animation: se-draw 7s ease-in-out infinite 0.7s; }
+      .se-ck3 { animation: se-draw 7s ease-in-out infinite 1.1s; }
+      .se-ck4 { animation: se-draw 7s ease-in-out infinite 1.5s; }
+
+      /* --- Text lines --- */
+      .se-text {
+        fill: rgba(255,255,255,0.2);
+        rx: 2; ry: 2;
+      }
+
+      /* --- Strikethrough lines --- */
+      .se-strike {
+        fill: none;
+        stroke: rgba(255,255,255,0.25);
+        stroke-width: 1.2;
+        stroke-linecap: round;
+        stroke-dasharray: 100;
+        stroke-dashoffset: 100;
+      }
+      .se-s1 { animation: se-strike-draw 7s ease-in-out infinite 0.6s; }
+      .se-s2 { animation: se-strike-draw 7s ease-in-out infinite 1.0s; }
+      .se-s3 { animation: se-strike-draw 7s ease-in-out infinite 1.4s; }
+      .se-s4 { animation: se-strike-draw 7s ease-in-out infinite 1.8s; }
+
+      /* --- Completion sparks --- */
+      .se-spark {
+        fill: #10B981;
+        opacity: 0;
+      }
+      .se-sp1 { animation: se-burst 7s ease-out infinite 0.5s; }
+      .se-sp2 { animation: se-burst 7s ease-out infinite 0.9s; }
+      .se-sp3 { animation: se-burst 7s ease-out infinite 1.3s; }
+      .se-sp4 { animation: se-burst 7s ease-out infinite 1.7s; }
+
+      /* --- Progress bar --- */
+      .se-prog-bg {
+        fill: rgba(255,255,255,0.06);
+        rx: 3; ry: 3;
+      }
+      .se-prog-fill {
+        rx: 3; ry: 3;
+        animation: se-progress 7s ease-in-out infinite;
+      }
+
+      @keyframes se-draw {
+        0%, 5% { stroke-dashoffset: 14; }
+        14%, 84% { stroke-dashoffset: 0; }
+        92%, 100% { stroke-dashoffset: 14; }
+      }
+      @keyframes se-fill {
+        0%, 5% { opacity: 0; }
+        14%, 84% { opacity: 1; }
+        92%, 100% { opacity: 0; }
+      }
+      @keyframes se-strike-draw {
+        0%, 5% { stroke-dashoffset: 100; }
+        16%, 84% { stroke-dashoffset: 0; }
+        92%, 100% { stroke-dashoffset: 100; }
+      }
+      @keyframes se-burst {
+        0%, 4% { opacity: 0; transform: scale(0); }
+        8% { opacity: 0.9; transform: scale(1.5); }
+        16% { opacity: 0; transform: scale(2.5); }
+        100% { opacity: 0; }
+      }
+      @keyframes se-progress {
+        0%, 2% { width: 0; }
+        20% { width: 45px; }
+        40% { width: 90px; }
+        60% { width: 135px; }
+        72%, 84% { width: 180px; }
+        95%, 100% { width: 0; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .se-ck1, .se-ck2, .se-ck3, .se-ck4,
+        .se-cd1, .se-cd2, .se-cd3, .se-cd4,
+        .se-s1, .se-s2, .se-s3, .se-s4,
+        .se-sp1, .se-sp2, .se-sp3, .se-sp4,
+        .se-prog-fill {
+          animation: none !important;
+        }
+        .se-check { stroke-dashoffset: 0; }
+        .se-circle-done { opacity: 1; }
+        .se-strike { stroke-dashoffset: 0; }
+        .se-prog-fill { width: 180px; }
+      }
+    </style>
+
+    <linearGradient id="se-prog-g" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#8129D7"/>
+      <stop offset="50%" stop-color="#2A5EDB"/>
+      <stop offset="100%" stop-color="#03AD9C"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Task 1 -->
+  <g>
+    <circle class="se-circle" cx="30" cy="22" r="8"/>
+    <circle class="se-circle-done se-cd1" cx="30" cy="22" r="8"/>
+    <polyline class="se-check se-ck1" points="25,22 28,26 35,18"/>
+    <rect class="se-text" x="48" y="18" width="100" height="6"/>
+    <line class="se-strike se-s1" x1="48" y1="21" x2="148" y2="21"/>
+    <circle class="se-spark se-sp1" cx="36" cy="16" r="1.5" style="transform-origin:36px 16px"/>
+    <circle class="se-spark se-sp1" cx="24" cy="16" r="1" style="transform-origin:24px 16px"/>
+    <circle class="se-spark se-sp1" cx="30" cy="12" r="1.2" style="transform-origin:30px 12px"/>
+  </g>
+
+  <!-- Task 2 -->
+  <g>
+    <circle class="se-circle" cx="30" cy="48" r="8"/>
+    <circle class="se-circle-done se-cd2" cx="30" cy="48" r="8"/>
+    <polyline class="se-check se-ck2" points="25,48 28,52 35,44"/>
+    <rect class="se-text" x="48" y="44" width="120" height="6"/>
+    <line class="se-strike se-s2" x1="48" y1="47" x2="168" y2="47"/>
+    <circle class="se-spark se-sp2" cx="36" cy="42" r="1.5" style="transform-origin:36px 42px"/>
+    <circle class="se-spark se-sp2" cx="24" cy="42" r="1" style="transform-origin:24px 42px"/>
+    <circle class="se-spark se-sp2" cx="30" cy="38" r="1.2" style="transform-origin:30px 38px"/>
+  </g>
+
+  <!-- Task 3 -->
+  <g>
+    <circle class="se-circle" cx="30" cy="74" r="8"/>
+    <circle class="se-circle-done se-cd3" cx="30" cy="74" r="8"/>
+    <polyline class="se-check se-ck3" points="25,74 28,78 35,70"/>
+    <rect class="se-text" x="48" y="70" width="90" height="6"/>
+    <line class="se-strike se-s3" x1="48" y1="73" x2="138" y2="73"/>
+    <circle class="se-spark se-sp3" cx="36" cy="68" r="1.5" style="transform-origin:36px 68px"/>
+    <circle class="se-spark se-sp3" cx="24" cy="68" r="1" style="transform-origin:24px 68px"/>
+    <circle class="se-spark se-sp3" cx="30" cy="64" r="1.2" style="transform-origin:30px 64px"/>
+  </g>
+
+  <!-- Task 4 -->
+  <g>
+    <circle class="se-circle" cx="30" cy="100" r="8"/>
+    <circle class="se-circle-done se-cd4" cx="30" cy="100" r="8"/>
+    <polyline class="se-check se-ck4" points="25,100 28,104 35,96"/>
+    <rect class="se-text" x="48" y="96" width="108" height="6"/>
+    <line class="se-strike se-s4" x1="48" y1="99" x2="156" y2="99"/>
+    <circle class="se-spark se-sp4" cx="36" cy="94" r="1.5" style="transform-origin:36px 94px"/>
+    <circle class="se-spark se-sp4" cx="24" cy="94" r="1" style="transform-origin:24px 94px"/>
+    <circle class="se-spark se-sp4" cx="30" cy="90" r="1.2" style="transform-origin:30px 90px"/>
+  </g>
+
+  <!-- Progress bar -->
+  <rect class="se-prog-bg" x="22" y="120" width="180" height="6"/>
+  <rect class="se-prog-fill" x="22" y="120" width="0" height="6" fill="url(#se-prog-g)"/>
+</svg>
