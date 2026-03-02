@@ -553,25 +553,36 @@ serve(async (req: Request) => {
 
   // ==========================================================================
   // STAGE 1 — Assemble context
+  //   Graceful degradation: offering profile and transcript are optional;
+  //   assembleProposalContext handles their absence internally.
+  //   Retry: 2x with 1s/3s/9s backoff — DB only, fast.
   // ==========================================================================
+  const s1 = new StageTimer('stage_1_context')
+  s1.start()
   const stage1Start = Date.now()
 
   try {
-    await invokeStage(supabase, 'proposal-assemble-context', {
-      proposal_id: proposalId,
-      meeting_id: meeting_id ?? undefined,
-      deal_id: deal_id ?? undefined,
-      contact_id: contact_id ?? undefined,
-      user_id,
-    })
+    await retryWithBackoff(
+      () => invokeStage(supabase, 'proposal-assemble-context', {
+        proposal_id: proposalId,
+        meeting_id: meeting_id ?? undefined,
+        deal_id: deal_id ?? undefined,
+        contact_id: contact_id ?? undefined,
+        user_id,
+      }),
+      2,
+      [1000, 3000, 9000],
+    )
+    monitor.recordStage(s1.finish('ok'))
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`${LOG_PREFIX} Stage 1 (assemble-context) failed:`, message)
+    monitor.recordStage(s1.finish('failed', message))
 
-    await updateProposalStatus(supabase, proposalId, 'failed', {
-      pipeline_error: message,
-      pipeline_failed_stage: 'assemble',
-    })
+    await Promise.all([
+      flushMetrics(supabase, proposalId, monitor.finalise()),
+      markFailed(supabase, proposalId, 'stage_1_context', message),
+    ])
 
     return jsonResponse(partialResult('failed', 'assemble', message), req, 500)
   }
@@ -586,28 +597,38 @@ serve(async (req: Request) => {
 
   // ==========================================================================
   // STAGE 2 — Compose with AI (status: composing → composed)
+  //   Retry: 2x with 1s/3s/9s backoff — resilience against AI timeouts.
   // ==========================================================================
   await updateProposalStatus(supabase, proposalId, 'composing')
 
+  const s2 = new StageTimer('stage_2_compose')
+  s2.start()
   const stage2Start = Date.now()
   let composeResult: Record<string, unknown> = {}
 
   try {
-    composeResult = await invokeStage(supabase, 'proposal-compose-v2', {
-      proposal_id: proposalId,
-      user_id,
-      org_id,
-      template_schema: null, // compose-v2 will load org default template schema itself
-    })
+    composeResult = await retryWithBackoff(
+      () => invokeStage(supabase, 'proposal-compose-v2', {
+        proposal_id: proposalId,
+        user_id,
+        org_id,
+        template_schema: null, // compose-v2 loads the org default template schema itself
+      }),
+      2,
+      [1000, 3000, 9000],
+    )
+    const creditsUsed = Number(composeResult?.credits_used ?? 0)
+    monitor.addCredits(creditsUsed)
+    monitor.recordStage(s2.finish('ok'))
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`${LOG_PREFIX} Stage 2 (compose-v2) failed:`, message)
+    monitor.recordStage(s2.finish('failed', message))
 
-    await updateProposalStatus(supabase, proposalId, 'failed', {
-      pipeline_error: message,
-      pipeline_failed_stage: 'compose',
-      stage_timings: { ...stageTiming },
-    })
+    await Promise.all([
+      flushMetrics(supabase, proposalId, monitor.finalise()),
+      markFailed(supabase, proposalId, 'stage_2_compose', message),
+    ])
 
     return jsonResponse(partialResult('failed', 'compose', message), req, 500)
   }
@@ -651,26 +672,34 @@ serve(async (req: Request) => {
 
   // ==========================================================================
   // STAGE 3+4 — Render to PDF via Gotenberg (status: rendering → rendered)
+  //   Retry: 2x with 1s/3s/9s backoff — Gotenberg warmup resilience.
   // ==========================================================================
   await updateProposalStatus(supabase, proposalId, 'rendering')
 
+  const s3 = new StageTimer('stage_3_render')
+  s3.start()
   const stage3Start = Date.now()
   let renderResult: Record<string, unknown> = {}
 
   try {
-    renderResult = await invokeStage(supabase, 'proposal-render-gotenberg', {
-      proposal_id: proposalId,
-      template_id: template_id ?? null,
-    })
+    renderResult = await retryWithBackoff(
+      () => invokeStage(supabase, 'proposal-render-gotenberg', {
+        proposal_id: proposalId,
+        template_id: template_id ?? null,
+      }),
+      2,
+      [1000, 3000, 9000],
+    )
+    monitor.recordStage(s3.finish('ok'))
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`${LOG_PREFIX} Stage 3+4 (render-gotenberg) failed:`, message)
+    monitor.recordStage(s3.finish('failed', message))
 
-    await updateProposalStatus(supabase, proposalId, 'failed', {
-      pipeline_error: message,
-      pipeline_failed_stage: 'render',
-      stage_timings: { ...stageTiming },
-    })
+    await Promise.all([
+      flushMetrics(supabase, proposalId, monitor.finalise()),
+      markFailed(supabase, proposalId, 'stage_3_render', message),
+    ])
 
     return jsonResponse(partialResult('failed', 'render', message), req, 500)
   }
@@ -691,20 +720,29 @@ serve(async (req: Request) => {
 
   // ==========================================================================
   // STAGE 5 — Deliver (Slack DM + activity record) (status: delivering → ready)
+  //   Retry: 1x — Slack is best-effort; never aborts pipeline on failure.
   // ==========================================================================
   await updateProposalStatus(supabase, proposalId, 'delivering')
 
+  const s5 = new StageTimer('stage_5_deliver')
+  s5.start()
   const stage5Start = Date.now()
   let deliverResult: Record<string, unknown> = {}
 
   try {
-    deliverResult = await invokeStage(supabase, 'proposal-deliver', {
-      proposal_id: proposalId,
-      pdf_url: pdfUrl ?? undefined,
-    })
+    deliverResult = await retryWithBackoff(
+      () => invokeStage(supabase, 'proposal-deliver', {
+        proposal_id: proposalId,
+        pdf_url: pdfUrl ?? undefined,
+      }),
+      1,
+      [1000, 3000, 9000],
+    )
+    monitor.recordStage(s5.finish('ok'))
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`${LOG_PREFIX} Stage 5 (deliver) failed:`, message)
+    monitor.recordStage(s5.finish('failed', message))
 
     // Delivery failure is non-fatal for the user (they have the PDF).
     // We still mark the proposal as 'ready' — Slack/activity are best-effort.
@@ -714,11 +752,15 @@ serve(async (req: Request) => {
 
     stageTiming.deliver_ms = Date.now() - stage5Start
 
-    await updateProposalStatus(supabase, proposalId, 'ready', {
-      stage_timings: { ...stageTiming },
-      pipeline_deliver_warning: message,
-      pipeline_completed_at: new Date().toISOString(),
-    })
+    const finalMetrics = monitor.finalise()
+    await Promise.all([
+      flushMetrics(supabase, proposalId, finalMetrics),
+      updateProposalStatus(supabase, proposalId, 'ready', {
+        stage_timings: { ...stageTiming },
+        pipeline_deliver_warning: message,
+        pipeline_completed_at: new Date().toISOString(),
+      }),
+    ])
 
     const total = Date.now() - pipelineStart
     console.log(
@@ -734,7 +776,7 @@ serve(async (req: Request) => {
         generation_status: 'ready',
         stage_timings: stageTiming,
         total_ms: total,
-        total_credits: 0, // credits logged per-stage
+        total_credits: finalMetrics.total_credits_used,
         warnings: [`Delivery notification failed: ${message}`],
       } satisfies Omit<PipelineResult, 'total_credits'> & { warnings: string[]; total_credits: number },
       req,
@@ -753,12 +795,16 @@ serve(async (req: Request) => {
   // Final status update: ready
   // ==========================================================================
   const total = Date.now() - pipelineStart
+  const finalMetrics = monitor.finalise()
 
-  await updateProposalStatus(supabase, proposalId, 'ready', {
-    stage_timings: { ...stageTiming },
-    pipeline_completed_at: new Date().toISOString(),
-    pipeline_total_ms: total,
-  })
+  await Promise.all([
+    flushMetrics(supabase, proposalId, finalMetrics),
+    updateProposalStatus(supabase, proposalId, 'ready', {
+      stage_timings: { ...stageTiming },
+      pipeline_completed_at: new Date().toISOString(),
+      pipeline_total_ms: total,
+    }),
+  ])
 
   // Log pipeline-level cost event (fire-and-forget)
   logAICostEvent(
@@ -776,6 +822,7 @@ serve(async (req: Request) => {
       trigger_type,
       stage_timings: stageTiming,
       total_ms: total,
+      total_credits: finalMetrics.total_credits_used,
     },
     {
       source: trigger_type === 'manual_button' || trigger_type === 'copilot'
@@ -791,6 +838,7 @@ serve(async (req: Request) => {
   console.log(
     `${LOG_PREFIX} Pipeline complete proposal=${proposalId}`,
     `| total_ms=${total}`,
+    `| total_credits=${finalMetrics.total_credits_used}`,
     `| assemble=${stageTiming.assemble_ms}ms`,
     `| compose=${stageTiming.compose_ms}ms`,
     `| render=${stageTiming.render_ms}ms`,
@@ -804,7 +852,7 @@ serve(async (req: Request) => {
     generation_status: 'ready',
     stage_timings: stageTiming,
     total_ms: total,
-    total_credits: 0, // credits are logged per-stage via logAICostEvent
+    total_credits: finalMetrics.total_credits_used,
   }
 
   return jsonResponse(finalResult, req, 200)
