@@ -1,5 +1,5 @@
 // supabase/functions/proposal-render-gotenberg/index.ts
-// GOT-005: Stage 3+4 of the V2 proposal pipeline — Render + Upload
+// GOT-005 + GOT-006: Stage 3+4+5 of the V2 proposal pipeline — Render + Upload + Thumbnail
 //
 // Responsibilities:
 //   1. Load proposal row (content_json, template_id, deal_id, contact_id, user_id)
@@ -8,8 +8,10 @@
 //   4. Call generateProposalHTML() to merge sections into a self-contained HTML document
 //   5. POST multipart/form-data to Gotenberg → receive raw PDF bytes
 //   6. Upload PDF to Supabase Storage (bucket: proposal-assets)
-//   7. Update proposals row: pdf_url, pdf_s3_key, generation_status, brand_config
-//   8. Return pdf_url and storage info
+//   7. Generate PNG thumbnail of first page via Gotenberg screenshot endpoint (non-fatal)
+//   8. Upload thumbnail to proposal-assets/{org_id}/thumbnails/{proposal_id}.png
+//   9. Update proposals row: pdf_url, pdf_s3_key, generation_status, brand_config (+ thumbnail_url)
+//  10. Return pdf_url, thumbnail_url and storage info
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
@@ -212,6 +214,73 @@ async function renderWithGotenberg(html: string, gotenbergUrl: string): Promise<
   console.log(`${LOG_PREFIX} PDF received from Gotenberg: ${pdfBuffer.byteLength} bytes`)
 
   return new Uint8Array(pdfBuffer)
+}
+
+/**
+ * GOT-006: Capture the first page of the proposal as a PNG thumbnail.
+ * Uses Gotenberg's Chromium screenshot endpoint with A4 dimensions at 96 dpi.
+ *
+ * This function is intentionally non-fatal — callers must catch errors and
+ * treat a failure as a warning, not a hard stop.
+ */
+async function generateThumbnail(html: string, gotenbergUrl: string): Promise<Uint8Array> {
+  const formData = new FormData()
+
+  // Gotenberg requires the HTML file to be named exactly "index.html"
+  const htmlBlob = new Blob([html], { type: 'text/html; charset=utf-8' })
+  formData.append('files', htmlBlob, 'index.html')
+
+  // PNG output
+  formData.append('format', 'png')
+
+  // A4 at 96 dpi: 794 × 1123 px
+  formData.append('width', '794')
+  formData.append('height', '1123')
+
+  // JPEG quality is not applicable for PNG, but quality param is sent to
+  // keep parity with spec — Gotenberg ignores it for PNG output.
+  formData.append('quality', '80')
+
+  // Clip to the first page only (only capture above-the-fold content)
+  formData.append('clip', 'true')
+
+  // Required for brand colors and background fills
+  formData.append('printBackground', 'true')
+
+  // Allow 500ms for web fonts to load (same as PDF render)
+  formData.append('waitDelay', '500ms')
+
+  const screenshotEndpoint = `${gotenbergUrl}/forms/chromium/screenshot/html`
+
+  console.log(`${LOG_PREFIX} Requesting thumbnail from Gotenberg: ${screenshotEndpoint}`)
+
+  let response: Response
+  try {
+    response = await fetch(screenshotEndpoint, {
+      method: 'POST',
+      body: formData,
+    })
+  } catch (fetchErr) {
+    const message = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+    throw new Error(`Gotenberg screenshot unreachable: ${message}`)
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '(no body)')
+    throw new Error(
+      `Gotenberg screenshot returned ${response.status}: ${errorText}`,
+    )
+  }
+
+  const pngBuffer = await response.arrayBuffer()
+
+  if (pngBuffer.byteLength === 0) {
+    throw new Error('Gotenberg screenshot returned empty PNG')
+  }
+
+  console.log(`${LOG_PREFIX} Thumbnail PNG received from Gotenberg: ${pngBuffer.byteLength} bytes`)
+
+  return new Uint8Array(pngBuffer)
 }
 
 // =============================================================================
@@ -431,15 +500,64 @@ serve(async (req: Request) => {
     console.log(`${LOG_PREFIX} PDF uploaded. Signed URL generated.`)
 
     // -------------------------------------------------------------------------
-    // Step 8: Update proposals row
+    // Step 8 (GOT-006): Generate PNG thumbnail — non-fatal
     // -------------------------------------------------------------------------
+    let thumbnailUrl: string | null = null
+
+    try {
+      const thumbnailBytes = await generateThumbnail(htmlDocument, gotenbergUrl)
+
+      const thumbnailPath = `${proposal.org_id}/thumbnails/${proposal.id}.png`
+
+      console.log(`${LOG_PREFIX} Uploading thumbnail to storage: ${thumbnailPath}`)
+
+      const { error: thumbnailUploadError } = await supabase.storage
+        .from('proposal-assets')
+        .upload(thumbnailPath, thumbnailBytes, {
+          contentType: 'image/png',
+          upsert: true,
+        })
+
+      if (thumbnailUploadError) {
+        throw new Error(`Thumbnail upload failed: ${thumbnailUploadError.message}`)
+      }
+
+      // Signed URL valid for 7 days — same window as the PDF
+      const { data: thumbnailSignedUrlData, error: thumbnailSignedUrlError } =
+        await supabase.storage
+          .from('proposal-assets')
+          .createSignedUrl(thumbnailPath, 604800)
+
+      if (thumbnailSignedUrlError || !thumbnailSignedUrlData?.signedUrl) {
+        throw new Error(
+          `Failed to create thumbnail signed URL: ${thumbnailSignedUrlError?.message}`,
+        )
+      }
+
+      thumbnailUrl = thumbnailSignedUrlData.signedUrl
+      console.log(`${LOG_PREFIX} Thumbnail uploaded and signed URL generated.`)
+    } catch (thumbnailErr) {
+      // Thumbnail failure must never block the response — log and continue
+      const msg = thumbnailErr instanceof Error ? thumbnailErr.message : String(thumbnailErr)
+      console.warn(`${LOG_PREFIX} Thumbnail generation failed (non-fatal): ${msg}`)
+    }
+
+    // -------------------------------------------------------------------------
+    // Step 9: Update proposals row
+    // Merge thumbnail_url into brand_config so we never overwrite other fields.
+    // -------------------------------------------------------------------------
+    const updatedBrandConfig: Record<string, unknown> = {
+      ...brandConfig,
+      ...(thumbnailUrl !== null ? { thumbnail_url: thumbnailUrl } : {}),
+    }
+
     const { error: updateError } = await supabase
       .from('proposals')
       .update({
         pdf_url: pdfUrl,
         pdf_s3_key: storagePath,
         generation_status: 'rendered',
-        brand_config: brandConfig,
+        brand_config: updatedBrandConfig,
         updated_at: new Date().toISOString(),
       })
       .eq('id', proposal.id)
@@ -450,7 +568,7 @@ serve(async (req: Request) => {
     }
 
     // -------------------------------------------------------------------------
-    // Step 9: Return result
+    // Step 10: Return result
     // -------------------------------------------------------------------------
     console.log(`${LOG_PREFIX} Render complete for proposal ${proposal.id}`)
 
@@ -462,6 +580,7 @@ serve(async (req: Request) => {
         pdf_s3_key: storagePath,
         generation_status: 'rendered',
         pdf_size_bytes: pdfBytes.length,
+        thumbnail_url: thumbnailUrl,
         metadata: {
           proposal_title: metadata.proposal_title,
           reference_number: metadata.reference_number,
