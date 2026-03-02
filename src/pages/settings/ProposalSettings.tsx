@@ -34,7 +34,7 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate, Package, Pencil, Trash2, Loader2, X, Bot, TrendingUp, ShieldCheck, Shield, Zap, Lock } from 'lucide-react';
+import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate, Package, Pencil, Trash2, Loader2, X, Bot, TrendingUp, ShieldCheck, Shield, Zap, Lock, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import TemplateManager from '@/components/proposals/TemplateManager';
 import OfferingUploader from '@/components/proposals/OfferingUploader';
@@ -777,7 +777,7 @@ function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: st
     queryFn: async () => {
       const { data, error: fetchError } = await supabase
         .from('autopilot_signals')
-        .select('action_type, signal_type, created_at')
+        .select('action_type, signal, created_at')
         .eq('user_id', userId)
         .in('action_type', [...PROPOSAL_ACTION_TYPES]);
       if (fetchError) throw fetchError;
@@ -785,7 +785,7 @@ function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: st
       const counts: Record<string, Record<string, number>> = {};
       for (const row of data ?? []) {
         const at = row.action_type as string;
-        const sig = (row.signal_type ?? 'unknown') as string;
+        const sig = ((row as Record<string, unknown>).signal ?? 'unknown') as string;
         if (!counts[at]) counts[at] = {};
         counts[at][sig] = (counts[at][sig] ?? 0) + 1;
       }
@@ -943,11 +943,32 @@ function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: st
                 {/* Confidence progress bar */}
                 <ConfidenceBar score={row.score} nextTierThreshold={nextThreshold} />
 
+                {/* Signal history summary — approved / edited / rejected */}
+                {row.totalSignals > 0 && (
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div className="flex flex-col items-center gap-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 p-2 border border-emerald-200 dark:border-emerald-500/20">
+                      <ThumbsUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{row.approvedCount}</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-500">Approved</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 p-2 border border-amber-200 dark:border-amber-500/20">
+                      <Pencil className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">{row.editedCount}</span>
+                      <span className="text-[10px] text-amber-600 dark:text-amber-500">Edited</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 rounded-lg bg-red-50 dark:bg-red-500/10 p-2 border border-red-200 dark:border-red-500/20">
+                      <ThumbsDown className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                      <span className="text-sm font-semibold text-red-700 dark:text-red-300">{row.rejectedCount}</span>
+                      <span className="text-[10px] text-red-600 dark:text-red-500">Rejected</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Stats row */}
                 <div className="flex items-center gap-4 flex-wrap text-xs text-gray-500 dark:text-gray-400">
                   <span className="flex items-center gap-1">
                     <TrendingUp className="h-3 w-3" />
-                    {row.totalApproved} approved / {row.totalSignals} total signals
+                    {row.totalSignals} total signals
                   </span>
                   {row.cleanApprovalRate != null && row.totalSignals > 0 && (
                     <span>
