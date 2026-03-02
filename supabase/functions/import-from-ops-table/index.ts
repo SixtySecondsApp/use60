@@ -1,6 +1,6 @@
 // @ts-nocheck — Deno edge function
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 
 /**
  * import-from-ops-table — Deep copy rows from one Ops table to a new one.

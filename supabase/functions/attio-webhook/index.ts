@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { syncToStandardTable } from '../_shared/standardTableSync.ts'
-import { upsertContactIndex, upsertCompanyIndex } from '../_shared/upsertCrmIndex.ts'
+import { upsertContactIndex, upsertCompanyIndex, upsertDealIndex } from '../_shared/upsertCrmIndex.ts'
 
 /**
  * Attio Webhook Receiver
@@ -123,8 +123,8 @@ serve(async (req) => {
     const objectType = recordData?.object_type || payload?.object_type
     const recordId = recordData?.id?.record_id || recordData?.id || eventId
 
-    if (objectType && recordId && (objectType === 'people' || objectType === 'companies')) {
-      const entityType = objectType === 'people' ? 'contact' : 'company'
+    if (objectType && recordId && (objectType === 'people' || objectType === 'companies' || objectType === 'deals')) {
+      const entityType = objectType === 'people' ? 'contact' : objectType === 'companies' ? 'company' : 'deal'
       const timestamp = payload?.timestamp || new Date().toISOString()
 
       try {
@@ -272,6 +272,41 @@ serve(async (req) => {
                 console.error(`[attio-webhook] Failed to update materialized company for ${recordId}:`, materializeErr)
               }
             }
+          }
+        } else if (objectType === 'deals') {
+          // Map Attio deal fields
+          const indexProperties = {
+            name: values.name?.[0]?.value,
+            stage: values.stage?.[0]?.status?.title || values.stage?.[0]?.value,
+            value: values.value?.[0]?.currency_value || values.value?.[0]?.value || values.amount?.[0]?.value,
+            close_date: values.close_date?.[0]?.value,
+            pipeline_name: values.pipeline?.[0]?.value || values.pipeline_name?.[0]?.value,
+            owner_id: values.owner?.[0]?.referenced_actor_id || values.owner?.[0]?.value,
+            updated_at: values.updated_at || new Date().toISOString(),
+            // Include any associations from the payload
+            associations: recordData?.associations,
+          }
+
+          const dealResult = await upsertDealIndex({
+            supabase: svc,
+            orgId: integration.org_id,
+            crmSource: 'attio',
+            crmRecordId: recordId,
+            properties: indexProperties,
+          })
+
+          if (dealResult.success) {
+            syncedToCrmIndex = true
+            console.log(`[attio-webhook] Indexed deal ${recordId} in CRM index (contacts updated: ${dealResult.contactsUpdated})`)
+
+            // Non-blocking materialization trigger
+            if (dealResult.dealId) {
+              svc.functions.invoke('materialize-crm-deals', {
+                body: { org_id: integration.org_id, deal_index_ids: [dealResult.dealId] }
+              }).catch((err: Error) => console.error('[attio-webhook] Non-blocking deal materialization failed:', err))
+            }
+          } else {
+            console.error(`[attio-webhook] Deal index upsert failed for ${recordId}:`, dealResult.error)
           }
         }
       } catch (indexErr) {

@@ -396,6 +396,7 @@ export interface MaSentimentTrends {
 export interface MaAskRequest {
   question: string;
   transcriptId?: string;
+  meetingIds?: string[];
   maxMeetings?: number;
   includeDemo?: boolean;
 }

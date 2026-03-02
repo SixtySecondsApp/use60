@@ -33,6 +33,7 @@ import {
 } from '../_shared/commandCentre/prioritisation.ts';
 import type { CommandCentreItem } from '../_shared/commandCentre/types.ts';
 import { createLogger } from '../_shared/logger.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 
 // ============================================================================
 // Constants
@@ -455,6 +456,12 @@ async function runContextCleanup(
 serve(async (req) => {
   const corsPreflightResponse = handleCorsPreflightRequest(req);
   if (corsPreflightResponse) return corsPreflightResponse;
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return errorResponse('Unauthorized', req, 401);
+  }
 
   const logger = createLogger('cc-daily-cleanup');
 

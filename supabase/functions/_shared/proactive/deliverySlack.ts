@@ -4,7 +4,7 @@
  * Handles sending Slack DMs and channel messages with safe block rendering.
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type { ProactiveNotificationPayload } from './types.ts';
 
 interface SlackDeliveryOptions {

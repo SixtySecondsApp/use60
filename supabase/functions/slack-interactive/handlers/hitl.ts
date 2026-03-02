@@ -8,7 +8,7 @@
  * @see docs/project-requirements/PRD_ACTION_CENTRE.md
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { recordSignal, ApprovalEvent } from '../../_shared/autopilot/signals.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

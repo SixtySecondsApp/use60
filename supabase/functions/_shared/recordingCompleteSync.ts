@@ -2,7 +2,7 @@
 // Called by both Gladia and MeetingBaaS transcript processors
 // Handles: S3 URL sync + thumbnail generation
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 interface SyncOptions {
   recording_id: string;

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, PoundSterling, Users, Building, FileText, Trash2, PieChart, Check, Search, ChevronDown } from 'lucide-react';
+import { X, Calendar, Users, Building, FileText, Trash2, PieChart, Check, Search, ChevronDown } from 'lucide-react';
 import { useDealStages } from '@/lib/hooks/useDealStages';
 import { ContactSearchModal } from '@/components/ContactSearchModal';
 import DealSplitModal from '@/components/DealSplitModal';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 interface DealFormProps {
   deal?: any;
@@ -39,6 +40,7 @@ export function DealForm({
 }: DealFormProps) {
   const { stages } = useDealStages();
   const { userId, userData } = useAuth();
+  const { symbol: currencySymbol, formatMoney: fmtMoney } = useOrgMoney();
   const [showContactModal, setShowContactModal] = useState(false);
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -329,7 +331,7 @@ export function DealForm({
         <label className={labelClass}>Revenue</label>
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
-            <PoundSterling className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-gray-400 font-medium">{currencySymbol}</span>
             <input
               type="number"
               name="one_off_revenue"
@@ -342,7 +344,7 @@ export function DealForm({
             />
           </div>
           <div className="relative">
-            <PoundSterling className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-gray-400 font-medium">{currencySymbol}</span>
             <input
               type="number"
               name="monthly_mrr"
@@ -357,16 +359,16 @@ export function DealForm({
         </div>
         {(formData.one_off_revenue || formData.monthly_mrr) && (
           <div className="mt-1.5 text-xs text-emerald-400 font-medium">
-            Total: £{(
+            Total: {fmtMoney(
               (parseFloat(formData.one_off_revenue as string) || 0) +
               ((parseFloat(formData.monthly_mrr as string) || 0) * 3)
-            ).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            )}
             {formData.monthly_mrr && parseFloat(formData.monthly_mrr as string) > 0 && (
               <span className="text-gray-500 ml-2">
-                Annual: £{(
+                Annual: {fmtMoney(
                   (parseFloat(formData.one_off_revenue as string) || 0) +
                   ((parseFloat(formData.monthly_mrr as string) || 0) * 12)
-                ).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                )}
               </span>
             )}
           </div>

@@ -2,7 +2,7 @@
 // Initial sync to populate CRM index when a customer first connects HubSpot
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders } from '../_shared/corsHelper.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
 import { HubSpotClient } from '../_shared/hubspot.ts';

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { S3Client } from "https://deno.land/x/s3_lite_client@0.7.0/mod.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

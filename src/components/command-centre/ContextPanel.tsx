@@ -411,7 +411,7 @@ function DealOverviewContent({ data, dealId }: { data: any; dealId?: string }) {
       )}
       {dealId && (
         <a
-          href={`/deals/${dealId}`}
+          href={`/crm/deals/${dealId}`}
           className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
         >
           <ExternalLink className="h-2.5 w-2.5" />
@@ -604,9 +604,9 @@ function RelatedItemsContent({ task }: { task: Task }) {
         <a
           key={i}
           href={
-            item.type === 'deal' ? `/deals/${item.id}` :
+            item.type === 'deal' ? `/crm/deals/${item.id}` :
             item.type === 'meeting' ? `/meetings/${item.id}` :
-            item.type === 'contact' ? `/contacts/${item.id}` :
+            item.type === 'contact' ? `/crm/contacts/${item.id}` :
             '#'
           }
           className="w-full flex items-center gap-3 rounded-lg border border-slate-200 dark:border-gray-700/50 p-3 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors text-left"

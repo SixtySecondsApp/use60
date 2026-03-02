@@ -7,7 +7,7 @@
 
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getServiceClient } from './contextEnrichment.ts';
 
 // =============================================================================

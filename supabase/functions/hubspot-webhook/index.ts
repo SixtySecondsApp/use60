@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/use60Signing.ts'
-import { legacyCorsHeaders as corsHeaders } from '../_shared/corsHelper.ts'
+import { getCorsHeaders } from '../_shared/corsHelper.ts'
 import { captureException } from '../_shared/sentryEdge.ts'
 import { syncToStandardTable } from '../_shared/standardTableSync.ts'
 import {
@@ -124,7 +124,7 @@ async function verifyHubSpotSignature(args: {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   try {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -148,7 +148,7 @@ serve(async (req) => {
   if (!allowServiceRole && !allowProxySig) {
     return new Response(JSON.stringify({ success: false, error: 'Unauthorized webhook' }), {
       status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -157,7 +157,7 @@ serve(async (req) => {
   if (!token) {
     return new Response(JSON.stringify({ success: false, error: 'Missing token query param' }), {
       status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -175,7 +175,7 @@ serve(async (req) => {
   if (!integration?.org_id) {
     return new Response(JSON.stringify({ success: false, error: 'Unknown webhook token' }), {
       status: 404,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -184,7 +184,7 @@ serve(async (req) => {
   if (!clientSecret) {
     return new Response(JSON.stringify({ success: false, error: 'HubSpot signature verification not configured' }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -208,7 +208,7 @@ serve(async (req) => {
   if (!verified.ok) {
     return new Response(JSON.stringify({ success: false, error: verified.reason || 'Invalid HubSpot signature' }), {
       status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -231,7 +231,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true, ignored: true, reason: 'no_events' }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -481,7 +481,17 @@ serve(async (req) => {
             properties: indexProps,
           })
             .then((result) => {
-              if (result.success) syncedToIndex++
+              if (result.success) {
+                syncedToIndex++
+
+                // Non-blocking materialization after deal index upsert
+                if (result.dealId) {
+                  // Fire-and-forget: materialize the deal into the deals table
+                  supabase.functions.invoke('materialize-crm-deals', {
+                    body: { org_id: integration.org_id, deal_index_ids: [result.dealId] }
+                  }).catch(err => console.error('[hubspot-webhook] Non-blocking materialization failed:', err))
+                }
+              }
             })
             .catch((err) => {
               console.error(`[hubspot-webhook] CRM index upsert failed for deal ${objectId}:`, err)
@@ -512,7 +522,7 @@ serve(async (req) => {
       synced_to_standard: syncedToStandard,
       synced_to_index: syncedToIndex,
     }),
-    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
   )
   } catch (error) {
     await captureException(error, {
@@ -523,7 +533,7 @@ serve(async (req) => {
     });
     return new Response(
       JSON.stringify({ success: false, error: error?.message || 'Webhook processing failed' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })

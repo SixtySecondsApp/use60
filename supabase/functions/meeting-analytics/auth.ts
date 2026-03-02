@@ -6,7 +6,7 @@
  * - Server-to-server (pg_net sync): service_role key — trusted, org_id from payload
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 /**
  * Decode JWT payload without verification to check the role claim.

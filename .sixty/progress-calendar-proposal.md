@@ -74,7 +74,7 @@
 **Files**: supabase/functions/_shared/orchestrator/adapters/calendar.ts, adapters/index.ts
 **Time**: ~15 min
 **Gates**: lint ✅ | test ✅ | types: skipped
-**Learnings**: detect-scheduling-intent step already existed in eventSequences.ts — only needed adapter registration; 4-phase flow (intent check → calendar check → param resolution → slot fetch); default 45min/UTC/7days/5results
+**Learnings**: detect-scheduling-intent step already existed in eventSequences.ts — only needed adapter registration; 4-phase flow (intent check → calendar check → param resolution → slot fetch); default 45 min / UTC / 7 days / 5 results
 
 ---
 

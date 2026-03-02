@@ -28,6 +28,7 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 import {
   resolveTrustThreshold,
   mapDraftedActionToActionType,
@@ -183,6 +184,12 @@ async function executeItem(
 Deno.serve(async (req: Request) => {
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return errorResponse('Unauthorized', req, 401);
+  }
 
   try {
     // Service role client — documented above

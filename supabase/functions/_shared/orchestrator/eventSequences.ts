@@ -124,13 +124,16 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['extract-action-items', 'detect-intents'],
     },
+    // Note: draft-followup-email and email-draft-approval removed from automatic sequence.
+    // Email drafting is now on-demand via the "Draft Follow-up" button on the Slack debrief card.
+    // Wave 3: CAL-002 — Slack HITL DM with top 3 slot options; pauses sequence for rep approval
     {
-      skill: 'draft-followup-email',
-      requires_context: ['tier1', 'tier2'],
-      requires_approval: false,
+      skill: 'calendar-slot-approval',
+      requires_context: ['tier1'],
+      requires_approval: true,
       criticality: 'best-effort',
       available: true,
-      depends_on: ['extract-action-items', 'detect-intents', 'extract-pricing-discussion'],
+      depends_on: ['detect-scheduling-intent'],
     },
     // Wave 3: CAL-002 — Slack HITL DM with top 3 slot options; pauses sequence for rep approval
     {
