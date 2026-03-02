@@ -259,6 +259,37 @@ serve(async (req) => {
 
     // No email verification needed — admin-created test users are auto-confirmed
 
+    // --- Step 8: Seed demo data (async, fire-and-forget) ---
+    // Only trigger for test users — populates the org with realistic demo data
+    if (tokenData.is_test_user) {
+      try {
+        const seedUrl = `${SUPABASE_URL}/functions/v1/seed-demo-data`;
+        fetch(seedUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            org_id: tokenData.org_id,
+            user_id: userId,
+          }),
+        }).then((res) => {
+          if (!res.ok) {
+            console.error('seed-demo-data call failed:', res.status);
+          } else {
+            console.log('seed-demo-data triggered successfully for org:', tokenData.org_id);
+          }
+        }).catch((err) => {
+          console.error('seed-demo-data call error:', err);
+        });
+        // Fire-and-forget — don't await, don't block the signup response
+      } catch (seedErr) {
+        console.error('Failed to trigger seed-demo-data:', seedErr);
+        // Non-fatal — user can still proceed without demo data
+      }
+    }
+
     console.log('Test user signup complete:', request.email, 'org:', tokenData.org_id, 'existing:', isExistingUser);
 
     return new Response(

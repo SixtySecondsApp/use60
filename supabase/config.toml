@@ -11,6 +11,11 @@
 # Development branch uses connection pooler for better performance
 pooler = { enabled = true, port = 6543, pool_mode = "transaction" }
 
+[functions.seed-demo-data]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/seed-demo-data/index.ts"
+
 [functions.process-single-activity]
 enabled = true
 verify_jwt = true
