@@ -12,10 +12,12 @@ description: |
   Do NOT use for SOWs, contracts, cold emails, or internal project plans.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2.0"
   category: sales-ai
   skill_type: atomic
   is_active: true
+  output_type: structured
+  output_format: ProposalPanel
   command_centre:
     enabled: true
     label: "/proposal"
@@ -74,6 +76,7 @@ metadata:
     - "bid"
   required_context:
     - deal_id
+    - meeting_id
   inputs:
     - name: deal_id
       type: string

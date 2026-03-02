@@ -18,6 +18,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   CheckCircle2,
   Loader2,
@@ -33,9 +37,12 @@ import {
   FileOutput,
   PackageCheck,
   Clock,
+  Save,
+  X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -76,8 +83,16 @@ interface ProposalRow {
   credits_used: number | null;
   metadata: Record<string, unknown> | null;
   brand_config: Record<string, unknown> | null;
+  style_config: Record<string, unknown> | null;
+  trigger_type: string | null;
   created_at: string | null;
   updated_at: string | null;
+}
+
+interface EditableSection {
+  type: string;
+  title: string;
+  content: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,15 +177,23 @@ export default function ProposalProgressOverlay({
   proposalId,
   open,
   onOpenChange,
-  onEditSections,
+  // onEditSections kept in interface for backward compat; inline edit mode (UX-006) now handles editing
+  onEditSections: _onEditSections,
   onSendToClient,
 }: ProposalProgressOverlayProps) {
+  void _onEditSections;
   const [proposal, setProposal] = useState<ProposalRow | null>(null);
   const [status, setStatus] = useState<PipelineStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
+
+  // Edit mode state (UX-006)
+  const [editMode, setEditMode] = useState(false);
+  const [editingSections, setEditingSections] = useState<EditableSection[]>([]);
+  const [editLoading, setEditLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
 
   // -------------------------------------------------------------------
   // Track elapsed time
@@ -199,7 +222,7 @@ export default function ProposalProgressOverlay({
   const fetchProposal = useCallback(async () => {
     const { data, error: fetchErr } = await supabase
       .from('proposals')
-      .select('id, title, generation_status, pdf_url, credits_used, metadata, brand_config, created_at, updated_at')
+      .select('id, title, generation_status, pdf_url, credits_used, metadata, brand_config, style_config, trigger_type, created_at, updated_at')
       .eq('id', proposalId)
       .maybeSingle();
 
@@ -220,6 +243,160 @@ export default function ProposalProgressOverlay({
       }
     }
   }, [proposalId]);
+
+  // -------------------------------------------------------------------
+  // Edit mode handlers (UX-006)
+  // -------------------------------------------------------------------
+  const handleEnterEditMode = useCallback(async () => {
+    setEditLoading(true);
+    try {
+      const { data, error: fetchErr } = await supabase
+        .from('proposals')
+        .select('content_json')
+        .eq('id', proposalId)
+        .maybeSingle();
+
+      if (fetchErr) {
+        toast.error('Failed to load proposal sections');
+        console.error('[ProposalProgressOverlay] Edit fetch error:', fetchErr);
+        return;
+      }
+
+      const sections = data?.content_json as EditableSection[] | null;
+      if (!sections || !Array.isArray(sections) || sections.length === 0) {
+        toast.error('No editable sections found in this proposal');
+        return;
+      }
+
+      setEditingSections(sections.map((s) => ({ ...s })));
+      setEditMode(true);
+    } catch (err) {
+      console.error('[ProposalProgressOverlay] Unexpected edit error:', err);
+      toast.error('Something went wrong loading sections');
+    } finally {
+      setEditLoading(false);
+    }
+  }, [proposalId]);
+
+  const handleSaveAndRerender = useCallback(async () => {
+    setSaveLoading(true);
+    try {
+      // 1. Save edited sections and set status to 'rendering'
+      const { error: updateErr } = await supabase
+        .from('proposals')
+        .update({
+          content_json: editingSections,
+          generation_status: 'rendering',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', proposalId);
+
+      if (updateErr) {
+        toast.error('Failed to save sections');
+        console.error('[ProposalProgressOverlay] Save error:', updateErr);
+        return;
+      }
+
+      // Reset timer for re-render duration tracking
+      startTimeRef.current = Date.now();
+      setElapsedSeconds(null);
+
+      // Update local status so the stepper shows rendering progress
+      setStatus('rendering');
+      setEditMode(false);
+
+      // 2. Invoke Gotenberg render (stages 3-4 only — skip assemble + compose)
+      const { data: renderData, error: renderErr } = await supabase.functions.invoke(
+        'proposal-render-gotenberg',
+        { body: { proposal_id: proposalId } },
+      );
+
+      if (renderErr) {
+        toast.error('Failed to start re-render');
+        console.error('[ProposalProgressOverlay] Render invoke error:', renderErr);
+        return;
+      }
+
+      // 3. Set generation_status to 'ready' (pipeline orchestrator does this
+      //    normally, but for re-render we skip the full pipeline)
+      const pdfUrl = typeof renderData?.pdf_url === 'string' ? renderData.pdf_url : null;
+      const { error: readyErr } = await supabase
+        .from('proposals')
+        .update({
+          generation_status: 'ready',
+          ...(pdfUrl ? { pdf_url: pdfUrl } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', proposalId);
+
+      if (readyErr) {
+        console.error('[ProposalProgressOverlay] Failed to set ready status:', readyErr);
+      }
+
+      toast.success('Sections saved — PDF re-rendered');
+    } catch (err) {
+      console.error('[ProposalProgressOverlay] Unexpected save error:', err);
+      toast.error('Something went wrong saving sections');
+    } finally {
+      setSaveLoading(false);
+    }
+  }, [proposalId, editingSections]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditMode(false);
+    setEditingSections([]);
+  }, []);
+
+  const updateSection = useCallback(
+    (index: number, field: 'title' | 'content', value: string) => {
+      setEditingSections((prev) =>
+        prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)),
+      );
+    },
+    [],
+  );
+
+  // -------------------------------------------------------------------
+  // AUT-002: Record autopilot signal when proposal is sent
+  // -------------------------------------------------------------------
+  const recordSendSignal = useCallback(async (currentProposal: ProposalRow) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
+
+      const editMetrics = (currentProposal.style_config as Record<string, unknown> | null)
+        ?._edit_metrics as Record<string, unknown> | undefined;
+      const editDistance = typeof editMetrics?.overall_distance === 'number'
+        ? editMetrics.overall_distance
+        : 0;
+
+      // Determine signal and weight based on edit distance
+      let signal: string;
+      if (editDistance === 0) {
+        signal = 'approved';      // sent as-is — strong positive
+      } else if (editDistance < 0.2) {
+        signal = 'approved_edited'; // minor edits — weak positive
+      } else {
+        signal = 'approved_edited'; // major edits — still approved_edited, lower weight handled by edit_distance
+      }
+
+      await supabase.functions.invoke('autopilot-record-signal', {
+        method: 'POST',
+        body: {
+          action_type: 'proposal.generate',
+          agent_name: 'proposal_pipeline',
+          signal,
+          edit_distance: editDistance,
+          autonomy_tier_at_time: 'suggest',
+        },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (err) {
+      // Fire-and-forget — do not surface errors to user
+      console.error('[ProposalProgressOverlay] recordSendSignal error:', err);
+    }
+  }, []);
 
   // -------------------------------------------------------------------
   // Realtime subscription
@@ -280,28 +457,118 @@ export default function ProposalProgressOverlay({
     | undefined;
 
   // -------------------------------------------------------------------
+  // Render helpers
+  // -------------------------------------------------------------------
+  const dialogTitle = editMode
+    ? 'Edit Proposal Sections'
+    : isDone
+      ? 'Proposal Ready'
+      : isFailed
+        ? 'Generation Failed'
+        : 'Generating Proposal';
+
+  const dialogDescription = editMode
+    ? 'Edit section titles and content below, then save to re-render the PDF.'
+    : isDone
+      ? 'Your proposal has been generated and is ready to review.'
+      : isFailed
+        ? 'Something went wrong during generation.'
+        : 'Sit tight — this usually takes under a minute.';
+
+  // -------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={cn('sm:max-w-md', editMode && 'sm:max-w-lg')}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            {isDone ? 'Proposal Ready' : isFailed ? 'Generation Failed' : 'Generating Proposal'}
+            {editMode ? <Pencil className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+            {dialogTitle}
           </DialogTitle>
-          <DialogDescription>
-            {isDone
-              ? 'Your proposal has been generated and is ready to review.'
-              : isFailed
-                ? 'Something went wrong during generation.'
-                : 'Sit tight — this usually takes under a minute.'}
-          </DialogDescription>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
         <AnimatePresence mode="wait">
+          {/* ---- Edit Mode ---- */}
+          {editMode && (
+            <motion.div
+              key="edit"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="flex flex-col gap-4 py-2"
+            >
+              <ScrollArea className="max-h-[60vh] pr-3">
+                <div className="flex flex-col gap-4">
+                  {editingSections.map((section, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 dark:border-gray-700 dark:bg-gray-800/30"
+                    >
+                      <div className="mb-1">
+                        <Badge variant="outline" className="text-xs mb-2">
+                          {section.type}
+                        </Badge>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <Label htmlFor={`section-title-${idx}`} className="text-xs text-muted-foreground">
+                            Title
+                          </Label>
+                          <Input
+                            id={`section-title-${idx}`}
+                            value={section.title}
+                            onChange={(e) => updateSection(idx, 'title', e.target.value)}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`section-content-${idx}`} className="text-xs text-muted-foreground">
+                            Content
+                          </Label>
+                          <Textarea
+                            id={`section-content-${idx}`}
+                            value={section.content}
+                            onChange={(e) => updateSection(idx, 'content', e.target.value)}
+                            rows={4}
+                            className="mt-1 resize-y"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={handleCancelEdit}
+                  disabled={saveLoading}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleSaveAndRerender}
+                  disabled={saveLoading}
+                >
+                  {saveLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save & Re-render
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
           {/* ---- Error State ---- */}
-          {isFailed && (
+          {!editMode && isFailed && (
             <motion.div
               key="error"
               initial={{ opacity: 0, y: 8 }}
@@ -329,7 +596,7 @@ export default function ProposalProgressOverlay({
           )}
 
           {/* ---- Done State ---- */}
-          {isDone && (
+          {!editMode && isDone && (
             <motion.div
               key="done"
               initial={{ opacity: 0, y: 8 }}
@@ -402,14 +669,14 @@ export default function ProposalProgressOverlay({
                   <Button
                     variant="outline"
                     className="flex-1"
-                    onClick={() => {
-                      if (onEditSections) {
-                        onEditSections(proposalId);
-                      }
-                      onOpenChange(false);
-                    }}
+                    onClick={handleEnterEditMode}
+                    disabled={editLoading}
                   >
-                    <Pencil className="mr-2 h-4 w-4" />
+                    {editLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Pencil className="mr-2 h-4 w-4" />
+                    )}
                     Edit Sections
                   </Button>
 
@@ -417,6 +684,9 @@ export default function ProposalProgressOverlay({
                     variant="outline"
                     className="flex-1"
                     onClick={() => {
+                      if (proposal) {
+                        recordSendSignal(proposal);
+                      }
                       if (onSendToClient) {
                         onSendToClient(proposalId);
                       }
@@ -432,7 +702,7 @@ export default function ProposalProgressOverlay({
           )}
 
           {/* ---- Progress State ---- */}
-          {!isDone && !isFailed && (
+          {!editMode && !isDone && !isFailed && (
             <motion.div
               key="progress"
               initial={{ opacity: 0 }}

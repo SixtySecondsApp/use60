@@ -32,8 +32,9 @@ import { AIProviderService } from '@/lib/services/aiProvider';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
+import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate, Package, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate, Package, Pencil, Trash2, Loader2, X, Bot, TrendingUp, ShieldCheck, ThumbsUp, ThumbsDown, Lock } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import TemplateManager from '@/components/proposals/TemplateManager';
 import OfferingUploader from '@/components/proposals/OfferingUploader';
@@ -437,7 +438,7 @@ function OfferingProfilesTab({ orgId }: { orgId: string }) {
               <CardTitle className="text-sm">Upload Sales Collateral</CardTitle>
               <Button variant="ghost" size="sm" onClick={() => setShowUploader(false)} className="h-7 w-7 p-0">
                 <span className="sr-only">Close</span>
-                ×
+                <X className="h-4 w-4" />
               </Button>
             </div>
             <CardDescription>
@@ -591,8 +592,321 @@ function OfferingProfilesTab({ orgId }: { orgId: string }) {
   );
 }
 
+// =============================================================================
+// Proposal Autopilot Section — AUT-003
+// =============================================================================
+
+const PROPOSAL_ACTION_TYPES = ['proposal.generate', 'proposal.send'] as const;
+
+const PROPOSAL_ACTION_DISPLAY: Record<string, string> = {
+  'proposal.generate': 'Generate Proposal',
+  'proposal.send': 'Send Proposal',
+};
+
+type AutonomyTier = 'disabled' | 'suggest' | 'approve' | 'auto';
+
+const TIER_ORDER: AutonomyTier[] = ['disabled', 'suggest', 'approve', 'auto'];
+
+const TIER_META: Record<AutonomyTier, {
+  label: string;
+  description: string;
+  badgeClass: string;
+  dotClass: string;
+}> = {
+  disabled: {
+    label: 'Disabled',
+    description: 'Manual trigger only',
+    badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+    dotClass: 'bg-gray-400 dark:bg-gray-600',
+  },
+  suggest: {
+    label: 'Suggest',
+    description: '60 will suggest generating a proposal after meetings',
+    badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
+    dotClass: 'bg-blue-500',
+  },
+  approve: {
+    label: 'Approve',
+    description: '60 drafts proposals automatically, asks for your approval',
+    badgeClass: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400',
+    dotClass: 'bg-amber-500',
+  },
+  auto: {
+    label: 'Auto',
+    description: '60 generates and sends proposals automatically',
+    badgeClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400',
+    dotClass: 'bg-emerald-500',
+  },
+};
+
+// Thresholds for tier progression (approximate platform defaults)
+const TIER_THRESHOLDS: Record<string, { minSignals: number; minScore: number }> = {
+  'suggest': { minSignals: 0, minScore: 0 },
+  'approve': { minSignals: 10, minScore: 0.6 },
+  'auto': { minSignals: 25, minScore: 0.85 },
+};
+
+interface ProposalConfidenceRow {
+  action_type: string;
+  score: number;
+  total_signals: number;
+  total_approved: number;
+  total_rejected: number;
+  current_tier: AutonomyTier;
+  promotion_eligible: boolean;
+  clean_approval_rate: number | null;
+  days_active: number;
+}
+
+function TierStepper({ currentTier }: { currentTier: AutonomyTier }) {
+  const currentIndex = TIER_ORDER.indexOf(currentTier);
+
+  return (
+    <div className="flex items-center gap-0">
+      {TIER_ORDER.map((tier, i) => {
+        const isActive = i <= currentIndex;
+        const isCurrent = tier === currentTier;
+        const meta = TIER_META[tier];
+
+        return (
+          <div key={tier} className="flex items-center">
+            {i > 0 && (
+              <div
+                className={`h-0.5 w-6 sm:w-10 ${
+                  i <= currentIndex
+                    ? 'bg-emerald-400 dark:bg-emerald-500'
+                    : 'bg-gray-200 dark:bg-gray-700'
+                }`}
+              />
+            )}
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={`h-3 w-3 rounded-full border-2 transition-all ${
+                  isCurrent
+                    ? `${meta.dotClass} border-transparent ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 ring-current`
+                    : isActive
+                    ? `${meta.dotClass} border-transparent`
+                    : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600'
+                }`}
+              />
+              <span
+                className={`text-[10px] font-medium leading-none ${
+                  isCurrent
+                    ? 'text-gray-900 dark:text-gray-100'
+                    : isActive
+                    ? 'text-gray-600 dark:text-gray-400'
+                    : 'text-gray-400 dark:text-gray-600'
+                }`}
+              >
+                {meta.label}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ConfidenceBar({ score, nextTierThreshold }: { score: number; nextTierThreshold: number | null }) {
+  const percentage = nextTierThreshold
+    ? Math.min(100, Math.round((score / nextTierThreshold) * 100))
+    : 100;
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          Confidence: {(score * 100).toFixed(0)}%
+        </span>
+        {nextTierThreshold && (
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            Next tier: {(nextTierThreshold * 100).toFixed(0)}%
+          </span>
+        )}
+      </div>
+      <div className="h-2 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            percentage >= 100
+              ? 'bg-emerald-500'
+              : percentage >= 60
+              ? 'bg-blue-500'
+              : percentage >= 30
+              ? 'bg-amber-500'
+              : 'bg-gray-400'
+          }`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: string }) {
+  const { data: proposalAutopilot, isLoading, error } = useQuery<ProposalConfidenceRow[]>({
+    queryKey: ['autopilot-proposal', orgId, userId],
+    queryFn: async () => {
+      const { data, error: fetchError } = await supabase
+        .from('autopilot_confidence')
+        .select(
+          'action_type, score, total_signals, total_approved, total_rejected, ' +
+          'current_tier, promotion_eligible, clean_approval_rate, days_active'
+        )
+        .eq('user_id', userId)
+        .in('action_type', [...PROPOSAL_ACTION_TYPES])
+        .order('action_type');
+      if (fetchError) throw fetchError;
+      return (data ?? []) as ProposalConfidenceRow[];
+    },
+    enabled: !!orgId && !!userId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-40 w-full rounded-lg" />
+        <Skeleton className="h-40 w-full rounded-lg" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center">
+          <p className="text-sm text-red-500">Failed to load autopilot data.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Build display data for each proposal action type.
+  // If a row doesn't exist yet, show it as disabled with no signals.
+  const actionRows = PROPOSAL_ACTION_TYPES.map((actionType) => {
+    const row = proposalAutopilot?.find((r) => r.action_type === actionType);
+    return {
+      action_type: actionType,
+      displayName: PROPOSAL_ACTION_DISPLAY[actionType],
+      tier: (row?.current_tier ?? 'disabled') as AutonomyTier,
+      score: row?.score ?? 0,
+      totalSignals: row?.total_signals ?? 0,
+      totalApproved: row?.total_approved ?? 0,
+      totalRejected: row?.total_rejected ?? 0,
+      promotionEligible: row?.promotion_eligible ?? false,
+      cleanApprovalRate: row?.clean_approval_rate ?? null,
+      daysActive: row?.days_active ?? 0,
+    };
+  });
+
+  const getNextTierThreshold = (currentTier: AutonomyTier): number | null => {
+    const idx = TIER_ORDER.indexOf(currentTier);
+    if (idx >= TIER_ORDER.length - 1) return null; // already at 'auto'
+    const nextTier = TIER_ORDER[idx + 1];
+    return TIER_THRESHOLDS[nextTier]?.minScore ?? null;
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          60's autopilot system learns from your feedback to progressively automate proposal actions.
+          As you approve or edit proposals, trust builds and the system can act with more autonomy.
+        </p>
+      </div>
+
+      {actionRows.map((row) => {
+        const tierMeta = TIER_META[row.tier];
+        const nextThreshold = getNextTierThreshold(row.tier);
+
+        return (
+          <Card key={row.action_type}>
+            <CardContent className="p-5">
+              <div className="flex flex-col gap-4">
+                {/* Header: action name + tier badge */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-800">
+                      {row.action_type === 'proposal.generate' ? (
+                        <FileText className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                      ) : (
+                        <ShieldCheck className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {row.displayName}
+                      </span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {tierMeta.description}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge className={`${tierMeta.badgeClass} text-xs font-semibold border-0`}>
+                    {tierMeta.label}
+                  </Badge>
+                </div>
+
+                {/* Tier progression stepper */}
+                <div className="flex justify-center py-1">
+                  <TierStepper currentTier={row.tier} />
+                </div>
+
+                {/* Confidence progress bar */}
+                <ConfidenceBar score={row.score} nextTierThreshold={nextThreshold} />
+
+                {/* Stats row */}
+                <div className="flex items-center gap-4 flex-wrap text-xs text-gray-500 dark:text-gray-400">
+                  <span className="flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" />
+                    {row.totalApproved} approved / {row.totalSignals} total signals
+                  </span>
+                  {row.cleanApprovalRate != null && row.totalSignals > 0 && (
+                    <span>
+                      Clean rate: {(row.cleanApprovalRate * 100).toFixed(0)}%
+                    </span>
+                  )}
+                  {row.daysActive > 0 && (
+                    <span>
+                      {row.daysActive} day{row.daysActive !== 1 ? 's' : ''} active
+                    </span>
+                  )}
+                  {row.promotionEligible && (
+                    <Badge variant="outline" className="text-xs text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+                      Eligible for promotion
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+
+      {/* Empty state when no signals exist at all */}
+      {actionRows.every((r) => r.totalSignals === 0) && (
+        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-500/5 dark:to-indigo-500/5 border-blue-200 dark:border-blue-500/20">
+          <CardContent className="py-5">
+            <div className="flex items-start gap-3">
+              <Bot className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">No signals yet</p>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Start using 60 to generate proposals after meetings. As you approve, edit, or reject
+                  proposals, the system tracks your preferences and builds trust to automate more over time.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function ProposalSettings() {
   const orgId = useActiveOrgId();
+  const { userId } = useAuth();
   const [templates, setTemplates] = useState<ProposalTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -1042,6 +1356,10 @@ export default function ProposalSettings() {
 
       <Tabs defaultValue="design_system" className="space-y-6">
         <TabsList className="bg-white border border-transparent shadow-sm dark:bg-gray-900/50 dark:backdrop-blur-xl dark:border-gray-800/50">
+          <TabsTrigger value="autopilot" className="flex items-center gap-1">
+            <Bot className="w-3 h-3" />
+            Autopilot
+          </TabsTrigger>
           <TabsTrigger value="models">AI Models</TabsTrigger>
           <TabsTrigger value="offering_profiles" className="flex items-center gap-1">
             <Package className="w-3 h-3" />
@@ -1068,6 +1386,16 @@ export default function ProposalSettings() {
             SOW
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="autopilot">
+          {orgId && userId ? (
+            <ProposalAutopilotSection orgId={orgId} userId={userId} />
+          ) : (
+            <div className="py-8 text-center text-sm text-gray-400">
+              {!orgId ? 'No active organisation selected.' : 'Please sign in to view autopilot status.'}
+            </div>
+          )}
+        </TabsContent>
 
         <TabsContent value="models" className="space-y-4">
           <Card>

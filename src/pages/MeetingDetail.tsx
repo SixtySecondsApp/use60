@@ -17,6 +17,7 @@ import { useEventEmitter } from '@/lib/communication/EventBus';
 import { toast } from 'sonner';
 import { ProposalWizard } from '@/components/proposals/ProposalWizard';
 import { ProposalQuickGenerate } from '@/components/proposals/ProposalQuickGenerate';
+import ProposalProgressOverlay from '@/components/proposals/ProposalProgressOverlay';
 import { TalkTimeChart } from '@/components/meetings/analytics/TalkTimeChart';
 import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsights';
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard';
@@ -243,6 +244,7 @@ export function MeetingDetail() {
   const primaryExternal = attendees.find(a => a.is_external);
 
   const [showProposalWizard, setShowProposalWizard] = useState(false);
+  const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
@@ -1009,6 +1011,7 @@ export function MeetingDetail() {
                       contactId={meeting.primary_contact_id}
                       hasRecording={!!meeting.fathom_recording_id}
                       hasNotes={!!meeting.transcript_text}
+                      onProposalStarted={setActiveProposalId}
                       onCustomise={() => setShowProposalWizard(true)}
                     />
                   </div>
@@ -1413,6 +1416,13 @@ export function MeetingDetail() {
           meetingIds={[meeting.id]}
           contactName={meeting.contact?.email || undefined}
           companyName={companyName || meeting.company?.name}
+        />
+      )}
+      {activeProposalId && (
+        <ProposalProgressOverlay
+          open={!!activeProposalId}
+          onOpenChange={(open) => { if (!open) setActiveProposalId(null); }}
+          proposalId={activeProposalId}
         />
       )}
       {/* Share Meeting Modal */}

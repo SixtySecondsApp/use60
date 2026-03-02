@@ -1,0 +1,1675 @@
+{
+  "project": {
+    "name": "Proposal Generation Engine V2",
+    "description": "Upgrade from wizard-based to pipeline-based proposal generation: one-click, context-rich, pixel-perfect PDF proposals via Gotenberg, with style fingerprinting, offering profiles, and all 4 trigger points",
+    "prd": "docs/proposal_system/proposal_pdf_generator.md",
+    "ref": "PRD-PG-002",
+    "createdAt": "2026-03-02T00:00:00Z",
+    "supersedes": "plan-proposal-generator.json (V1 \u2014 28 stories complete)"
+  },
+  "features": [
+    {
+      "id": "style",
+      "name": "Style Fingerprint \u2014 Wire into Proposals",
+      "status": "complete",
+      "phase": 1,
+      "dependencies": [],
+      "description": "Connect existing user_tone_settings and analyze-writing-style infrastructure into proposal generation. Add edit-distance learning."
+    },
+    {
+      "id": "offering",
+      "name": "Offering Profile \u2014 Structured Product Data",
+      "status": "complete",
+      "phase": 2,
+      "dependencies": [],
+      "description": "New org_offering_profiles table, collateral upload/extract, wire into context assembly."
+    },
+    {
+      "id": "gotenberg",
+      "name": "Gotenberg PDF \u2014 Pixel-Perfect Rendering",
+      "status": "complete",
+      "phase": 3,
+      "dependencies": [],
+      "description": "Deploy Gotenberg on Railway, build HTML template engine with CSS print media queries, replace pdf-lib."
+    },
+    {
+      "id": "pipeline",
+      "name": "5-Stage Pipeline \u2014 End-to-End",
+      "status": "complete",
+      "phase": 4,
+      "dependencies": [
+        "style",
+        "offering",
+        "gotenberg"
+      ],
+      "description": "Context assembly \u2192 AI composition \u2192 template merge \u2192 Gotenberg render \u2192 deliver. Full pipeline orchestration."
+    },
+    {
+      "id": "ux",
+      "name": "One-Click UX \u2014 Frontend",
+      "status": "complete",
+      "phase": 5,
+      "dependencies": [
+        "pipeline"
+      ],
+      "description": "ProposalQuickGenerate button, progress overlay, copilot panel, proposals list view."
+    },
+    {
+      "id": "triggers",
+      "name": "All 4 Triggers \u2014 Wiring",
+      "status": "complete",
+      "phase": 6,
+      "dependencies": [
+        "pipeline"
+      ],
+      "description": "Update PROP-001 to V2 pipeline, consolidate copilot skills, update Slack handler."
+    },
+    {
+      "id": "autopilot",
+      "name": "Autopilot and Polish",
+      "status": "complete",
+      "phase": 7,
+      "dependencies": [
+        "ux",
+        "triggers"
+      ],
+      "description": "Register rubber-stamp thresholds, edit distance tracking, QA, template refinement, performance tuning."
+    }
+  ],
+  "stories": [
+    {
+      "id": "STY-001",
+      "feature": "style",
+      "title": "Wire user_tone_settings into proposal-compose-v2 prompt",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/generate-proposal/index.ts"
+        ],
+        "schema": [
+          "user_tone_settings"
+        ]
+      },
+      "blocks": [
+        "STY-003"
+      ],
+      "parallelWith": [
+        "STY-002",
+        "OFR-001",
+        "GOT-001"
+      ],
+      "acceptance": [
+        "Query user_tone_settings for the proposal creator's user_id",
+        "Inject formality, directness, warmth, words_to_avoid into AI system prompt",
+        "Default to 'professional, consultative, confident' when no tone settings exist",
+        "Style preferences visible in proposals.style_config JSON"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/generate-proposal/index.ts",
+        "src/lib/services/toneSettingsService.ts"
+      ]
+    },
+    {
+      "id": "STY-002",
+      "feature": "style",
+      "title": "Extract style patterns from uploaded proposal examples",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/proposal-parse-document/index.ts"
+        ],
+        "schema": [
+          "proposal_templates"
+        ]
+      },
+      "blocks": [
+        "STY-003"
+      ],
+      "parallelWith": [
+        "STY-001",
+        "OFR-001",
+        "GOT-001"
+      ],
+      "acceptance": [
+        "When proposal-parse-document processes an upload, also analyze writing style",
+        "Extract sentence length averages, vocabulary patterns, tone indicators",
+        "Store writing style metadata alongside template in proposal_templates.brand_config",
+        "Style extraction uses Claude Haiku (cost-efficient, already used in generateCustomSectionsAdapter)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/proposal-parse-document/index.ts"
+      ]
+    },
+    {
+      "id": "STY-003",
+      "feature": "style",
+      "title": "Build compound style fingerprint from multiple sources",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "STY-001",
+          "STY-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "PIP-002"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Merge email analysis (user_tone_settings) + proposal examples + org defaults into single style_config JSON",
+        "Priority order: explicit user settings > learned from examples > org defaults",
+        "Output conforms to ProposalContextPayload.style_fingerprint interface from PRD",
+        "Exported as buildStyleFingerprint(userId, orgId) utility function"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/proposalContext.ts"
+      ]
+    },
+    {
+      "id": "STY-004",
+      "feature": "style",
+      "title": "Track edit distance on approved_edited proposals",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/autopilot/signals.ts"
+        ],
+        "schema": [
+          "autopilot_signals"
+        ]
+      },
+      "blocks": [
+        "STY-005"
+      ],
+      "parallelWith": [
+        "STY-001",
+        "STY-002"
+      ],
+      "acceptance": [
+        "When approved_edited signal fires, compute Levenshtein distance between original and edited sections",
+        "Store edit_distance and edit_fields in ApprovalEvent metadata",
+        "Track which sections were modified (e.g., pricing edited 80% of the time)",
+        "Uses existing ApprovalEvent.edit_distance and edit_fields fields"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/autopilot/signals.ts",
+        "src/lib/services/proposalService.ts"
+      ]
+    },
+    {
+      "id": "STY-005",
+      "feature": "style",
+      "title": "Style learning loop: aggregate edit patterns into tone settings",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": [
+          "STY-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Periodic aggregation of edit patterns per user from autopilot_signals",
+        "Identify trends: which sections get edited most, tone direction of edits",
+        "Update user_tone_settings with learned preferences (additive, never destructive)",
+        "Learning requires minimum 5 approved_edited signals before updating"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/proposalContext.ts",
+        "src/lib/services/toneSettingsService.ts"
+      ]
+    },
+    {
+      "id": "OFR-001",
+      "feature": "offering",
+      "title": "Migration: create org_offering_profiles table with RLS",
+      "type": "schema",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "organizations"
+        ]
+      },
+      "blocks": [
+        "OFR-002",
+        "OFR-003",
+        "OFR-005"
+      ],
+      "parallelWith": [
+        "STY-001",
+        "GOT-001"
+      ],
+      "acceptance": [
+        "org_offering_profiles table created with columns per PRD Section 6",
+        "RLS policies: users can view/manage profiles within their org",
+        "Index on org_id for query performance",
+        "Migration is idempotent (IF NOT EXISTS pattern)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260302000000_org_offering_profiles.sql"
+      ]
+    },
+    {
+      "id": "OFR-002",
+      "feature": "offering",
+      "title": "Build OfferingUploader component for collateral upload",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": {
+        "stories": [
+          "OFR-001"
+        ],
+        "files": [
+          "src/components/proposals/TemplateUploader.tsx"
+        ],
+        "schema": [
+          "proposal_assets"
+        ]
+      },
+      "blocks": [
+        "OFR-004"
+      ],
+      "parallelWith": [
+        "OFR-003"
+      ],
+      "acceptance": [
+        "Drag-and-drop file upload accepting PDF, DOCX, PPTX",
+        "Upload to proposal_assets with asset_type: 'document'",
+        "Shows upload progress and 'Analyzing document...' loading state",
+        "Follows same pattern as existing TemplateUploader component"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/proposals/OfferingUploader.tsx"
+      ]
+    },
+    {
+      "id": "OFR-003",
+      "feature": "offering",
+      "title": "Create offering-extract edge function for AI-powered collateral analysis",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": {
+        "stories": [
+          "OFR-001"
+        ],
+        "files": [
+          "supabase/functions/proposal-parse-document/index.ts"
+        ],
+        "schema": [
+          "org_offering_profiles",
+          "proposal_assets"
+        ]
+      },
+      "blocks": [
+        "OFR-004"
+      ],
+      "parallelWith": [
+        "OFR-002"
+      ],
+      "acceptance": [
+        "Edge function downloads file from Supabase Storage given a proposal_assets.id",
+        "Extract text via mammoth (DOCX) or pdf-parse (PDF)",
+        "Send to Claude for structured extraction: products, services, case studies, pricing models, differentiators",
+        "Creates/updates org_offering_profiles row with extracted JSON data",
+        "Credit cost: 1-2 credits logged via logAICostEvent"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/offering-extract/index.ts"
+      ]
+    },
+    {
+      "id": "OFR-004",
+      "feature": "offering",
+      "title": "Offering review UI: display and edit extracted data before saving",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": {
+        "stories": [
+          "OFR-002",
+          "OFR-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "OFR-006"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Review screen showing extracted products, services, case studies, pricing models",
+        "Editable fields for each extracted item",
+        "Approve button saves to org_offering_profiles",
+        "Follows TemplateExtractReview pattern"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/proposals/OfferingReviewPanel.tsx"
+      ]
+    },
+    {
+      "id": "OFR-005",
+      "feature": "offering",
+      "title": "Wire offering profile into context assembly queries",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": {
+        "stories": [
+          "OFR-001"
+        ],
+        "files": [],
+        "schema": [
+          "org_offering_profiles"
+        ]
+      },
+      "blocks": [
+        "PIP-001"
+      ],
+      "parallelWith": [
+        "OFR-002",
+        "OFR-003"
+      ],
+      "acceptance": [
+        "proposal-assemble-context queries org_offering_profiles for the org",
+        "Includes products, services, case studies, pricing models in context payload",
+        "Falls back to org_settings.value_propositions if no offering profile exists",
+        "Offering data respects 30k token budget (truncate if needed)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/proposalContext.ts"
+      ]
+    },
+    {
+      "id": "OFR-006",
+      "feature": "offering",
+      "title": "Offering profile settings page: view, edit, delete, upload new",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "dependencies": {
+        "stories": [
+          "OFR-004"
+        ],
+        "files": [
+          "src/pages/settings/ProposalSettings.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New tab or section in Settings > Proposal Settings",
+        "List all offering profiles for the org with edit/delete actions",
+        "Upload new collateral button opens OfferingUploader",
+        "Active/inactive toggle per profile"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/settings/ProposalSettings.tsx",
+        "src/components/proposals/OfferingUploader.tsx"
+      ],
+      "completedAt": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "GOT-001",
+      "feature": "gotenberg",
+      "title": "Deploy Gotenberg Docker container on Railway",
+      "type": "infra",
+      "status": "complete",
+      "priority": 12,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GOT-005"
+      ],
+      "parallelWith": [
+        "STY-001",
+        "OFR-001"
+      ],
+      "acceptance": [
+        "Gotenberg container deployed on Railway with internal networking",
+        "Accessible via internal URL (not public-facing)",
+        "Health check endpoint responds at /health",
+        "Configuration: A4 paper, 500ms waitDelay for font loading"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "railway.json",
+        "Dockerfile.gotenberg"
+      ]
+    },
+    {
+      "id": "GOT-002",
+      "feature": "gotenberg",
+      "title": "Build HTML template engine with Handlebars-style substitution",
+      "type": "backend",
+      "status": "complete",
+      "priority": 13,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "proposal_templates"
+        ]
+      },
+      "blocks": [
+        "GOT-004",
+        "GOT-005"
+      ],
+      "parallelWith": [
+        "GOT-001",
+        "GOT-003"
+      ],
+      "acceptance": [
+        "Template engine merges ProposalSection[] into proposal_templates.content HTML",
+        "Variable substitution: {{deal.name}}, {{contact.name}}, {{section.content}} etc.",
+        "Section loop: iterate sections in order, render each into its HTML slot",
+        "Outputs complete HTML document ready for Gotenberg"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/templateEngine.ts"
+      ]
+    },
+    {
+      "id": "GOT-003",
+      "feature": "gotenberg",
+      "title": "CSS print media queries for professional PDF output",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 14,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GOT-004"
+      ],
+      "parallelWith": [
+        "GOT-001",
+        "GOT-002"
+      ],
+      "acceptance": [
+        "@page rules for margins, headers, footers, page numbers",
+        "@media print blocks for page-break control, orphan/widow handling",
+        "Print-specific typography (fonts embedded or loaded from CDN)",
+        "Brand bar, cover page layout render identically in browser and PDF"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/styles/proposal-print.css"
+      ]
+    },
+    {
+      "id": "GOT-004",
+      "feature": "gotenberg",
+      "title": "Build 'Sandler Standard' default HTML + CSS print template",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 15,
+      "dependencies": {
+        "stories": [
+          "GOT-002",
+          "GOT-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GOT-005"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Clean cover page with brand bar and client/company logos",
+        "Structured sections with consistent typography and spacing",
+        "Professional pricing tables with subtotals",
+        "Clear next steps section with action items",
+        "Page numbers in footer, header with company logo"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/20260302000001_sandler_standard_template.sql",
+        "src/templates/sandler-standard.html"
+      ]
+    },
+    {
+      "id": "GOT-005",
+      "feature": "gotenberg",
+      "title": "Create proposal-render-gotenberg edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 16,
+      "dependencies": {
+        "stories": [
+          "GOT-001",
+          "GOT-002",
+          "GOT-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "PIP-004"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function merges sections into HTML via template engine",
+        "POSTs multipart/form-data to Gotenberg (index.html, header.html, footer.html)",
+        "Receives PDF bytes, uploads to S3 (proposal-assets bucket)",
+        "Updates proposals.pdf_url and proposals.pdf_s3_key",
+        "Returns presigned download URL"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/proposal-render-gotenberg/index.ts"
+      ]
+    },
+    {
+      "id": "GOT-006",
+      "feature": "gotenberg",
+      "title": "PDF first-page thumbnail for UI preview",
+      "type": "backend",
+      "status": "complete",
+      "priority": 17,
+      "dependencies": {
+        "stories": [
+          "GOT-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "UX-002"
+      ],
+      "parallelWith": [
+        "GOT-007"
+      ],
+      "acceptance": [
+        "Use Gotenberg screenshot endpoint to capture first page as PNG thumbnail",
+        "Store thumbnail in proposal_assets with asset_type: 'image'",
+        "Thumbnail URL stored in proposals.brand_config.thumbnail_url",
+        "Thumbnail displayed in ProposalProgressOverlay Done state and ProposalPanel"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/proposal-render-gotenberg/index.ts"
+      ],
+      "completedAt": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "GOT-007",
+      "feature": "gotenberg",
+      "title": "Deprecate proposal-generate-pdf (pdf-lib) with v1_legacy flag",
+      "type": "backend",
+      "status": "complete",
+      "priority": 18,
+      "dependencies": {
+        "stories": [
+          "GOT-005"
+        ],
+        "files": [
+          "supabase/functions/proposal-generate-pdf/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "GOT-006"
+      ],
+      "acceptance": [
+        "Add v1_legacy flag to proposal-generate-pdf",
+        "New requests routed to proposal-render-gotenberg by default",
+        "Existing requests with pipeline_version=1 still use pdf-lib",
+        "Deprecation warning logged on legacy calls"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/proposal-generate-pdf/index.ts"
+      ],
+      "completedAt": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "PIP-001",
+      "feature": "pipeline",
+      "title": "Build proposal-assemble-context edge function (Stage 1)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 19,
+      "dependencies": {
+        "stories": [
+          "STY-003",
+          "OFR-005"
+        ],
+        "files": [],
+        "schema": [
+          "proposals",
+          "deals",
+          "contacts",
+          "meetings",
+          "user_tone_settings",
+          "org_offering_profiles"
+        ]
+      },
+      "blocks": [
+        "PIP-004"
+      ],
+      "parallelWith": [
+        "PIP-002"
+      ],
+      "acceptance": [
+        "Queries all 8 data sources from PRD Section 3",
+        "Builds typed ProposalContextPayload JSON matching interface definition",
+        "Stores context snapshot in proposals.context_payload",
+        "Truncates transcript to 15k tokens; falls back to process-recording summary",
+        "Total payload stays under 30k token budget",
+        "Credit cost: 0 (database reads only)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/proposal-assemble-context/index.ts",
+        "supabase/functions/_shared/proposalContext.ts"
+      ]
+    },
+    {
+      "id": "PIP-002",
+      "feature": "pipeline",
+      "title": "Build proposal-compose-v2 edge function (Stage 2)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 20,
+      "dependencies": {
+        "stories": [
+          "STY-003"
+        ],
+        "files": [
+          "supabase/functions/generate-proposal/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "PIP-004"
+      ],
+      "parallelWith": [
+        "PIP-001"
+      ],
+      "acceptance": [
+        "Accepts ProposalContextPayload + template schema + style fingerprint",
+        "Sends to Claude Sonnet 4.5 via model router",
+        "Returns ProposalSection[] structured JSON (validated against PROPOSAL_SECTIONS_SCHEMA)",
+        "Style calibration: injects style_fingerprint into system prompt",
+        "Offering awareness: maps products/services into Solution and Investment sections",
+        "Credit cost: 3-5 credits logged via logAICostEvent",
+        "Budget check via checkCreditBalance before generation"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/proposal-compose-v2/index.ts"
+      ]
+    },
+    {
+      "id": "PIP-003",
+      "feature": "pipeline",
+      "title": "Build proposal-deliver edge function (Stage 5)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 21,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "proposals",
+          "activities"
+        ]
+      },
+      "blocks": [
+        "PIP-004"
+      ],
+      "parallelWith": [
+        "PIP-001",
+        "PIP-002"
+      ],
+      "acceptance": [
+        "Creates activities row: type proposal_generated, linked to deal and contact",
+        "Sends Slack DM to rep with PDF download link",
+        "Updates proposals.status to 'ready'",
+        "If autonomy_tier is 'auto': sends client email with undo window",
+        "Credit cost: 0-0.5 credits"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/proposal-deliver/index.ts"
+      ]
+    },
+    {
+      "id": "PIP-004",
+      "feature": "pipeline",
+      "title": "Pipeline orchestration: chain stages with realtime status updates",
+      "type": "backend",
+      "status": "complete",
+      "priority": 22,
+      "dependencies": {
+        "stories": [
+          "PIP-001",
+          "PIP-002",
+          "PIP-003",
+          "GOT-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "UX-001",
+        "TRG-001"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Chain: Stage 1 \u2192 2 \u2192 3-4 (GOT-005) \u2192 5",
+        "Update proposals.generation_status at each stage via Supabase realtime",
+        "Store timing per stage in proposals metadata",
+        "Log credit usage per stage",
+        "Total pipeline completes in <60s"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/proposal-pipeline-v2/index.ts"
+      ],
+      "completedAt": "2026-03-02T12:00:00Z"
+    },
+    {
+      "id": "PIP-005",
+      "feature": "pipeline",
+      "title": "Pipeline error handling and retry logic",
+      "type": "backend",
+      "status": "complete",
+      "priority": 23,
+      "dependencies": {
+        "stories": [
+          "PIP-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIP-006"
+      ],
+      "acceptance": [
+        "Graceful degradation at each stage (e.g., skip offering if not available)",
+        "Retry logic for transient failures (Gotenberg timeout, API errors)",
+        "Clear error states in proposals.generation_status = 'failed' with error_message",
+        "Uses existing retry pattern from REL-002 (exponential backoff 1s, 3s, 9s)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/proposal-pipeline-v2/index.ts"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "PIP-006",
+      "feature": "pipeline",
+      "title": "Pipeline monitoring: timing, credits, error rates per stage",
+      "type": "backend",
+      "status": "complete",
+      "priority": 24,
+      "dependencies": {
+        "stories": [
+          "PIP-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "PIP-005"
+      ],
+      "acceptance": [
+        "Log start/end time for each pipeline stage",
+        "Aggregate credit usage across all stages per proposal",
+        "Store total in proposals.credits_used",
+        "Error rate tracking per stage for monitoring dashboard"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/proposal-pipeline-v2/index.ts"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "UX-001",
+      "feature": "ux",
+      "title": "Build ProposalQuickGenerate button on meeting detail page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 25,
+      "dependencies": {
+        "stories": [
+          "PIP-004"
+        ],
+        "files": [
+          "src/pages/MeetingDetail.tsx",
+          "src/components/meetings/MeetingDetail.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "UX-005"
+      ],
+      "parallelWith": [
+        "UX-002",
+        "TRG-001"
+      ],
+      "acceptance": [
+        "Blue primary button 'Generate Proposal' with FileText icon (lucide-react)",
+        "Positioned next to existing action buttons on meeting detail",
+        "Disabled when meeting has no recording AND no notes, tooltip: 'No meeting data available yet'",
+        "Click fires V2 pipeline and opens ProposalProgressOverlay",
+        "Creates proposal record with trigger_type: 'manual_button'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/proposals/ProposalQuickGenerate.tsx",
+        "src/pages/MeetingDetail.tsx"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "UX-002",
+      "feature": "ux",
+      "title": "Build ProposalProgressOverlay with 5-stage progress bar",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 26,
+      "dependencies": {
+        "stories": [
+          "PIP-004",
+          "GOT-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "UX-006"
+      ],
+      "parallelWith": [
+        "UX-001"
+      ],
+      "acceptance": [
+        "Modal overlay with 5-stage progress bar per PRD Section 9",
+        "Subscribes to proposals table changes via Supabase Realtime",
+        "Each stage animates on completion with label and description",
+        "Final 'Done' state shows PDF thumbnail, Download PDF, Edit Sections, Send to Client buttons",
+        "Credits used badge shown in Done state"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/proposals/ProposalProgressOverlay.tsx"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "UX-003",
+      "feature": "ux",
+      "title": "Build ProposalPanel copilot response type",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 27,
+      "dependencies": {
+        "stories": [
+          "PIP-004"
+        ],
+        "files": [
+          "src/components/copilot/responses/ProposalSelectionResponse.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "UX-001",
+        "UX-002"
+      ],
+      "acceptance": [
+        "New response panel type in the 48-panel architecture",
+        "Shows PDF thumbnail, title, client name",
+        "Quick actions: Download PDF, Edit in 60, Regenerate, Send to Client",
+        "Credits used badge and status indicator (generating / ready / sent)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/copilot/responses/ProposalPanel.tsx"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "UX-004",
+      "feature": "ux",
+      "title": "Build Proposals list view with filters and actions",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 28,
+      "dependencies": {
+        "stories": [
+          "PIP-004"
+        ],
+        "files": [],
+        "schema": [
+          "proposals"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "UX-001",
+        "UX-002",
+        "UX-003"
+      ],
+      "acceptance": [
+        "Table view: Title, Client, Deal, Created, Status, Trigger, Credits, Actions",
+        "Filterable by status, trigger_type, and date range",
+        "Sortable by all columns",
+        "Actions: Download PDF, Edit, Regenerate, Send, Delete",
+        "Accessible from main navigation"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/ProposalsList.tsx"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "UX-005",
+      "feature": "ux",
+      "title": "Wire ProposalWizard as 'Customise' secondary path",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 29,
+      "dependencies": {
+        "stories": [
+          "UX-001"
+        ],
+        "files": [
+          "src/components/proposals/ProposalWizard.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "UX-006"
+      ],
+      "acceptance": [
+        "Secondary text link 'Customise' below ProposalQuickGenerate button",
+        "Opens existing ProposalWizard 8-step flow",
+        "Wizard pre-populated with deal/meeting context from the page",
+        "Wizard output routed through V2 pipeline for Gotenberg rendering"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/proposals/ProposalQuickGenerate.tsx",
+        "src/pages/MeetingDetail.tsx"
+      ],
+      "completedAt": "2026-03-02T22:14:36.147454Z"
+    },
+    {
+      "id": "UX-006",
+      "feature": "ux",
+      "title": "Post-generation edit flow: Done \u2192 edit sections \u2192 re-render PDF",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 30,
+      "dependencies": {
+        "stories": [
+          "UX-002"
+        ],
+        "files": [
+          "src/components/proposals/ProposalPreview.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "UX-005"
+      ],
+      "acceptance": [
+        "From ProposalProgressOverlay Done state, 'Edit Sections' opens ProposalPreview",
+        "Inline editing of sections with existing contentEditable mode",
+        "'Re-generate PDF' button fires Stages 3-4 only (skip context assembly and composition)",
+        "Updated PDF replaces previous in S3"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/proposals/ProposalProgressOverlay.tsx",
+        "src/components/proposals/ProposalPreview.tsx"
+      ],
+      "completedAt": "2026-03-02T22:14:36.147454Z"
+    },
+    {
+      "id": "TRG-001",
+      "feature": "triggers",
+      "title": "Update detectProposalIntentAdapter (PROP-001) to use V2 pipeline",
+      "type": "backend",
+      "status": "complete",
+      "priority": 31,
+      "dependencies": {
+        "stories": [
+          "PIP-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRG-002",
+        "TRG-003",
+        "UX-001"
+      ],
+      "acceptance": [
+        "PROP-001 calls V2 pipeline (proposal-pipeline-v2) instead of legacy generate-proposal",
+        "Pipeline receives deal_id, meeting_id, trigger_type: 'auto_post_meeting'",
+        "Existing skip conditions preserved (no intents, no deal_id)",
+        "Backward compatible: V1 pipeline still accessible via pipeline_version flag"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "TRG-002",
+      "feature": "triggers",
+      "title": "Consolidate 3 copilot skills into generate-proposal-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 32,
+      "dependencies": {
+        "stories": [
+          "PIP-004"
+        ],
+        "files": [
+          "skills/atomic/proposal/SKILL.md",
+          "skills/atomic/proposal-generator/SKILL.md",
+          "skills/atomic/copilot-proposal/SKILL.md"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRG-001",
+        "TRG-003"
+      ],
+      "acceptance": [
+        "New generate-proposal-v2 SKILL.md with frontmatter per PRD Section 8",
+        "Existing 3 skills marked as deprecated (is_active: false) but not deleted",
+        "Routing updated in copilotRoutingService.ts to map trigger phrases to new skill",
+        "Skill fires V2 pipeline with trigger_type: 'copilot'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "skills/atomic/generate-proposal-v2/SKILL.md",
+        "src/lib/services/copilotRoutingService.ts"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "TRG-003",
+      "feature": "triggers",
+      "title": "Update Slack proposal_request handler to use V2 pipeline",
+      "type": "backend",
+      "status": "complete",
+      "priority": 33,
+      "dependencies": {
+        "stories": [
+          "PIP-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRG-001",
+        "TRG-002"
+      ],
+      "acceptance": [
+        "Slack handler resolves entity ref to deal_id/meeting_id",
+        "Fires V2 pipeline with trigger_type: 'slack'",
+        "Posts progress updates in Slack thread (Stage 1... Stage 2... etc.)",
+        "Final message: PDF file upload + download link + 'Edit in 60' button"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-copilot/handlers/proposalHandler.ts"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "TRG-004",
+      "feature": "triggers",
+      "title": "Manual button trigger wiring (ProposalQuickGenerate \u2192 pipeline)",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 34,
+      "dependencies": {
+        "stories": [
+          "UX-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRG-001",
+        "TRG-002",
+        "TRG-003"
+      ],
+      "acceptance": [
+        "ProposalQuickGenerate creates proposal record with trigger_type: 'manual_button'",
+        "Fires pipeline via supabase.functions.invoke('proposal-pipeline-v2')",
+        "Subscribes to realtime updates for ProposalProgressOverlay",
+        "All 4 trigger types now active and testable"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/proposals/ProposalQuickGenerate.tsx"
+      ],
+      "completedAt": "2026-03-02T22:14:36.147454Z"
+    },
+    {
+      "id": "AUT-001",
+      "feature": "autopilot",
+      "title": "Register proposal.generate and proposal.send in RUBBER_STAMP_THRESHOLDS",
+      "type": "backend",
+      "status": "complete",
+      "priority": 35,
+      "dependencies": {
+        "stories": [
+          "TRG-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/autopilot/signals.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "AUT-002",
+        "AUT-003"
+      ],
+      "acceptance": [
+        "Add 'proposal.generate': 4000 to RUBBER_STAMP_THRESHOLDS",
+        "Add 'proposal.send': 5000 to RUBBER_STAMP_THRESHOLDS",
+        "Approvals faster than thresholds flagged as rubber stamps",
+        "Rubber stamps do not count toward autonomy promotion"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/_shared/autopilot/signals.ts"
+      ],
+      "completedAt": "2026-03-02T22:14:36.147454Z"
+    },
+    {
+      "id": "AUT-002",
+      "feature": "autopilot",
+      "title": "Wire edit distance tracking into autopilot signals for proposals",
+      "type": "backend",
+      "status": "complete",
+      "priority": 36,
+      "dependencies": {
+        "stories": [
+          "STY-004",
+          "TRG-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "AUT-001",
+        "AUT-003"
+      ],
+      "acceptance": [
+        "When proposal approved with edits, compute Levenshtein ratio between original and edited sections",
+        "Store in ApprovalEvent.edit_distance (existing field)",
+        "Track edited section IDs in ApprovalEvent.edit_fields (existing field)",
+        "Signal weight: approved_edited (+0.3) applies to proposal actions"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/autopilot/signals.ts",
+        "src/lib/services/proposalService.ts"
+      ],
+      "completedAt": "2026-03-02T22:14:36.147454Z"
+    },
+    {
+      "id": "AUT-003",
+      "feature": "autopilot",
+      "title": "Autonomy tier display in proposal settings",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 37,
+      "dependencies": {
+        "stories": [
+          "UX-004"
+        ],
+        "files": [
+          "src/pages/settings/ProposalSettings.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "AUT-001",
+        "AUT-002"
+      ],
+      "acceptance": [
+        "Show current autonomy tier for proposal.generate and proposal.send",
+        "Explain promotion criteria (5+ approved for 'approve', 15+ with <5% edit for 'auto')",
+        "Allow manual override to a lower tier (never force promotion)",
+        "Display signal history summary: approved/rejected/edited counts"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/settings/ProposalSettings.tsx"
+      ],
+      "completedAt": "2026-03-02T22:14:36.147454Z"
+    },
+    {
+      "id": "AUT-004",
+      "feature": "autopilot",
+      "title": "QA: test all 4 triggers end-to-end with real meeting data",
+      "type": "test",
+      "status": "complete",
+      "priority": 38,
+      "dependencies": {
+        "stories": [
+          "UX-001",
+          "TRG-001",
+          "TRG-002",
+          "TRG-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "AUT-005"
+      ],
+      "acceptance": [
+        "Post-meeting auto trigger fires correctly on meeting_ended event with send_proposal intent",
+        "Manual button generates proposal from meeting detail page",
+        "Copilot skill generates proposal from 'write a proposal for [deal]' command",
+        "Slack handler generates proposal from '@60 write proposal for deal X'",
+        "All 4 produce valid PDF output via Gotenberg"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "completedAt": "2026-03-02T22:14:36.147454Z"
+    },
+    {
+      "id": "AUT-005",
+      "feature": "autopilot",
+      "title": "Template refinement: iterate Sandler Standard based on real output",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 39,
+      "dependencies": {
+        "stories": [
+          "GOT-004",
+          "PIP-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "AUT-004"
+      ],
+      "acceptance": [
+        "Generate 10+ proposals with real meeting data",
+        "Review PDF quality: typography, spacing, page breaks, brand rendering",
+        "Iterate CSS print media queries for optimal output",
+        "Fix any rendering issues across different content lengths"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/templates/sandler-standard.html",
+        "src/styles/proposal-print.css"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    },
+    {
+      "id": "AUT-006",
+      "feature": "autopilot",
+      "title": "Performance tuning: pipeline latency, Gotenberg warm-up, caching",
+      "type": "backend",
+      "status": "complete",
+      "priority": 40,
+      "dependencies": {
+        "stories": [
+          "PIP-004",
+          "GOT-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "AUT-004",
+        "AUT-005"
+      ],
+      "acceptance": [
+        "Pipeline p95 latency under 60 seconds",
+        "Gotenberg cold start mitigated (keep-alive or warm-up endpoint)",
+        "Context assembly queries cached where appropriate (company data, offering profile)",
+        "Pipeline timing logged per stage for monitoring"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/proposal-pipeline-v2/index.ts",
+        "supabase/functions/proposal-render-gotenberg/index.ts"
+      ],
+      "completedAt": "2026-03-02T13:00:00Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 40,
+    "completedStories": 40,
+    "currentFeature": "style,offering,gotenberg",
+    "lastUpdated": "2026-03-02T22:14:36.147454Z",
+    "phases": {
+      "phase1_style": {
+        "name": "Style Fingerprint \u2014 Wire into Proposals",
+        "stories": [
+          "STY-001",
+          "STY-002",
+          "STY-003",
+          "STY-004",
+          "STY-005"
+        ],
+        "estimatedHours": "2",
+        "parallelGroups": [
+          [
+            "STY-001",
+            "STY-002",
+            "STY-004"
+          ],
+          [
+            "STY-003"
+          ],
+          [
+            "STY-005"
+          ]
+        ],
+        "canParallelWith": [
+          "phase2_offering",
+          "phase3_gotenberg"
+        ]
+      },
+      "phase2_offering": {
+        "name": "Offering Profile \u2014 Structured Product Data",
+        "stories": [
+          "OFR-001",
+          "OFR-002",
+          "OFR-003",
+          "OFR-004",
+          "OFR-005",
+          "OFR-006"
+        ],
+        "estimatedHours": "2.5",
+        "parallelGroups": [
+          [
+            "OFR-001"
+          ],
+          [
+            "OFR-002",
+            "OFR-003",
+            "OFR-005"
+          ],
+          [
+            "OFR-004"
+          ],
+          [
+            "OFR-006"
+          ]
+        ],
+        "canParallelWith": [
+          "phase1_style",
+          "phase3_gotenberg"
+        ]
+      },
+      "phase3_gotenberg": {
+        "name": "Gotenberg PDF \u2014 Pixel-Perfect Rendering",
+        "stories": [
+          "GOT-001",
+          "GOT-002",
+          "GOT-003",
+          "GOT-004",
+          "GOT-005",
+          "GOT-006",
+          "GOT-007"
+        ],
+        "estimatedHours": "3",
+        "parallelGroups": [
+          [
+            "GOT-001",
+            "GOT-002",
+            "GOT-003"
+          ],
+          [
+            "GOT-004"
+          ],
+          [
+            "GOT-005"
+          ],
+          [
+            "GOT-006",
+            "GOT-007"
+          ]
+        ],
+        "canParallelWith": [
+          "phase1_style",
+          "phase2_offering"
+        ]
+      },
+      "phase4_pipeline": {
+        "name": "5-Stage Pipeline \u2014 End-to-End",
+        "stories": [
+          "PIP-001",
+          "PIP-002",
+          "PIP-003",
+          "PIP-004",
+          "PIP-005",
+          "PIP-006"
+        ],
+        "estimatedHours": "2.5",
+        "parallelGroups": [
+          [
+            "PIP-001",
+            "PIP-002",
+            "PIP-003"
+          ],
+          [
+            "PIP-004"
+          ],
+          [
+            "PIP-005",
+            "PIP-006"
+          ]
+        ],
+        "dependsOn": [
+          "phase1_style",
+          "phase2_offering",
+          "phase3_gotenberg"
+        ]
+      },
+      "phase5_ux": {
+        "name": "One-Click UX \u2014 Frontend",
+        "stories": [
+          "UX-001",
+          "UX-002",
+          "UX-003",
+          "UX-004",
+          "UX-005",
+          "UX-006"
+        ],
+        "estimatedHours": "2.5",
+        "parallelGroups": [
+          [
+            "UX-001",
+            "UX-002",
+            "UX-003",
+            "UX-004"
+          ],
+          [
+            "UX-005",
+            "UX-006"
+          ]
+        ],
+        "dependsOn": [
+          "phase4_pipeline"
+        ],
+        "canParallelWith": [
+          "phase6_triggers"
+        ]
+      },
+      "phase6_triggers": {
+        "name": "All 4 Triggers \u2014 Wiring",
+        "stories": [
+          "TRG-001",
+          "TRG-002",
+          "TRG-003",
+          "TRG-004"
+        ],
+        "estimatedHours": "1.5",
+        "parallelGroups": [
+          [
+            "TRG-001",
+            "TRG-002",
+            "TRG-003",
+            "TRG-004"
+          ]
+        ],
+        "dependsOn": [
+          "phase4_pipeline"
+        ],
+        "canParallelWith": [
+          "phase5_ux"
+        ]
+      },
+      "phase7_autopilot": {
+        "name": "Autopilot and Polish",
+        "stories": [
+          "AUT-001",
+          "AUT-002",
+          "AUT-003",
+          "AUT-004",
+          "AUT-005",
+          "AUT-006"
+        ],
+        "estimatedHours": "2.5",
+        "parallelGroups": [
+          [
+            "AUT-001",
+            "AUT-002",
+            "AUT-003"
+          ],
+          [
+            "AUT-004",
+            "AUT-005",
+            "AUT-006"
+          ]
+        ],
+        "dependsOn": [
+          "phase5_ux",
+          "phase6_triggers"
+        ]
+      }
+    }
+  },
+  "risks": [
+    {
+      "id": "RISK-001",
+      "severity": "high",
+      "description": "Gotenberg container on Railway: cold start latency and reliability in production. Railway containers can sleep if not accessed frequently.",
+      "mitigation": "Configure Railway to keep container always-on (not sleep). Add warm-up ping. Fallback to Browserless.io cloud API if Railway has issues."
+    },
+    {
+      "id": "RISK-002",
+      "severity": "high",
+      "description": "Gotenberg network access from Supabase edge functions: edge functions run on Deno Deploy and may not have direct access to Railway internal networking.",
+      "mitigation": "Use Railway's public URL with API key auth, or deploy Gotenberg behind a reverse proxy with rate limiting. Test connectivity before building the full pipeline."
+    },
+    {
+      "id": "RISK-003",
+      "severity": "medium",
+      "description": "CSS print media queries are notoriously finicky across different Chromium versions. Gotenberg's embedded Chromium version may render differently than expected.",
+      "mitigation": "Pin Gotenberg to a specific version. Test templates against the exact Chromium version in the container. Keep CSS simple and avoid bleeding-edge features."
+    },
+    {
+      "id": "RISK-004",
+      "severity": "medium",
+      "description": "Context assembly hitting 30k token budget: 8 data sources may exceed budget for deals with rich history.",
+      "mitigation": "Priority-based truncation: transcript and offering profile are highest priority, conversation history is lowest. Implement token counting and truncation at assembly time."
+    },
+    {
+      "id": "RISK-005",
+      "severity": "medium",
+      "description": "Offering extraction quality varies significantly by document type. Pitch decks (PPTX) are harder to parse than product sheets (PDF/DOCX).",
+      "mitigation": "Start with PDF/DOCX only (already supported via mammoth/pdfjs). Add PPTX support as a follow-up. AI prompt handles gracefully with partial extraction."
+    },
+    {
+      "id": "RISK-006",
+      "severity": "low",
+      "description": "Style fingerprint cold start: new users have no email analysis, no uploaded examples, no edit history.",
+      "mitigation": "Default to 'professional, consultative' tone. Prompt users to run analyze-writing-style during onboarding. Style improves naturally as edit history accumulates."
+    }
+  ],
+  "notes": {
+    "v1Status": "28 stories complete. All Phase 1-4 features shipped. V1 plan at .sixty/plan-proposal-generator.json",
+    "keyDecisions": [
+      "One-click primary UX, wizard as 'Customise' advanced path",
+      "Both email analysis + uploaded proposal examples for style source",
+      "Pixel-perfect branded PDF via Gotenberg (not pdf-lib)",
+      "Upload collateral + AI extract for offering data",
+      "All 4 triggers ship simultaneously in V1"
+    ],
+    "criticalPath": "Phase 3 (Gotenberg) is the longest of the parallel phases \u2192 Phase 4 (Pipeline) \u2192 Phase 7 (Polish). Total: ~8 weeks with parallelization.",
+    "existingInfra": "PROP-001 (detectProposalIntentAdapter), PROP-002 (proposalApprovalAdapter), meeting_ended sequence, creditLedger, costTracking, user_tone_settings, analyze-writing-style, proposal_templates, proposal_assets \u2014 all production-ready and reused."
+  }
+}

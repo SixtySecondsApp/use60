@@ -250,6 +250,33 @@ const ProposalsList: React.FC = () => {
   });
 
   // -------------------------------------------------------------------------
+  // AUT-002: Record autopilot signal when a proposal is dismissed/deleted
+  // -------------------------------------------------------------------------
+
+  const recordDismissSignal = async (proposalId: string) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
+
+      await supabase.functions.invoke('autopilot-record-signal', {
+        method: 'POST',
+        body: {
+          action_type: 'proposal.generate',
+          agent_name: 'proposal_pipeline',
+          signal: 'rejected',
+          edit_distance: 0,
+          autonomy_tier_at_time: 'suggest',
+        },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (err) {
+      // Fire-and-forget — do not surface errors to user
+      console.error('[ProposalsList] recordDismissSignal error:', err);
+    }
+  };
+
+  // -------------------------------------------------------------------------
   // Delete mutation
   // -------------------------------------------------------------------------
 
@@ -261,9 +288,10 @@ const ProposalsList: React.FC = () => {
         .eq('id', id);
       if (deleteError) throw deleteError;
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['proposals'] });
       toast.success('Proposal deleted');
+      recordDismissSignal(id);
       setDeleteTarget(null);
     },
     onError: (err: Error) => {
