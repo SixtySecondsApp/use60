@@ -217,4 +217,5 @@ export interface BrandConfig {
   text_color: string;
   font_heading: string;
   font_body: string;
+  show_dividers?: boolean;
 }

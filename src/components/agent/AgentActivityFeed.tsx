@@ -237,21 +237,24 @@ export function AgentActivityFeed({ onClose }: AgentActivityFeedProps) {
       </div>
 
       {/* Filter Tabs */}
-      <div className="px-4 sm:px-5 py-2 border-b border-gray-200 dark:border-gray-800 flex gap-1 overflow-x-auto">
-        {FILTER_OPTIONS.map((filter) => (
-          <button
-            key={filter.key}
-            onClick={() => setActiveFilter(filter.key)}
-            className={cn(
-              'px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
-              activeFilter === filter.key
-                ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-            )}
-          >
-            {filter.label}
-          </button>
-        ))}
+      <div className="px-4 sm:px-5 py-3 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {FILTER_OPTIONS.map((filter) => (
+            <button
+              key={filter.key}
+              onClick={() => setActiveFilter(filter.key)}
+              aria-pressed={activeFilter === filter.key}
+              className={cn(
+                'shrink-0 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
+                activeFilter === filter.key
+                  ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Activity List */}

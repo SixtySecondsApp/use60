@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Loader2, AlertTriangle, Monitor, Tablet, Smartphone } from 'lucide-react';
+import { Check, Loader2, AlertTriangle, Monitor, Tablet, Smartphone, Waves } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ReactSectionRenderer } from './ReactSectionRenderer';
 import type { LandingSection, BrandConfig, AssetStatus } from './types';
@@ -23,6 +23,10 @@ interface AssemblyPreviewProps {
   brandConfig: BrandConfig;
   highlightSectionId?: string;
   onSectionClick?: (sectionId: string) => void;
+  showDividers?: boolean;
+  onToggleDividers?: () => void;
+  onSectionUpdate?: (sectionId: string, updates: Partial<LandingSection>) => void;
+  onRegenerateAsset?: (sectionId: string, assetType: 'image' | 'svg') => void;
 }
 
 type DeviceWidth = 'mobile' | 'tablet' | 'desktop';
@@ -66,6 +70,10 @@ export const AssemblyPreview: React.FC<AssemblyPreviewProps> = ({
   brandConfig,
   highlightSectionId,
   onSectionClick,
+  showDividers = true,
+  onToggleDividers,
+  onSectionUpdate,
+  onRegenerateAsset,
 }) => {
   const [device, setDevice] = useState<DeviceWidth>('desktop');
   const [recentlyCompleted, setRecentlyCompleted] = useState<Set<string>>(new Set());
@@ -148,6 +156,26 @@ export const AssemblyPreview: React.FC<AssemblyPreviewProps> = ({
               <Icon className="w-4 h-4" />
             </button>
           ))}
+
+          {/* Divider toggle */}
+          {onToggleDividers && (
+            <>
+              <div className="w-px h-4 bg-gray-200 dark:bg-white/10 mx-1" />
+              <button
+                type="button"
+                onClick={onToggleDividers}
+                className={cn(
+                  'p-1.5 rounded-md transition-colors',
+                  showDividers
+                    ? 'bg-violet-500/10 text-violet-500'
+                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300',
+                )}
+                title={showDividers ? 'Hide section dividers' : 'Show section dividers'}
+              >
+                <Waves className="w-4 h-4" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Asset generation progress */}
@@ -210,6 +238,9 @@ export const AssemblyPreview: React.FC<AssemblyPreviewProps> = ({
             sections={sections}
             brandConfig={brandConfig}
             onSectionClick={onSectionClick}
+            showDividers={showDividers}
+            onSectionUpdate={onSectionUpdate}
+            onRegenerateAsset={onRegenerateAsset}
           />
         </div>
       </div>

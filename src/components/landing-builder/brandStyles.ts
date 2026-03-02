@@ -68,6 +68,32 @@ export function generateBaseStyles(brand: BrandConfig): string {
     .animate-stagger-child { animation: stagger-child 0.5s ease-out both; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .animate-fadeIn { animation: fadeIn 0.5s ease-out both; }
+
+    /* Inline edit hover hints */
+    [data-section-id] h1:hover,
+    [data-section-id] h2:hover,
+    [data-section-id] p:hover,
+    [data-section-id] .cta-btn:hover {
+      outline: 1px dashed rgba(139, 92, 246, 0.3);
+      outline-offset: 2px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    [contenteditable="true"] {
+      outline: 2px solid #8b5cf6 !important;
+      outline-offset: 2px;
+      border-radius: 4px;
+      cursor: text;
+    }
+    [contenteditable="true"]:focus {
+      outline: 2px solid #8b5cf6 !important;
+    }
+    [data-divider-for]:hover {
+      outline: 1px dashed rgba(139, 92, 246, 0.3);
+      outline-offset: -2px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
   `;
 }
 

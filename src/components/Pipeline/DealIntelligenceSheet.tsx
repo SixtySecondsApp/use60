@@ -197,6 +197,10 @@ export function DealIntelligenceSheet({
   const chatEndRef = React.useRef<HTMLDivElement>(null);
   const chatInputRef = React.useRef<HTMLTextAreaElement>(null);
 
+  // Stable ref for dealChat.reset to avoid infinite re-render loop
+  const dealChatResetRef = React.useRef(dealChat.reset);
+  dealChatResetRef.current = dealChat.reset;
+
   // Filtered slash commands based on current input
   const filteredSlashCommands = useMemo(() => {
     if (!showSlashMenu) return [];
@@ -211,9 +215,9 @@ export function DealIntelligenceSheet({
   useEffect(() => {
     if (!open) {
       setChatMode(false);
-      dealChat.reset();
+      dealChatResetRef.current();
     }
-  }, [open, _dealId, dealChat]);
+  }, [open, _dealId]);
 
   // Auto-scroll chat on new messages
   useEffect(() => {
