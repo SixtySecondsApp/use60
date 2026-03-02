@@ -226,7 +226,7 @@ serve(async (req) => {
         const { error: creditError } = await supabaseAdmin.rpc('add_credits', {
           p_org_id: tokenData.org_id,
           p_amount: tokenData.credit_amount,
-          p_type: 'admin_grant',
+          p_type: 'bonus',
           p_description: 'Test user provisioning — magic link signup',
           p_stripe_session_id: null,
           p_created_by: tokenData.created_by,

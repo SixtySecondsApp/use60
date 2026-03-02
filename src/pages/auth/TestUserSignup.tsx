@@ -135,6 +135,9 @@ export default function TestUserSignup() {
         throw new Error(result?.error || 'Signup failed');
       }
 
+      // Set onboarding completed timestamp so ProductTour triggers
+      localStorage.setItem('sixty_onboarding_completed_at', String(Date.now()));
+
       // Set the magic link org as active BEFORE sign-in so orgStore picks it up
       try {
         const stored = JSON.parse(localStorage.getItem('org-store') || '{}');
