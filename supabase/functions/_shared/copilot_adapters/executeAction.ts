@@ -411,6 +411,70 @@ export async function executeAction(
       const skillContext = (params.skill_context || params.context || {}) as Record<string, unknown>;
       const dryRun = params.dry_run === true || params.is_simulation === true;
 
+      // AUT-004 / TRG-003: Proposal V2 pipeline — invoke directly rather than via AI skill executor.
+      // Skills that declare `pipeline.entry_function` in frontmatter trigger a real edge function pipeline.
+      // Currently handled explicitly for generate-proposal-v2 to keep this path auditable.
+      if (skillKey === 'generate-proposal-v2' && !dryRun) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+        if (!supabaseUrl || !serviceKey) {
+          return { success: false, data: null, error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for pipeline invocation' };
+        }
+
+        const pipelineBody: Record<string, unknown> = {
+          deal_id: skillContext.deal_id ?? undefined,
+          meeting_id: skillContext.meeting_id ?? undefined,
+          contact_id: skillContext.contact_id ?? undefined,
+          trigger_type: 'copilot',
+          user_id: userId,
+          org_id: orgId,
+        };
+
+        try {
+          const pipelineResp = await fetch(`${supabaseUrl}/functions/v1/proposal-pipeline-v2`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${serviceKey}`,
+            },
+            body: JSON.stringify(pipelineBody),
+          });
+
+          const pipelineData = pipelineResp.ok
+            ? await pipelineResp.json().catch(() => ({}))
+            : { error: await pipelineResp.text().catch(() => `HTTP ${pipelineResp.status}`) };
+
+          if (!pipelineResp.ok) {
+            return {
+              success: false,
+              data: pipelineData,
+              error: `proposal-pipeline-v2 failed: ${pipelineData.error || pipelineResp.status}`,
+              source: 'run_skill',
+            };
+          }
+
+          return {
+            success: true,
+            data: {
+              proposal_id: pipelineData.proposal_id,
+              generation_status: pipelineData.generation_status,
+              pdf_url: pipelineData.pdf_url,
+              pipeline_version: 'v2',
+              skill_key: skillKey,
+            },
+            source: 'run_skill',
+          };
+        } catch (pipelineErr) {
+          return {
+            success: false,
+            data: null,
+            error: `Failed to invoke proposal-pipeline-v2: ${pipelineErr instanceof Error ? pipelineErr.message : String(pipelineErr)}`,
+            source: 'run_skill',
+          };
+        }
+      }
+
       // Prefer org-enabled compiled skill docs; fallback to prompt runtime if not enabled (handled internally)
       const { executeAgentSkillWithContract } = await import('../agentSkillExecutor.ts');
       const result = await executeAgentSkillWithContract(client as any, {
