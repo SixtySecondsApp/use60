@@ -117,14 +117,35 @@ serve(async (req) => {
     const hasMeetingBaaS = !!meetingBaaSData;
     const meetingBaaSPlatform = meetingBaaSData?.platform as string | undefined;
 
-    // Calendar: prefer direct Google integration, fall back to MeetingBaaS
-    const hasCalendar = hasGoogleCalendar || hasMeetingBaaS;
+    // Check Microsoft 365 integration
+    const { data: microsoftData } = await supabase
+      .from('microsoft_integrations')
+      .select('scopes, service_preferences')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+    const hasMicrosoftCalendar = !!(
+      microsoftData?.scopes &&
+      typeof microsoftData.scopes === 'string' &&
+      microsoftData.scopes.includes('Calendars')
+    );
+    const hasMicrosoftMail = !!(
+      microsoftData?.scopes &&
+      typeof microsoftData.scopes === 'string' &&
+      (microsoftData.scopes.includes('Mail.Read') || microsoftData.scopes.includes('Mail.ReadWrite'))
+    );
+
+    // Calendar: prefer direct Google, then Microsoft, fall back to MeetingBaaS
+    const hasCalendar = hasGoogleCalendar || hasMicrosoftCalendar || hasMeetingBaaS;
     let calendarProvider: string | undefined;
     let calendarFeatures: string[] = [];
 
     if (hasGoogleCalendar) {
       calendarProvider = 'google';
       calendarFeatures = ['events', 'attendees', 'availability'];
+    } else if (hasMicrosoftCalendar) {
+      calendarProvider = 'microsoft';
+      calendarFeatures = ['events', 'attendees', 'availability', 'teams'];
     } else if (hasMeetingBaaS) {
       calendarProvider = meetingBaaSPlatform === 'microsoft' ? 'microsoft' : 'google';
       calendarFeatures = ['events']; // Limited features via MeetingBaaS
@@ -137,7 +158,7 @@ serve(async (req) => {
       features: calendarFeatures,
     });
 
-    // Email capability
+    // Email capability — Google Gmail or Microsoft Outlook
     const hasGmail = !!(
       googleData?.scopes &&
       Array.isArray(googleData.scopes) &&
@@ -145,11 +166,23 @@ serve(async (req) => {
         s.includes('gmail') || s.includes('https://www.googleapis.com/auth/gmail')
       )
     );
+    const hasOutlook = hasMicrosoftMail;
+
+    let emailProvider = 'db';
+    let emailFeatures = ['search'];
+    if (hasGmail) {
+      emailProvider = 'google';
+      emailFeatures = ['search', 'draft', 'send'];
+    } else if (hasOutlook) {
+      emailProvider = 'microsoft';
+      emailFeatures = ['search', 'draft', 'send'];
+    }
+
     capabilities.push({
       capability: 'email',
-      available: hasGmail || true, // DB may have stored emails
-      provider: hasGmail ? 'google' : 'db',
-      features: hasGmail ? ['search', 'draft', 'send'] : ['search'],
+      available: true, // DB may have stored emails
+      provider: emailProvider,
+      features: emailFeatures,
     });
 
     // Meetings capability (records: transcripts, recordings, summaries)

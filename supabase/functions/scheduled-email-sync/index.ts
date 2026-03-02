@@ -16,6 +16,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts';
 import { processEmailForDealTruth } from '../_shared/dealTruthExtraction.ts';
+import { getMicrosoftIntegration } from '../_shared/microsoftOAuth.ts';
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -289,9 +290,177 @@ serve(async (req) => {
       }
     }
 
+    // -----------------------------------------------------------------------
+    // Microsoft 365 / Outlook email sync pass
+    // -----------------------------------------------------------------------
+    const msResults = {
+      usersProcessed: 0,
+      emailsSynced: 0,
+      contactsWithEmails: 0,
+      errors: [] as string[],
+    };
+
+    const { data: msUsers, error: msUsersError } = await supabase
+      .from('profiles')
+      .select(`
+        id,
+        microsoft_integrations!inner(id, is_active, access_token, refresh_token, expires_at)
+      `)
+      .gte('last_login_at', sevenDaysAgo.toISOString())
+      .not('last_login_at', 'is', null)
+      .eq('microsoft_integrations.is_active', true);
+
+    if (msUsersError) {
+      console.warn('[scheduled-email-sync] Microsoft users query error (non-fatal):', msUsersError.message);
+    }
+
+    if (msUsers && msUsers.length > 0) {
+      for (const user of msUsers) {
+        try {
+          const { data: contacts, error: contactsError } = await supabase
+            .from('contacts')
+            .select('id, email')
+            .eq('owner_id', user.id)
+            .not('email', 'is', null);
+
+          if (contactsError || !contacts || contacts.length === 0) {
+            if (contactsError) msResults.errors.push(`MS User ${user.id}: ${contactsError.message}`);
+            continue;
+          }
+
+          msResults.contactsWithEmails += contacts.length;
+
+          // Get valid access token via shared module
+          const msIntegration = await getMicrosoftIntegration(supabase, user.id);
+          if (!msIntegration) {
+            msResults.errors.push(`MS User ${user.id}: No valid Microsoft integration`);
+            continue;
+          }
+
+          const { accessToken } = msIntegration;
+
+          // Fetch last 24 hours of emails from Outlook via MS Graph
+          const oneDayAgo = new Date();
+          oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+          const filterDate = oneDayAgo.toISOString();
+
+          const graphParams = new URLSearchParams({
+            '$filter': `receivedDateTime ge ${filterDate}`,
+            '$top': '100',
+            '$select': 'id,subject,from,toRecipients,receivedDateTime,conversationId,bodyPreview',
+            '$orderby': 'receivedDateTime desc',
+          });
+
+          const graphResponse = await fetch(
+            `https://graph.microsoft.com/v1.0/me/messages?${graphParams}`,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+          );
+
+          if (!graphResponse.ok) {
+            const errData = await graphResponse.json().catch(() => ({}));
+            const graphErr = (errData as any).error;
+            msResults.errors.push(`MS User ${user.id}: Graph API error - ${graphErr?.message || graphResponse.statusText}`);
+            continue;
+          }
+
+          const graphData = await graphResponse.json();
+          const messages = graphData.value || [];
+
+          const crmEmails = new Set(
+            contacts
+              .map((c: any) => c.email?.toLowerCase().trim())
+              .filter((email: string | undefined): email is string => Boolean(email))
+          );
+
+          let emailsStoredForUser = 0;
+
+          for (const msg of messages.slice(0, 20)) {
+            try {
+              const fromEmail = msg.from?.emailAddress?.address?.toLowerCase().trim();
+              const toEmails = (msg.toRecipients || []).map(
+                (r: any) => r.emailAddress?.address?.toLowerCase().trim()
+              ).filter(Boolean);
+
+              const matchesCRM = (fromEmail && crmEmails.has(fromEmail)) ||
+                toEmails.some((e: string) => crmEmails.has(e));
+
+              if (!matchesCRM) continue;
+
+              let contactId = null;
+              if (fromEmail && crmEmails.has(fromEmail)) {
+                const contact = contacts.find((c: any) => c.email?.toLowerCase().trim() === fromEmail);
+                contactId = contact?.id || null;
+              } else {
+                for (const toEmail of toEmails) {
+                  if (crmEmails.has(toEmail)) {
+                    const contact = contacts.find((c: any) => c.email?.toLowerCase().trim() === toEmail);
+                    if (contact) { contactId = contact.id; break; }
+                  }
+                }
+              }
+
+              const { error: insertError } = await supabase
+                .from('communication_events')
+                .upsert({
+                  user_id: user.id,
+                  contact_id: contactId,
+                  event_type: 'email_received',
+                  communication_date: msg.receivedDateTime || new Date().toISOString(),
+                  subject: msg.subject || '',
+                  summary: `Email: ${msg.subject || '(no subject)'}`,
+                  external_id: msg.id,
+                  metadata: {
+                    from: fromEmail,
+                    to: toEmails,
+                    outlook_message_id: msg.id,
+                    conversation_id: msg.conversationId,
+                    provider: 'microsoft',
+                    synced_at: new Date().toISOString(),
+                  },
+                }, { onConflict: 'external_id' });
+
+              if (!insertError) {
+                emailsStoredForUser++;
+
+                try {
+                  const dealTruthResult = await processEmailForDealTruth(
+                    supabase, user.id, msg.id, fromEmail || '', toEmails, msg.subject || ''
+                  );
+                  if (dealTruthResult.processed && dealTruthResult.updates.length > 0) {
+                    results.dealTruthUpdates += dealTruthResult.updates.length;
+                  }
+                } catch {
+                  // Don't fail email sync for Deal Truth errors
+                }
+              }
+            } catch (emailError: any) {
+              console.error(`[scheduled-email-sync] MS error processing email ${msg.id}:`, emailError);
+            }
+          }
+
+          msResults.emailsSynced += emailsStoredForUser;
+          msResults.usersProcessed++;
+        } catch (error: any) {
+          msResults.errors.push(`MS User ${user.id}: ${error.message}`);
+        }
+      }
+    }
+
     return jsonResponse({
-      success: results.errors.length === 0,
-      ...results,
+      success: results.errors.length === 0 && msResults.errors.length === 0,
+      google: {
+        usersProcessed: results.usersProcessed,
+        emailsSynced: results.emailsSynced,
+        contactsWithEmails: results.contactsWithEmails,
+        dealTruthUpdates: results.dealTruthUpdates,
+        errors: results.errors,
+      },
+      microsoft: {
+        usersProcessed: msResults.usersProcessed,
+        emailsSynced: msResults.emailsSynced,
+        contactsWithEmails: msResults.contactsWithEmails,
+        errors: msResults.errors,
+      },
       timestamp: new Date().toISOString(),
     }, req);
 

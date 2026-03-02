@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { googleApi, GoogleIntegration, GoogleServiceStatus } from '@/lib/api/googleIntegration';
+import { microsoftApi, MicrosoftIntegration, MicrosoftServiceStatus } from '@/lib/api/microsoftIntegration';
 
 interface GoogleState {
   isConnected: boolean;
@@ -12,10 +13,22 @@ interface GoogleState {
   error: string | null;
 }
 
+interface MicrosoftState {
+  isConnected: boolean;
+  integration: MicrosoftIntegration | null;
+  email: string | null;
+  services: MicrosoftServiceStatus;
+  lastSync: Date | null;
+  status: 'connected' | 'disconnected' | 'error' | 'refreshing';
+  isLoading: boolean;
+  error: string | null;
+}
+
 interface IntegrationState {
   google: GoogleState;
-  
-  // Actions
+  microsoft: MicrosoftState;
+
+  // Google Actions
   checkGoogleConnection: () => Promise<void>;
   connectGoogle: () => Promise<string>; // Returns auth URL
   disconnectGoogle: () => Promise<void>;
@@ -24,7 +37,12 @@ interface IntegrationState {
   refreshGoogleTokens: () => Promise<void>;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
-  
+
+  // Microsoft Actions
+  checkMicrosoftConnection: () => Promise<void>;
+  connectMicrosoft: () => Promise<string>;
+  disconnectMicrosoft: () => Promise<void>;
+
   // Selectors
   isServiceEnabled: (service: keyof GoogleServiceStatus) => boolean;
   getConnectionHealth: () => { isHealthy: boolean; issues: string[] };
@@ -45,8 +63,23 @@ const initialGoogleState: GoogleState = {
   error: null
 };
 
+const initialMicrosoftState: MicrosoftState = {
+  isConnected: false,
+  integration: null,
+  email: null,
+  services: {
+    outlook: false,
+    calendar: false,
+  },
+  lastSync: null,
+  status: 'disconnected',
+  isLoading: false,
+  error: null,
+};
+
 export const useIntegrationStore = create<IntegrationState>((set, get) => ({
   google: initialGoogleState,
+  microsoft: initialMicrosoftState,
 
   checkGoogleConnection: async () => {
     const { google } = get();
@@ -282,6 +315,95 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
     }));
   },
 
+  // Microsoft Actions
+  checkMicrosoftConnection: async () => {
+    const { microsoft } = get();
+    if (microsoft.isLoading) return;
+
+    set(state => ({
+      microsoft: { ...state.microsoft, isLoading: true, error: null }
+    }));
+
+    try {
+      const integration = await microsoftApi.getStatus();
+      const serviceStatus = await microsoftApi.getServiceStatus();
+      const health = await microsoftApi.getHealth();
+
+      const computedStatus: 'connected' | 'disconnected' | 'error' = integration
+        ? (health.isConnected ? 'connected' : 'error')
+        : 'disconnected';
+
+      set(state => ({
+        microsoft: {
+          ...state.microsoft,
+          isConnected: !!integration && health.isConnected,
+          integration,
+          email: integration?.email || null,
+          services: serviceStatus,
+          lastSync: integration ? new Date(integration.updated_at) : null,
+          status: computedStatus,
+          isLoading: false,
+          error: computedStatus === 'error' ? (state.microsoft.error || null) : null,
+        }
+      }));
+    } catch (error: any) {
+      set(state => ({
+        microsoft: {
+          ...state.microsoft,
+          isConnected: false,
+          status: 'error',
+          isLoading: false,
+          error: error.message || 'Failed to check Microsoft connection',
+        }
+      }));
+    }
+  },
+
+  connectMicrosoft: async (): Promise<string> => {
+    set(state => ({
+      microsoft: { ...state.microsoft, isLoading: true, error: null }
+    }));
+
+    try {
+      const { authUrl } = await microsoftApi.initiateOAuth();
+      return authUrl;
+    } catch (error: any) {
+      set(state => ({
+        microsoft: {
+          ...state.microsoft,
+          isLoading: false,
+          error: error.message || 'Failed to initiate Microsoft connection',
+        }
+      }));
+      throw error;
+    }
+  },
+
+  disconnectMicrosoft: async () => {
+    const { microsoft } = get();
+    if (microsoft.isLoading) return;
+
+    set(state => ({
+      microsoft: { ...state.microsoft, isLoading: true, error: null }
+    }));
+
+    try {
+      await microsoftApi.disconnect();
+      set(() => ({
+        microsoft: { ...initialMicrosoftState, status: 'disconnected' }
+      }));
+    } catch (error: any) {
+      set(state => ({
+        microsoft: {
+          ...state.microsoft,
+          isLoading: false,
+          error: error.message || 'Failed to disconnect Microsoft account',
+        }
+      }));
+      throw error;
+    }
+  },
+
   // Selectors
   isServiceEnabled: (service: keyof GoogleServiceStatus): boolean => {
     const { google } = get();
@@ -348,5 +470,27 @@ export const useGoogleIntegration = () => {
     // Selectors
     isServiceEnabled: store.isServiceEnabled,
     getConnectionHealth: store.getConnectionHealth
+  };
+};
+
+// Utility hook for Microsoft-specific state
+export const useMicrosoftIntegrationStore = () => {
+  const store = useIntegrationStore();
+
+  return {
+    // State
+    isConnected: store.microsoft.isConnected,
+    integration: store.microsoft.integration,
+    email: store.microsoft.email,
+    services: store.microsoft.services,
+    status: store.microsoft.status,
+    isLoading: store.microsoft.isLoading,
+    error: store.microsoft.error,
+    lastSync: store.microsoft.lastSync,
+
+    // Actions
+    checkConnection: store.checkMicrosoftConnection,
+    connect: store.connectMicrosoft,
+    disconnect: store.disconnectMicrosoft,
   };
 };

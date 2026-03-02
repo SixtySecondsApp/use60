@@ -1,18 +1,14 @@
 /**
  * Microsoft Graph Email Edge Function (EMAIL-010)
  *
- * Sends email via Microsoft Graph Mail.Send API.
- * Accepts the same payload interface as google-gmail (action=send).
+ * Full email operations via Microsoft Graph API.
+ * Supports send, list, get, mark-as-read, star/flag, archive, trash,
+ * draft, reply, forward, list-folders, list-categories, categorize.
  *
  * SECURITY:
  * - POST only
  * - User JWT authentication OR service-role with userId in body
- * - Microsoft OAuth access token retrieved from user_settings.preferences.microsoft_oauth
- * - Token refreshed automatically when expired
- *
- * THREADING:
- * - Uses conversationId (MS equivalent of Gmail threadId) to keep replies in thread
- * - Uses internetMessageId / In-Reply-To / References headers for RFC 2822 compliance
+ * - Microsoft OAuth access token from microsoft_integrations table (shared module)
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -23,21 +19,28 @@ import {
   errorResponse,
 } from '../_shared/corsHelper.ts';
 import { authenticateRequest } from '../_shared/edgeAuth.ts';
+import { getMicrosoftIntegration } from '../_shared/microsoftOAuth.ts';
+import {
+  listMessages,
+  getMessage,
+  markAsRead,
+  flagMessage,
+  archiveMessage,
+  trashMessage,
+  createDraft,
+  replyToMessage,
+  forwardMessage,
+  listFolders,
+  listCategories,
+  categorizeMessage,
+} from './outlook-actions.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID') || '';
-const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET') || '';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface MicrosoftOAuthTokens {
-  access_token: string;
-  refresh_token: string;
-  expires_at: string; // ISO string
-}
 
 /**
  * Payload interface matching google-gmail's send action.
@@ -62,144 +65,6 @@ interface SendEmailResult {
 }
 
 // ---------------------------------------------------------------------------
-// Microsoft OAuth token management
-// ---------------------------------------------------------------------------
-
-/**
- * Load MS OAuth tokens from user_settings.preferences.microsoft_oauth.
- * Returns null if the user has no Microsoft connection.
- */
-async function getMicrosoftTokens(
-  supabase: ReturnType<typeof createClient>,
-  userId: string
-): Promise<MicrosoftOAuthTokens | null> {
-  const { data, error } = await supabase
-    .from('user_settings')
-    .select('preferences')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) {
-    console.error('[ms-graph-email] user_settings query error:', error);
-    return null;
-  }
-
-  const prefs = (data?.preferences || {}) as Record<string, unknown>;
-  const oauth = prefs.microsoft_oauth as MicrosoftOAuthTokens | undefined;
-
-  if (!oauth?.access_token || !oauth?.refresh_token) {
-    return null;
-  }
-
-  return oauth;
-}
-
-/**
- * Refresh the MS access token using the refresh token.
- * Persists the new tokens back to user_settings.preferences.microsoft_oauth.
- * Throws on failure.
- */
-async function refreshMicrosoftAccessToken(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  refreshToken: string
-): Promise<string> {
-  if (!MS_CLIENT_ID || !MS_CLIENT_SECRET) {
-    throw new Error(
-      'Microsoft OAuth is not configured on this server. Set MS_CLIENT_ID and MS_CLIENT_SECRET.'
-    );
-  }
-
-  const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: MS_CLIENT_ID,
-      client_secret: MS_CLIENT_SECRET,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-      scope: 'https://graph.microsoft.com/Mail.Send offline_access',
-    }),
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    const errMsg = (errData as Record<string, string>).error_description ||
-      (errData as Record<string, string>).error ||
-      `HTTP ${response.status}`;
-    console.error('[ms-graph-email] Token refresh failed:', errMsg);
-    throw new Error(`Microsoft token refresh failed: ${errMsg}`);
-  }
-
-  const data = await response.json() as {
-    access_token: string;
-    refresh_token?: string;
-    expires_in?: number;
-  };
-
-  const expiresAt = new Date();
-  expiresAt.setSeconds(expiresAt.getSeconds() + (data.expires_in || 3600));
-
-  const newTokens: MicrosoftOAuthTokens = {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token || refreshToken, // MS may not always return a new refresh token
-    expires_at: expiresAt.toISOString(),
-  };
-
-  // Persist updated tokens (merge-update inside preferences JSONB)
-  const { data: existing } = await supabase
-    .from('user_settings')
-    .select('preferences')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  const currentPrefs = (existing?.preferences || {}) as Record<string, unknown>;
-
-  await supabase
-    .from('user_settings')
-    .upsert(
-      {
-        user_id: userId,
-        preferences: {
-          ...currentPrefs,
-          microsoft_oauth: newTokens,
-        },
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id' }
-    );
-
-  return newTokens.access_token;
-}
-
-/**
- * Resolve a valid Microsoft access token for the user, refreshing if needed.
- */
-async function getValidMicrosoftToken(
-  supabase: ReturnType<typeof createClient>,
-  userId: string
-): Promise<string> {
-  const tokens = await getMicrosoftTokens(supabase, userId);
-
-  if (!tokens) {
-    throw new Error(
-      'Microsoft account not connected. Please connect your Microsoft / Outlook account in Settings.'
-    );
-  }
-
-  // Refresh if expired (or within 60s of expiry to avoid edge-cases)
-  const expiresAt = new Date(tokens.expires_at);
-  const nowPlusBuffer = new Date(Date.now() + 60_000);
-
-  if (isNaN(expiresAt.getTime()) || expiresAt <= nowPlusBuffer) {
-    console.log('[ms-graph-email] Access token expired, refreshing...');
-    return await refreshMicrosoftAccessToken(supabase, userId, tokens.refresh_token);
-  }
-
-  return tokens.access_token;
-}
-
-// ---------------------------------------------------------------------------
 // Microsoft Graph Mail.Send
 // ---------------------------------------------------------------------------
 
@@ -207,15 +72,12 @@ async function getValidMicrosoftToken(
  * Send an email via Microsoft Graph Mail.Send.
  *
  * Threading strategy:
- * - When inReplyTo / references are provided the function looks up the
- *   MS Graph message by its internetMessageId so we can attach the
- *   conversationId (MS thread identifier) to keep the reply in the same thread.
- * - If the look-up fails (e.g., message not found) we fall back to sending
- *   as a new message — this is always safe.
+ * - When inReplyTo / references are provided the function adds
+ *   Internet Message headers for RFC 2822 compliance.
+ * - conversationId (MS thread identifier) is attached when threadId is provided.
  *
  * Note: MS Graph sendMail returns HTTP 202 (Accepted) with an empty body,
- * so there is no message ID in the response. We surface the conversationId
- * obtained from the thread look-up when available.
+ * so there is no message ID in the response.
  */
 async function sendEmailViaGraph(
   accessToken: string,
@@ -223,7 +85,6 @@ async function sendEmailViaGraph(
 ): Promise<SendEmailResult> {
   const contentType = request.isHtml !== false ? 'HTML' : 'Text';
 
-  // Build the MS Graph message body
   const message: Record<string, unknown> = {
     subject: request.subject,
     body: {
@@ -245,16 +106,12 @@ async function sendEmailViaGraph(
   if (request.references) {
     internetMessageHeaders.push({ name: 'References', value: request.references });
   } else if (request.inReplyTo) {
-    // References must at minimum contain In-Reply-To (same as Gmail path)
     internetMessageHeaders.push({ name: 'References', value: request.inReplyTo });
   }
   if (internetMessageHeaders.length > 0) {
     message.internetMessageHeaders = internetMessageHeaders;
   }
 
-  // Attach conversationId when the caller passed a threadId (interface parity with Gmail).
-  // MS Graph uses conversationId to group messages in the same mail thread.
-  // We accept it from the caller (stored earlier as threadId in our DB).
   if (request.threadId) {
     message.conversationId = request.threadId;
   }
@@ -271,19 +128,33 @@ async function sendEmailViaGraph(
   });
 
   if (!response.ok) {
-    // MS Graph typically returns a JSON error body
     const errData = await response.json().catch(() => ({})) as Record<string, unknown>;
     const graphError = errData.error as Record<string, string> | undefined;
     const errMsg = graphError?.message || graphError?.code || `HTTP ${response.status}`;
     throw new Error(`Microsoft Graph API error: ${errMsg}`);
   }
 
-  // 202 Accepted — no body. Return success with the conversationId when available.
   return {
     success: true,
-    // Use the inbound threadId as the returned threadId for consistency with Gmail interface
     threadId: request.threadId ?? undefined,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: resolve access token via shared module
+// ---------------------------------------------------------------------------
+
+async function resolveAccessToken(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<string> {
+  const result = await getMicrosoftIntegration(supabase, userId);
+  if (!result) {
+    throw new Error(
+      'Microsoft account not connected. Please connect your Microsoft / Outlook account in Settings.'
+    );
+  }
+  return result.accessToken;
 }
 
 // ---------------------------------------------------------------------------
@@ -326,15 +197,16 @@ serve(async (req) => {
 
     console.log(`[ms-graph-email] Authenticated as ${mode}, userId: ${userId}, action: ${action}`);
 
+    const accessToken = await resolveAccessToken(supabase, userId);
+
     switch (action) {
       case 'send': {
-        const { to, subject, body, isHtml, threadId, inReplyTo, references } = requestBody as Record<string, string | boolean | undefined>;
+        const { to, subject, body, isHtml, threadId, inReplyTo, references } =
+          requestBody as Record<string, string | boolean | undefined>;
 
         if (!to || !subject || !body) {
           return errorResponse('Missing required fields: to, subject, body', req, 400);
         }
-
-        const accessToken = await getValidMicrosoftToken(supabase, userId);
 
         const result = await sendEmailViaGraph(accessToken, {
           to: to as string,
@@ -349,9 +221,132 @@ serve(async (req) => {
         return jsonResponse(result, req);
       }
 
+      case 'list': {
+        const result = await listMessages(accessToken, {
+          folder: requestBody.folder as string | undefined,
+          filter: requestBody.filter as string | undefined,
+          top: requestBody.top as number | undefined,
+          skip: requestBody.skip as number | undefined,
+          select: requestBody.select as string | undefined,
+          orderby: requestBody.orderby as string | undefined,
+          search: requestBody.search as string | undefined,
+        });
+        return jsonResponse(result, req);
+      }
+
+      case 'get':
+      case 'get-message': {
+        const id = requestBody.id as string;
+        if (!id) return errorResponse('Missing required field: id', req, 400);
+        const result = await getMessage(accessToken, {
+          id,
+          select: requestBody.select as string | undefined,
+        });
+        return jsonResponse(result, req);
+      }
+
+      case 'mark-as-read': {
+        const id = requestBody.id as string;
+        if (!id) return errorResponse('Missing required field: id', req, 400);
+        const isRead = requestBody.isRead !== undefined ? requestBody.isRead as boolean : true;
+        const result = await markAsRead(accessToken, { id, isRead });
+        return jsonResponse({ success: true, data: result }, req);
+      }
+
+      case 'star':
+      case 'flag': {
+        const id = requestBody.id as string;
+        if (!id) return errorResponse('Missing required field: id', req, 400);
+        const flagged = requestBody.flagged !== undefined ? requestBody.flagged as boolean : true;
+        const result = await flagMessage(accessToken, { id, flagged });
+        return jsonResponse({ success: true, data: result }, req);
+      }
+
+      case 'archive': {
+        const id = requestBody.id as string;
+        if (!id) return errorResponse('Missing required field: id', req, 400);
+        const result = await archiveMessage(accessToken, { id });
+        return jsonResponse({ success: true, data: result }, req);
+      }
+
+      case 'trash':
+      case 'delete': {
+        const id = requestBody.id as string;
+        if (!id) return errorResponse('Missing required field: id', req, 400);
+        const result = await trashMessage(accessToken, { id });
+        return jsonResponse({ success: true, data: result }, req);
+      }
+
+      case 'draft': {
+        const to = requestBody.to as string[] | undefined;
+        const subject = requestBody.subject as string | undefined;
+        const body = requestBody.body as string | undefined;
+        if (!to?.length || !subject || !body) {
+          return errorResponse('Missing required fields: to (array), subject, body', req, 400);
+        }
+        const result = await createDraft(accessToken, {
+          subject,
+          body,
+          isHtml: requestBody.isHtml as boolean | undefined,
+          to,
+          cc: requestBody.cc as string[] | undefined,
+          bcc: requestBody.bcc as string[] | undefined,
+        });
+        return jsonResponse({ success: true, data: result }, req);
+      }
+
+      case 'reply': {
+        const id = requestBody.id as string;
+        const comment = requestBody.comment as string;
+        if (!id || !comment) {
+          return errorResponse('Missing required fields: id, comment', req, 400);
+        }
+        const result = await replyToMessage(accessToken, {
+          id,
+          comment,
+          isHtml: requestBody.isHtml as boolean | undefined,
+        });
+        return jsonResponse({ success: true, data: result }, req);
+      }
+
+      case 'forward': {
+        const id = requestBody.id as string;
+        const to = requestBody.to as string[] | undefined;
+        if (!id || !to?.length) {
+          return errorResponse('Missing required fields: id, to (array)', req, 400);
+        }
+        const result = await forwardMessage(accessToken, {
+          id,
+          to,
+          comment: requestBody.comment as string | undefined,
+          isHtml: requestBody.isHtml as boolean | undefined,
+        });
+        return jsonResponse({ success: true, data: result }, req);
+      }
+
+      case 'list-folders': {
+        const result = await listFolders(accessToken);
+        return jsonResponse(result, req);
+      }
+
+      case 'list-categories': {
+        const result = await listCategories(accessToken);
+        return jsonResponse(result, req);
+      }
+
+      case 'categorize': {
+        const id = requestBody.id as string;
+        const categories = requestBody.categories as string[] | undefined;
+        if (!id || !categories) {
+          return errorResponse('Missing required fields: id, categories (array)', req, 400);
+        }
+        const result = await categorizeMessage(accessToken, { id, categories });
+        return jsonResponse({ success: true, data: result }, req);
+      }
+
       default:
         return errorResponse(
-          `Unknown action: "${action}". Supported actions: send`,
+          `Unknown action: "${action}". Supported actions: send, list, get, get-message, mark-as-read, star, flag, archive, trash, delete, draft, reply, forward, list-folders, list-categories, categorize`,
           req,
           400
         );

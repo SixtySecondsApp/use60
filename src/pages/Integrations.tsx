@@ -44,9 +44,10 @@ import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
 import { ExplloriumConfigModal } from '@/components/integrations/ExplloriumConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
+import { MicrosoftConfigModal } from '@/components/integrations/MicrosoftConfigModal';
 
 // Hooks and stores
-import { useGoogleIntegration } from '@/lib/stores/integrationStore';
+import { useGoogleIntegration, useMicrosoftIntegrationStore } from '@/lib/stores/integrationStore';
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
 import { useSlackIntegration } from '@/lib/hooks/useSlackIntegration';
 import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
@@ -322,6 +323,28 @@ const builtIntegrations: IntegrationConfig[] = [
         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+      </svg>
+    ),
+    isBuilt: true,
+  },
+  {
+    id: 'microsoft-365',
+    name: 'Microsoft 365',
+    description: 'Outlook email, Calendar & Teams.',
+    permissions: [
+      { title: 'View and send email', description: 'Send emails from contact pages.' },
+      { title: 'Access calendar', description: 'Schedule meetings and sync events.' },
+      { title: 'Teams meetings', description: 'Create Teams meeting links.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-gray-50 dark:bg-gray-800',
+    iconBorderColor: 'border-gray-200 dark:border-gray-700',
+    fallbackIcon: (
+      <svg className="w-6 h-6" viewBox="0 0 24 24">
+        <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+        <rect x="13" y="1" width="10" height="10" fill="#7FBA00" />
+        <rect x="1" y="13" width="10" height="10" fill="#00A4EF" />
+        <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
       </svg>
     ),
     isBuilt: true,
@@ -682,6 +705,14 @@ export default function Integrations() {
   } = useGoogleIntegration();
 
   const {
+    isConnected: microsoftConnected,
+    status: microsoftStatus,
+    isLoading: microsoftLoading,
+    checkConnection: checkMicrosoftConnection,
+    connect: connectMicrosoft,
+  } = useMicrosoftIntegrationStore();
+
+  const {
     isConnected: fathomConnected,
     loading: fathomLoading,
     error: fathomError,
@@ -749,8 +780,19 @@ export default function Integrations() {
     const hubspotStatus = searchParams.get('hubspot_status');
     const hubspotError = searchParams.get('hubspot_error');
     const fathomStatus = searchParams.get('fathom');
+    const microsoftStatusParam = searchParams.get('microsoft_status');
+    const microsoftError = searchParams.get('microsoft_error');
 
-    if (statusParam === 'connected' && emailParam) {
+    if (microsoftStatusParam === 'connected') {
+      const msEmail = searchParams.get('microsoft_email');
+      toast.success(msEmail ? `Connected Microsoft account: ${msEmail}` : 'Microsoft 365 connected!');
+      checkMicrosoftConnection();
+      window.history.replaceState({}, '', '/integrations');
+    } else if (microsoftError) {
+      const msDesc = searchParams.get('microsoft_error_description');
+      toast.error(`Failed to connect Microsoft: ${msDesc || microsoftError}`);
+      window.history.replaceState({}, '', '/integrations');
+    } else if (statusParam === 'connected' && emailParam) {
       toast.success(`Successfully connected Google account: ${emailParam}`);
       checkGoogleConnection();
       window.history.replaceState({}, '', '/integrations');
@@ -784,6 +826,7 @@ export default function Integrations() {
   // Check integration status on mount
   useEffect(() => {
     checkGoogleConnection();
+    checkMicrosoftConnection();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount to avoid infinite loop
 
@@ -794,6 +837,10 @@ export default function Integrations() {
         if (googleStatus === 'error') return 'error';
         if (googleStatus === 'refreshing') return 'syncing';
         return googleConnected ? 'active' : 'inactive';
+      case 'microsoft-365':
+        if (microsoftStatus === 'error') return 'error';
+        if (microsoftStatus === 'refreshing') return 'syncing';
+        return microsoftConnected ? 'active' : 'inactive';
       case 'fathom':
         // If we're connected, always show Active even if there was a non-fatal error
         // (e.g. user clicked Connect again and the Edge Function returned 400 "already connected").
@@ -910,6 +957,14 @@ export default function Integrations() {
             toast.error('Failed to get authentication URL');
           }
           break;
+        case 'microsoft-365':
+          const msAuthUrl = await connectMicrosoft();
+          if (msAuthUrl) {
+            window.location.href = msAuthUrl;
+          } else {
+            toast.error('Failed to get Microsoft authentication URL');
+          }
+          break;
         case 'fathom':
           // connectFathom returns whether initiation succeeded (popup opened)
           if (await connectFathom()) {
@@ -960,6 +1015,7 @@ export default function Integrations() {
   const builtActionLoadingById: Record<string, boolean> = useMemo(
     () => ({
       'google-workspace': googleLoading,
+      'microsoft-365': microsoftLoading,
       fathom: fathomLoading,
       slack: slackLoading,
       justcall: justcallLoading,
@@ -973,7 +1029,7 @@ export default function Integrations() {
       instantly: instantlyLoading,
       apify: apifyLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading]
+    [googleLoading, microsoftLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading]
   );
 
   // Preload logo.dev URLs on page load to prevent any visible swap/flicker.
@@ -1099,6 +1155,10 @@ export default function Integrations() {
       {/* Configure Modals */}
       <GoogleConfigModal
         open={activeConfigModal === 'google-workspace'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <MicrosoftConfigModal
+        open={activeConfigModal === 'microsoft-365'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
       <FathomConfigModal
