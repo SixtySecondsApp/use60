@@ -139,6 +139,8 @@ export interface CCItemCardProps {
   showUndo?: boolean;
   /** Extra classes injected by the parent (e.g. entrance animation) */
   animationClass?: string;
+  /** Whether this item is highlighted via keyboard navigation */
+  isHighlighted?: boolean;
 }
 
 // ============================================================================
@@ -165,6 +167,7 @@ export function CCItemCard({
   isPending,
   showUndo,
   animationClass,
+  isHighlighted,
 }: CCItemCardProps) {
   const draftedAction = item.drafted_action as Record<string, unknown> | null;
   const displayText = draftedAction?.display_text as string | undefined;
@@ -185,6 +188,7 @@ export function CCItemCard({
         transitionClass,
         statusOpacity,
         animationClass,
+        isHighlighted && 'ring-2 ring-blue-500 dark:ring-blue-400',
         // Auto-exec: full emerald border takes precedence (CC-012)
         isAutoExec
           ? 'border-2 border-emerald-500/70 dark:border-emerald-500/50 hover:border-emerald-500 dark:hover:border-emerald-400'

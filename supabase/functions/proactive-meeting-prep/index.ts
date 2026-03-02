@@ -16,6 +16,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { shouldSendNotification, recordNotificationSent } from '../_shared/proactive/dedupe.ts';
+import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
 
 // ============================================================================
 // Types
@@ -594,6 +595,28 @@ async function prepMeetingsForUserInternal(
           meeting_title: meeting.title,
         },
       });
+
+      // Write to Command Centre for inbox feed
+      try {
+        await writeToCommandCentre({
+          org_id: orgId || prepResult.organizationId,
+          user_id: userId,
+          source_agent: 'meeting-prep',
+          item_type: 'meeting_prep',
+          title: `Prep: ${meeting.title}`,
+          summary: (prepResult.brief || '').substring(0, 500),
+          context: {
+            meeting_id: meeting.id,
+            meeting_title: meeting.title,
+            start_time: meeting.start_time,
+          },
+          due_date: meeting.start_time,
+          urgency: 'high',
+        });
+      } catch (ccErr) {
+        // CC failure must not break meeting prep delivery
+        console.error('[MeetingPrep] CC write failed for meeting', meeting.id, String(ccErr));
+      }
 
       results.push({
         meetingId: meeting.id,
