@@ -31,7 +31,10 @@ import {
   useCommandCentreItemsQuery,
   useCommandCentreStatsQuery,
   useCommandCentreItemMutations,
+  useCommandCentreRealtime,
 } from '@/lib/hooks/useCommandCentreItemsQuery';
+import { useCommandCentreDeepLinks } from '@/lib/hooks/useCommandCentreDeepLinks';
+import { useCommandCentreKeyboard } from '@/lib/hooks/useCommandCentreKeyboard';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
 import { CCDetailPanel } from '@/components/commandCentre/CCDetailPanel';
 import { CCEmptyState } from '@/components/commandCentre/CCEmptyState';
@@ -241,6 +244,9 @@ export default function CommandCentre() {
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [detailItem, setDetailItem] = useState<CCItem | null>(null);
 
+  // CC-008: Realtime subscriptions — items appear without manual refresh
+  useCommandCentreRealtime();
+
   // Track IDs that are "new" (just arrived via realtime) so we can play an entrance animation.
   // We use a ref for the previous known ID set to avoid stale closure issues in the effect.
   const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
@@ -366,6 +372,42 @@ export default function CommandCentre() {
   const handleUndo = (id: string) => withPending(id, () => undoItem.mutate(id));
   const handleViewDetail = (item: CCItem) => setDetailItem(item);
 
+  // CC-009: Deep links — bookmarkable URLs for items and filters
+  const { updateItemParam, updateFilterParam } = useCommandCentreDeepLinks({
+    items: allItems,
+    onSelectItem: setDetailItem,
+    onSelectFilter: (f) => setActiveFilter(f as CCFilter),
+  });
+
+  // Update URL when detail panel opens/closes
+  const handleViewDetailWithDeepLink = (item: CCItem) => {
+    setDetailItem(item);
+    updateItemParam(item.id);
+  };
+
+  const handleCloseDetail = () => {
+    setDetailItem(null);
+    updateItemParam(null);
+  };
+
+  const handleFilterChange = (filter: CCFilter) => {
+    setActiveFilter(filter);
+    updateFilterParam(filter);
+  };
+
+  // CC-010: Keyboard navigation — j/k/Enter/a/d/Esc
+  const { isHighlighted } = useCommandCentreKeyboard({
+    items: filteredItems,
+    selectedItem: detailItem,
+    onSelectItem: (item) => {
+      setDetailItem(item);
+      updateItemParam(item?.id ?? null);
+    },
+    onApprove: handleApprove,
+    onDismiss: handleDismiss,
+    isPanelOpen: detailItem !== null,
+  });
+
   if (allItemsQuery.isError) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -445,7 +487,7 @@ export default function CommandCentre() {
           <div className="flex-shrink-0 px-6 pt-3 pb-2 bg-white dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800/60">
             <CCFilterBar
               activeFilter={activeFilter}
-              onFilterChange={setActiveFilter}
+              onFilterChange={handleFilterChange}
               needsYouCount={needsYouCount}
             />
           </div>
@@ -482,9 +524,10 @@ export default function CommandCentre() {
                     onDismiss={handleDismiss}
                     onSnooze={handleSnooze}
                     onUndo={handleUndo}
-                    onViewDetail={handleViewDetail}
+                    onViewDetail={handleViewDetailWithDeepLink}
                     isPending={pendingIds.has(item.id)}
                     animationClass={newItemIds.has(item.id) ? 'animate-slide-in-top' : undefined}
+                    isHighlighted={isHighlighted(item.id)}
                   />
                 ))}
               </div>
@@ -493,7 +536,7 @@ export default function CommandCentre() {
         </div>
 
         {/* Detail panel — inline, compresses the feed (no overlay) */}
-        <CCDetailPanel item={detailItem} onClose={() => setDetailItem(null)} />
+        <CCDetailPanel item={detailItem} onClose={handleCloseDetail} />
       </div>
     </div>
   );

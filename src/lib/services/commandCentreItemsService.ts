@@ -137,6 +137,9 @@ class CommandCentreItemsService {
         query = query.ilike('title', `%${filters.search}%`);
       }
 
+      // CC-011: Hide snoozed items until their due_date arrives
+      query = query.or('due_date.is.null,due_date.lte.now()');
+
       const { data, error } = await query;
 
       if (error) {

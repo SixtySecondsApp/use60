@@ -7,11 +7,11 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type {
-  CommandCentreFilter,
-  CommandCentreSortField,
-  CommandCentreSortOrder,
-} from '@/components/command-centre/types';
+
+// Inlined from deleted command-centre/types.ts (orphaned old task-based UI)
+type CommandCentreFilter = 'all' | 'review' | 'drafts' | 'working' | 'done';
+type CommandCentreSortField = 'urgency' | 'created_at' | 'due_date' | 'priority' | 'ai_status';
+type CommandCentreSortOrder = 'asc' | 'desc';
 
 interface CommandCentreState {
   // Selection

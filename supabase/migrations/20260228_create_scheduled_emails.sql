@@ -45,20 +45,20 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_emails_user
 ALTER TABLE public.scheduled_emails ENABLE ROW LEVEL SECURITY;
 
 -- Service role bypass (cron poller uses service role)
-CREATE POLICY "service_role_all_scheduled_emails"
-  ON public.scheduled_emails
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
+DO $$ BEGIN
+  CREATE POLICY "service_role_all_scheduled_emails"
+    ON public.scheduled_emails FOR ALL TO service_role
+    USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can CRUD their own rows
-CREATE POLICY "users_own_scheduled_emails"
-  ON public.scheduled_emails
-  FOR ALL
-  TO authenticated
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
+DO $$ BEGIN
+  CREATE POLICY "users_own_scheduled_emails"
+    ON public.scheduled_emails FOR ALL TO authenticated
+    USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 3. Cron worker function
@@ -146,6 +146,11 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 4. pg_cron schedule -- every minute
 -- ---------------------------------------------------------------------------
+DO $$ BEGIN
+  PERFORM cron.unschedule('process-scheduled-emails');
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
 SELECT cron.schedule(
   'process-scheduled-emails',
   '* * * * *',

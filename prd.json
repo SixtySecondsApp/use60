@@ -1,302 +1,291 @@
 {
-  "project": "Copilot Showstopper V1",
-  "runSlug": "copilot-showstopper",
-  "branchName": "feature/copilot-showstopper",
-  "description": "Transform Copilot into a skill-first smart assistant with 5 deterministic workflows, delightful animated progress, clickable structured results, and safe preview→confirm for emails.",
-  "aiDevHubProjectId": "cae03d2d-74ac-49e6-9da2-aae2440e0c00",
-  "createdAt": "2026-01-23T10:30:00.000Z",
+  "project": "Command Centre Wiring",
+  "runSlug": "cc-wiring",
+  "branchName": "feat/cc-wiring",
+  "description": "Wire the Command Centre data pipeline end-to-end: connect proactive agents to write items, schedule enrichment + prioritisation crons, mount frontend realtime/deep-links/keyboard hooks, fix snooze, and clean up 200KB+ of dead code.",
+  "aiDevHubProjectId": null,
+  "createdAt": "2026-03-02T12:00:00.000Z",
+  "auditRef": "docs/audits/COMMAND_CENTRE_AUDIT.md",
+  "planRef": "docs/audits/COMMAND_CENTRE_WIRING_PLAN.md",
   "userStories": [
     {
-      "id": "US-001",
-      "title": "Deterministic Workflow Router",
-      "description": "As a user, I want my requests for the 5 V1 workflows to be handled reliably and consistently, so that I get predictable results every time.",
+      "id": "CC-001",
+      "title": "Wire morning briefing agent to Command Centre",
+      "description": "Add writeToCommandCentre() call to agent-morning-briefing so each user's daily briefing creates a CC item with source_agent='morning-brief', item_type='insight'.",
       "acceptanceCriteria": [
-        "Add workflow router in api-copilot that detects V1 intents before LLM reasoning",
-        "Router maps: 'next meeting prep' → seq-next-meeting-command-center",
-        "Router maps: 'post-meeting follow-up' → seq-post-meeting-followup-pack",
-        "Router maps: 'email zero inbox' → seq-followup-zero-inbox",
-        "Router maps: 'pipeline focus' → seq-pipeline-focus-tasks",
-        "Router maps: 'catch me up' → seq-catch-me-up (new sequence)",
-        "Deterministic routes bypass Gemini free-form reasoning",
-        "Fallback to Gemini tool-calling for non-V1 intents",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "Import writeToCommandCentre from _shared/commandCentre/writeAdapter.ts",
+        "Call writeToCommandCentre after the insert_agent_activity RPC (~line 95) with org_id from persona.org_id, user_id from persona.user_id",
+        "Set item_type='insight', source_agent='morning-brief', urgency='normal'",
+        "Title includes deal/meeting counts from briefing data",
+        "Summary contains first 500 chars of narrativeBriefing",
+        "Wrapped in try-catch so CC failure never breaks briefing delivery",
+        "Deploy to staging and verify item appears in command_centre_items table"
       ],
       "priority": 1,
+      "phase": "data-population",
+      "files": [
+        "supabase/functions/agent-morning-briefing/index.ts"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-002", "CC-003", "CC-004"],
       "passes": true,
-      "notes": "Implemented unified V1 workflow router with routeToV1Workflow() function. Added detection functions: isCatchMeUpQuestion, isEmailZeroInboxQuestion, isPipelineFocusQuestion. All 5 V1 workflows + meetings_for_period now route deterministically. Note: seq-catch-me-up sequence needs to be seeded in a follow-up migration (US-004).",
-      "aiDevHubTaskId": null
+      "notes": "Pattern: follow agent-crm-heartbeat/index.ts:196 which already writes to CC. persona loop gives per-user items."
     },
     {
-      "id": "US-002",
-      "title": "Animated Delightful Progress Stepper",
-      "description": "As a user, I want to see an animated progress stepper with icons, estimated durations, and smooth transitions while Copilot processes my request, so that I feel confident it's working.",
+      "id": "CC-002",
+      "title": "Wire pipeline analysis agent to Command Centre",
+      "description": "Replace or supplement the existing createActionCentreItems() call in proactive-pipeline-analysis with writeMultipleItems() targeting command_centre_items. Map severity→urgency, use existing summary.insights array.",
       "acceptanceCriteria": [
-        "Placeholder steps appear immediately when request starts",
-        "Each step shows an icon based on tool type (calendar, database, AI, email, etc.)",
-        "Steps animate through pending → active → complete states with Framer Motion",
-        "Active step shows subtle pulsing animation",
-        "Completed steps show checkmark with green accent",
-        "Estimated duration shown for active step",
-        "Real tool telemetry replaces placeholders as tool_executions arrive",
-        "Staggered reveal animation for new steps",
-        "Right panel progress mirrors chat stepper",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "Import writeMultipleItems from _shared/commandCentre/writeAdapter.ts",
+        "At ~line 559, replace or supplement createActionCentreItems() with writeMultipleItems()",
+        "Map each insight to CC item: source_agent='pipeline-analysis', item_type from insight.actionType",
+        "Add mapSeverityToUrgency helper: critical→critical, high→high, medium→normal, low→low",
+        "Include deal_id and contact_id from insight data where available",
+        "Wrapped in try-catch so CC failure never breaks pipeline analysis",
+        "Deploy to staging, run pipeline analysis manually, verify items appear in command_centre_items"
+      ],
+      "priority": 1,
+      "phase": "data-population",
+      "files": [
+        "supabase/functions/proactive-pipeline-analysis/index.ts"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-001", "CC-003", "CC-004"],
+      "passes": true,
+      "notes": "Existing summary.insights array (lines 351-495) has all the data. Consider keeping old Action Centre call temporarily for backwards compat."
+    },
+    {
+      "id": "CC-003",
+      "title": "Wire meeting prep agent to Command Centre",
+      "description": "Add writeToCommandCentre() call to proactive-meeting-prep after log_copilot_engagement RPC, creating a 'meeting_prep' item with urgency='high' and due_date set to meeting start time.",
+      "acceptanceCriteria": [
+        "Import writeToCommandCentre from _shared/commandCentre/writeAdapter.ts",
+        "Call writeToCommandCentre after log_copilot_engagement RPC (~line 596)",
+        "Set item_type='meeting_prep', source_agent='meeting-prep', urgency='high'",
+        "Set due_date to meeting.start_time (prep needed before meeting)",
+        "Title: 'Prep: {meeting.title}', summary from prepResult.brief (first 500 chars)",
+        "org_id from orgId || prepResult.organizationId, user_id from userId",
+        "Wrapped in try-catch so CC failure never breaks meeting prep delivery"
+      ],
+      "priority": 1,
+      "phase": "data-population",
+      "files": [
+        "supabase/functions/proactive-meeting-prep/index.ts"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-001", "CC-002", "CC-004"],
+      "passes": true,
+      "notes": "deal_id not directly available at insertion point — enrichment pipeline will resolve from meeting context."
+    },
+    {
+      "id": "CC-004",
+      "title": "Wire post-meeting agent to Command Centre",
+      "description": "Add writeMultipleItems() call to slack-post-meeting after action items are extracted from the debrief, creating 'follow_up' items with urgency='high'.",
+      "acceptanceCriteria": [
+        "Read full slack-post-meeting/index.ts to find exact action item extraction point",
+        "Import writeMultipleItems from _shared/commandCentre/writeAdapter.ts",
+        "Map each extracted action item to a CC item: source_agent='post-meeting', item_type='follow_up'",
+        "Set urgency='high', include deal_id from meeting.deal.id where available",
+        "Include meeting context (meeting_id, meeting_title) in the context JSONB field",
+        "Wrapped in try-catch so CC failure never breaks post-meeting flow",
+        "Deploy to staging and verify items appear after a test meeting ends"
+      ],
+      "priority": 1,
+      "phase": "data-population",
+      "files": [
+        "supabase/functions/slack-post-meeting/index.ts"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-001", "CC-002", "CC-003"],
+      "passes": true,
+      "notes": "Need to read full file first to locate extraction point. Use writeMultipleItems for batch efficiency."
+    },
+    {
+      "id": "CC-005",
+      "title": "Create cron schedule for cc-enrich (every 15 min)",
+      "description": "Create a new Supabase migration that schedules cc-enrich via pg_cron every 15 minutes. This is the CRITICAL missing piece — without it, items stay at enrichment_status='pending' forever and never get drafted actions.",
+      "acceptanceCriteria": [
+        "New migration file in supabase/migrations/ following naming convention",
+        "pg_cron schedule: */15 * * * * calling cc-enrich edge function via net.http_post",
+        "Pass CRON_SECRET or service_role_key in Authorization header (follow cc-auto-execute pattern from 20260222700005)",
+        "Body includes { source: 'cron' } to distinguish from manual invocations",
+        "Apply migration to staging environment (ref: caerqjzvuerejfrdtygb)",
+        "Verify in Supabase dashboard that cron job appears and fires",
+        "Check cc-enrich logs show processing within 15 minutes of deployment"
+      ],
+      "priority": 1,
+      "phase": "enrichment-pipeline",
+      "files": [
+        "supabase/migrations/YYYYMMDD_schedule_cc_enrich_cron.sql"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-006"],
+      "passes": true,
+      "notes": "Follow exact pattern from 20260222700005_schedule_cc_auto_execute_cron.sql. Fleet-health already expects 15-min cadence. cc-enrich handles batch (20 items/run), rate limits, and semaphore internally."
+    },
+    {
+      "id": "CC-006",
+      "title": "Create cron schedule for cc-prioritise (every 10 min)",
+      "description": "Create a new migration scheduling cc-prioritise via pg_cron every 10 minutes, offset by 3 minutes from the enrichment cycle to avoid overlap.",
+      "acceptanceCriteria": [
+        "New migration file in supabase/migrations/ following naming convention",
+        "pg_cron schedule: 3,13,23,33,43,53 * * * * (offset from enrichment cycle)",
+        "Pass service_role_key in Authorization header",
+        "Body includes { batch: true, source: 'cron' } for batch mode",
+        "Apply migration to staging",
+        "Verify items get priority_score and urgency values after cron fires",
+        "Verify DEDUP-003 merge group recheck triggers on items with multiple agents"
+      ],
+      "priority": 1,
+      "phase": "enrichment-pipeline",
+      "files": [
+        "supabase/migrations/YYYYMMDD_schedule_cc_prioritise_cron.sql"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-005"],
+      "passes": true,
+      "notes": "Runs in batch mode to score all open/enriching/ready items. Also triggers DEDUP-003 auto-approve if merged confidence >= 0.7."
+    },
+    {
+      "id": "CC-007",
+      "title": "End-to-end enrichment pipeline verification",
+      "description": "Verify the full item lifecycle on staging: insert test item → cc-enrich picks it up → actionDrafter generates drafted_action → cc-prioritise scores it → status becomes 'ready'. Debug and fix any issues found.",
+      "acceptanceCriteria": [
+        "Insert test CC item via SQL with source_agent='manual-test', item_type='follow_up'",
+        "Within 15 min: enrichment_status changes from 'pending' to 'enriched'",
+        "drafted_action field is populated (not null) with type, payload, display_text",
+        "confidence_score is set (0.0-1.0 range)",
+        "Within 25 min: priority_score and urgency are set by cc-prioritise",
+        "status progresses to 'ready'",
+        "Item appears in the Command Centre UI under the 'Needs You' filter",
+        "If AI enrichment fails: check ANTHROPIC_API_KEY / model config, verify actionDrafter fallback path"
       ],
       "priority": 2,
+      "phase": "enrichment-pipeline",
+      "files": [],
+      "dependencies": ["CC-005", "CC-006"],
+      "parallelWith": [],
       "passes": true,
-      "notes": "Already implemented in prior work. Key files: ToolCallIndicator.tsx (stepVariants, iconPulseVariants for animations), CopilotRightPanel.tsx (ProgressSection mirrors chat), toolUtils.ts (getStepIcon, getStepDurationEstimate, formatDurationEstimate). Pre-existing lint warnings in CopilotRightPanel.tsx (file too long, missing return types) - tracked for future cleanup.",
-      "aiDevHubTaskId": null
+      "notes": "This is a verification story, not a code change. May require debugging cc-enrich logs, checking API keys, or fixing actionDrafter. Critical gate before frontend work matters."
     },
     {
-      "id": "US-003",
-      "title": "Standardized Clickable Action Contract",
-      "description": "As a user, I want to click on items in Copilot results to navigate directly to meetings, deals, contacts, and tasks, so that I can take action quickly.",
+      "id": "CC-008",
+      "title": "Mount realtime hook in Command Centre page",
+      "description": "Add useCommandCentreRealtime() call to CommandCentre.tsx so items added by agents appear in the feed without manual refresh.",
       "acceptanceCriteria": [
-        "Define standard action vocabulary: open_contact, open_deal, open_meeting, open_task, open_external_url",
-        "All structured response components emit actions via onActionClick prop",
-        "Central handler in AssistantShell.tsx routes actions to correct navigation",
-        "Legacy aliases map to standard names",
-        "Audit and update all existing response components to use standard contract",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "Import useCommandCentreRealtime from @/lib/hooks/useCommandCentreItemsQuery",
+        "Call useCommandCentreRealtime() at the top of the CommandCentre component (before state declarations)",
+        "Verify: insert a CC item via SQL while the page is open → item appears without pressing Refresh",
+        "Verify: approve an item in another tab → status updates in the current tab",
+        "Realtime publication already enabled in migration 20260225000005 (no DB changes needed)"
+      ],
+      "priority": 2,
+      "phase": "frontend-polish",
+      "files": [
+        "src/pages/platform/CommandCentre.tsx"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-009", "CC-010", "CC-011"],
+      "passes": true,
+      "notes": "1-line addition. useRealtimeHub is working-hours aware (full during 8AM-6PM, minimal off-hours). Table-side realtime already configured."
+    },
+    {
+      "id": "CC-009",
+      "title": "Wire deep links for bookmarkable Command Centre URLs",
+      "description": "Connect the existing useCommandCentreDeepLinks hook to CommandCentre.tsx so URLs like /command-centre?item={id}&filter=needs-you work.",
+      "acceptanceCriteria": [
+        "Import useCommandCentreDeepLinks from @/lib/hooks/useCommandCentreDeepLinks",
+        "Call the hook with { items: allItems, onSelectItem: setDetailItem, onSelectFilter: setActiveFilter }",
+        "When user opens detail panel: URL updates to include ?item={id}",
+        "When user changes filter: URL updates to include ?filter={name}",
+        "When user closes detail panel: ?item param is removed from URL",
+        "Loading /command-centre?item={id} directly opens the detail panel for that item",
+        "Loading /command-centre?filter=deals applies the Deals filter on mount"
       ],
       "priority": 3,
+      "phase": "frontend-polish",
+      "files": [
+        "src/pages/platform/CommandCentre.tsx"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-008", "CC-010", "CC-011"],
       "passes": true,
-      "notes": "Already implemented. AssistantShell.tsx has handleActionClick() with standard actions (open_contact, open_deal, open_meeting, open_task, open_external_url) plus legacy aliases (open_meeting_url, view_meeting, view_task). All 30+ response components use onActionClick prop. V1 workflow responses (NextMeetingCommandCenterResponse, PipelineFocusTasksResponse, PostMeetingFollowUpPackResponse) all emit standard actions.",
-      "aiDevHubTaskId": null
+      "notes": "Hook is fully implemented — just needs 3 wiring points: init, panel open/close, filter change."
     },
     {
-      "id": "US-004",
-      "title": "Catch Me Up Sequence + Adaptive Briefing",
-      "description": "As a user, I want to ask 'catch me up' and receive a time-aware briefing (morning = today's focus, evening = wrap-up + tomorrow preview), so that I stay on top of my priorities.",
+      "id": "CC-010",
+      "title": "Wire keyboard navigation for Command Centre",
+      "description": "Connect the existing useCommandCentreKeyboard hook to CommandCentre.tsx for j/k/Enter/a/d/Esc navigation.",
       "acceptanceCriteria": [
-        "Create seq-catch-me-up sequence in platform_skills table",
-        "Sequence steps: get_meetings_for_period, get_pipeline_deals, get_contacts_needing_attention, list_tasks",
-        "Final step: planner skill outputs structured brief model",
-        "Morning (before 12pm): Focus on today's schedule and priorities",
-        "Afternoon (12pm-5pm): Include today's progress and remaining items",
-        "Evening (after 5pm): Wrap-up summary + tomorrow preview",
-        "Seed migration enables sequence for all orgs",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "Import useCommandCentreKeyboard from @/lib/hooks/useCommandCentreKeyboard",
+        "Call the hook with { items: filteredItems, selectedItem: detailItem, onSelectItem, onApprove, onDismiss, isPanelOpen }",
+        "j/k keys move highlight through items in the feed",
+        "Enter toggles the detail panel for the highlighted item",
+        "a key approves the highlighted item (only if status is open/ready)",
+        "d key dismisses the highlighted item",
+        "Escape closes the detail panel",
+        "Keyboard shortcuts are disabled when focus is in an input/textarea/contenteditable"
+      ],
+      "priority": 3,
+      "phase": "frontend-polish",
+      "files": [
+        "src/pages/platform/CommandCentre.tsx",
+        "src/components/commandCentre/CCItemCard.tsx"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-008", "CC-009", "CC-011"],
+      "passes": true,
+      "notes": "May need to add isHighlighted prop to CCItemCard for visual highlight state."
+    },
+    {
+      "id": "CC-011",
+      "title": "Fix snooze to hide items from Command Centre feed",
+      "description": "Add a due_date filter to commandCentreItemsService.getItems() so snoozed items (with due_date pushed into the future) don't appear in the feed until their snooze expires.",
+      "acceptanceCriteria": [
+        "In getItems() query (commandCentreItemsService.ts ~line 104-153), add filter: or('due_date.is.null,due_date.lte.now()')",
+        "Snooze an item → it immediately disappears from the feed",
+        "After snooze time expires → item reappears in the feed",
+        "Items with no due_date continue to appear normally",
+        "Items with a past due_date continue to appear normally"
+      ],
+      "priority": 2,
+      "phase": "frontend-polish",
+      "files": [
+        "src/lib/services/commandCentreItemsService.ts"
+      ],
+      "dependencies": [],
+      "parallelWith": ["CC-008", "CC-009", "CC-010"],
+      "passes": true,
+      "notes": "Single-line query addition. Alternative: add a snoozed_until column (cleaner but needs migration). Start with the filter approach."
+    },
+    {
+      "id": "CC-012",
+      "title": "Delete orphaned command-centre components and demo pages",
+      "description": "Remove 21 orphaned component files from src/components/command-centre/, the unused useCommandCentreTasks hook, and 3 demo pages (200KB+ of hardcoded mock data). Update commandCentreStore.ts to remove dependency on deleted types.",
+      "acceptanceCriteria": [
+        "Delete entire src/components/command-centre/ directory (21 files, all verified orphaned)",
+        "Delete src/lib/hooks/useCommandCentreTasks.ts (unused, queries wrong table)",
+        "Update src/lib/stores/commandCentreStore.ts to remove import from deleted types.ts (inline the types or import from commandCentreItemsService)",
+        "Delete src/pages/platform/CommandCentreDemo.tsx (45KB hardcoded mock data)",
+        "Delete src/pages/platform/CommandCentreV2Demo.tsx (85KB hardcoded mock data)",
+        "Delete src/pages/platform/CommandCentreWowDemo.tsx (70KB hardcoded mock data)",
+        "Remove any route config entries for deleted demo pages",
+        "Build passes with no import errors (npm run build)"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Created migrations: 20260123000003_seed_catch_me_up_sequence.sql (skills + sequence) and 20260123000004_enable_catch_me_up_for_all_orgs.sql. Sequence has 7 steps: get_meetings_for_period (today/tomorrow), get_pipeline_deals (stale/closing_soon), get_contacts_needing_attention, list_tasks, then daily-brief-planner skill. Router already handles isCatchMeUpQuestion() in api-copilot. Note: daily_brief structured response type needs UI component (US-005).",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-005",
-      "title": "Daily Brief Structured Response Panel",
-      "description": "As a user, I want the 'catch me up' response to render as a rich, scannable panel (not just text), so that I can quickly understand my day.",
-      "acceptanceCriteria": [
-        "Add daily_brief structured response type to CopilotResponse.tsx",
-        "Create DailyBriefResponse.tsx component",
-        "Panel shows time-appropriate greeting",
-        "Schedule section: Today's meetings with times, clickable",
-        "Deals section: Cards for stale/closing-soon deals, clickable",
-        "Contacts section: List of contacts needing attention, clickable",
-        "Tasks section: Pending tasks list, clickable",
-        "Expand button to show full dashboard view",
-        "Compact by default (~30 seconds to scan)",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+      "phase": "cleanup",
+      "files": [
+        "src/components/command-centre/",
+        "src/lib/hooks/useCommandCentreTasks.ts",
+        "src/lib/stores/commandCentreStore.ts",
+        "src/pages/platform/CommandCentreDemo.tsx",
+        "src/pages/platform/CommandCentreV2Demo.tsx",
+        "src/pages/platform/CommandCentreWowDemo.tsx"
       ],
-      "priority": 5,
+      "dependencies": ["CC-008", "CC-009", "CC-010", "CC-011"],
+      "parallelWith": [],
       "passes": true,
-      "notes": "Created DailyBriefResponse.tsx with collapsible sections for Schedule, Deals, Contacts, Tasks, and Tomorrow Preview (evening). Uses TimeIcon for morning/afternoon/evening. Added types to types.ts (DailyBriefResponse, DailyBriefResponseData, DailyBriefMeeting, DailyBriefDeal, DailyBriefContact, DailyBriefTask). All items clickable via onActionClick with standard action contract.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-006",
-      "title": "Email Preview → Confirm Flow",
-      "description": "As a user, I want to preview email drafts before they are sent, so that I can review and approve before committing.",
-      "acceptanceCriteria": [
-        "Email sequences run with is_simulation: true by default",
-        "Backend stores pending_action with sequence key and params",
-        "Email draft shown in structured response with Send confirmation button",
-        "User reply Confirm or clicking Send triggers sequence with is_simulation: false",
-        "Confirmation works for both Gemini-invoked and deterministic sequences",
-        "Clear visual indicator that email is a preview (not sent yet)",
-        "Cancel/Edit option available before confirming",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 6,
-      "passes": true,
-      "notes": "Backend already had is_simulation and pending_action pattern (api-copilot lines 776-800, 857). Added Cancel (X) and Edit (Pencil) buttons to PostMeetingFollowUpPackResponse and FollowupZeroInboxResponse. Preview badge already shows when isSimulation=true. Confirm button sends 'Confirm' message which triggers is_simulation:false execution.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-007",
-      "title": "Validate Next Meeting Prep Sequence",
-      "description": "As a user, I want the 'prep me for my next meeting' workflow to reliably return a complete command center, so that I'm always prepared.",
-      "acceptanceCriteria": [
-        "Test seq-next-meeting-command-center end-to-end",
-        "Verify all required fields in output: meeting ID, title, attendees, company, context",
-        "Structured response includes: meeting details, attendee profiles, deal context, prep checklist",
-        "All items are clickable",
-        "Handles edge cases: no upcoming meetings, meeting with no linked contacts",
-        "Response time under 5 seconds for typical case",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": "Enhanced NextMeetingCommandCenterResponse with: (1) Attendees section with expandable list, clickable contacts, (2) Deal Context section with linked deal, stage, value, (3) Meeting Brief section with prep notes, objectives, talking points, (4) Company name in meeting header, (5) Edit/Cancel buttons for simulation mode. All items use standard action contract. Backend seq-next-meeting-command-center already handles edge cases.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-008",
-      "title": "Validate Post-Meeting Follow-Up Pack Sequence",
-      "description": "As a user, I want the 'create follow-ups for my last meeting' workflow to generate actionable items, so that nothing falls through the cracks.",
-      "acceptanceCriteria": [
-        "Test seq-post-meeting-followup-pack end-to-end",
-        "Verify output includes: email drafts, task suggestions, Slack message drafts",
-        "Email drafts use preview→confirm pattern",
-        "Task suggestions are clickable with Create action",
-        "Handles edge cases: meeting with no transcript, meeting with no linked deal",
-        "All generated content references actual meeting context",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": "PostMeetingFollowUpPackResponse already implements all criteria: (1) 3 tabs for Email/Slack/Tasks, (2) Preview badge with Confirm button, (3) Edit/Cancel buttons added in US-006, (4) Tasks tab shows count + details, (5) Meeting context displayed (title, start, contact). Backend seq-post-meeting-followup-pack uses on_failure:'continue' for resilience. Edge case handling built into sequence steps.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-009",
-      "title": "Validate Email Zero Inbox Sequence",
-      "description": "As a user, I want the 'help me with email follow-ups' workflow to find pending emails and draft replies, so that I can clear my inbox efficiently.",
-      "acceptanceCriteria": [
-        "Test seq-followup-zero-inbox end-to-end",
-        "Verify output includes: list of emails needing response, draft replies",
-        "Draft replies use preview→confirm pattern",
-        "Each email shows: sender, subject, age, priority indicator",
-        "Drafts reference actual email content",
-        "Skip action available for emails that don't need reply",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": "FollowupZeroInboxResponse already had: threadsNeedingResponse list with urgency dots, Reply Email/Drafts/Tasks tabs, preview→confirm pattern, Edit/Cancel buttons (US-006). Added Skip button (SkipForward icon) to allow skipping emails that don't need reply. Component sends 'Skip this email, show me the next one' message.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-010",
-      "title": "Validate Pipeline Focus Sequence",
-      "description": "As a user, I want the 'what deals should I focus on' workflow to surface priority deals with specific actions, so that I know where to spend my time.",
-      "acceptanceCriteria": [
-        "Test seq-pipeline-focus-tasks end-to-end",
-        "Verify output includes: prioritized deal list with recommended actions",
-        "Each deal shows: name, value, stage, days since activity, health indicator",
-        "Recommended actions are specific",
-        "Deals are clickable to open deal page",
-        "Filters applied: stale deals, closing soon, high value",
-        "Handles empty pipeline gracefully",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": "Enhanced PipelineFocusTasksResponse with: (1) Deal value displayed prominently in emerald, (2) Days since activity with clock icon in amber, (3) Health indicator with color coding (emerald=healthy, amber=at_risk, red=stale), (4) Changed 'Yes create a task' to 'Confirm' for consistency, (5) Added Edit/Cancel buttons for simulation mode. Deal clickable via open_deal action.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-011",
-      "title": "Tool Type Icons and Labels",
-      "description": "As a user, I want each step in the progress stepper to show an appropriate icon and label, so that I understand what Copilot is doing.",
-      "acceptanceCriteria": [
-        "Map tool capabilities to icons: calendar, database, AI, email, Slack, tasks",
-        "Each step shows human-readable label",
-        "Icon colors match tool type",
-        "Create getToolIcon and getToolLabel utility functions",
-        "Apply to both chat stepper and right panel progress",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": "Already implemented. toolUtils.ts has TOOL_CONFIGS with 14 tool types, each with: icon, label, gradient, iconColor, glowColor, estimatedDurationMs. Functions getToolIcon(), getToolLabel(), getStepIcon() exist. Used in ToolCallIndicator.tsx (line 143) and CopilotRightPanel.tsx (line 273).",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-012",
-      "title": "Stepper Duration Estimates",
-      "description": "As a user, I want to see estimated time remaining for each step, so that I know how long to wait.",
-      "acceptanceCriteria": [
-        "Add duration estimates per tool type",
-        "Active step shows estimated time remaining",
-        "Completed steps show actual duration",
-        "Total estimated time shown at top of stepper",
-        "Estimates update as steps complete",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 12,
-      "passes": true,
-      "notes": "Already implemented in ToolCallIndicator.tsx. Uses getStepDurationEstimate(step.icon) for estimates, formatDurationEstimate() for display, formatActualDuration() for completed steps. Shows 'Est. total' at header (line 505) and 'X remaining' for active step (line 436). Completed steps show actual duration (lines 274-280).",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-013",
-      "title": "Golden Path Scenario Tests",
-      "description": "As a developer, I want automated tests for the 5 V1 workflows, so that regressions are caught before deployment.",
-      "acceptanceCriteria": [
-        "Create test fixtures with sample context data",
-        "Test: Catch me up returns daily_brief structured response",
-        "Test: Prep for next meeting returns next_meeting_command_center",
-        "Test: Create follow-ups returns post_meeting_followup_pack",
-        "Test: Email inbox returns followup_zero_inbox",
-        "Test: Pipeline focus returns pipeline_focus_tasks",
-        "Tests verify pending_action saved for preview flows",
-        "Tests run in CI pipeline",
-        "Typecheck passes"
-      ],
-      "priority": 13,
-      "passes": true,
-      "notes": "Created tests/unit/copilot/workflows.test.ts with 19 tests covering all 5 V1 workflows. Includes: mock fixtures (meeting, deal, contact, task), response builders for each workflow type, type validators (isValidDailyBrief, etc.), edge case tests (no meetings, empty inbox). Tests verify isSimulation=true and sequenceKey for pending_action. All tests pass.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-014",
-      "title": "Workflow Telemetry and Metrics",
-      "description": "As a product owner, I want to track per-workflow success rates and performance, so that I can identify issues and measure improvement.",
-      "acceptanceCriteria": [
-        "Add telemetry events: copilot_workflow_started, copilot_workflow_completed, copilot_workflow_failed",
-        "Track: workflow type, duration, step count, tool failures",
-        "Track confirmation conversion rate for preview→confirm flows",
-        "Create dashboard query for workflow success rate by type",
-        "Add error categorization",
-        "Typecheck passes"
-      ],
-      "priority": 14,
-      "passes": true,
-      "notes": "Added workflow telemetry to api-copilot: workflow_type, workflow_sequence_key, is_deterministic_workflow, structured_response_type, workflow_step_count, workflow_duration_ms, workflow_completed, is_preview_flow, pending_action_created, error_category. Created migration 20260124000001_add_workflow_telemetry_columns.sql with indexed columns. Error categorization: timeout, rate_limit, auth, not_found, validation, network, internal.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-015",
-      "title": "Hybrid Escalation Rules",
-      "description": "As a user, I want Copilot to intelligently escalate complex requests to agent-first mode while keeping simple queries chat-first, so that I get the right experience for each request.",
-      "acceptanceCriteria": [
-        "Define escalation criteria: multi-entity, write operations, multi-step",
-        "Simple queries stay chat-first",
-        "Complex queries trigger plan→execute agent mode",
-        "Agent mode still enforces preview→confirm for writes",
-        "UI shows Planning indicator when agent mode activates",
-        "Escalation decision logged for debugging",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 15,
-      "passes": true,
-      "notes": "Added analyzeEscalationCriteria() function to api-copilot. Escalation criteria: (1) Multi-entity: 3+ entity types = +3 complexity, (2) Write operations: create/update/delete/send = +2, (3) Multi-step: 'and then', 'for each', bulk = +2, (4) Conditional: if/then, unless, based on = +2. Simple indicators reduce score. Threshold: score >= 4 = 'agent' mode. Decision logged with [ESCALATION] prefix. Analytics fields: escalation_decision, escalation_reasons.",
-      "aiDevHubTaskId": null
+      "notes": "Do last — no functional impact but large diff. Run build after deletion to catch any hidden imports. ~200KB+ removed."
     }
   ]
 }

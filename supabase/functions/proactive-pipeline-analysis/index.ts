@@ -34,6 +34,7 @@ import {
   type PipelineMathInput,
 } from '../_shared/orchestrator/adapters/pipelineMath.ts';
 import { getOvernightSummary } from '../_shared/orchestrator/adapters/overnightSummary.ts';
+import { writeMultipleItems } from '../_shared/commandCentre/writeAdapter.ts';
 
 // ============================================================================
 // Types
@@ -559,6 +560,43 @@ async function analyzeUserPipeline(
   // AC-005: Create Action Centre items
   if (summary.insights.length > 0) {
     await createActionCentreItems(supabase, summary);
+  }
+
+  // Write to Command Centre for new inbox feed
+  if (summary.insights.length > 0) {
+    try {
+      const severityToUrgency: Record<string, 'critical' | 'high' | 'normal' | 'low'> = {
+        critical: 'critical',
+        high: 'high',
+        medium: 'normal',
+        low: 'low',
+      };
+
+      await writeMultipleItems(
+        summary.insights.map((insight) => ({
+          org_id: summary.organizationId,
+          user_id: summary.userId,
+          source_agent: 'pipeline-analysis',
+          item_type: insight.type === 'overdue_task' ? 'follow_up' : 'insight',
+          title: insight.title,
+          summary: insight.description?.substring(0, 500),
+          context: {
+            insight_type: insight.type,
+            severity: insight.severity,
+            suggested_action: insight.suggestedAction,
+            deal_name: insight.dealName,
+            contact_name: insight.contactName,
+            value: insight.value,
+          },
+          deal_id: insight.dealId ?? undefined,
+          contact_id: insight.contactId ?? undefined,
+          urgency: severityToUrgency[insight.severity] || 'normal',
+        }))
+      );
+    } catch (ccErr) {
+      // CC failure must not break pipeline analysis
+      console.error('[Pipeline] CC write failed for user', summary.userId, String(ccErr));
+    }
   }
 
   return summary;

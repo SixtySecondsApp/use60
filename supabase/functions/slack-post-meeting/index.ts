@@ -14,6 +14,7 @@ import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
 import { loadProactiveContext, type ProactiveContext } from '../_shared/proactive/orgContext.ts';
 import { extractEventsFromMeeting } from '../_shared/memory/writer.ts';
 import { createRAGClient } from '../_shared/memory/ragClient.ts';
+import { writeMultipleItems } from '../_shared/commandCentre/writeAdapter.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1046,6 +1047,34 @@ serve(async (req) => {
       }
     } catch (e) {
       console.warn('[slack-post-meeting] Failed to create in-app notification:', (e as any)?.message || e);
+    }
+
+    // Write action items to Command Centre for inbox feed
+    try {
+      if (!isTest && meeting.owner_user_id && analysis.actionItems?.length > 0) {
+        await writeMultipleItems(
+          analysis.actionItems.map((item: { task: string; suggestedOwner?: string; dueInDays: number }) => ({
+            org_id: effectiveOrgId,
+            user_id: meeting.owner_user_id,
+            source_agent: 'post-meeting',
+            item_type: 'follow_up' as const,
+            title: item.task,
+            summary: `Follow-up from: ${meeting.title || 'Meeting'}`,
+            context: {
+              meeting_id: meeting.id,
+              meeting_title: meeting.title,
+              suggested_owner: item.suggestedOwner,
+              due_in_days: item.dueInDays,
+              sentiment: analysis.sentiment,
+            },
+            deal_id: (deal as { id?: string } | undefined)?.id ?? undefined,
+            urgency: 'high' as const,
+          }))
+        );
+      }
+    } catch (ccErr) {
+      // CC failure must not break post-meeting flow
+      console.warn('[slack-post-meeting] CC write failed:', (ccErr as any)?.message || ccErr);
     }
 
     // HITL follow-up email approval (best-effort): DM owner with approve/edit/reject
