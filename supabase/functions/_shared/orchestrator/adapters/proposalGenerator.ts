@@ -16,9 +16,12 @@ import { getServiceClient } from './contextEnrichment.ts';
 
 /**
  * Detects a send_proposal commitment in detect-intents output and, when found,
- * calls generate-proposal with enriched deal-memory context to kick off an
- * async proposal job.  The resulting proposal_job_id is stored in the step
+ * calls proposal-pipeline-v2 with enriched deal-memory context to kick off an
+ * async proposal job.  The resulting proposal_id is stored in the step
  * output so that the downstream HITL step (PROP-002) can surface it.
+ *
+ * V2 pipeline (default): calls proposal-pipeline-v2 with trigger_type: 'auto_post_meeting'.
+ * V1 fallback: set pipeline_version: 'v1' in the step config to use generate-proposal.
  *
  * Skip conditions (all return success with skipped:true, no error):
  *   - detect-intents step produced no output
@@ -138,49 +141,82 @@ export const detectProposalIntentAdapter: SkillAdapter = {
         trigger_phrase: proposalCommitment.phrase || proposalCommitment.source_quote || null,
       };
 
-      // ---- 6. Call generate-proposal with async job creation --------------
-      const payload = {
-        action: 'analyze_focus_areas',
-        async: true,
-        org_id: state.event.org_id,
-        user_id: state.event.user_id,
-        deal_id: deal.id,
-        contact_id: contact?.id,
-        contact_name: contact?.name,
-        company_name: company?.name || contact?.company,
-        transcripts: state.context.tier2?.meetingHistory?.[0]?.transcript
-          ? [state.context.tier2.meetingHistory[0].transcript.substring(0, 5000)]
-          : [],
-        deal_context: {
-          name: deal.name,
-          value: deal.value,
-          stage: deal.stage,
-          expected_close_date: deal.expected_close_date,
-          requirements: dealMemory.requirements,
-          pricing_tier: dealMemory.pricing_tier,
-          background: dealMemory.background,
-          commercial_summary: dealMemory.commercial_summary,
-          objections: dealMemory.objections,
-        },
-        meeting_context: meetingContext,
-        intent_data: intentsOutput,
-        trigger_phrase: proposalCommitment.phrase || proposalCommitment.source_quote,
-      };
+      // ---- 6. Call proposal-pipeline-v2 (default) or generate-proposal (V1 fallback) ----
+      // V1 fallback: set pipeline_version: 'v1' in step config to use legacy generate-proposal.
+      const pipelineVersion = (_step.config as Record<string, unknown> | undefined)?.pipeline_version ?? 'v2';
+      const useV2 = pipelineVersion !== 'v1';
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/generate-proposal`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      let response: Response;
+
+      if (useV2) {
+        // V2 pipeline — leaner payload, server drives template + PDF generation
+        const v2Payload = {
+          meeting_id: state.event.payload.meeting_id,
+          deal_id: deal.id,
+          contact_id: contact?.id,
+          trigger_type: 'auto_post_meeting' as const,
+          user_id: state.event.user_id,
+          org_id: state.event.org_id,
+        };
+
+        console.log('[detect-proposal-intent] Calling proposal-pipeline-v2');
+
+        response = await fetch(`${supabaseUrl}/functions/v1/proposal-pipeline-v2`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(v2Payload),
+        });
+      } else {
+        // V1 legacy pipeline — full enriched payload
+        const v1Payload = {
+          action: 'analyze_focus_areas',
+          async: true,
+          org_id: state.event.org_id,
+          user_id: state.event.user_id,
+          deal_id: deal.id,
+          contact_id: contact?.id,
+          contact_name: contact?.name,
+          company_name: company?.name || contact?.company,
+          transcripts: state.context.tier2?.meetingHistory?.[0]?.transcript
+            ? [state.context.tier2.meetingHistory[0].transcript.substring(0, 5000)]
+            : [],
+          deal_context: {
+            name: deal.name,
+            value: deal.value,
+            stage: deal.stage,
+            expected_close_date: deal.expected_close_date,
+            requirements: dealMemory.requirements,
+            pricing_tier: dealMemory.pricing_tier,
+            background: dealMemory.background,
+            commercial_summary: dealMemory.commercial_summary,
+            objections: dealMemory.objections,
+          },
+          meeting_context: meetingContext,
+          intent_data: intentsOutput,
+          trigger_phrase: proposalCommitment.phrase || proposalCommitment.source_quote,
+        };
+
+        console.log('[detect-proposal-intent] Calling generate-proposal (V1 fallback)');
+
+        response = await fetch(`${supabaseUrl}/functions/v1/generate-proposal`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(v1Payload),
+        });
+      }
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
         // Degrade gracefully — proposal generation failing should not block the
         // rest of the meeting_ended sequence.
-        console.warn(`[detect-proposal-intent] generate-proposal returned ${response.status}: ${errorText}`);
+        const pipelineName = useV2 ? 'proposal-pipeline-v2' : 'generate-proposal';
+        console.warn(`[detect-proposal-intent] ${pipelineName} returned ${response.status}: ${errorText}`);
         return {
           success: true,
           output: {
@@ -194,22 +230,35 @@ export const detectProposalIntentAdapter: SkillAdapter = {
 
       const result = await response.json();
 
+      // V2 returns { success, proposal_id, pdf_url, generation_status, ... }
+      // V1 returns { job_id, proposal_job_id, ... }
+      const proposalId: string | undefined = result.proposal_id ?? undefined;
       const proposalJobId: string | undefined =
         result.job_id ?? result.proposal_job_id ?? undefined;
 
+      // Canonical identifier: prefer V2 proposal_id, fall back to V1 job id
+      const canonicalId = proposalId ?? proposalJobId;
+
       console.log(
-        `[detect-proposal-intent] Proposal job created: job_id=${proposalJobId ?? 'sync_response'}`,
+        `[detect-proposal-intent] Proposal initiated: proposal_id=${proposalId ?? 'n/a'}, ` +
+        `job_id=${proposalJobId ?? 'n/a'} (pipeline=${useV2 ? 'v2' : 'v1'})`,
       );
 
       return {
         success: true,
         output: {
-          proposal_job_id: proposalJobId,
+          // V2 fields (primary)
+          proposal_id: proposalId,
+          pdf_url: result.pdf_url ?? undefined,
+          generation_status: result.generation_status ?? undefined,
+          // V1 fields preserved for backward compat
+          proposal_job_id: proposalJobId ?? canonicalId,
           deal_id: deal.id,
           deal_name: deal.name,
           trigger_phrase: proposalCommitment.phrase || proposalCommitment.source_quote,
           confidence: proposalCommitment.confidence,
-          // Pass generate-proposal's full response in case caller needs it
+          pipeline_version: useV2 ? 'v2' : 'v1',
+          // Full pipeline response for downstream steps
           generate_proposal_response: result,
         },
         duration_ms: Date.now() - start,
@@ -670,6 +719,12 @@ export const proposalApprovalAdapter: SkillAdapter = {
       const intentOutput = state.outputs['detect-proposal-intent'] as
         | {
             skipped?: boolean;
+            // V2 pipeline fields
+            proposal_id?: string;
+            pdf_url?: string;
+            generation_status?: string;
+            pipeline_version?: string;
+            // V1 pipeline fields (backward compat)
             proposal_job_id?: string;
             deal_id?: string;
             deal_name?: string;
@@ -678,8 +733,11 @@ export const proposalApprovalAdapter: SkillAdapter = {
           }
         | undefined;
 
-      if (!intentOutput || intentOutput.skipped || !intentOutput.proposal_job_id) {
-        console.log('[proposal-approval] No proposal job from detect-proposal-intent, skipping');
+      // Accept either V2 proposal_id or V1 proposal_job_id as the canonical reference
+      const canonicalProposalRef = intentOutput?.proposal_id ?? intentOutput?.proposal_job_id;
+
+      if (!intentOutput || intentOutput.skipped || !canonicalProposalRef) {
+        console.log('[proposal-approval] No proposal reference from detect-proposal-intent, skipping');
         return {
           success: true,
           output: { skipped: true, reason: 'no_proposal_job_id' },
@@ -687,7 +745,9 @@ export const proposalApprovalAdapter: SkillAdapter = {
         };
       }
 
-      const proposalJobId = intentOutput.proposal_job_id;
+      // proposalJobId is kept as the variable name for backward compat with the rest of the adapter;
+      // for V2 pipelines it holds the proposal_id value.
+      const proposalJobId = canonicalProposalRef;
       const deal = state.context.tier2?.deal;
       const contact = state.context.tier2?.contact;
       const dealName = intentOutput.deal_name || deal?.name || 'Untitled Deal';
@@ -695,38 +755,55 @@ export const proposalApprovalAdapter: SkillAdapter = {
       const meetingTitle = (state.event.payload.title as string | undefined) || 'Our meeting';
       const meetingId = state.event.payload.meeting_id as string | undefined;
 
-      // --- 2. Try to fetch proposal content from proposal_jobs table ---
+      // --- 2. Try to fetch proposal content for preview ---
+      // V2: read from proposals.sections (ProposalSection[] jsonb)
+      // V1: fall back to proposal_jobs table (legacy)
       let executiveSummary = 'Executive summary will be available once the proposal is generated.';
       let pricingSection: string | null = null;
 
+      const isV2 = intentOutput.pipeline_version === 'v2' || !!intentOutput.proposal_id;
+
       try {
-        const { data: jobRow } = await supabase
-          .from('proposal_jobs')
-          .select('status, result, executive_summary, pricing_section, content')
-          .eq('id', proposalJobId)
-          .maybeSingle();
+        if (isV2 && intentOutput.proposal_id) {
+          // V2: read sections from proposals table
+          const { data: proposalRow } = await supabase
+            .from('proposals')
+            .select('sections, generation_status')
+            .eq('id', intentOutput.proposal_id)
+            .maybeSingle();
 
-        if (jobRow) {
-          // Accept completed or in-progress (show preview if available)
-          const summary =
-            jobRow.executive_summary ||
-            (jobRow.result as Record<string, unknown> | null)?.executive_summary ||
-            (jobRow.content as Record<string, unknown> | null)?.executive_summary;
-
-          const pricing =
-            jobRow.pricing_section ||
-            (jobRow.result as Record<string, unknown> | null)?.pricing_section ||
-            (jobRow.content as Record<string, unknown> | null)?.pricing_section;
-
-          if (typeof summary === 'string' && summary.trim()) {
-            executiveSummary = summary;
+          if (proposalRow?.sections) {
+            const sections = proposalRow.sections as Array<{ type: string; content: string }>;
+            const execSection = sections.find((s) => s.type === 'executive_summary');
+            const pricingSecObj = sections.find((s) => s.type === 'pricing');
+            if (execSection?.content) executiveSummary = execSection.content;
+            if (pricingSecObj?.content) pricingSection = pricingSecObj.content;
           }
-          if (typeof pricing === 'string' && pricing.trim()) {
-            pricingSection = pricing;
+        } else {
+          // V1 legacy: read from proposal_jobs table
+          const { data: jobRow } = await supabase
+            .from('proposal_jobs')
+            .select('status, result, executive_summary, pricing_section, content')
+            .eq('id', proposalJobId)
+            .maybeSingle();
+
+          if (jobRow) {
+            const summary =
+              jobRow.executive_summary ||
+              (jobRow.result as Record<string, unknown> | null)?.executive_summary ||
+              (jobRow.content as Record<string, unknown> | null)?.executive_summary;
+
+            const pricing =
+              jobRow.pricing_section ||
+              (jobRow.result as Record<string, unknown> | null)?.pricing_section ||
+              (jobRow.content as Record<string, unknown> | null)?.pricing_section;
+
+            if (typeof summary === 'string' && summary.trim()) executiveSummary = summary;
+            if (typeof pricing === 'string' && pricing.trim()) pricingSection = pricing;
           }
         }
       } catch (fetchErr) {
-        console.warn('[proposal-approval] Failed to fetch proposal_jobs row (non-fatal):', fetchErr);
+        console.warn('[proposal-approval] Failed to fetch proposal content (non-fatal):', fetchErr);
       }
 
       // --- 3. Get Slack credentials for DM delivery ---
@@ -797,7 +874,11 @@ export const proposalApprovalAdapter: SkillAdapter = {
           slack_message_ts: '', // updated after message is sent
           status: 'pending',
           original_content: {
+            // V2: proposal_id is the proposals table UUID
+            proposal_id: intentOutput.proposal_id,
+            // V1 compat: proposal_job_id holds the canonical ref (same value for V2)
             proposal_job_id: proposalJobId,
+            pipeline_version: intentOutput.pipeline_version ?? 'v2',
             deal_id: intentOutput.deal_id || deal?.id,
             deal_name: dealName,
             contact_name: contactName,
@@ -810,6 +891,7 @@ export const proposalApprovalAdapter: SkillAdapter = {
           callback_type: 'edge_function',
           callback_target: 'hitl-send-followup-email',
           callback_metadata: {
+            proposal_id: intentOutput.proposal_id,
             proposal_job_id: proposalJobId,
             meeting_id: meetingId,
             job_id: (state as any).job_id || null,
@@ -820,6 +902,7 @@ export const proposalApprovalAdapter: SkillAdapter = {
             sequence_type: 'meeting_ended',
             step: 'proposal-approval',
             meeting_id: meetingId,
+            proposal_id: intentOutput.proposal_id,
             proposal_job_id: proposalJobId,
           },
         })
