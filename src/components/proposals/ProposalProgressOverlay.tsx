@@ -452,9 +452,10 @@ export default function ProposalProgressOverlay({
   // -------------------------------------------------------------------
   const isDone = status === 'ready';
   const isFailed = status === 'failed';
-  const thumbnailUrl = (proposal?.metadata as Record<string, unknown> | null)?.thumbnail_url as
-    | string
-    | undefined;
+  // Thumbnail is written to brand_config by proposal-render-gotenberg; fall back to metadata
+  const thumbnailUrl =
+    ((proposal?.brand_config as Record<string, unknown> | null)?.thumbnail_url as string | undefined) ||
+    ((proposal?.metadata as Record<string, unknown> | null)?.thumbnail_url as string | undefined);
 
   // -------------------------------------------------------------------
   // Render helpers
