@@ -77,7 +77,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, CommandCentreWowDemo, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -344,9 +344,6 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/landing-page-builder" element={<InternalRouteGuard><AppLayout><LandingPageBuilderPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/action-centre" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/command-centre" element={<InternalRouteGuard><AppLayout><CommandCentre /></AppLayout></InternalRouteGuard>} />
-                <Route path="/command-centre-demo" element={<InternalRouteGuard><AppLayout><CommandCentreDemo /></AppLayout></InternalRouteGuard>} />
-                <Route path="/command-centre-v2" element={<InternalRouteGuard><AppLayout><CommandCentreV2Demo /></AppLayout></InternalRouteGuard>} />
-                <Route path="/command-centre-wow" element={<InternalRouteGuard><AppLayout><CommandCentreWowDemo /></AppLayout></InternalRouteGuard>} />
                 <Route path="/activity" element={<InternalRouteGuard><AppLayout><ActivityLog /></AppLayout></InternalRouteGuard>} />
                 <Route path="/insights" element={<AppLayout><Insights /></AppLayout>} />
                 <Route path="/crm" element={<Navigate to="/ops" replace />} />
@@ -468,6 +465,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/demo/campaign-workflow" element={<PlatformAdminRouteGuard><AppLayout><CampaignWorkflowDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/ops-webhook" element={<PlatformAdminRouteGuard><AppLayout><OpsWebhookDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/visual-assets" element={<PlatformAdminRouteGuard><AppLayout><VisualAssetsDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/google-integration" element={<PlatformAdminRouteGuard><GoogleIntegrationDemo /></PlatformAdminRouteGuard>} />
                 {/* Documentation CMS Admin */}
                 <Route path="/platform/docs-admin" element={<PlatformAdminRouteGuard><AppLayout><DocsAdminPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Shareable skill detail page - accessible to org members */}

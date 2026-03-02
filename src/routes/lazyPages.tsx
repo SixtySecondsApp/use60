@@ -43,9 +43,6 @@ export const NotetakerVideoQuality = lazyWithRetry(() => import('@/pages/platfor
 export const NotetakerRecordingLimit = lazyWithRetry(() => import('@/pages/platform/NotetakerRecordingLimit'));
 export const ActionCentre = lazyWithRetry(() => import('@/pages/platform/ActionCentre'));
 export const CommandCentre = lazyWithRetry(() => import('@/pages/platform/CommandCentre'));
-export const CommandCentreDemo = lazyWithRetry(() => import('@/pages/platform/CommandCentreDemo'));
-export const CommandCentreV2Demo = lazyWithRetry(() => import('@/pages/platform/CommandCentreV2Demo'));
-export const CommandCentreWowDemo = lazyWithRetry(() => import('@/pages/platform/CommandCentreWowDemo'));
 export const CommitmentDetectionDemo = lazyWithRetry(() => import('@/pages/platform/CommitmentDetectionDemo'));
 export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/AgentTeamSettings'));
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
@@ -67,6 +64,7 @@ export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentR
 export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
 export const OpsWebhookDemo = lazyWithRetry(() => import('@/pages/demo/OpsWebhookDemo'));
 export const VisualAssetsDemo = lazyWithRetry(() => import('@/pages/demo/VisualAssetsDemo'));
+export const GoogleIntegrationDemo = lazyWithRetry(() => import('@/pages/demo/GoogleIntegrationDemo'));
 // Admin Configuration
 export const ControlRoom = lazyWithRetry(() => import('@/pages/admin/ControlRoom'));
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
