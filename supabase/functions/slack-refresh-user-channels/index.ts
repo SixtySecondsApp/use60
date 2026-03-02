@@ -2,7 +2,7 @@
 // Refreshes Slack channels for a user's OAuth integration and caches them in slack_channels
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { getAuthContext } from '../_shared/edgeAuth.ts';
 

@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
-import { corsHeaders } from './corsHelper.ts'
+import { getCorsHeaders, corsHeaders } from './corsHelper.ts'
 
 export interface ApiResponse<T = any> {
   data: T | null;
@@ -54,11 +54,13 @@ export function createApiResponse<T>(
 
 // Standard error response
 export function createErrorResponse(
-  message: string, 
-  status: number = 500, 
-  code?: string, 
-  details?: any
+  message: string,
+  status: number = 500,
+  code?: string,
+  details?: any,
+  req?: Request
 ): Response {
+  const headers = req ? getCorsHeaders(req) : corsHeaders
   return new Response(JSON.stringify({
     data: null,
     error: message,
@@ -66,20 +68,22 @@ export function createErrorResponse(
     details
   }), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    headers: { ...headers, 'Content-Type': 'application/json' }
   })
 }
 
 // Standard success response
 export function createSuccessResponse<T>(
-  data: T, 
-  status: number = 200, 
+  data: T,
+  status: number = 200,
   count?: number,
-  pagination?: any
+  pagination?: any,
+  req?: Request
 ): Response {
+  const headers = req ? getCorsHeaders(req) : corsHeaders
   return new Response(JSON.stringify(createApiResponse(data, null, count, pagination)), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    headers: { ...headers, 'Content-Type': 'application/json' }
   })
 }
 

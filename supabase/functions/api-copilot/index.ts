@@ -10,8 +10,8 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { getCorsHeaders, handleCorsPreflightRequest, corsHeaders as staticCorsHeaders } from '../_shared/corsHelper.ts';
 import { resolveModel, recordSuccess, recordFailure } from '../_shared/modelRouter.ts';
 import { 
   createSuccessResponse,
@@ -360,6 +360,7 @@ async function handleChat(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   const requestStartTime = Date.now()
   let analyticsData: any = {
     user_id: userId,
@@ -1610,6 +1611,7 @@ async function handleDraftEmail(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   try {
     const body: DraftEmailRequest = await req.json()
     
@@ -1693,14 +1695,15 @@ async function handleRegenerateEmailTone(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   try {
     const body = await req.json()
     const { currentEmail, newTone, context } = body
-    
+
     if (!currentEmail?.body || !newTone) {
       return createErrorResponse('currentEmail and newTone are required', 400, 'INVALID_REQUEST')
     }
-    
+
     console.log('[REGENERATE-TONE] Starting tone adjustment:', { newTone, hasContext: !!context })
     
     // Fetch user's writing style and profile
@@ -1810,10 +1813,11 @@ RECIPIENT: ${context?.contactName || 'the recipient'}
 CRITICAL REQUIREMENTS:
 1. Keep ALL the same information, meeting references, action items, and key points
 2. Only adjust the tone/style as requested - DO NOT remove content
-3. Keep the greeting style appropriate for the new tone
+3. The greeting MUST address the EXACT SAME PERSON as the original email. If the original says "Hi Haris," the adjusted email MUST also address Haris. NEVER change the recipient name.
 4. Sign off with "${userName}" (never use placeholders like "[Your Name]")
 5. If the email mentions specific dates, names, or action items - KEEP THEM ALL
 6. The adjusted email should be roughly the same length (unless "concise" is requested)
+7. Never use em dashes. Use commas, periods, or rewrite instead.
 
 Return ONLY a JSON object:
 {"subject": "adjusted subject", "body": "adjusted email body with proper greeting and sign-off"}`
@@ -1846,41 +1850,78 @@ Return ONLY a JSON object:
 
     const geminiData = await geminiResponse.json()
     const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    
+
+    console.log('[REGENERATE-TONE] Gemini response length:', responseText.length, 'first 200:', responseText.slice(0, 200))
+
+    // Extract original recipient name from the current email greeting
+    const originalGreetingMatch = currentEmail.body.match(/^(?:Hi|Hey|Hello|Dear)\s+([A-Z][a-zA-Z]+)/m)
+    const originalRecipientName = originalGreetingMatch ? originalGreetingMatch[1] : null
+
+    // Post-process regenerated email: fix recipient name and clean artifacts
+    function postProcessEmail(emailBody: string): string {
+      let result = emailBody
+      // Strip markdown blockquote prefixes ("> " at start of lines)
+      result = result.replace(/^>\s?/gm, '')
+      // If original had a specific name, ensure the new email uses the same name
+      if (originalRecipientName) {
+        result = result.replace(
+          /^((?:Hi|Hey|Hello|Dear)\s+)([A-Z][a-zA-Z]+)/m,
+          `$1${originalRecipientName}`
+        )
+      }
+      // Clean em dashes and placeholders
+      result = result
+        .replace(/\u2014/g, ',')
+        .replace(/\[Your Name\]/gi, userName)
+        .replace(/\[Your (?:Title|Company|Phone|Email)[^\]]*\]/gi, '')
+      return result.trim()
+    }
+
+    // Try parsing as JSON directly
     try {
       const emailJson = JSON.parse(responseText)
       if (emailJson.subject && emailJson.body) {
-        console.log('[REGENERATE-TONE] ✅ Successfully regenerated email with', newTone, 'tone')
+        console.log('[REGENERATE-TONE] Successfully regenerated email with', newTone, 'tone')
         return new Response(JSON.stringify({
           subject: emailJson.subject,
-          body: emailJson.body,
+          body: postProcessEmail(emailJson.body),
           tone: newTone
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-    } catch (parseError) {
-      // Try to extract JSON
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        try {
-          const emailJson = JSON.parse(jsonMatch[0])
-          if (emailJson.subject && emailJson.body) {
-            return new Response(JSON.stringify({
-              subject: emailJson.subject,
-              body: emailJson.body,
-              tone: newTone
-            }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            })
-          }
-        } catch (e) {
-          // Fall through to error
+    } catch (_parseError) {
+      // Try to extract JSON from response
+    }
+
+    // Try to extract JSON from response text
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      try {
+        const emailJson = JSON.parse(jsonMatch[0])
+        if (emailJson.subject && emailJson.body) {
+          return new Response(JSON.stringify({
+            subject: emailJson.subject,
+            body: postProcessEmail(emailJson.body),
+            tone: newTone
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
         }
+      } catch (_e) {
+        // Fall through
       }
     }
-    
-    return createErrorResponse('Failed to parse regenerated email', 500, 'PARSE_ERROR')
+
+    // If Gemini returned text but we couldn't parse, return the original email unchanged
+    console.error('[REGENERATE-TONE] Failed to parse Gemini response, returning original email. Response:', responseText.slice(0, 300))
+    return new Response(JSON.stringify({
+      subject: currentEmail.subject,
+      body: currentEmail.body,
+      tone: newTone
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
     
   } catch (error) {
     console.error('[REGENERATE-TONE] Error:', error)
@@ -1906,6 +1947,7 @@ async function handleTestSkill(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   try {
     const body = await req.json()
     const skillKey = body?.skill_key ? String(body.skill_key).trim() : ''
@@ -2126,6 +2168,7 @@ async function handleGenerateDealEmail(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   console.log('[GENERATE-DEAL-EMAIL] Starting email generation', { userId })
   try {
     const body = await req.json()
@@ -2574,6 +2617,7 @@ async function handleGetConversation(
   conversationId: string,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = staticCorsHeaders;
   try {
     if (!isValidUUID(conversationId)) {
       return createErrorResponse('Invalid conversation ID', 400, 'INVALID_ID')

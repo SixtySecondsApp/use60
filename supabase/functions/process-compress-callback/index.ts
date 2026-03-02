@@ -3,7 +3,7 @@
 // Updates recordings table, syncs to meetings, triggers thumbnail
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.43.4';
 import { LambdaClient, InvokeCommand } from 'npm:@aws-sdk/client-lambda@3';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { syncRecordingToMeeting } from '../_shared/recordingCompleteSync.ts';

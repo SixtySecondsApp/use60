@@ -2,7 +2,7 @@
 // Search internal CRM index tables with ICP criteria
 // Returns existing CRM contacts and companies matching ICP profile
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts'
 import { logFlatRateCostEvent } from '../_shared/costTracking.ts'
 

@@ -28,6 +28,7 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 import {
   buildAutoExecutionReport,
   type AutoExecReportItem,
@@ -114,6 +115,12 @@ async function postToSlack(
 serve(async (req) => {
   const corsPreflightResponse = handleCorsPreflightRequest(req);
   if (corsPreflightResponse) return corsPreflightResponse;
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return errorResponse('Unauthorized', req, 401);
+  }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';

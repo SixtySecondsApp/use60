@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -105,7 +105,7 @@ serve(async (req) => {
       `)
       .eq('id', meetingId)
       .eq('owner_user_id', userId)
-      .single()
+      .maybeSingle()
 
     if (meetingError || !meeting) {
       throw new Error('Meeting not found or access denied')
@@ -137,7 +137,7 @@ serve(async (req) => {
       .select('access_token, fathom_user_id')
       .eq('user_id', userId)
       .eq('is_active', true)
-      .single()
+      .maybeSingle()
 
     if (integrationError || !fathomIntegration) {
       throw new Error('Fathom integration not found')

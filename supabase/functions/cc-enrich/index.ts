@@ -35,6 +35,7 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 import {
   getEnrichmentPlan,
   type CreditTier,
@@ -928,6 +929,12 @@ async function enrichItem(
 Deno.serve(async (req: Request) => {
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return errorResponse('Unauthorized', req, 401);
+  }
 
   // Extract trace_id from request body for pipeline correlation
   let traceId: string | undefined;

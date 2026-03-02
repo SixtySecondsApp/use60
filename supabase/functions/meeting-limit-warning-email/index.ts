@@ -10,7 +10,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -35,8 +35,8 @@ interface MeetingLimitWarningEmailRequest {
 function verifySecret(req: Request): boolean {
   const secret = Deno.env.get('EDGE_FUNCTION_SECRET');
   if (!secret) {
-    console.warn('[meeting-limit-warning-email] No EDGE_FUNCTION_SECRET configured');
-    return true; // Dev mode
+    console.error('[meeting-limit-warning-email] EDGE_FUNCTION_SECRET not configured - rejecting request');
+    return false;
   }
 
   const authHeader = req.headers.get('authorization');

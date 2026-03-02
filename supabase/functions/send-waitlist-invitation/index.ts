@@ -12,7 +12,8 @@
  * 5. Return emailParams for frontend to send
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 
 interface InvitationRequest {
   entryId: string;
@@ -47,6 +48,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
         'Access-Control-Allow-Methods': 'POST',
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
       },
+    });
+  }
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
   }
 

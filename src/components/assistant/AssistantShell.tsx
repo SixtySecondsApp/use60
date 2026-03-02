@@ -344,7 +344,7 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
     if (actionName === 'shorten') return;
     if (actionName === 'add_calendar_link') return;
     if (actionName === 'copy_email') return;
-    if (actionName === 'send_email') return;
+    // send_email handled in-component by EmailResponse (Send Now button)
     if (actionName === 'edit_in_gmail') return;
   };
 

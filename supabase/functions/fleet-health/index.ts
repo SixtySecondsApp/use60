@@ -14,6 +14,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { createLogger } from '../_shared/logger.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 
 // ---------------------------------------------------------------------------
 // Agent cadence configuration
@@ -345,6 +346,15 @@ serve(async (req: Request) => {
   if (preflightResponse) return preflightResponse;
 
   const corsHeaders = getCorsHeaders(req);
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {

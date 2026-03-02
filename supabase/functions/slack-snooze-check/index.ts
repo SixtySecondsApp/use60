@@ -14,13 +14,20 @@ serve(async (req: Request) => {
   if (corsPreflightResponse) return corsPreflightResponse;
   const corsHeaders = getCorsHeaders(req);
 
-  // Verify cron auth
+  // Verify cron auth (fail-closed: reject if CRON_SECRET not configured)
   const cronSecret = Deno.env.get('CRON_SECRET');
   const authHeader = req.headers.get('authorization');
   const isCron = req.headers.get('x-vercel-cron');
   const isServiceRole = authHeader?.replace('Bearer ', '') === supabaseServiceKey;
 
-  if (!isCron && !isServiceRole && cronSecret) {
+  if (!isCron && !isServiceRole) {
+    if (!cronSecret) {
+      console.error('[slack-snooze-check] CRON_SECRET not configured - rejecting request');
+      return new Response(JSON.stringify({ error: 'Unauthorized: CRON_SECRET not configured' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     const url = new URL(req.url);
     if (url.searchParams.get('secret') !== cronSecret) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {

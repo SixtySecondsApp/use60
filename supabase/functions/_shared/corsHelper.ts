@@ -36,7 +36,7 @@ function getAllowedOrigins(): string[] {
     'https://www.sixtyseconds.video',
     'https://app.sixtyseconds.video',
     'https://sixty-sales-dashboard.vercel.app',
-    '*.vercel.app',
+    '*-sixty-sales.vercel.app',
   ];
   
   return [...defaults, ...prodDomains];
@@ -47,15 +47,17 @@ function getAllowedOrigins(): string[] {
  */
 export function isOriginAllowed(origin: string | null): boolean {
   if (!origin) return false;
-  
+
   const allowedOrigins = getAllowedOrigins();
   return allowedOrigins.some(allowed => {
     // Exact match
     if (allowed === origin) return true;
-    // Wildcard subdomain match (e.g., *.vercel.app)
-    if (allowed.startsWith('*.')) {
-      const domain = allowed.slice(2);
-      return origin.endsWith(domain) || origin.endsWith('.' + domain);
+    // Wildcard match (e.g., *-sixty-sales.vercel.app matches https://foo-sixty-sales.vercel.app)
+    if (allowed.startsWith('*')) {
+      const suffix = allowed.slice(1); // e.g., "-sixty-sales.vercel.app"
+      // Strip protocol from origin for matching
+      const originWithoutProtocol = origin.replace(/^https?:\/\//, '');
+      return originWithoutProtocol.endsWith(suffix);
     }
     return false;
   });

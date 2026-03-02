@@ -26,7 +26,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.32.1';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
@@ -1390,6 +1390,12 @@ Don't stop after completing just one step — complete the FULL workflow the use
 
 When the user message includes a [DEAL_CONTEXT] block, you are in **Deal Copilot Mode**. This means the user opened a specific deal and is asking for help with it. Be proactive, action-oriented, and use every tool available.
 
+**CRITICAL formatting rules for Deal Copilot Mode:**
+- NEVER use emojis anywhere in your response (no icons, no emoji characters)
+- NEVER use em dashes (use commas or periods instead)
+- Sign-offs in emails MUST have the sign-off phrase on one line and the name on the next line (e.g. "Best,\n\nAndrew" not "Best, Andrew")
+- NEVER use "[Your Name]" placeholders. Use the sender's actual name from the deal context.
+
 **1. Always use the Deal ID for ALL lookups — this prevents cross-deal contamination:**
 - Use execute_action with get_deal { id: "<deal_id>", include_health: true } instead of searching by name
 - ALWAYS pass deal_id to get_meetings { deal_id: "<deal_id>" } — never rely on contactId alone, it returns meetings from OTHER deals
@@ -1560,7 +1566,7 @@ Use markdown tables for structured analysis:
 - If a tool returns an error, explain what happened and suggest alternatives
 - Present data in a helpful, actionable way for sales professionals
 - **Email output rules:** When you generate an email draft, output ONLY the email (subject line + body). Do NOT append meta-commentary, analysis, word counts, scoring, or coaching notes (e.g. "Word count: 62 | One ask: Quick call"). The user wants a ready-to-send email, not a writing critique. After the email, you may offer to adjust but never add statistics or framework labels.
-- **Email style rules:** Never use em dashes (— or –) in emails, they are the biggest AI tell. Never use oxford commas ("sales, marketing and ops" not "sales, marketing, and ops"). Don't swap punctuation for colons or dashes. If a sentence needs a colon or em dash to work, rewrite it as two short sentences. Keep punctuation simple: full stops, commas, question marks.
+- **Writing style rules (ALL responses, not just emails):** Never use em dashes (— or –) anywhere in your responses. They are the biggest AI tell. Use commas, periods, or rewrite as two short sentences instead. Never use oxford commas ("sales, marketing and ops" not "sales, marketing, and ops"). Keep punctuation simple: full stops, commas, question marks. These rules apply to emails, analysis, strategy notes, and every other output.
 
 ### LEAD SEARCH — MANDATORY TOOL USAGE
 
@@ -1828,7 +1834,8 @@ async function handleMultiAgentRequest(
   writer: WritableStreamDefaultWriter,
   encoder: TextEncoder,
   executionId: string | null,
-  recentContext?: string
+  recentContext?: string,
+  context?: Record<string, unknown>
 ): Promise<void> {
   const streamWriter: StreamWriter = {
     sendSSE: (event, data) => sendSSE(writer, encoder, event, data),
@@ -2011,8 +2018,294 @@ Combine these into a single, well-structured response that tells a coherent stor
     await sendSSE(writer, encoder, 'message_complete', { content: synthesized });
   }
 
-  // Send done event with agent metadata (includes per-agent responses for persistence)
+  // Detect structured response for multi-agent path.
+  // For email drafts from the outreach agent, we extract the email DIRECTLY from
+  // the agent's response text. This avoids structureEmailDraftResponse running its
+  // own meeting queries which can return unrelated meeting data (e.g., Owen King
+  // meeting when the deal is about Peter at Bigrockdigital).
   const allToolsUsed = results.flatMap((r) => r.toolsUsed);
+  const finalAgentText = results.length === 1
+    ? results[0].responseText
+    : results.map((r) => r.responseText).join('\n\n');
+
+  try {
+    const messageLower = message.toLowerCase();
+    const isEmailRequest =
+      (messageLower.includes('draft') && messageLower.includes('email')) ||
+      (messageLower.includes('write') && messageLower.includes('email')) ||
+      (messageLower.includes('follow up') && !messageLower.includes('task')) ||
+      (messageLower.includes('follow-up') && !messageLower.includes('task')) ||
+      messageLower.includes('email to') || messageLower.includes('compose email') ||
+      (messageLower.includes('send') && messageLower.includes('email'));
+
+    const outreachAgentUsed = results.some(r => r.agentName === 'outreach');
+
+    console.log('[copilot-autonomous] Multi-agent email check:', { isEmailRequest, outreachAgentUsed, textLen: finalAgentText.length, agentNames: results.map(r => r.agentName) });
+
+    if (isEmailRequest && outreachAgentUsed && finalAgentText.length > 100) {
+      // Parse the email directly from the outreach agent's response.
+      // The agent already wrote a contextually correct email using the deal context.
+      console.log('[copilot-autonomous] Multi-agent email: extracting from outreach agent response');
+
+      let emailExtracted = false;
+      try {
+        // Look up the user's name for sign-off replacement
+        let userName = '';
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, first_name, last_name')
+            .eq('id', userId)
+            .maybeSingle();
+          userName = profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || '';
+        } catch (_e) { /* best effort */ }
+        // Fallback: extract first name from user's email
+        if (!userName) {
+          try {
+            const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+            const email = authUser?.user?.email || '';
+            const localPart = email.split('@')[0] || '';
+            // Capitalize first letter of email local part as name
+            if (localPart && !localPart.includes('+') && localPart.length > 1) {
+              userName = localPart.charAt(0).toUpperCase() + localPart.slice(1).toLowerCase();
+            }
+          } catch (_e) { /* best effort */ }
+        }
+
+        // Extract email body: find greeting (Hi/Hey/Hello/Dear) and capture through sign-off
+        const greetingIdx = finalAgentText.search(/\b(?:Hi|Hey|Hello|Dear)\s+[A-Z]/);
+        let emailBody = '';
+        let emailSubject = '';
+
+        console.log('[copilot-autonomous] Email extraction:', { greetingIdx, userName: userName ? 'found' : 'empty' });
+
+        if (greetingIdx >= 0) {
+          // Take text from greeting to end, then trim trailing non-email content
+          let rawBody = finalAgentText.slice(greetingIdx);
+
+          // Cut off at common section breaks that follow the email
+          const cutPatterns = [
+            /\n---\n/,                             // Horizontal rule
+            /\n##\s/,                              // Markdown heading
+            /\n\*\*(?:Key |Next |Action|Strategy|Context|Analysis|Note|Suggested|Recommended|Additional|Why|Tips)/i,
+            /\n\n\n/,                              // Triple newline
+          ];
+          for (const pat of cutPatterns) {
+            const cutMatch = rawBody.match(pat);
+            if (cutMatch && cutMatch.index && cutMatch.index > 50) {
+              rawBody = rawBody.slice(0, cutMatch.index);
+              break;
+            }
+          }
+
+          // Clean markdown, emojis, em dashes, placeholders
+          emailBody = rawBody
+            .replace(/\*\*([^*]+)\*\*/g, '$1')     // Remove bold
+            .replace(/\*([^*]+)\*/g, '$1')          // Remove italic
+            .replace(/\s*\u2014\s*/g, ', ')         // Em dashes → comma (trim surrounding spaces)
+            .replace(/\u2013/g, '-')                // En dashes
+            .replace(/, ,/g, ',')                   // Fix double commas from em dash replacement
+            .replace(/,\s*,/g, ',')                 // Fix comma-space-comma
+            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '')
+            .replace(/\[Your Name\]/gi, userName || '')  // Replace [Your Name] with actual name
+            .replace(/\[(?:Your Company|Your Title|Phone[^[\]]*|Calendar[^[\]]*|Email|Title|Proposal[^[\]]*|Attach[^[\]]*|Link[^[\]]*|Key deliverable[^[\]]*|suggest[^[\]]*)\]/gi, '')  // Remove common placeholders
+            .replace(/\[[^\]]{0,60}\]/g, '')        // Remove any remaining short [...] placeholders
+            .replace(/\s*\|\s*$/gm, '')             // Remove trailing " | "
+            .replace(/[ \t]{2,}/g, ' ')             // Collapse horizontal spaces
+            .replace(/^\s*[-*]\s*,?\s*$/gm, '')    // Remove bullet lines that are now empty after placeholder removal
+            .replace(/^\s*$/gm, '')                 // Remove blank lines
+            .replace(/\n{3,}/g, '\n\n')             // Collapse excessive newlines
+            .trim();
+
+          // Fix fabricated temporal references ("today", "earlier today", "this morning")
+          // Check if the deal context has a recent meeting that was actually today
+          const meetingDateMatches = message.match(/(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))/gi);
+          const todayStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          const hasMeetingToday = meetingDateMatches?.some(d => d.trim() === todayStr) || false;
+
+          if (!hasMeetingToday) {
+            // Replace "today" references with neutral alternatives
+            emailBody = emailBody
+              .replace(/\bgood speaking with you today\b/gi, 'good speaking with you recently')
+              .replace(/\bgreat speaking with you today\b/gi, 'great speaking with you recently')
+              .replace(/\bnice speaking with you today\b/gi, 'nice speaking with you recently')
+              .replace(/\bour (?:call|chat|conversation|meeting) (?:earlier )?today\b/gi, 'our recent conversation')
+              .replace(/\bearlier today\b/gi, 'recently')
+              .replace(/\bwe discussed today\b/gi, 'we discussed')
+              .replace(/\bwe spoke today\b/gi, 'we spoke recently')
+              .replace(/\bwe met today\b/gi, 'we spoke recently')
+              .replace(/\bfrom today(?:'s)? (?:call|meeting|conversation|chat)\b/gi, 'from our recent conversation');
+          }
+        }
+
+        // Extract subject from agent response
+        const subjectMatch = finalAgentText.match(/\*?\*?Subject:?\*?\*?\s*(.+?)(?:\n|$)/i);
+        if (subjectMatch) {
+          emailSubject = subjectMatch[1]
+            .replace(/\*+/g, '').replace(/\[[^\]]*\]/g, '')
+            .replace(/\u2014/g, ' - ').replace(/\u2013/g, '-')
+            .replace(/\s{2,}/g, ' ').trim();
+        } else {
+          // Generate subject from deal context
+          const dealNameMatch = message.match(/Deal:\s*(.+?)(?:\n|$)/i);
+          emailSubject = dealNameMatch
+            ? `Following up - ${dealNameMatch[1].trim()}`
+            : 'Following up';
+        }
+
+        // Extract recipient from DEAL_CONTEXT
+        // Context block uses "Contact Name:" and "Contact Email:" (with Name/Email suffixes)
+        const contactNameMatch = message.match(/Contact\s*Name:\s*([^\n]+)/i);
+        const contactFallback = !contactNameMatch ? message.match(/Contact:\s*([^(,\n]+)/i) : null;
+        const contactEmailMatch = message.match(/Contact\s*Email:\s*([\w.+-]+@[\w.-]+\.\w+)/i);
+        const emailFallback = !contactEmailMatch ? message.match(/(?:Email|To):\s*([\w.+-]+@[\w.-]+\.\w+)/i) : null;
+        const genericEmailMatch = !contactEmailMatch && !emailFallback ? message.match(/[\w.+-]+@[\w.-]+\.\w+/) : null;
+        const recipientName = (contactNameMatch ? contactNameMatch[1] : contactFallback ? contactFallback[1] : '').trim();
+        const recipientEmail = (contactEmailMatch ? contactEmailMatch[1] : emailFallback ? emailFallback[1] : genericEmailMatch ? genericEmailMatch[0] : '').trim();
+        const recipientFirstName = recipientName.split(/\s+/)[0] || '';
+
+        // If we have a contact name but no email, try to look it up from contacts table
+        let resolvedRecipientEmail = recipientEmail;
+        if (!resolvedRecipientEmail && recipientName) {
+          try {
+            const nameParts = recipientName.split(/\s+/);
+            const firstName = nameParts[0] || '';
+            let contactQuery = supabase.from('contacts').select('email').ilike('first_name', firstName);
+            if (nameParts.length > 1) contactQuery = contactQuery.ilike('last_name', nameParts.slice(1).join(' '));
+            const { data: contactRows } = await contactQuery.limit(1);
+            if (contactRows?.[0]?.email) {
+              resolvedRecipientEmail = contactRows[0].email;
+              console.log('[copilot-autonomous] Resolved email from contacts:', resolvedRecipientEmail);
+            }
+          } catch (_e) { /* non-critical */ }
+        }
+        // Also try Primary Contact ID if available
+        if (!resolvedRecipientEmail) {
+          const contactIdMatch = message.match(/Primary Contact ID:\s*([a-f0-9-]+)/i);
+          if (contactIdMatch) {
+            try {
+              const { data: contactById } = await supabase.from('contacts').select('email').eq('id', contactIdMatch[1]).maybeSingle();
+              if (contactById?.email) {
+                resolvedRecipientEmail = contactById.email;
+                console.log('[copilot-autonomous] Resolved email from contact ID:', resolvedRecipientEmail);
+              }
+            } catch (_e) { /* non-critical */ }
+          }
+        }
+
+        // Ensure greeting includes contact name (e.g., "Hi," → "Hi James,")
+        if (recipientFirstName && emailBody) {
+          emailBody = emailBody
+            .replace(/^(Hi|Hey|Hello|Dear),?\s*$/m, `$1 ${recipientFirstName},`)
+            .replace(/^(Hi|Hey|Hello|Dear),\s*\n/m, `$1 ${recipientFirstName},\n`);
+        }
+
+        // Ensure sign-off has user name
+        if (userName && emailBody) {
+          // If email ends with sign-off word + comma (no name after), append name
+          const signoffPattern = /^((?:Best regards|Kind regards|Regards|Best|Cheers|Thanks|Thank you|Warm regards|All the best),?)\s*$/m;
+          const lastLines = emailBody.split('\n');
+          for (let i = lastLines.length - 1; i >= 0; i--) {
+            const trimmed = lastLines[i].trim();
+            if (signoffPattern.test(trimmed)) {
+              // Add name on next line
+              const hasNameAfter = i < lastLines.length - 1 && lastLines[i + 1].trim().length > 0;
+              if (!hasNameAfter) {
+                lastLines.splice(i + 1, 0, userName);
+              }
+              break;
+            }
+            if (trimmed.length > 0) break; // Stop at first non-empty non-signoff line
+          }
+          emailBody = lastLines.join('\n');
+        }
+
+        // Final safety net: remove any remaining [Your Name] placeholders
+        emailBody = emailBody.replace(/\[Your Name\]/gi, userName || '').trim();
+        emailSubject = emailSubject.replace(/\[Your Name\]/gi, userName || '').trim();
+
+        if (emailBody.length > 50) {
+          console.log('[copilot-autonomous] Multi-agent email extracted:', {
+            subjectLen: emailSubject.length,
+            bodyLen: emailBody.length,
+            to: resolvedRecipientEmail || 'none',
+          });
+
+          const now = new Date();
+          let sendTime = new Date();
+          const hour = now.getHours();
+          const day = now.getDay();
+          if (hour < 9 || hour > 17 || day === 0 || day === 6) {
+            sendTime.setDate(sendTime.getDate() + (day === 6 ? 2 : day === 0 ? 1 : 0));
+            sendTime.setHours(9, 0, 0, 0);
+          } else {
+            sendTime.setMinutes(sendTime.getMinutes() + 30);
+          }
+
+          const emailStructured: StructuredResponse = {
+            type: 'email',
+            summary: recipientName
+              ? `Here's a draft email for ${recipientName}. Review and customize before sending.`
+              : `Here's a draft email. Add recipient details and customize before sending.`,
+            data: {
+              email: {
+                to: resolvedRecipientEmail ? [resolvedRecipientEmail] : [],
+                cc: [],
+                subject: emailSubject,
+                body: emailBody,
+                tone: 'professional',
+                sendTime: sendTime.toISOString(),
+              },
+              context: {
+                contactName: recipientName || 'Unknown',
+                lastInteraction: 'Deal copilot session',
+                lastInteractionDate: new Date().toISOString(),
+                keyPoints: ['Extracted from agent response'],
+              },
+              suggestions: [
+                { label: 'Make it shorter', action: 'regenerate', params: { tone: 'concise' } },
+                { label: 'Change tone to friendly', action: 'regenerate', params: { tone: 'friendly' } },
+                { label: 'Add calendar link', action: 'add_calendar_link' },
+              ],
+            },
+          };
+
+          await sendSSE(writer, encoder, 'structured_response', emailStructured);
+          emailExtracted = true;
+          console.log('[copilot-autonomous] Multi-agent: email structured_response sent');
+        }
+      } catch (extractErr) {
+        console.error('[copilot-autonomous] Email extraction failed, falling back to detector:', extractErr instanceof Error ? `${extractErr.message}\n${extractErr.stack}` : String(extractErr));
+      }
+
+      if (!emailExtracted) {
+        // Fallback to detectAndStructureResponse
+        console.log('[copilot-autonomous] Multi-agent: email extraction failed or too short, falling back to detector');
+        const structuredResponse = await detectAndStructureResponse(
+          message, finalAgentText, supabase, userId!,
+          [...new Set(allToolsUsed)], userId!, context, []
+        );
+        if (structuredResponse) {
+          await sendSSE(writer, encoder, 'structured_response', structuredResponse);
+        }
+      }
+    } else {
+      // Non-email request: use standard detection pipeline
+      console.log('[copilot-autonomous] Multi-agent: calling detectAndStructureResponse, agents:', results.map(r => r.agentName).join(','));
+      const structuredResponse = await detectAndStructureResponse(
+        message, finalAgentText, supabase, userId!,
+        [...new Set(allToolsUsed)], userId!, context, []
+      );
+      if (structuredResponse) {
+        console.log('[copilot-autonomous] Multi-agent structured response detected:', structuredResponse.type);
+        await sendSSE(writer, encoder, 'structured_response', structuredResponse);
+      }
+    }
+  } catch (srError) {
+    console.error('[copilot-autonomous] Multi-agent structured response error (non-fatal):', srError instanceof Error ? `${srError.message}\n${srError.stack}` : String(srError));
+  }
+
+  // Send done event with agent metadata (includes per-agent responses for persistence)
   const totalInputTokens = results.reduce((sum, r) => sum + r.inputTokens, 0);
   const totalOutputTokens = results.reduce((sum, r) => sum + r.outputTokens, 0);
 
@@ -2164,6 +2457,11 @@ serve(async (req: Request) => {
     // Parse request
     const body: RequestBody = await req.json();
     const { message, organizationId, context = {}, stream = true, fact_profile_id, product_profile_id } = body;
+
+    // Ensure orgId is available in context for model router and downstream consumers
+    if (organizationId && !context.orgId) {
+      context.orgId = organizationId;
+    }
 
     if (!message) {
       return new Response(JSON.stringify({ error: 'Message is required' }), {
@@ -2447,7 +2745,8 @@ serve(async (req: Request) => {
                 writer,
                 encoder,
                 executionId,
-                recentConversationContext || undefined
+                recentConversationContext || undefined,
+                context
               );
             } catch (err) {
               const errorMsg = err instanceof Error ? err.message : String(err);
@@ -2621,6 +2920,7 @@ serve(async (req: Request) => {
               // Claude responds with plain text without calling any tools.
               let structuredResponse: StructuredResponse | null = null;
               try {
+                console.log('[copilot-autonomous] Calling detectAndStructureResponse, message length:', message.length, 'response length:', finalResponseText.length, 'toolExecs:', toolExecutionDetails.length, 'orgId:', context?.orgId || 'MISSING');
                 structuredResponse = await detectAndStructureResponse(
                   message,
                   finalResponseText,
@@ -2633,8 +2933,11 @@ serve(async (req: Request) => {
                 );
 
                 if (structuredResponse) {
-                  console.log('[copilot-autonomous] Structured response detected:', structuredResponse.type);
+                  console.log('[copilot-autonomous] Structured response detected:', structuredResponse.type, 'sending SSE...');
                   await sendSSE(writer, encoder, 'structured_response', structuredResponse);
+                  console.log('[copilot-autonomous] structured_response SSE sent successfully');
+                } else {
+                  console.log('[copilot-autonomous] No structured response detected (null returned)');
                 }
               } catch (srError) {
                 console.error('[copilot-autonomous] Structured response detection error (non-fatal):', srError);

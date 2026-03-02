@@ -114,7 +114,7 @@ export async function getGoogleIntegration(
     .select('access_token, refresh_token, expires_at')
     .eq('user_id', userId)
     .eq('is_active', true)
-    .single();
+    .maybeSingle();
 
   if (integrationError || !integration) {
     throw new Error('Google integration not found. Please connect your Google account first.');

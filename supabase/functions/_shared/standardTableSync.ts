@@ -2,7 +2,7 @@
 // Shared utility for syncing CRM webhook data into standard ops tables
 // Called by hubspot-webhook and attio-webhook handlers
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { resolveConflict } from './conflictResolver.ts';
 
 // CRM property name → standard table column key mappings

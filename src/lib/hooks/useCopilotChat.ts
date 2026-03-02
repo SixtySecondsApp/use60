@@ -239,6 +239,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
               context: {
                 ...options.initialContext,
                 user_id: options.userId,
+                orgId: options.organizationId,
               },
               stream: true,
               ...(sendOpts?.routingContext ? { routingContext: sendOpts.routingContext } : {}),
@@ -382,6 +383,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
 
                   case 'structured_response':
                     // Attach structured response data to the assistant message
+                    console.log('[useCopilotChat] Received structured_response SSE:', (data as any)?.type, 'for message:', assistantMessageId);
                     receivedStructuredResponse = data;
                     setMessages((prev) =>
                       prev.map((m) =>
@@ -435,6 +437,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                     break;
 
                   case 'done':
+                    console.log('[useCopilotChat] done event received, had structured_response:', !!receivedStructuredResponse);
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === assistantMessageId

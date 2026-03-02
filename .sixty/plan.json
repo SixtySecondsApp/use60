@@ -17,7 +17,7 @@
     },
     {
       "id": "followup-email-v2",
-      "name": "Follow-Up Email v2 \u2014 Quality + Demo Polish",
+      "name": "Follow-Up Email v2 — Quality + Demo Polish",
       "status": "complete",
       "consultReport": ".sixty/consult/followup-email-v2.md",
       "createdAt": "2026-02-25"
@@ -31,8 +31,20 @@
     {
       "id": "deal-copilot-v2",
       "name": "Deal Copilot V2 — Intelligence, Memory & Actions",
-      "status": "in_progress",
+      "status": "complete",
       "createdAt": "2026-02-27"
+    },
+    {
+      "id": "edge-function-audit-p2",
+      "name": "Edge Function Audit Phase 2 — Remaining ~380 Functions",
+      "status": "complete",
+      "createdAt": "2026-03-01"
+    },
+    {
+      "id": "audit-fix-sprints",
+      "name": "Audit Fix Sprints — 50 P0 + 147 P1 Remediation",
+      "status": "complete",
+      "createdAt": "2026-03-01"
     }
   ],
   "stories": [
@@ -83,7 +95,7 @@
         "When guidance provided, re-composes email with same RAG context plus user instructions appended to prompt",
         "Frontend shows text input modal when Regenerate button is clicked",
         "Regenerated email replaces previous result with a 'Regenerated' badge",
-        "No re-query of RAG \u2014 uses cached context from first generation (saves credits and time)"
+        "No re-query of RAG — uses cached context from first generation (saves credits and time)"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": 18,
@@ -150,7 +162,7 @@
       "acceptance": [
         "Edit button on email preview switches to editable textarea for body and input for subject",
         "Preview button returns to styled read-only view with edited content",
-        "Edited content persists in state \u2014 Copy button copies edited version",
+        "Edited content persists in state — Copy button copies edited version",
         "Cancel button reverts to original generated content",
         "Edit state does not re-trigger generation"
       ],
@@ -283,7 +295,7 @@
         "SSE result event includes warnings array listing what degraded: missing writing style, no sentiment, RAG partial results, placeholder attendee",
         "Each warning has a severity (info/warn) and human-readable message",
         "Frontend renders warnings as amber badges below the context breakdown",
-        "Warnings are informational only \u2014 generation still completes",
+        "Warnings are informational only — generation still completes",
         "No warnings shown when all data sources returned successfully"
       ],
       "estimatedMinutes": 10,
@@ -317,7 +329,7 @@
         "All 8 seed deals (UUIDs 11111111-..through 88888888-..) deleted from staging deals table",
         "Child records in deal_contacts and deal_health_scores cleaned up first",
         "SELECT count(*) FROM deals WHERE id LIKE '11111111%' returns 0",
-        "Real deals unaffected \u2014 verified by count before/after"
+        "Real deals unaffected — verified by count before/after"
       ],
       "estimatedMinutes": 10,
       "actualMinutes": null,
@@ -373,7 +385,7 @@
     {
       "id": "PIPE-003",
       "feature": "pipeline-migration",
-      "title": "Audit Kanban view \u2014 stages, drag-drop, counts",
+      "title": "Audit Kanban view — stages, drag-drop, counts",
       "type": "frontend",
       "status": "complete",
       "priority": 3,
@@ -407,7 +419,7 @@
     {
       "id": "PIPE-004",
       "feature": "pipeline-migration",
-      "title": "Audit Table view \u2014 columns, sort, row click",
+      "title": "Audit Table view — columns, sort, row click",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
@@ -439,7 +451,7 @@
     {
       "id": "PIPE-005",
       "feature": "pipeline-migration",
-      "title": "Audit deal creation flow \u2014 DealForm create mode",
+      "title": "Audit deal creation flow — DealForm create mode",
       "type": "frontend",
       "status": "complete",
       "priority": 5,
@@ -585,9 +597,9 @@
       "priority": 9,
       "acceptance": [
         "Edge function reads unmaterialized deals from crm_deal_index",
-        "Maps name, amount\u2192value, stage\u2192stage_id (fuzzy match to deal_stages.name), close_date\u2192expected_close_date",
-        "Resolves contact_crm_ids \u2192 contacts.id via crm_contact_index",
-        "Resolves company_crm_id \u2192 companies.id via crm_company_index",
+        "Maps name, amount→value, stage→stage_id (fuzzy match to deal_stages.name), close_date→expected_close_date",
+        "Resolves contact_crm_ids → contacts.id via crm_contact_index",
+        "Resolves company_crm_id → companies.id via crm_company_index",
         "Sets is_materialized=true and materialized_deal_id on crm_deal_index record"
       ],
       "estimatedMinutes": 30,
@@ -869,14 +881,14 @@
       ],
       "startedAt": null,
       "completedAt": null
-    }
-  ],
+    },
     {
       "id": "DCV2-001",
       "feature": "deal-copilot-v2",
       "title": "Extend enrichment with meeting intelligence, overdue tasks, temperature, and email signals",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-28T12:00:00Z",
       "priority": 1,
       "acceptance": [
         "askMeeting() called in parallel with existing meetings/activities fetch during enrichment",
@@ -890,16 +902,26 @@
       "files": [
         "src/components/Pipeline/hooks/useDealCopilotChat.ts"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["DCV2-002"],
-      "parallelWith": ["DCV2-003", "DCV2-005"]
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "DCV2-002"
+      ],
+      "parallelWith": [
+        "DCV2-003",
+        "DCV2-005"
+      ]
     },
     {
       "id": "DCV2-002",
       "feature": "deal-copilot-v2",
       "title": "Build proactive alerts and meeting intel into greeting",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-28T12:05:00Z",
       "priority": 2,
       "acceptance": [
         "Greeting includes meeting intelligence one-liner when available (e.g. 'Last discussed pricing on Feb 12')",
@@ -913,7 +935,13 @@
       "files": [
         "src/components/Pipeline/hooks/useDealCopilotChat.ts"
       ],
-      "dependencies": { "stories": ["DCV2-001"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "DCV2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": []
     },
@@ -922,7 +950,8 @@
       "feature": "deal-copilot-v2",
       "title": "Render structured response cards in deal copilot chat",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-28T12:10:00Z",
       "priority": 3,
       "acceptance": [
         "Import CopilotResponse from @/components/copilot/CopilotResponse",
@@ -935,16 +964,24 @@
       "files": [
         "src/components/Pipeline/DealIntelligenceSheet.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["DCV2-001", "DCV2-005"]
+      "parallelWith": [
+        "DCV2-001",
+        "DCV2-005"
+      ]
     },
     {
       "id": "DCV2-004",
       "feature": "deal-copilot-v2",
       "title": "Add deal_id column to copilot_conversations and create migration",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-28T12:15:00Z",
       "priority": 4,
       "acceptance": [
         "Migration adds deal_id UUID column to copilot_conversations referencing deals(id) ON DELETE SET NULL",
@@ -956,16 +993,29 @@
       "files": [
         "supabase/migrations/20260227120000_add_deal_id_to_copilot_conversations.sql"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": ["copilot_conversations"] },
-      "blocks": ["DCV2-006"],
-      "parallelWith": ["DCV2-001", "DCV2-003", "DCV2-005"]
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "copilot_conversations"
+        ]
+      },
+      "blocks": [
+        "DCV2-006"
+      ],
+      "parallelWith": [
+        "DCV2-001",
+        "DCV2-003",
+        "DCV2-005"
+      ]
     },
     {
       "id": "DCV2-005",
       "feature": "deal-copilot-v2",
       "title": "Add slash command dropdown to deal copilot input",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-28T12:20:00Z",
       "priority": 5,
       "acceptance": [
         "DEAL_SLASH_COMMANDS constant defines 11 commands with command, label, description, prompt",
@@ -980,16 +1030,24 @@
       "files": [
         "src/components/Pipeline/DealIntelligenceSheet.tsx"
       ],
-      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
-      "parallelWith": ["DCV2-001", "DCV2-003"]
+      "parallelWith": [
+        "DCV2-001",
+        "DCV2-003"
+      ]
     },
     {
       "id": "DCV2-006",
       "feature": "deal-copilot-v2",
       "title": "Add getDealSession to CopilotSessionService",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-28T12:25:00Z",
       "priority": 6,
       "acceptance": [
         "CopilotConversation type updated with deal_id?: string | null",
@@ -1002,8 +1060,18 @@
         "src/lib/types/copilot.ts",
         "src/lib/services/copilotSessionService.ts"
       ],
-      "dependencies": { "stories": ["DCV2-004"], "files": [], "schema": ["copilot_conversations"] },
-      "blocks": ["DCV2-007"],
+      "dependencies": {
+        "stories": [
+          "DCV2-004"
+        ],
+        "files": [],
+        "schema": [
+          "copilot_conversations"
+        ]
+      },
+      "blocks": [
+        "DCV2-007"
+      ],
       "parallelWith": []
     },
     {
@@ -1011,7 +1079,8 @@
       "feature": "deal-copilot-v2",
       "title": "Add dealId option to useCopilotChat hook",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-28T12:30:00Z",
       "priority": 7,
       "acceptance": [
         "dealId?: string added to UseCopilotChatOptions interface",
@@ -1023,8 +1092,16 @@
       "files": [
         "src/lib/hooks/useCopilotChat.ts"
       ],
-      "dependencies": { "stories": ["DCV2-006"], "files": [], "schema": [] },
-      "blocks": ["DCV2-008"],
+      "dependencies": {
+        "stories": [
+          "DCV2-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "DCV2-008"
+      ],
       "parallelWith": []
     },
     {
@@ -1032,7 +1109,8 @@
       "feature": "deal-copilot-v2",
       "title": "Wire deal copilot to use persistent per-deal sessions",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-02-28T12:35:00Z",
       "priority": 8,
       "acceptance": [
         "useDealCopilotChat passes persistSession: true and dealId: deal.id to useCopilotChat",
@@ -1046,7 +1124,13 @@
         "src/components/Pipeline/hooks/useDealCopilotChat.ts",
         "src/components/Pipeline/DealIntelligenceSheet.tsx"
       ],
-      "dependencies": { "stories": ["DCV2-007"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "DCV2-007"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": []
     },
@@ -1055,7 +1139,8 @@
       "feature": "deal-copilot-v2",
       "title": "Deploy migration and edge function to staging",
       "type": "deployment",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-03-01T10:15:00Z",
       "priority": 9,
       "acceptance": [
         "Migration pushed to staging: npx supabase db push --project-ref caerqjzvuerejfrdtygb",
@@ -1064,8 +1149,19 @@
       ],
       "estimatedMinutes": 5,
       "files": [],
-      "dependencies": { "stories": ["DCV2-008", "DCV2-005", "DCV2-003", "DCV2-002"], "files": [], "schema": [] },
-      "blocks": ["DCV2-010"],
+      "dependencies": {
+        "stories": [
+          "DCV2-008",
+          "DCV2-005",
+          "DCV2-003",
+          "DCV2-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "DCV2-010"
+      ],
       "parallelWith": []
     },
     {
@@ -1073,7 +1169,8 @@
       "feature": "deal-copilot-v2",
       "title": "End-to-end verification of all 5 features",
       "type": "testing",
-      "status": "pending",
+      "status": "complete",
+      "completedAt": "2026-03-01T10:20:00Z",
       "priority": 10,
       "acceptance": [
         "Open deal → greeting shows health + proactive alerts + meeting intel one-liner",
@@ -1084,15 +1181,540 @@
       ],
       "estimatedMinutes": 15,
       "files": [],
-      "dependencies": { "stories": ["DCV2-009"], "files": [], "schema": [] },
+      "dependencies": {
+        "stories": [
+          "DCV2-009"
+        ],
+        "files": [],
+        "schema": []
+      },
       "blocks": [],
       "parallelWith": []
+    },
+    {
+      "id": "EFA2-001",
+      "feature": "edge-function-audit-p2",
+      "title": "Audit Batch 5: CRM Integration Infrastructure (OAuth, webhooks, token refresh, sync)",
+      "type": "audit",
+      "status": "complete",
+      "completedAt": "2026-03-01T18:15:00Z",
+      "priority": 1,
+      "acceptance": [
+        "All CRM OAuth flows audited: attio-*, bullhorn-*, hubspot-*, fathom-*, google-oauth-*, slack-oauth-*, justcall-oauth-*",
+        "Token refresh functions reviewed for secure storage and rotation",
+        "Webhook handlers reviewed for signature verification",
+        "CRM write-back functions reviewed: push-cell-to-*, push-to-*, crm-writeback-worker",
+        "Findings written to .sixty/audit-batch-5-findings.md with P0-P4 severity ratings"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFA2-002",
+        "EFA2-003",
+        "EFA2-004"
+      ]
+    },
+    {
+      "id": "EFA2-002",
+      "feature": "edge-function-audit-p2",
+      "title": "Audit Batch 6: Billing, Credits, Onboarding & Account Management",
+      "type": "audit",
+      "status": "complete",
+      "completedAt": "2026-03-01T18:17:45Z",
+      "priority": 2,
+      "acceptance": [
+        "Billing functions audited: create-checkout-session, create-credit-checkout, credit-auto-topup, stripe-*, reconcile-billing",
+        "Credit system audited: admin-credit-menu, get-credit-*, check-credit-alerts, grant-welcome-credits, purge-credit-logs, meter-storage",
+        "Onboarding audited: initialize-onboarding, create-profile, create-users-from-profiles, invite-user, handle-*-joining",
+        "Account lifecycle audited: delete-user, delete-organization, clerk-user-sync (deprecated), restore-user",
+        "Findings written to .sixty/audit-batch-6-findings.md with P0-P4 severity ratings"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFA2-001",
+        "EFA2-003",
+        "EFA2-004"
+      ]
+    },
+    {
+      "id": "EFA2-003",
+      "feature": "edge-function-audit-p2",
+      "title": "Audit Batch 7: Public REST API & Proxy Infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "completedAt": "2026-03-01T18:14:24Z",
+      "priority": 3,
+      "acceptance": [
+        "All api-v1-* endpoints audited for auth, rate limiting, input validation",
+        "api-auth, api-proxy, api-monitor, api-monitor-notify reviewed",
+        "api-usage-alerts, api-usage-cron reviewed for cost control",
+        "api-skill-builder, api-skill-execute, api-sequence-execute reviewed",
+        "Findings written to .sixty/audit-batch-7-findings.md with P0-P4 severity ratings"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFA2-001",
+        "EFA2-002",
+        "EFA2-004"
+      ]
+    },
+    {
+      "id": "EFA2-004",
+      "feature": "edge-function-audit-p2",
+      "title": "Audit Batch 8: Transcription Pipeline & Recording Infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "completedAt": "2026-03-01T18:17:31Z",
+      "priority": 4,
+      "acceptance": [
+        "Multi-provider transcription audited: poll-gladia-jobs, poll-transcription-queue, process-gladia-webhook, process-transcription-callback",
+        "Recording infrastructure audited: upload-recording-to-s3, get-recording-url, proxy-fathom-video, deploy/stop-recording-bot",
+        "Voice system audited: voice-transcribe, voice-transcribe-poll, voice-upload, voice-audio-url, voice-presigned-url, voice-share*",
+        "Usage tracking audited: fetch-deepgram-usage, fetch-gladia-usage, fetch-meetingbaas-usage",
+        "Findings written to .sixty/audit-batch-8-findings.md with P0-P4 severity ratings"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFA2-001",
+        "EFA2-002",
+        "EFA2-003"
+      ]
+    },
+    {
+      "id": "EFA2-005",
+      "feature": "edge-function-audit-p2",
+      "title": "Audit Batch 9: Enrichment Pipeline & Email Infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "completedAt": "2026-03-01T18:21:22Z",
+      "priority": 5,
+      "acceptance": [
+        "Enrichment providers audited: ai-ark-*, apollo-*, explorium-*, deep-enrich-organization, enrich-*",
+        "Email infrastructure audited: email-send-as-rep, categorize-email, gmail-*, ms-graph-email, encharge-*",
+        "Transactional emails audited: first-meeting-synced-email, subscription-confirmed-email, org-approval-email, send-*-email",
+        "Email sync audited: scheduled-email-sync, scheduled-encharge-emails, scheduled-google-context-sync",
+        "Findings written to .sixty/audit-batch-9-findings.md with P0-P4 severity ratings"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFA2-006",
+        "EFA2-007",
+        "EFA2-008"
+      ]
+    },
+    {
+      "id": "EFA2-006",
+      "feature": "edge-function-audit-p2",
+      "title": "Audit Batch 10: Agent Fleet & Specialized Agents",
+      "type": "audit",
+      "status": "complete",
+      "completedAt": "2026-03-01T18:24:00Z",
+      "priority": 6,
+      "acceptance": [
+        "Agent fleet audited: agent-config-admin, agent-crm-*, agent-deal-temperature, agent-email-signals, agent-engagement-patterns",
+        "Autonomous agents audited: agent-eod-synthesis, agent-morning-briefing, agent-org-learning, agent-pipeline-*, agent-reengagement",
+        "Autopilot system audited: autopilot-admin, autopilot-backfill, autopilot-evaluate, autopilot-record-signal",
+        "Process agents audited: process-ai-analysis, process-calendar-events, process-lead-prep, process-notification-queue, process-reengagement",
+        "Findings written to .sixty/audit-batch-10-findings.md with P0-P4 severity ratings"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFA2-005",
+        "EFA2-007",
+        "EFA2-008"
+      ]
+    },
+    {
+      "id": "EFA2-007",
+      "feature": "edge-function-audit-p2",
+      "title": "Audit Batch 11: Calendar Integration & Slack Notification Ecosystem",
+      "type": "audit",
+      "status": "complete",
+      "completedAt": "2026-03-01T18:24:30Z",
+      "priority": 7,
+      "acceptance": [
+        "Calendar ecosystem audited: google-calendar*, calendar-search, calendar-sync, meetingbaas-*, savvycal-*, find-available-slots",
+        "Google workspace audited: google-docs*, google-drive, google-gmail, google-tasks, google-workspace-batch",
+        "Slack notifications audited: slack-deal-*, slack-email-reply-alert, slack-expire-actions, slack-interactive, slack-morning-brief",
+        "Slack infrastructure audited: slack-slash-commands, slack-task-reminders, route-message, send-slack-*, notification-triage",
+        "Findings written to .sixty/audit-batch-11-findings.md with P0-P4 severity ratings"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFA2-005",
+        "EFA2-006",
+        "EFA2-008"
+      ]
+    },
+    {
+      "id": "EFA2-008",
+      "feature": "edge-function-audit-p2",
+      "title": "Audit Batch 12: Workflows, Analytics, Data Sync, Demo & Remaining Functions",
+      "type": "audit",
+      "status": "complete",
+      "completedAt": "2026-03-01T18:23:13Z",
+      "priority": 8,
+      "acceptance": [
+        "Workflows audited: evaluate-*, workflow-webhook, ops-workflow-orchestrator, task-auto-expire, task-signal-processor",
+        "Analytics audited: analytics-web-vitals, cloudinary-analytics, meeting-analytics*, account-monitor, account-signal-digest",
+        "Data sync audited: app-data-batch, bulk-import-activities, materialize-crm-deals, sync-profile-names, sync-recording-to-crm",
+        "Demo/test/misc audited: demo-*, test-*, health, heal-deal-links, entity-search, generate-embedding, sentry-*",
+        "Findings written to .sixty/audit-batch-12-findings.md with P0-P4 severity ratings"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFA2-005",
+        "EFA2-006",
+        "EFA2-007"
+      ]
+    },
+    {
+      "id": "FIX-001",
+      "feature": "audit-fix-sprints",
+      "title": "Sprint 0: Fix shared auth infrastructure (edgeAuth.ts JWT bypass)",
+      "type": "security",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "edgeAuth.ts getAuthContext/authenticateRequest uses supabase.auth.getUser() ONLY — JWT fallback removed",
+        "isServiceRoleAuth() validates JWT signature before trusting role claim",
+        "debug-auth function deleted from staging and production",
+        "impersonate-user requires admin role + org membership (not anon key)",
+        "clerk-user-sync, fix-invitation-rls, fix-trigger deleted from all environments"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/edgeAuth.ts",
+        "supabase/functions/debug-auth/index.ts",
+        "supabase/functions/impersonate-user/index.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FIX-002",
+        "FIX-003"
+      ],
+      "parallelWith": [
+        "FIX-004"
+      ],
+      "completedAt": "2026-03-01T19:41:28.844Z"
+    },
+    {
+      "id": "FIX-002",
+      "feature": "audit-fix-sprints",
+      "title": "Sprint 0B: Delete test/debug functions from production",
+      "type": "security",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "9 test functions deleted: test-hitl, test-slack-webhook, test-fathom-api, test-auth, test-no-auth, test-browserless-access, test-fathom-token, test-email-sequence, run-process-map-test",
+        "Functions removed from staging and production via supabase functions delete",
+        "No test-* functions remain deployed in production"
+      ],
+      "estimatedMinutes": 15,
+      "files": [],
+      "dependencies": {
+        "stories": [
+          "FIX-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FIX-003"
+      ],
+      "completedAt": "2026-03-01T19:41:28.844Z"
+    },
+    {
+      "id": "FIX-003",
+      "feature": "audit-fix-sprints",
+      "title": "Sprint 1: Add auth to cron/worker functions (~30 functions)",
+      "type": "security",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "All cc-* functions (5) add verifyCronSecret() guard at entry",
+        "All process-* workers add verifyCronSecret() or isServiceRoleAuth()",
+        "Agent cron functions (agent-dead-letter-retry, agent-pipeline-snapshot, fleet-health) add cron secret",
+        "Proactive functions (proactive-pipeline-analysis, proactive-task-analysis, proactive-weekly-scorecard) add cron secret",
+        "Financial functions (credit-auto-topup, meter-storage, reconcile-billing) add cron secret"
+      ],
+      "estimatedMinutes": 30,
+      "files": [],
+      "dependencies": {
+        "stories": [
+          "FIX-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FIX-002"
+      ],
+      "completedAt": "2026-03-01T19:46:31.372Z"
+    },
+    {
+      "id": "FIX-004",
+      "feature": "audit-fix-sprints",
+      "title": "Sprint 1B: Fix CRUD endpoint auth + body.userId bypasses",
+      "type": "security",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "deals/index.ts and contacts/index.ts add JWT validation + org scoping + explicit column select",
+        "handle-join-request-action uses JWT identity not body admin_user_id",
+        "generate-magic-link validates JWT not just checks header presence",
+        "execute-migration and run-migration add real auth (admin role required)",
+        "google-calendar-sync, find-available-slots, create-calendar-event use JWT identity not body.userId"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/deals/index.ts",
+        "supabase/functions/contacts/index.ts",
+        "supabase/functions/handle-join-request-action/index.ts",
+        "supabase/functions/generate-magic-link/index.ts",
+        "supabase/functions/execute-migration/index.ts",
+        "supabase/functions/google-calendar-sync/index.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FIX-001"
+      ],
+      "completedAt": "2026-03-01T19:41:28.844Z"
+    },
+    {
+      "id": "FIX-005",
+      "feature": "audit-fix-sprints",
+      "title": "Sprint 2: Webhook verification + proxy lockdown + email auth",
+      "type": "security",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "process-gladia-webhook adds Gladia webhook signature verification",
+        "gmail-push-webhook adds Google Pub/Sub OIDC token verification",
+        "apify-run-webhook adds webhook secret validation",
+        "proxy-fathom-video, freepik-proxy, run-apify-actor add JWT auth",
+        "Email sending functions (send-organization-invitation, send-rejoin-invitation, send-waitlist-*, send-org-deactivation-email) add cron secret or service role auth"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/process-gladia-webhook/index.ts",
+        "supabase/functions/gmail-push-webhook/index.ts",
+        "supabase/functions/proxy-fathom-video/index.ts",
+        "supabase/functions/_shared/slackAuth.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FIX-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FIX-006"
+      ],
+      "completedAt": "2026-03-01T19:46:31.372Z"
+    },
+    {
+      "id": "FIX-006",
+      "feature": "audit-fix-sprints",
+      "title": "Sprint 3: SDK pinning + CORS migration (batch fix ~110 functions)",
+      "type": "infrastructure",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "All @supabase/supabase-js@2 imports pinned to @2.43.4 (~60 functions + 4 shared modules)",
+        "All legacy corsHeaders replaced with getCorsHeaders(req) (~50 functions)",
+        "security.ts createErrorResponse() uses getCorsHeaders(req) not hardcoded wildcard",
+        "api-utils.ts uses getCorsHeaders(req) not legacy corsHeaders",
+        "All affected functions redeployed to staging with --no-verify-jwt"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/security.ts",
+        "supabase/functions/_shared/api-utils.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FIX-005"
+      ],
+      "completedAt": "2026-03-01T19:41:28.844Z"
+    },
+    {
+      "id": "FIX-007",
+      "feature": "audit-fix-sprints",
+      "title": "Sprint 4: Agent budget enforcement + cost tracking",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "agentRunner.ts creditsUsed counter incremented on each LLM call",
+        "agentConfig.ts budget_limit_daily_usd enforced — agents stopped when budget exceeded",
+        "logAICostEvent added to 11 agent functions making untracked LLM calls",
+        "rateLimiter.ts fails CLOSED on DB errors (not open)",
+        "agentSkillExecutor.ts sanitizes skill content before prompt injection into Claude"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/agentRunner.ts",
+        "supabase/functions/_shared/agentConfig.ts",
+        "supabase/functions/_shared/rateLimiter.ts",
+        "supabase/functions/_shared/agentSkillExecutor.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FIX-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FIX-008"
+      ],
+      "completedAt": "2026-03-01T19:41:28.844Z"
+    },
+    {
+      "id": "FIX-008",
+      "feature": "audit-fix-sprints",
+      "title": "Sprint 5: IDOR fixes, data safety, S3 expiry, .single() fixes",
+      "type": "security",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "cc-action-sync, cc-undo add org ownership check (not just JWT)",
+        "ops-table-ai-query, ops-table-transform-column, ops-table-insights-engine add table ownership check",
+        "get-recording-url, get-batch-signed-urls S3 expiry reduced from 7 days to 4 hours",
+        ".single() replaced with .maybeSingle() in 6+ locations (fetch-transcript, voice-audio-url, meetingbaas-connect-calendar, etc.)",
+        "Fail-open auth fixed in meeting-limit-warning-email, slack-snooze-check, slack-expire-actions"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/cc-action-sync/index.ts",
+        "supabase/functions/ops-table-ai-query/index.ts",
+        "supabase/functions/get-recording-url/index.ts",
+        "supabase/functions/get-batch-signed-urls/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "FIX-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FIX-007"
+      ],
+      "completedAt": "2026-03-01T19:46:31.372Z"
+    },
+    {
+      "id": "FIX-009",
+      "feature": "audit-fix-sprints",
+      "title": "Sprint 6: Architecture diagram corrections",
+      "type": "docs",
+      "status": "complete",
+      "priority": 9,
+      "acceptance": [
+        "Model reference updated: Claude Haiku 4.5 -> Claude Sonnet 4.6",
+        "Transcription provider updated: AssemblyAI -> Railway WhisperX",
+        "Credit Governance V2 marked as planned/aspirational (not deployed)",
+        "Skills count updated: 30 -> 127, response panels: 48 -> 62",
+        "Security notes added reflecting actual auth posture post-fixes"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "docs/architecture/architecture-diagram.html"
+      ],
+      "dependencies": {
+        "stories": [
+          "FIX-001",
+          "FIX-005",
+          "FIX-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "completedAt": "2026-03-01T19:41:28.844Z"
     }
   ],
   "execution": {
-    "totalStories": 35,
-    "completedStories": 25,
-    "currentFeature": "deal-copilot-v2",
-    "lastUpdated": "2026-02-27T12:00:00Z"
+    "totalStories": 52,
+    "completedStories": 52,
+    "currentFeature": "audit-fix-sprints",
+    "lastUpdated": "2026-03-01T19:46:31.372Z"
   }
 }

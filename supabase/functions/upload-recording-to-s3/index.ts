@@ -4,7 +4,7 @@
 // Lambda calls back to process-compress-callback when done
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { getS3Bucket, generateS3Key } from '../_shared/s3Client.ts';
 import { LambdaClient, InvokeCommand } from 'npm:@aws-sdk/client-lambda@3';

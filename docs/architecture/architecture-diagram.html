@@ -772,8 +772,8 @@
     <tbody>
       <tr><td>CopilotContext</td><td>src/lib/contexts/CopilotContext.tsx</td><td>State management, mode routing, sendMessage()</td><td><span class="b bp">Context</span></td></tr>
       <tr><td>copilotRoutingService</td><td>src/lib/services/copilotRoutingService.ts</td><td>3-step skill routing: sequences → triggers → embeddings</td><td><span class="b bb">Service</span></td></tr>
-      <tr><td>copilot-autonomous</td><td>supabase/functions/copilot-autonomous/</td><td>Claude Haiku 4.5 native tool_use, streaming SSE</td><td><span class="b bg">Edge Fn</span></td></tr>
-      <tr><td>api-copilot</td><td>supabase/functions/api-copilot/</td><td>Gemini 2.5 Flash, 48 response panels, HITL confirm</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>copilot-autonomous</td><td>supabase/functions/copilot-autonomous/</td><td>Claude Sonnet 4.6 native tool_use, streaming SSE</td><td><span class="b bg">Edge Fn</span></td></tr>
+      <tr><td>api-copilot</td><td>supabase/functions/api-copilot/</td><td>Gemini 2.5 Flash, 62 response panels, HITL confirm</td><td><span class="b bg">Edge Fn</span></td></tr>
       <tr><td>autonomousExecutor</td><td>src/lib/copilot/agent/autonomousExecutor.ts</td><td>Skill-to-tool conversion, lazy loading, iteration</td><td><span class="b bp">Module</span></td></tr>
       <tr><td>useCopilotChat</td><td>src/lib/hooks/useCopilotChat.ts</td><td>Streaming, tool tracking, progress steps</td><td><span class="b by">Hook</span></td></tr>
     </tbody>
@@ -783,7 +783,7 @@
 <!-- TAB 3: Recording Pipeline -->
 <div id="tab-recording" class="tp v1-content">
   <div class="stl">Recording Pipeline</div>
-  <div class="sds">4-phase pipeline: bot deployment → S3 upload with multipart → transcription (AssemblyAI/Gladia) → Claude AI processing.</div>
+  <div class="sds">4-phase pipeline: bot deployment → S3 upload with multipart → transcription (WhisperX/Gladia) → Claude AI processing.</div>
 
   <div style="margin: 18px 0 12px;">
     <div class="fvh"><div class="fvb" style="background:#0f766e">Recording Pipeline</div><div><div class="fvt">Full Recording Pipeline — Detailed</div><div class="fvd">All phases with retry logic, dual transcription providers, AI processing</div></div></div>
@@ -800,8 +800,8 @@
       <tr><td>deploy-recording-bot</td><td>Scheduler call</td><td>MeetingBaaS API — Zoom, Meet, Teams support</td><td><span class="b bb">1 · Deploy</span></td></tr>
       <tr><td>meetingbaas-webhook</td><td>Webhook POST</td><td>Receive bot completion signal, enqueue upload</td><td><span class="b bp">2 · Upload</span></td></tr>
       <tr><td>poll-s3-upload-queue</td><td>Cron</td><td>5MB multipart upload, exponential backoff retry</td><td><span class="b bp">2 · Upload</span></td></tr>
-      <tr><td>poll-transcription-queue</td><td>Cron</td><td>AssemblyAI primary, Gladia fallback</td><td><span class="b bg">3 · Transcribe</span></td></tr>
-      <tr><td>process-recording</td><td>Transcript ready</td><td>Claude Haiku analysis: summary, highlights, speaker ID</td><td><span class="b by">4 · AI</span></td></tr>
+      <tr><td>poll-transcription-queue</td><td>Cron</td><td>Railway WhisperX primary, Gladia fallback</td><td><span class="b bg">3 · Transcribe</span></td></tr>
+      <tr><td>process-recording</td><td>Transcript ready</td><td>Claude Sonnet analysis: summary, highlights, speaker ID</td><td><span class="b by">4 · AI</span></td></tr>
     </tbody>
   </table>
 </div>
@@ -894,7 +894,7 @@
 <!-- TAB 8: Credit Governance (V2) -->
 <div id="tab-credits" class="tp v2-only">
   <div class="stl">Credit Governance <span class="v2-badge">V2</span></div>
-  <div class="sds">Every AI call metered through modelRouter → creditLedger → creditBudgetService → fleetThrottle. Hard kill at 100%, Slack alerts at 80%, usage dashboard with per-agent breakdowns.</div>
+  <div class="sds"><strong style="color:#e11d48">PLANNED/ASPIRATIONAL</strong> — creditLedger.ts, creditBudgetService.ts, fleetThrottle.ts, and credit_ledger table exist as stubs only. Budget enforcement is not yet wired. The architecture below shows the target design.</div>
 
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;">
     <div>
@@ -1124,7 +1124,7 @@ ov: [
   '    end',
   '    subgraph AUTO["Autonomous Mode - Default"]',
   '        AEF["copilot-autonomous"]',
-  '        CAI["Claude Haiku 4.5"]',
+  '        CAI["Claude Sonnet 4.6"]',
   '        EXC["autonomousExecutor"]',
   '        AEF --> CAI --> EXC',
   '    end',
@@ -1133,7 +1133,7 @@ ov: [
   '        GM["Gemini 2.5 Flash"]',
   '        AC --> GM',
   '    end',
-  '    subgraph SKLS["Skills 30 total"]',
+  '    subgraph SKLS["Skills 127 total"]',
   '        SM["SKILL.md files"]',
   '        SY["sync-skills.ts"]',
   '        PS["platform_skills"]',
@@ -1151,7 +1151,7 @@ ov: [
   '    subgraph REC["Recording Pipeline"]',
   '        BD["Bot Deploy MeetingBaaS"]',
   '        S3["S3 Upload 5MB chunks"]',
-  '        TR["Transcription AssemblyAI"]',
+  '        TR["Transcription WhisperX"]',
   '        PR["AI Processing Claude"]',
   '        BD --> S3 --> TR --> PR',
   '    end',
@@ -1329,7 +1329,7 @@ cp: [
   '    end',
   '    subgraph AUTOM["Autonomous Mode - DEFAULT"]',
   '        AEF["copilot-autonomous edge function"]',
-  '        CLD["Claude Haiku 4.5 - native tool_use"]',
+  '        CLD["Claude Sonnet 4.6 - native tool_use"]',
   '        T1["list_skills - discover available skills"]',
   '        T2["get_skill - fetch content on demand"]',
   '        T3["execute_action - CRM and skills"]',
@@ -1363,7 +1363,7 @@ cp: [
 sk: [
   'flowchart LR',
   '    subgraph SRC["Source of Truth"]',
-  '        MD["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n30 total - YAML frontmatter + markdown"]',
+  '        MD["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n127 total - YAML frontmatter + markdown"]',
   '    end',
   '    subgraph SYNC["Sync Paths"]',
   '        CLI["sync-skills.ts\\nnpm run sync-skills\\nlocal dev and CI"]',
@@ -1430,7 +1430,7 @@ rf: [
   '    subgraph P3["Phase 3 - Transcription"]',
   '        WHK["meetingbaas-webhook\\nsignals ready"]',
   '        PTR["poll-transcription-queue"]',
-  '        ASS["AssemblyAI - primary"]',
+  '        ASS["Railway WhisperX - primary"]',
   '        GLA["Gladia - fallback"]',
   '        TRY["Transcript Ready"]',
   '        WHK --> PTR',
@@ -1441,7 +1441,7 @@ rf: [
   '    end',
   '    subgraph P4["Phase 4 - AI Processing"]',
   '        PRC["process-recording\\nedge function"]',
-  '        CLD["Claude Haiku\\ntranscript analysis"]',
+  '        CLD["Claude Sonnet\\ntranscript analysis"]',
   '        RES["Summary + Highlights\\nAction Items + Speaker ID"]',
   '        PRC --> CLD --> RES',
   '    end',
@@ -1514,8 +1514,8 @@ be: [
 ai: [
   'flowchart LR',
   '    subgraph ANT["Anthropic Claude"]',
-  '        H45["Claude Haiku 4.5\\nnative tool_use"]',
-  '        HREC["Claude Haiku\\nRecording analysis"]',
+  '        H45["Claude Sonnet 4.6\\nnative tool_use"]',
+  '        HREC["Claude Sonnet\\nRecording analysis"]',
   '    end',
   '    subgraph GGL["Google Gemini"]',
   '        G25["Gemini 2.5 Flash\\nfunction calling"]',
@@ -1590,7 +1590,7 @@ sq: [
   '    participant EF as copilot-autonomous',
   '    participant RPC as get-agent-skills RPC',
   '    participant DB as organization_skills',
-  '    participant Claude as Claude Haiku 4.5',
+  '    participant Claude as Claude Sonnet 4.6',
   '    participant Tools as Tool Handlers',
   '    User->>UI: Send message',
   '    UI->>Ctx: sendMessage()',
@@ -1640,7 +1640,7 @@ rp: [
   '    subgraph P3["Phase 3 - Transcription"]',
   '        WHK2["meetingbaas-webhook\\nsignals ready"]',
   '        PTR2["poll-transcription-queue"]',
-  '        ASS2["AssemblyAI - primary provider"]',
+  '        ASS2["Railway WhisperX - primary provider"]',
   '        GLA2["Gladia - fallback provider"]',
   '        TRY2["Transcript Ready"]',
   '        WHK2 --> PTR2',
@@ -1651,7 +1651,7 @@ rp: [
   '    end',
   '    subgraph P4["Phase 4 - AI Processing"]',
   '        PRC2["process-recording\\nedge function"]',
-  '        CLD2["Claude Haiku\\ntranscript analysis\\nspeaker identification"]',
+  '        CLD2["Claude Sonnet\\ntranscript analysis\\nspeaker identification"]',
   '        RES2["Summary and Highlights\\nAction Items and Speaker ID\\nCRM field updates"]',
   '        PRC2 --> CLD2 --> RES2',
   '    end',
@@ -1672,7 +1672,7 @@ rp: [
 sf: [
   'flowchart LR',
   '    subgraph SRC2["Source of Truth"]',
-  '        MD2["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n30 total - 18 atomic + 12 sequences"]',
+  '        MD2["skills/atomic/name/SKILL.md\\nskills/sequences/seq-name/SKILL.md\\n127 total - atomic + sequence skills"]',
   '    end',
   '    subgraph SYNC2["Sync Paths"]',
   '        CLI2["sync-skills.ts\\nnpm run sync-skills\\nlocal dev and CI"]',

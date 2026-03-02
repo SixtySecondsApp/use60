@@ -1,7 +1,7 @@
 // supabase/functions/_shared/slackSearch.ts
 // Hybrid search service for Slack commands - searches Sixty DB first, then CRM fallback
 
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { HubSpotClient } from './hubspot.ts';
 import { getHubSpotClientForOrg, hasHubSpotIntegration } from './copilot_adapters/hubspotAdapters.ts';
 

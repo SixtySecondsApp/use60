@@ -7,7 +7,7 @@
  * - CRM syncs
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 // Confidence scores by source type (higher = more trustworthy)
 export const SOURCE_CONFIDENCE: Record<string, number> = {

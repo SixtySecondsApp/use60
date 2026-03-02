@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { authenticateRequest } from '../_shared/edgeAuth.ts';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -15,31 +16,32 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    // Authenticate user via JWT
+    const { userId } = await authenticateRequest(
+      req,
+      supabaseClient,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
     const url = new URL(req.url)
     const pathSegments = url.pathname.split('/').filter(segment => segment && segment !== 'functions' && segment !== 'v1' && segment !== 'contacts')
     let contactId = pathSegments[0]
-    
+
     // Also check for id in query params (for compatibility)
     const queryId = url.searchParams.get('id')
-    
+
     if (req.method === 'GET') {
-      // Check if this is a single contact request
       if (queryId && !contactId) {
-        // GET /contacts?id=xxx - Single contact (query param style)
-        return await handleSingleContact(supabaseClient, queryId, url)
+        return await handleSingleContact(supabaseClient, queryId, url, userId)
       } else if (contactId) {
-        // GET /contacts/:id - Single contact (path style)
-        return await handleSingleContact(supabaseClient, contactId, url)
+        return await handleSingleContact(supabaseClient, contactId, url, userId)
       } else {
-        // GET /contacts - List contacts
-        return await handleContactsList(supabaseClient, url)
+        return await handleContactsList(supabaseClient, url, userId)
       }
     } else if (req.method === 'POST') {
-      // POST /contacts - Create contact
       const body = await req.json()
-      return await handleCreateContact(supabaseClient, body)
+      return await handleCreateContact(supabaseClient, body, userId)
     } else if (req.method === 'PUT') {
-      // PUT /contacts/:id - Update contact
       if (!contactId) {
         return new Response(JSON.stringify({ error: 'Contact ID required' }), {
           status: 400,
@@ -47,16 +49,15 @@ serve(async (req) => {
         })
       }
       const body = await req.json()
-      return await handleUpdateContact(supabaseClient, contactId, body)
+      return await handleUpdateContact(supabaseClient, contactId, body, userId)
     } else if (req.method === 'DELETE') {
-      // DELETE /contacts/:id - Delete contact
       if (!contactId) {
         return new Response(JSON.stringify({ error: 'Contact ID required' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-      return await handleDeleteContact(supabaseClient, contactId)
+      return await handleDeleteContact(supabaseClient, contactId, userId)
     }
 
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -72,7 +73,7 @@ serve(async (req) => {
 })
 
 // List contacts
-async function handleContactsList(supabaseClient: any, url: URL) {
+async function handleContactsList(supabaseClient: any, url: URL, userId: string) {
   try {
     const includeCompany = url.searchParams.get('includeCompany') === 'true'
     const limit = parseInt(url.searchParams.get('limit') || '50')
@@ -84,6 +85,7 @@ async function handleContactsList(supabaseClient: any, url: URL) {
     let query = supabaseClient
       .from('contacts')
       .select('*', { count: 'exact' })
+      .eq('owner_id', userId)
       .range(offset, offset + limit - 1)
       .order('created_at', { ascending: false })
 
@@ -163,7 +165,7 @@ async function handleContactsList(supabaseClient: any, url: URL) {
 }
 
 // Get single contact
-async function handleSingleContact(supabaseClient: any, contactId: string, url?: URL) {
+async function handleSingleContact(supabaseClient: any, contactId: string, url: URL | undefined, userId: string) {
   try {
     const includeCompany = url?.searchParams.get('includeCompany') === 'true'
     
@@ -172,6 +174,7 @@ async function handleSingleContact(supabaseClient: any, contactId: string, url?:
       .from('contacts')
       .select('*')
       .eq('id', contactId)
+      .eq('owner_id', userId)
       .single()
 
     if (error) {
@@ -217,11 +220,11 @@ async function handleSingleContact(supabaseClient: any, contactId: string, url?:
 }
 
 // Create contact
-async function handleCreateContact(supabaseClient: any, body: any) {
+async function handleCreateContact(supabaseClient: any, body: any, userId: string) {
   try {
     const { data: contact, error } = await supabaseClient
       .from('contacts')
-      .insert(body)
+      .insert({ ...body, owner_id: userId })
       .select()
       .single()
 
@@ -248,12 +251,13 @@ async function handleCreateContact(supabaseClient: any, body: any) {
 }
 
 // Update contact
-async function handleUpdateContact(supabaseClient: any, contactId: string, body: any) {
+async function handleUpdateContact(supabaseClient: any, contactId: string, body: any, userId: string) {
   try {
     const { data: contact, error } = await supabaseClient
       .from('contacts')
       .update(body)
       .eq('id', contactId)
+      .eq('owner_id', userId)
       .select()
       .single()
 
@@ -279,12 +283,13 @@ async function handleUpdateContact(supabaseClient: any, contactId: string, body:
 }
 
 // Delete contact
-async function handleDeleteContact(supabaseClient: any, contactId: string) {
+async function handleDeleteContact(supabaseClient: any, contactId: string, userId: string) {
   try {
     const { error } = await supabaseClient
       .from('contacts')
       .delete()
       .eq('id', contactId)
+      .eq('owner_id', userId)
 
     if (error) {
       throw error

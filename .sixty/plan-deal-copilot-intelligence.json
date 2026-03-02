@@ -1,0 +1,430 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth"
+    }
+  },
+
+  "features": [
+    {
+      "id": "meeting-context",
+      "name": "Full Meeting Context Injection",
+      "status": "complete",
+      "createdAt": "2026-02-28T00:00:00Z"
+    },
+    {
+      "id": "auto-heal",
+      "name": "Auto-Heal CRM Data Graph",
+      "status": "complete",
+      "createdAt": "2026-02-28T00:00:00Z"
+    },
+    {
+      "id": "deal-dossier",
+      "name": "Persistent Deal Dossier",
+      "status": "complete",
+      "createdAt": "2026-02-28T00:00:00Z"
+    },
+    {
+      "id": "copilot-email-intelligence",
+      "name": "Copilot Email Intelligence & Quality",
+      "status": "complete",
+      "description": "Use model router for intelligence-tier-based model selection in email generation, add user sign-offs, prohibit em dashes, broaden detection patterns.",
+      "createdAt": "2026-02-28T18:00:00Z"
+    }
+  ],
+
+  "aiDevHubProjectId": "7232c546-6ff8-49c0-959f-eb56dacc4626",
+
+  "stories": [
+    {
+      "id": "MTG-001",
+      "feature": "meeting-context",
+      "title": "Fetch and inject Fathom summary into context block",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["src/components/Pipeline/hooks/useDealCopilotChat.ts"], "schema": ["meetings"] },
+      "blocks": ["MTG-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "buildDealContextBlock includes structured meeting summary (key takeaways, action items, pricing) from top 2 meetings",
+        "Summary is extracted from meetings.summary JSON field (Fathom markdown_formatted), condensed to ~400 tokens per meeting",
+        "Falls back gracefully when summary is null or malformed",
+        "Console debug log shows summary injection"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts"
+      ]
+    },
+    {
+      "id": "MTG-002",
+      "feature": "meeting-context",
+      "title": "Inject deal truth fields into context block",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["MTG-001"], "files": ["src/components/Pipeline/hooks/useDealCopilotChat.ts"], "schema": ["deal_truth_fields"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Context block includes deal truth fields (pain, champion, economic_buyer, success_metric, next_step, top_risks) when available",
+        "Fetched via single query to deal_truth_fields table scoped by deal_id",
+        "Fields with confidence < 0.3 are excluded",
+        "No extra latency — runs in parallel with existing enrichment queries"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts"
+      ]
+    },
+    {
+      "id": "MTG-003",
+      "feature": "meeting-context",
+      "title": "Enrich greeting with meeting-specific insights",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["MTG-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["MTG-002"],
+      "acceptance": [
+        "Greeting shows last meeting date and one key takeaway (not just oneliner)",
+        "If next_step truth field exists, greeting shows it as a proactive nudge",
+        "Greeting mentions contact name when resolved"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts"
+      ]
+    },
+
+    {
+      "id": "HEAL-001",
+      "feature": "auto-heal",
+      "title": "Write back resolved contact and company links on enrichment",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": ["src/components/Pipeline/hooks/useDealCopilotChat.ts"], "schema": ["deals"] },
+      "blocks": ["HEAL-002"],
+      "parallelWith": ["MTG-001"],
+      "acceptance": [
+        "When enrichment resolves a contact_id or company_id that the deal is missing, PATCH deals table with the resolved values",
+        "Also writes contact_name and contact_email when resolved",
+        "Only writes if the deal field is currently null (never overwrites existing links)",
+        "Non-blocking — fire-and-forget PATCH, does not delay enrichment"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts"
+      ]
+    },
+    {
+      "id": "HEAL-002",
+      "feature": "auto-heal",
+      "title": "Create batch heal edge function for nightly run",
+      "type": "edge-function",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["HEAL-001"], "files": [], "schema": ["deals", "contacts", "companies", "meetings"] },
+      "blocks": ["HEAL-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function heal-deal-links processes deals with null primary_contact_id or company_id",
+        "Uses same resolution logic as enrichment: match contacts by company name/email domain, match companies by name/domain",
+        "Processes in batches of 50, updates deals table directly",
+        "Logs count of healed links per run"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/heal-deal-links/index.ts"
+      ]
+    },
+    {
+      "id": "HEAL-003",
+      "feature": "auto-heal",
+      "title": "Schedule nightly heal job via pg_cron",
+      "type": "schema",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["HEAL-002"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration adds pg_cron job calling heal-deal-links edge function daily at 03:00 UTC",
+        "Cron job passes service_role auth",
+        "Job is scoped to active deals only (status = 'active')"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260228_heal_deal_links_cron.sql"
+      ]
+    },
+
+    {
+      "id": "DOSS-001",
+      "feature": "deal-dossier",
+      "title": "Create deal_dossiers table schema",
+      "type": "schema",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": [], "files": [], "schema": ["deals"] },
+      "blocks": ["DOSS-002", "DOSS-003"],
+      "parallelWith": ["HEAL-002"],
+      "acceptance": [
+        "deal_dossiers table with: id, deal_id (unique), org_id, snapshot (JSONB), last_meetings_hash, updated_at, created_at",
+        "snapshot JSONB structure: { narrative, key_facts[], stakeholders[], commitments[], objections[], timeline[] }",
+        "RLS policy: users can read/write dossiers for deals they own or share org with",
+        "Index on deal_id for fast lookup"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260228_deal_dossiers.sql"
+      ]
+    },
+    {
+      "id": "DOSS-002",
+      "feature": "deal-dossier",
+      "title": "Build dossier on copilot session close",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": { "stories": ["DOSS-001", "MTG-001"], "files": ["src/components/Pipeline/hooks/useDealCopilotChat.ts"], "schema": ["deal_dossiers"] },
+      "blocks": ["DOSS-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "When copilot chat has >= 2 user messages and the sheet closes, trigger a dossier synthesis",
+        "Sends conversation + enrichment to copilot-autonomous with a hidden system message requesting a structured dossier extract",
+        "Upserts result into deal_dossiers table (on conflict deal_id)",
+        "Non-blocking — runs after sheet close animation"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts",
+        "src/components/Pipeline/DealIntelligenceSheet.tsx"
+      ]
+    },
+    {
+      "id": "DOSS-003",
+      "feature": "deal-dossier",
+      "title": "Load dossier into context block on copilot open",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": { "stories": ["DOSS-001"], "files": ["src/components/Pipeline/hooks/useDealCopilotChat.ts"], "schema": ["deal_dossiers"] },
+      "blocks": [],
+      "parallelWith": ["DOSS-002"],
+      "acceptance": [
+        "On enrichment fetch, also load deal_dossiers row for this deal",
+        "If dossier exists, inject snapshot.narrative + key_facts into the [DEAL_CONTEXT] block",
+        "Dossier data appears under a [DEAL_HISTORY] section in the context",
+        "Greeting references dossier insights (e.g. 'Last session you discussed pricing')"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts"
+      ]
+    },
+    {
+      "id": "DOSS-004",
+      "feature": "deal-dossier",
+      "title": "Auto-update dossier when new meetings are synced",
+      "type": "edge-function",
+      "status": "complete",
+      "priority": 10,
+      "dependencies": { "stories": ["DOSS-001", "DOSS-002"], "files": [], "schema": ["deal_dossiers", "meetings"] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "When a meeting summary completes (summary_status = 'complete'), check if the meeting's contact/company links to a deal with an existing dossier",
+        "If yes, append the new meeting's key takeaways to the dossier's timeline and update narrative",
+        "Uses a meetings_hash field to avoid reprocessing already-incorporated meetings",
+        "Triggered via database webhook or pg_notify on meetings.summary_status change"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/update-deal-dossier/index.ts",
+        "supabase/migrations/20260228_dossier_meeting_trigger.sql"
+      ]
+    },
+
+    {
+      "id": "INTEL-001",
+      "feature": "copilot-email-intelligence",
+      "title": "Wire model router into email draft generation",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/structuredResponseDetector.ts",
+          "supabase/functions/_shared/modelRouter.ts"
+        ],
+        "schema": ["model_config", "ai_feature_config"]
+      },
+      "blocks": ["INTEL-002", "INTEL-003", "INTEL-004"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Import resolveModel from modelRouter.ts into structureEmailDraftResponse",
+        "Call resolveModel with feature='copilot', userId, orgId from context to get the tier-appropriate model",
+        "When provider is 'anthropic', call Claude API (same pattern as line 4567) with resolved modelId",
+        "Keep Gemini as fallback when ANTHROPIC_API_KEY is missing or model router fails",
+        "Log resolved model name in console for debugging"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/_shared/structuredResponseDetector.ts"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "6b11998f-3e78-4faf-a69d-860a5e98040d",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INTEL-002",
+      "feature": "copilot-email-intelligence",
+      "title": "Add em dash prohibition and sign-off instructions to email prompt",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+
+      "dependencies": {
+        "stories": ["INTEL-001"],
+        "files": [
+          "supabase/functions/_shared/structuredResponseDetector.ts"
+        ],
+        "schema": []
+      },
+      "blocks": ["INTEL-004"],
+      "parallelWith": ["INTEL-003"],
+
+      "acceptance": [
+        "Add 'Never use em dashes anywhere in the email' to INSTRUCTIONS block",
+        "Extract signoffs array from style_metadata.signoffs and style_metadata.greetings_signoffs.signoffs",
+        "Include preferred sign-offs in style instruction with 'USE ONE OF THESE EXACTLY'",
+        "Update instruction #7 to reference user's preferred sign-off from writing style",
+        "Add wordsToAvoid from style_metadata to prompt"
+      ],
+
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/_shared/structuredResponseDetector.ts"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "57b5ab78-c1fb-481e-91a3-cddc3455aeaf",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INTEL-003",
+      "feature": "copilot-email-intelligence",
+      "title": "Broaden email draft detection patterns",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+
+      "dependencies": {
+        "stories": ["INTEL-001"],
+        "files": [
+          "supabase/functions/_shared/structuredResponseDetector.ts"
+        ],
+        "schema": []
+      },
+      "blocks": ["INTEL-004"],
+      "parallelWith": ["INTEL-002"],
+
+      "acceptance": [
+        "Add 'follow up' and 'follow-up' patterns without requiring 'email' keyword (exclude when 'task' present)",
+        "Add 'reach out to' and 'get in touch' patterns",
+        "Existing detection patterns remain unchanged (no regression)"
+      ],
+
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/_shared/structuredResponseDetector.ts"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "964d2e55-6f59-42df-80c7-8e53d39bf804",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "INTEL-004",
+      "feature": "copilot-email-intelligence",
+      "title": "Deploy copilot-autonomous to staging and verify",
+      "type": "integration",
+      "status": "complete",
+      "priority": 13,
+
+      "dependencies": {
+        "stories": ["INTEL-001", "INTEL-002", "INTEL-003"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Deploy copilot-autonomous with --no-verify-jwt to staging project caerqjzvuerejfrdtygb",
+        "Verify edge function logs show resolved model name (e.g., claude-sonnet-4-6-20250514 for medium tier)"
+      ],
+
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+
+      "files": [],
+
+      "designRef": null,
+      "aiDevHubTaskId": "c739838d-4dad-4fa7-b13d-5b8e44af5530",
+
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 14,
+    "currentFeature": null,
+    "lastUpdated": "2026-02-28T18:07:00Z",
+    "parallelGroups": [
+      {
+        "name": "Group 1: Model Router Integration",
+        "stories": ["INTEL-001"],
+        "note": "Foundation - wire model router into email generation"
+      },
+      {
+        "name": "Group 2: Quality Improvements (parallel)",
+        "stories": ["INTEL-002", "INTEL-003"],
+        "note": "Em dashes + signoffs and detection broadening can run in parallel after INTEL-001"
+      },
+      {
+        "name": "Group 3: Deploy & Verify",
+        "stories": ["INTEL-004"],
+        "note": "Deploy after all code changes complete"
+      }
+    ],
+    "estimatedTotalMinutes": 40,
+    "criticalPath": ["INTEL-001", "INTEL-002", "INTEL-004"]
+  }
+}

@@ -3,7 +3,7 @@
  * Shared utilities for edge functions (Deno runtime)
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 
 export interface Contact {
   id: string

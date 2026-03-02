@@ -9,7 +9,7 @@
  * - Summary condensation
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { analyzeTranscriptWithClaude, type TranscriptAnalysis } from '../fathom-sync/aiAnalysis.ts'
 import { storeAIActionItems, queueMeetingForIndexing, condenseMeetingSummary } from '../fathom-sync/services/transcriptService.ts'
 import { matchOrCreateCompany } from '../_shared/companyMatching.ts'

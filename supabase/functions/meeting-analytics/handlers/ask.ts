@@ -154,6 +154,21 @@ export async function handleAsk(req: Request, orgId: string): Promise<Response> 
     const transcriptMap = new Map(allTranscripts.map(t => [t.id, t]));
     const allowedTranscriptIds = new Set(allTranscripts.map(t => t.id));
 
+    // Early exit: if meetingIds were provided but matched zero transcripts, return empty
+    // This prevents unscoped vector search from returning results from unrelated meetings
+    if (meetingIds && meetingIds.length > 0 && allTranscripts.length === 0) {
+      return successResponse({
+        answer: 'No transcripts found for the specified meetings.',
+        sources: [],
+        structuredData: [],
+        segmentsSearched: 0,
+        meetingsAnalyzed: 0,
+        totalMeetings: 0,
+        isAggregateQuestion: false,
+        specificMeeting: null,
+      }, req);
+    }
+
     // ============================================
     // STEP 2: Vector search to find relevant content
     // ============================================

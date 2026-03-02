@@ -2,7 +2,7 @@
 // Uses service role to bypass RLS and return org name
 // Safe because invitation tokens are 256-bit cryptographically random
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 // Simple in-memory rate limiter per IP (resets on cold start)

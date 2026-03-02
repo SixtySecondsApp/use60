@@ -5,7 +5,7 @@
  * HEARTBEAT_OK equivalent: suppress empty/low-value notifications.
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 // ============================================================================
 // Types

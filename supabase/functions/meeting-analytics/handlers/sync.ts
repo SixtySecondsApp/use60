@@ -4,7 +4,7 @@
  * Resolves org_id from owner_user_id via organization_memberships.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getRailwayDb } from '../db.ts';
 import { successResponse, errorResponse } from '../helpers.ts';
 

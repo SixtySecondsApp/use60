@@ -2,7 +2,7 @@
 // Starts a free trial without requiring payment information
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 import { corsHeaders } from "../_shared/cors.ts";
 import { getStripeClient, getOrCreateStripeCustomer } from "../_shared/stripe.ts";
 

@@ -1,4 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { authenticateRequest } from '../_shared/edgeAuth.ts'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 const FREEPIK_API_BASE = 'https://api.freepik.com/v1/ai'
@@ -71,6 +73,12 @@ serve(async (req) => {
   }
 
   try {
+    // Authenticate request
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    await authenticateRequest(req, supabase, serviceRoleKey);
+
     const apiKey = Deno.env.get('FREEPIK_API_KEY')
     if (!apiKey) {
       return new Response(
@@ -125,9 +133,11 @@ serve(async (req) => {
     )
   } catch (error) {
     console.error('[freepik-proxy] unexpected error', error)
+    const msg = error instanceof Error ? error.message : 'Unexpected server error';
+    const isAuthError = msg.includes('Unauthorized') || msg.includes('invalid session');
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unexpected server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: msg }),
+      { status: isAuthError ? 401 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
