@@ -26,19 +26,20 @@ export const CopilotLayout: React.FC<CopilotLayoutProps> = ({ children, rightPan
   return (
     // Main container: 100% of available height, no overflow (page doesn't scroll)
     <div className="flex h-full min-h-0 relative overflow-hidden">
-      {/* Right Panel Toggle Button (only shown when rightPanel is provided) */}
+      {/* Right Panel Toggle Button (only shown on small screens) */}
       {rightPanel && (
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setShowRightPanel(!showRightPanel)}
           className={cn(
-            'absolute top-4 right-4 z-20 h-9 px-3 gap-2',
+            'absolute top-4 z-20 h-9 px-3 gap-2',
             'bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm',
             'border border-gray-200 dark:border-gray-700/50',
             'hover:bg-gray-50 dark:hover:bg-gray-800/80',
             'text-gray-600 dark:text-gray-400',
-            'lg:hidden' // Only show on mobile/tablet, right panel always visible on desktop
+            // Position depends on whether the panel is visible
+            showRightPanel ? 'right-[21rem] md:hidden' : 'right-4 md:hidden',
           )}
         >
           {showRightPanel ? (
@@ -57,28 +58,28 @@ export const CopilotLayout: React.FC<CopilotLayoutProps> = ({ children, rightPan
       {/* Right Panel - Action Items, Context, Connected */}
       {rightPanel && (
         <>
-          {/* Mobile/Tablet overlay */}
+          {/* Mobile overlay backdrop */}
           {showRightPanel && (
             <div
-              className="fixed inset-0 bg-black/20 z-[5] lg:hidden"
+              className="fixed inset-0 bg-black/20 z-[5] md:hidden"
               onClick={() => setShowRightPanel(false)}
             />
           )}
 
-          {/* Right panel container */}
+          {/* Right panel container — always visible on md+ */}
           <div
             className={cn(
-              'absolute lg:relative z-10 right-0 h-full transition-all duration-300 ease-in-out',
+              'z-10 h-full transition-all duration-300 ease-in-out flex-shrink-0',
               'bg-white/[0.02] dark:bg-gray-900/50 backdrop-blur-xl',
               'border-l border-gray-200 dark:border-white/5',
-              // Width and visibility - responsive widths for mobile
+              // Mobile: absolute overlay. md+: static in flex layout
+              'absolute md:relative right-0',
               showRightPanel
-                ? 'w-[85vw] sm:w-80 max-w-80 opacity-100'
-                : 'w-0 opacity-0 overflow-hidden lg:w-0'
+                ? 'w-[85vw] sm:w-80 md:w-72 lg:w-80 opacity-100 translate-x-0'
+                : 'w-0 opacity-0 overflow-hidden translate-x-full md:translate-x-0 md:w-72 md:opacity-100 md:overflow-visible lg:w-80'
             )}
           >
-            {/* Inner container - use full width on mobile, fixed on larger screens */}
-            <div className="w-full sm:w-80 h-full overflow-y-auto overflow-x-hidden">
+            <div className="w-full h-full overflow-y-auto overflow-x-hidden">
               {rightPanel}
             </div>
           </div>

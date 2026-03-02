@@ -248,7 +248,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Note: /ops/ pages removed — they use normal page scroll so users can scroll
   // when the mouse is outside the table.
   const isFullHeightPage = useMemo(() => {
-    return location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/');
+    return location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/') || location.pathname.startsWith('/landing-page-builder');
   }, [location.pathname]);
 
   // Keyboard shortcut for SmartSearch (⌘K) - Disabled

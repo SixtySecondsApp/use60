@@ -109,7 +109,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, to
       <div className={cn('max-w-3xl', isUser ? '' : 'w-full')}>
         {isUser ? (
           <div className="bg-blue-50 dark:bg-blue-500/10 backdrop-blur-sm border border-blue-200 dark:border-blue-500/20 rounded-xl px-4 py-3 inline-block">
-            <p className="text-sm text-gray-900 dark:text-gray-100">{message.content}</p>
+            <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : (
           <div className="w-full relative group/assistant">

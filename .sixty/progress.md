@@ -1,39 +1,174 @@
-# Progress Log — Pipeline Real Deals Migration & Full Audit
+# Progress Log — Landing Builder React Component Upgrade
 
-## Feature: pipeline-migration (17 stories)
+## Current Feature: landing-builder-react-components (25/25 stories) COMPLETE
 
-### Codebase Patterns (Pipeline)
-- Pipeline components: `src/components/Pipeline/` (16 files + hooks subfolder)
-- Pipeline data: `usePipelineData.ts` calls `get_pipeline_with_health` RPC, falls back to direct table queries
-- CRM index: `crm_deal_index` table with `is_materialized`/`materialized_deal_id` — no materialization logic yet
-- Deal CRUD: `useDealCRUD.ts` tries Edge Function first via `apiCall`, falls back to direct Supabase
-- Seed data: 8 deals with patterned UUIDs (11111111- through 88888888-) in staging org `1d1b4274-c9c4-4cb7-9efc-243c90c86f4c`
-- HubSpot webhook: unpinned `@supabase/supabase-js@2` import (broken), uses `legacyCorsHeaders`
-- Attio webhook: correctly pinned `@2.43.4`, handles contacts+companies but NOT deals yet
-- upsertCrmIndex.ts: pinned to `@2.39.3` (should be `@2.43.4`)
-- DealIntelligenceSheet: SheetContent classes correct (`!top-16 !h-[calc(100vh-4rem)]`)
-- useDealStages.ts: has `select('*')` in fallback path — needs explicit columns
+### Plan Generated: 2026-03-01
 
-### Dependency Graph
-```
-Phase 1 (Data):    PIPE-001 ─┬→ PIPE-003..008 (UI audit)
-                   PIPE-002 ─┘  (parallel, independent)
+**Feature**: React Component Upgrade + Design Improvements
+**Stories**: 24 (RC-001 → RC-026, skipping RC-022)
+**Estimated**: ~6 hours sequential, ~3 hours with parallelism
 
-Phase 2 (UI):      PIPE-003 ═══ PIPE-004 (parallel: Kanban + Table)
-                   PIPE-005 → PIPE-006 (Create → Edit/Delete)
-                   PIPE-007 ═══ PIPE-008 (parallel: Filters + Sheet)
+**Phases**:
+1. Foundation (RC-001 → RC-005): Types, shared components, animations, registry, install
+2. Section Components (RC-006 → RC-012): Port all 8 types + 4 new types to React
+3. React Preview Renderer (RC-013 → RC-016): react-frame-component iframe, update previews
+4. Orchestrator + Features (RC-017 → RC-020): Smart assets, new keywords, intelligence toggle
+5. Export + Editor (RC-021 → RC-026): React export, updated panels, agent prompt, HTML parity
 
-Phase 3 (Backend): PIPE-009 ─┬→ PIPE-010 (HubSpot webhook)
-                             ├→ PIPE-011 (Attio webhook)
-                             └→ PIPE-013 → PIPE-014 + PIPE-015 (Import UI)
-                   PIPE-012 ═══ (parallel: fix import version)
+**Parallel Groups**:
+- Group 1 (no deps): RC-001, RC-003, RC-005
+- Group 2 (after RC-001 + RC-002): RC-006 through RC-012 (all 7 section story groups)
+- Group 3 (after RC-001): RC-017, RC-019, RC-020
+- Group 4 (after sections): RC-021, RC-023, RC-025, RC-026
 
-Phase 5 (Verify):  PIPE-016 ═══ PIPE-017 (parallel verification)
-```
+### 2026-03-01 — RC-001 through RC-026 (all 25 stories)
+**Feature**: React Component Upgrade + Design Improvements
+**Stories completed**: 25/25
+**Files created**: 40+ (sections/, shared/, registry, brandStyles, ReactSectionRenderer, IntelligenceToggle)
+**Files modified**: 10 (types, sectionRenderer, assemblyOrchestrator, assetQueue, AssemblyPreview, ProgressivePreview, exportPolishAgent, SectionListPanel, PropertiesPanel, FloatingChatBar, LandingPageBuilder, sectionEditAgent)
+**Quality gates**: lint 0 errors, pre-existing warnings only
+**Key changes**:
+- Extended type system: 12 section types, 10 layout variants, AssetStrategy, SectionDividerType, ContentBlock
+- Created shared subcomponents: SectionWrapper, CtaButton, AssetSlot, ContentBlockRenderer, SectionDivider, MicroCopy
+- Created CSS micro-animation library (8 keyframe animations + utility classes)
+- Self-registering component registry with getSectionComponent(type, variant) + fallback chain
+- Installed react-frame-component for iframe-based React rendering with injected styles
+- Built all 12 section types as React components (30+ variants total)
+- React renderer is primary for preview; HTML renderer kept for export/polish
+- Smart asset strategy: sections with icon/none strategy skip asset generation
+- IntelligenceToggle: 3-tier model selector wired into FloatingChatBar
+- React TSX export added to exportPolishAgent
+- HTML export parity: 31 templates (was 24) including pricing, comparison, stats, how-it-works
+- sectionEditAgent prompt extended for new types, content blocks, asset strategy, dividers
+- PropertiesPanel: asset strategy selector, icon name field, divider picker, extended layout options
 
 ---
 
-# Previous Feature: Follow-Up Email v2
+## Previous Feature: landing-builder-ux-redesign (5/5 stories) COMPLETE
+
+### 2026-03-01 — LB-UX-001 through LB-UX-005 (all 5 stories)
+**Feature**: Landing Builder UX Redesign (Preview Fix + Layout Overhaul)
+**Stories completed**: 5/5
+**Time**: ~25 minutes
+**Gates**: lint 0 errors | test: pass (no test files changed)
+
+**LB-UX-001 — Fix preview render bug**: `LandingCodePreview.tsx` now detects raw HTML (`<!DOCTYPE`) vs React JSX. Raw HTML renders directly as `srcDoc` bypassing Babel/React pipeline. Fixes "Script error" in assembly mode.
+
+**LB-UX-002 — Wire right panel (LandingEditorPanel.tsx)**: New component wraps `SectionListPanel` (top) + `PropertiesPanel` (bottom). Clicking section → properties load. Drag-drop reorder → sections update. Progress indicator shows asset count.
+
+**LB-UX-003 — FloatingChatBar.tsx**: Spotlight-style chat overlay — centered bottom, max-w-[600px], input always visible. Collapsed (120px) by default, expands upward to 50vh. Backdrop blur, smooth 300ms transition.
+
+**LB-UX-004 — Hero layout assembly**: Assembly mode now: `flex row` with `AssemblyPreview` (flex-1) + `LandingEditorPanel` (w-80) side by side. FloatingChatBar absolute overlay at bottom center z-20. Old bottom-left 380x480 floating panel removed. Preview gets bottom padding to avoid chat overlap.
+
+**LB-UX-005 — Polish**: Section click in preview → selects in editor panel (via shared `highlightSectionId`). Asset regeneration wired via `assetQueue.prioritise()`. Expand/collapse animates via `transition-all duration-300 ease-in-out`. Progress badge in editor header.
+
+**Commits**: pending (uncommitted)
+
+---
+
+## Previous Feature: landing-builder-progressive (16/16 stories) COMPLETE
+
+**PRD:** `docs/landing-page-builder/landing-page-builder-improvements.md`
+
+### Execution Phases
+
+```
+Phase A — Foundation (EDIT-001 → 002 → 003)
+  Schema migration → Types + workspace CRUD → Section renderer (16 templates)
+
+Phase B — Progressive Assembly Engine (EDIT-004 → 005 → 006)
+  Assembly orchestrator → Asset queue + retry → Progressive preview component
+
+Phase C — Chat Editing + Pipeline Wiring (EDIT-007 ∥ 004, then 008 → 012 → 013 → 014)
+  Section edit agent (clarify-first) → Preview-first layout → Phase restructure → Remove visuals → Builder agent JSON
+
+Phase D — Advanced Editor (EDIT-009 → 010 ∥ 011)
+  Editor toolbar → Section list (dnd-kit) ∥ Properties panel
+
+Phase E — Polish (EDIT-015 ∥ 016)
+  Export polish agent (AI pass + cache) ∥ Session recovery
+```
+
+**Critical path:** A → B → C → ship. Phases D and E can follow.
+
+**Key decisions (from consult):**
+1. Launch with 2 layout variants per section type (16 templates total), expand post-launch
+2. Assembly phase collapses to full-width preview with floating chat panel (no right panel)
+3. Section edit agent always clarifies ambiguous requests (creative director role)
+4. Asset failures auto-retry with simplified prompt, then fall back to placeholder
+5. Export triggers AI polish pass (Sonnet) for production-quality code, cached until sections change
+
+### 2026-03-01 — EDIT-001 through EDIT-016 (all 16 stories)
+**Feature**: Progressive Assembly Pipeline — Landing Page Builder
+**Stories completed**: 16/16
+**Time**: ~2 hours
+**Gates**: lint 0 errors | test: pass (no test files changed)
+
+**Phase A — Foundation**: Migration, types, workspace CRUD, section renderer (16 templates)
+**Phase B — Assembly Engine**: Orchestrator (strategy+copy→sections), asset queue (priority, retry, placeholder), AssemblyPreview
+**Phase C — Pipeline Wiring**: Section edit agent (clarify-first), 3-phase pipeline, floating chat panel, removed Visuals phase
+**Phase D — Advanced Editor**: EditorToolbar (device toggles, mode switch), SectionListPanel (dnd-kit), PropertiesPanel (copy/layout/style)
+**Phase E — Polish**: Export polish agent (cache, HTML download, clipboard), session recovery (detects workspace sections, restores assembly)
+
+**Key architectural decisions**:
+- parseWorkspaceToSections converts strategy+copy into LandingSection[] with brand config extraction
+- AssetGenerationQueue processes serially: hero image → above-fold SVGs → remaining images → remaining SVGs
+- sectionRenderer is pure (no side effects): 8 section types × 2 layout variants = 16 templates
+- Section edit agent returns JSON ops (not prose), applied by phaseComponent in LandingPageBuilder
+- Assembly mode: CopilotLayout replaced with full-width preview + 380px floating chat panel
+- Session recovery: workspace.sections persisted every 2s, generating statuses reset to idle on reload
+
+**Commits**:
+- b1f399ac: feat: landing page builder — progressive assembly pipeline (EDIT-001 through EDIT-013)
+- df1dd124: feat: landing builder — editor panels, export agent, session recovery (EDIT-009 through EDIT-016)
+
+---
+
+## Previous Feature: landing-builder-v2 (13/13 stories) COMPLETE
+
+---
+
+### 2026-02-28 — LBV2-001 + LBV2-002 (parallel) + LBV2-003 + LBV2-012 (parallel)
+**Stories**: Workspace schema + generate-svg edge function + workspace service + geminiSvgService
+**Files**: migration, generate-svg/index.ts, landingBuilderWorkspaceService.ts, geminiSvgService.ts, useLandingBuilderWorkspace.ts, types.ts
+**Gates**: lint pass | test: n/a (new files)
+**Learnings**: Gemini 3.1 Pro uses thinkingConfig.thinkingBudget for thinking models; response has parts with thought=true to filter
+
+---
+
+### 2026-02-28 — LBV2-004
+**Story**: Refactor LandingPageBuilder to workspace state
+**Files**: LandingPageBuilder.tsx
+**Gates**: lint pass
+**Learnings**: buildWorkspaceContext gives each phase only the data it needs; workspace.phase_status tracks per-phase state
+
+---
+
+### 2026-02-28 — LBV2-005 + LBV2-006 + LBV2-007 + LBV2-008 (4 agents)
+**Stories**: Strategist + Copywriter + Visual Artist + Builder agents
+**Files**: agents/strategistAgent.ts, copywriterAgent.ts, visualArtistAgent.ts, builderAgent.ts, LandingPageBuilder.tsx
+**Gates**: lint pass
+**Learnings**: Agents are system prompt configurations injected via builderApiTransform; gap detection logic in strategistAgent for follow-up questions
+
+---
+
+### 2026-02-28 — LBV2-009
+**Story**: Agent badges on ChatMessage and PhaseTimeline
+**Files**: AssistantShell.tsx, LandingPageBuilder.tsx, PhaseTimeline.tsx
+**Gates**: lint pass
+**Learnings**: messageBadge prop on AssistantShell renders above assistant messages; AGENT_BADGES maps role to color
+
+---
+
+### 2026-02-28 — LBV2-010 + LBV2-011 (parallel)
+**Stories**: Wizard reduction (7 to 5 questions) + SvgGallery component
+**Files**: DiscoveryWizard.tsx, SvgGallery.tsx
+**Gates**: lint pass
+**Learnings**: Tone and sections inferred by Strategist; SvgGallery uses approve/reject/regenerate pattern with geminiSvgService
+
+---
+
+# Previous: Follow-Up Email v2 (COMPLETE)
 
 ## Codebase Patterns
 - Edge functions: `getCorsHeaders(req)` from `_shared/corsHelper.ts`, pin `@supabase/supabase-js@2.43.4`

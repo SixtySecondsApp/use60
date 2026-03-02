@@ -6272,6 +6272,17 @@ export async function detectAndStructureResponse(
   const originalMessage = userMessage
 
   // ---------------------------------------------------------------------------
+  // System seed prompt bypass — skip ALL intent-based detection when the
+  // message is a system-injected preamble (e.g. landing page builder).
+  // These contain instruction keywords ("follow", "with", "task", "email to")
+  // that collide with user-intent patterns and trigger false positives.
+  // ---------------------------------------------------------------------------
+  if (messageLower.includes('[instructions') || messageLower.includes('[end instructions]')) {
+    console.log('[STRUCTURED] Skipping detection — system seed prompt detected')
+    return null
+  }
+
+  // ---------------------------------------------------------------------------
   // Sequence-aware structured responses
   // ---------------------------------------------------------------------------
   if (toolExecutions && toolExecutions.length > 0) {
@@ -7467,7 +7478,7 @@ export async function detectAndStructureResponse(
       taskCreationKeywords.some(keyword => messageLower.includes(keyword)) ||
       (messageLower.includes('task') && (messageLower.includes('create') || messageLower.includes('add') || messageLower.includes('for') || messageLower.includes('to'))) ||
       (messageLower.includes('remind') && (messageLower.includes('to') || messageLower.includes('me') || messageLower.includes('about'))) ||
-      (messageLower.includes('follow') && (messageLower.includes('up') || messageLower.includes('with'))) ||
+      (/follow[\s-]?up/.test(messageLower) || /follow\s+with/.test(messageLower)) ||
       (messageLower.includes('reminder') && (messageLower.includes('for') || messageLower.includes('about')))
     )
 
@@ -7709,6 +7720,18 @@ export async function detectAndStructureResponse(
   // ---------------------------------------------------------------------------
   // Pipeline queries
   // ---------------------------------------------------------------------------
+
+  // Skip intent-based detection when a skill was engaged —
+  // keyword collisions (e.g. "pipeline" in landing-page-builder prompts) cause
+  // false positives that inject the pipeline UI over the skill's output.
+  const hasEngagedSkill = toolsUsed?.includes('get_skill') ||
+    toolExecutions?.some((e: any) =>
+      (e?.toolName === 'get_skill') ||
+      (e?.toolName === 'execute_action' &&
+        (e?.args?.action === 'run_skill' || e?.args?.action === 'run_sequence') &&
+        e?.success)
+    )
+
   // When user is viewing a specific deal (dealIds in context), singular "deal"
   // references like "this deal" or "the deal" refer to THAT deal, not the pipeline.
   // Only route to pipeline overview for explicitly multi-deal / pipeline queries.
@@ -7731,7 +7754,7 @@ export async function detectAndStructureResponse(
     (messageLower.includes('show me my') && (messageLower.includes('deal') || messageLower.includes('pipeline')))
   )
 
-  if (isPipelineQuery && !isPipelineFocusTaskRequest) {
+  if (isPipelineQuery && !isPipelineFocusTaskRequest && !hasEngagedSkill) {
     const structured = await structurePipelineResponse(client, userId, aiContent, userMessage)
     return structured
   }

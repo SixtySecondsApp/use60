@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
+    <title>Premium Animated Aurora Background</title>
+    <defs>
+        <style>
+            .hero-aurora-blob1 {
+                transform-origin: 350px 250px;
+                animation: hero-aurora-flow1 18s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+            }
+            .hero-aurora-blob2 {
+                transform-origin: 850px 550px;
+                animation: hero-aurora-flow2 22s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+            }
+            .hero-aurora-blob3 {
+                transform-origin: 550px 650px;
+                animation: hero-aurora-flow3 15s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+            }
+            .hero-aurora-blob4 {
+                transform-origin: 800px 150px;
+                animation: hero-aurora-flow4 25s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+            }
+
+            @keyframes hero-aurora-flow1 {
+                0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+                50% { transform: translate(120px, 80px) scale(1.1) rotate(15deg); }
+            }
+            @keyframes hero-aurora-flow2 {
+                0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+                50% { transform: translate(-150px, -100px) scale(0.9) rotate(-10deg); }
+            }
+            @keyframes hero-aurora-flow3 {
+                0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+                50% { transform: translate(100px, -50px) scale(1.15) rotate(20deg); }
+            }
+            @keyframes hero-aurora-flow4 {
+                0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+                50% { transform: translate(-80px, 120px) scale(0.95) rotate(-15deg); }
+            }
+
+            .hero-aurora-ray1 { animation: hero-aurora-sweep1 18s linear infinite; }
+            .hero-aurora-ray2 { animation: hero-aurora-sweep2 22s linear infinite; }
+            .hero-aurora-ray3 { animation: hero-aurora-sweep3 25s linear infinite; }
+
+            @keyframes hero-aurora-sweep1 {
+                0% { transform: translateX(-600px); }
+                100% { transform: translateX(1400px); }
+            }
+            @keyframes hero-aurora-sweep2 {
+                0% { transform: translateX(-500px); }
+                100% { transform: translateX(1500px); }
+            }
+            @keyframes hero-aurora-sweep3 {
+                0% { transform: translateX(-600px); }
+                100% { transform: translateX(1400px); }
+            }
+
+            .hero-aurora-particle1 { animation: hero-aurora-drift 8s cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+            .hero-aurora-particle2 { animation: hero-aurora-drift 6.5s cubic-bezier(0.37, 0, 0.63, 1) infinite 1.5s; }
+            .hero-aurora-particle3 { animation: hero-aurora-drift 9s cubic-bezier(0.37, 0, 0.63, 1) infinite 3s; }
+            .hero-aurora-particle4 { animation: hero-aurora-drift 7.5s cubic-bezier(0.37, 0, 0.63, 1) infinite 4.5s; }
+            .hero-aurora-particle5 { animation: hero-aurora-drift 10s cubic-bezier(0.37, 0, 0.63, 1) infinite 2s; }
+
+            @keyframes hero-aurora-drift {
+                0% { transform: translateY(0px); opacity: 0; }
+                30% { opacity: 0.8; }
+                70% { opacity: 0.8; }
+                100% { transform: translateY(-150px); opacity: 0; }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                * { animation: none !important; transition: none !important; }
+            }
+        </style>
+
+        <pattern id="hero-aurora-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#FFFFFF" stroke-width="0.5" stroke-opacity="0.08" />
+        </pattern>
+
+        <filter id="hero-aurora-blur" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="60" />
+        </filter>
+
+        <radialGradient id="hero-aurora-grad-violet" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#8129D7" stop-opacity="1" />
+            <stop offset="100%" stop-color="#8129D7" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="hero-aurora-grad-blue" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#2A5EDB" stop-opacity="1" />
+            <stop offset="100%" stop-color="#2A5EDB" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="hero-aurora-grad-teal" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#03AD9C" stop-opacity="1" />
+            <stop offset="100%" stop-color="#03AD9C" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="hero-aurora-grad-violetdark" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#6D28D9" stop-opacity="1" />
+            <stop offset="100%" stop-color="#6D28D9" stop-opacity="0" />
+        </radialGradient>
+
+        <linearGradient id="hero-aurora-ray-grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#60A5FA" stop-opacity="0" />
+            <stop offset="50%" stop-color="#60A5FA" stop-opacity="0.9" />
+            <stop offset="100%" stop-color="#60A5FA" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient id="hero-aurora-ray-grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#A855F7" stop-opacity="0" />
+            <stop offset="50%" stop-color="#A855F7" stop-opacity="0.8" />
+            <stop offset="100%" stop-color="#A855F7" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient id="hero-aurora-ray-grad3" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0" />
+            <stop offset="50%" stop-color="#2DD4BF" stop-opacity="0.7" />
+            <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0" />
+        </linearGradient>
+    </defs>
+
+    <!-- Background -->
+    <rect width="100%" height="100%" fill="#09090b" />
+
+    <!-- Grid -->
+    <rect width="100%" height="100%" fill="url(#hero-aurora-grid)" />
+
+    <!-- Aurora Mesh -->
+    <g filter="url(#hero-aurora-blur)" opacity="0.35">
+        <ellipse class="hero-aurora-blob1" cx="350" cy="250" rx="550" ry="450" fill="url(#hero-aurora-grad-violet)" />
+        <ellipse class="hero-aurora-blob2" cx="850" cy="550" rx="600" ry="500" fill="url(#hero-aurora-grad-blue)" />
+        <ellipse class="hero-aurora-blob3" cx="550" cy="650" rx="450" ry="350" fill="url(#hero-aurora-grad-teal)" />
+        <ellipse class="hero-aurora-blob4" cx="800" cy="150" rx="500" ry="400" fill="url(#hero-aurora-grad-violetdark)" />
+    </g>
+
+    <!-- Luminous Streaks / Rays -->
+    <g transform="translate(0, 250) rotate(-15)">
+        <rect class="hero-aurora-ray1" x="0" y="0" width="400" height="1.5" fill="url(#hero-aurora-ray-grad1)" />
+    </g>
+    <g transform="translate(0, 650) rotate(10)">
+        <rect class="hero-aurora-ray2" x="0" y="0" width="350" height="1" fill="url(#hero-aurora-ray-grad2)" />
+    </g>
+    <g transform="translate(0, 400) rotate(25)">
+        <rect class="hero-aurora-ray3" x="0" y="0" width="300" height="2" fill="url(#hero-aurora-ray-grad3)" />
+    </g>
+
+    <!-- Particles -->
+    <g>
+        <circle class="hero-aurora-particle1" cx="250" cy="500" r="1.5" fill="#FFFFFF" />
+        <circle class="hero-aurora-particle2" cx="750" cy="650" r="2" fill="#60A5FA" />
+        <circle class="hero-aurora-particle3" cx="1050" cy="450" r="1.5" fill="#A855F7" />
+        <circle class="hero-aurora-particle4" cx="450" cy="700" r="2.5" fill="#2DD4BF" />
+        <circle class="hero-aurora-particle5" cx="850" cy="300" r="1.5" fill="#FFFFFF" />
+    </g>
+</svg>

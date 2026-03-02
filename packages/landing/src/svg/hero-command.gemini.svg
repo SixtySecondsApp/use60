@@ -1,0 +1,317 @@
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+  <title>Premium Isometric AI Command Center Dashboard</title>
+  
+  <defs>
+    <style>
+      .hero-command-float-1 { animation: hero-command-float1 5s ease-in-out infinite; }
+      .hero-command-float-2 { animation: hero-command-float2 6s ease-in-out infinite; }
+      .hero-command-float-3 { animation: hero-command-float3 4.5s ease-in-out infinite; }
+      .hero-command-float-4 { animation: hero-command-float4 5.5s ease-in-out infinite; }
+      .hero-command-float-5 { animation: hero-command-float5 4s ease-in-out infinite; }
+      
+      .hero-command-delay-1 { animation-delay: 0s; }
+      .hero-command-delay-2 { animation-delay: -1.2s; }
+      .hero-command-delay-3 { animation-delay: -2.5s; }
+      .hero-command-delay-4 { animation-delay: -3.8s; }
+      .hero-command-delay-5 { animation-delay: -0.8s; }
+
+      .hero-command-flow { animation: hero-command-flow-anim 3s linear infinite; }
+      .hero-command-breathe { animation: hero-command-breathe-anim 4s ease-in-out infinite; }
+      .hero-command-pulse { animation: hero-command-pulse-anim 3s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+
+      @keyframes hero-command-float1 {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-8px); }
+      }
+      @keyframes hero-command-float2 {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-6px); }
+      }
+      @keyframes hero-command-float3 {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+      }
+      @keyframes hero-command-float4 {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-7px); }
+      }
+      @keyframes hero-command-float5 {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-9px); }
+      }
+
+      @keyframes hero-command-flow-anim {
+        0% { stroke-dashoffset: 100; }
+        100% { stroke-dashoffset: 0; }
+      }
+
+      @keyframes hero-command-breathe-anim {
+        0%, 100% { transform: scale(0.98); opacity: 0.15; }
+        50% { transform: scale(1.05); opacity: 0.35; }
+      }
+
+      @keyframes hero-command-pulse-anim {
+        0% { transform: scale(0.8); opacity: 1; }
+        100% { transform: scale(2.5); opacity: 0; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; }
+      }
+    </style>
+
+    <!-- Filters -->
+    <filter id="hero-command-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+    </filter>
+    <filter id="hero-command-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" />
+    </filter>
+    <filter id="hero-command-shadow-sm" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" />
+    </filter>
+
+    <!-- Gradients -->
+    <linearGradient id="hero-command-chart-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#A855F7" stop-opacity="0"/>
+    </linearGradient>
+
+    <radialGradient id="hero-command-grid-fade" cx="50%" cy="50%" r="50%">
+      <stop offset="20%" stop-color="white" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Grid Pattern -->
+    <pattern id="hero-command-grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#27272a" stroke-width="1.5"/>
+    </pattern>
+
+    <mask id="hero-command-grid-mask">
+      <ellipse cx="400" cy="350" rx="450" ry="250" fill="url(#hero-command-grid-fade)"/>
+    </mask>
+  </defs>
+
+  <!-- 1. Grid Floor -->
+  <g mask="url(#hero-command-grid-mask)">
+    <g transform="translate(400, 350) scale(1, 0.5) rotate(45)">
+      <rect x="-600" y="-600" width="1200" height="1200" fill="url(#hero-command-grid-pattern)"/>
+    </g>
+  </g>
+
+  <!-- 2. Connection Lines -->
+  <g id="hero-command-connections">
+    <!-- Static Lines -->
+    <path d="M 640 140 Q 520 140 400 260" fill="none" stroke="#27272a" stroke-width="2"/>
+    <path d="M 160 160 Q 280 160 400 260" fill="none" stroke="#27272a" stroke-width="2"/>
+    <path d="M 120 360 Q 260 360 400 260" fill="none" stroke="#27272a" stroke-width="2"/>
+    <path d="M 680 360 Q 540 360 400 260" fill="none" stroke="#27272a" stroke-width="2"/>
+    <path d="M 400 480 Q 400 370 400 260" fill="none" stroke="#27272a" stroke-width="2"/>
+
+    <!-- Animated Energy Dots -->
+    <path d="M 640 140 Q 520 140 400 260" fill="none" stroke="#60A5FA" stroke-width="2" stroke-linecap="round" stroke-dasharray="15 85" pathLength="100" class="hero-command-flow hero-command-delay-1"/>
+    <path d="M 160 160 Q 280 160 400 260" fill="none" stroke="#A855F7" stroke-width="2" stroke-linecap="round" stroke-dasharray="15 85" pathLength="100" class="hero-command-flow hero-command-delay-2"/>
+    <path d="M 120 360 Q 260 360 400 260" fill="none" stroke="#2DD4BF" stroke-width="2" stroke-linecap="round" stroke-dasharray="15 85" pathLength="100" class="hero-command-flow hero-command-delay-3"/>
+    <path d="M 680 360 Q 540 360 400 260" fill="none" stroke="#60A5FA" stroke-width="2" stroke-linecap="round" stroke-dasharray="15 85" pathLength="100" class="hero-command-flow hero-command-delay-4"/>
+    <path d="M 400 480 Q 400 370 400 260" fill="none" stroke="#A855F7" stroke-width="2" stroke-linecap="round" stroke-dasharray="15 85" pathLength="100" class="hero-command-flow hero-command-delay-5"/>
+  </g>
+
+  <!-- 3. Orbiting Elements (Drawn in Z-Index Order based on Y-position) -->
+
+  <!-- UR Element (Email Envelope) -->
+  <g transform="translate(640, 140)">
+    <g class="hero-command-float-1 hero-command-delay-1">
+      <!-- Shadow -->
+      <g transform="translate(0, 60) scale(1, 0.5) rotate(45)">
+        <rect x="-45" y="-35" width="90" height="70" rx="6" fill="black" opacity="0.4" filter="url(#hero-command-shadow-sm)"/>
+      </g>
+      <!-- Extrusion -->
+      <g transform="translate(0, 6) scale(1, 0.5) rotate(45)">
+        <rect x="-45" y="-35" width="90" height="70" rx="6" fill="#27272a"/>
+      </g>
+      <!-- Face -->
+      <g transform="scale(1, 0.5) rotate(45)">
+        <rect x="-45" y="-35" width="90" height="70" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5"/>
+        <rect x="-25" y="-15" width="50" height="30" rx="3" fill="#27272a" stroke="#2A5EDB" stroke-width="1.5"/>
+        <path d="M -25 -15 L 0 0 L 25 -15" fill="none" stroke="#2A5EDB" stroke-width="1.5" stroke-linejoin="round"/>
+        <circle cx="20" cy="10" r="10" fill="#10B981" stroke="#18181b" stroke-width="2"/>
+        <path d="M 16 10 L 19 13 L 24 7" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- UL Element (Contact Profile) -->
+  <g transform="translate(160, 160)">
+    <g class="hero-command-float-2 hero-command-delay-2">
+      <!-- Shadow -->
+      <g transform="translate(0, 60) scale(1, 0.5) rotate(45)">
+        <rect x="-40" y="-50" width="80" height="100" rx="6" fill="black" opacity="0.4" filter="url(#hero-command-shadow-sm)"/>
+      </g>
+      <!-- Extrusion -->
+      <g transform="translate(0, 6) scale(1, 0.5) rotate(45)">
+        <rect x="-40" y="-50" width="80" height="100" rx="6" fill="#27272a"/>
+      </g>
+      <!-- Face -->
+      <g transform="scale(1, 0.5) rotate(45)">
+        <rect x="-40" y="-50" width="80" height="100" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5"/>
+        <circle cx="0" cy="-20" r="16" fill="#27272a" stroke="#60A5FA" stroke-width="2"/>
+        <circle cx="0" cy="-20" r="6" fill="#60A5FA" opacity="0.5"/>
+        <rect x="-25" y="10" width="50" height="6" rx="3" fill="#FFFFFF"/>
+        <rect x="-15" y="24" width="30" height="4" rx="2" fill="#9CA3AF"/>
+        <rect x="-20" y="36" width="40" height="4" rx="2" fill="#9CA3AF"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- 4. Central Dashboard Panel -->
+  <!-- Ambient Breathing Glow -->
+  <ellipse cx="400" cy="260" rx="220" ry="130" fill="#8129D7" filter="url(#hero-command-glow)" class="hero-command-breathe" style="transform-origin: 400px 260px; pointer-events: none;"/>
+
+  <g transform="translate(400, 260)">
+    <g class="hero-command-float-3 hero-command-delay-3">
+      <!-- Shadow -->
+      <g transform="translate(0, 90) scale(1, 0.5) rotate(45)">
+        <rect x="-150" y="-110" width="300" height="220" rx="8" fill="black" opacity="0.6" filter="url(#hero-command-shadow)"/>
+      </g>
+      <!-- Extrusion Base -->
+      <g transform="translate(0, 10) scale(1, 0.5) rotate(45)">
+        <rect x="-150" y="-110" width="300" height="220" rx="8" fill="#27272a"/>
+      </g>
+      <g transform="translate(0, 5) scale(1, 0.5) rotate(45)">
+        <rect x="-150" y="-110" width="300" height="220" rx="8" fill="#27272a"/>
+      </g>
+      <!-- Top Face -->
+      <g transform="scale(1, 0.5) rotate(45)">
+        <!-- Panel Base -->
+        <rect x="-150" y="-110" width="300" height="220" rx="8" fill="#18181b" stroke="#3f3f46" stroke-width="1.5"/>
+        
+        <!-- Violet Header -->
+        <path d="M -150 -102 C -150 -106.4 -146.4 -110 -142 -110 L 142 -110 C 146.4 -110 150 -106.4 150 -102 L 150 -80 L -150 -80 Z" fill="#8129D7"/>
+        <circle cx="-130" cy="-95" r="3" fill="#A855F7"/>
+        <circle cx="-115" cy="-95" r="3" fill="#A855F7"/>
+        <rect x="90" y="-98" width="40" height="6" rx="3" fill="#A855F7" opacity="0.5"/>
+
+        <!-- Metric Card 1 -->
+        <rect x="-130" y="-60" width="75" height="45" rx="4" fill="#27272a"/>
+        <rect x="-120" y="-50" width="12" height="12" rx="2" fill="#2A5EDB"/>
+        <rect x="-100" y="-48" width="30" height="4" rx="2" fill="#9CA3AF"/>
+        <rect x="-120" y="-30" width="40" height="6" rx="2" fill="#FFFFFF"/>
+
+        <!-- Metric Card 2 -->
+        <rect x="-42.5" y="-60" width="85" height="45" rx="4" fill="#27272a"/>
+        <rect x="-32.5" y="-50" width="12" height="12" rx="2" fill="#03AD9C"/>
+        <rect x="-12.5" y="-48" width="35" height="4" rx="2" fill="#9CA3AF"/>
+        <rect x="-32.5" y="-30" width="50" height="6" rx="2" fill="#FFFFFF"/>
+
+        <!-- Metric Card 3 -->
+        <rect x="55" y="-60" width="75" height="45" rx="4" fill="#27272a"/>
+        <rect x="65" y="-50" width="12" height="12" rx="2" fill="#8129D7"/>
+        <rect x="85" y="-48" width="30" height="4" rx="2" fill="#9CA3AF"/>
+        <rect x="65" y="-30" width="45" height="6" rx="2" fill="#FFFFFF"/>
+
+        <!-- Line Chart Area -->
+        <rect x="-130" y="0" width="260" height="90" rx="4" fill="#27272a"/>
+        <line x1="-130" y1="20" x2="130" y2="20" stroke="#3f3f46" stroke-width="1"/>
+        <line x1="-130" y1="45" x2="130" y2="45" stroke="#3f3f46" stroke-width="1"/>
+        <line x1="-130" y1="70" x2="130" y2="70" stroke="#3f3f46" stroke-width="1"/>
+        
+        <!-- Chart Gradient Fill -->
+        <path d="M -130 60 Q -100 60, -80 30 T -30 45 T 30 15 T 80 35 Q 110 35, 130 10 L 130 90 L -130 90 Z" fill="url(#hero-command-chart-grad)"/>
+        
+        <!-- Chart Line -->
+        <path d="M -130 60 Q -100 60, -80 30 T -30 45 T 30 15 T 80 35 Q 110 35, 130 10" fill="none" stroke="#A855F7" stroke-width="3" stroke-linecap="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- 5. Lower Orbiting Elements -->
+
+  <!-- L Element (Calendar) -->
+  <g transform="translate(120, 360)">
+    <g class="hero-command-float-4 hero-command-delay-4">
+      <!-- Shadow -->
+      <g transform="translate(0, 60) scale(1, 0.5) rotate(45)">
+        <rect x="-45" y="-45" width="90" height="90" rx="6" fill="black" opacity="0.4" filter="url(#hero-command-shadow-sm)"/>
+      </g>
+      <!-- Extrusion -->
+      <g transform="translate(0, 6) scale(1, 0.5) rotate(45)">
+        <rect x="-45" y="-45" width="90" height="90" rx="6" fill="#27272a"/>
+      </g>
+      <!-- Face -->
+      <g transform="scale(1, 0.5) rotate(45)">
+        <rect x="-45" y="-45" width="90" height="90" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5"/>
+        <path d="M -45 -39 C -45 -42.3 -42.3 -45 -39 -45 L 39 -45 C 42.3 -45 45 -42.3 45 -39 L 45 -25 L -45 -25 Z" fill="#03AD9C"/>
+        <!-- Time Slots -->
+        <rect x="-30" y="-15" width="25" height="10" rx="2" fill="#27272a"/>
+        <rect x="5" y="-15" width="25" height="10" rx="2" fill="#03AD9C" opacity="0.8"/>
+        <rect x="-30" y="0" width="25" height="10" rx="2" fill="#27272a"/>
+        <rect x="5" y="0" width="25" height="10" rx="2" fill="#27272a"/>
+        <rect x="-30" y="15" width="25" height="20" rx="2" fill="#2DD4BF" opacity="0.5"/>
+        <rect x="5" y="15" width="25" height="10" rx="2" fill="#27272a"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- LR Element (Pipeline/Kanban) -->
+  <g transform="translate(680, 360)">
+    <g class="hero-command-float-5 hero-command-delay-5">
+      <!-- Shadow -->
+      <g transform="translate(0, 60) scale(1, 0.5) rotate(45)">
+        <rect x="-55" y="-40" width="110" height="80" rx="6" fill="black" opacity="0.4" filter="url(#hero-command-shadow-sm)"/>
+      </g>
+      <!-- Extrusion -->
+      <g transform="translate(0, 6) scale(1, 0.5) rotate(45)">
+        <rect x="-55" y="-40" width="110" height="80" rx="6" fill="#27272a"/>
+      </g>
+      <!-- Face -->
+      <g transform="scale(1, 0.5) rotate(45)">
+        <rect x="-55" y="-40" width="110" height="80" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5"/>
+        <!-- Col 1 -->
+        <rect x="-45" y="-30" width="25" height="4" rx="2" fill="#9CA3AF"/>
+        <rect x="-45" y="-20" width="25" height="15" rx="3" fill="#27272a"/>
+        <rect x="-45" y="0" width="25" height="20" rx="3" fill="#27272a"/>
+        <!-- Col 2 -->
+        <rect x="-12.5" y="-30" width="25" height="4" rx="2" fill="#9CA3AF"/>
+        <rect x="-12.5" y="-20" width="25" height="25" rx="3" fill="#2A5EDB" opacity="0.8"/>
+        <rect x="-12.5" y="10" width="25" height="15" rx="3" fill="#27272a"/>
+        <!-- Col 3 -->
+        <rect x="20" y="-30" width="25" height="4" rx="2" fill="#9CA3AF"/>
+        <rect x="20" y="-20" width="25" height="15" rx="3" fill="#27272a"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- BC Element (AI Chip) -->
+  <g transform="translate(400, 480)">
+    <g class="hero-command-float-1">
+      <!-- Shadow -->
+      <g transform="translate(0, 60) scale(1, 0.5) rotate(45)">
+        <rect x="-35" y="-35" width="70" height="70" rx="6" fill="black" opacity="0.4" filter="url(#hero-command-shadow-sm)"/>
+      </g>
+      <!-- Extrusion -->
+      <g transform="translate(0, 6) scale(1, 0.5) rotate(45)">
+        <rect x="-35" y="-35" width="70" height="70" rx="6" fill="#27272a"/>
+      </g>
+      <!-- Face -->
+      <g transform="scale(1, 0.5) rotate(45)">
+        <!-- Animated Pulse Ring -->
+        <g class="hero-command-pulse" style="transform-origin: 0 0;">
+          <circle cx="0" cy="0" r="20" fill="none" stroke="#A855F7" stroke-width="2"/>
+        </g>
+        
+        <rect x="-35" y="-35" width="70" height="70" rx="6" fill="#18181b" stroke="#3f3f46" stroke-width="1.5"/>
+        
+        <!-- Traces -->
+        <path d="M -15 -35 L -15 -20 M 0 -35 L 0 -20 M 15 -35 L 15 -20" stroke="#3f3f46" stroke-width="2"/>
+        <path d="M -15 20 L -15 35 M 0 20 L 0 35 M 15 20 L 15 35" stroke="#3f3f46" stroke-width="2"/>
+        <path d="M -35 -15 L -20 -15 M -35 0 L -20 0 M -35 15 L -20 15" stroke="#3f3f46" stroke-width="2"/>
+        <path d="M 20 -15 L 35 -15 M 20 0 L 35 0 M 20 15 L 35 15" stroke="#3f3f46" stroke-width="2"/>
+        
+        <!-- Core -->
+        <rect x="-15" y="-15" width="30" height="30" rx="4" fill="#27272a" stroke="#A855F7" stroke-width="1.5"/>
+        <circle cx="0" cy="0" r="4" fill="#A855F7"/>
+      </g>
+    </g>
+  </g>
+
+</svg>

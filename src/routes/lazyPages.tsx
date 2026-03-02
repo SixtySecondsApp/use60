@@ -28,6 +28,7 @@ export const ErrorMonitoring = lazyWithRetry(() => import('@/pages/platform/Erro
 export const SentryBridge = lazyWithRetry(() => import('@/pages/platform/SentryBridge'));
 export const SkillsAdmin = lazyWithRetry(() => import('@/pages/platform/SkillsAdmin'));
 export const SkillsQAPage = lazyWithRetry(() => import('@/pages/platform/SkillsQAPage'));
+export const SkillUpgradeReport = lazyWithRetry(() => import('@/pages/platform/SkillUpgradeReport'));
 export const PlatformSkillViewPage = lazyWithRetry(() => import('@/pages/platform/PlatformSkillViewPage'));
 export const PlatformSkillEditPage = lazyWithRetry(() => import('@/pages/platform/PlatformSkillEditPage'));
 export const SkillDetailPage = lazyWithRetry(() => import('@/pages/skills/SkillDetailPage'));
@@ -65,6 +66,7 @@ export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailS
 export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));
 export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
 export const OpsWebhookDemo = lazyWithRetry(() => import('@/pages/demo/OpsWebhookDemo'));
+export const VisualAssetsDemo = lazyWithRetry(() => import('@/pages/demo/VisualAssetsDemo'));
 // Admin Configuration
 export const ControlRoom = lazyWithRetry(() => import('@/pages/admin/ControlRoom'));
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
@@ -155,6 +157,7 @@ export const Workflows = lazyWithRetry(() => import('@/pages/Workflows'));
 export const FreepikFlow = lazyWithRetry(() => import('@/components/workflows/FreepikFlow'));
 export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m => ({ default: m.Copilot })));
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
+export const LandingPageBuilderPage = lazyWithRetry(() => import('@/pages/LandingPageBuilderPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
 export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));

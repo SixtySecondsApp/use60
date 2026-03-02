@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <title>Intel Document - Meeting Prep</title>
+  <defs>
+    <style>
+      /* --- Document --- */
+      .fp-doc {
+        fill: rgba(42,94,219,0.08);
+        stroke: #2A5EDB;
+        stroke-width: 1.5;
+      }
+      .fp-fold {
+        fill: rgba(42,94,219,0.15);
+        stroke: #2A5EDB;
+        stroke-width: 1;
+      }
+
+      /* --- Text lines drawing in --- */
+      .fp-line {
+        fill: none;
+        stroke: rgba(255,255,255,0.45);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-dasharray: 50;
+        stroke-dashoffset: 50;
+      }
+      .fp-l1 { animation: fp-draw 6s ease-in-out infinite 0s; }
+      .fp-l2 { animation: fp-draw 6s ease-in-out infinite 0.3s; }
+      .fp-l3 { animation: fp-draw 6s ease-in-out infinite 0.6s; }
+      .fp-l4 { animation: fp-draw 6s ease-in-out infinite 0.9s; }
+      .fp-l5 { animation: fp-draw 6s ease-in-out infinite 1.2s; }
+
+      /* --- Magnifying glass --- */
+      .fp-mag {
+        fill: none;
+        stroke: #60A5FA;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        animation: fp-mag-pulse 6s ease-in-out infinite;
+      }
+      .fp-mag-fill {
+        fill: rgba(96,165,250,0.08);
+        animation: fp-mag-pulse 6s ease-in-out infinite;
+      }
+
+      /* --- Checkmark at top-right --- */
+      .fp-check {
+        fill: none;
+        stroke: #10B981;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 14;
+        stroke-dashoffset: 14;
+        animation: fp-check-draw 6s ease-in-out infinite;
+      }
+      .fp-check-bg {
+        fill: rgba(16,185,129,0.15);
+        stroke: #10B981;
+        stroke-width: 1;
+        opacity: 0;
+        animation: fp-check-show 6s ease-in-out infinite;
+      }
+
+      @keyframes fp-draw {
+        0%, 5% { stroke-dashoffset: 50; }
+        22%, 80% { stroke-dashoffset: 0; }
+        92%, 100% { stroke-dashoffset: 50; }
+      }
+      @keyframes fp-mag-pulse {
+        0%, 100% { opacity: 0.5; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.06); }
+      }
+      @keyframes fp-check-draw {
+        0%, 50% { stroke-dashoffset: 14; }
+        60%, 85% { stroke-dashoffset: 0; }
+        95%, 100% { stroke-dashoffset: 14; }
+      }
+      @keyframes fp-check-show {
+        0%, 50% { opacity: 0; }
+        60%, 85% { opacity: 1; }
+        95%, 100% { opacity: 0; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .fp-l1, .fp-l2, .fp-l3, .fp-l4, .fp-l5,
+        .fp-mag, .fp-mag-fill,
+        .fp-check, .fp-check-bg {
+          animation: none !important;
+        }
+        .fp-line { stroke-dashoffset: 0; }
+        .fp-check { stroke-dashoffset: 0; }
+        .fp-check-bg { opacity: 1; }
+      }
+    </style>
+
+    <filter id="fp-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- Document shape -->
+  <path class="fp-doc" d="M26,14 L76,14 L92,30 L92,106 Q92,108 90,108 L28,108 Q26,108 26,106 Z"/>
+  <!-- Folded corner -->
+  <path class="fp-fold" d="M76,14 L76,30 L92,30 Z"/>
+
+  <!-- Text lines drawing from left -->
+  <line class="fp-line fp-l1" x1="36" y1="42" x2="82" y2="42"/>
+  <line class="fp-line fp-l2" x1="36" y1="52" x2="74" y2="52"/>
+  <line class="fp-line fp-l3" x1="36" y1="62" x2="80" y2="62"/>
+  <line class="fp-line fp-l4" x1="36" y1="72" x2="68" y2="72"/>
+  <line class="fp-line fp-l5" x1="36" y1="82" x2="76" y2="82"/>
+
+  <!-- Magnifying glass at bottom-right corner -->
+  <g style="transform-origin: 86px 94px;">
+    <circle class="fp-mag-fill" cx="82" cy="90" r="8"/>
+    <circle class="fp-mag" cx="82" cy="90" r="8"/>
+    <line class="fp-mag" x1="88" y1="96" x2="94" y2="102"/>
+  </g>
+
+  <!-- Checkmark at top-right (appears when lines are done) -->
+  <circle class="fp-check-bg" cx="96" cy="12" r="8"/>
+  <polyline class="fp-check" points="91,12 94,16 102,8"/>
+</svg>

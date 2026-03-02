@@ -1,0 +1,76 @@
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+  <title>Premium Ambient SaaS Background</title>
+  <defs>
+    <style>
+      .hero-bg-blob-1 {
+        animation: hero-bg-drift-1 18s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+      }
+      .hero-bg-blob-2 {
+        animation: hero-bg-drift-2 22s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+      }
+      .hero-bg-blob-3 {
+        animation: hero-bg-drift-3 26s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+      }
+      .hero-bg-dot {
+        animation: hero-bg-pulse 8s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+      }
+      .hero-bg-d1 { animation-delay: 0s; }
+      .hero-bg-d2 { animation-delay: -2s; animation-duration: 9s; }
+      .hero-bg-d3 { animation-delay: -4s; animation-duration: 11s; }
+      .hero-bg-d4 { animation-delay: -6s; animation-duration: 10s; }
+      .hero-bg-d5 { animation-delay: -8s; animation-duration: 12s; }
+
+      @keyframes hero-bg-drift-1 {
+        0% { transform: translate(0px, 0px); }
+        100% { transform: translate(40px, -30px); }
+      }
+      @keyframes hero-bg-drift-2 {
+        0% { transform: translate(0px, 0px); }
+        100% { transform: translate(-30px, 40px); }
+      }
+      @keyframes hero-bg-drift-3 {
+        0% { transform: translate(0px, 0px); }
+        100% { transform: translate(50px, 20px); }
+      }
+      @keyframes hero-bg-pulse {
+        0% { opacity: 0.02; }
+        100% { opacity: 0.15; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; }
+      }
+    </style>
+    
+    <pattern id="hero-bg-grid" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#27272a" stroke-width="1" opacity="0.15" />
+    </pattern>
+
+    <radialGradient id="hero-bg-grad-1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#8129D7" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0" />
+    </radialGradient>
+    
+    <radialGradient id="hero-bg-grad-2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2A5EDB" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#2A5EDB" stop-opacity="0" />
+    </radialGradient>
+    
+    <radialGradient id="hero-bg-grad-3" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#A855F7" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <rect width="100%" height="100%" fill="#09090b" />
+  <rect width="100%" height="100%" fill="url(#hero-bg-grid)" />
+
+  <circle class="hero-bg-blob-1" cx="650" cy="150" r="500" fill="url(#hero-bg-grad-1)" />
+  <circle class="hero-bg-blob-2" cx="150" cy="450" r="600" fill="url(#hero-bg-grad-2)" />
+  <circle class="hero-bg-blob-3" cx="400" cy="300" r="400" fill="url(#hero-bg-grad-3)" />
+
+  <circle class="hero-bg-dot hero-bg-d1" cx="250" cy="180" r="1.5" fill="#A855F7" opacity="0.02" />
+  <circle class="hero-bg-dot hero-bg-d2" cx="680" cy="420" r="2" fill="#60A5FA" opacity="0.02" />
+  <circle class="hero-bg-dot hero-bg-d3" cx="480" cy="120" r="1.5" fill="#FFFFFF" opacity="0.02" />
+  <circle class="hero-bg-dot hero-bg-d4" cx="120" cy="480" r="2" fill="#A855F7" opacity="0.02" />
+  <circle class="hero-bg-dot hero-bg-d5" cx="720" cy="220" r="1.5" fill="#60A5FA" opacity="0.02" />
+</svg>

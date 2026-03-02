@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 140">
+  <title>Intent Highlighter - Smart Detection</title>
+  <defs>
+    <style>
+      /* --- Text line placeholders --- */
+      .sd-line {
+        fill: rgba(255,255,255,0.12);
+        rx: 2; ry: 2;
+      }
+
+      /* --- Highlight scanner --- */
+      .sd-hl {
+        rx: 4; ry: 4;
+        opacity: 0;
+      }
+      .sd-hl1 { fill: url(#sd-hl-g1); animation: sd-scan1 7s ease-in-out infinite; }
+      .sd-hl2 { fill: url(#sd-hl-g2); animation: sd-scan2 7s ease-in-out infinite; }
+
+      /* --- Tag pills --- */
+      .sd-tag {
+        rx: 8; ry: 8;
+        opacity: 0;
+      }
+      .sd-tag-text {
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 8px;
+        font-weight: 600;
+        text-anchor: middle;
+        dominant-baseline: central;
+        opacity: 0;
+      }
+      .sd-tag1 { fill: rgba(129,41,215,0.2); stroke: rgba(129,41,215,0.3); stroke-width: 0.8; animation: sd-tag-a 7s ease-in-out infinite; }
+      .sd-tag-t1 { fill: #B57EE6; animation: sd-tag-a 7s ease-in-out infinite; }
+      .sd-tag2 { fill: rgba(3,173,156,0.2); stroke: rgba(3,173,156,0.3); stroke-width: 0.8; animation: sd-tag-b 7s ease-in-out infinite; }
+      .sd-tag-t2 { fill: #2DD4BF; animation: sd-tag-b 7s ease-in-out infinite; }
+      .sd-tag3 { fill: rgba(245,158,11,0.2); stroke: rgba(245,158,11,0.3); stroke-width: 0.8; animation: sd-tag-c 7s ease-in-out infinite; }
+      .sd-tag-t3 { fill: #FBBF24; animation: sd-tag-c 7s ease-in-out infinite; }
+
+      @keyframes sd-scan1 {
+        0%, 8% { opacity: 0; width: 0; }
+        12% { opacity: 0.8; width: 110px; }
+        18%, 82% { opacity: 0.6; width: 110px; }
+        90%, 100% { opacity: 0; width: 110px; }
+      }
+      @keyframes sd-scan2 {
+        0%, 30% { opacity: 0; width: 0; }
+        35% { opacity: 0.8; width: 90px; }
+        42%, 82% { opacity: 0.6; width: 90px; }
+        90%, 100% { opacity: 0; width: 90px; }
+      }
+      @keyframes sd-tag-a {
+        0%, 18% { opacity: 0; transform: translateY(4px); }
+        24%, 82% { opacity: 1; transform: translateY(0); }
+        90%, 100% { opacity: 0; transform: translateY(-2px); }
+      }
+      @keyframes sd-tag-b {
+        0%, 42% { opacity: 0; transform: translateY(4px); }
+        48%, 82% { opacity: 1; transform: translateY(0); }
+        90%, 100% { opacity: 0; transform: translateY(-2px); }
+      }
+      @keyframes sd-tag-c {
+        0%, 55% { opacity: 0; transform: translateY(4px); }
+        61%, 82% { opacity: 1; transform: translateY(0); }
+        90%, 100% { opacity: 0; transform: translateY(-2px); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .sd-hl1, .sd-hl2,
+        .sd-tag1, .sd-tag2, .sd-tag3,
+        .sd-tag-t1, .sd-tag-t2, .sd-tag-t3 {
+          animation: none !important;
+        }
+        .sd-hl1, .sd-hl2 { opacity: 0.6; }
+        .sd-tag1, .sd-tag2, .sd-tag3 { opacity: 1; }
+        .sd-tag-t1, .sd-tag-t2, .sd-tag-t3 { opacity: 1; }
+      }
+    </style>
+
+    <!-- Highlight glow gradients -->
+    <linearGradient id="sd-hl-g1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.15"/>
+      <stop offset="50%" stop-color="#F59E0B" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="sd-hl-g2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.1"/>
+      <stop offset="50%" stop-color="#F59E0B" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.05"/>
+    </linearGradient>
+
+    <filter id="sd-blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- Text lines -->
+  <rect class="sd-line" x="22" y="18" width="170" height="5"/>
+  <rect class="sd-line" x="22" y="30" width="145" height="5"/>
+  <rect class="sd-line" x="22" y="48" width="160" height="5"/>
+  <rect class="sd-line" x="22" y="60" width="130" height="5"/>
+  <rect class="sd-line" x="22" y="78" width="150" height="5"/>
+  <rect class="sd-line" x="22" y="90" width="115" height="5"/>
+  <rect class="sd-line" x="22" y="108" width="140" height="5"/>
+  <rect class="sd-line" x="22" y="120" width="100" height="5"/>
+
+  <!-- Highlight glow behind (blurred layer) -->
+  <rect filter="url(#sd-blur)" class="sd-hl sd-hl1" x="18" y="26" width="110" height="14"/>
+  <rect filter="url(#sd-blur)" class="sd-hl sd-hl2" x="18" y="86" width="90" height="14"/>
+
+  <!-- Highlight rectangles on lines 2 and 4 -->
+  <rect class="sd-hl sd-hl1" x="18" y="26" width="110" height="14"/>
+  <rect class="sd-hl sd-hl2" x="18" y="86" width="90" height="14"/>
+
+  <!-- Tag pills -->
+  <g>
+    <rect class="sd-tag sd-tag1" x="140" y="24" width="48" height="16"/>
+    <text class="sd-tag-text sd-tag-t1" x="164" y="32">Intent</text>
+  </g>
+  <g>
+    <rect class="sd-tag sd-tag2" x="140" y="54" width="50" height="16"/>
+    <text class="sd-tag-text sd-tag-t2" x="165" y="62">Action</text>
+  </g>
+  <g>
+    <rect class="sd-tag sd-tag3" x="118" y="84" width="38" height="16"/>
+    <text class="sd-tag-text sd-tag-t3" x="137" y="92">Risk</text>
+  </g>
+</svg>

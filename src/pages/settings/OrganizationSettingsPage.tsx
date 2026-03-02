@@ -1,6 +1,6 @@
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
-import { useState, useEffect } from 'react';
-import { Building2, Check, X, Loader2, AlertCircle, ChevronDown, Brain, FileText } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Building2, Check, X, Loader2, AlertCircle, ChevronDown, Brain, FileText, Palette, Plus, Trash2 } from 'lucide-react';
 import { OrgAIUsage } from '@/components/settings/OrgAIUsage';
 import { OrgProfileSettings } from '@/components/settings/OrgProfileSettings';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,15 @@ export default function OrganizationSettingsPage() {
   const [companyWebsite, setCompanyWebsite] = useState(activeOrg?.company_website || '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
+  // Brand guidelines
+  interface BrandColor { hex: string; role: string }
+  const existingBrand = (activeOrg as any)?.brand_guidelines || {};
+  const [brandColors, setBrandColors] = useState<BrandColor[]>(existingBrand.colors || []);
+  const [brandFont, setBrandFont] = useState(existingBrand.heading_font || '');
+  const [brandBodyFont, setBrandBodyFont] = useState(existingBrand.body_font || '');
+  const [brandTone, setBrandTone] = useState(existingBrand.tone || '');
+  const [isSavingBrand, setIsSavingBrand] = useState(false);
+
   // Update org name when activeOrg changes
   useEffect(() => {
     setEditedOrgName(activeOrg?.name || '');
@@ -39,7 +48,12 @@ export default function OrganizationSettingsPage() {
   useEffect(() => {
     setCurrencyCode(((activeOrg?.currency_code as CurrencyCode | undefined) || 'GBP'));
     setCompanyWebsite(activeOrg?.company_website || '');
-  }, [activeOrg?.currency_code, activeOrg?.company_website]);
+    const bg = (activeOrg as any)?.brand_guidelines || {};
+    setBrandColors(bg.colors || []);
+    setBrandFont(bg.heading_font || '');
+    setBrandBodyFont(bg.body_font || '');
+    setBrandTone(bg.tone || '');
+  }, [activeOrg?.currency_code, activeOrg?.company_website, (activeOrg as any)?.brand_guidelines]);
 
   // Load member count
   useEffect(() => {
@@ -115,6 +129,31 @@ export default function OrganizationSettingsPage() {
       setIsSavingProfile(false);
     }
   };
+
+  const handleSaveBrandGuidelines = useCallback(async () => {
+    if (!activeOrgId || !permissions.canManageSettings) return;
+    setIsSavingBrand(true);
+    try {
+      const validColors = brandColors.filter(c => c.hex && /^#[0-9A-Fa-f]{3,8}$/.test(c.hex));
+      const payload = {
+        colors: validColors,
+        heading_font: brandFont.trim() || null,
+        body_font: brandBodyFont.trim() || null,
+        tone: brandTone || null,
+      };
+      const { error } = await (supabase as any)
+        .from('organizations')
+        .update({ brand_guidelines: payload, updated_at: new Date().toISOString() })
+        .eq('id', activeOrgId);
+      if (error) throw error;
+      toast.success('Brand guidelines saved');
+      await refreshOrgs();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save brand guidelines');
+    } finally {
+      setIsSavingBrand(false);
+    }
+  }, [activeOrgId, permissions.canManageSettings, brandColors, brandFont, brandBodyFont, brandTone, refreshOrgs]);
 
   if (!activeOrgId) {
     return (
@@ -258,6 +297,152 @@ export default function OrganizationSettingsPage() {
               orgId={activeOrgId}
               canManage={permissions.canManageSettings}
             />
+          </div>
+        </div>
+
+        {/* Brand Guidelines */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <Palette className="w-5 h-5 text-[#37bd7e]" />
+            Brand Guidelines
+          </h2>
+          <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-6 space-y-6">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Brand colors, fonts, and tone are used by AI agents (landing page builder, email drafts, proposals) to match your brand.
+            </p>
+
+            {/* Brand Colors */}
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Brand Colors
+              </label>
+              {brandColors.map((color, idx) => (
+                <div key={idx} className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={color.hex || '#000000'}
+                    onChange={(e) => {
+                      const updated = [...brandColors];
+                      updated[idx] = { ...updated[idx], hex: e.target.value };
+                      setBrandColors(updated);
+                    }}
+                    disabled={!permissions.canManageSettings}
+                    className="w-10 h-10 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer p-0.5"
+                  />
+                  <input
+                    type="text"
+                    value={color.hex}
+                    onChange={(e) => {
+                      const updated = [...brandColors];
+                      updated[idx] = { ...updated[idx], hex: e.target.value };
+                      setBrandColors(updated);
+                    }}
+                    disabled={!permissions.canManageSettings}
+                    className="w-28 bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white font-mono"
+                    placeholder="#000000"
+                  />
+                  <input
+                    type="text"
+                    value={color.role}
+                    onChange={(e) => {
+                      const updated = [...brandColors];
+                      updated[idx] = { ...updated[idx], role: e.target.value };
+                      setBrandColors(updated);
+                    }}
+                    disabled={!permissions.canManageSettings}
+                    className="flex-1 bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white"
+                    placeholder="e.g. Primary, Accent, Background"
+                  />
+                  {permissions.canManageSettings && (
+                    <button
+                      type="button"
+                      onClick={() => setBrandColors(brandColors.filter((_, i) => i !== idx))}
+                      className="p-2 text-gray-400 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {permissions.canManageSettings && brandColors.length < 6 && (
+                <button
+                  type="button"
+                  onClick={() => setBrandColors([...brandColors, { hex: '#000000', role: '' }])}
+                  className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add color
+                </button>
+              )}
+            </div>
+
+            {/* Typography */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Heading Font
+                </label>
+                <input
+                  type="text"
+                  value={brandFont}
+                  onChange={(e) => setBrandFont(e.target.value)}
+                  disabled={!permissions.canManageSettings}
+                  className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white"
+                  placeholder="e.g. Inter, Poppins"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Body Font
+                </label>
+                <input
+                  type="text"
+                  value={brandBodyFont}
+                  onChange={(e) => setBrandBodyFont(e.target.value)}
+                  disabled={!permissions.canManageSettings}
+                  className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white"
+                  placeholder="e.g. Inter, Open Sans"
+                />
+              </div>
+            </div>
+
+            {/* Tone of Voice */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Tone of Voice
+              </label>
+              <select
+                value={brandTone}
+                onChange={(e) => setBrandTone(e.target.value)}
+                disabled={!permissions.canManageSettings}
+                className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white"
+              >
+                <option value="">Select tone...</option>
+                <option value="formal">Formal & Professional</option>
+                <option value="conversational">Conversational & Friendly</option>
+                <option value="playful">Playful & Energetic</option>
+                <option value="authoritative">Authoritative & Expert</option>
+                <option value="minimal">Minimal & Direct</option>
+              </select>
+            </div>
+
+            {/* Save */}
+            {permissions.canManageSettings && (
+              <Button
+                onClick={handleSaveBrandGuidelines}
+                disabled={isSavingBrand}
+                className="bg-[#37bd7e] hover:bg-[#2da76c]"
+              >
+                {isSavingBrand ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Brand Guidelines'
+                )}
+              </Button>
+            )}
           </div>
         </div>
 
