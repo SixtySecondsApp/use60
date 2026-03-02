@@ -26,7 +26,9 @@ function parseTranscriptText(transcriptText: string): {
   const rawLines = transcriptText.split('\n').filter(line => line.trim());
   const parsed: ParsedLine[] = [];
   const timestampRegex = /^\[(\d{2}):(\d{2}):(\d{2})\]\s*([^:]+):\s*(.+)$/;
+  const plainSpeakerRegex = /^([A-Za-z\s\-'\.]+\w):\s+(.+)$/;
 
+  // First pass: try timestamped format
   for (const line of rawLines) {
     const match = line.match(timestampRegex);
     if (match) {
@@ -36,6 +38,21 @@ function parseTranscriptText(transcriptText: string): {
           parseInt(minutes, 10) * 60 +
           parseInt(seconds, 10)) * 1000;
       parsed.push({ speaker: speaker.trim(), text: text.trim(), startMs });
+    }
+  }
+
+  // Fallback: plain "Speaker: text" format (Fathom transcripts)
+  if (parsed.length === 0) {
+    let estimatedMs = 0;
+    for (const line of rawLines) {
+      const match = line.match(plainSpeakerRegex);
+      if (match) {
+        const [, speaker, text] = match;
+        parsed.push({ speaker: speaker.trim(), text: text.trim(), startMs: estimatedMs });
+        // Estimate ~150 words per minute for timing
+        const words = text.trim().split(/\s+/).length;
+        estimatedMs += Math.round((words / 150) * 60 * 1000);
+      }
     }
   }
 
