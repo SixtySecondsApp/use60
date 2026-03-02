@@ -23,6 +23,21 @@ function isServiceRoleJwt(token: string): boolean {
   }
 }
 
+/**
+ * Decode JWT payload without verification to check the role claim.
+ * Used as a fallback when string comparison against SUPABASE_SERVICE_ROLE_KEY fails.
+ */
+function isServiceRoleJwt(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return false;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role === 'service_role';
+  } catch {
+    return false;
+  }
+}
+
 export interface AuthContext {
   userId: string;
   orgId: string;

@@ -27,6 +27,7 @@ import HeroV9Preview from './pages/HeroV9Preview';
 import HeroV10Preview from './pages/HeroV10Preview';
 import DemoExperience from './demo/DemoExperience';
 import DemoExperienceV2 from './demo-v2/DemoExperience';
+import { LandingPageV5 } from './pages/LandingPageV5';
 import { getAppUrl } from './lib/utils/siteUrl';
 import { trackPageView } from './lib/pageViewTracker';
 
@@ -83,6 +84,7 @@ function App() {
         <Route path="/login" element={<RedirectToApp />} />
         <Route path="/signup" element={<RedirectToApp />} />
         <Route path="/v4" element={<MeetingsLandingV4 />} />
+        <Route path="/v5" element={<LandingPageV5 />} />
         <Route path="/" element={<LandingPage />} />
       </Routes>
     </BrowserRouter>

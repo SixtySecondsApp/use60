@@ -1,31 +1,35 @@
 # Follow-Up Pack Templates — Complete Reference
 
-Complete follow-up pack templates for each meeting type. A "pack" includes three artifacts: a buyer-facing email, an internal Slack update, and a task list. Each meeting type has all three artifacts fully templated with structure, examples, and the "momentum preservation" principle.
+Complete follow-up pack templates for each meeting type. A "pack" includes three artifacts: a buyer-facing email, an internal Slack update, and a task list. Each meeting type has all three artifacts fully templated with structure, examples, and the momentum preservation framework.
 
 ## Table of Contents
 
-1. [The Momentum Preservation Principle](#the-momentum-preservation-principle)
-2. [Discovery Pack](#discovery-pack)
-3. [Demo Pack](#demo-pack)
-4. [QBR Pack](#qbr-pack)
-5. [Negotiation Pack](#negotiation-pack)
-6. [Executive Briefing Pack](#executive-briefing-pack)
-7. [Cross-Artifact Consistency Rules](#cross-artifact-consistency-rules)
-8. [Pack Quality Scoring](#pack-quality-scoring)
-9. [Sources](#sources)
+1. [The Momentum Preservation Framework](#the-momentum-preservation-framework)
+2. [Template Selection Decision Tree](#template-selection-decision-tree)
+3. [Discovery Meeting Pack](#discovery-meeting-pack)
+4. [Demo Meeting Pack](#demo-meeting-pack)
+5. [QBR Pack](#qbr-pack)
+6. [Negotiation Meeting Pack](#negotiation-meeting-pack)
+7. [Executive Briefing Pack](#executive-briefing-pack)
+8. [Technical Deep-Dive Pack](#technical-deep-dive-pack)
+9. [Cross-Artifact Consistency Rules](#cross-artifact-consistency-rules)
+10. [Pack Quality Scoring](#pack-quality-scoring)
+11. [Sources](#sources)
 
 ---
 
-## The Momentum Preservation Principle
+## The Momentum Preservation Framework
 
 Every follow-up pack exists to answer one question: **Does this pack keep the deal moving forward?**
 
-### The Data
+### The Data Behind the Bundle
 
-- **Reps who send all 3 artifacts within 1 hour close 38% more deals** (Gong.io, 2023). The complete pack — not just the email — is what drives outcomes.
-- **The buyer email alone advances the deal 42% of the time. Add the Slack update and it jumps to 58%.** Internal coordination is the hidden multiplier. Your SE cannot prepare a POC if they do not know about it. Your manager cannot approve a discount if they have not been briefed.
-- **Tasks are the execution guarantee**: Reps who create follow-up tasks within 1 hour of a meeting are **2.4x less likely** to let the deal stall in the next 14 days (HubSpot, 2024).
-- **The 1-hour decay**: Every hour of delay reduces the probability of completing all 3 artifacts by 15%. After 4 hours, only 23% of reps complete the full pack. After 24 hours, it drops to 8%.
+- **Complete 3-artifact packs close 38% more deals** than email-only follow-ups (Gong.io, 25K+ deal outcomes, 2023). The pack — not just the email — drives outcomes.
+- **Email alone advances deals 42% of the time. Add the Slack update and it jumps to 58%.** Internal coordination is the hidden multiplier. Your SE cannot prepare a POC if they do not know about it. Your manager cannot approve a discount without a briefing.
+- **Task creation within 1 hour = 2.4x less likely to stall** in the next 14 days (HubSpot pipeline velocity, 2024). Tasks are the execution guarantee.
+- **The 1-hour decay curve**: Each hour of delay reduces full pack completion probability by 15%. At 4 hours, only 23% of reps complete all 3. At 24 hours, only 8%.
+- **67% of buyers reconsider vendors** who demonstrate poor follow-through (Forrester B2B Buying Study, 2024). Follow-up quality is a competitive differentiator.
+- **Deals with team-assisted follow-up close 31% faster** than solo rep follow-up (Salesforce, 2023). The Slack update enables team assist.
 
 ### The Four Momentum Signals
 
@@ -44,15 +48,40 @@ A pack creates momentum when it:
 | Unlinked tasks | Orphaned tasks get forgotten | Link every task to contact_id and deal_id |
 | Delayed execution | 3-day-old follow-up is an autopsy | Send all 3 artifacts within the golden hour |
 | Generic email | Buyer feels like a number | Use their words, reference their specific situation |
+| Missing risk flags | Team cannot help with risks they do not know about | Every Slack update includes an honest risk section |
 
 ---
 
-## Discovery Pack
+## Template Selection Decision Tree
+
+Use this to select the correct pack template:
+
+```
+Was this the FIRST substantive conversation?
+├─ Yes → Discovery Pack
+└─ No → Did you show the product or give a demo?
+         ├─ Yes → Demo Pack
+         └─ No → Was this a periodic review of an existing account?
+                  ├─ Yes → QBR Pack
+                  └─ No → Were commercial terms / pricing discussed?
+                           ├─ Yes → Negotiation Pack
+                           └─ No → Were C-suite / VP-level executives the primary audience?
+                                    ├─ Yes → Executive Briefing Pack
+                                    └─ No → Was this a deep technical evaluation?
+                                             ├─ Yes → Technical Deep-Dive Pack
+                                             └─ No → Use Discovery Pack as default
+```
+
+When a meeting spans multiple categories (e.g., demo followed by negotiation), use the template for the **most critical business outcome** of the meeting. If the demo was the vehicle but the pricing discussion was the outcome, use the Negotiation Pack.
+
+---
+
+## Discovery Meeting Pack
 
 ### When to Use
-First substantive sales conversation with a prospect. You learned about their challenges, timeline, and decision process. The pack establishes your follow-through and drives toward a demo or deeper evaluation.
+First substantive sales conversation. You learned about their challenges, timeline, decision process, and team. The pack establishes your follow-through and drives toward a demo or deeper evaluation.
 
-### Artifact 1: Buyer Email (Target: 140-170 words)
+### Buyer Email (Target: 140-170 words)
 
 ```
 Subject: [Company] x [Your Company] — Discovery Recap + Next Steps
@@ -84,7 +113,7 @@ Best,
 [Rep]
 ```
 
-### Artifact 2: Slack Update (Target: 80-120 words)
+### Slack Update (Target: 80-120 words)
 
 ```
 *[Company] — Discovery Call Update*
@@ -99,8 +128,7 @@ Best,
   evaluation criteria, internal champion]
 
 *Risks / Blockers*:
-- :warning: [Risk 1 with context, e.g., "Competitor X is also
-  in evaluation — timeline pressure"]
+- :warning: [Risk 1 with context]
 - [If no risks: "No risks identified at this stage"]
 
 *Asks for Team*:
@@ -110,7 +138,7 @@ Best,
 *Next*: Demo [date/time]. Invite sent.
 ```
 
-### Artifact 3: Task List
+### Task List
 
 ```
 Task 1 (Internal): "Prepare tailored demo for [Company]
@@ -145,12 +173,12 @@ Checklist:
 
 ---
 
-## Demo Pack
+## Demo Meeting Pack
 
 ### When to Use
-You showed the product. The buyer saw features in action and reacted — positively, with concerns, or with questions. The pack reinforces what resonated, addresses what did not, and drives toward a POC or technical evaluation.
+You showed the product. The buyer saw features in action and reacted. The pack reinforces what resonated, addresses concerns head-on, and drives toward a POC or technical evaluation.
 
-### Artifact 1: Buyer Email (Target: 150-190 words)
+### Buyer Email (Target: 150-190 words)
 
 ```
 Subject: [Company] Demo Recap — [Key Feature Area] + POC Next Steps
@@ -175,10 +203,8 @@ Decisions:
 - Scope: [agreed POC scope]
 
 Next steps:
-1. [Your team] [Deliverable 1, e.g., "Migration plan + POC access"]
-   — by [date]
-2. [Their team] [Their deliverable, e.g., "API credentials and
-   test data"] — by [date]
+1. [Your team] [Deliverable 1] — by [date]
+2. [Their team] [Their deliverable] — by [date]
 3. [Both] Technical review — [date and time]
 
 [Single CTA tied to their highest-priority next action]
@@ -187,18 +213,17 @@ Best,
 [Rep]
 ```
 
-### Artifact 2: Slack Update (Target: 90-130 words)
+### Slack Update (Target: 90-130 words)
 
 ```
 *[Company] — Demo Update*
 *Signal*: :green_circle: / :yellow_circle: / :red_circle:
 
-*TL;DR*: [1-sentence summary. e.g., "Strong demo. Team engaged
-  on data sync. Main concern: migration complexity. Moving to POC."]
+*TL;DR*: [1-sentence summary]
 
 *Key Intel*:
 - [What resonated most — specific feature and their reaction]
-- [New stakeholder info — who was in the room, who was engaged]
+- [New stakeholder info — who was engaged]
 - [Competitive intel — did they mention alternatives?]
 
 *Concerns Raised*:
@@ -213,7 +238,7 @@ Best,
 *Next*: Technical review [date]. POC scope defined.
 ```
 
-### Artifact 3: Task List
+### Task List
 
 ```
 Task 1 (Internal): "Prepare [deliverable addressing their
@@ -221,18 +246,18 @@ Task 1 (Internal): "Prepare [deliverable addressing their
 Due: [1 day before next meeting] | Priority: High
 Owner: [SE or relevant team member]
 Checklist:
-- [ ] Build migration plan specific to their schema
-- [ ] Configure POC environment with their test data
-- [ ] Prepare technical documentation for their concern area
+- [ ] Build deliverable specific to their concern
+- [ ] Configure POC environment with their parameters
+- [ ] Prepare technical documentation for concern area
 - [ ] Review with [Manager] before sending
 
-Task 2 (Customer): "Send POC access and migration plan to
+Task 2 (Customer): "Send POC access and [deliverable] to
   [Contact Name]"
 Due: [committed date] | Priority: High
 Owner: [Rep]
 Checklist:
-- [ ] Verify POC environment is configured correctly
-- [ ] Create demo credentials and access documentation
+- [ ] Verify environment is configured correctly
+- [ ] Create access credentials and documentation
 - [ ] Send with personalized cover note referencing demo
 - [ ] Follow up if [their deliverable] not received by [date]
 
@@ -241,7 +266,7 @@ Task 3 (Deal Hygiene): "Update [Company] deal: stage and
 Due: Today EOD | Priority: Medium
 Owner: [Rep]
 Checklist:
-- [ ] Move deal stage from Discovery to [Technical Review/POC]
+- [ ] Move deal stage from Discovery to Technical Review/POC
 - [ ] Add new stakeholders from the demo
 - [ ] Log demo feedback and concerns raised
 - [ ] Update expected close date if timeline shifted
@@ -252,9 +277,9 @@ Checklist:
 ## QBR Pack
 
 ### When to Use
-Quarterly Business Review with an existing customer. The pack recaps performance, celebrates wins, identifies improvement areas, and sets the strategic direction for the next quarter.
+Quarterly Business Review with an existing customer. The pack recaps performance, celebrates wins, identifies improvement areas, and sets strategic direction for the next quarter. Tone shifts from selling to partnering.
 
-### Artifact 1: Buyer Email (Target: 160-200 words)
+### Buyer Email (Target: 160-200 words)
 
 ```
 Subject: [Company] Q[N] Review — Results + Q[N+1] Strategic Plan
@@ -284,21 +309,19 @@ Next steps:
 2. [Their team] [Their commitment] — by [date]
 3. [Both] Q[N+1] kickoff — [proposed date]
 
-Shall we lock in [date] for the Q[N+1] kickoff? I'll send the
-invite with the strategic plan.
+Shall we lock in [date] for the Q[N+1] kickoff?
 
 Best,
 [Rep]
 ```
 
-### Artifact 2: Slack Update (Target: 90-120 words)
+### Slack Update (Target: 90-120 words)
 
 ```
 *[Company] — Q[N] QBR Update*
 *Signal*: :green_circle: Healthy / :yellow_circle: Watch / :red_circle: At Risk
 
-*TL;DR*: [1-sentence summary. e.g., "Strong Q[N] — metrics on
-  target. Customer wants to expand to [use case] in Q[N+1]."]
+*TL;DR*: [1-sentence summary]
 
 *Key Intel*:
 - [Performance against targets — headline numbers]
@@ -317,7 +340,7 @@ Best,
 *Next*: Q[N+1] kickoff [date]. Renewal in [N months].
 ```
 
-### Artifact 3: Task List
+### Task List
 
 ```
 Task 1 (Internal): "Prepare Q[N+1] strategic plan for [Company]"
@@ -350,12 +373,12 @@ Checklist:
 
 ---
 
-## Negotiation Pack
+## Negotiation Meeting Pack
 
 ### When to Use
-Commercial discussion — pricing, terms, contract structure. Precision is paramount. The pack must be exact about what was agreed, what is open, and what each side needs to do to finalize.
+Commercial discussion — pricing, terms, contract structure. Precision is paramount. The pack must be exact about what was agreed, what is open, and what each side needs to finalize. Every word matters because this email may be forwarded to legal and procurement.
 
-### Artifact 1: Buyer Email (Target: 140-180 words)
+### Buyer Email (Target: 140-180 words)
 
 ```
 Subject: [Company] — Commercial Terms Summary + Contract Next Steps
@@ -391,19 +414,17 @@ Best,
 [Rep]
 ```
 
-### Artifact 2: Slack Update (Target: 100-140 words)
+### Slack Update (Target: 100-140 words)
 
 ```
 *[Company] — Negotiation Update*
 *Signal*: :green_circle: / :yellow_circle: / :red_circle:
 
-*TL;DR*: [1-sentence. e.g., "Terms largely agreed. Legal review
-  is the final hurdle. Target close: [date]."]
+*TL;DR*: [1-sentence summary]
 
 *Terms Agreed*:
 - [Term 1: pricing, commitment, SLA]
 - [Term 2]
-- [Term 3]
 
 *Open Items*:
 - :warning: [Open item 1 — risk level and resolution owner]
@@ -422,7 +443,7 @@ Best,
 Target close: [date].
 ```
 
-### Artifact 3: Task List
+### Task List
 
 ```
 Task 1 (Internal): "Prepare revised contract for [Company]
@@ -461,9 +482,9 @@ Checklist:
 ## Executive Briefing Pack
 
 ### When to Use
-You presented to or received a briefing from C-suite stakeholders. Executive time is the scarcest resource — the pack must be ultra-concise externally and highly actionable internally.
+You presented to or received a briefing from C-suite stakeholders. Executive time is the scarcest resource — the pack must be ultra-concise externally and highly actionable internally. Executives do not read long emails.
 
-### Artifact 1: Buyer Email (Target: 80-110 words)
+### Buyer Email (Target: 80-110 words)
 
 ```
 Subject: [Company] Executive Briefing — Key Decisions + Next Steps
@@ -481,21 +502,19 @@ We'll deliver:
 - [Your commitment 2] — by [date]
 
 Next: [Your team member] will coordinate with [their team member]
-on [specific operational next step]. [Confirmatory CTA, e.g.,
-"Does that align with what you had in mind?"]
+on [specific operational next step]. [Confirmatory CTA]
 
 Best,
 [Rep]
 ```
 
-### Artifact 2: Slack Update (Target: 80-110 words)
+### Slack Update (Target: 80-110 words)
 
 ```
 *[Company] — Executive Briefing Update*
 *Signal*: :green_circle: / :yellow_circle: / :red_circle:
 
-*TL;DR*: [1-sentence. e.g., "CEO personally engaged. Budget
-  approved in principle. Legal is the last gate."]
+*TL;DR*: [1-sentence summary]
 
 *Executive Signals*:
 - :white_check_mark: [Positive signal from exec]
@@ -514,7 +533,7 @@ Best,
 *Next*: [Operational next step] by [date].
 ```
 
-### Artifact 3: Task List
+### Task List
 
 ```
 Task 1 (Internal): "Execute on commitment made to [Exec Name]
@@ -548,6 +567,116 @@ Checklist:
 
 ---
 
+## Technical Deep-Dive Pack
+
+### When to Use
+Deep technical evaluation session — architecture review, integration planning, security assessment, or POC scoping. The audience is typically engineers, architects, and technical decision-makers. The pack must be technically precise and actionable.
+
+### Buyer Email (Target: 150-190 words)
+
+```
+Subject: [Company] Technical Review — Architecture Summary + POC Plan
+
+Hi [Name],
+
+Thanks for the deep dive today. [Person]'s questions about
+[specific technical topic] helped us scope the POC precisely.
+
+Technical alignment confirmed:
+- [Architecture decision 1 — e.g., "REST API over WebSocket
+  for your latency requirements"]
+- [Integration approach — e.g., "Direct DB connector for SAP,
+  not middleware"]
+- [Security/compliance requirement met — e.g., "SOC 2 Type II
+  with data residency in EU-West"]
+
+Open technical questions:
+- [Question 1] — [who will investigate, by when]
+- [Question 2] — [who will investigate, by when]
+
+POC scope agreed:
+- Duration: [weeks]
+- Data: [what data, what volume]
+- Success criteria: [specific, measurable criteria they stated]
+
+Next steps:
+1. [Your team] [Technical deliverable] — by [date]
+2. [Their team] [Access/credentials/data needed] — by [date]
+3. [Both] POC kickoff — [date and time]
+
+Can you have [access/credentials] ready by [date] so we can
+configure the environment before kickoff?
+
+Best,
+[Rep]
+```
+
+### Slack Update (Target: 100-140 words)
+
+```
+*[Company] — Technical Deep-Dive Update*
+*Signal*: :green_circle: / :yellow_circle: / :red_circle:
+
+*TL;DR*: [1-sentence summary — e.g., "Architecture validated.
+  POC scoped for 4 weeks. One open question on auth integration."]
+
+*Technical Intel*:
+- [Architecture decision and its implication for our team]
+- [Integration requirements — specific technologies/protocols]
+- [Their tech stack details relevant to our solution]
+
+*Technical Risks*:
+- :warning: [Risk 1 — e.g., "Custom auth flow requires
+  engineering effort beyond standard POC"]
+- :warning: [Risk 2 — e.g., "Their legacy system has no API —
+  may need custom connector"]
+
+*Asks for Team*:
+- @[SE]: [Build/configure specific technical deliverable by date]
+- @[Engineering]: [Investigate feasibility of X by date]
+- @[Security]: [Provide compliance documentation by date]
+
+*Next*: POC kickoff [date]. Environment must be ready by [date].
+```
+
+### Task List
+
+```
+Task 1 (Internal): "Build POC environment for [Company] with
+  [specific technical requirements]"
+Due: [2 days before POC kickoff] | Priority: High
+Owner: [SE / Engineering]
+Checklist:
+- [ ] Configure environment per architecture decisions
+- [ ] Set up integration connectors for their systems
+- [ ] Load test data at specified volume
+- [ ] Validate against their security requirements
+- [ ] Test end-to-end before granting access
+
+Task 2 (Customer): "Send POC access package and technical
+  documentation to [Contact Name]"
+Due: [1 day before POC kickoff] | Priority: High
+Owner: [SE / Rep]
+Checklist:
+- [ ] Create access credentials with appropriate permissions
+- [ ] Prepare technical setup guide tailored to their stack
+- [ ] Include API documentation relevant to agreed scope
+- [ ] Confirm they have credentials/access ready on their end
+
+Task 3 (Deal Hygiene): "Update [Company] deal with technical
+  evaluation details"
+Due: Today EOD | Priority: Medium
+Owner: [Rep]
+Checklist:
+- [ ] Move deal stage to Technical Evaluation / POC
+- [ ] Log technical requirements and architecture decisions
+- [ ] Add technical stakeholders to deal contacts
+- [ ] Update MEDDICC: Technical criteria validated
+- [ ] Set POC end date as milestone
+```
+
+---
+
 ## Cross-Artifact Consistency Rules
 
 ### Information That Must Match Across All 3 Artifacts
@@ -569,6 +698,7 @@ Before finalizing a pack:
 3. Verify the Slack update references the same timeline
 4. Check that risk signals in Slack are reflected in task priority assignments
 5. Ensure contact names are spelled consistently across all artifacts
+6. Verify the buyer email CTA maps to at least one task
 
 ---
 

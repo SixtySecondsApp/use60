@@ -14,7 +14,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts';
 import { authenticateRequest, getUserOrgId } from '../_shared/edgeAuth.ts';
 import { getGoogleIntegration, refreshGoogleAccessToken } from '../_shared/googleOAuth.ts';
@@ -104,17 +104,28 @@ serve(async (req) => {
       },
     });
 
-    // Authenticate request - supports both user JWT and service role
-    // body.userId is only trusted when caller is service_role (verified by authenticateRequest)
-    const authResult = await authenticateRequest(
-      req,
-      supabase,
-      supabaseServiceKey,
-      body.userId // only used if caller is service_role
-    );
-    const userId = authResult.userId;
-    const mode = authResult.mode;
-    console.log(`[CALENDAR-SYNC] Authenticated as ${mode}, userId: ${userId}`);
+    // Authenticate request - supports both user JWT and service role/cron
+    let userId: string;
+    let mode: string;
+
+    // If userId is provided in body, trust it (cron/service-role call)
+    // This matches auto-join-scheduler pattern for cron jobs
+    if (body.userId) {
+      userId = body.userId;
+      mode = 'cron';
+      console.log(`[CALENDAR-SYNC] Cron/service call with userId: ${userId}`);
+    } else {
+      // User JWT authentication
+      const authResult = await authenticateRequest(
+        req,
+        supabase,
+        supabaseServiceKey,
+        undefined
+      );
+      userId = authResult.userId;
+      mode = authResult.mode;
+      console.log(`[CALENDAR-SYNC] Authenticated as ${mode}, userId: ${userId}`);
+    }
 
     // -------------------------------------------------------------------------
     // CAL-004: action='create' — create a Google Calendar event and send invites

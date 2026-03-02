@@ -2702,7 +2702,11 @@ serve(async (req: Request) => {
     // comparison page. Normal copilot requests always attempt classification.
     const forceSingleAgent = !!context?.force_single_agent;
 
-    if (resolvedOrgForConfig && stream && !forceSingleAgent && !isLeadSearchQuery) {
+    // Skip multi-agent routing for UI-injected system prompts (e.g. landing page builder).
+    // These contain instruction keywords that collide with agent domain keywords.
+    const isSystemSeedPrompt = message.toLowerCase().includes('[instructions');
+
+    if (resolvedOrgForConfig && stream && !forceSingleAgent && !isLeadSearchQuery && !isSystemSeedPrompt) {
       const agentTeamConfig = await loadAgentTeamConfig(supabase, resolvedOrgForConfig);
 
       // Check budget before multi-agent delegation
@@ -2817,13 +2821,20 @@ serve(async (req: Request) => {
             const forceToolChoice = (isLeadSearchQuery && iterations === 1 && hasSearchLeads)
               ? { type: 'tool' as const, name: 'search_leads' }
               : undefined;
+            // System seed prompts (e.g. landing page builder) inject their own instructions
+            // and must not call tools — strip tools so Claude responds with text only.
+            // Also swap to a minimal system prompt so CRM/lead/pipeline content doesn't bleed in.
+            const iterationTools = isSystemSeedPrompt ? [] : claudeTools;
+            const iterationSystemPrompt = isSystemSeedPrompt
+              ? `You are a landing page specialist. Follow the [INSTRUCTIONS] provided in the user message exactly. Today is ${new Date().toISOString().split('T')[0]}. Respond in markdown.`
+              : systemPrompt;
             const stream = anthropic.messages.stream({
               model: iterationModel,
               max_tokens: MAX_TOKENS,
-              system: systemPrompt,
-              tools: claudeTools,
+              system: iterationSystemPrompt,
+              ...(iterationTools.length > 0 ? { tools: iterationTools } : {}),
               messages: claudeMessages,
-              ...(forceToolChoice && { tool_choice: forceToolChoice }),
+              ...(forceToolChoice && !isSystemSeedPrompt && { tool_choice: forceToolChoice }),
             });
 
             // Track content blocks as they stream

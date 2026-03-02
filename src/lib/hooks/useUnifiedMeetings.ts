@@ -61,9 +61,12 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
   const [meetingsCount, setMeetingsCount] = useState(0)
   const [meetingsLoading, setMeetingsLoading] = useState(true)
   const [meetingsError, setMeetingsError] = useState<string | null>(null)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
 
   // Auto-sync ref
   const autoSyncAttemptedRef = useRef(false)
+  // Stable ref for fetchMeetings — used by realtime INSERT handler to avoid dep array churn
+  const fetchMeetingsRef = useRef<() => void>(() => {})
 
   // Skip meetings fetch if source filter is 60_notetaker only
   const shouldFetchMeetings = filters.sourceFilter !== '60_notetaker'
@@ -100,7 +103,10 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
       return
     }
 
-    setMeetingsLoading(true)
+    // Only show skeleton on initial load — background refreshes keep stale data visible
+    if (!hasLoadedOnce) {
+      setMeetingsLoading(true)
+    }
     setMeetingsError(null)
     try {
       // Count query
@@ -185,13 +191,17 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
       })) as MeetingRow[]
 
       setMeetings(meetingsData)
+      if (!hasLoadedOnce) setHasLoadedOnce(true)
     } catch (error: any) {
       console.error('Error fetching meetings:', error)
       setMeetingsError(error?.message || 'Failed to load meetings')
     } finally {
       setMeetingsLoading(false)
     }
-  }, [user, activeOrgId, currentPage, filters.scope, filters.sortField, filters.sortDirection, filters.dateRange, filters.selectedRepId, filters.sourceFilter, shouldFetchMeetings])
+  }, [user, activeOrgId, currentPage, filters.scope, filters.sortField, filters.sortDirection, filters.dateRange, filters.selectedRepId, filters.sourceFilter, shouldFetchMeetings, hasLoadedOnce])
+
+  // Keep ref current for realtime handlers (avoids subscription dep churn)
+  fetchMeetingsRef.current = fetchMeetings
 
   // Trigger fetch when deps change
   useEffect(() => {
@@ -252,6 +262,22 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
                 : m
             )
           )
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'meetings',
+          filter: `org_id=eq.${activeOrgId}`,
+        },
+        (payload) => {
+          const inserted = payload.new as any
+          // 60 Notetaker meetings are shown via the recordings table, skip here
+          if (inserted.source_type === '60_notetaker') return
+          // Silent refetch — hasLoadedOnce ensures no skeleton flash
+          fetchMeetingsRef.current()
         }
       )
       .subscribe()
@@ -433,7 +459,10 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
     totalCount: filtered.length,
     totalPages,
     stats,
-    isLoading: meetingsLoading || recordingsLoading,
+    // Initial load: show skeleton only when we have NO data yet
+    isLoading: (meetingsLoading && !hasLoadedOnce) || (recordingsLoading && recordings.length === 0),
+    // Background refresh: data is visible, subtle indicator shown
+    isRefetching: hasLoadedOnce && meetingsLoading,
     error: meetingsError,
 
     // Search

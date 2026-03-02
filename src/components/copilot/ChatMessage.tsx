@@ -25,7 +25,9 @@ import { useUser } from '@/lib/hooks/useUser';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { LandingCodePreview } from '@/components/landing-builder/LandingCodePreview';
+import { SvgPreview } from '@/components/landing-builder/SvgPreview';
+
 
 interface ChatMessageProps {
   message: CopilotMessage;
@@ -109,7 +111,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, to
       <div className={cn('max-w-3xl', isUser ? '' : 'w-full')}>
         {isUser ? (
           <div className="bg-blue-50 dark:bg-blue-500/10 backdrop-blur-sm border border-blue-200 dark:border-blue-500/20 rounded-xl px-4 py-3 inline-block">
-            <p className="text-sm text-gray-900 dark:text-gray-100">{message.content}</p>
+            <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : (
           <div className="w-full relative group/assistant">
@@ -256,81 +258,96 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, to
                       : "border-gray-200 dark:border-gray-800/40"
                   )}
                 >
-                  <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:underline">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        h1: ({ children }) => (
-                          <h1 className="text-base font-bold mt-4 mb-2 first:mt-0">{children}</h1>
-                        ),
-                        h2: ({ children }) => (
-                          <h2 className="text-sm font-bold mt-3 mb-1.5 first:mt-0">{children}</h2>
-                        ),
-                        h3: ({ children }) => (
-                          <h3 className="text-sm font-semibold mt-2.5 mb-1 first:mt-0">{children}</h3>
-                        ),
-                        p: ({ children }) => (
-                          <p className="mb-2 last:mb-0 text-sm leading-relaxed">{children}</p>
-                        ),
-                        ul: ({ children }) => (
-                          <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>
-                        ),
-                        ol: ({ children }) => (
-                          <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>
-                        ),
-                        li: ({ children }) => (
-                          <li className="text-sm pl-0.5">{children}</li>
-                        ),
-                        strong: ({ children }) => (
-                          <strong className="font-semibold">{children}</strong>
-                        ),
-                        a: ({ node: _node, ...props }) => (
-                          <a
-                            {...props}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline underline-offset-2"
-                          />
-                        ),
-                        hr: () => (
-                          <hr className="my-3 border-gray-200 dark:border-gray-700" />
-                        ),
-                        table: ({ children }) => (
-                          <div className="overflow-x-auto my-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                            <table className="min-w-full text-sm">{children}</table>
-                          </div>
-                        ),
-                        thead: ({ children }) => (
-                          <thead className="bg-gray-50 dark:bg-gray-800/50">{children}</thead>
-                        ),
-                        th: ({ children }) => (
-                          <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">{children}</th>
-                        ),
-                        td: ({ children }) => (
-                          <td className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800 last:[&:is(tr>td)]:border-b-0">{children}</td>
-                        ),
-                        tr: ({ children }) => (
-                          <tr className="last:border-b-0">{children}</tr>
-                        ),
-                        blockquote: ({ children }) => (
-                          <blockquote className="border-l-2 border-blue-400 dark:border-blue-500 pl-3 my-2 text-sm text-gray-600 dark:text-gray-400 italic">{children}</blockquote>
-                        ),
-                        code: ({ children, className }) => {
-                          const isInline = !className;
-                          return isInline ? (
-                            <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs font-mono">{children}</code>
-                          ) : (
-                            <code className={cn("block p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 text-xs font-mono overflow-x-auto my-2", className)}>{children}</code>
-                          );
-                        },
-                        pre: ({ children }) => (
-                          <pre className="my-2">{children}</pre>
-                        ),
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
+                  {message.content && (
+                    <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:underline">
+                      <ReactMarkdown
+                        components={{
+                          a: ({ node, ...props }) => (
+                            <a
+                              {...props}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline underline-offset-2"
+                            />
+                          ),
+                          pre: ({ children }) => <>{children}</>,
+                          // Render blockquotes as styled copy cards (used for A/B copy options)
+                          blockquote: ({ node, children, ...props }) => (
+                            <div
+                              className={cn(
+                                'my-3 px-4 py-3 rounded-lg border-l-4',
+                                'bg-gray-50 dark:bg-white/[0.03]',
+                                'border-violet-400 dark:border-violet-500',
+                              )}
+                              {...props}
+                            >
+                              {children}
+                            </div>
+                          ),
+                          // Render inline code with color swatches for hex codes
+                          code: ({ node, className, children, ...props }) => {
+                            const codeStr = String(children).replace(/\n$/, '');
+                            const langMatch = /language-(\w+)/.exec(className || '');
+                            const lang = langMatch?.[1] || '';
+
+                            // Inline code — check for hex color
+                            if (!className && !codeStr.includes('\n')) {
+                              const hexMatch = codeStr.match(/^#([0-9A-Fa-f]{3,8})$/);
+                              if (hexMatch) {
+                                return (
+                                  <span className="inline-flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded text-sm font-mono">
+                                    <span
+                                      className="w-4 h-4 rounded-sm border border-gray-300 dark:border-gray-600 flex-shrink-0"
+                                      style={{ backgroundColor: codeStr }}
+                                    />
+                                    {children}
+                                  </span>
+                                );
+                              }
+                              return (
+                                <code className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+                                  {children}
+                                </code>
+                              );
+                            }
+
+                            // SVG code blocks — render inline
+                            if (lang === 'svg' || (codeStr.trim().startsWith('<svg') && codeStr.trim().endsWith('</svg>'))) {
+                              return <SvgPreview svg={codeStr} />;
+                            }
+
+                            // React/JSX/TSX code blocks with component exports — live preview
+                            // Detect any React component pattern: export default, function Component, const Component =
+                            const isReactComponent = (
+                              (['jsx', 'tsx', 'react', 'typescript', 'javascript'].includes(lang) || lang === '')
+                              && codeStr.includes('className')
+                              && (
+                                codeStr.includes('export default function')
+                                || codeStr.includes('export default ')
+                                || /export\s+function\s+[A-Z]/.test(codeStr)
+                                || /(?:const|function)\s+[A-Z]\w+\s*(?:=\s*(?:\([^)]*\)\s*=>|\(\))|(?:\s*\())/.test(codeStr)
+                              )
+                              && (codeStr.includes('return (') || codeStr.includes('return(') || codeStr.includes('=> ('))
+                            );
+                            if (isReactComponent) {
+                              return <LandingCodePreview code={codeStr} />;
+                            }
+
+                            // Default code block
+                            return (
+                              <pre className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 overflow-x-auto text-sm my-3 border border-gray-200 dark:border-gray-800">
+                                <code className={cn('font-mono text-gray-800 dark:text-gray-200', className)} {...props}>
+                                  {children}
+                                </code>
+                              </pre>
+                            );
+                          },
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                   {/* UX-001: Retry button for error messages */}
                   {message.isError && originalQuery() && (
                     <div className="mt-3 pt-3 border-t border-red-100 dark:border-red-500/10">

@@ -1,8 +1,8 @@
 // src/pages/admin/ControlRoom.tsx
 // Admin Control Room — fleet-level AI operations dashboard skeleton
 
-import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
@@ -20,7 +20,6 @@ import CreditHealth from '@/components/control-room/CreditHealth';
 import AutonomyMatrix from '@/components/control-room/AutonomyMatrix';
 import ActionFeed from '@/components/control-room/ActionFeed';
 import { ROISummary } from '@/components/control-room/ROISummary';
-import ApprovalReviewDialog from '@/components/control-room/ApprovalReviewDialog';
 
 // ============================================================================
 // Widget zone definitions
@@ -79,28 +78,12 @@ const WIDGET_ZONES: WidgetZone[] = [
 
 export default function ControlRoom() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const {
     isLoading: isPermissionsLoading,
     isOrgAdmin,
     isPlatformAdmin,
   } = useUserPermissions();
   const activeOrgId = useActiveOrgId();
-
-  // Deep-link approval review (?approval={id})
-  const approvalId = searchParams.get('approval');
-  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
-
-  useEffect(() => {
-    if (approvalId) setApprovalDialogOpen(true);
-  }, [approvalId]);
-
-  const handleApprovalClose = () => {
-    setApprovalDialogOpen(false);
-    // Remove the approval param from the URL
-    searchParams.delete('approval');
-    setSearchParams(searchParams, { replace: true });
-  };
 
   // Admin gate: org owners/admins and platform admins only
   useEffect(() => {
@@ -129,15 +112,6 @@ export default function ControlRoom() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-white dark:bg-gray-950">
-      {/* Approval review dialog (deep-linked from Slack) */}
-      {approvalId && (
-        <ApprovalReviewDialog
-          approvalId={approvalId}
-          open={approvalDialogOpen}
-          onClose={handleApprovalClose}
-        />
-      )}
-
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page header */}
         <div>

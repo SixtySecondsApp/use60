@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 140">
+  <title>Waveform Scanner - Audio Intelligence</title>
+  <defs>
+    <style>
+      /* --- Waveform bars --- */
+      .sl-bar {
+        rx: 3; ry: 3;
+      }
+      .sl-b1  { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 0s; }
+      .sl-b2  { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 0.15s; }
+      .sl-b3  { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 0.3s; }
+      .sl-b4  { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 0.45s; }
+      .sl-b5  { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 0.6s; }
+      .sl-b6  { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 0.75s; }
+      .sl-b7  { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 0.9s; }
+      .sl-b8  { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 1.05s; }
+      .sl-b9  { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 1.2s; }
+      .sl-b10 { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 1.35s; }
+      .sl-b11 { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 1.5s; }
+      .sl-b12 { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 1.65s; }
+      .sl-b13 { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 1.8s; }
+      .sl-b14 { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 1.95s; }
+      .sl-b15 { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 2.1s; }
+      .sl-b16 { fill: url(#sl-bar-g); animation: sl-wave 2.4s ease-in-out infinite 2.25s; }
+
+      /* --- Scan line --- */
+      .sl-scan {
+        animation: sl-sweep 4s linear infinite;
+      }
+
+      /* --- Sound rings --- */
+      .sl-ring {
+        fill: none;
+        stroke: rgba(129,41,215,0.12);
+        stroke-width: 0.8;
+        animation: sl-ring-expand 3s ease-out infinite;
+      }
+      .sl-ring2 { animation-delay: 1s; }
+      .sl-ring3 { animation-delay: 2s; }
+
+      @keyframes sl-wave {
+        0%, 100% { transform: scaleY(0.3); }
+        50% { transform: scaleY(1); }
+      }
+      @keyframes sl-sweep {
+        0% { transform: translateX(-20px); opacity: 0; }
+        5% { opacity: 1; }
+        95% { opacity: 1; }
+        100% { transform: translateX(220px); opacity: 0; }
+      }
+      @keyframes sl-ring-expand {
+        0% { r: 8; opacity: 0.2; }
+        100% { r: 35; opacity: 0; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .sl-b1, .sl-b2, .sl-b3, .sl-b4, .sl-b5, .sl-b6, .sl-b7, .sl-b8,
+        .sl-b9, .sl-b10, .sl-b11, .sl-b12, .sl-b13, .sl-b14, .sl-b15, .sl-b16,
+        .sl-scan, .sl-ring, .sl-ring2, .sl-ring3 {
+          animation: none !important;
+        }
+      }
+    </style>
+
+    <linearGradient id="sl-bar-g" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#8129D7"/>
+      <stop offset="60%" stop-color="#6D28D9"/>
+      <stop offset="100%" stop-color="#2A5EDB"/>
+    </linearGradient>
+
+    <linearGradient id="sl-scan-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="0"/>
+      <stop offset="40%" stop-color="#A855F7" stop-opacity="0.5"/>
+      <stop offset="60%" stop-color="#A855F7" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#A855F7" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="sl-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2"/>
+    </filter>
+  </defs>
+
+  <!-- Sound rings emanating from center -->
+  <circle class="sl-ring" cx="120" cy="75" r="8"/>
+  <circle class="sl-ring sl-ring2" cx="120" cy="75" r="8"/>
+  <circle class="sl-ring sl-ring3" cx="120" cy="75" r="8"/>
+
+  <!-- Waveform bars along slight arc -->
+  <!-- Each bar uses transform-origin at its own bottom center for scaleY -->
+  <rect class="sl-bar sl-b1"  x="18"  y="45" width="6" height="55" style="transform-origin: 21px 100px;"/>
+  <rect class="sl-bar sl-b2"  x="30"  y="42" width="6" height="60" style="transform-origin: 33px 102px;"/>
+  <rect class="sl-bar sl-b3"  x="42"  y="40" width="6" height="62" style="transform-origin: 45px 102px;"/>
+  <rect class="sl-bar sl-b4"  x="54"  y="38" width="6" height="65" style="transform-origin: 57px 103px;"/>
+  <rect class="sl-bar sl-b5"  x="66"  y="36" width="6" height="68" style="transform-origin: 69px 104px;"/>
+  <rect class="sl-bar sl-b6"  x="78"  y="34" width="6" height="72" style="transform-origin: 81px 106px;"/>
+  <rect class="sl-bar sl-b7"  x="90"  y="33" width="6" height="74" style="transform-origin: 93px 107px;"/>
+  <rect class="sl-bar sl-b8"  x="102" y="32" width="6" height="76" style="transform-origin: 105px 108px;"/>
+  <rect class="sl-bar sl-b9"  x="114" y="32" width="6" height="76" style="transform-origin: 117px 108px;"/>
+  <rect class="sl-bar sl-b10" x="126" y="33" width="6" height="74" style="transform-origin: 129px 107px;"/>
+  <rect class="sl-bar sl-b11" x="138" y="34" width="6" height="72" style="transform-origin: 141px 106px;"/>
+  <rect class="sl-bar sl-b12" x="150" y="36" width="6" height="68" style="transform-origin: 153px 104px;"/>
+  <rect class="sl-bar sl-b13" x="162" y="38" width="6" height="65" style="transform-origin: 165px 103px;"/>
+  <rect class="sl-bar sl-b14" x="174" y="40" width="6" height="62" style="transform-origin: 177px 102px;"/>
+  <rect class="sl-bar sl-b15" x="186" y="42" width="6" height="60" style="transform-origin: 189px 102px;"/>
+  <rect class="sl-bar sl-b16" x="198" y="45" width="6" height="55" style="transform-origin: 201px 100px;"/>
+
+  <!-- Horizontal scanning line -->
+  <g class="sl-scan">
+    <rect x="0" y="25" width="2" height="90" fill="url(#sl-scan-g)" rx="1" filter="url(#sl-glow)"/>
+  </g>
+
+  <!-- Subtle baseline -->
+  <line x1="14" y1="112" x2="210" y2="112" stroke="rgba(255,255,255,0.06)" stroke-width="0.8"/>
+</svg>

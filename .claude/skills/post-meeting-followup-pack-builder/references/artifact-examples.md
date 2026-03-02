@@ -1,498 +1,69 @@
 # Follow-Up Artifact Examples — Complete Reference
 
-Real-world examples of excellent follow-up artifacts with annotations explaining what makes each one effective. Includes complete buyer recap emails, internal Slack updates, and task lists, plus a before/after comparison showing the difference between mediocre and excellent follow-up packs.
+Annotated real-world examples of excellent and poor follow-up packs. Each example includes what makes it work (or fail), industry-specific tone adjustments, and meeting outcome variations. Use these to calibrate pack quality.
 
 ## Table of Contents
 
-1. [Buyer Recap Email Examples](#buyer-recap-email-examples)
-2. [Internal Slack Update Examples](#internal-slack-update-examples)
-3. [Task List Examples](#task-list-examples)
-4. [Before/After: Mediocre vs. Excellent Pack](#beforeafter-mediocre-vs-excellent-pack)
-5. [Annotation Key](#annotation-key)
-6. [Common Mistakes Gallery](#common-mistakes-gallery)
-7. [Sources](#sources)
+1. [Annotation Key](#annotation-key)
+2. [5 Excellent Follow-Up Pack Examples](#5-excellent-follow-up-pack-examples)
+3. [3 Poor Follow-Up Pack Examples](#3-poor-follow-up-pack-examples)
+4. [Before/After Comparisons](#beforeafter-comparisons)
+5. [Industry-Specific Tone Adjustments](#industry-specific-tone-adjustments)
+6. [Meeting Outcome Variations](#meeting-outcome-variations)
 
 ---
 
 ## Annotation Key
 
-Throughout this document, annotations are marked with **[A]** tags:
+Annotations are marked with **[A]** tags throughout:
 
-- **[A-WHAT-WE-HEARD]**: Example of the "what we heard" technique
-- **[A-SPECIFICITY]**: Specific detail that proves personalization
-- **[A-ATTRIBUTION]**: Attributing a point to a specific person
+- **[A-WHAT-WE-HEARD]**: "What we heard" technique — buyer's words, not yours
+- **[A-SPECIFICITY]**: Specific detail proving personalization
+- **[A-ATTRIBUTION]**: Point attributed to a specific person by name
 - **[A-OWNER-DEADLINE]**: Clear ownership and deadline assignment
-- **[A-SINGLE-CTA]**: One clear call-to-action
+- **[A-SINGLE-CTA]**: One clear call-to-action (not multiple asks)
 - **[A-MOMENTUM]**: Element that preserves deal momentum
-- **[A-TONE]**: Tone calibration example
-- **[A-TRUST]**: Trust-building element
-- **[A-RISK]**: Honest risk identification
-- **[A-ACTIONABLE]**: Specific, actionable language
+- **[A-TONE]**: Tone calibration matching meeting outcome
+- **[A-TRUST]**: Trust-building element (honesty, vulnerability, ownership)
+- **[A-RISK]**: Honest risk identification (internal only)
+- **[A-ACTIONABLE]**: Specific, actionable language (not vague)
+- **[A-RAG]**: Historical context from previous meetings (Layer 3)
+- **[A-ENRICHMENT]**: Web search enrichment woven in (Layer 2)
+- **[A-CONFIDENCE]**: Outcome confidence signal detected (Layer 4)
 
 ---
 
-## Buyer Recap Email Examples
+## 5 Excellent Follow-Up Pack Examples
 
-### Example 1: Post-Discovery Email (SaaS / Mid-Market)
+### Example 1: Post-Discovery — SaaS Mid-Market ($80K deal)
 
-**Context**: Discovery call with a 200-person SaaS company evaluating data integration tools. VP of Engineering and 2 senior engineers attended. Deal value ~$80K. Competitive evaluation with one named competitor.
+**Context**: Discovery call with 200-person SaaS company. VP of Engineering and 2 senior engineers. Competitive evaluation with ConnectHub. First meeting — no RAG history.
 
+**Buyer Email (167 words)**:
 ```
 Subject: DataFlow x Acme — Integration Deep Dive + Demo Setup
 
 Hi Sarah,
 
-Thanks for the thorough walkthrough of Acme's data pipeline today.      [A-SPECIFICITY]
-Hearing directly from James and Priya about the manual reconciliation   [A-ATTRIBUTION]
+Thanks for the thorough walkthrough of Acme's data pipeline today.     [A-SPECIFICITY]
+Hearing directly from James and Priya about the manual reconciliation  [A-ATTRIBUTION]
 bottleneck gave us exactly the context we needed.
 
-What we heard from your team:                                           [A-WHAT-WE-HEARD]
-- Manual data reconciliation is consuming 15+ hours/week across         [A-SPECIFICITY]
-  3 engineers (James)                                                   [A-ATTRIBUTION]
+What we heard from your team:                                          [A-WHAT-WE-HEARD]
+- Manual data reconciliation consuming 15+ hrs/week across             [A-SPECIFICITY]
+  3 engineers (James)                                                  [A-ATTRIBUTION]
 - SOC 2 compliance by Q3 is non-negotiable for any new vendor (Sarah)  [A-ATTRIBUTION]
-- You've evaluated ConnectHub but found their API documentation         [A-SPECIFICITY]
-  insufficient for your custom schema requirements (Priya)
-- Budget approval requires VP Engineering sign-off by end of month      [A-SPECIFICITY]
+- ConnectHub's API documentation didn't meet your custom schema        [A-SPECIFICITY]
+  requirements (Priya)
+- Budget approval requires VP Engineering sign-off by end of month     [A-SPECIFICITY]
 
 Next steps:
-1. [DataFlow] Prepare a tailored demo focused on custom schema          [A-OWNER-DEADLINE]
-   mapping and SOC 2 compliance — by Friday EOD
-2. [Acme] Share sample API schema and test credentials — by Thursday    [A-OWNER-DEADLINE]
-3. [Both] Demo walkthrough — Monday Feb 17 at 2pm EST                   [A-MOMENTUM]
-
-Could you share those API credentials by Thursday so we can             [A-SINGLE-CTA]
-configure the demo environment for your exact schema?
-
-Best,
-Alex
-```
-
-**Word count**: 167
-
-**Why this is excellent**:
-- **"What we heard" uses THEIR language**: "manual reconciliation bottleneck" and "custom schema requirements" are the buyer's words, not generic sales language. This builds trust because it proves the rep was listening.
-- **Every point is attributed**: Sarah said X, James said Y, Priya said Z. This creates accountability and shows the rep tracked who said what.
-- **Competitive mention is factual, not aggressive**: "You've evaluated ConnectHub" is neutral. The rep does not bash the competitor.
-- **Next steps have owners AND deadlines**: "[DataFlow] by Friday EOD" and "[Acme] by Thursday" are concrete.
-- **Single CTA tied to THEIR action**: The ask is for them to send credentials — something they already agreed to.
-- **Under 200 words**: Concise but complete.
-
----
-
-### Example 2: Post-Demo Email (Enterprise / Technical Audience)
-
-**Context**: Product demo for a Fortune 500 manufacturing company. 6 attendees including Director of IT and a security architect. Deal value ~$250K. The security architect raised specific concerns about data residency.
-
-```
-Subject: TechCorp Demo Recap — Data Residency Addressed + POC Plan
-
-Hi David,
-
-Great session today — your team's technical rigor was impressive,       [A-TONE]
-and Marcus's questions about EU data residency were exactly the         [A-ATTRIBUTION]
-ones we expected at this stage.                                         [A-TRUST]
-
-What resonated:
-- Real-time bi-directional sync with your SAP ERP (the 200ms latency   [A-SPECIFICITY]
-  demo caught your team's attention)
-- Native SAML/SSO integration — no middleware required                  [A-SPECIFICITY]
-
-Concern raised by Marcus: EU data residency for GDPR compliance         [A-ATTRIBUTION]
-- Our response: We operate EU-West (Frankfurt) and EU-North             [A-SPECIFICITY]
-  (Stockholm) data centers. Attached is our data residency              [A-TRUST]
-  architecture doc with specific GDPR compliance certifications.
-
-Decisions:
-- Proceed with a 4-week POC focused on SAP sync module                  [A-MOMENTUM]
-- Scope: 3 data feeds, production-like volume (50K records/day)         [A-SPECIFICITY]
-
-Next steps:
-1. [Our team] POC environment with EU-West data residency — by          [A-OWNER-DEADLINE]
-   Wednesday EOD
-2. [TechCorp] VPN credentials and SAP sandbox access — by Friday        [A-OWNER-DEADLINE]
-3. [Both] POC kickoff — Tuesday Feb 25 at 10am CET                      [A-MOMENTUM]
-
-Does Tuesday at 10am CET work for the kickoff? I'll send the            [A-SINGLE-CTA]
-invite with a pre-read on our POC methodology.
-
-Best,
-Jennifer
-```
-
-**Word count**: 184
-
-**Why this is excellent**:
-- **Addresses the concern head-on**: Marcus's data residency concern is not buried — it is a dedicated section with a specific, detailed response.
-- **Attaches supporting evidence**: The data residency doc is proactive, not reactive.
-- **POC scope is precise**: "3 data feeds, production-like volume (50K records/day)" shows the rep understands enterprise evaluation rigor.
-- **Technical details are correct-level**: Enough specificity to be credible (EU-West Frankfurt) without overwhelming.
-
----
-
-### Example 3: Post-Meeting Email (Renewal Discussion / Customer Success)
-
-**Context**: Renewal discussion with an existing customer. 2-year relationship. Account value $120K/year. The customer shared both satisfaction and frustration during the meeting.
-
-```
-Subject: Meridian Renewal — Your Feedback + Proposed Enhancements
-
-Hi Lisa,
-
-Thank you for the candid conversation today. Your team's honesty        [A-TONE]
-about both what's working and where we're falling short is exactly
-what helps us serve you better.                                         [A-TRUST]
-
-What's working well:
-- Pipeline automation saved your team 12 hours/week (your words:        [A-WHAT-WE-HEARD]
-  "game-changer for our SDR team")                                      [A-ATTRIBUTION]
-- Custom reporting dashboard — used daily by leadership                 [A-SPECIFICITY]
-
-Where we need to improve:
-- Response time on support tickets (your team flagged 48-hour           [A-WHAT-WE-HEARD]
-  waits — that's not acceptable and we own it)                          [A-TRUST]
-- Mobile app performance on Android (Rachel mentioned crashes           [A-ATTRIBUTION]
-  during field visits)
-
-What we're doing about it:
-- Dedicated support channel with 4-hour SLA — effective immediately     [A-ACTIONABLE]
-- Android app fix shipped in next release (March 1 target)              [A-SPECIFICITY]
-
-Renewal structure:
-- 2-year renewal at current rate with dedicated CSM included            [A-SPECIFICITY]
-- Added: Priority support tier (4-hour SLA) at no additional cost       [A-MOMENTUM]
-
-Next steps:
-1. [Our team] Send renewal proposal with enhanced terms — by Friday     [A-OWNER-DEADLINE]
-2. [Meridian] Internal review — by [date]                               [A-OWNER-DEADLINE]
-3. [Both] Renewal finalization call — [proposed date]                   [A-MOMENTUM]
-
-Shall we schedule the review for [date]?                                [A-SINGLE-CTA]
-
-Best,
-Sarah
-```
-
-**Word count**: 194
-
-**Why this is excellent**:
-- **Acknowledges both positive and negative**: This is not a sales email — it is a partnership email. The rep does not hide from the criticism.
-- **"We own it"**: Taking responsibility for the support ticket delays builds enormous trust.
-- **Immediate remediation**: "Dedicated support channel — effective immediately" shows action, not just words.
-- **Renewal terms include a concession**: Adding priority support at no cost directly addresses the stated concern.
-
----
-
-## Internal Slack Update Examples
-
-### Example 1: Post-Discovery (Positive Signal)
-
-```
-*Acme Corp — Discovery Call Update*
-*Signal*: :green_circle: Advancing
-
-*TL;DR*: Strong discovery. VP Engineering (Sarah Chen) is the champion.
-Budget approved in principle, needs VP sign-off by month-end. Moving to
-tailored demo Monday.
-
-*Key Intel*:
-- 15+ hrs/week burned on manual data reconciliation — that's their
-  #1 pain. 3 engineers assigned full-time to the problem.
-- They evaluated ConnectHub already and weren't happy with the API
-  docs. We have an opening if we nail the demo.
-- Budget: VP Engineering sign-off, targeting end of month.
-  Approx. $80K range based on seat count.
-
-*Risks*:
-- :warning: SOC 2 compliance is a hard gate — Q3 deadline. We need
-  the compliance brief ready before the demo.
-- :warning: Priya (Sr. Engineer) was skeptical about migration effort.
-  Need SE to address this specifically.
-
-*Asks for Team*:
-- @David (SE): Prepare tailored demo with custom schema mapping.
-  Focus on migration ease. Need it by Friday EOD.
-- @Lisa (CSM): Review onboarding timeline — can we commit to Q2
-  go-live given their Q3 SOC 2 deadline?
-
-*Next*: Demo Monday Feb 17 at 2pm EST. Invite sent.
-```
-
-**Word count**: 148
-
-**What makes this excellent**:
-- **Signal is the first thing visible**: :green_circle: tells the team the deal health instantly
-- **TL;DR is genuinely one sentence**: Team can get the picture without reading further
-- **Risks are explicit and specific**: Not "some concerns raised" but "Priya was skeptical about migration effort"
-- **Asks have names, specifics, and deadlines**: @David knows exactly what to build and by when
-- **Competitive intel is surfaced**: ConnectHub evaluation gives the team context for positioning
-
----
-
-### Example 2: Post-Demo (Mixed Signals)
-
-```
-*TechCorp — Demo Update*
-*Signal*: :yellow_circle: Neutral — positive on product, security concern
-  needs resolution
-
-*TL;DR*: 6 attendees, good engagement. SAP sync demo went well.
-Security architect (Marcus) raised EU data residency concern that
-we need to address before POC approval.
-
-*Key Intel*:
-- Director of IT (David Park) is the economic buyer. Engaged and
-  asking forward-looking questions — good sign.
-- Marcus (Security Architect) has effective veto power on vendor
-  selection. We MUST satisfy his data residency concerns.
-- They are NOT evaluating competitors currently — but Marcus said
-  they will open an RFP if we can't satisfy GDPR requirements.
-
-*Risks*:
-- :warning: Data residency is a potential deal-breaker. Marcus needs
-  our EU data center documentation before he'll approve the POC.
-  I've sent the doc, but we may need a direct call with our
-  security team.
-- :warning: 4-week POC timeline is tight for their team — David
-  hinted they may need 6 weeks.
-
-*Asks for Team*:
-- @Security Team: Be available for a 30-min call with Marcus this
-  week. He needs to validate our GDPR architecture directly.
-- @SE (James): Configure POC environment in EU-West region, not
-  US-East. Critical for this deal.
-- @Manager: Flag — if POC extends to 6 weeks, close date moves
-  from March to April. Need your input on forecast.
-
-*Next*: POC kickoff targeting Tuesday Feb 25. Depends on Marcus
-approving data residency docs this week.
-```
-
-**Word count**: 189 (slightly over 150 target, justified by complexity)
-
-**What makes this excellent**:
-- **Yellow signal is honest**: The team knows this is not a slam dunk and why
-- **Power dynamics are mapped**: Economic buyer (David) and effective veto (Marcus) identified
-- **Risks include business impact**: "If POC extends, close date moves" gives the manager forecast-relevant information
-- **Asks are specific and urgent**: Security team call, EU-West configuration, and forecast input
-
----
-
-### Example 3: Post-Negotiation (At Risk)
-
-```
-*Meridian Corp — Negotiation Update*
-*Signal*: :red_circle: At Risk — budget pushback, timeline slipping
-
-*TL;DR*: Renewal at risk. Lisa flagged support ticket response times
-(48-hour waits) and Android app crashes. She has internal pressure
-to evaluate alternatives.
-
-*Key Intel*:
-- Lisa's VP asked her to "make sure we're getting the best value"
-  — code for "get competitive quotes." We need to respond urgently.
-- They want to stay — pipeline automation is a "game-changer"
-  (Lisa's words) — but the support issues are giving ammunition
-  to internal skeptics.
-- Budget is approved at current rate, but they'll push for a
-  discount if we can't show support improvements.
-
-*Risks*:
-- :warning: CRITICAL: 48-hour support ticket response times are
-  a real problem. This is our fault, not a negotiation tactic.
-  @Support Lead — need an explanation and a fix THIS WEEK.
-- :warning: Android app crashes during field visits. Rachel uses
-  the app daily. This is a retention risk independent of renewal.
-
-*Asks for Team*:
-- @Support Lead: Investigate Meridian ticket response times. I need
-  a root cause by Wednesday EOD for the renewal conversation.
-- @Product: Android crash fix timeline — is March 1 realistic?
-  Lisa needs a date she can share internally.
-- @Manager: I'm proposing adding priority support (4-hr SLA) at
-  no cost to save this renewal. Need your approval by Thursday.
-
-*Next*: Renewal proposal going out Friday. Need all inputs by
-Thursday EOD.
-```
-
-**Word count**: 186
-
-**What makes this excellent**:
-- **Red signal creates urgency**: The team knows this needs immediate attention
-- **Candid assessment**: "This is our fault, not a negotiation tactic" — the rep is being honest about the root cause
-- **Asks include approvals**: Manager approval for the concession is explicitly requested with a deadline
-- **Business context for each ask**: Not just "fix the app" but "Rachel uses it daily — this is a retention risk"
-
----
-
-## Task List Examples
-
-### Example 1: Post-Discovery Tasks
-
-```
-Task 1 (Internal): "Build tailored demo environment for Acme Corp
-  with custom schema mapping and SOC 2 compliance walkthrough"
-Due: Friday Feb 14 EOD | Priority: High | Owner: David Chen (SE)
-Contact: Sarah Chen (sarah.chen@acme.com)
-Deal: Acme Corp Expansion ($80K, Discovery)
-Checklist:
-- [ ] Import Acme's sample schema (3 data feeds, JSON + CSV)
-- [ ] Configure real-time sync demo with simulated 50K records
-- [ ] Prepare SOC 2 compliance slide deck for security review
-- [ ] Run through demo script once with Alex (rep) before Monday
-
-Task 2 (Customer): "Send demo pre-read and calendar invite to
-  Sarah Chen at Acme Corp"
-Due: Thursday Feb 13 EOD | Priority: High | Owner: Alex (Rep)
-Contact: Sarah Chen
-Deal: Acme Corp Expansion
-Checklist:
-- [ ] Create calendar invite for Monday Feb 17 at 2pm EST
-- [ ] Include Sarah, James (VP Eng), Priya (Sr Eng) on invite
-- [ ] Attach pre-read: what we'll cover and what to have ready
-- [ ] Confirm with Sarah that API credentials will be ready
-
-Task 3 (Deal Hygiene): "Create deal record and log discovery
-  for Acme Corp"
-Due: Today EOD | Priority: Medium | Owner: Alex (Rep)
-Checklist:
-- [ ] Create deal: Acme Corp Expansion, $80K, Discovery stage
-- [ ] Add contacts: Sarah Chen (champion), James Rodriguez (VP Eng),
-     Priya Sharma (Sr Eng)
-- [ ] Log discovery notes with key requirements and concerns
-- [ ] Update MEDDICC: Decision criteria (SOC 2, API quality),
-     Decision process (VP sign-off by month-end),
-     Champion (Sarah Chen)
-```
-
-**What makes these excellent**:
-- **Task titles are specific verbs**: "Build," "Send," "Create" — not "Follow up" or "Do stuff"
-- **Checklists break complex tasks into concrete sub-tasks**: The SE knows exactly what to configure
-- **Due dates include buffer**: Demo pre-read due Thursday for Monday demo
-- **Context connects tasks to the deal narrative**: MEDDICC update captures discovery insights
-
----
-
-### Example 2: Post-Negotiation Tasks
-
-```
-Task 1 (Internal): "Get support ticket root cause analysis
-  for Meridian Corp renewal conversation"
-Due: Wednesday Feb 12 EOD | Priority: High | Owner: Support Lead
-Contact: Lisa Park (lisa.park@meridian.com)
-Deal: Meridian Corp Renewal ($120K, Negotiation)
-Checklist:
-- [ ] Pull all Meridian support tickets from last 90 days
-- [ ] Identify root cause of 48-hour response times
-- [ ] Prepare a remediation plan with specific SLA commitments
-- [ ] Share findings with Sarah (CSM) by Wednesday 3pm
-
-Task 2 (Customer): "Send renewal proposal with enhanced terms
-  to Lisa Park at Meridian"
-Due: Friday Feb 14 EOD | Priority: High | Owner: Sarah (Rep/CSM)
-Contact: Lisa Park
-Deal: Meridian Corp Renewal
-Trigger: AFTER manager approves priority support concession
-Checklist:
-- [ ] Include 2-year renewal at current rate
-- [ ] Add priority support tier (4-hour SLA) at no additional cost
-- [ ] Reference Android fix timeline (March 1 target)
-- [ ] Include support improvement plan from root cause analysis
-- [ ] Personal cover note acknowledging their feedback
-
-Task 3 (Deal Hygiene): "Update Meridian deal record with
-  renewal risk signals"
-Due: Today EOD | Priority: High | Owner: Sarah (Rep/CSM)
-Checklist:
-- [ ] Update deal health to "At Risk" with documented reasons
-- [ ] Log negotiation notes: budget approved, support concerns,
-     competitive pressure from VP
-- [ ] Flag in CRM: "Customer evaluating alternatives"
-- [ ] Update renewal close date if timeline has shifted
-- [ ] Add note: product feedback (Android crashes) forwarded to
-     product team
-```
-
-**What makes these excellent**:
-- **Task 2 has a trigger condition**: "AFTER manager approves" prevents premature action
-- **Task 3 is flagged High priority**: Deal hygiene is normally Medium, but the risk signals here justify elevation
-- **Support task deadline is before the customer task**: Internal preparation precedes external delivery
-
----
-
-## Before/After: Mediocre vs. Excellent Pack
-
-### The Mediocre Pack
-
-**Buyer Email**:
-```
-Subject: Follow-up
-
-Hi Sarah,
-
-Thanks for the meeting today. We discussed your data integration
-needs and how our platform can help. Our solution offers real-time
-sync, custom connectors, and enterprise security.
-
-Let me know if you have any questions or would like to schedule
-a follow-up.
-
-Best regards,
-Alex
-```
-
-**Slack Update**:
-```
-Had a good meeting with Acme. They're interested in our platform.
-Going to schedule a demo next week. Will follow up.
-```
-
-**Tasks**:
-```
-1. "Follow up with Acme" — due: next week
-2. "Update CRM" — due: soon
-3. "Prepare demo" — due: TBD
-```
-
-### What's Wrong With the Mediocre Pack
-
-| Problem | Impact |
-|---------|--------|
-| **Zero personalization**: No buyer quotes, no specific references, no attribution | Buyer feels like a number, not a partner |
-| **Re-pitches features**: "real-time sync, custom connectors" were not necessarily discussed | Damages credibility — shows the rep is on autopilot |
-| **Dead-end CTA**: "Let me know if you have any questions" invites silence | No momentum — deal stalls |
-| **Slack update has no signal**: "Going well" tells the team nothing actionable | Team is blind — cannot support the deal |
-| **Tasks are vague**: "Follow up" is not a task. "Soon" is not a deadline. | Nothing gets done — promises are broken |
-| **No "what we heard"**: The buyer's words are completely absent | Missed opportunity to build trust and accountability |
-| **No risks identified**: Either the rep is not aware of risks or is hiding them | Team cannot act on problems they do not know about |
-
-### The Excellent Pack
-
-**Buyer Email (167 words)**:
-```
-Subject: Acme x DataFlow — Discovery Recap + Demo Monday
-
-Hi Sarah,
-
-Thanks for walking us through Acme's data pipeline today. James's
-insight about the 15-hour-per-week reconciliation bottleneck was
-eye-opening — that's a significant engineering cost.
-
-What we heard from your team:
-- Manual data reconciliation consuming 15+ hrs/week across 3
-  engineers (James)
-- SOC 2 compliance by Q3 is non-negotiable for vendor selection (Sarah)
-- ConnectHub's API documentation didn't meet your custom schema
-  needs (Priya)
-- VP Engineering sign-off required, targeting end of month
-
-Next steps:
-1. [DataFlow] Tailored demo with custom schema mapping + SOC 2
-   walkthrough — ready by Friday
-2. [Acme] Sample API schema and test credentials — by Thursday
-3. [Both] Demo — Monday Feb 17 at 2pm EST
-
-Could you share those API credentials by Thursday so we can
+1. [DataFlow] Prepare tailored demo with custom schema mapping         [A-OWNER-DEADLINE]
+   and SOC 2 compliance walkthrough — by Friday EOD
+2. [Acme] Share sample API schema and test credentials — by Thursday   [A-OWNER-DEADLINE]
+3. [Both] Demo walkthrough — Monday Feb 17 at 2pm EST                  [A-MOMENTUM]
+
+Could you share those API credentials by Thursday so we can            [A-SINGLE-CTA]
 configure the demo for your exact schema?
 
 Best,
@@ -504,21 +75,21 @@ Alex
 *Acme Corp — Discovery Call Update*
 *Signal*: :green_circle: Advancing
 
-*TL;DR*: Strong discovery. VP Eng (Sarah Chen) is the champion.
-Budget approved, needs VP sign-off by month-end. Demo Monday.
+*TL;DR*: Strong discovery. VP Eng (Sarah Chen) is champion.
+Budget approved in principle, needs VP sign-off by month-end.
 
 *Key Intel*:
-- 15+ hrs/week on manual reconciliation — 3 engineers full-time
-  on the problem. Real pain.
-- Evaluated ConnectHub, unhappy with API docs. Our opening if we
-  nail the demo.
-- Budget: ~$80K range. VP Eng sign-off by month-end.
+- 15+ hrs/week on manual reconciliation — 3 engineers full-time.
+  This is real pain, not hypothetical.
+- Evaluated ConnectHub, unhappy with API docs. Opening for us
+  if we nail the demo.
+- Budget: ~$80K range. VP Eng sign-off, month-end deadline.
 
 *Risks*:
 - :warning: SOC 2 is a hard gate (Q3 deadline). Compliance brief
-  must be ready for the demo.
-- :warning: Priya (Sr Eng) skeptical about migration effort.
-  @David: address this specifically in demo.
+  must be ready for demo.
+- :warning: Priya (Sr Eng) was skeptical about migration effort.
+  @David: address this specifically in demo.                           [A-RISK]
 
 *Asks*:
 - @David (SE): Tailored demo with schema mapping by Friday EOD
@@ -527,88 +98,455 @@ Budget approved, needs VP sign-off by month-end. Demo Monday.
 *Next*: Demo Monday Feb 17, 2pm EST.
 ```
 
+**Why this is excellent**: 4 personalization signals. Every point attributed. Competitive intel surfaced without aggression. CTA maps directly to a task. Slack is candid about risks. Team has specific asks with deadlines.
+
+---
+
+### Example 2: Post-Demo — Enterprise Manufacturing ($250K deal)
+
+**Context**: Product demo for Fortune 500 manufacturer. 6 attendees including Director of IT and security architect. Data residency concern raised. This is their 3rd meeting — RAG shows previous commitment about providing test data that was fulfilled.
+
+**Buyer Email (184 words)**:
+```
+Subject: TechCorp Demo Recap — Data Residency Addressed + POC Plan
+
+Hi David,
+
+Great session today — your team's technical rigor was impressive,      [A-TONE]
+and Marcus's questions about EU data residency were exactly the        [A-ATTRIBUTION]
+ones we expected at this stage.                                        [A-TRUST]
+
+What resonated:
+- Real-time bi-directional sync with your SAP ERP (the 200ms          [A-SPECIFICITY]
+  latency demo caught your team's attention)
+- Native SAML/SSO integration — no middleware required                 [A-SPECIFICITY]
+
+Concern raised by Marcus: EU data residency for GDPR compliance        [A-ATTRIBUTION]
+- Our response: We operate EU-West (Frankfurt) and EU-North            [A-SPECIFICITY]
+  (Stockholm) data centers. Attached: data residency architecture      [A-TRUST]
+  doc with GDPR compliance certifications.
+
+Decisions:
+- Proceed with 4-week POC focused on SAP sync module                   [A-MOMENTUM]
+- Scope: 3 data feeds, production-like volume (50K records/day)        [A-SPECIFICITY]
+
+Next steps:
+1. [Our team] POC environment with EU-West residency — Wednesday EOD   [A-OWNER-DEADLINE]
+2. [TechCorp] VPN credentials and SAP sandbox access — Friday          [A-OWNER-DEADLINE]
+3. [Both] POC kickoff — Tuesday Feb 25 at 10am CET                     [A-MOMENTUM]
+
+Does Tuesday at 10am CET work for the kickoff?                         [A-SINGLE-CTA]
+
+Best,
+Jennifer
+```
+
+**Why this is excellent**: Addresses the security concern head-on with a dedicated section. Attaches supporting evidence proactively. POC scope is enterprise-precise ("3 data feeds, 50K records/day"). Technical details at the right level of specificity.
+
+---
+
+### Example 3: Post-Renewal Discussion — Customer Success ($120K/year)
+
+**Context**: Renewal discussion with 2-year customer. Account value $120K/year. Customer shared satisfaction and frustration. RAG shows support ticket complaints mentioned in 2 previous meetings.
+
+**Buyer Email (194 words)**:
+```
+Subject: Meridian Renewal — Your Feedback + Proposed Enhancements
+
+Hi Lisa,
+
+Thank you for the candid conversation today. Your team's honesty       [A-TONE]
+about both what's working and where we're falling short is exactly
+what helps us serve you better.                                        [A-TRUST]
+
+What's working well:
+- Pipeline automation saved your team 12 hrs/week (your words:         [A-WHAT-WE-HEARD]
+  "game-changer for our SDR team")                                     [A-ATTRIBUTION]
+- Custom reporting dashboard — used daily by leadership                [A-SPECIFICITY]
+
+Where we need to improve:
+- Response time on support tickets (your team flagged 48-hour          [A-WHAT-WE-HEARD]
+  waits — that's not acceptable and we own it)                         [A-TRUST]
+- Mobile app performance on Android (Rachel mentioned crashes          [A-ATTRIBUTION]
+  during field visits)
+
+I should note — this is the third time support response times          [A-RAG]
+have come up in our conversations. We hear you, and this time
+we're putting a structural fix in place, not just a patch.
+
+What we're doing about it:
+- Dedicated support channel with 4-hour SLA — effective immediately    [A-ACTIONABLE]
+- Android app fix shipped in next release (March 1 target)             [A-SPECIFICITY]
+
+Renewal structure:
+- 2-year renewal at current rate with dedicated CSM
+- Added: Priority support tier (4-hour SLA) at no additional cost      [A-MOMENTUM]
+
+Shall we schedule the review for [date]?                               [A-SINGLE-CTA]
+
+Best,
+Sarah
+```
+
+**Why this is excellent**: Acknowledges both positive and negative. "We own it" builds trust. RAG context surfaces the recurring theme — "this is the third time" shows the rep has long-term memory. Immediate remediation demonstrates action. Concession directly addresses the stated concern.
+
+---
+
+### Example 4: Post-Executive Briefing — Tech Startup ($45K deal)
+
+**Context**: 30-minute briefing with CEO of 50-person startup. CEO was direct, made fast decisions. Web search revealed they just closed a $15M Series B last week.
+
+**Buyer Email (92 words)**:
+```
+Subject: Nexus AI Briefing — Decision + Next Steps
+
+Hi Chen,
+
+Congratulations again on the Series B — exciting momentum.             [A-ENRICHMENT]
+Three takeaways from today:
+
+1. You want sales automation live before Q2 hiring push (your          [A-WHAT-WE-HEARD]
+   words: "we're tripling the team and need systems before people")    [A-ATTRIBUTION]
+2. Annual commitment approved — procurement to handle contract         [A-CONFIDENCE]
+3. Target go-live: 6 weeks from contract signature                     [A-SPECIFICITY]
+
+We'll deliver:
+- Implementation timeline + onboarding plan — by Thursday              [A-OWNER-DEADLINE]
+
+Next: Your procurement team and our legal will coordinate.             [A-MOMENTUM]
+Julia will reach out to [procurement contact] tomorrow.
+
+Best,
+Mark
+```
+
+**Why this is excellent**: 92 words — perfectly calibrated for an executive who values brevity. Web enrichment (Series B) shows the rep pays attention to their world. High confidence outcome — assumptive language because the CEO personally committed. No hedging, no extra asks.
+
+---
+
+### Example 5: Post-Technical Deep-Dive — Healthcare IT ($180K deal)
+
+**Context**: Architecture review with hospital system IT team. HIPAA compliance is non-negotiable. 4 engineers + CISO attended. RAG shows this is the 5th meeting — deal has been progressing steadily for 8 weeks.
+
+**Buyer Email (176 words)**:
+```
+Subject: HealthBridge Technical Review — HIPAA Architecture + POC Scope
+
+Hi Dr. Martinez,
+
+Thank you for the thorough architecture review today. Having your
+CISO Rebecca validate our encryption-at-rest approach was a key        [A-ATTRIBUTION]
+milestone — we understand the stakes in healthcare IT.                 [A-TONE]
+
+Technical alignment confirmed:
+- HL7 FHIR R4 integration with your Epic EHR via direct connector      [A-SPECIFICITY]
+- End-to-end encryption: AES-256 at rest, TLS 1.3 in transit          [A-SPECIFICITY]
+- Data residency: US-East (Virginia) — BAA-covered region              [A-SPECIFICITY]
+
+Rebecca's remaining question: audit logging granularity for HIPAA      [A-ATTRIBUTION]
+- We're preparing a detailed audit log specification document
+  with sample outputs by Monday                                        [A-ACTIONABLE]
+
+POC scope agreed:
+- 3-week POC with de-identified patient data (500 records/day)
+- Success criteria: <100ms API response, zero data leakage events      [A-SPECIFICITY]
+
+Next steps:
+1. [Our team] Audit log spec + POC environment — by Monday EOD         [A-OWNER-DEADLINE]
+2. [HealthBridge] VPN access + test data set — by Wednesday            [A-OWNER-DEADLINE]
+3. [Both] POC kickoff — Thursday Mar 6 at 9am ET                       [A-MOMENTUM]
+
+Can your team have the test data ready by Wednesday?                   [A-SINGLE-CTA]
+
+Best,
+Amanda
+```
+
+**Why this is excellent**: Healthcare-appropriate formality (Dr. Martinez, not "hi there"). HIPAA-specific technical details at the right depth. CISO validation called out as a milestone. Success criteria are measurable. De-identified data shows compliance awareness.
+
+---
+
+## 3 Poor Follow-Up Pack Examples
+
+### Poor Example 1: The Generic Template
+
+**Buyer Email**:
+```
+Subject: Follow-up from our meeting
+
+Hi,
+
+Thanks for the meeting today. We discussed your needs and how
+our platform can help. Our solution offers real-time sync, custom
+connectors, and enterprise security.
+
+I've attached some materials for your review. Let me know if you
+have any questions or would like to schedule a follow-up.
+
+Best regards,
+Alex
+```
+
+**Slack Update**:
+```
+Had a good meeting with Acme. They're interested. Going to
+schedule a demo next week. Will follow up.
+```
+
 **Tasks**:
 ```
-Task 1 (Internal): "Build tailored demo for Acme with custom
-  schema mapping and SOC 2 compliance section"
-Due: Friday Feb 14 EOD | Priority: High | Owner: David (SE)
-Checklist:
-- [ ] Import Acme sample schema (JSON + CSV feeds)
-- [ ] Configure real-time sync demo with 50K simulated records
-- [ ] Prepare SOC 2 compliance walkthrough
-- [ ] Practice demo run with Alex by Friday 3pm
-
-Task 2 (Customer): "Send demo invite and pre-read to Acme team"
-Due: Thursday Feb 13 EOD | Priority: High | Owner: Alex (Rep)
-Checklist:
-- [ ] Calendar invite: Monday Feb 17, 2pm EST
-- [ ] Include Sarah, James, Priya on invite
-- [ ] Attach pre-read with agenda and prep instructions
-- [ ] Confirm API credentials received from Sarah
-
-Task 3 (Deal Hygiene): "Create Acme deal and log discovery"
-Due: Today EOD | Priority: Medium | Owner: Alex (Rep)
-Checklist:
-- [ ] Create deal: Acme Corp, $80K, Discovery stage
-- [ ] Add contacts: Sarah (champion), James (VP Eng), Priya (Sr Eng)
-- [ ] Log discovery notes and key requirements
-- [ ] Update MEDDICC fields
+1. "Follow up with Acme" — due: next week
+2. "Update CRM" — due: soon
+3. "Prepare demo" — due: TBD
 ```
 
-### Side-by-Side Comparison
+**What went wrong**:
+- **Zero personalization**: No buyer quotes, no specific references, no attribution. This email could be for any company after any meeting.
+- **Re-pitches features not discussed**: "real-time sync, custom connectors" may not have been mentioned. This makes the rep look like they are on autopilot.
+- **Dead-end CTA**: "Let me know if you have questions" invites silence. No specific ask, no specific date.
+- **Slack has no structure**: No signal icon, no risks, no asks, no specifics. Team is completely blind.
+- **Tasks are intentions, not tasks**: "Follow up" is not actionable. "Soon" is not a deadline. "TBD" is a confession that nothing was planned.
+- **Momentum score: 1/5** — This pack will not prevent deal stall.
 
-| Element | Mediocre Pack | Excellent Pack |
-|---------|---------------|----------------|
+---
+
+### Poor Example 2: The Information Dump
+
+**Buyer Email (347 words)**:
+```
+Subject: Comprehensive recap of today's discussion and next steps
+  for the evaluation process
+
+Hi Sarah,
+
+Thank you so much for taking the time to meet with us today. We
+really enjoyed the conversation and are excited about the potential
+partnership between our companies.
+
+During our meeting, we covered a lot of ground. First, we discussed
+your current data pipeline architecture, including the manual
+reconciliation process that James mentioned is taking significant
+time. We also talked about your SOC 2 compliance requirements and
+the timeline for that. Priya raised some excellent points about API
+documentation quality, which is something we take very seriously.
+
+Let me share some additional context about our platform that I think
+will be relevant. Our data integration engine supports over 200
+connectors out of the box, with custom connector development available
+for enterprise clients. We also recently achieved SOC 2 Type II
+certification and our median API response time is under 50ms.
+
+Additionally, I wanted to mention that we just released our new
+real-time monitoring dashboard, which several of our enterprise
+clients have found extremely valuable. We also have a partnership
+with [Company X] that enables...
+
+[continues for 3 more paragraphs]
+
+Next steps:
+- We'll send over some materials
+- Let's find a time for a demo
+- Happy to loop in our technical team
+
+Best,
+Alex
+```
+
+**What went wrong**:
+- **347 words — 73% over the 200-word maximum**. Nobody reads this.
+- **Narrative format, not scannable**: Walls of text. No bullets until the very end.
+- **Feature dump**: 3 paragraphs of capabilities the buyer did not ask about. This damages credibility.
+- **"What we heard" is absent**: The email talks about what the rep wants to say, not what the buyer said.
+- **Vague next steps**: "Send some materials" and "find a time" have no owners, no deadlines, no specificity.
+- **Momentum score: 2/5** — The buyer gets information but no clear path forward.
+
+---
+
+### Poor Example 3: The Copy-Paste Accident
+
+**Buyer Email**:
+```
+Subject: Meeting follow-up — [COMPANY NAME]
+
+Hi [CONTACT NAME],
+
+Great meeting today about [TOPIC]. As discussed, here are the
+next steps:
+
+1. [OUR TEAM] — [DELIVERABLE] by [DATE]
+2. [THEIR TEAM] — [DELIVERABLE] by [DATE]
+3. Both — [MEETING TYPE] on [DATE]
+
+[PERSONALIZATION NOTE]
+
+Would [DAY] at [TIME] work?
+
+Best,
+[REP NAME]
+```
+
+**What went wrong**:
+- **Template placeholders not filled in**: "[COMPANY NAME]", "[CONTACT NAME]", "[TOPIC]" — this is the cardinal sin. It tells the buyer you did not care enough to even fill in the blanks.
+- **Instant trust destroyer**: This single mistake can kill a deal. The buyer will question everything else you say.
+- **Prevention**: The skill should validate that no bracket-enclosed placeholder text remains in any artifact before finalizing. Add a regex check: `/\[[A-Z_\s]+\]/` should return zero matches.
+
+---
+
+## Before/After Comparisons
+
+### Comparison 1: Discovery Follow-Up
+
+**Before (Mediocre)**:
+```
+Subject: Follow-up
+
+Hi Sarah,
+
+Thanks for the meeting. We're excited about the opportunity to
+work together. Let me know if you have questions.
+
+Best,
+Alex
+```
+**Score: 52 words. 0 personalization. 0 specific next steps. Dead-end CTA. Momentum: 1/5.**
+
+**After (Excellent)**:
+```
+Subject: Acme x DataFlow — Discovery Recap + Demo Monday
+
+Hi Sarah,
+
+Thanks for walking us through Acme's data pipeline today. James's
+insight about the 15-hour-per-week reconciliation bottleneck was
+eye-opening — that's a significant engineering cost.
+
+What we heard:
+- Manual data reconciliation: 15+ hrs/week across 3 engineers (James)
+- SOC 2 compliance by Q3 is non-negotiable (Sarah)
+- ConnectHub's API docs didn't meet custom schema needs (Priya)
+- VP Engineering sign-off required, targeting end of month
+
+Next steps:
+1. [DataFlow] Tailored demo + SOC 2 walkthrough — Friday EOD
+2. [Acme] Sample API schema and test credentials — Thursday
+3. [Both] Demo — Monday Feb 17 at 2pm EST
+
+Could you share those API credentials by Thursday?
+
+Best,
+Alex
+```
+**Score: 167 words. 4 personalization signals. 3 specific next steps with owners and dates. Specific CTA. Momentum: 4/5.**
+
+### What Changed
+
+| Element | Before | After |
+|---------|--------|-------|
 | Buyer quotes | 0 | 4 attributed quotes |
-| Specific details | 0 | 7 (hours/week, team size, competitor name, schema type, budget) |
-| Deadlines | 0 ("next week", "soon", "TBD") | 5 specific dates |
-| Task owners | 0 | 3 named owners |
-| Risks identified | 0 | 2 with specific mitigation |
-| Team @mentions | 0 | 2 with specific asks |
-| Deal signal | None | Green circle with rationale |
-| CTA specificity | "Let me know" | "Could you share credentials by Thursday?" |
-| Word count | 52 words (too short to be useful) | 167 words (right-sized) |
-| Momentum score | 1/5 | 4/5 |
-
-The excellent pack takes approximately 15 minutes to produce with this skill. The mediocre pack takes 5 minutes. The 10-minute difference is the difference between a deal that advances and a deal that stalls.
+| Specific details | 0 | 7 specifics |
+| Deadlines | 0 | 5 specific dates |
+| CTA type | "Let me know" (passive) | "Share credentials by Thursday" (specific) |
+| Word count | 52 (too short) | 167 (right-sized) |
+| Time to write | 2 minutes | 15 minutes (with this skill: 60 seconds) |
 
 ---
 
-## Common Mistakes Gallery
+### Comparison 2: Post-Negotiation Slack Update
 
-### Mistake 1: The Feature Dump Email
-**What it looks like**: Three paragraphs about your product capabilities that were not discussed in the meeting.
-**Why it fails**: The buyer did not ask for a product overview. It makes you look like you were not listening.
-**Fix**: Only reference features or capabilities that were explicitly discussed or demonstrated.
+**Before**:
+```
+Meridian renewal chat went OK. They have some concerns about
+support but I think we can work it out. Will send proposal Friday.
+```
 
-### Mistake 2: The Invisible Slack Update
-**What it looks like**: "Good meeting with Acme. Will follow up."
-**Why it fails**: Your team has zero actionable information. The SE does not know to prepare anything. The manager does not know about risks.
-**Fix**: Signal + TL;DR + Key Intel + Risks + Asks. Every time.
+**After**:
+```
+*Meridian Corp — Negotiation Update*
+*Signal*: :red_circle: At Risk — budget pushback, timeline slipping
 
-### Mistake 3: The "Follow Up" Task
-**What it looks like**: Task titled "Follow up with prospect" with no deadline, no checklist, no context.
-**Why it fails**: It will never get done. It is not a task — it is a vague intention.
-**Fix**: Start with a verb, include a specific action, add a deadline, link to contact and deal.
+*TL;DR*: Renewal at risk. Lisa flagged 48-hour support ticket waits
+and Android app crashes. Internal pressure to evaluate alternatives.
 
-### Mistake 4: The Missing Risk
-**What it looks like**: A Slack update that only mentions positive signals, even when the meeting had clear concerns.
-**Why it fails**: Your team cannot help with risks they do not know about. The problem festers until it is too late.
-**Fix**: If the meeting had even one concern, risk, or objection, it belongs in the Slack update. Candor saves deals.
+*Key Intel*:
+- Lisa's VP asked her to "make sure we're getting best value"
+  — code for "get competitive quotes." Urgent response needed.
+- They WANT to stay — pipeline automation is a "game-changer"
+  — but support issues give ammunition to internal skeptics.
 
-### Mistake 5: The Inconsistent Pack
-**What it looks like**: Email says "demo on Tuesday" but the task says "demo on Wednesday" and the Slack says "demo next week."
-**Why it fails**: Creates confusion internally and externally. If the buyer sees one date and your SE prepares for another, the demo fails.
-**Fix**: Always cross-check dates, names, and commitments across all three artifacts before finalizing.
+*Risks*:
+- :warning: CRITICAL: 48-hour support waits are our fault, not
+  a negotiation tactic. @Support Lead: need root cause by Wed EOD.
+- :warning: Android crashes during field visits. Rachel uses daily.
+
+*Asks*:
+- @Support Lead: Meridian ticket root cause analysis by Wed EOD
+- @Product: Android fix timeline — is March 1 realistic?
+- @Manager: Approve adding priority support (4-hr SLA) at no cost
+
+*Next*: Proposal Friday. Need all inputs by Thursday EOD.
+```
+
+**What Changed**: Before version gives the team nothing to act on. After version maps power dynamics, surfaces the real risk, requests specific help with deadlines, and gives the manager the information needed to approve a concession.
 
 ---
 
-## Sources
+## Industry-Specific Tone Adjustments
 
-- Gong.io (2023). "3-Artifact Follow-Up Analysis." Deal outcome data for complete vs. partial follow-up packs.
-- HubSpot (2024). "State of Sales." Task creation timing and deal stall correlation.
-- Salesforce (2023). "Team-Assisted Close Rates." Internal communication impact on deal outcomes.
-- Lavender (2023). "Email Intelligence Report." "What we heard" technique and attribution impact on reply rates.
-- Forrester (2024). "B2B Buying Study." Buyer perception of vendor follow-through quality.
-- LinkedIn (2024). "State of Sales." Buyer complaints about sales rep follow-up.
-- Chorus.ai (2023). "Pipeline Velocity Study." Multi-artifact follow-up correlation with deal velocity.
+### Technology / SaaS
+- **Tone**: Direct, efficient, jargon-comfortable
+- **Email style**: Technical specifics welcome. Reference integrations, APIs, performance metrics.
+- **Caution**: Do not over-explain basic concepts. Tech buyers find condescension worse than complexity.
+- **Example opener**: "Thanks for the deep dive on your event-driven architecture today."
+
+### Financial Services
+- **Tone**: Formal, precise, risk-aware
+- **Email style**: Compliance references mandatory. Use exact terms (not approximations). Reference regulatory frameworks by name.
+- **Caution**: Never use casual language. "Hey" is inappropriate. Avoid exclamation marks. Numbers must be exact.
+- **Example opener**: "Thank you for the thorough discussion on regulatory requirements today."
+
+### Healthcare
+- **Tone**: Professional, empathetic, compliance-first
+- **Email style**: Reference HIPAA, BAAs, patient data handling explicitly. Use proper titles (Dr., not first name, unless they initiate).
+- **Caution**: Never reference patient data casually. Always mention de-identification when discussing test data. Data residency is not optional — state it explicitly.
+- **Example opener**: "Thank you for walking us through HealthBridge's integration requirements and compliance framework today."
+
+### Manufacturing
+- **Tone**: Practical, results-oriented, ROI-focused
+- **Email style**: Emphasize operational efficiency gains. Use their language (throughput, yield, downtime, OEE). Reference plant-floor reality.
+- **Caution**: Manufacturing buyers are practical. Avoid abstract benefits. Show specific operational improvements with numbers.
+- **Example opener**: "Thanks for the plant walkthrough today — seeing the line in operation gave us much better context for the integration."
+
+---
+
+## Meeting Outcome Variations
+
+How the follow-up pack adapts based on the detected meeting outcome and confidence level.
+
+### Positive Outcome (High Confidence)
+- **Email tone**: Confident, warm, forward-looking
+- **CTA style**: Assumptive — "I'll send the contract Thursday" or "Here's the calendar invite for the kickoff"
+- **Slack signal**: :green_circle: Advancing
+- **Task emphasis**: Execution-focused. All tasks oriented toward delivering what was committed.
+- **Example CTA**: "I'll have the POC environment ready by Wednesday — does Thursday at 10am work for the kickoff?"
+
+### Neutral Outcome (Medium Confidence)
+- **Email tone**: Professional, helpful, value-adding
+- **CTA style**: Confirmatory — "Does this align with what you had in mind?" or "Would a comparison document be helpful?"
+- **Slack signal**: :yellow_circle: Neutral
+- **Task emphasis**: Balanced. Include a re-confirmation task alongside execution tasks.
+- **Example CTA**: "Would it be helpful if we prepared a comparison of both approaches before your team decides?"
+
+### Difficult Outcome (Low Confidence)
+- **Email tone**: Empathetic, solution-oriented, patient
+- **CTA style**: Low-friction — "Happy to connect your team with our [role]" or "No pressure — here's a resource that might help"
+- **Slack signal**: :yellow_circle: or :red_circle: depending on severity
+- **Task emphasis**: Alignment-focused. Prioritize a "get stakeholder alignment" task. De-prioritize execution tasks.
+- **Example CTA**: "I heard the concerns about [specific issue]. Would it help if our security team spoke directly with Marcus?"
+
+### No-Show Variation
+- **Email tone**: Gracious, brief, zero guilt
+- **CTA style**: Easy reschedule — "Would any of these times work?" with 3 specific options
+- **Slack signal**: :yellow_circle: with note on no-show context
+- **Task emphasis**: Single task — reschedule. Do not create execution tasks for a meeting that did not happen.
+- **Example CTA**: "I know schedules shift. Would Tuesday at 2pm or Thursday at 10am work better?"
+- **Note**: Use the `no-show-followup` skill for dedicated no-show handling. The follow-up pack builder should only handle no-shows if specifically asked for a full pack format.

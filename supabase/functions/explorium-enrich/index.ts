@@ -690,7 +690,7 @@ serve(async (req: Request) => {
     const errMsg = error instanceof Error ? error.message : String(error)
     console.error(`${LOG_PREFIX} Unhandled error:`, errMsg)
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ error: errMsg }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   }

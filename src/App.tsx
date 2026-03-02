@@ -67,7 +67,7 @@ const FathomCallbackWrapper = () => <FathomCallback />;
 import {
   // Platform Admin
   MeetingsWaitlist, WaitlistSlackSettings, OnboardingSimulator, TrialTimelineSimulator, PricingControl, CostAnalysis, AIUsageAdmin, ApiUsageDashboard, LaunchChecklist,
-  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, SkillsQAPage, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, CopilotLabPage, AgentPerformanceDashboard, CopilotConsolePage, OrchestratorDashboard, Users, PipelineSettings,
+  ActivationDashboard, EngagementDashboard, PlatformDashboard, IntegrationRoadmap, VSLAnalytics, MetaAdsAnalytics, ErrorMonitoring, SentryBridge, SkillsAdmin, SkillsQAPage, SkillUpgradeReport, PlatformSkillViewPage, PlatformSkillEditPage, SkillDetailPage, AgentSequencesPage, AgentSequenceBuilderPage, CopilotTestPage, CopilotLabPage, AgentPerformanceDashboard, CopilotConsolePage, OrchestratorDashboard, Users, PipelineSettings,
   ControlRoom,
   AuditLogs, SmartTasksAdmin, PipelineAutomationAdmin, EmailTemplates, FunctionTesting,
   AIProviderSettings, GoogleIntegrationTestsLegacy, GoogleIntegrationTests, SettingsSavvyCal,
@@ -77,7 +77,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, CommandCentreWowDemo, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommandCentreDemo, CommandCentreV2Demo, CommandCentreWowDemo, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -87,7 +87,7 @@ import {
   // Features
   MeetingsPage, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   Events, ActivityLog,
-  ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage,
+  ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage,
   OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
   ProductProfileViewPage, ProductProfileEditPage,
   // Settings
@@ -340,6 +340,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Copilot with URL-based conversation routing */}
                 <Route path="/copilot" element={<InternalRouteGuard><AppLayout><CopilotPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/copilot/:conversationId" element={<InternalRouteGuard><AppLayout><CopilotPage /></AppLayout></InternalRouteGuard>} />
+                {/* Landing Page Builder */}
+                <Route path="/landing-page-builder" element={<InternalRouteGuard><AppLayout><LandingPageBuilderPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/action-centre" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/command-centre" element={<InternalRouteGuard><AppLayout><CommandCentre /></AppLayout></InternalRouteGuard>} />
                 <Route path="/command-centre-demo" element={<InternalRouteGuard><AppLayout><CommandCentreDemo /></AppLayout></InternalRouteGuard>} />
@@ -432,6 +434,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/skills/:category/:skillKey/edit" element={<PlatformAdminRouteGuard><AppLayout><PlatformSkillEditPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Skills QA Testing - Validate skills/sequences against real org data */}
                 <Route path="/platform/skills-qa" element={<PlatformAdminRouteGuard><AppLayout><SkillsQAPage /></AppLayout></PlatformAdminRouteGuard>} />
+                {/* Skill Upgrade Report - Gold Standard before/after comparison */}
+                <Route path="/platform/skill-upgrades" element={<PlatformAdminRouteGuard><AppLayout><SkillUpgradeReport /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Agent Sequences - Multi-step skill chains */}
                 <Route path="/platform/agent-sequences" element={<PlatformAdminRouteGuard><AppLayout><AgentSequencesPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-sequences/new" element={<PlatformAdminRouteGuard><AgentSequenceBuilderPage /></PlatformAdminRouteGuard>} />
@@ -463,6 +467,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/demo/agent-research" element={<PlatformAdminRouteGuard><AppLayout><AgentResearchDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/campaign-workflow" element={<PlatformAdminRouteGuard><AppLayout><CampaignWorkflowDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/ops-webhook" element={<PlatformAdminRouteGuard><AppLayout><OpsWebhookDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/visual-assets" element={<PlatformAdminRouteGuard><AppLayout><VisualAssetsDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Documentation CMS Admin */}
                 <Route path="/platform/docs-admin" element={<PlatformAdminRouteGuard><AppLayout><DocsAdminPage /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Shareable skill detail page - accessible to org members */}

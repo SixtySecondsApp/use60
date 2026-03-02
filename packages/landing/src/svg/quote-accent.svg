@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60">
+  <title>Luminous Quote - Decorative Accent</title>
+  <defs>
+    <style>
+      /* --- Quote mark stroke draw --- */
+      .qa-mark {
+        fill: none;
+        stroke: url(#qa-stroke-g);
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 140;
+        stroke-dashoffset: 140;
+        animation: qa-draw 4s ease-in-out infinite;
+      }
+
+      /* --- Fill layer --- */
+      .qa-fill {
+        fill: url(#qa-fill-g);
+        opacity: 0;
+        animation: qa-fill-in 4s ease-in-out infinite;
+      }
+
+      /* --- Glow layer --- */
+      .qa-glow {
+        fill: none;
+        stroke: #8129D7;
+        stroke-width: 6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0;
+        filter: url(#qa-blur);
+        animation: qa-glow-show 4s ease-in-out infinite;
+      }
+
+      @keyframes qa-draw {
+        0% { stroke-dashoffset: 140; }
+        45%, 65% { stroke-dashoffset: 0; }
+        100% { stroke-dashoffset: -140; }
+      }
+      @keyframes qa-fill-in {
+        0%, 35% { opacity: 0; }
+        50%, 70% { opacity: 0.3; }
+        85%, 100% { opacity: 0; }
+      }
+      @keyframes qa-glow-show {
+        0%, 30% { opacity: 0; }
+        50%, 60% { opacity: 0.2; }
+        80%, 100% { opacity: 0; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .qa-mark, .qa-fill, .qa-glow {
+          animation: none !important;
+        }
+        .qa-mark { stroke-dashoffset: 0; opacity: 0.4; }
+        .qa-fill { opacity: 0.2; }
+      }
+    </style>
+
+    <linearGradient id="qa-stroke-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A855F7" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#8129D7" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#6D28D9" stop-opacity="0.3"/>
+    </linearGradient>
+
+    <linearGradient id="qa-fill-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8129D7" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="qa-blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4"/>
+    </filter>
+  </defs>
+
+  <!-- Glow layer behind -->
+  <path class="qa-glow" d="M16,10 C28,10 34,16 34,24 C34,32 28,36 20,36 Q16,36 14,33 M16,10 Q16,26 8,38 M44,10 C56,10 62,16 62,24 C62,32 56,36 48,36 Q44,36 42,33 M44,10 Q44,26 36,38"/>
+
+  <!-- Fill layer -->
+  <path class="qa-fill" d="M16,10 C28,10 34,16 34,24 C34,32 28,36 20,36 Q16,28 16,20 Z M44,10 C56,10 62,16 62,24 C62,32 56,36 48,36 Q44,28 44,20 Z"/>
+
+  <!-- Main stroke -->
+  <path class="qa-mark" d="M16,10 C28,10 34,16 34,24 C34,32 28,36 20,36 Q16,36 14,33 M16,10 Q16,26 8,38 M44,10 C56,10 62,16 62,24 C62,32 56,36 48,36 Q44,36 42,33 M44,10 Q44,26 36,38"/>
+</svg>
