@@ -78,13 +78,10 @@ export const FloatingChatBar: React.FC<FloatingChatBarProps> = ({
     onChatStateChange?.(next);
   }, [onChatStateChange]);
 
-  // Auto-expand when AI starts responding while collapsed
+  // Track agent working state (no auto-expand — chat stays collapsed by default)
   useEffect(() => {
-    if (!prevIsAgentWorking.current && isAgentWorking && chatState === 'collapsed') {
-      updateState('expanded');
-    }
     prevIsAgentWorking.current = isAgentWorking;
-  }, [isAgentWorking, chatState, updateState]);
+  }, [isAgentWorking]);
 
   // Keyboard: Cmd+J toggles collapsed<->expanded, Escape exits maximized
   useEffect(() => {

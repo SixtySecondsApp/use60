@@ -61,6 +61,24 @@ export function AssetSlot({
         />
       );
     }
+    // SVG failed — decorative gradient placeholder
+    if (svgStatus === 'failed') {
+      return (
+        <div
+          className={`w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden scroll-reveal ${className}`}
+          style={{
+            background: `linear-gradient(135deg, ${accentColor}20 0%, ${accentColor}08 50%, ${accentColor}15 100%)`,
+          }}
+        >
+          <svg viewBox="0 0 200 200" fill="none" className="w-full h-full opacity-30">
+            <circle cx="100" cy="100" r="60" stroke={accentColor} strokeWidth="1" strokeDasharray="8 4" />
+            <circle cx="100" cy="100" r="30" stroke={accentColor} strokeWidth="0.5" strokeDasharray="4 4" />
+            <line x1="40" y1="100" x2="160" y2="100" stroke={accentColor} strokeWidth="0.5" strokeDasharray="4 4" />
+            <line x1="100" y1="40" x2="100" y2="160" stroke={accentColor} strokeWidth="0.5" strokeDasharray="4 4" />
+          </svg>
+        </div>
+      );
+    }
   }
 
   // Image slot (default)
@@ -76,6 +94,23 @@ export function AssetSlot({
         alt={alt}
         className={`w-full rounded-2xl shadow-lg object-cover scroll-reveal ${className}`}
       />
+    );
+  }
+  // Image failed — decorative gradient placeholder
+  if (imageStatus === 'failed') {
+    return (
+      <div
+        className={`w-full aspect-video rounded-2xl overflow-hidden scroll-reveal ${className}`}
+        style={{
+          background: `linear-gradient(135deg, ${accentColor}18 0%, ${accentColor}06 40%, ${accentColor}12 100%)`,
+        }}
+      >
+        <svg viewBox="0 0 400 225" fill="none" className="w-full h-full opacity-20">
+          <rect x="20" y="20" width="360" height="185" rx="12" stroke={accentColor} strokeWidth="1" strokeDasharray="8 4" />
+          <circle cx="320" cy="60" r="20" stroke={accentColor} strokeWidth="0.5" />
+          <path d="M60 180 L140 100 L200 140 L280 70 L360 130" stroke={accentColor} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
     );
   }
 

@@ -118,15 +118,12 @@ const DEFAULT_ICON_MAP: Record<SectionType, string> = {
   'how-it-works': '→',
 };
 
+// Use dividers sparingly — only at key narrative shifts to avoid visual clutter.
 const DIVIDER_TRANSITIONS: Record<string, SectionDividerType> = {
   'hero→problem': 'wave',
-  'problem→solution': 'curve',
-  'solution→features': 'diagonal',
-  'features→social-proof': 'wave',
-  'social-proof→cta': 'curve',
-  'features→pricing': 'diagonal',
+  'solution→features': 'wave',
+  'features→social-proof': 'curve',
   'pricing→cta': 'wave',
-  'stats→cta': 'curve',
 };
 
 function assignAssetStrategy(sectionType: SectionType): AssetStrategy {

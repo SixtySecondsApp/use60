@@ -358,23 +358,15 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
   }, [workspace, currentPhase, messages.length]);
 
   // Session recovery: restore assembly mode from persisted workspace sections
+  // Falls back to reconstructing sections from workspace strategy + copy if
+  // the sections column doesn't exist in the DB yet.
   const sessionRecoveredRef = useRef(false);
   React.useEffect(() => {
     if (sessionRecoveredRef.current || isAssemblyMode) return;
     if (!workspace) return;
-
-    const savedSections = workspace.sections as LandingSection[] | undefined;
-    if (!savedSections || savedSections.length === 0) return;
     if (workspace.current_phase < 2) return;
 
     sessionRecoveredRef.current = true;
-
-    // Reset interrupted generation statuses to idle
-    const recovered = savedSections.map(s => ({
-      ...s,
-      image_status: s.image_status === 'generating' ? 'idle' as const : s.image_status,
-      svg_status: s.svg_status === 'generating' ? 'idle' as const : s.svg_status,
-    }));
 
     // Extract brand config from workspace visuals or use defaults
     const vis = (workspace.visuals ?? {}) as Record<string, unknown>;
@@ -389,7 +381,52 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
       font_body: String((vis.typography as Record<string, unknown>)?.body ?? 'Inter'),
     };
 
-    setAssemblySections(recovered);
+    const savedSections = workspace.sections as LandingSection[] | undefined;
+
+    if (savedSections && savedSections.length > 0) {
+      // Restore from persisted sections (reset interrupted statuses)
+      const recovered = savedSections.map(s => ({
+        ...s,
+        image_status: s.image_status === 'generating' ? 'idle' as const : s.image_status,
+        svg_status: s.svg_status === 'generating' ? 'idle' as const : s.svg_status,
+      }));
+      setAssemblySections(recovered);
+    } else {
+      // Fallback: reconstruct sections from workspace strategy + copy
+      try {
+        const strategyRaw = (workspace.brief ?? {}) as Record<string, unknown>;
+        const strategyData = typeof strategyRaw.raw === 'string'
+          ? (() => { try { return JSON.parse(strategyRaw.raw); } catch { return strategyRaw; } })()
+          : strategyRaw;
+        const copyRaw = (workspace.copy ?? {}) as Record<string, unknown>;
+
+        const { sections: reconstructed } = parseWorkspaceToSections({
+          strategy: strategyData as Record<string, unknown>,
+          copy: copyRaw,
+          research: (workspace.research ?? null) as Record<string, unknown> | null,
+          visuals: {},
+        });
+
+        if (reconstructed.length === 0) {
+          sessionRecoveredRef.current = false;
+          return;
+        }
+
+        // Mark all assets as failed since we can't recover URLs
+        const withFailedAssets = reconstructed.map(s => ({
+          ...s,
+          image_status: s.asset_strategy === 'image' ? 'failed' as const : s.image_status,
+          svg_status: s.asset_strategy === 'svg' ? 'failed' as const : s.svg_status,
+        }));
+
+        setAssemblySections(withFailedAssets);
+      } catch (err) {
+        console.error('[session-recovery] Failed to reconstruct sections:', err);
+        sessionRecoveredRef.current = false;
+        return;
+      }
+    }
+
     setAssemblyBrandConfig(brandConfig);
     setCurrentPhase(2);
     setIsAssemblyMode(true);
@@ -845,6 +882,23 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
             highlightSectionId={highlightSectionId}
             onSectionClick={(id) => setHighlightSectionId(id)}
           />
+
+          {/* Floating chat bar — centered within preview area */}
+          <FloatingChatBar
+            apiContentTransform={builderApiTransform}
+            phaseActions={phaseActions}
+            onPhaseAction={handlePhaseAction}
+            phaseComponent={phaseComponent}
+            agentLabel={agentBadgeData.label}
+            agentColor={agentBadgeData.color}
+            statusText={chatStatusText}
+            sectionCount={assemblySections.length}
+            isAgentWorking={isLoading}
+            onChatStateChange={setChatOverlayState}
+            lastMessagePreview={lastAssistantPreview}
+            modelTier={modelTier}
+            onModelTierChange={setModelTier}
+          />
         </div>
 
         {/* Right editor panel — section list + properties */}
@@ -857,23 +911,6 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
             onSelectSection={(id) => setHighlightSectionId(id)}
           />
         </div>
-
-        {/* Floating chat bar — 3-state overlay */}
-        <FloatingChatBar
-          apiContentTransform={builderApiTransform}
-          phaseActions={phaseActions}
-          onPhaseAction={handlePhaseAction}
-          phaseComponent={phaseComponent}
-          agentLabel={agentBadgeData.label}
-          agentColor={agentBadgeData.color}
-          statusText={chatStatusText}
-          sectionCount={assemblySections.length}
-          isAgentWorking={isLoading}
-          onChatStateChange={setChatOverlayState}
-          lastMessagePreview={lastAssistantPreview}
-          modelTier={modelTier}
-          onModelTierChange={setModelTier}
-        />
       </div>
     );
   }

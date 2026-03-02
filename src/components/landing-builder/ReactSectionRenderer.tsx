@@ -59,20 +59,43 @@ export function ReactSectionRenderer({
             <ScrollRevealInjector document={frameDoc} />
             {sorted.map((section, index) => {
               const Component = getSectionComponent(section.type, section.layout_variant);
-              const dividerType = section.divider;
+              const nextSection = sorted[index + 1];
+              const nextDivider = nextSection?.divider;
+              const hasOutgoingDivider = nextDivider && nextDivider !== 'none';
+
               return (
-                <React.Fragment key={section.id}>
-                  {index > 0 && dividerType && dividerType !== 'none' && (
-                    <SectionDivider
-                      type={dividerType}
-                      color={section.style.accent_color}
-                    />
-                  )}
+                <div
+                  key={section.id}
+                  style={{
+                    position: 'relative',
+                    zIndex: sorted.length - index,
+                  }}
+                >
                   <Component
                     section={section}
                     onSectionClick={onSectionClick ? () => onSectionClick(section.id) : undefined}
                   />
-                </React.Fragment>
+                  {/* Shape divider at the bottom of this section, bridging into the next */}
+                  {hasOutgoingDivider && nextSection && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        transform: 'translateY(50%)',
+                        pointerEvents: 'none',
+                        zIndex: 2,
+                      }}
+                    >
+                      <SectionDivider
+                        type={nextDivider}
+                        color={nextSection.style.accent_color}
+                        toBg={nextSection.style.bg_color}
+                      />
+                    </div>
+                  )}
+                </div>
               );
             })}
           </>
