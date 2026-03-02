@@ -44,6 +44,7 @@ import { format, parseISO } from 'date-fns';
 import { User, Target } from '@/lib/hooks/useUsers';
 import logger from '@/lib/utils/logger';
 import { AuthCodeGenerator } from '@/components/admin/AuthCodeGenerator';
+import { MagicLinkGenerator } from '@/components/admin/MagicLinkGenerator';
 
 // Define a union type for the editing user state
 type EditingUserState =
@@ -51,7 +52,7 @@ type EditingUserState =
   | { isNew: true; editingTargets?: never;[key: string]: any };
 
 export default function Users() {
-  const [activeTab, setActiveTab] = useState<'users' | 'authCodes'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'authCodes' | 'magicLinks'>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStage, setSelectedStage] = useState('all');
@@ -337,11 +338,22 @@ export default function Users() {
           >
             Authentication Codes
           </button>
+          <button
+            onClick={() => setActiveTab('magicLinks')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'magicLinks'
+              ? 'border-[#37bd7e] text-[#37bd7e]'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+          >
+            Magic Links
+          </button>
         </div>
 
         {/* Tab Content */}
         {activeTab === 'authCodes' ? (
           <AuthCodeGenerator />
+        ) : activeTab === 'magicLinks' ? (
+          <MagicLinkGenerator />
         ) : (
           <>
 

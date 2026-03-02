@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 import { useOrgStore } from '@/lib/stores/orgStore';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
+import { useSubscriptionGate } from '@/lib/hooks/useSubscriptionGate';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { logger } from '@/lib/utils/logger';
@@ -17,6 +18,7 @@ const publicRoutes = [
   '/auth/login',
   '/auth/signup',
   '/auth/invite-signup',
+  '/auth/test-signup',
   '/auth/forgot-password',
   '/auth/reset-password',
   '/auth/callback',
@@ -63,9 +65,22 @@ const onboardingExemptRoutes = [
   '/platform' // All platform routes are exempt from onboarding redirect
 ];
 
+// Routes exempt from subscription enforcement — always accessible even when trial expired
+const subscriptionExemptRoutes = [
+  '/settings/billing',
+  '/trial-expired',
+  '/auth',
+  '/onboarding',
+];
+
 // Helper to check if a route is exempt (including sub-routes)
 const isOnboardingExemptRoute = (pathname: string): boolean => {
   return onboardingExemptRoutes.some(route => pathname.startsWith(route));
+};
+
+// Helper to check if a route is exempt from subscription enforcement
+const isSubscriptionExemptRoute = (pathname: string): boolean => {
+  return subscriptionExemptRoutes.some(route => pathname.startsWith(route));
 };
 
 export function ProtectedRoute({ children, redirectTo = '/auth/login' }: ProtectedRouteProps) {
@@ -86,10 +101,18 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
   const [isCheckingPendingRequest, setIsCheckingPendingRequest] = useState(true);
   const [isOrgActive, setIsOrgActive] = useState<boolean | null>(null);
   const [isCheckingOrgActive, setIsCheckingOrgActive] = useState(true);
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(true);
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const isPublicRoute = publicRoutes.includes(location.pathname) || isPublicWaitlistRoute(location.pathname);
   const isVerifyEmailRoute = location.pathname === '/auth/verify-email';
+  const isSubscriptionExempt = isSubscriptionExemptRoute(location.pathname);
+
+  // Only run the subscription gate when we have an org and the route is not exempt
+  // Active subscribers pass through with zero additional latency (gate returns immediately on cache hit)
+  const subscriptionGate = useSubscriptionGate(
+    !isPublicRoute && !isSubscriptionExempt && activeOrgId ? activeOrgId : null
+  );
 
   // Check both hash AND search params for password recovery indicators
   // Supabase uses different formats:
@@ -347,6 +370,16 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
     checkOrgActiveStatus();
   }, [activeOrgId, user?.id, isAuthenticated, loading, isPublicRoute]);
 
+  // Sync subscription gate loading state
+  // Public routes and exempt routes skip the gate entirely (isLoading stays false immediately)
+  useEffect(() => {
+    if (isPublicRoute || isSubscriptionExempt || !activeOrgId) {
+      setIsCheckingSubscription(false);
+      return;
+    }
+    setIsCheckingSubscription(subscriptionGate.isLoading);
+  }, [subscriptionGate.isLoading, isPublicRoute, isSubscriptionExempt, activeOrgId]);
+
   useEffect(() => {
     // Clean up timeout on unmount
     return () => {
@@ -362,8 +395,8 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       return;
     }
 
-    // Don't redirect while loading auth, onboarding status, email verification, profile status, org membership, pending requests, or org active status
-    if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest || isCheckingOrgActive) return;
+    // Don't redirect while loading auth, onboarding status, email verification, profile status, org membership, pending requests, org active status, or subscription gate
+    if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest || isCheckingOrgActive || isCheckingSubscription) return;
 
     // Check profile status for join request approval flow
     // CRITICAL: Check memberships BEFORE checking profile_status
@@ -399,6 +432,26 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
         return;
       }
       // User is on inactive-organization page, allow it
+      return;
+    }
+
+    // Subscription enforcement — runs after org-active check, exempt routes bypass this entirely
+    // Grace period: allow navigation (banners handled by AppLayout), but do not block
+    // Expired with no subscription: redirect to /trial-expired
+    if (
+      isAuthenticated &&
+      !isPublicRoute &&
+      !isPasswordRecovery &&
+      !isOAuthCallback &&
+      !isVerifyEmailRoute &&
+      !isSubscriptionExempt &&
+      subscriptionGate.action === 'redirect_expired'
+    ) {
+      if (location.pathname !== '/trial-expired') {
+        logger.log('[ProtectedRoute] Trial expired, redirecting to /trial-expired');
+        navigate('/trial-expired', { replace: true });
+        return;
+      }
       return;
     }
 
@@ -501,10 +554,10 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       });
       return;
     }
-  }, [isResettingOnboarding, isAuthenticated, loading, onboardingLoading, isCheckingEmail, isCheckingProfileStatus, isCheckingOrgMembership, isCheckingPendingRequest, isCheckingOrgActive, isOrgActive, profileStatus, hasOrgMembership, hasPendingRequest, emailVerified, needsOnboarding, isPublicRoute, isVerifyEmailRoute, isPasswordRecovery, hasRecoveryTokens, isDevModeBypass, isAuthRequiredRoute, isOnboardingExempt, navigate, redirectTo, location, isRedirecting, user?.email, activeOrgId]);
+  }, [isResettingOnboarding, isAuthenticated, loading, onboardingLoading, isCheckingEmail, isCheckingProfileStatus, isCheckingOrgMembership, isCheckingPendingRequest, isCheckingOrgActive, isCheckingSubscription, isOrgActive, profileStatus, hasOrgMembership, hasPendingRequest, emailVerified, needsOnboarding, isPublicRoute, isVerifyEmailRoute, isPasswordRecovery, hasRecoveryTokens, isDevModeBypass, isAuthRequiredRoute, isOnboardingExempt, isSubscriptionExempt, subscriptionGate.action, navigate, redirectTo, location, isRedirecting, user?.email, activeOrgId]);
 
-  // Show loading spinner while checking authentication, onboarding status, email verification, profile status, org membership, pending requests, org active status, or during redirect delay
-  if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest || isCheckingOrgActive || isRedirecting) {
+  // Show loading spinner while checking authentication, onboarding status, email verification, profile status, org membership, pending requests, org active status, subscription gate, or during redirect delay
+  if (loading || onboardingLoading || isCheckingEmail || isCheckingProfileStatus || isCheckingOrgMembership || isCheckingPendingRequest || isCheckingOrgActive || isCheckingSubscription || isRedirecting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(74,74,117,0.25),transparent)] pointer-events-none" />
