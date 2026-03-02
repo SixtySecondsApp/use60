@@ -134,7 +134,7 @@ export function useApprovalDetection(
 
       return data as JoinRequest | null;
     },
-    enabled: enabled && !!userId,
+    enabled: enabled && !!userId && !!orgId,
     staleTime: 30_000,
   });
 

@@ -145,6 +145,8 @@ export function SkillsConfigStep() {
       const success = await persistSkillsToServer(organizationId);
       if (success) {
         setStep('notetaker_connection');
+      } else {
+        toast.error('Failed to save skill preferences. Please try again.');
       }
     } else {
       setStep('notetaker_connection');

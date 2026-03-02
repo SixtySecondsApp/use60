@@ -12,7 +12,7 @@ import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrg } from '@/lib/contexts/OrgContext';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cancelJoinRequest } from '@/lib/services/joinRequestService';
@@ -98,6 +98,7 @@ export function PendingApprovalStep() {
   // Automatic polling for approval/rejection detection
   useEffect(() => {
     if (!user?.id || !pendingJoinRequest?.orgId) {
+      setIsPolling(false);
       return;
     }
 
@@ -128,7 +129,7 @@ export function PendingApprovalStep() {
   }, [user?.id, pendingJoinRequest?.orgId, isApproved, isRejected, refetch]);
 
   // Handler for when approval is detected
-  const handleApprovalDetected = async (membership: { org_id: string }) => {
+  const handleApprovalDetected = useCallback(async (membership: { org_id: string }) => {
     try {
       // Show success state briefly before loading dashboard
       setShowApprovalSuccess(true);
@@ -265,7 +266,7 @@ export function PendingApprovalStep() {
       toast.error('Failed to load dashboard. Please try refreshing the page.');
       setIsLoadingDashboard(false);
     }
-  };
+  }, [user, refreshOrgs, switchOrg, navigate]);
 
   // Handle approval detection
   useEffect(() => {
@@ -273,8 +274,7 @@ export function PendingApprovalStep() {
       console.log('[PendingApprovalStep] Approval detected!', membership);
       handleApprovalDetected(membership);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApproved, membership, isLoadingDashboard]);
+  }, [isApproved, membership, isLoadingDashboard, handleApprovalDetected]);
 
   // Handle rejection detection
   useEffect(() => {
@@ -381,7 +381,7 @@ export function PendingApprovalStep() {
       toast.success('Restarting onboarding...');
       useOnboardingV2Store.getState().reset();
       setTimeout(() => {
-        navigate('/onboarding?step=website_input', { replace: true });
+        navigate('/onboarding?step=website_input', { replace: true, state: { fromCancelRequest: true } });
       }, 1000);
     } catch (error) {
       console.error('[PendingApprovalStep] Error cancelling request:', error);
@@ -395,7 +395,7 @@ export function PendingApprovalStep() {
     // Reset store state
     useOnboardingV2Store.getState().reset();
     // Redirect to website input step
-    navigate('/onboarding?step=website_input', { replace: true });
+    navigate('/onboarding?step=website_input', { replace: true, state: { fromCancelRequest: true } });
   };
 
   const displayEmail = userEmail || profileEmail;

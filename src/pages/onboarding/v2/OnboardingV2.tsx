@@ -297,8 +297,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
       try {
         await supabase
           .from('user_onboarding_progress')
-          .update({ onboarding_step: currentStep })
-          .eq('user_id', user.id);
+          .upsert({ user_id: user.id, onboarding_step: currentStep }, { onConflict: 'user_id' });
 
         console.log('[OnboardingV2] Synced step to database:', currentStep);
       } catch (error) {
@@ -398,6 +397,10 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
 
   const renderStep = () => {
     const effectiveDomain = storeDomain || domain || '';
+    // Always read organizationId from the store — the prop value may be stale if the store
+    // updated organizationId after the component first mounted (e.g. after org creation).
+    const storeOrgId = useOnboardingV2Store.getState().organizationId;
+    const effectiveOrgId = storeOrgId || organizationId;
 
     switch (currentStep) {
       case 'website_input':
@@ -413,7 +416,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
           <EnrichmentLoadingStep
             key="loading"
             domain={effectiveDomain}
-            organizationId={organizationId}
+            organizationId={effectiveOrgId}
           />
         );
       case 'enrichment_result':
@@ -436,7 +439,7 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
           <EnrichmentLoadingStep
             key="loading"
             domain={effectiveDomain}
-            organizationId={organizationId}
+            organizationId={effectiveOrgId}
           />
         );
     }

@@ -361,7 +361,7 @@ export function ProtectedRoute({ children, redirectTo = '/auth/login' }: Protect
       } catch (error) {
         logger.error('[ProtectedRoute] Error checking org status:', error);
         setIsOrgActive(true); // Fail open to avoid blocking users
-        lastCheckedOrgRef.current = activeOrgId; // Still mark as checked to avoid spam
+        // Don't cache failed check — allow retry on next render
       } finally {
         setIsCheckingOrgActive(false);
       }

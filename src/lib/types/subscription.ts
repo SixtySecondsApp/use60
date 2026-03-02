@@ -316,7 +316,7 @@ export function getTierFromSlug(slug: string): PlanTier {
 
 // Helper function to check if plan tier is higher
 export function isTierHigher(current: PlanTier, required: PlanTier): boolean {
-  const tierOrder: PlanTier[] = ['trial', 'cancelled', 'basic', 'pro'];
+  const tierOrder: PlanTier[] = ['cancelled', 'trial', 'basic', 'pro'];
   return tierOrder.indexOf(current) >= tierOrder.indexOf(required);
 }
 

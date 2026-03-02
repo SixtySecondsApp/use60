@@ -45,7 +45,7 @@ interface SeedResponse {
   seeded?: {
     companies: number;
     contacts: number;
-    stages: number;
+    deal_stages: number;
     meetings: number;
     meeting_attendees: number;
     meeting_contacts: number;
@@ -120,7 +120,8 @@ serve(async (req: Request) => {
     const { count: existingCount, error: countError } = await supabase
       .from("companies")
       .select("id", { count: "exact", head: true })
-      .eq("owner_id", user_id);
+      .eq("owner_id", user_id)
+      .eq("clerk_org_id", org_id);
 
     if (countError) {
       console.error("[seed-demo-data] Failed to check existing companies:", countError);
@@ -142,44 +143,37 @@ serve(async (req: Request) => {
     }
 
     // ------------------------------------------------------------------
-    // Step 1: Seed pipeline stages
-    // The stages table has no org_id column — stages are global.
-    // We insert the five standard stages and collect their IDs.
+    // Step 1: Look up existing deal stages
+    // deals.stage_id references deal_stages (not the stages table).
+    // The seed data maps stageIndex: 0=Lead→SQL, 1=Qualified→Opportunity,
+    // 2=Proposal→Verbal, 3=Negotiation→Verbal, 4=Closed Won→Signed.
     // ------------------------------------------------------------------
     const stageIds: string[] = [];
 
     try {
-      const stageRows = STAGES.map((s) => ({
-        name: s.name,
-        position: s.position,
-      }));
+      const stageNameMap = ['SQL', 'Opportunity', 'Verbal', 'Verbal', 'Signed'];
+      const uniqueNames = [...new Set(stageNameMap)];
 
-      const { data: insertedStages, error: stagesError } = await supabase
-        .from("stages")
-        .insert(stageRows)
-        .select("id, position");
+      const { data: dealStages, error: stagesError } = await supabase
+        .from("deal_stages")
+        .select("id, name")
+        .in("name", uniqueNames);
 
-      if (stagesError) {
-        console.error("[seed-demo-data] Stages insert error:", stagesError);
-        // Non-fatal: stages may already exist. Attempt a fallback read.
-        const { data: existingStages } = await supabase
-          .from("stages")
-          .select("id, position")
-          .order("position", { ascending: true })
-          .limit(5);
-
-        if (existingStages && existingStages.length > 0) {
-          const sorted = [...existingStages].sort((a, b) => a.position - b.position);
-          sorted.forEach((s) => stageIds.push(s.id));
-          console.log("[seed-demo-data] Using existing stages as fallback:", stageIds.length);
+      if (stagesError || !dealStages || dealStages.length === 0) {
+        console.error("[seed-demo-data] Failed to look up deal_stages:", stagesError);
+      } else {
+        const stageByName: Record<string, string> = {};
+        dealStages.forEach((s: { id: string; name: string }) => {
+          stageByName[s.name] = s.id;
+        });
+        // Build stageIds array indexed by STAGES position (0-4)
+        for (const name of stageNameMap) {
+          stageIds.push(stageByName[name] ?? "");
         }
-      } else if (insertedStages) {
-        const sorted = [...insertedStages].sort((a, b) => a.position - b.position);
-        sorted.forEach((s) => stageIds.push(s.id));
-        console.log("[seed-demo-data] Seeded stages:", stageIds.length);
+        console.log("[seed-demo-data] Resolved deal_stages:", stageIds.filter(Boolean).length);
       }
     } catch (stageErr) {
-      console.error("[seed-demo-data] Unexpected error seeding stages:", stageErr);
+      console.error("[seed-demo-data] Unexpected error looking up deal stages:", stageErr);
     }
 
     // ------------------------------------------------------------------
@@ -371,7 +365,6 @@ serve(async (req: Request) => {
             meeting_end: meetingEnd,
             duration_minutes: template.durationMinutes,
             transcript_text: rendered.transcript,
-            meeting_type: template.meetingType,
             transcript_status: "complete",
             summary_status: "complete",
             thumbnail_status: "complete",
@@ -951,7 +944,7 @@ serve(async (req: Request) => {
           priority: "high",
           client_name: companyName,
           sales_rep: "Demo Rep",
-          details: `Proposal sent for ${deal.name} — value £${deal.value.toLocaleString()}. Awaiting response.`,
+          details: `Proposal sent for ${deal.name} — value $${deal.value.toLocaleString()}. Awaiting response.`,
           date: new Date(proposalDateMs).toISOString(),
           clerk_org_id: org_id,
         });
@@ -1120,7 +1113,7 @@ serve(async (req: Request) => {
       seeded: {
         companies: filteredCompanyIds.length,
         contacts: contactIds.length,
-        stages: stageIds.length,
+        deal_stages: stageIds.filter(Boolean).length,
         meetings: meetingIds.length,
         meeting_attendees: totalAttendees,
         meeting_contacts: totalMeetingContacts,

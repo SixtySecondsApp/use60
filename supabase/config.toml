@@ -13,7 +13,7 @@ pooler = { enabled = true, port = 6543, pool_mode = "transaction" }
 
 [functions.seed-demo-data]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 entrypoint = "./functions/seed-demo-data/index.ts"
 
 [functions.process-single-activity]
@@ -390,3 +390,10 @@ verify_jwt = false
 # SSE streaming; handles user JWT auth internally (staging ES256 JWT issue)
 [functions.instant-replay]
 verify_jwt = false
+
+# Stripe webhook - receives payment events from Stripe using HMAC signatures
+# Stripe does not send Supabase JWTs; signature is verified inside the function
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-webhook/index.ts"

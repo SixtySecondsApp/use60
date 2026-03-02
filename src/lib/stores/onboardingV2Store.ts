@@ -1876,6 +1876,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to complete onboarding';
       set({ saveError: message });
+      toast.error(message);
     }
   },
 
@@ -2004,7 +2005,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     try {
       const { compiledSkills } = get();
 
-      // Update each skill's is_enabled status
+      // Update each skill's is_enabled status — collect errors instead of aborting on first failure
+      const errors: string[] = [];
       for (const skill of compiledSkills) {
         const { error } = await supabase
           .from('organization_skills')
@@ -2012,7 +2014,13 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           .eq('organization_id', organizationId)
           .eq('skill_id', skill.skill_key);
 
-        if (error) throw error;
+        if (error) {
+          errors.push(`${skill.skill_key}: ${error.message}`);
+          console.error('[onboarding] Skill save error:', skill.skill_key, error);
+        }
+      }
+      if (errors.length > 0) {
+        throw new Error(`Failed to save ${errors.length} skills: ${errors[0]}`);
       }
 
       // Also mark V1 onboarding as complete so ProtectedRoute allows dashboard access
@@ -2189,6 +2197,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           org_id: org.id,
           user_id: session.user.id,
           role: 'owner',
+          member_status: 'active',
         });
 
       set({ organizationId: org.id });
@@ -2212,6 +2221,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
   // Reset store
   reset: () => {
+    // Capture userEmail BEFORE nulling it — set() wipes userEmail so get() after would return null
+    const emailBeforeReset = get().userEmail;
+
     set({
       // Context
       organizationId: null,
@@ -2265,9 +2277,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     });
 
     // Clear localStorage to prevent stale data from being restored
-    const state = get();
-    if (state.userEmail) {
-      clearOnboardingState(state.userEmail);
+    if (emailBeforeReset) {
+      clearOnboardingState(emailBeforeReset);
     }
   },
 

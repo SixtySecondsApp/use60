@@ -855,7 +855,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     companyIndex: 0,
     contactIndices: [0, 1, 2],
     meetingType: 'follow_up',
-    transcriptIndex: 2,
+    transcriptIndex: 3,
     daysAgo: 55,
     durationMinutes: 30,
   },
@@ -863,7 +863,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     companyIndex: 0,
     contactIndices: [0, 1],
     meetingType: 'negotiation',
-    transcriptIndex: 3,
+    transcriptIndex: 2,
     daysAgo: 14,
     durationMinutes: 45,
   },
@@ -889,7 +889,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     companyIndex: 1,
     contactIndices: [3, 5],
     meetingType: 'follow_up',
-    transcriptIndex: 2,
+    transcriptIndex: 3,
     daysAgo: 10,
     durationMinutes: 30,
   },
@@ -915,7 +915,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     companyIndex: 2,
     contactIndices: [6, 7],
     meetingType: 'negotiation',
-    transcriptIndex: 3,
+    transcriptIndex: 2,
     daysAgo: 20,
     durationMinutes: 60,
   },
@@ -923,7 +923,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   // Forge Manufacturing
   {
     companyIndex: 3,
-    contactIndices: [12],
+    contactIndices: [10],
     meetingType: 'discovery',
     transcriptIndex: 0,
     daysAgo: 45,
@@ -931,7 +931,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   },
   {
     companyIndex: 3,
-    contactIndices: [12, 13],
+    contactIndices: [10, 11],
     meetingType: 'demo',
     transcriptIndex: 1,
     daysAgo: 25,
@@ -941,7 +941,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   // ShipStream Logistics — won deal, retrospective meeting
   {
     companyIndex: 4,
-    contactIndices: [15],
+    contactIndices: [13],
     meetingType: 'closing',
     transcriptIndex: 4,
     daysAgo: 18,
@@ -949,9 +949,9 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   },
   {
     companyIndex: 4,
-    contactIndices: [15, 16],
+    contactIndices: [13, 14],
     meetingType: 'follow_up',
-    transcriptIndex: 5,
+    transcriptIndex: 3,
     daysAgo: 5,
     durationMinutes: 30,
   },
@@ -959,7 +959,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   // Amplify Creative
   {
     companyIndex: 5,
-    contactIndices: [18],
+    contactIndices: [16],
     meetingType: 'discovery',
     transcriptIndex: 0,
     daysAgo: 35,
@@ -967,7 +967,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   },
   {
     companyIndex: 5,
-    contactIndices: [18, 19],
+    contactIndices: [16, 17],
     meetingType: 'demo',
     transcriptIndex: 1,
     daysAgo: 15,
@@ -977,7 +977,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   // Nexus Cybersecurity
   {
     companyIndex: 6,
-    contactIndices: [21],
+    contactIndices: [19],
     meetingType: 'discovery',
     transcriptIndex: 0,
     daysAgo: 28,
@@ -985,7 +985,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   },
   {
     companyIndex: 6,
-    contactIndices: [21, 22],
+    contactIndices: [19, 20],
     meetingType: 'demo',
     transcriptIndex: 1,
     daysAgo: 12,
@@ -995,7 +995,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   // BrightPath EdTech — fast-moving deal
   {
     companyIndex: 9,
-    contactIndices: [30],
+    contactIndices: [29],
     meetingType: 'discovery',
     transcriptIndex: 0,
     daysAgo: 20,
