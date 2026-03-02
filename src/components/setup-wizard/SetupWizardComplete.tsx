@@ -45,7 +45,9 @@ export function SetupWizardComplete() {
       p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       p_morning_briefing_time: '08:00',
       p_morning_briefing_enabled: true,
-    }).catch((err) => console.error('[SetupWizardComplete] Persona creation failed:', err));
+    }).then(({ error }) => {
+      if (error) console.error('[SetupWizardComplete] Persona creation failed:', error);
+    });
 
     // Run the initial scan
     const runScan = async () => {

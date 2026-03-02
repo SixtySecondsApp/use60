@@ -3,8 +3,9 @@
 // Supports both manual trigger and cron-based proactive delivery
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 import { buildMeetingPrepMessage, type MeetingPrepData } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole, verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
 import {
@@ -450,7 +451,8 @@ async function generateTalkingPoints(
   attendees: string[],
   riskSignals: Array<{ type: string; severity: string; description: string }> = [],
   previousObjections: Array<{ objection: string; resolution?: string; resolved: boolean }> = [],
-  proactiveCtx?: ProactiveContext | null
+  proactiveCtx?: ProactiveContext | null,
+  costCtx?: { supabase: ReturnType<typeof createClient>; userId: string; orgId: string | null }
 ): Promise<string[]> {
   if (!anthropicApiKey) {
     return [
@@ -527,6 +529,17 @@ Return JSON: { "talkingPoints": ["point1", "point2", "point3", "point4"] }`
     }
 
     const result = await response.json();
+    // Log AI cost event (fire-and-forget)
+    if (costCtx?.supabase && result.usage && costCtx.userId) {
+      logAICostEvent(
+        costCtx.supabase, costCtx.userId, costCtx.orgId,
+        'anthropic', 'claude-haiku-4-5-20251001',
+        result.usage.input_tokens || 0, result.usage.output_tokens || 0,
+        'meeting_prep_talking_points',
+        undefined,
+        { source: 'agent_automated', agentType: 'slack-meeting-prep' },
+      ).catch((e: unknown) => console.warn('[slack-meeting-prep] cost log error:', e));
+    }
     const content = result.content[0]?.text;
     const parsed = JSON.parse(content);
     return parsed.talkingPoints || [];
@@ -796,7 +809,8 @@ async function processMeetingPrep(
       contacts.map(c => c.full_name || `${c.first_name} ${c.last_name}`.trim() || c.email || 'Unknown'),
       riskSignals,
       previousObjections,
-      proactiveCtx
+      proactiveCtx,
+      { supabase, userId: event.user_id, orgId: event.org_id ?? null }
     );
 
     // Calculate days in pipeline

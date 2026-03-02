@@ -14,7 +14,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts';
-import { sendSlackDM } from '../_shared/proactive/deliverySlack.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -147,6 +147,17 @@ Write 3-4 sentences. Be specific about the most urgent finding. End with "I'll s
         });
 
         const result = await response.json();
+        // Log AI cost event (fire-and-forget)
+        if (result.usage && user_id) {
+          logAICostEvent(
+            supabase, user_id, org_id ?? null,
+            'anthropic', 'claude-haiku-4-5-20251001',
+            result.usage.input_tokens || 0, result.usage.output_tokens || 0,
+            'agent_initial_scan',
+            undefined,
+            { source: 'agent_automated', agentType: 'initial-scan' },
+          ).catch((e: unknown) => console.warn('[agent-initial-scan] cost log error:', e));
+        }
         briefing = result.content?.[0]?.text || formatFallbackBriefing(agentName, deals, staleDealCount, overdueTasks, upcomingMeetings, totalPipelineValue);
       } catch {
         briefing = formatFallbackBriefing(agentName, deals, staleDealCount, overdueTasks, upcomingMeetings, totalPipelineValue);
@@ -172,55 +183,8 @@ Write 3-4 sentences. Be specific about the most urgent finding. End with "I'll s
       },
     });
 
-    // Deliver via Slack DM if possible
-    const { data: slackOrg } = await supabase
-      .from('slack_org_settings')
-      .select('bot_access_token')
-      .eq('org_id', org_id)
-      .eq('is_connected', true)
-      .maybeSingle();
-
-    if (slackOrg?.bot_access_token) {
-      const { data: mapping } = await supabase
-        .from('slack_user_mappings')
-        .select('slack_user_id')
-        .eq('org_id', org_id)
-        .eq('sixty_user_id', user_id)
-        .maybeSingle();
-
-      if (mapping?.slack_user_id) {
-        await sendSlackDM({
-          botToken: slackOrg.bot_access_token,
-          slackUserId: mapping.slack_user_id,
-          text: `${agentName}'s First Impressions`,
-          blocks: [
-            {
-              type: 'context',
-              elements: [{ type: 'mrkdwn', text: `*${agentName}* | Your AI Sales Agent` }],
-            },
-            {
-              type: 'header',
-              text: { type: 'plain_text', text: "Here's what I found", emoji: false },
-            },
-            {
-              type: 'section',
-              text: { type: 'mrkdwn', text: briefing },
-            },
-            {
-              type: 'actions',
-              elements: [
-                {
-                  type: 'button',
-                  text: { type: 'plain_text', text: 'Open Dashboard' },
-                  url: 'https://app.use60.com',
-                  action_id: 'open_dashboard',
-                },
-              ],
-            },
-          ],
-        });
-      }
-    }
+    // Skip Slack DM — the scan result is already shown in the setup wizard UI.
+    // New users won't have Slack connected during onboarding anyway.
 
     return jsonResponse({
       success: true,

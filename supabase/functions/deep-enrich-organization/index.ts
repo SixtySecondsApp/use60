@@ -1284,6 +1284,7 @@ async function scrapeWebsite(domain: string): Promise<string> {
           'User-Agent': 'Mozilla/5.0 (compatible; Use60Bot/1.0; +https://use60.com)',
         },
         redirect: 'follow',
+        signal: AbortSignal.timeout(10000), // 10s timeout per page
       });
 
       if (response.ok) {

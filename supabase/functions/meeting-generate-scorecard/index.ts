@@ -17,6 +17,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
 import { logAICostEvent, checkCreditBalance, extractAnthropicUsage } from '../_shared/costTracking.ts';
+import { validateTranscript } from '../_shared/transcriptValidation.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -709,10 +710,11 @@ serve(async (req) => {
       );
     }
 
-    if (!meeting.transcript_text || meeting.transcript_text.length < 100) {
+    const transcriptValidation = validateTranscript(meeting.transcript_text);
+    if (!transcriptValidation.valid) {
       return new Response(
-        JSON.stringify({ error: 'Meeting has no transcript or transcript too short' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: transcriptValidation.error, details: transcriptValidation.details }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

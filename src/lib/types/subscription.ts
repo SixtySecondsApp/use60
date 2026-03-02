@@ -6,7 +6,7 @@ export type PlanTier = 'basic' | 'pro' | 'trial' | 'cancelled';
 // Legacy tiers (deprecated): 'starter' | 'growth' | 'team' | 'free'
 
 // Subscription status
-export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'paused';
+export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'paused' | 'grace_period' | 'expired';
 
 // Billing cycle
 export type BillingCycle = 'monthly' | 'yearly';
@@ -74,6 +74,8 @@ export interface OrganizationSubscription {
   current_period_end: string;
   trial_start_at: string | null;
   trial_ends_at: string | null;
+  grace_period_started_at: string | null;
+  grace_period_ends_at: string | null;
   canceled_at: string | null;
   stripe_subscription_id: string | null;
   stripe_customer_id: string | null;

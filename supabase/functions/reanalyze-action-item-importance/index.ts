@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
+import { logAICostEvent } from '../_shared/costTracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -132,6 +133,21 @@ Only return the JSON array, no additional text.`
 
     console.log('Parsing OpenRouter response...')
     const openaiData = await openaiResponse.json()
+    // Log AI cost event (fire-and-forget)
+    if (openaiData.usage && user) {
+      const { data: membership } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle()
+      logAICostEvent(
+        supabase, user.id, membership?.org_id ?? null,
+        'openrouter', 'anthropic/claude-haiku-4.5',
+        openaiData.usage.prompt_tokens || 0, openaiData.usage.completion_tokens || 0,
+        'reanalyze_action_item_importance',
+      ).catch((e: unknown) => console.warn('[reanalyze-action-item-importance] cost log error:', e))
+    }
     console.log('OpenRouter response:', JSON.stringify(openaiData, null, 2))
 
     console.log('Extracting analysis text from response...')

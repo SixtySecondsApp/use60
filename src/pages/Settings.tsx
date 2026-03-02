@@ -337,7 +337,7 @@ export default function Settings() {
   return (
     <div className="min-h-screen">
       <div className="p-4 sm:p-6 lg:p-8">
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div data-tour="settings-hub" className="max-w-4xl mx-auto space-y-8">
           {/* Page Header */}
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-[#1E293B] dark:text-white">

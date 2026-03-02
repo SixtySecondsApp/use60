@@ -990,7 +990,7 @@ export default function Integrations() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto">
+      <div data-tour="integrations-grid" className="max-w-7xl mx-auto">
         {/* Connected Integrations */}
         <div className="mb-12">
           <div className="mb-4">

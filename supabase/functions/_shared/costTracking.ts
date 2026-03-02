@@ -422,6 +422,9 @@ async function getProviderCostRates(
  * Log AI cost event from an edge function.
  * Determines credit cost by feature_key + org intelligence tier from ACTION_CREDIT_COSTS.
  * Calls deduct_credits_ordered() for subscription-first ordered credit consumption.
+ *
+ * Returns { blocked: true, reason: string } if the org has insufficient credits.
+ * Returns {} on success or non-fatal errors.
  */
 export async function logAICostEvent(
   supabaseClient: any,
@@ -434,7 +437,7 @@ export async function logAICostEvent(
   feature?: string,
   metadata?: Record<string, unknown>,
   logContext?: CreditLogContext
-): Promise<void> {
+): Promise<{ blocked?: boolean; reason?: string }> {
   try {
     // If no orgId provided, try to get it from user
     if (!orgId) {
@@ -451,7 +454,21 @@ export async function logAICostEvent(
 
     if (!orgId) {
       console.warn('[CostTracking] No org_id found for user, skipping cost log');
-      return;
+      return {};
+    }
+
+    // Pre-flight: check subscription status before proceeding with AI call
+    const subCheck = await checkSubscriptionStatus(supabaseClient, orgId);
+    if (!subCheck.allowed) {
+      console.warn('[CostTracking] Blocked: subscription inactive for org', orgId, '— status:', subCheck.status);
+      return { blocked: true, reason: 'subscription_inactive' };
+    }
+
+    // Pre-flight: check credit balance before proceeding with AI call
+    const creditCheck = await checkCreditBalance(supabaseClient, orgId);
+    if (!creditCheck.allowed) {
+      console.warn('[CostTracking] Blocked: insufficient credits for org', orgId, '— balance:', creditCheck.balance);
+      return { blocked: true, reason: creditCheck.message ?? 'insufficient_credits' };
     }
 
     // Determine credit cost using feature key + org intelligence tier
@@ -506,10 +523,13 @@ export async function logAICostEvent(
       tier,
       logContext,
     );
+
+    return {};
   } catch (err) {
     if (err instanceof Error && !err.message.includes('relation') && !err.message.includes('does not exist')) {
       console.warn('[CostTracking] Error in cost logging:', err);
     }
+    return {};
   }
 }
 
@@ -725,6 +745,110 @@ export async function checkCreditBalance(
   } catch (err) {
     console.warn('[CostTracking] Credit check exception:', err);
     return { allowed: true, balance: 0 };
+  }
+}
+
+// =============================================================================
+// Subscription Status Check
+// =============================================================================
+
+export interface SubscriptionCheckResult {
+  allowed: boolean;
+  status: string | null;
+  message?: string;
+  upgradeUrl?: string;
+}
+
+const BLOCKED_STATUSES = new Set(['grace_period', 'expired']);
+const ALLOWED_STATUSES = new Set(['active', 'trialing', 'past_due']);
+
+/**
+ * Check if the org's subscription allows AI usage.
+ * - Blocks for grace_period or expired subscriptions.
+ * - Allows for active, trialing, past_due.
+ * - If no subscription row, falls back to checking org's own trial fields.
+ * - Returns allowed=true on any DB/table error (backward compat).
+ */
+export async function checkSubscriptionStatus(
+  supabaseClient: any,
+  orgId: string
+): Promise<SubscriptionCheckResult> {
+  try {
+    const { data: sub, error } = await supabaseClient
+      .from('organization_subscriptions')
+      .select('status, trial_ends_at')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (error) {
+      if (error.message.includes('relation') || error.message.includes('does not exist')) {
+        return { allowed: true, status: null };
+      }
+      console.warn('[CostTracking] Subscription status check error:', error);
+      return { allowed: true, status: null };
+    }
+
+    // No subscription row — check if org has an active trial via organizations table
+    if (!sub) {
+      try {
+        const { data: org, error: orgError } = await supabaseClient
+          .from('organizations')
+          .select('trial_ends_at')
+          .eq('id', orgId)
+          .maybeSingle();
+
+        if (!orgError && org?.trial_ends_at) {
+          const trialEndsAt = new Date(org.trial_ends_at);
+          if (trialEndsAt > new Date()) {
+            return { allowed: true, status: 'trialing' };
+          }
+        }
+      } catch {
+        // Non-fatal — fall through to block
+      }
+
+      return {
+        allowed: false,
+        status: null,
+        message: 'No active subscription or trial found.',
+        upgradeUrl: 'https://app.use60.com/settings/billing',
+      };
+    }
+
+    const status = sub.status as string;
+
+    if (BLOCKED_STATUSES.has(status)) {
+      return {
+        allowed: false,
+        status,
+        message: `Subscription is ${status}. Please upgrade to continue using AI features.`,
+        upgradeUrl: 'https://app.use60.com/settings/billing',
+      };
+    }
+
+    // Also handle trialing status via subscription row — check trial_ends_at
+    if (status === 'trialing' && sub.trial_ends_at) {
+      const trialEndsAt = new Date(sub.trial_ends_at);
+      if (trialEndsAt <= new Date()) {
+        return {
+          allowed: false,
+          status,
+          message: 'Trial period has ended. Please upgrade to continue using AI features.',
+          upgradeUrl: 'https://app.use60.com/settings/billing',
+        };
+      }
+    }
+
+    if (ALLOWED_STATUSES.has(status)) {
+      return { allowed: true, status };
+    }
+
+    // Unknown status — allow (forward compat)
+    console.warn('[CostTracking] Unknown subscription status:', status, '— allowing');
+    return { allowed: true, status };
+  } catch (err) {
+    console.warn('[CostTracking] checkSubscriptionStatus exception:', err);
+    return { allowed: true, status: null };
   }
 }
 

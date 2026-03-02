@@ -198,6 +198,11 @@
 
 /* ─── Skip Tour confirmation dialog ──────────────────────────────────────── */
 
+.tour-skip-overlay,
+.tour-skip-overlay * {
+  pointer-events: auto !important; /* Override driver.js `.driver-active * { pointer-events: none }` */
+}
+
 .tour-skip-overlay {
   position: fixed;
   inset: 0;

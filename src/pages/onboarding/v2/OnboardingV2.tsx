@@ -31,6 +31,7 @@ import { EnrichmentResultStep } from './EnrichmentResultStep';
 import { AgentConfigConfirmStep } from './AgentConfigConfirmStep';
 import { SkillsConfigStep } from './SkillsConfigStep';
 import { PlatformSkillConfigStep } from './PlatformSkillConfigStep';
+import { NotetakerConnectionStep } from './NotetakerConnectionStep';
 import { CompletionStep } from './CompletionStep';
 
 // Feature flag for platform skills (Phase 7)
@@ -47,6 +48,7 @@ const VALID_STEPS: OnboardingV2Step[] = [
   'enrichment_result',
   'agent_config_confirm',
   'skills_config',
+  'notetaker_connection',
   'complete',
 ];
 
@@ -425,6 +427,8 @@ export function OnboardingV2({ organizationId, domain, userEmail }: OnboardingV2
         ) : (
           <SkillsConfigStep key="config" />
         );
+      case 'notetaker_connection':
+        return <NotetakerConnectionStep key="notetaker-connection" />;
       case 'complete':
         return <CompletionStep key="complete" />;
       default:

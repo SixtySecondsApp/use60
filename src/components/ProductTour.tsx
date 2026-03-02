@@ -269,13 +269,24 @@ function showSkipConfirmation(): Promise<boolean> {
       resolve(result);
     }
 
-    overlay.querySelector('[data-action="continue"]')!.addEventListener('click', () => cleanup(false));
-    overlay.querySelector('[data-action="skip"]')!.addEventListener('click', () => cleanup(true));
-
-    // Clicking the backdrop also means "continue"
+    // driver.js registers capture-phase listeners on document that call
+    // stopPropagation/stopImmediatePropagation for clicks inside its overlay.
+    // We must intercept clicks on our dialog in the capture phase first,
+    // stopping them before driver.js can swallow them.
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) cleanup(false);
-    });
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-action="continue"]')) {
+        cleanup(false);
+      } else if (target.closest('[data-action="skip"]')) {
+        cleanup(true);
+      } else if (target === overlay) {
+        // Clicking the backdrop means "continue"
+        cleanup(false);
+      }
+    }, true); // capture phase — fires before driver.js handlers
 
     document.body.appendChild(overlay);
   });
@@ -356,6 +367,9 @@ export function ProductTour({ userId, onTourEnd }: ProductTourProps) {
 
   // Guard to ensure onDestroyStarted / handleTourEnd only fires once
   const destroyedRef = useRef(false);
+
+  // Guard to prevent multiple skip confirmation dialogs from stacking
+  const skipDialogOpenRef = useRef(false);
 
   const navigate = useNavigate();
 
@@ -532,7 +546,15 @@ export function ProductTour({ userId, onTourEnd }: ProductTourProps) {
         // driver.js v1.4.0: onDestroyStarted fires and returns early without
         // cleaning up. We only call driverObj.destroy() (which calls the
         // internal destroy with skip-hook=true) if the user confirms.
+
+        // Guard: don't open a second dialog if one is already showing.
+        // Without this, every overlay click re-triggers onDestroyStarted
+        // and stacks another confirmation dialog.
+        if (skipDialogOpenRef.current) return;
+        skipDialogOpenRef.current = true;
+
         showSkipConfirmation().then((confirmed) => {
+          skipDialogOpenRef.current = false;
           if (confirmed) {
             skippedRef.current = true;
             // Destroy driver.js DOM first, then run our cleanup/navigation.
@@ -548,8 +570,9 @@ export function ProductTour({ userId, onTourEnd }: ProductTourProps) {
       },
     };
 
-    // Reset the destroy guard for this effect run
+    // Reset guards for this effect run
     destroyedRef.current = false;
+    skipDialogOpenRef.current = false;
 
     // ── Start tour after WelcomeSplash ──────────────────────────────────────
     //

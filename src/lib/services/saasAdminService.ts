@@ -12,6 +12,7 @@ import type {
   OrganizationMembership,
   OrganizationUsage,
   OrganizationFeatureFlag,
+  OrgCreditBalance,
   BillingHistoryItem,
   CustomerWithDetails,
   AdminDashboardStats,
@@ -226,6 +227,65 @@ export async function getCustomers(): Promise<CustomerWithDetails[]> {
     {} as Record<string, OrganizationFeatureFlag[]>
   );
 
+  // Get credit balances
+  const { data: creditBalances, error: creditsError } = await supabase
+    .from('org_credit_balance')
+    .select('org_id, balance_credits, lifetime_purchased, lifetime_consumed');
+
+  if (creditsError) {
+    logger.error('[SaaS Admin] Error fetching credit balances:', creditsError);
+  }
+
+  const creditBalanceMap = (creditBalances || []).reduce(
+    (acc, cb) => {
+      acc[cb.org_id] = cb;
+      return acc;
+    },
+    {} as Record<string, OrgCreditBalance>
+  );
+
+  // Get owner emails (members with role = 'owner')
+  const { data: ownerMemberships, error: ownersError } = await supabase
+    .from('organization_memberships')
+    .select('org_id, user_id')
+    .eq('role', 'owner');
+
+  if (ownersError) {
+    logger.error('[SaaS Admin] Error fetching owner memberships:', ownersError);
+  }
+
+  const ownerUserIds = [...new Set((ownerMemberships || []).map((m) => m.user_id))];
+  let ownerEmailMap: Record<string, string> = {};
+
+  if (ownerUserIds.length > 0) {
+    const { data: ownerProfiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, email')
+      .in('id', ownerUserIds);
+
+    if (profilesError) {
+      logger.error('[SaaS Admin] Error fetching owner profiles:', profilesError);
+    }
+
+    const profileEmailMap = (ownerProfiles || []).reduce(
+      (acc, p) => {
+        acc[p.id] = p.email;
+        return acc;
+      },
+      {} as Record<string, string>
+    );
+
+    ownerEmailMap = (ownerMemberships || []).reduce(
+      (acc, m) => {
+        if (!acc[m.org_id] && profileEmailMap[m.user_id]) {
+          acc[m.org_id] = profileEmailMap[m.user_id];
+        }
+        return acc;
+      },
+      {} as Record<string, string>
+    );
+  }
+
   // Combine all data
   return (orgs || []).map((org) => {
     const subscription = subscriptionMap[org.id] || null;
@@ -237,6 +297,8 @@ export async function getCustomers(): Promise<CustomerWithDetails[]> {
       member_count: memberCountMap[org.id] || 0,
       current_usage: usageMap[org.id] || null,
       feature_flags: flagsMap[org.id] || [],
+      credit_balance: creditBalanceMap[org.id] || null,
+      owner_email: ownerEmailMap[org.id] || null,
     };
   });
 }
@@ -600,6 +662,60 @@ export async function deleteOrganization(orgId: string): Promise<{ success: bool
   }
 
   return { success: true, affectedUsers: data?.affectedUsers || 0 };
+}
+
+// ============================================================================
+// Admin Actions — Trial Extension + Credit Grant
+// ============================================================================
+
+export interface ExtendTrialResult {
+  success: boolean;
+  field: 'trial_ends_at' | 'grace_period_ends_at';
+  new_date: string;
+  days_added: number;
+}
+
+export async function adminExtendTrial(
+  orgId: string,
+  days: 7 | 14 | 30
+): Promise<ExtendTrialResult> {
+  const { data, error } = await supabase.rpc('admin_extend_trial', {
+    p_org_id: orgId,
+    p_days: days,
+  });
+
+  if (error) {
+    logger.error('[SaaS Admin] Error extending trial:', error);
+    throw error;
+  }
+
+  return data as ExtendTrialResult;
+}
+
+export interface GrantCreditsResult {
+  success: boolean;
+  amount: number;
+  new_balance: number;
+  reason: string;
+}
+
+export async function adminGrantCredits(
+  orgId: string,
+  amount: number,
+  reason?: string
+): Promise<GrantCreditsResult> {
+  const { data, error } = await supabase.rpc('admin_grant_credits', {
+    p_org_id: orgId,
+    p_amount: amount,
+    p_reason: reason || null,
+  });
+
+  if (error) {
+    logger.error('[SaaS Admin] Error granting credits:', error);
+    throw error;
+  }
+
+  return data as GrantCreditsResult;
 }
 
 // ============================================================================

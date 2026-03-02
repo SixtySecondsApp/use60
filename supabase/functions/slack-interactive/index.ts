@@ -2,7 +2,8 @@
 // Handles Slack Interactivity - button clicks, modal submissions, shortcuts
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
   buildTaskAddedConfirmation,
@@ -787,6 +788,17 @@ Return JSON: { "subject": "...", "body": "..." }`;
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
           emailDraft = { subject: parsed.subject || emailDraft.subject, body: parsed.body || emailDraft.body };
+        }
+        // Log AI cost event (fire-and-forget)
+        if (aiData.usage && ctx?.userId) {
+          logAICostEvent(
+            supabase, ctx.userId, ctx.orgId ?? null,
+            'anthropic', 'claude-haiku-4-5-20251001',
+            aiData.usage.input_tokens || 0, aiData.usage.output_tokens || 0,
+            'slack_draft_followup',
+            undefined,
+            { source: 'user_initiated', agentType: 'slack-interactive' },
+          ).catch((e: unknown) => console.warn('[slack-interactive] cost log error:', e));
         }
       }
     }

@@ -34,7 +34,7 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { TeamKPIGrid } from '@/components/insights/TeamKPIGrid';
 import { TeamComparisonMatrix } from '@/components/insights/TeamComparisonMatrix';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ActivationChecklist } from '@/components/dashboard/ActivationChecklist';
+
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 const LazyActivityLog = lazy(() => import('@/pages/ActivityLog'));
@@ -726,6 +726,20 @@ export default function Dashboard() {
         <div className="flex items-center gap-2">
           <h1 className="text-3xl font-bold text-[#1E293B] dark:text-white">Welcome back{userData?.first_name ? `, ${userData.first_name}` : ''}</h1>
           <HelpPanel docSlug="customer-dashboard" tooltip="Dashboard help" />
+          {import.meta.env.DEV && (
+            <button
+              onClick={() => {
+                // Reset tour + splash state so it re-triggers
+                if (userId) localStorage.removeItem(`sixty_tour_completed_${userId}`);
+                localStorage.setItem('sixty_onboarding_completed_at', String(Date.now()));
+                window.location.reload();
+              }}
+              className="px-2 py-1 text-[10px] font-mono rounded bg-violet-600/20 text-violet-400 border border-violet-600/30 hover:bg-violet-600/30 transition-colors"
+              title="Dev only: Reset & replay Welcome Splash + Product Tour"
+            >
+              DEV: Replay Tour
+            </button>
+          )}
         </div>
         <div className="flex items-center justify-between mt-2">
           <p className="text-[#64748B] dark:text-gray-400">Here's how your sales performance is tracking</p>
@@ -784,16 +798,13 @@ export default function Dashboard() {
 
         <TabsContent value="overview">
 
-      {/* Activation Checklist for new users */}
-      <ActivationChecklist />
-
       {/* Pending Join Request Banner */}
       <div className="mb-6">
         <PendingJoinRequestBanner />
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-8">
+      <div data-tour="dashboard-overview" className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-8">
         <MetricCard
           key="revenue-metric"
           title="New Business"
@@ -941,19 +952,27 @@ export default function Dashboard() {
             <div className="pt-4 rounded-xl bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 p-4">
               <div className="grid grid-cols-[30px_repeat(7,1fr)] gap-1">
                 {/* day labels */}
-                <div />
+                <div className="py-2" />
                 {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (
                   <Skeleton key={d} className="h-5 w-full rounded" />
                 ))}
                 {/* 5 weeks of cells */}
                 {Array.from({ length: 5 }).map((_, w) => (
                   <React.Fragment key={w}>
-                    <Skeleton className="h-8 w-full rounded" />
+                    <Skeleton className="h-full w-5 rounded justify-self-end" />
                     {Array.from({ length: 7 }).map((_, d) => (
-                      <Skeleton key={d} className="aspect-square w-full rounded" />
+                      <Skeleton key={d} className="aspect-square w-full rounded-lg" />
                     ))}
                   </React.Fragment>
                 ))}
+              </div>
+              <div className="flex items-center gap-2 mt-3 p-2 bg-gray-100 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50">
+                <Skeleton className="h-3 w-6 rounded" />
+                {[0,1,2,3,4,5,6].map((i) => (
+                  <Skeleton key={i} className="w-3 h-3 rounded" />
+                ))}
+                <Skeleton className="h-3 w-6 rounded" />
+                <Skeleton className="h-3 w-24 rounded ml-2" />
               </div>
             </div>
           }>

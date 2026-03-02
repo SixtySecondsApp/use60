@@ -2,8 +2,8 @@
 // Starts a free trial without requiring payment information
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+import { getCorsHeaders, handleCorsPreflightRequest } from "../_shared/corsHelper.ts";
 import { getStripeClient, getOrCreateStripeCustomer } from "../_shared/stripe.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -28,9 +28,10 @@ interface StartTrialResponse {
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const preflight = handleCorsPreflightRequest(req);
+  if (preflight) return preflight;
+
+  const corsHeaders = getCorsHeaders(req);
 
   if (req.method !== "POST") {
     return new Response(
@@ -79,7 +80,7 @@ serve(async (req) => {
       .select("role")
       .eq("org_id", org_id)
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
     if (membershipError || !membership || !["owner", "admin"].includes(membership.role)) {
       return new Response(
@@ -88,27 +89,37 @@ serve(async (req) => {
       );
     }
 
-    // Check for existing active subscription
+    // Check for existing subscription
     const { data: existingSub } = await supabase
       .from("organization_subscriptions")
       .select("id, status, stripe_customer_id")
       .eq("org_id", org_id)
-      .single();
+      .maybeSingle();
 
-    if (existingSub && ["active", "trialing"].includes(existingSub.status)) {
-      return new Response(
-        JSON.stringify({ error: "Organization already has an active subscription or trial" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (existingSub) {
+      // Block if already on an active trial or paid subscription
+      if (["active", "trialing"].includes(existingSub.status)) {
+        return new Response(
+          JSON.stringify({ error: "Organization already has an active subscription or trial" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      // Block re-trialing after the trial has already been used
+      if (["grace_period", "expired", "canceled"].includes(existingSub.status)) {
+        return new Response(
+          JSON.stringify({ error: "Trial already used. Please subscribe." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Get the plan details
     const { data: plan, error: planError } = await supabase
       .from("subscription_plans")
-      .select("*")
+      .select("id, name, slug, trial_days, currency")
       .eq("id", plan_id)
       .eq("is_active", true)
-      .single();
+      .maybeSingle();
 
     if (planError || !plan) {
       return new Response(
@@ -122,7 +133,7 @@ serve(async (req) => {
       .from("organizations")
       .select("id, name")
       .eq("id", org_id)
-      .single();
+      .maybeSingle();
 
     if (orgError || !org) {
       return new Response(
@@ -189,6 +200,11 @@ serve(async (req) => {
       subscriptionId = newSub.id;
     }
 
+    // Ensure org_credit_balance row exists (idempotent — ignore if already present)
+    await supabase
+      .from("org_credit_balance")
+      .upsert({ org_id, balance_credits: 0 }, { onConflict: "org_id", ignoreDuplicates: true });
+
     // Record billing event
     await supabase.from("billing_history").insert({
       org_id,
@@ -205,6 +221,47 @@ serve(async (req) => {
       },
       created_at: now.toISOString(),
     });
+
+    // Trigger day-0 welcome email via encharge-send-email (fire-and-forget)
+    // Encharge automation handles the day-3 follow-up based on event timestamp.
+    (async () => {
+      try {
+        const ownerName = (user.email ?? "").split("@")[0];
+        const emailResponse = await fetch(
+          `${SUPABASE_URL}/functions/v1/encharge-send-email`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              template_type: "trial_started",
+              to_email: user.email ?? "",
+              to_name: ownerName,
+              user_id: user.id,
+              variables: {
+                recipient_name: ownerName,
+                organization_name: org.name,
+                trial_days: trialDays,
+                trial_ends_at: trialEndsAt.toLocaleDateString(),
+                app_url: Deno.env.get("FRONTEND_URL") ?? "https://app.use60.com",
+                support_email: "support@use60.com",
+              },
+            }),
+          }
+        );
+        if (!emailResponse.ok) {
+          const errText = await emailResponse.text();
+          console.error("[start-free-trial] Failed to send trial_started email:", errText);
+        } else {
+          console.log("[start-free-trial] trial_started email triggered for", user.email);
+        }
+      } catch (emailErr) {
+        // Non-fatal: email failure should not block trial start
+        console.error("[start-free-trial] Error sending trial_started email:", emailErr);
+      }
+    })();
 
     const response: StartTrialResponse = {
       success: true,

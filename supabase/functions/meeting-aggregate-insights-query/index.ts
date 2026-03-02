@@ -13,7 +13,8 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
 
@@ -99,7 +100,7 @@ Return ONLY valid JSON, no additional text.`;
 /**
  * Parse natural language query using Claude
  */
-async function parseNaturalQuery(query: string): Promise<ParsedQuery> {
+async function parseNaturalQuery(query: string): Promise<ParsedQuery & { __inputTokens?: number; __outputTokens?: number }> {
   if (!anthropicApiKey) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
@@ -133,6 +134,8 @@ async function parseNaturalQuery(query: string): Promise<ParsedQuery> {
   const result = await response.json();
   const content = result.content[0]?.text;
 
+  const usage = result.usage;
+
   try {
     let jsonContent = content.trim();
     if (jsonContent.startsWith('```json')) {
@@ -143,7 +146,12 @@ async function parseNaturalQuery(query: string): Promise<ParsedQuery> {
     if (jsonContent.endsWith('```')) {
       jsonContent = jsonContent.slice(0, -3);
     }
-    return JSON.parse(jsonContent.trim());
+    const parsed = JSON.parse(jsonContent.trim());
+    return {
+      ...parsed,
+      __inputTokens: usage?.input_tokens || 0,
+      __outputTokens: usage?.output_tokens || 0,
+    };
   } catch (parseError) {
     console.error('Failed to parse Claude response:', content);
     // Return a default filter that gets all meetings
@@ -151,6 +159,8 @@ async function parseNaturalQuery(query: string): Promise<ParsedQuery> {
       filter: {},
       query_type: 'count',
       description: 'All meetings (query parsing failed)',
+      __inputTokens: usage?.input_tokens || 0,
+      __outputTokens: usage?.output_tokens || 0,
     };
   }
 }
@@ -587,6 +597,20 @@ serve(async (req) => {
       effectiveFilter = { ...effectiveFilter, ...parsed.filter };
       effectiveQueryType = parsed.query_type;
       queryDescription = parsed.description;
+      // Log AI cost event (fire-and-forget)
+      if ((parsed.__inputTokens || parsed.__outputTokens) && (user_id || effectiveOrgId)) {
+        const costUserId = user_id || (
+          await supabase.from('organization_memberships').select('user_id').eq('org_id', effectiveOrgId).limit(1).maybeSingle()
+        ).data?.user_id;
+        if (costUserId) {
+          logAICostEvent(
+            supabase, costUserId, effectiveOrgId ?? null,
+            'anthropic', 'claude-3-5-haiku-20241022',
+            parsed.__inputTokens || 0, parsed.__outputTokens || 0,
+            'meeting_aggregate_insights',
+          ).catch((e: unknown) => console.warn('[meeting-aggregate-insights-query] cost log error:', e));
+        }
+      }
     } else {
       // Generate description from filter
       const filterParts: string[] = [];

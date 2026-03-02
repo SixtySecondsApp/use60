@@ -9,6 +9,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { crypto } from 'https://deno.land/std@0.168.0/crypto/mod.ts'
 import { captureException } from '../_shared/sentryEdge.ts'
+import { validateTranscript } from '../_shared/transcriptValidation.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -550,11 +551,12 @@ serve(async (req) => {
         company: meeting.company_id ? companyMap.get(meeting.company_id) : null,
         primary_contact: meeting.primary_contact_id ? contactMap.get(meeting.primary_contact_id) : null,
       }
-      if (!meeting.transcript_text || meeting.transcript_text.length < 100) {
+      const transcriptValidation = validateTranscript(meeting.transcript_text)
+      if (!transcriptValidation.valid) {
         results.push({
           meetingId: meeting.id,
           success: false,
-          message: 'Meeting has no transcript or transcript too short'
+          message: transcriptValidation.error,
         })
         continue
       }

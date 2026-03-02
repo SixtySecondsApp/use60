@@ -10,6 +10,7 @@ import {
 import { searchContacts, type ContactResult } from '../../_shared/slackSearch.ts';
 import { buildErrorResponse } from '../../_shared/slackAuth.ts';
 import type { CommandContext } from '../index.ts';
+import { logAICostEvent } from '../../_shared/costTracking.ts';
 
 // Anthropic API key for AI-generated drafts
 const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY') || '';
@@ -125,6 +126,7 @@ async function buildFollowUpForContact(
     lastMeeting,
     deal,
     recentActivities,
+    costCtx: { supabase, userId, orgId: orgId ?? null },
   });
 
   // Calculate confidence score
@@ -384,6 +386,7 @@ async function generateFollowUpDraft(input: {
   lastMeeting: MeetingContext | null;
   deal: DealContext | null;
   recentActivities: string[];
+  costCtx?: { supabase: any; userId: string; orgId: string | null };
 }): Promise<{ subject: string; body: string }> {
   // Build context for the prompt
   const contextParts: string[] = [];
@@ -480,6 +483,17 @@ Return JSON: { "subject": "...", "body": "..." }`,
     }
 
     const result = await response.json();
+    // Log AI cost event (fire-and-forget)
+    if (result.usage && input.costCtx?.supabase && input.costCtx.userId) {
+      logAICostEvent(
+        input.costCtx.supabase, input.costCtx.userId, input.costCtx.orgId,
+        'anthropic', 'claude-haiku-4-5-20251001',
+        result.usage.input_tokens || 0, result.usage.output_tokens || 0,
+        'slack_followup_draft',
+        undefined,
+        { source: 'user_initiated', agentType: 'slack-slash-commands' },
+      ).catch((e: unknown) => console.warn('[slack-slash-commands/followUp] cost log error:', e));
+    }
     const content = result.content?.[0]?.text || '';
 
     // Extract JSON from response

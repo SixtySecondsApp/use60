@@ -14,6 +14,7 @@ import { useOrgId } from '@/lib/contexts/OrgContext';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
 import { useUser } from '@/lib/hooks/useUser';
 import { cn } from '@/lib/utils';
+import { useCreditTopUp } from '@/components/credits/CreditTopUpPrompt';
 
 export function LowBalanceBanner() {
   const orgId = useOrgId();
@@ -22,6 +23,7 @@ export function LowBalanceBanner() {
   const isAdmin = userData ? isUserAdmin(userData) : false;
   const navigate = useNavigate();
   const location = useLocation();
+  const { openTopUp } = useCreditTopUp();
   const [dismissed, setDismissed] = useState(false);
   const welcomeKey = orgId ? `sixty_welcome_credits_${orgId}` : null;
   const [showWelcome, setShowWelcome] = useState(() =>
@@ -103,7 +105,7 @@ export function LowBalanceBanner() {
       </span>
       {isAdmin && !autoTopUpEnabled && (
         <button
-          onClick={() => navigate('/settings/credits?action=topup')}
+          onClick={() => openTopUp({ currentBalance: balance })}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors flex-shrink-0',
             isZero || isRedLow

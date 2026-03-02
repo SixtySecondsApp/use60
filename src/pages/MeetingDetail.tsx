@@ -23,6 +23,7 @@ import { ShareMeetingModal } from '@/components/meetings/ShareMeetingModal';
 import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary';
 import { useActivationTracking } from '@/lib/hooks/useActivationTracking';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
+import { useCreditGatedAction } from '@/lib/hooks/useCreditGatedAction';
 
 // Processing status type for real-time UI updates
 type ProcessingStatus = 'pending' | 'processing' | 'complete' | 'failed';
@@ -243,6 +244,7 @@ export function MeetingDetail() {
 
   const [showProposalWizard, setShowProposalWizard] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
+  const { execute: executeMeetingSummaryGated } = useCreditGatedAction('meeting_summary', 5);
   const [showShareModal, setShowShareModal] = useState(false);
 
   const handleQuickAdd = async (type: 'meeting' | 'outbound' | 'proposal' | 'sale') => {
@@ -591,10 +593,11 @@ export function MeetingDetail() {
   }, []);
 
 
-  // Reprocess meeting with AI analysis
+  // Reprocess meeting with AI analysis (credit-gated)
   const handleReprocessMeeting = useCallback(async () => {
     if (!meeting?.id) return;
 
+    await executeMeetingSummaryGated(async () => {
     try {
       setIsReprocessing(true);
 
@@ -639,7 +642,8 @@ export function MeetingDetail() {
     } finally {
       setIsReprocessing(false);
     }
-  }, [meeting?.id]);
+    });
+  }, [meeting?.id, executeMeetingSummaryGated]);
 
   // Attach click handlers to Fathom timestamp links in summary
   useEffect(() => {

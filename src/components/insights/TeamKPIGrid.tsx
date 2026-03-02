@@ -223,7 +223,7 @@ function KPICard({
 }
 
 export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamKPIGridProps) {
-  const { data, isLoading, error } = useTeamAggregates(period, dateRange);
+  const { data, isLoading, isPlaceholderData, error } = useTeamAggregates(period, dateRange);
 
   // Compute the comparison period label based on dateRange or period
   const periodLabel = useMemo(() => {
@@ -235,7 +235,8 @@ export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamK
     return periodLabels[period];
   }, [dateRange, period]);
 
-  if (isLoading) {
+  // Only show skeleton on initial load (no data at all)
+  if (isLoading && !data) {
     return <TeamKPIGridSkeleton />;
   }
 
@@ -339,7 +340,7 @@ export function TeamKPIGrid({ period, dateRange, onCardClick, className }: TeamK
   ];
 
   return (
-    <div className={cn('grid grid-cols-2 lg:grid-cols-4 gap-4', className)}>
+    <div className={cn('grid grid-cols-2 lg:grid-cols-4 gap-4 transition-opacity duration-200', isPlaceholderData && 'opacity-60', className)}>
       {kpiCards.map((card, index) => (
         <KPICard
           key={card.title}
