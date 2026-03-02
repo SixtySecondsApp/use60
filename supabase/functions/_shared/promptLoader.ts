@@ -13,7 +13,7 @@
  * ```
  */
 
-import { SupabaseClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/+esm';
+import { SupabaseClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.4/+esm';
 
 // ============================================================================
 // Types
@@ -1214,7 +1214,7 @@ async function loadFromDatabase(
         .select('system_prompt, user_prompt, model, temperature, max_tokens')
         .eq('user_id', userId)
         .eq('category', featureKey)
-        .single();
+        .maybeSingle();
 
       if (userPrompt && (userPrompt.system_prompt || userPrompt.user_prompt)) {
         return convertToConfig(userPrompt, featureKey);
@@ -1229,7 +1229,7 @@ async function loadFromDatabase(
       .eq('is_public', true)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (systemPrompt && (systemPrompt.system_prompt || systemPrompt.user_prompt)) {
       return convertToConfig(systemPrompt, featureKey);

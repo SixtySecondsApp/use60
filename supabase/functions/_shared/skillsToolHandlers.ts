@@ -8,7 +8,7 @@
  * get_organization_skills_for_agent RPC, with fallback to direct table queries.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 

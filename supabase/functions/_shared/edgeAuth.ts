@@ -104,13 +104,21 @@ function normalizeBearer(authHeader: string | null): string | null {
 }
 
 /**
- * Check if the request is authenticated with a service role key (exact match)
+ * Check if the request is authenticated with a service role key.
+ * Accepts both the sb_secret_ format (Deno env var) and the JWT-format
+ * service role key (used by callers/clients).
  */
 export function isServiceRoleAuth(authHeader: string | null, serviceRoleKey: string): boolean {
   const token = normalizeBearer(authHeader);
   if (!token) return false;
-  // IMPORTANT: Exact match only - no partial/includes checks
-  return token === serviceRoleKey;
+  // Direct match against the env var (sb_secret_ format)
+  if (token === serviceRoleKey) return true;
+  // JWT-format service role keys: compare the full token against the known
+  // SUPABASE_SERVICE_ROLE_KEY env var (which IS a JWT). We never decode/trust
+  // claims from an unverified JWT — only exact string match is safe.
+  const envServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (envServiceRoleKey && token === envServiceRoleKey) return true;
+  return false;
 }
 
 /**
@@ -169,60 +177,20 @@ export async function getAuthContext(
     throw new Error('Unauthorized: missing Authorization header');
   }
 
-  let user = null;
   const { data: authData, error } = await supabase.auth.getUser(token);
 
   if (error || !authData?.user) {
-    console.error('[edgeAuth] auth.getUser() failed:', error);
-
-    // Fallback: decode JWT without verification (we're in a trusted edge function environment)
-    try {
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        console.log('[edgeAuth] Decoded JWT payload (fallback):', { sub: payload.sub, email: payload.email, iss: payload.iss });
-
-        // Get the Supabase URL from the client - with defensive check
-        const clientUrl = (supabase as any).supabaseUrl || (supabase as any)._supabaseUrl || '';
-
-        // Verify the JWT is for this project by checking issuer
-        if (payload.iss && clientUrl && payload.iss.includes(clientUrl.replace('https://', ''))) {
-          console.log('[edgeAuth] JWT issuer matches project, using fallback auth');
-          user = {
-            id: payload.sub,
-            email: payload.email,
-            ...payload
-          };
-        } else if (payload.sub && payload.iss) {
-          // If we can't verify issuer but have a valid-looking JWT, log warning and allow
-          console.warn('[edgeAuth] Could not verify JWT issuer, but JWT appears valid. iss:', payload.iss);
-          user = {
-            id: payload.sub,
-            email: payload.email,
-            ...payload
-          };
-        } else {
-          console.error('[edgeAuth] JWT issuer mismatch:', payload.iss, 'vs', clientUrl);
-          throw new Error('Unauthorized: JWT issuer mismatch');
-        }
-      }
-    } catch (decodeError) {
-      console.error('[edgeAuth] JWT decode fallback failed:', decodeError);
-      throw new Error(`Unauthorized: invalid session - ${error?.message || 'no user'}`);
-    }
-  } else {
-    user = authData.user;
+    console.error('[edgeAuth] auth.getUser() failed:', error?.message);
+    throw new Error(`Unauthorized: invalid session - ${error?.message || 'no user'}`);
   }
 
-  if (!user) {
-    throw new Error('Unauthorized: no user found');
-  }
+  const user = authData.user;
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('is_admin')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   return { mode: 'user', userId: user.id, isPlatformAdmin: profile?.is_admin === true };
 }
@@ -254,57 +222,14 @@ export async function authenticateRequest(
     throw new Error('Unauthorized: missing Authorization header');
   }
 
-  let user = null;
   const { data: authData, error } = await supabase.auth.getUser(token);
 
   if (error || !authData?.user) {
-    console.error('[edgeAuth] authenticateRequest: auth.getUser() failed:', error);
-
-    // Fallback: decode JWT without verification (trusted environment)
-    try {
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        console.log('[edgeAuth] Decoded JWT payload (fallback):', { sub: payload.sub, email: payload.email, iss: payload.iss });
-
-        // Get the Supabase URL from the client - with defensive check
-        const clientUrl = (supabase as any).supabaseUrl || (supabase as any)._supabaseUrl || '';
-        console.log('[edgeAuth] Client URL for issuer check:', clientUrl ? clientUrl.substring(0, 30) + '...' : 'NOT FOUND');
-
-        // Verify JWT issuer matches this project
-        if (payload.iss && clientUrl && payload.iss.includes(clientUrl.replace('https://', ''))) {
-          console.log('[edgeAuth] JWT issuer matches project, using fallback auth');
-          user = {
-            id: payload.sub,
-            email: payload.email,
-            ...payload
-          };
-        } else if (payload.sub && payload.iss) {
-          // If we can't verify issuer but have a valid-looking JWT, log warning and allow
-          console.warn('[edgeAuth] Could not verify JWT issuer, but JWT appears valid. iss:', payload.iss);
-          user = {
-            id: payload.sub,
-            email: payload.email,
-            ...payload
-          };
-        } else {
-          console.error('[edgeAuth] JWT issuer mismatch:', payload.iss, 'vs', clientUrl);
-          throw new Error('Unauthorized: JWT issuer mismatch');
-        }
-      }
-    } catch (decodeError) {
-      console.error('[edgeAuth] JWT decode fallback failed:', decodeError);
-      throw new Error(`Unauthorized: invalid session - ${error?.message || 'no user'}`);
-    }
-  } else {
-    user = authData.user;
+    console.error('[edgeAuth] authenticateRequest: auth.getUser() failed:', error?.message);
+    throw new Error(`Unauthorized: invalid session - ${error?.message || 'no user'}`);
   }
 
-  if (!user) {
-    throw new Error('Unauthorized: no user found');
-  }
-
-  return { userId: user.id, mode: 'user' };
+  return { userId: authData.user.id, mode: 'user' };
 }
 
 /**
@@ -321,7 +246,7 @@ export async function requireOrgRole(
     .select('role')
     .eq('org_id', orgId)
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
   if (error || !data?.role) {
     throw new Error('Unauthorized: not a member of this organization');

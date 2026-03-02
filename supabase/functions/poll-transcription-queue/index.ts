@@ -4,7 +4,7 @@
 // Tier 2: Fall back to Gladia/Deepgram via process-recording for retries >= 3
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 // If a recording has been in 'processing' state for longer than this,

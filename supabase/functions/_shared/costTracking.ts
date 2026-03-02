@@ -445,7 +445,7 @@ export async function logAICostEvent(
         .eq('user_id', userId)
         .order('created_at', { ascending: true })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       orgId = membership?.org_id || null;
     }

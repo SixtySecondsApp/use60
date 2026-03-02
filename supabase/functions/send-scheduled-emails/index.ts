@@ -1,10 +1,20 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
+/// <reference path="../deno.d.ts" />
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+/**
+ * Send Scheduled Emails Edge Function
+ *
+ * Processes pending scheduled emails by delegating to email-send-as-rep.
+ * Reads from the scheduled_emails table, finds rows due, and invokes
+ * email-send-as-rep for each one.
+ *
+ * NOTE: The primary scheduler is the pg_cron job (process_scheduled_emails)
+ * which calls email-send-as-rep via net.http_post. This edge function serves
+ * as a manual trigger / fallback.
+ */
+
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts';
 
 interface ScheduledEmail {
   id: string;
@@ -15,57 +25,51 @@ interface ScheduledEmail {
   subject: string;
   body: string;
   scheduled_for: string;
-  reply_to_message_id?: string;
   thread_id?: string;
+  reply_to_message_id?: string;
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) return preflightResponse;
 
   try {
-    console.log('[Scheduled Email Sender] Starting scheduled email processing...');
+    console.log('[send-scheduled-emails] Starting scheduled email processing...');
 
-    // Create Supabase client with service role key for bypassing RLS
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-    // Get all pending scheduled emails that are due to be sent
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Server configuration error');
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    // Get all pending scheduled emails that are due
     const now = new Date().toISOString();
     const { data: pendingEmails, error: fetchError } = await supabaseAdmin
       .from('scheduled_emails')
-      .select('*')
+      .select('id, user_id, to_email, cc_email, bcc_email, subject, body, scheduled_for, thread_id, reply_to_message_id')
       .eq('status', 'pending')
       .lte('scheduled_for', now)
-      .limit(50); // Process up to 50 emails per run
+      .limit(50);
 
     if (fetchError) {
-      console.error('[Scheduled Email Sender] Error fetching pending emails:', fetchError);
+      console.error('[send-scheduled-emails] Error fetching pending emails:', fetchError);
       throw fetchError;
     }
 
     if (!pendingEmails || pendingEmails.length === 0) {
-      console.log('[Scheduled Email Sender] No pending emails to send');
-      return new Response(
-        JSON.stringify({ message: 'No pending emails to send', processed: 0 }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        }
-      );
+      console.log('[send-scheduled-emails] No pending emails to send');
+      return jsonResponse({ message: 'No pending emails to send', processed: 0 }, req);
     }
 
-    console.log(`[Scheduled Email Sender] Found ${pendingEmails.length} emails to send`);
+    console.log(`[send-scheduled-emails] Found ${pendingEmails.length} emails to send`);
 
     const results = {
       sent: 0,
@@ -73,113 +77,72 @@ serve(async (req) => {
       errors: [] as string[],
     };
 
-    // Process each email
     for (const email of pendingEmails as ScheduledEmail[]) {
       try {
-        console.log(`[Scheduled Email Sender] Processing email ${email.id}...`);
+        console.log(`[send-scheduled-emails] Processing email ${email.id}...`);
 
-        // Get user's Gmail credentials
-        const { data: userIntegration, error: integrationError } = await supabaseAdmin
-          .from('user_integrations')
-          .select('access_token, refresh_token, expires_at')
+        // Check for gmail.send scope before attempting to send.
+        // gmail.send is a restricted scope removed in Phase 1 — skip gracefully
+        // rather than crashing the entire batch run.
+        const { data: integration } = await supabaseAdmin
+          .from('google_integrations')
+          .select('scopes')
           .eq('user_id', email.user_id)
-          .eq('provider', 'google')
-          .single();
+          .eq('is_active', true)
+          .maybeSingle();
 
-        if (integrationError || !userIntegration) {
-          throw new Error(`No Gmail integration found for user ${email.user_id}`);
-        }
+        const grantedScopes: string[] = (integration as Record<string, unknown> | null)?.scopes as string[] ?? [];
+        const hasSendScope =
+          grantedScopes.includes('https://www.googleapis.com/auth/gmail.send') ||
+          grantedScopes.includes('https://mail.google.com/');
 
-        // Check if access token is expired and refresh if needed
-        let accessToken = userIntegration.access_token;
-        const expiresAt = new Date(userIntegration.expires_at);
-
-        if (expiresAt < new Date()) {
-          console.log('[Scheduled Email Sender] Access token expired, refreshing...');
-
-          // Refresh the access token
-          const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-              client_id: Deno.env.get('GOOGLE_CLIENT_ID') ?? '',
-              client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '',
-              refresh_token: userIntegration.refresh_token,
-              grant_type: 'refresh_token',
-            }),
-          });
-
-          if (!refreshResponse.ok) {
-            throw new Error('Failed to refresh access token');
-          }
-
-          const refreshData = await refreshResponse.json();
-          accessToken = refreshData.access_token;
-
-          // Update the stored access token
+        if (!hasSendScope) {
+          console.warn(
+            `[send-scheduled-emails] Skipping email ${email.id} for user ${email.user_id}: gmail.send scope not granted. Email sending is not yet available.`
+          );
+          results.failed++;
+          results.errors.push(`Email ${email.id}: Email sending is not yet available`);
           await supabaseAdmin
-            .from('user_integrations')
-            .update({
-              access_token: accessToken,
-              expires_at: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
-            })
-            .eq('user_id', email.user_id)
-            .eq('provider', 'google');
+            .from('scheduled_emails')
+            .update({ status: 'failed', error_message: 'Email sending is not yet available. This feature will be enabled in a future update.' })
+            .eq('id', email.id);
+          continue;
         }
 
-        // Build the email message in RFC 2822 format
-        const emailLines: string[] = [];
-        emailLines.push(`To: ${email.to_email}`);
-        if (email.cc_email) emailLines.push(`Cc: ${email.cc_email}`);
-        if (email.bcc_email) emailLines.push(`Bcc: ${email.bcc_email}`);
-        emailLines.push(`Subject: ${email.subject}`);
-        emailLines.push('Content-Type: text/html; charset=utf-8');
-        emailLines.push('');
-        emailLines.push(email.body);
-
-        const rawMessage = emailLines.join('\r\n');
-        const encodedMessage = btoa(unescape(encodeURIComponent(rawMessage)))
-          .replace(/\+/g, '-')
-          .replace(/\//g, '_')
-          .replace(/=+$/, '');
-
-        // Send email via Gmail API
-        const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            raw: encodedMessage,
-            threadId: email.thread_id,
-          }),
-        });
-
-        if (!gmailResponse.ok) {
-          const errorText = await gmailResponse.text();
-          throw new Error(`Gmail API error: ${errorText}`);
-        }
-
-        // Mark email as sent
+        // Mark as sent optimistically to prevent double-fire
         const { error: updateError } = await supabaseAdmin
           .from('scheduled_emails')
-          .update({
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-          })
-          .eq('id', email.id);
+          .update({ status: 'sent', sent_at: new Date().toISOString() })
+          .eq('id', email.id)
+          .eq('status', 'pending');
 
         if (updateError) {
-          console.error(`[Scheduled Email Sender] Error updating email ${email.id}:`, updateError);
+          console.warn(`[send-scheduled-emails] Could not claim email ${email.id}:`, updateError);
+          continue;
         }
 
-        console.log(`[Scheduled Email Sender] Successfully sent email ${email.id}`);
+        // Delegate to email-send-as-rep
+        const { error: sendError } = await supabaseAdmin.functions.invoke('email-send-as-rep', {
+          body: {
+            userId: email.user_id,
+            to: email.to_email,
+            subject: email.subject,
+            body: email.body,
+            cc: email.cc_email || undefined,
+            bcc: email.bcc_email || undefined,
+            thread_id: email.thread_id || undefined,
+            in_reply_to: email.reply_to_message_id || undefined,
+          },
+        });
+
+        if (sendError) {
+          throw new Error(sendError.message || 'email-send-as-rep returned an error');
+        }
+
+        console.log(`[send-scheduled-emails] Successfully sent email ${email.id}`);
         results.sent++;
       } catch (error) {
-        console.error(`[Scheduled Email Sender] Error sending email ${email.id}:`, error);
+        console.error(`[send-scheduled-emails] Error sending email ${email.id}:`, error);
 
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         results.failed++;
@@ -188,38 +151,24 @@ serve(async (req) => {
         // Mark email as failed
         await supabaseAdmin
           .from('scheduled_emails')
-          .update({
-            status: 'failed',
-            error_message: errorMessage,
-          })
+          .update({ status: 'failed', error_message: errorMessage })
           .eq('id', email.id);
       }
     }
 
-    console.log('[Scheduled Email Sender] Processing complete:', results);
+    console.log('[send-scheduled-emails] Processing complete:', results);
 
-    return new Response(
-      JSON.stringify({
-        message: 'Scheduled email processing complete',
-        processed: pendingEmails.length,
-        results,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    );
+    return jsonResponse({
+      message: 'Scheduled email processing complete',
+      processed: pendingEmails.length,
+      results,
+    }, req);
   } catch (error) {
-    console.error('[Scheduled Email Sender] Fatal error:', error);
-
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
+    console.error('[send-scheduled-emails] Fatal error:', error);
+    return errorResponse(
+      error instanceof Error ? error.message : 'Unknown error',
+      req,
+      500
     );
   }
 });

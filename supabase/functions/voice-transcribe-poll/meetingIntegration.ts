@@ -3,7 +3,7 @@
  * Creates meeting records from voice recordings and runs meeting intelligence
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 
 interface VoiceRecording {
   id: string

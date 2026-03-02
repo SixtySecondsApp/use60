@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { buildMeetingPrepMessage, buildWeeklyCoachingDigestMessage, buildCoachingMicroFeedbackMessage, buildMeetingDebriefMessage, buildCampaignReportMessage, buildCampaignReadyMessage } from '../_shared/slackBlocks.ts';
 import type { MeetingPrepData, WeeklyCoachingDigestData, CoachingMicroFeedbackData, MeetingDebriefData, CampaignReportData, CampaignReadyData } from '../_shared/slackBlocks.ts';
 

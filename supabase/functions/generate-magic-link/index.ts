@@ -15,7 +15,7 @@ declare const Deno: {
 // @ts-expect-error - Deno HTTP imports are resolved at runtime
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 // @ts-expect-error - ESM imports are resolved at runtime
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -38,16 +38,27 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Verify authentication (user must be authenticated)
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    return new Response(
-      JSON.stringify({ success: false, error: 'Unauthorized: missing authorization header' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
   try {
+    // Validate JWT — not just header presence
+    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized: missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user: caller }, error: authError } = await supabaseAuth.auth.getUser(token);
+    if (authError || !caller) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized: invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const request: GenerateMagicLinkRequest = await req.json();
 
     if (!request.email || !request.redirectTo) {

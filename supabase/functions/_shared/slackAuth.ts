@@ -1,7 +1,7 @@
 // supabase/functions/_shared/slackAuth.ts
 // Shared Slack authentication and utility functions for slash commands and interactive handlers
 
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 // ============================================================================
 // Types
@@ -141,7 +141,15 @@ export async function verifySlackSignature(
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   const computedSignature = `v0=${hashHex}`;
 
-  return computedSignature === signature;
+  // Constant-time comparison to prevent timing attacks
+  if (computedSignature.length !== signature.length) {
+    return false;
+  }
+  let result = 0;
+  for (let i = 0; i < computedSignature.length; i++) {
+    result |= computedSignature.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+  return result === 0;
 }
 
 // ============================================================================
@@ -162,7 +170,7 @@ export async function getSlackOrgConnection(
     .select('org_id, bot_access_token')
     .eq('slack_team_id', teamId)
     .eq('is_connected', true)
-    .single();
+    .maybeSingle();
 
   if (!data?.org_id || !data?.bot_access_token) return null;
   return { orgId: data.org_id as string, botToken: data.bot_access_token as string };
@@ -189,14 +197,14 @@ export async function getSixtyUserContext(
       .from('slack_org_settings')
       .select('org_id')
       .eq('slack_team_id', teamId)
-      .single();
+      .maybeSingle();
 
     if (orgSettings?.org_id) {
       query = query.eq('org_id', orgSettings.org_id);
     }
   }
 
-  const { data, error } = await query.single();
+  const { data, error } = await query.maybeSingle();
 
   if (error || !data?.sixty_user_id) {
     console.warn('No Sixty user mapping found for Slack user:', slackUserId);
@@ -220,7 +228,7 @@ export async function getUserDisplayName(
     .from('profiles')
     .select('full_name, first_name, last_name, email')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   const profile = data as Record<string, unknown> | null;
   const full = profile?.full_name as string | null | undefined;

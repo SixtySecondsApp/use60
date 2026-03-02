@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { HubSpotClient } from '../hubspot.ts';
 import type { ActionResult, CRMAdapter, MeetingAdapter } from './types.ts';
 

@@ -6,7 +6,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { crypto } from 'https://deno.land/std@0.168.0/crypto/mod.ts'
 import { captureException } from '../_shared/sentryEdge.ts'
 

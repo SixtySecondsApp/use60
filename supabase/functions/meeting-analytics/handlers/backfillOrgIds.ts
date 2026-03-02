@@ -3,7 +3,7 @@
  * Requires CRON_SECRET or service_role Authorization.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getRailwayDb } from '../db.ts';
 import { successResponse, errorResponse, jsonResponse } from '../helpers.ts';
 

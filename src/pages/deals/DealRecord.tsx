@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Building2, User, Calendar, DollarSign, Target, TrendingUp, Edit, Phone, Mail, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Building2, User, Calendar, DollarSign, Target, TrendingUp, Edit, Phone, Mail, MessageCircle, GitBranch } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
@@ -37,11 +37,11 @@ interface Deal {
 
 interface TimelineEvent {
   id: string;
-  type: 'created' | 'updated' | 'meeting' | 'activity';
+  type: 'created' | 'updated' | 'meeting' | 'activity' | 'stage_change';
   title: string;
   description?: string;
   date: string;
-  icon: 'create' | 'update' | 'meeting' | 'email' | 'call' | 'linkedin' | 'proposal';
+  icon: 'create' | 'update' | 'meeting' | 'email' | 'call' | 'linkedin' | 'proposal' | 'stage_change';
   color: string;
 }
 
@@ -241,6 +241,32 @@ const DealRecord: React.FC = () => {
             date: activity.proposal_date || activity.date,
             icon,
             color
+          });
+        });
+      }
+
+      // Fetch CRM changes (stage history)
+      const { data: stageHistory, error: stageError } = await supabase
+        .from('deal_stage_history')
+        .select('id, stage_id, entered_at, exited_at, duration_seconds, deal_stages:stage_id(name, color)')
+        .eq('deal_id', dealId)
+        .order('entered_at', { ascending: false })
+        .limit(20);
+
+      if (!stageError && stageHistory) {
+        stageHistory.forEach((entry: any) => {
+          const stageName = entry.deal_stages?.name || 'Unknown Stage';
+          const durationLabel = entry.duration_seconds
+            ? ` (${Math.round(entry.duration_seconds / 86400)}d)`
+            : entry.exited_at ? '' : ' (current)';
+          events.push({
+            id: `stage-${entry.id}`,
+            type: 'stage_change',
+            title: `Moved to ${stageName}`,
+            description: durationLabel ? `Stage duration${durationLabel}` : undefined,
+            date: entry.entered_at,
+            icon: 'stage_change',
+            color: 'purple',
           });
         });
       }
@@ -734,6 +760,7 @@ const DealRecord: React.FC = () => {
                   if (event.icon === 'email') IconComponent = Mail;
                   if (event.icon === 'call') IconComponent = Phone;
                   if (event.icon === 'meeting') IconComponent = MessageCircle;
+                  if (event.icon === 'stage_change') IconComponent = GitBranch;
 
                   return (
                     <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg theme-bg-elevated theme-border border hover:border-gray-600 transition-colors">

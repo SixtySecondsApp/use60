@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type {
   ActionResult,
   AdapterContext,
@@ -93,9 +93,32 @@ export function createDbMeetingAdapter(client: SupabaseClient, userId: string): 
         }
 
         const limit = Math.min(Math.max(Number(params.limit ?? 5) || 5, 1), 20);
+        const dealId: string | null = (params as any).deal_id ? String((params as any).deal_id).trim() : null;
 
         let contactEmail: string | null = params.contactEmail ? String(params.contactEmail).trim().toLowerCase() : null;
         let contactId: string | null = params.contactId ? String(params.contactId).trim() : null;
+
+        // Priority strategy: If deal_id is provided, filter by deal_id directly
+        if (dealId) {
+          let q = client
+            .from('meetings')
+            .select(
+              'id,title,meeting_start,meeting_end,duration_minutes,summary,transcript_text,share_url,company_id,primary_contact_id'
+            )
+            .eq('owner_user_id', userId)
+            .eq('deal_id', dealId)
+            .order('meeting_start', { ascending: false })
+            .limit(limit);
+
+          // Optionally also filter by contact within the deal
+          if (contactId) {
+            q = q.eq('primary_contact_id', contactId);
+          }
+
+          const { data: meetings, error: meetingsError } = await q;
+          if (meetingsError) throw meetingsError;
+          return ok({ meetings: meetings || [], matchedOn: 'deal_id' }, this.source);
+        }
 
         // If we have contactId but no email, look up the email
         if (!contactEmail && contactId) {
@@ -1982,11 +2005,39 @@ export function createDbEmailAdapter(client: SupabaseClient, userId: string): Em
     async searchEmails(params) {
       try {
         const limit = Math.min(Math.max(Number(params.limit ?? 10) || 10, 1), 20);
+        const dealId = params.deal_id ? String(params.deal_id).trim() : null;
 
         // Prefer existing emails table if present. Filter by user_id.
         // We do not assume a contact foreign key; prefer contact_email matching.
         const contactEmail = params.contact_email ? String(params.contact_email).trim() : null;
         const query = params.query ? String(params.query).trim() : null;
+
+        // If deal_id is provided, first get contacts associated with the deal
+        // to scope emails to this specific deal
+        let dealContactEmails: string[] = [];
+        if (dealId) {
+          const { data: dealContacts } = await client
+            .from('contacts')
+            .select('email')
+            .eq('owner_id', userId)
+            .or(`id.in.(select primary_contact_id from deals where id = '${dealId}')`)
+            .not('email', 'is', null);
+
+          if (dealContacts && dealContacts.length > 0) {
+            dealContactEmails = dealContacts.map((c: any) => c.email).filter(Boolean);
+          }
+
+          // Also check the deal's primary contact directly
+          const { data: deal } = await client
+            .from('deals')
+            .select('primary_contact_id, contacts!deals_primary_contact_id_fkey(email)')
+            .eq('id', dealId)
+            .maybeSingle();
+
+          if (deal?.contacts?.email && !dealContactEmails.includes(deal.contacts.email)) {
+            dealContactEmails.push(deal.contacts.email);
+          }
+        }
 
         let q = client
           .from('emails')
@@ -1995,8 +2046,16 @@ export function createDbEmailAdapter(client: SupabaseClient, userId: string): Em
           .order('received_at', { ascending: false })
           .limit(limit);
 
-        if (contactEmail) {
+        // If we have deal-scoped contact emails, use those instead of the raw contact_email param
+        const emailFilter = dealContactEmails.length > 0 ? dealContactEmails : (contactEmail ? [contactEmail] : []);
+
+        if (emailFilter.length > 0) {
           // best-effort: match in from/to arrays stored as text/json
+          const orClauses = emailFilter
+            .flatMap((e) => [`from.ilike.%${e}%`, `to.ilike.%${e}%`])
+            .join(',');
+          q = q.or(orClauses);
+        } else if (contactEmail) {
           q = q.or(`from.ilike.%${contactEmail}%,to.ilike.%${contactEmail}%`);
         }
 

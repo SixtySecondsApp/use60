@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 
 interface MemberDeactivationEmailPayload {
   recipient_emails: string[];
@@ -18,6 +19,15 @@ serve(async (req) => {
   // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   try {

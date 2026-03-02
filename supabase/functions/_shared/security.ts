@@ -9,7 +9,8 @@
  * - Security event logging
  */
 
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { getCorsHeaders } from './corsHelper.ts'
 
 // ============================================================================
 // Constants
@@ -413,7 +414,7 @@ export async function verifyMeetingOwnership(
     .from('meetings')
     .select('id, title, transcript_text, share_url, meeting_start, owner_user_id')
     .eq('id', meetingId)
-    .single()
+    .maybeSingle()
 
   if (meetingError || !meeting) {
     return {
@@ -477,7 +478,8 @@ export interface ErrorResponse {
 export function createErrorResponse(
   error: string,
   details?: string,
-  status: number = 400
+  status: number = 400,
+  req?: Request
 ): Response {
   const body: ErrorResponse = {
     success: false,
@@ -485,17 +487,24 @@ export function createErrorResponse(
     ...(details && { details }),
   }
 
+  const headers: Record<string, string> = req
+    ? { ...getCorsHeaders(req), 'Content-Type': 'application/json' }
+    : {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+      }
+
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    },
+    headers,
   })
 }
 
-export function createRateLimitResponse(result: RateLimitResult): Response {
+export function createRateLimitResponse(result: RateLimitResult, req?: Request): Response {
+  const corsHeaders: Record<string, string> = req
+    ? getCorsHeaders(req)
+    : { 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' }
+
   return new Response(
     JSON.stringify({
       success: false,
@@ -506,7 +515,7 @@ export function createRateLimitResponse(result: RateLimitResult): Response {
       status: 429,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        ...corsHeaders,
         'X-RateLimit-Limit': result.limit.toString(),
         'X-RateLimit-Remaining': result.remaining.toString(),
         'X-RateLimit-Reset': result.reset.getTime().toString(),

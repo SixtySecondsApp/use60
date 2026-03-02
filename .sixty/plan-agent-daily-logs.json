@@ -1,0 +1,191 @@
+{
+  "name": "Agent Daily Logs — The Audit Trail",
+  "prd": "PRD-03",
+  "version": "1.0",
+  "createdAt": "2026-02-26T00:00:00Z",
+  "description": "Single table + shared module + integration hooks. Creates the narrative record for everything the orchestrator does — enabling manager visibility (PRD-04), autopilot signal quality, and chain replay. Ships in parallel with PRD-01.",
+  "status_baseline": {
+    "memory_modules": "built — 10-file _shared/memory/ module (reader, writer, decay, contacts, reps, etc.)",
+    "orchestrator_runner": "built — logs to sequence_jobs table with step-level state",
+    "credit_ledger": "built — cost tracking via logAICostEvent()",
+    "missing": [
+      "agent_daily_logs table (no agent_type/action_type/decision_reasoning/wave_number/chain_id audit trail)",
+      "_shared/memory/dailyLog.ts — logAgentAction() shared function",
+      "Orchestrator runner hooks (log each wave step start/complete/fail)",
+      "Email send outcome hook in hitl-send-followup-email",
+      "Fleet agent decision-point hooks (emailSend, dealRisk, reengagement, preMeeting adapters)",
+      "pg_cron auto-prune for 90-day retention"
+    ]
+  },
+  "effort_estimate": "1 week",
+  "ship_sequence_week": "1–2 (parallel with PRD-01)",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Schema + shared module",
+      "description": "Table, index, RLS, and the logAgentAction() function all other integrations will call",
+      "priority": "critical",
+      "duration": "1–2 days",
+      "stories": ["LOG-001", "LOG-002"]
+    },
+    {
+      "id": "phase-2",
+      "name": "Core integration hooks",
+      "description": "Orchestrator runner waves and email send — the highest-value log sources",
+      "priority": "critical",
+      "duration": "2–3 days",
+      "stories": ["LOG-003", "LOG-004", "LOG-005"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Fleet agent hooks",
+      "description": "Logging at key decision points across the 4 highest-value fleet adapters",
+      "priority": "high",
+      "duration": "2 days",
+      "stories": ["LOG-006"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "LOG-001",
+      "title": "agent_daily_logs table migration",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": [],
+      "blocks": ["LOG-002", "LOG-003", "LOG-004", "LOG-005", "LOG-006"],
+      "acceptance": [
+        "Migration creates agent_daily_logs table: id (uuid PK), org_id (FK), user_id (FK nullable — some agents are org-level), agent_type (text — e.g. 'meeting_ended', 'reengagement', 'deal_risk'), action_type (text — e.g. 'classify', 'draft_email', 'send_email', 'update_crm'), action_detail (jsonb — flexible payload per action type), decision_reasoning (text nullable — AI reasoning summary), input_context_summary (text nullable), outcome (enum: success/failed/pending/cancelled/skipped), error_message (text nullable), credit_cost (float nullable), execution_ms (int nullable), chain_id (uuid nullable — links to orchestrator chain/sequence_job), wave_number (smallint nullable), created_at (timestamptz DEFAULT now())",
+        "Indexes: (org_id, created_at DESC), (user_id, created_at DESC), (chain_id), (agent_type, created_at DESC)",
+        "RLS: org members can SELECT own org rows (org_id match); service role full access",
+        "pg_cron job registered: DELETE FROM agent_daily_logs WHERE created_at < NOW() - INTERVAL '90 days' — runs daily at 3am UTC",
+        "Migration runs on staging without errors"
+      ],
+      "files": [
+        "supabase/migrations/YYYYMMDD_agent_daily_logs.sql"
+      ],
+      "estimatedMinutes": 20,
+      "notes": "No date-based partitioning needed at this scale — simple index on created_at is sufficient. Add partitioning later if volume demands it."
+    },
+    {
+      "id": "LOG-002",
+      "title": "_shared/memory/dailyLog.ts — logAgentAction() shared function",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["LOG-001"],
+      "blocks": ["LOG-003", "LOG-004", "LOG-005", "LOG-006"],
+      "acceptance": [
+        "New file _shared/memory/dailyLog.ts exports logAgentAction(params) function",
+        "Params: { supabaseClient, orgId, userId?, agentType, actionType, actionDetail, decisionReasoning?, inputContextSummary?, outcome, errorMessage?, creditCost?, executionMs?, chainId?, waveNumber? }",
+        "Function inserts row into agent_daily_logs — fire-and-forget (does not throw if insert fails, logs console.error only)",
+        "Follows existing _shared/memory/*.ts module pattern (same import style, same error handling approach)",
+        "TypeScript types exported: AgentLogParams, AgentOutcome enum, AgentType enum with common values"
+      ],
+      "files": [
+        "supabase/functions/_shared/memory/dailyLog.ts (new)"
+      ],
+      "estimatedMinutes": 20,
+      "notes": "Fire-and-forget pattern is critical — logging failures must never break the main agent flow. Look at writer.ts in same folder for the pattern."
+    },
+    {
+      "id": "LOG-003",
+      "title": "Orchestrator runner wave step hooks",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["LOG-002"],
+      "blocks": [],
+      "acceptance": [
+        "runner.ts calls logAgentAction() at three points per step: (1) step start with outcome='pending', (2) step complete with outcome='success' + execution_ms + credit_cost, (3) step fail with outcome='failed' + error_message",
+        "chain_id = sequence_job.id, wave_number = current step index",
+        "agent_type derived from sequence trigger type (e.g. 'meeting_ended', 'deal_updated')",
+        "action_type = adapter name (e.g. 'classify', 'draft_followup_email', 'detect_intents')",
+        "decision_reasoning populated when adapter returns a reasoning field in its output",
+        "No performance regression — logAgentAction() is awaited but non-blocking on failure"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "The runner already tracks step execution with timing. This adds the database logging without changing control flow."
+    },
+    {
+      "id": "LOG-004",
+      "title": "Email send outcome logging in hitl-send-followup-email",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["LOG-002"],
+      "blocks": [],
+      "acceptance": [
+        "hitl-send-followup-email calls logAgentAction() on: send success (outcome='success', credit_cost=0 since it's an API call not AI), send failure (outcome='failed', error_message), undo (outcome='cancelled'), skip (outcome='skipped')",
+        "action_type='send_email', action_detail includes {to, subject, thread_id (if applicable), provider: 'gmail'/'o365'}",
+        "chain_id passed through from the originating sequence_job if available"
+      ],
+      "files": [
+        "supabase/functions/hitl-send-followup-email/index.ts"
+      ],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "LOG-005",
+      "title": "pg_cron 90-day retention prune verification",
+      "phase": "phase-2",
+      "priority": "P1",
+      "type": "schema",
+      "status": "pending",
+      "dependencies": ["LOG-001"],
+      "blocks": [],
+      "acceptance": [
+        "pg_cron job 'prune-agent-daily-logs' exists in cron.job table after migration",
+        "Runs daily at 03:00 UTC: DELETE FROM agent_daily_logs WHERE created_at < NOW() - INTERVAL '90 days'",
+        "Manual test: insert row with created_at = NOW() - INTERVAL '91 days', run prune manually, verify deleted",
+        "Prune job does not block reads/writes (row-level delete, not truncate)"
+      ],
+      "files": [
+        "supabase/migrations/YYYYMMDD_agent_daily_logs.sql (included in LOG-001 migration)"
+      ],
+      "estimatedMinutes": 10,
+      "notes": "Typically included in the LOG-001 migration. Separate story for visibility and explicit acceptance testing."
+    },
+    {
+      "id": "LOG-006",
+      "title": "Fleet adapter decision-point hooks (emailSend, dealRisk, reengagement, preMeeting)",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["LOG-002"],
+      "blocks": [],
+      "acceptance": [
+        "emailSend.ts adapter: logs at draft_generated (outcome='success', action_detail includes subject preview + to address)",
+        "dealRisk.ts adapter: logs at risk_assessed (outcome='success', action_detail includes risk_score + top risk factors)",
+        "reengagement.ts adapter: logs at reengagement_triggered (outcome='success', action_detail includes contact_id + trigger reason)",
+        "preMeeting.ts adapter: logs at prep_generated (outcome='success', action_detail includes meeting_id + sections generated)",
+        "All 4 adapters handle logAgentAction() failure gracefully (fire-and-forget)"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/emailSend.ts",
+        "supabase/functions/_shared/orchestrator/adapters/dealRisk.ts",
+        "supabase/functions/_shared/orchestrator/adapters/reengagement.ts",
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "4 files in one story — each adapter change is small (3-5 lines). Combined for efficiency since the pattern is identical in each."
+    }
+  ],
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 0,
+    "parallelOpportunities": [
+      "LOG-001 and LOG-002 are sequential (002 needs the table)",
+      "LOG-003, LOG-004, LOG-005 parallel after LOG-002",
+      "LOG-006 parallel with LOG-003/004/005"
+    ]
+  }
+}

@@ -105,6 +105,7 @@ export async function handleAsk(req: Request, orgId: string): Promise<Response> 
   if (!question) return errorResponse('question is required', 400, req);
 
   const transcriptId = body.transcriptId as string | undefined;
+  const meetingIds = Array.isArray(body.meetingIds) ? body.meetingIds.filter((id: unknown) => typeof id === 'string') as string[] : undefined;
   const maxMeetings = Math.min((body.maxMeetings as number) ?? 20, 50);
   const includeDemo = (body.includeDemo as boolean) ?? false;
   const demoOnly = (body.demoOnly as boolean) ?? false;
@@ -134,6 +135,13 @@ export async function handleAsk(req: Request, orgId: string): Promise<Response> 
     `;
     const transcriptParams: unknown[] = [orgId];
 
+    // Filter by specific meeting IDs (via external_id) when provided — scopes to a deal
+    if (meetingIds && meetingIds.length > 0) {
+      const placeholders = meetingIds.map((_, i) => `$${transcriptParams.length + i + 1}`).join(', ');
+      transcriptSql += ` AND external_id IN (${placeholders})`;
+      transcriptParams.push(...meetingIds);
+    }
+
     if (demoOnly) {
       transcriptSql += ' AND is_demo = true';
     } else if (!includeDemo) {
@@ -145,6 +153,21 @@ export async function handleAsk(req: Request, orgId: string): Promise<Response> 
     const allTranscripts = await db.unsafe<Transcript>(transcriptSql, transcriptParams);
     const transcriptMap = new Map(allTranscripts.map(t => [t.id, t]));
     const allowedTranscriptIds = new Set(allTranscripts.map(t => t.id));
+
+    // Early exit: if meetingIds were provided but matched zero transcripts, return empty
+    // This prevents unscoped vector search from returning results from unrelated meetings
+    if (meetingIds && meetingIds.length > 0 && allTranscripts.length === 0) {
+      return successResponse({
+        answer: 'No transcripts found for the specified meetings.',
+        sources: [],
+        structuredData: [],
+        segmentsSearched: 0,
+        meetingsAnalyzed: 0,
+        totalMeetings: 0,
+        isAggregateQuestion: false,
+        specificMeeting: null,
+      }, req);
+    }
 
     // ============================================
     // STEP 2: Vector search to find relevant content

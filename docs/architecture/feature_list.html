@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>60 / Feature Catalogue</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surf: #111111;
+      --surf2: #1a1a1a;
+      --surf3: #222222;
+      --bdr: #2a2a2a;
+      --bdr2: #333333;
+      --acc: #6366f1;
+      --acc2: #8b5cf6;
+      --txt: #ededed;
+      --txt2: #a0a0a0;
+      --txt3: #666666;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --cyan: #06b6d4;
+      --purple: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--txt);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surf);
+      border-bottom: 1px solid var(--bdr);
+      height: 56px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: linear-gradient(135deg, var(--acc), var(--acc2));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 12px; color: #fff;
+      letter-spacing: -0.5px;
+      flex-shrink: 0;
+    }
+    .header-title { display: flex; align-items: baseline; gap: 8px; }
+    .lt { font-size: 14px; font-weight: 600; color: var(--txt); letter-spacing: -0.2px; }
+    .ls { font-size: 12px; color: var(--txt3); font-weight: 400; }
+    .hsep { width: 1px; height: 20px; background: var(--bdr2); flex-shrink: 0; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .hbg {
+      font-size: 11px; color: var(--txt3);
+      background: var(--surf2); border: 1px solid var(--bdr);
+      padding: 3px 10px; border-radius: 20px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .header-link {
+      font-size: 12px; color: var(--acc); text-decoration: none;
+      padding: 4px 12px; border-radius: 6px;
+      border: 1px solid var(--bdr);
+      transition: all .15s;
+    }
+    .header-link:hover { background: var(--surf2); border-color: var(--acc); }
+
+    /* ── Hero ── */
+    .hero {
+      text-align: center;
+      padding: 64px 24px 48px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .hero h1 {
+      font-size: 40px; font-weight: 800; letter-spacing: -1.5px;
+      background: linear-gradient(135deg, #fff 30%, var(--acc));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 16px;
+    }
+    .hero p { font-size: 16px; color: var(--txt2); max-width: 600px; margin: 0 auto; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex; justify-content: center; gap: 32px;
+      padding: 24px; margin: 0 auto 40px; max-width: 900px;
+      flex-wrap: wrap;
+    }
+    .stat {
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 32px; font-weight: 800; letter-spacing: -1px;
+      background: linear-gradient(135deg, var(--acc), var(--acc2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-label { font-size: 11px; color: var(--txt3); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      display: flex; gap: 8px; justify-content: center;
+      padding: 0 24px 32px; flex-wrap: wrap;
+      max-width: 1000px; margin: 0 auto;
+    }
+    .filter-btn {
+      font-size: 12px; font-weight: 500; padding: 6px 14px;
+      border-radius: 20px; border: 1px solid var(--bdr);
+      background: var(--surf); color: var(--txt2); cursor: pointer;
+      transition: all .15s;
+    }
+    .filter-btn:hover, .filter-btn.active { background: var(--acc); color: #fff; border-color: var(--acc); }
+
+    /* ── Sort bar ── */
+    .sort-bar {
+      display: flex; gap: 8px; justify-content: center;
+      padding: 0 24px 40px;
+      max-width: 1000px; margin: 0 auto;
+    }
+    .sort-label { font-size: 11px; color: var(--txt3); text-transform: uppercase; letter-spacing: 1px; align-self: center; margin-right: 4px; }
+    .sort-btn {
+      font-size: 11px; font-weight: 500; padding: 4px 10px;
+      border-radius: 4px; border: 1px solid var(--bdr);
+      background: var(--surf2); color: var(--txt3); cursor: pointer;
+      transition: all .15s;
+    }
+    .sort-btn:hover, .sort-btn.active { color: var(--txt); border-color: var(--txt3); }
+
+    /* ── Workflow section ── */
+    .workflow-section {
+      max-width: 1200px;
+      margin: 0 auto 48px;
+      padding: 0 24px;
+    }
+    .workflow-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--bdr);
+    }
+    .workflow-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .workflow-header h2 {
+      font-size: 20px; font-weight: 700; letter-spacing: -0.5px;
+    }
+    .workflow-header p { font-size: 13px; color: var(--txt3); margin-left: auto; }
+
+    /* ── Feature cards ── */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 16px;
+    }
+    .feature-card {
+      background: var(--surf);
+      border: 1px solid var(--bdr);
+      border-radius: 12px;
+      padding: 20px;
+      transition: all .2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card:hover { border-color: var(--bdr2); transform: translateY(-2px); }
+    .feature-card.highlight { border-color: var(--acc); }
+    .feature-card.highlight::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--acc), var(--acc2));
+    }
+
+    .fc-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+    .fc-name { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+    .fc-badges { display: flex; gap: 4px; flex-shrink: 0; }
+
+    .badge {
+      font-size: 9px; font-weight: 600; padding: 2px 6px;
+      border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .badge-ai { background: rgba(139,92,246,.2); color: var(--acc2); }
+    .badge-new { background: rgba(34,197,94,.2); color: var(--green); }
+    .badge-unique { background: rgba(244,63,94,.15); color: var(--rose); }
+    .badge-backend { background: rgba(6,182,212,.15); color: var(--cyan); }
+
+    .fc-desc { font-size: 13px; color: var(--txt2); margin-bottom: 12px; line-height: 1.5; }
+
+    .fc-diff {
+      font-size: 11px; color: var(--acc2);
+      background: rgba(139,92,246,.08);
+      border: 1px solid rgba(139,92,246,.15);
+      border-radius: 6px; padding: 8px 10px;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+    .fc-diff strong { color: var(--acc); font-weight: 600; }
+    .fc-diff-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--txt3); margin-bottom: 4px; }
+
+    /* ── Rating bars ── */
+    .fc-ratings { display: flex; gap: 8px; }
+    .fc-rating {
+      flex: 1;
+      background: var(--surf2);
+      border-radius: 6px;
+      padding: 6px 8px;
+      text-align: center;
+    }
+    .fc-rating-label {
+      font-size: 9px; color: var(--txt3);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 4px;
+      white-space: nowrap;
+    }
+    .fc-rating-dots { display: flex; justify-content: center; gap: 3px; }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--bdr2);
+    }
+    .dot.filled { background: var(--acc); }
+    .dot.filled.high { background: var(--green); }
+    .dot.filled.med { background: var(--amber); }
+
+    /* ── Composite score ── */
+    .fc-score {
+      position: absolute; top: 12px; right: 12px;
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .score-5 { background: rgba(34,197,94,.15); color: var(--green); border: 1.5px solid rgba(34,197,94,.3); }
+    .score-4 { background: rgba(99,102,241,.15); color: var(--acc); border: 1.5px solid rgba(99,102,241,.3); }
+    .score-3 { background: rgba(245,158,11,.1); color: var(--amber); border: 1.5px solid rgba(245,158,11,.2); }
+    .score-2 { background: rgba(102,102,102,.1); color: var(--txt3); border: 1.5px solid rgba(102,102,102,.2); }
+
+    /* ── Competitor tags ── */
+    .fc-comps {
+      display: flex; gap: 4px; flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .comp-tag {
+      font-size: 9px; color: var(--txt3);
+      background: var(--surf2); border: 1px solid var(--bdr);
+      padding: 2px 6px; border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .comp-tag.beats { color: var(--green); border-color: rgba(34,197,94,.2); }
+    .comp-tag.matches { color: var(--amber); border-color: rgba(245,158,11,.2); }
+
+    /* ── Legend ── */
+    .legend {
+      max-width: 1200px; margin: 0 auto 40px; padding: 0 24px;
+      display: flex; gap: 24px; flex-wrap: wrap;
+      font-size: 11px; color: var(--txt3);
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center; padding: 48px 24px;
+      border-top: 1px solid var(--bdr);
+      color: var(--txt3); font-size: 12px;
+    }
+
+    /* ── Back to top ── */
+    .btt {
+      position: fixed; bottom: 24px; right: 24px;
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--acc); color: #fff; border: none;
+      cursor: pointer; font-size: 18px;
+      display: none; align-items: center; justify-content: center;
+      box-shadow: 0 4px 12px rgba(99,102,241,.3);
+      z-index: 99;
+    }
+    .btt.show { display: flex; }
+
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 28px; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .stats-bar { gap: 16px; }
+      .stat-num { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">60</div>
+  <div class="header-title">
+    <span class="lt">Feature Catalogue</span>
+    <span class="ls">use60.com</span>
+  </div>
+  <div class="hsep"></div>
+  <a class="header-link" href="architecture-diagram.html">Architecture Diagrams</a>
+  <div class="header-right">
+    <span class="hbg">86 features &middot; Feb 2026</span>
+  </div>
+</header>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<div class="hero">
+  <h1>Everything 60 Does</h1>
+  <p>The AI command centre for sales. Every feature rated for marketing impact &mdash; wow factor, pain relief, and trust building &mdash; with competitor differentiation.</p>
+</div>
+
+<div class="stats-bar">
+  <div class="stat"><div class="stat-num">86</div><div class="stat-label">Features</div></div>
+  <div class="stat"><div class="stat-num">285</div><div class="stat-label">Edge Functions</div></div>
+  <div class="stat"><div class="stat-num">14</div><div class="stat-label">Integrations</div></div>
+  <div class="stat"><div class="stat-num">6</div><div class="stat-label">AI Agents</div></div>
+  <div class="stat"><div class="stat-num">46</div><div class="stat-label">AI Skills</div></div>
+</div>
+
+<!-- ═══════════════ FILTERS ═══════════════ -->
+<div class="filter-bar">
+  <button class="filter-btn active" onclick="filterCat('all',this)">All Features</button>
+  <button class="filter-btn" onclick="filterCat('before',this)">Before the Call</button>
+  <button class="filter-btn" onclick="filterCat('during',this)">During the Call</button>
+  <button class="filter-btn" onclick="filterCat('after',this)">After the Call</button>
+  <button class="filter-btn" onclick="filterCat('pipeline',this)">Pipeline &amp; Deals</button>
+  <button class="filter-btn" onclick="filterCat('outreach',this)">Outreach &amp; Prospecting</button>
+  <button class="filter-btn" onclick="filterCat('platform',this)">Platform &amp; Intelligence</button>
+  <button class="filter-btn" onclick="filterCat('backend',this)">Backend Infrastructure</button>
+</div>
+
+<div class="sort-bar">
+  <span class="sort-label">Sort by</span>
+  <button class="sort-btn active" onclick="sortBy('score',this)">Overall Score</button>
+  <button class="sort-btn" onclick="sortBy('wow',this)">Wow Factor</button>
+  <button class="sort-btn" onclick="sortBy('pain',this)">Pain Killer</button>
+  <button class="sort-btn" onclick="sortBy('trust',this)">Trust Builder</button>
+</div>
+
+<!-- ═══════════════ LEGEND ═══════════════ -->
+<div class="legend">
+  <div class="legend-item"><span class="badge badge-ai" style="font-size:10px">AI</span> AI-powered</div>
+  <div class="legend-item"><span class="badge badge-unique" style="font-size:10px">UNIQUE</span> No direct competitor equivalent</div>
+  <div class="legend-item"><span class="badge badge-new" style="font-size:10px">NEW</span> Recently shipped</div>
+  <div class="legend-item"><span class="comp-tag beats" style="font-size:10px">beats</span> 60 outperforms competitor</div>
+  <div class="legend-item"><span class="comp-tag matches" style="font-size:10px">matches</span> Comparable to competitor</div>
+  <div class="legend-item">
+    <div style="display:flex;gap:2px">
+      <div class="dot filled high" style="width:6px;height:6px"></div>
+      <div class="dot filled" style="width:6px;height:6px"></div>
+      <div class="dot" style="width:6px;height:6px"></div>
+    </div>
+    Rating dots (5 = max)
+  </div>
+</div>
+
+<!-- ═══════════════ FEATURE SECTIONS ═══════════════ -->
+<div id="features-container"></div>
+
+<button class="btt" id="btt" onclick="window.scrollTo({top:0,behavior:'smooth'})">&#8593;</button>
+
+<footer>
+  60 &mdash; The AI Command Centre for Sales &middot; use60.com &middot; Updated Feb 2026<br>
+  <span style="color:var(--txt3);font-size:11px">86 features across 285 edge functions, 14 integrations, 6 specialist AI agents</span>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// FEATURE DATA
+// ═══════════════════════════════════════════════════════════════
+const FEATURES = [
+  // ─── BEFORE THE CALL ───
+  {
+    id: 'pre-meeting-briefing',
+    name: 'AI Pre-Meeting Briefing',
+    cat: 'before',
+    desc: 'Automatically researches every attendee and their company 90 minutes before your call. Delivers a structured brief to Slack with company intel, stakeholder map, talking points, and risk flags.',
+    ai: true, unique: true, isNew: false, highlight: true,
+    wow: 5, pain: 5, trust: 4,
+    diff: 'Fully autonomous &mdash; no manual trigger needed. Combines Exa web search + Gemini extraction + CRM context + past meeting history into one brief. Competitors require you to click "prep" each time.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Clay', status: 'beats' },
+    ]
+  },
+  {
+    id: 'company-research',
+    name: 'AI Company Research',
+    cat: 'before',
+    desc: 'Deep company intelligence in under 6 seconds. Funding rounds, tech stack, hiring signals, competitive landscape, news, and business triggers &mdash; structured into an actionable fact profile.',
+    ai: true, unique: false, isNew: false, highlight: true,
+    wow: 4, pain: 4, trust: 5,
+    diff: 'Exa semantic search + Gemini extraction pipeline runs in ~4-6s (vs 30-60s for Clay or manual research). Results cached as reusable "Fact Profiles" shared across the team.',
+    comps: [
+      { name: 'Clay', status: 'beats' },
+      { name: 'Apollo', status: 'beats' },
+      { name: 'Gong', status: 'beats' },
+    ]
+  },
+  {
+    id: 'fact-profiles',
+    name: 'Shareable Fact Profiles',
+    cat: 'before',
+    desc: 'AI-generated company intelligence cards that are shareable via public link, exportable as PDF, and sync across your org. Build a living knowledge base of every company you engage with.',
+    ai: true, unique: true, isNew: false, highlight: false,
+    wow: 3, pain: 3, trust: 4,
+    diff: 'No competitor creates persistent, shareable company profiles from AI research. Clay gives you spreadsheet rows; 60 gives you a branded intelligence card you can send to your team or investors.',
+    comps: [
+      { name: 'Clay', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'product-profiles',
+    name: 'Product Profile Builder',
+    cat: 'before',
+    desc: 'Guided wizard to document each product/service you sell. Feeds AI-generated proposals, email sequences, and demo prep with accurate product knowledge.',
+    ai: true, unique: true, isNew: false, highlight: false,
+    wow: 2, pain: 3, trust: 3,
+    diff: 'Teaches the AI your products so it writes with product-specific accuracy. Competitors use generic templates &mdash; 60\'s proposals and follow-ups reference real features, pricing, and differentiators.',
+    comps: [
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'icp-builder',
+    name: 'ICP Builder & Scoring',
+    cat: 'before',
+    desc: 'Define your Ideal Customer Profile with firmographic filters. Every prospect gets a fit score against your ICP. AI auto-generates search filters from a plain English description.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 3, pain: 4, trust: 3,
+    diff: 'Natural language ICP definition ("Series A SaaS companies in APAC with 50-200 employees") auto-converts to structured search across Apollo + AI Ark + Explorium. Competitors require manual filter setup.',
+    comps: [
+      { name: 'Apollo', status: 'matches' },
+      { name: 'Clay', status: 'matches' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'meeting-prep-command',
+    name: 'Meeting Prep Command Centre',
+    cat: 'before',
+    desc: 'Unified prep hub before every call: agenda builder, talking point suggestions, risk flags, open action items from last meeting, and a checklist that auto-checks as you complete items.',
+    ai: true, unique: true, isNew: false, highlight: false,
+    wow: 3, pain: 5, trust: 3,
+    diff: 'Pulls last meeting\'s unresolved action items + CRM deal data + email thread context into one prep view. Gong and Salesloft show meeting history but don\'t build actionable prep checklists.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'calendar-scheduling',
+    name: 'AI Calendar Scheduling',
+    cat: 'before',
+    desc: 'Finds mutual availability across participants and proposes times. Integrated with Google Calendar and SavvyCal for booking link generation.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 3, trust: 3,
+    diff: 'Built-in rather than requiring a separate scheduling tool. AI copilot can find times and draft scheduling emails in one conversation.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+  {
+    id: 'smart-listening',
+    name: 'Smart Listening & Account Signals',
+    cat: 'before',
+    desc: 'Monitors key accounts for job changes, funding rounds, company news, and custom signals. Alerts via Slack when a trigger fires so you always have a reason to reach out.',
+    ai: true, unique: false, isNew: true, highlight: true,
+    wow: 4, pain: 4, trust: 4,
+    diff: 'Runs on a schedule, not just at point-of-search. Apollo and Clay give you data when you ask; 60 watches your accounts 24/7 and pings you when something changes.',
+    comps: [
+      { name: 'Clay', status: 'beats' },
+      { name: 'Apollo', status: 'beats' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+
+  // ─── DURING THE CALL ───
+  {
+    id: 'notetaker',
+    name: '60 Notetaker (Auto-Record)',
+    cat: 'during',
+    desc: 'Auto-deploys a recording bot to every meeting on your calendar. Records video + audio, transcribes with WhisperX, and processes through the full AI pipeline. No browser extension needed.',
+    ai: true, unique: false, isNew: true, highlight: true,
+    wow: 4, pain: 5, trust: 4,
+    diff: 'Calendar-aware auto-join with no browser extension. Feeds directly into 60\'s AI pipeline (summary, action items, deal updates, follow-up email) in one flow. Fathom/Gong record but don\'t act on it.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+      { name: 'Sendspark', status: 'beats' },
+    ]
+  },
+  {
+    id: 'voice-recorder',
+    name: 'Voice Recorder & Notes',
+    cat: 'during',
+    desc: 'In-app audio recorder for quick sales notes, phone calls, and ad-hoc meetings. AI transcribes and extracts action items. Shareable via public link.',
+    ai: true, unique: true, isNew: false, highlight: false,
+    wow: 3, pain: 3, trust: 2,
+    diff: 'Built into your sales tool &mdash; no separate voice memo app. Records process through the same AI pipeline as meetings: transcript, summary, action items, CRM update suggestions.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'fathom-integration',
+    name: 'Multi-Notetaker Aggregation',
+    cat: 'during',
+    desc: 'Pulls meetings from Fathom, Fireflies, JustCall, and 60 Notetaker into one unified list. Switch notetakers without losing history or AI processing.',
+    ai: false, unique: true, isNew: false, highlight: false,
+    wow: 3, pain: 4, trust: 4,
+    diff: 'No other platform aggregates recordings from multiple notetaker providers. Your meeting intelligence doesn\'t fragment across tools.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'call-recording',
+    name: 'Call Recording & Transcription',
+    cat: 'during',
+    desc: 'JustCall integration captures phone calls with full transcription, talk-time analytics, and action item extraction. Audio waveform visualiser for playback.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 3, trust: 3,
+    diff: 'Phone calls get the same AI treatment as video meetings &mdash; coaching insights, action items, deal updates. Most platforms treat calls as second-class citizens.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+
+  // ─── AFTER THE CALL ───
+  {
+    id: 'post-meeting-debrief',
+    name: 'AI Post-Meeting Debrief',
+    cat: 'after',
+    desc: 'Within minutes of your call ending, 60 generates a structured summary, extracts action items, drafts a follow-up email in your voice, and posts everything to Slack for one-click approval.',
+    ai: true, unique: true, isNew: false, highlight: true,
+    wow: 5, pain: 5, trust: 4,
+    diff: 'End-to-end automation: meeting ends &rarr; summary + action items + follow-up email + CRM updates &rarr; all awaiting your approval in Slack. Gong summarises. 60 acts.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'hitl-email',
+    name: 'HITL Follow-Up Email (Send as Rep)',
+    cat: 'after',
+    desc: 'AI drafts follow-up emails from your actual Gmail account, in your writing style, with your signature. Approve/edit/reject via Slack or in-app. 30-second undo window after sending.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 5, pain: 5, trust: 5,
+    diff: 'Sends from YOUR Gmail with YOUR signature, not a separate email tool. Slack fire-and-forget approval with timezone-aware scheduling. No other platform does end-to-end: draft &rarr; Slack approve &rarr; send from Gmail &rarr; undo.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+      { name: 'Sendr', status: 'beats' },
+      { name: 'Sendspark', status: 'beats' },
+    ]
+  },
+  {
+    id: 'action-items',
+    name: 'Smart Action Item Extraction',
+    cat: 'after',
+    desc: 'AI extracts every commitment, follow-up, and next step from meeting transcripts. Scores by importance and urgency. Auto-creates tasks in Google Tasks and CRM with confidence thresholds.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 3, pain: 5, trust: 3,
+    diff: 'Importance scoring + auto-task-creation with configurable confidence threshold. Gong extracts action items but doesn\'t create tasks or score urgency.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'meeting-ask-ai',
+    name: 'Ask AI About Any Meeting',
+    cat: 'after',
+    desc: 'Chat with AI about any specific meeting transcript. Ask "What pricing objections came up?" or "What did they say about competitor X?" and get instant answers with transcript citations.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 4, pain: 3, trust: 3,
+    diff: 'Grounded in the specific transcript, not a generic summary. Works across Fathom, Fireflies, and 60 Notetaker recordings in one interface.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+    ]
+  },
+  {
+    id: 'coaching-insights',
+    name: 'AI Coaching & Talk Analytics',
+    cat: 'after',
+    desc: 'Per-call analysis of talk ratio, question quality, objection handling, and engagement patterns. AI generates coaching micro-feedback. Weekly coaching digest delivered to managers.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 3, pain: 3, trust: 4,
+    diff: 'Built into a platform that also acts on the coaching (auto-drafts better follow-ups, improves prep briefs). Gong coaches but doesn\'t close the loop.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+  {
+    id: 'proposal-gen',
+    name: 'AI Proposal Generator',
+    cat: 'after',
+    desc: 'Generates professional proposals from deal context, meeting notes, and product profiles. Exports as DOCX or PDF. Password-protected sharing links with view tracking.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 3, pain: 4, trust: 4,
+    diff: 'Uses your actual product profiles + meeting context to generate tailored proposals, not generic templates. One click from the meeting detail page.',
+    comps: [
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'intent-detection',
+    name: 'Buyer Intent Detection',
+    cat: 'after',
+    desc: 'AI scans transcripts for buying signals: pricing questions, scheduling intent, verbal commitments, and competitive comparisons. Flags high-intent moments for deal acceleration.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 4, pain: 3, trust: 4,
+    diff: 'Intent signals feed directly into deal health scores and pipeline automation. Gong detects but doesn\'t act; 60 adjusts deal risk and triggers workflows automatically.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'crm-writeback',
+    name: 'Autonomous CRM Updates',
+    cat: 'after',
+    desc: 'AI extracts deal stage, next steps, stakeholders, and MEDDIC fields from meetings and proposes CRM updates. Approve in Slack or let the AI auto-apply based on your autonomy settings.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 5, pain: 5, trust: 4,
+    diff: 'Bi-directional CRM sync with autonomy escalation. Start with "ask me every time", graduate to "just do it" as confidence grows. No CRM data entry ever again.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'meeting-share',
+    name: 'Meeting Sharing & Content Library',
+    cat: 'after',
+    desc: 'Share meeting recordings, transcripts, and summaries via secure public links. Build a searchable content library of your best calls for training and reference.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 2, trust: 3,
+    diff: 'Integrated with the broader 60 ecosystem &mdash; shared meetings link to contacts, deals, and company profiles. Not a standalone recording tool.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+    ]
+  },
+
+  // ─── PIPELINE & DEALS ───
+  {
+    id: 'pipeline-kanban',
+    name: 'Visual Pipeline (Kanban + Table)',
+    cat: 'pipeline',
+    desc: 'Drag-and-drop deal pipeline with Kanban and table views. AI health badges per deal, risk signals, revenue trend charts, and pipeline recommendations.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 4, trust: 4,
+    diff: 'AI health badges and risk signals on every deal card are not cosmetic &mdash; they\'re computed from meeting sentiment, email engagement, and activity recency.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+  {
+    id: 'deal-health',
+    name: 'AI Deal Health Scoring',
+    cat: 'pipeline',
+    desc: 'Composite health score per deal computed from meeting frequency, sentiment trends, email engagement, action item completion, and stakeholder involvement. Recalculated daily.',
+    ai: true, unique: false, isNew: false, highlight: true,
+    wow: 4, pain: 4, trust: 5,
+    diff: 'Multi-signal health scoring (not just "days since last activity"). Factors in sentiment analysis from actual conversations, email reply patterns, and stakeholder mapping depth.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'deal-risk-scanner',
+    name: 'Proactive Deal Risk Scanner',
+    cat: 'pipeline',
+    desc: 'AI agent scans your pipeline daily. Identifies at-risk deals before they slip. Delivers risk alerts with diagnosis and rescue recommendations via Slack.',
+    ai: true, unique: true, isNew: false, highlight: true,
+    wow: 5, pain: 5, trust: 4,
+    diff: 'Proactive, not reactive. Runs autonomously on a schedule and alerts you &mdash; you don\'t have to check a dashboard. Includes concrete rescue actions, not just "this deal is at risk."',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'stale-deal-revival',
+    name: 'Stale Deal Revival',
+    cat: 'pipeline',
+    desc: 'AI identifies dormant deals, diagnoses why they stalled, and drafts personalised re-engagement outreach based on the last meeting context and any new company signals.',
+    ai: true, unique: true, isNew: false, highlight: true,
+    wow: 4, pain: 5, trust: 3,
+    diff: 'Not just "you haven\'t touched this deal in 30 days." AI reads the last meeting transcript, checks for company news, and writes a re-engagement email with a genuine reason to reconnect.',
+    comps: [
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'deal-intelligence',
+    name: 'Deal Intelligence Panel',
+    cat: 'pipeline',
+    desc: 'AI-generated deal analysis: stakeholder map, MEDDIC qualification, competitive positioning, buying signals timeline, and recommended next actions. All from your meeting data.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 4, pain: 3, trust: 5,
+    diff: 'Aggregates intelligence from every meeting and email into a single deal view. Updates automatically after each call. Gong shows per-meeting insights; 60 shows the deal narrative arc.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'sales-methodology',
+    name: 'Configurable Sales Methodology',
+    cat: 'pipeline',
+    desc: 'Built-in MEDDIC, SPIN, Challenger, and custom methodology support. AI scores qualification criteria from meeting transcripts. Stage mapping editor for your process.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 3, trust: 4,
+    diff: 'AI auto-fills methodology fields from conversation data instead of manual entry. Choose your framework or build a custom one.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+      { name: 'HubSpot', status: 'matches' },
+    ]
+  },
+  {
+    id: 'deal-rooms',
+    name: 'Slack Deal Rooms',
+    cat: 'pipeline',
+    desc: 'Auto-creates a private Slack channel per deal. AI posts meeting summaries, deal updates, risk alerts, and momentum changes. Archives on deal close.',
+    ai: true, unique: true, isNew: false, highlight: false,
+    wow: 3, pain: 3, trust: 3,
+    diff: 'Automatic Slack channel per deal with AI-curated updates. No manual Slack channel management. Competitors send notifications; 60 creates a persistent context room.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'dashboard-kpi',
+    name: 'Sales Dashboard & KPIs',
+    cat: 'pipeline',
+    desc: 'Real-time dashboard with configurable goals for New Business, Outbound, Meetings, and Proposals. Progress bars, trend arrows, team performance matrix, and conversion funnel.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 3, trust: 4,
+    diff: 'Goal-based tracking with vs-same-period and vs-previous comparisons. Clean, focused metrics instead of report overload.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+
+  // ─── OUTREACH & PROSPECTING ───
+  {
+    id: 'multi-source-prospecting',
+    name: 'Multi-Source Prospecting Hub',
+    cat: 'outreach',
+    desc: 'Search Apollo, AI Ark, and Explorium from one interface. Natural language queries convert to structured filters. Similarity search finds lookalike companies from a seed domain.',
+    ai: true, unique: true, isNew: false, highlight: true,
+    wow: 4, pain: 5, trust: 4,
+    diff: 'Three data providers in one search bar with natural language. "Find Series B fintech companies in London with 50-200 employees" works out of the box. Clay requires manual column setup per provider.',
+    comps: [
+      { name: 'Clay', status: 'beats' },
+      { name: 'Apollo', status: 'beats' },
+    ]
+  },
+  {
+    id: 'ops-tables',
+    name: 'Ops Tables (AI Spreadsheet)',
+    cat: 'outreach',
+    desc: 'Dynamic spreadsheet-style tables with AI-powered columns that auto-enrich, classify, or generate data. Import from CSV, HubSpot, Attio, Apollo, AI Ark, Explorium, or Apify scrapers.',
+    ai: true, unique: false, isNew: false, highlight: true,
+    wow: 4, pain: 5, trust: 4,
+    diff: 'Clay\'s spreadsheet concept but inside your CRM with direct push to HubSpot/Attio/Instantly. AI columns run autonomously, not manually. Import from 7 sources including web scrapers.',
+    comps: [
+      { name: 'Clay', status: 'matches' },
+      { name: 'Apollo', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'ai-query-bar',
+    name: 'Natural Language Data Queries',
+    cat: 'outreach',
+    desc: 'Ask questions about your ops table data in plain English. "Show me contacts who opened emails but didn\'t reply" or "Which companies have the most engaged leads?" AI translates to SQL.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 4, pain: 3, trust: 3,
+    diff: 'Natural language queries on your actual sales data, not just search. Cross-table queries combine contacts, deals, and engagement data. Clay has column formulas but not conversational data exploration.',
+    comps: [
+      { name: 'Clay', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'ai-dedup',
+    name: 'AI Deduplication',
+    cat: 'outreach',
+    desc: 'AI-powered fuzzy matching to find and merge duplicate records in your ops tables. Preview duplicates before merge.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 4, trust: 3,
+    diff: 'AI fuzzy matching rather than exact-field comparison. Catches "Bob Smith" = "Robert Smith" and "Acme Inc" = "Acme Corporation".',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Apollo', status: 'beats' },
+    ]
+  },
+  {
+    id: 'email-sequences',
+    name: 'AI Email Sequence Generator',
+    cat: 'outreach',
+    desc: 'Generates multi-step cold outreach sequences that sound human. Personalised per prospect using enrichment data. Push directly to Instantly for automated sending.',
+    ai: true, unique: false, isNew: false, highlight: true,
+    wow: 4, pain: 5, trust: 3,
+    diff: 'AI writes the sequence from your ICP + product profile + prospect research, not templates. Push to Instantly in one click. Sendr and Salesloft require manual sequence building.',
+    comps: [
+      { name: 'Sendr', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+      { name: 'Apollo', status: 'beats' },
+    ]
+  },
+  {
+    id: 'campaign-monitoring',
+    name: 'AI Campaign Monitoring',
+    cat: 'outreach',
+    desc: 'Pulls Instantly campaign metrics, classifies every reply by intent (interested, objection, not now, unsubscribe), and generates performance insights. Alerts on campaigns that need attention.',
+    ai: true, unique: true, isNew: false, highlight: false,
+    wow: 3, pain: 4, trust: 3,
+    diff: 'AI reply classification goes beyond open/click rates. Detects "interested but busy" vs "hard no" vs "wrong person" and suggests campaign adjustments.',
+    comps: [
+      { name: 'Sendr', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+      { name: 'Apollo', status: 'beats' },
+    ]
+  },
+  {
+    id: 'enrich-cascade',
+    name: 'Waterfall Enrichment',
+    cat: 'outreach',
+    desc: 'Multi-source enrichment waterfall: Apollo &rarr; AI Ark &rarr; Explorium. If one source is missing data, the next fills the gaps. Auto-re-enrichment runs weekly for stale records.',
+    ai: false, unique: true, isNew: false, highlight: false,
+    wow: 3, pain: 4, trust: 4,
+    diff: 'Automatic cascade across three providers with weekly refresh. Clay requires manual waterfall column setup. Apollo is single-source.',
+    comps: [
+      { name: 'Clay', status: 'beats' },
+      { name: 'Apollo', status: 'beats' },
+    ]
+  },
+  {
+    id: 'apify-scraping',
+    name: 'Web Scraping Marketplace',
+    cat: 'outreach',
+    desc: 'Run Apify actors (web scrapers) directly from 60. Scrape LinkedIn profiles, company websites, job boards &mdash; results land in your ops table with AI field mapping.',
+    ai: true, unique: true, isNew: false, highlight: false,
+    wow: 4, pain: 3, trust: 2,
+    diff: 'Apify\'s 2,000+ scraper marketplace integrated into your sales workflow. Results auto-mapped to table columns by AI. No other CRM/sales tool has built-in web scraping.',
+    comps: [
+      { name: 'Clay', status: 'matches' },
+      { name: 'Apollo', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'lead-inbox',
+    name: 'Leads Inbox',
+    cat: 'outreach',
+    desc: 'Inbox-style view of all inbound leads from SavvyCal bookings, HubSpot forms, and manual entry. AI qualification scoring against ICP. One-click research before the first call.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 3, trust: 3,
+    diff: 'Inbound leads scored against ICP and auto-researched before the meeting. Not a lead list &mdash; a prioritised inbox.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+  {
+    id: 'crm-push',
+    name: 'Multi-CRM Push',
+    cat: 'outreach',
+    desc: 'Push contacts, deals, and enrichment data to HubSpot, Attio, or both with bi-directional sync. Field mapping with write policies (auto / approval / suggest / disabled).',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 4, trust: 4,
+    diff: 'Bi-directional sync with write policy control per field. Not just "export to CRM" but a live two-way bridge with conflict resolution.',
+    comps: [
+      { name: 'Clay', status: 'matches' },
+      { name: 'Apollo', status: 'matches' },
+    ]
+  },
+
+  // ─── PLATFORM & INTELLIGENCE ───
+  {
+    id: 'copilot',
+    name: 'AI Copilot (Conversational Agent)',
+    cat: 'platform',
+    desc: 'Full-page conversational AI with access to your entire sales context. Slash commands for 46 skills, entity mentions, tool call visualisation, and persistent conversation history.',
+    ai: true, unique: true, isNew: false, highlight: true,
+    wow: 5, pain: 4, trust: 4,
+    diff: 'Not a chatbot &mdash; a sales teammate with access to your CRM, meetings, emails, pipeline, and enrichment data. 46 skills from proposal generation to competitor battlecards. No other platform has a general-purpose sales AI this deep.',
+    comps: [
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Gong', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'slack-copilot',
+    name: 'Slack Sales Assistant',
+    cat: 'platform',
+    desc: 'Full copilot experience in Slack DM. Ask about deals, contacts, pipeline, coaching, and competitive intel without leaving Slack. Slash commands and button-driven workflows.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 5, pain: 5, trust: 3,
+    diff: 'A complete sales assistant in Slack, not just notifications. "What\'s the status on the Acme deal?" or "Draft a follow-up to Sarah" works in your Slack DM. Gong and HubSpot send alerts to Slack; 60 lives in Slack.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'agent-fleet',
+    name: '6-Agent Specialist Fleet',
+    cat: 'platform',
+    desc: 'Six specialist AI agents (Pipeline, Outreach, Research, CRM Ops, Meetings, Prospecting) work autonomously on your behalf. Circuit breakers prevent cascading failures. Dead-letter queue for retry.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 5, pain: 4, trust: 5,
+    diff: 'Production-grade agent architecture with circuit breakers, health monitoring, and autonomy escalation. Not a single chatbot &mdash; a fleet of specialists. No other sales platform has this.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Clay', status: 'beats' },
+    ]
+  },
+  {
+    id: 'autonomy-system',
+    name: 'Autonomy Escalation Engine',
+    cat: 'platform',
+    desc: 'AI actions start supervised ("ask me every time"). As you approve actions, confidence grows and the AI earns autonomy. Three presets (Conservative, Balanced, Autonomous) or full custom control.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 5, pain: 4, trust: 5,
+    diff: 'Trust builds over time like a real teammate. No other platform has a confidence-based autonomy promotion engine. You control the pace &mdash; per action type, per user.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'command-centre',
+    name: 'Command Centre (Action Hub)',
+    cat: 'platform',
+    desc: 'Unified hub for all AI-generated actions awaiting your approval. Task chains, writing canvas, CRM update previews, Slack previews. Approve, edit, or reject everything in one place.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 4, pain: 5, trust: 4,
+    diff: 'One place to review and approve everything the AI has done. Not scattered across dashboards. Task chains show the full context of why an action was generated.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'email-action-centre',
+    name: 'Email Action Centre',
+    cat: 'platform',
+    desc: 'Dedicated inbox for AI-drafted emails awaiting human review. Edit subject, body, recipients. Approve to send from your Gmail. Reject with feedback to improve future drafts.',
+    ai: true, unique: true, isNew: true, highlight: false,
+    wow: 3, pain: 4, trust: 4,
+    diff: 'Centralised email approval queue. Most tools scatter AI-drafted emails across features. 60 gives you one inbox to review everything before it goes out.',
+    comps: [
+      { name: 'Salesloft', status: 'beats' },
+      { name: 'Sendr', status: 'beats' },
+    ]
+  },
+  {
+    id: 'agent-marketplace',
+    name: 'Agent Marketplace',
+    cat: 'platform',
+    desc: 'App-store of AI abilities you can enable/disable. Meeting prep, post-meeting automation, deal risk scanning, coaching, campaign monitoring, email handling &mdash; each with run stats and integration requirements.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 5, pain: 3, trust: 4,
+    diff: 'Choose which AI abilities run for your account like installing apps. See run counts, last-run time, and required integrations. No other sales platform has a modular agent marketplace.',
+    comps: [
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Gong', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'custom-sops',
+    name: 'Custom AI Playbooks (SOPs)',
+    cat: 'platform',
+    desc: 'Build custom Standard Operating Procedures for the AI. Define trigger conditions, step sequences, and approval gates. The AI follows your playbook, not generic rules.',
+    ai: true, unique: true, isNew: true, highlight: false,
+    wow: 4, pain: 3, trust: 4,
+    diff: 'Teach the AI your specific sales process. "When a demo is booked, research the company, prep talking points, and draft a confirmation email." No other platform lets you build custom agent workflows.',
+    comps: [
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'morning-brief',
+    name: 'AI Daily Briefing',
+    cat: 'platform',
+    desc: 'Time-aware daily briefing delivered to Slack. Today\'s meetings with prep notes, deals needing attention, overdue tasks, and pipeline highlights. Adapts to morning, afternoon, or evening.',
+    ai: true, unique: true, isNew: false, highlight: true,
+    wow: 4, pain: 5, trust: 3,
+    diff: 'Time-aware (different content at 8AM vs 2PM). Combines calendar + pipeline + tasks + signals into one message. Not a notification dump &mdash; an executive summary of your day.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'semantic-search',
+    name: 'Semantic Meeting Search',
+    cat: 'platform',
+    desc: 'Search across all your meeting transcripts using natural language. "Meetings where pricing objections came up" or "Calls where they mentioned competitor X." Vector-powered semantic matching.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 4, pain: 3, trust: 4,
+    diff: 'Semantic (meaning-based) search, not keyword matching. Finds relevant moments even when the exact words differ. Indexed with pgvector embeddings.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+    ]
+  },
+  {
+    id: 'memory-system',
+    name: 'AI Memory & Relationship Graph',
+    cat: 'platform',
+    desc: 'The AI remembers every interaction, commitment, and preference per contact. Relationship strength decays over time. Memory snapshots track how relationships evolve.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 5, pain: 3, trust: 5,
+    diff: 'Persistent memory with decay. The AI knows you promised to send that case study 3 weeks ago and that the contact\'s daughter started uni. No other sales AI has persistent relational memory with decay.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'competitive-intel',
+    name: 'Competitive Intelligence',
+    cat: 'platform',
+    desc: 'Tracks competitor mentions across meetings. Auto-generates battlecards with positioning, objection responses, and win/loss insights. Searchable from Slack.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 3, pain: 3, trust: 4,
+    diff: 'Battlecards built from your actual conversation data, not generic market research. Updated automatically as new competitive mentions surface.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+      { name: 'HubSpot', status: 'beats' },
+    ]
+  },
+  {
+    id: 'writing-style',
+    name: 'AI Writing Style Learning',
+    cat: 'platform',
+    desc: 'AI analyses your past emails to learn your writing voice and tone. All AI-generated emails, follow-ups, and sequences match your personal style.',
+    ai: true, unique: true, isNew: false, highlight: true,
+    wow: 4, pain: 4, trust: 3,
+    diff: 'Learns from YOUR emails, not generic sales copy. The AI sounds like you, not a robot. Sendr and Salesloft use templates; 60 learns your voice.',
+    comps: [
+      { name: 'Sendr', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+      { name: 'Sendspark', status: 'beats' },
+    ]
+  },
+  {
+    id: 'workflows',
+    name: 'Visual Workflow Builder',
+    cat: 'platform',
+    desc: 'Drag-and-drop automation builder with templates, test lab, execution history, and analytics. Create custom workflows triggered by pipeline changes, meetings, or signals.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 3, pain: 3, trust: 4,
+    diff: 'Visual builder with AI-powered actions in the workflow (research, draft email, classify). Not just "if/then" rules but AI-augmented automation.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+  {
+    id: 'ai-settings',
+    name: 'Configurable AI Models',
+    cat: 'platform',
+    desc: 'Choose AI models per feature: OpenAI, Anthropic Claude, Google Gemini, or OpenRouter. Adjust temperature and max tokens. Route different tasks to different models.',
+    ai: true, unique: true, isNew: false, highlight: false,
+    wow: 3, pain: 2, trust: 4,
+    diff: 'Model transparency and choice. Most platforms hide which AI they use. 60 lets you pick Claude for proposals and Gemini for research based on what works best.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Clay', status: 'beats' },
+    ]
+  },
+  {
+    id: 'signal-intelligence',
+    name: 'Email Signal Intelligence',
+    cat: 'platform',
+    desc: '12 configurable signal types detected from email patterns. Engagement scoring, deal temperature calculation, and Slack alerts when signals cross thresholds.',
+    ai: true, unique: false, isNew: true, highlight: false,
+    wow: 3, pain: 3, trust: 4,
+    diff: 'Email signals feed directly into deal health and trigger proactive agent actions. Not just analytics &mdash; automated responses to engagement patterns.',
+    comps: [
+      { name: 'Salesloft', status: 'matches' },
+      { name: 'HubSpot', status: 'matches' },
+    ]
+  },
+
+  // ─── INTEGRATIONS ───
+  {
+    id: 'integration-hub',
+    name: '14 Native Integrations',
+    cat: 'platform',
+    desc: 'Google Workspace, Slack, HubSpot, Attio, Fathom, Fireflies, JustCall, SavvyCal, Apollo, AI Ark, Explorium, Instantly, Apify, and 60 Notetaker. OAuth-based with health monitoring.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 4, trust: 5,
+    diff: 'All integrations are bi-directional where applicable. Not just "read from CRM" but "write back with approval." Integration health dashboard monitors connection status.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+  {
+    id: 'smart-search',
+    name: 'Global Smart Search',
+    cat: 'platform',
+    desc: 'Keyboard-shortcut-activated search across all contacts, companies, deals, meetings, and activities. Instant results as you type.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 3, trust: 3,
+    diff: 'Searches across entities, not siloed. Find a contact, their deals, and their meetings from one search bar.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+    ]
+  },
+  {
+    id: 'quick-add',
+    name: 'Quick Add (Rapid Entry)',
+    cat: 'platform',
+    desc: 'Floating + button to create deals, contacts, tasks, or activities from anywhere in the app. Two-click max.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 1, pain: 3, trust: 2,
+    diff: 'Speed-focused UX. No navigating to a page to create something.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+    ]
+  },
+  {
+    id: 'credits-billing',
+    name: 'Credit System & Billing',
+    cat: 'platform',
+    desc: 'Usage-based credit system for AI features. Auto top-up, balance monitoring, usage breakdown by feature, cost tracking, and Stripe-powered billing.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 1, pain: 2, trust: 4,
+    diff: 'Transparent AI cost tracking per feature. See exactly where your credits go.',
+    comps: [
+      { name: 'Clay', status: 'matches' },
+      { name: 'Apollo', status: 'matches' },
+    ]
+  },
+  {
+    id: 'team-management',
+    name: 'Team & Org Management',
+    cat: 'platform',
+    desc: 'Invite team members with roles (owner, admin, member, readonly). Org-level settings, join requests, and member management.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 1, pain: 3, trust: 4,
+    diff: 'Standard but necessary. Role-based access control.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+  {
+    id: 'onboarding',
+    name: 'Guided Onboarding Wizard',
+    cat: 'platform',
+    desc: 'Multi-step onboarding: calendar setup, CRM connection, notetaker selection, follow-up configuration, and a test run. Persistent sidebar indicator tracks completion.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 3, trust: 3,
+    diff: 'Integration-first onboarding. Connect your tools, then the AI starts working immediately.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+    ]
+  },
+  {
+    id: 'roadmap-votes',
+    name: 'Public Roadmap & Voting',
+    cat: 'platform',
+    desc: 'In-app product roadmap where users vote on upcoming features. Changelog of shipped releases.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 1, trust: 3,
+    diff: 'Transparency builds trust. Users see what\'s coming and influence priorities.',
+    comps: [
+      { name: 'Clay', status: 'matches' },
+    ]
+  },
+
+  // ─── BACKEND INFRASTRUCTURE ───
+  {
+    id: 'fleet-orchestrator',
+    name: 'Fleet Orchestrator',
+    cat: 'backend',
+    desc: 'Event-driven agent orchestration with declarative skill pipelines, self-invocation for timeout handling, idempotency, HITL pause/resume, and dead-letter queue for failed events.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 5, pain: 3, trust: 5,
+    diff: 'Production-grade agent infrastructure. Circuit breakers disable unhealthy agents. Dead-letter queue retries failures. Fleet health monitor runs every 5 minutes. No other sales platform has this level of agent ops.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
+    id: 'model-router',
+    name: 'Multi-Model AI Router',
+    cat: 'backend',
+    desc: 'Unified model routing across Anthropic Claude, Google Gemini, and OpenAI. Automatic model selection by task, cost tracking per call, and graceful fallbacks.',
+    ai: true, unique: true, isNew: false, highlight: false,
+    wow: 3, pain: 2, trust: 5,
+    diff: 'Best model for each task, not one-size-fits-all. Claude for nuanced writing, Gemini for real-time search, OpenAI for embeddings. With per-call cost tracking.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'Clay', status: 'beats' },
+    ]
+  },
+  {
+    id: 'transcription-pipeline',
+    name: 'Multi-Engine Transcription',
+    cat: 'backend',
+    desc: 'Recording &rarr; S3 upload &rarr; Lambda compression &rarr; WhisperX or Gladia transcription &rarr; AI summarisation &rarr; action item extraction &rarr; CRM updates. Fully async with retry queues.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 3, pain: 3, trust: 5,
+    diff: 'Redundant transcription engines with automatic failover. Compression pipeline reduces storage costs. Most platforms use a single transcription provider.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+    ]
+  },
+  {
+    id: 'webhook-mesh',
+    name: 'Webhook Event Mesh',
+    cat: 'backend',
+    desc: '20+ inbound webhook endpoints receiving events from Stripe, HubSpot, Attio, Google, Slack, Fathom, JustCall, MeetingBaas, Apify, Sentry, and more. Events route to agent sequences.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 2, pain: 3, trust: 5,
+    diff: 'Events from external systems trigger autonomous agent actions, not just database writes. A HubSpot deal update can trigger a risk re-evaluation or a prep brief.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+    ]
+  },
+  {
+    id: 'cron-system',
+    name: '25+ Scheduled Jobs',
+    cat: 'backend',
+    desc: 'pg_cron-powered schedule from every 2 minutes to weekly. Signal scanning, fleet health, transcription queues, re-enrichment, morning briefs, scorecard delivery, and cleanup jobs.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 1, pain: 2, trust: 4,
+    diff: 'The machinery behind "it just happens." 25+ background jobs keep data fresh, agents healthy, and users informed without manual triggers.',
+    comps: []
+  },
+  {
+    id: 'vector-search',
+    name: 'Vector Embeddings & RAG',
+    cat: 'backend',
+    desc: 'pgvector-powered embeddings for meeting transcripts. RAG (retrieval-augmented generation) pipeline for semantic search and context-aware AI responses.',
+    ai: true, unique: false, isNew: false, highlight: false,
+    wow: 3, pain: 2, trust: 4,
+    diff: 'AI responses grounded in your actual data, not hallucinations. Every answer cites specific meeting moments.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+    ]
+  },
+  {
+    id: 'rls-security',
+    name: 'Row-Level Security (Multi-Tenant)',
+    cat: 'backend',
+    desc: 'PostgreSQL RLS on every table. Data is siloed by org_id at the database level, not application logic. Audit logging for auth events.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 1, pain: 2, trust: 5,
+    diff: 'Enterprise-grade data isolation at the database layer. Important for regulated industries and security-conscious buyers.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Gong', status: 'matches' },
+    ]
+  },
+  {
+    id: 'api-v1',
+    name: 'Public REST API',
+    cat: 'backend',
+    desc: 'Public API endpoints for contacts, deals, meetings, companies, activities, and tasks. API key authentication for external integrations.',
+    ai: false, unique: false, isNew: false, highlight: false,
+    wow: 1, pain: 3, trust: 4,
+    diff: 'Build custom integrations and automations. Standard REST API with API key management.',
+    comps: [
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// WORKFLOW SECTIONS CONFIG
+// ═══════════════════════════════════════════════════════════════
+const SECTIONS = [
+  { id: 'before', label: 'Before the Call', icon: '&#128269;', color: '#0891b2', desc: 'Research, prep, and intelligence gathering' },
+  { id: 'during', label: 'During the Call', icon: '&#127908;', color: '#16a34a', desc: 'Recording, transcription, and note-taking' },
+  { id: 'after', label: 'After the Call', icon: '&#9889;', color: '#f59e0b', desc: 'Follow-up, action items, and CRM updates' },
+  { id: 'pipeline', label: 'Pipeline & Deals', icon: '&#128200;', color: '#6366f1', desc: 'Deal management, health scoring, and risk detection' },
+  { id: 'outreach', label: 'Outreach & Prospecting', icon: '&#127919;', color: '#f43f5e', desc: 'Lead discovery, enrichment, and email campaigns' },
+  { id: 'platform', label: 'Platform & Intelligence', icon: '&#129302;', color: '#8b5cf6', desc: 'AI copilot, agents, integrations, and configuration' },
+  { id: 'backend', label: 'Backend Infrastructure', icon: '&#9881;', color: '#64748b', desc: 'Architecture, security, and reliability' },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════
+let currentCat = 'all';
+let currentSort = 'score';
+
+function getScore(f) {
+  return Math.round((f.wow + f.pain + f.trust) / 3 * 10) / 10;
+}
+
+function scoreClass(f) {
+  const s = getScore(f);
+  if (s >= 4.5) return 'score-5';
+  if (s >= 3.5) return 'score-4';
+  if (s >= 2.5) return 'score-3';
+  return 'score-2';
+}
+
+function renderDots(val, type) {
+  let dots = '';
+  for (let i = 1; i <= 5; i++) {
+    const cls = i <= val ? (val >= 4 ? 'filled high' : val >= 3 ? 'filled med' : 'filled') : '';
+    dots += `<div class="dot ${cls}"></div>`;
+  }
+  return dots;
+}
+
+function renderCard(f) {
+  const score = getScore(f);
+  const badges = [];
+  if (f.ai) badges.push('<span class="badge badge-ai">AI</span>');
+  if (f.unique) badges.push('<span class="badge badge-unique">Unique</span>');
+  if (f.isNew) badges.push('<span class="badge badge-new">New</span>');
+
+  const comps = f.comps.map(c => `<span class="comp-tag ${c.status}">${c.name}</span>`).join('');
+
+  return `
+    <div class="feature-card ${f.highlight ? 'highlight' : ''}" data-cat="${f.cat}" data-score="${score}" data-wow="${f.wow}" data-pain="${f.pain}" data-trust="${f.trust}">
+      <div class="fc-score ${scoreClass(f)}">${score.toFixed(1)}</div>
+      <div class="fc-top">
+        <div class="fc-name">${f.name}</div>
+      </div>
+      <div class="fc-badges">${badges.join('')}</div>
+      <div class="fc-desc">${f.desc}</div>
+      <div class="fc-diff">
+        <div class="fc-diff-title">What makes this different</div>
+        ${f.diff}
+      </div>
+      <div class="fc-ratings">
+        <div class="fc-rating">
+          <div class="fc-rating-label">Wow</div>
+          <div class="fc-rating-dots">${renderDots(f.wow, 'wow')}</div>
+        </div>
+        <div class="fc-rating">
+          <div class="fc-rating-label">Pain Killer</div>
+          <div class="fc-rating-dots">${renderDots(f.pain, 'pain')}</div>
+        </div>
+        <div class="fc-rating">
+          <div class="fc-rating-label">Trust</div>
+          <div class="fc-rating-dots">${renderDots(f.trust, 'trust')}</div>
+        </div>
+      </div>
+      ${comps ? `<div class="fc-comps">${comps}</div>` : ''}
+    </div>
+  `;
+}
+
+function render() {
+  const container = document.getElementById('features-container');
+  let html = '';
+
+  const sections = currentCat === 'all' ? SECTIONS : SECTIONS.filter(s => s.id === currentCat);
+
+  for (const section of sections) {
+    let features = FEATURES.filter(f => f.cat === section.id);
+
+    // Sort
+    if (currentSort === 'wow') features.sort((a, b) => b.wow - a.wow);
+    else if (currentSort === 'pain') features.sort((a, b) => b.pain - a.pain);
+    else if (currentSort === 'trust') features.sort((a, b) => b.trust - a.trust);
+    else features.sort((a, b) => getScore(b) - getScore(a));
+
+    if (features.length === 0) continue;
+
+    html += `
+      <div class="workflow-section">
+        <div class="workflow-header">
+          <div class="workflow-icon" style="background:${section.color}20;color:${section.color}">${section.icon}</div>
+          <h2>${section.label}</h2>
+          <p>${features.length} features &middot; ${section.desc}</p>
+        </div>
+        <div class="feature-grid">
+          ${features.map(renderCard).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+function filterCat(cat, btn) {
+  currentCat = cat;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function sortBy(sort, btn) {
+  currentSort = sort;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+// Back to top
+window.addEventListener('scroll', () => {
+  document.getElementById('btt').classList.toggle('show', window.scrollY > 400);
+});
+
+// Initial render
+render();
+</script>
+
+</body>
+</html>

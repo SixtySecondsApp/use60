@@ -17,6 +17,7 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 import { getStripeClient } from '../_shared/stripe.ts';
 import { CREDIT_PACKS, type PackType } from '../_shared/creditPacks.ts';
 
@@ -308,6 +309,15 @@ serve(async (req) => {
 
   const preflightResponse = handleCorsPreflightRequest(req);
   if (preflightResponse) return preflightResponse;
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {

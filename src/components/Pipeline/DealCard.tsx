@@ -8,6 +8,7 @@
 
 import React, { useState } from 'react';
 import { CircleDot, Users, Clock, TrendingUp, TrendingDown, Minus, AlertTriangle, ListTodo, Calendar } from 'lucide-react';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import type { PipelineDeal } from './hooks/usePipelineData';
 import { DealTemperatureGauge } from '@/components/signals/DealTemperatureGauge';
 
@@ -33,20 +34,6 @@ interface DealCardProps {
   temperatureData?: DealTemperatureData | null;
 }
 
-/**
- * Format currency value (e.g., $50K, $1.2M)
- */
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return '$0';
-
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(0)}K`;
-  }
-  return `$${value.toFixed(0)}`;
-}
 
 /**
  * Get initials from company name
@@ -127,6 +114,8 @@ export const DealCard = React.memo<DealCardProps>(({
   temperatureData,
 }) => {
   const [logoError, setLogoError] = useState(false);
+  const { formatMoney: fmtMoney } = useOrgMoney();
+  const formatCurrency = (value: number | null) => fmtMoney(value ?? 0, { compact: true });
   const healthBar = getHealthBarStyles(deal.health_status);
   const avatarGradient = getAvatarGradient(deal.company);
   const showLogo = logoUrl && !logoError;

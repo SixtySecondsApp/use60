@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 import { corsHeaders } from "../_shared/cors.ts";
 import { captureException } from '../_shared/sentryEdge.ts';
 import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts';

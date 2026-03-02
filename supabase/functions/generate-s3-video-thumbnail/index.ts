@@ -14,7 +14,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { S3Client, PutObjectCommand, GetObjectCommand } from 'npm:@aws-sdk/client-s3@3';
 import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
 import { corsHeaders, handleCorsPreflightWithResponse } from '../_shared/corsHelper.ts';

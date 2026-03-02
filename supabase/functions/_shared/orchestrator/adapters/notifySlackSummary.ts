@@ -4,7 +4,6 @@
  * Final step in the meeting_ended sequence (Wave 4).
  * Collects outputs from all upstream steps and sends:
  * 1. A rich Meeting Debrief Block Kit message to Slack
- * 2. An email draft approval message (if draft-followup-email produced one)
  *
  * Upstream outputs consumed:
  * - classify-call-type: { call_type_name, is_sales }
@@ -12,7 +11,6 @@
  * - detect-intents: { commitments, buying_signals, follow_up_items }
  * - coaching-micro-feedback: { talk_ratio, overall_score, insights, recommendations }
  * - suggest-next-actions: { actions }
- * - draft-followup-email: { email_draft, to, contact_name, subject }
  * - update-crm-from-meeting: { deal_id, deal_name, changes_applied, field_changes }
  */
 
@@ -102,7 +100,6 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
       const actionItemsOutput = state.outputs['extract-action-items'] as any;
       const intentsOutput = state.outputs['detect-intents'] as any;
       const coachingOutput = state.outputs['coaching-micro-feedback'] as any;
-      const emailOutput = state.outputs['draft-followup-email'] as any;
       const crmUpdateOutput = state.outputs['update-crm-from-meeting'] as any;
 
       // --- Get meeting metadata ---
@@ -167,8 +164,18 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
           attendees.push(a.name || a.email || 'Unknown');
         }
       }
-      if (attendees.length === 0 && emailOutput?.contact_name) {
-        attendees.push(emailOutput.contact_name);
+      // Fallback: query meeting_attendees if no attendees in event payload
+      if (attendees.length === 0 && meetingId) {
+        const { data: mtgAttendees } = await supabase
+          .from('meeting_attendees')
+          .select('name, email, is_external')
+          .eq('meeting_id', meetingId)
+          .limit(10);
+        if (mtgAttendees) {
+          for (const a of mtgAttendees) {
+            attendees.push(a.name || a.email || 'Unknown');
+          }
+        }
       }
 
       // --- Get deal info from context ---
@@ -254,6 +261,11 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
         }
       }
 
+      // --- Compute CRM fields updated count (used in metadata below) ---
+      const crmFieldsUpdated = crmUpdateOutput && !crmUpdateOutput.skipped
+        ? crmUpdateOutput.changes_applied || 0
+        : 0;
+
       // Get bot token and Slack user ID for delivery
       const { data: slackIntegration } = await supabase
         .from('slack_integrations')
@@ -315,10 +327,6 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
       }
 
       // Insert agent_activity record (in-app mirroring)
-      const crmFieldsUpdated = crmUpdateOutput && !crmUpdateOutput.skipped
-        ? crmUpdateOutput.changes_applied || 0
-        : 0;
-
       try {
         const { error: activityError } = await supabase.rpc('insert_agent_activity', {
           p_user_id: state.event.user_id,
@@ -347,88 +355,12 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
         console.error('[notify-slack-summary] Error inserting agent_activity:', actErr);
       }
 
-      // =================================================================
-      // 2. Send Email Draft Approval to Slack (if draft exists)
-      // =================================================================
-      let emailApprovalDelivered = false;
-      if (emailOutput?.email_draft && !emailOutput?.skipped) {
-        const draft = emailOutput.email_draft;
-        const contactName = emailOutput.contact_name || draft.to;
-
-        // Build a simple Slack message with the email draft for review
-        const emailBlocks = [
-          {
-            type: 'header',
-            text: { type: 'plain_text', text: ':email:  Draft Follow-Up Email Ready', emoji: true },
-          },
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `*To:* ${contactName} (${draft.to})\n*Subject:* ${draft.subject}`,
-            },
-          },
-          { type: 'divider' },
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: (draft.body || '').substring(0, 2900), // Slack block text limit
-            },
-          },
-          { type: 'divider' },
-          {
-            type: 'context',
-            elements: [
-              {
-                type: 'mrkdwn',
-                text: `${draft.ai_generated ? ':sparkles: AI-generated' : ':pencil: Template'} | Meeting: ${meetingTitle} | Reply in 60 or your email client to send`,
-              },
-            ],
-          },
-        ];
-
-        if (botToken && recipientSlackUserId) {
-          try {
-            const emailPayload: ProactiveNotificationPayload = {
-              type: 'hitl_followup_email',
-              orgId: state.event.org_id,
-              recipientUserId: state.event.user_id,
-              recipientSlackUserId,
-              entityType: 'meeting',
-              entityId: meetingId,
-              title: 'Draft Follow-Up Email Ready',
-              message: `Draft follow-up email for ${contactName}: ${draft.subject}`,
-              blocks: emailBlocks,
-              metadata: {
-                meeting_id: meetingId,
-                contact_name: contactName,
-                to: draft.to,
-                subject: draft.subject,
-                ai_generated: draft.ai_generated,
-              },
-              priority: 'medium',
-            };
-
-            const emailDeliveryResult = await deliverToSlack(supabase, emailPayload, botToken);
-            emailApprovalDelivered = emailDeliveryResult.sent;
-
-            if (!emailApprovalDelivered) {
-              console.warn(`[notify-slack-summary] Email draft Slack delivery blocked/failed: ${emailDeliveryResult.error}`);
-            } else {
-              console.log(`[notify-slack-summary] Email draft sent to Slack for review — to=${draft.to}, subject=${draft.subject}`);
-            }
-          } catch (emailErr) {
-            console.error('[notify-slack-summary] Email draft Slack error:', emailErr);
-          }
-        } else {
-          console.warn('[notify-slack-summary] Skipping email draft delivery — missing bot token or Slack user ID');
-        }
-      }
+      // Note: email draft approval is handled by the dedicated emailDraftApproval adapter
+      // (with HITL buttons). No duplicate email notification is sent here.
 
       console.log(
         `[notify-slack-summary] Delivery complete: ` +
-        `debrief=${slackDelivered}, email_draft=${emailApprovalDelivered}, ` +
+        `debrief=${slackDelivered}, ` +
         `action_items=${actionItems.length}, ` +
         `crm_fields_updated=${crmFieldsUpdated}, ` +
         `sentiment=${sentiment}, ` +
@@ -439,7 +371,6 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
         success: true,
         output: {
           delivered: slackDelivered,
-          email_draft_delivered: emailApprovalDelivered,
           delivery_method: slackDelivered ? 'slack' : 'in_app_only',
           delivery_error: deliveryError,
           action_items_count: actionItems.length,

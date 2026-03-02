@@ -16,7 +16,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 import { corsHeaders } from "../_shared/cors.ts";
 
 // Helper for logging sync operations to integration_sync_logs table

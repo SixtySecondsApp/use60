@@ -25,6 +25,7 @@ import {
 import { calculatePriority, scoreToUrgency, type DealContext } from '../_shared/commandCentre/prioritisation.ts';
 import type { CommandCentreItem } from '../_shared/commandCentre/types.ts';
 import { createLogger } from '../_shared/logger.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -298,6 +299,12 @@ async function recheckMergeGroupThreshold(
 serve(async (req: Request) => {
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return errorResponse('Unauthorized', req, 401);
+  }
 
   if (req.method !== 'POST') {
     return errorResponse('Method not allowed', req, 405);

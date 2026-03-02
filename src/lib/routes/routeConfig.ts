@@ -186,10 +186,10 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Pipeline',
     icon: Kanban,
-    showInNav: false, // Phase 2: accessible from Ops standard tables
+    showInNav: true,
     navSection: 'main',
     order: 4,
-    displayGroup: 3,
+    displayGroup: 1,
   },
   {
     path: '/calls',

@@ -22,7 +22,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts';
 import { authenticateRequest } from '../_shared/edgeAuth.ts';
 import { getGoogleIntegration } from '../_shared/googleOAuth.ts';
@@ -112,8 +112,12 @@ serve(async (req) => {
                         scopes.includes('https://mail.google.com/');
 
     if (!hasSendScope) {
+      // Phase 1: gmail.send is a restricted scope not yet included in our OAuth flow.
+      // Return a clear, user-friendly message instead of a generic auth error.
+      // Phase 2 will re-introduce gmail.send via the scope_tier parameter after
+      // Google app verification is complete.
       throw new Error(
-        'Gmail send permission not authorized. Please reconnect your Google account with send permissions.'
+        'Email sending is not yet available. This feature will be enabled in a future update.'
       );
     }
 

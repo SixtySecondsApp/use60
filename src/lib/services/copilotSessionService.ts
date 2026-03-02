@@ -156,6 +156,47 @@ export class CopilotSessionService {
   }
 
   /**
+   * Get or create a per-deal session for a user
+   */
+  async getDealSession(userId: string, dealId: string, orgId?: string): Promise<CopilotConversation> {
+    const { data: existing, error: fetchError } = await this.supabase
+      .from('copilot_conversations')
+      .select('id, user_id, org_id, deal_id, title, is_main_session, total_tokens_estimate, last_compaction_at, created_at, updated_at')
+      .eq('user_id', userId)
+      .eq('deal_id', dealId)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error('[CopilotSessionService] Error fetching deal session:', fetchError);
+      throw new Error(`Failed to fetch deal session: ${fetchError.message}`);
+    }
+
+    if (existing) {
+      return existing as CopilotConversation;
+    }
+
+    const { data: created, error: createError } = await this.supabase
+      .from('copilot_conversations')
+      .insert({
+        user_id: userId,
+        org_id: orgId,
+        deal_id: dealId,
+        title: 'Deal Session',
+        is_main_session: false,
+        total_tokens_estimate: 0,
+      })
+      .select('id, user_id, org_id, deal_id, title, is_main_session, total_tokens_estimate, last_compaction_at, created_at, updated_at')
+      .single();
+
+    if (createError) {
+      console.error('[CopilotSessionService] Error creating deal session:', createError);
+      throw new Error(`Failed to create deal session: ${createError.message}`);
+    }
+
+    return created as CopilotConversation;
+  }
+
+  /**
    * Get a conversation by ID
    */
   async getConversation(conversationId: string): Promise<CopilotConversation | null> {

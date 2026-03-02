@@ -50,8 +50,13 @@ export interface AgentContext {
   logger: Logger;
   /** Distributed trace ID for this run. */
   traceId: string;
-  /** Credits consumed so far in this run (updated externally via addCredits). */
+  /** Credits consumed so far in this run (read-only view of the counter). */
   creditsUsed: number;
+  /**
+   * Increment the cumulative credits counter for this run.
+   * Call this after each LLM invocation with the creditCost from the model resolution.
+   */
+  addCredits: (amount: number) => void;
   /**
    * Check whether the per-run budget for this agent has been exceeded.
    * Returns { exceeded, limit, used }.
@@ -386,6 +391,15 @@ export async function runAgent<T>(
     traceId,
     get creditsUsed() {
       return creditsUsed;
+    },
+    addCredits(amount: number) {
+      if (amount <= 0) return; // Ignore non-positive amounts
+      creditsUsed += amount;
+      logger.info('agent.credits_added', {
+        agentName: config.agentName,
+        amount,
+        totalCreditsUsed: creditsUsed,
+      });
     },
     checkBudget() {
       return checkAgentBudget(config.agentName, creditsUsed);

@@ -33,7 +33,7 @@ import {
 // AI Prompt Builder — uses followup-reply-drafter methodology
 // =============================================================================
 
-function buildFollowupEmailPrompt(params: {
+export function buildFollowupEmailPrompt(params: {
   repName: string;
   orgName: string;
   meetingTitle: string;

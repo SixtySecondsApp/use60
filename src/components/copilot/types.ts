@@ -584,7 +584,7 @@ export interface EmailContext {
 
 export interface EmailSuggestion {
   label: string;
-  action: 'change_tone' | 'add_point' | 'shorten' | 'add_calendar_link';
+  action: 'change_tone' | 'add_point' | 'shorten' | 'add_calendar_link' | 'create_task' | 'schedule_send' | 'send_now';
   description: string;
 }
 

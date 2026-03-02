@@ -9,7 +9,7 @@
  * Context is loaded ONCE at sequence start and stored in sequence_jobs.context.
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type {
   OrchestratorEvent,
   SequenceContext,
@@ -436,22 +436,30 @@ async function loadTier2(
     }
   }
 
-  // Load deal
+  // Load deal (v2: uses stage_id not stage)
   if (payload.deal_id) {
-    const { data: deal } = await supabase
+    console.log(`[contextLoader] Loading deal: ${payload.deal_id}`);
+    const { data: deal, error: dealError } = await supabase
       .from('deals')
-      .select('id, name, stage, value, owner_id, close_date, probability, created_at, updated_at')
+      .select('id, name, stage_id, status, value, owner_id, close_date, probability, created_at, updated_at')
       .eq('id', payload.deal_id as string)
       .maybeSingle();
+
+    if (dealError) {
+      console.warn('[contextLoader] Deal fetch error:', dealError.message);
+    }
+
+    console.log(`[contextLoader] Deal result: ${deal ? deal.name : 'null'}, error: ${dealError?.message || 'none'}`);
 
     if (deal) {
       tier2.deal = {
         id: deal.id,
         name: deal.name,
-        stage: deal.stage,
+        stage: deal.stage_id || deal.status,
         value: deal.value,
         owner_id: deal.owner_id,
       };
+      console.log(`[contextLoader] tier2.deal set: ${deal.name}`);
     }
   }
 

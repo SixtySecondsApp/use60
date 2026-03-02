@@ -1,0 +1,228 @@
+{
+  "name": "The Control Room — Unified Manager View",
+  "prd": "PRD-04",
+  "version": "1.0",
+  "createdAt": "2026-02-26T00:00:00Z",
+  "description": "Frontend aggregation screen at /admin/control-room answering: 'What did 60 do for my team today? Is it working? How much is it costing? Who's earning autonomy?' All data sources are live — this is connecting dots, not building infrastructure.",
+  "status_baseline": {
+    "command_centre": "built — /platform/command-centre (rep's personal inbox)",
+    "orchestrator_dashboard": "built — /platform/orchestrator-dashboard (engineering monitoring)",
+    "agent_performance": "built — /platform/agent-performance (dev telemetry)",
+    "autonomy_settings": "built — /settings/autonomy (per-user config)",
+    "underlying_tables": "live — command_centre_items, autopilot_confidence, autopilot_events, credit_ledger all populated",
+    "agent_daily_logs": "PRD-03 (shipping in parallel) — Control Room works without it, action feed falls back to command_centre_items",
+    "missing": [
+      "/admin/control-room route with admin/owner RLS gate",
+      "Fleet Pulse widget (8 agents × status + 7-day error trends)",
+      "Team Autonomy Matrix widget (reps × action_types, tier color coding)",
+      "Credit Health widget (burn gauge, per-agent breakdown, 30-day trend, projected exhaustion)",
+      "Action Feed widget (cross-team stream, filterable, expandable chain context)",
+      "ROI Summary widget (hours saved, follow-up speed, pipeline coverage)",
+      "Realtime subscription for action feed",
+      "5-minute polling refresh for aggregates"
+    ]
+  },
+  "effort_estimate": "2 weeks",
+  "ship_sequence_week": "3–5 (parallel with PRD-02)",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Route + layout skeleton",
+      "description": "Admin-gated route, responsive grid layout, navigation link",
+      "priority": "critical",
+      "duration": "1 day",
+      "stories": ["CTRL-001"]
+    },
+    {
+      "id": "phase-2",
+      "name": "Data widgets",
+      "description": "Fleet Pulse, Autonomy Matrix, and Credit Health — each a self-contained widget with its own query hook",
+      "priority": "critical",
+      "duration": "1 week",
+      "stories": ["CTRL-002", "CTRL-003", "CTRL-004"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Action Feed + ROI",
+      "description": "Cross-team activity stream and ROI summary — depends on PRD-03 daily logs for full fidelity",
+      "priority": "high",
+      "duration": "4–5 days",
+      "stories": ["CTRL-005", "CTRL-006", "CTRL-007"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "CTRL-001",
+      "title": "Route, layout skeleton, and admin gate for /admin/control-room",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "frontend",
+      "status": "pending",
+      "dependencies": [],
+      "blocks": ["CTRL-002", "CTRL-003", "CTRL-004", "CTRL-005", "CTRL-006", "CTRL-007"],
+      "acceptance": [
+        "New route /admin/control-room added to router config",
+        "Route protected by admin/owner role check (uses existing isUserAdmin() from adminUtils)",
+        "Non-admin users redirected to /dashboard with toast 'Access restricted to admins'",
+        "Page renders responsive 12-column grid with 5 named widget zones: Fleet Pulse (top-left, 6 cols), Autonomy Matrix (top-right, 6 cols), Credit Health (mid-left, 4 cols), Action Feed (mid-right, 8 cols), ROI Summary (bottom, 12 cols)",
+        "Navigation link added to admin sidebar or settings dropdown (visible to admin/owner only)",
+        "Page title: 'Control Room' with subtitle 'What 60 did for your team today'"
+      ],
+      "files": [
+        "src/pages/admin/ControlRoom.tsx (new)",
+        "src/router.tsx (or equivalent routing config)",
+        "src/components/layout/AdminNav.tsx (or wherever admin nav lives)"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "CTRL-002",
+      "title": "Fleet Pulse widget — 8 agents × status, last run, items today, 7-day error trend",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "frontend",
+      "status": "pending",
+      "dependencies": ["CTRL-001"],
+      "blocks": [],
+      "acceptance": [
+        "Widget shows a row per fleet agent (meeting_ended, deal_risk, reengagement, pre_meeting, health_recalculate, eod_synthesis, pipeline_monitor, morning_brief)",
+        "Each row: agent name, status badge (running/idle/throttled/errored — colour coded), last execution timestamp, items generated today count, 7-day error rate sparkline or percentage",
+        "Data sourced from sequence_jobs table: group by agent_type, get latest status, count today's completions, calculate 7-day error rate",
+        "React Query hook useFleetPulse() with 60s refetch interval",
+        "Errored agents highlighted in red with click-to-expand showing last error message",
+        "Empty state when no sequence_jobs yet"
+      ],
+      "files": [
+        "src/components/control-room/FleetPulse.tsx (new)",
+        "src/lib/hooks/useFleetPulse.ts (new)"
+      ],
+      "estimatedMinutes": 30,
+      "notes": "sequence_jobs is the source of truth for fleet agent status. Check existing OrchestratorDashboard for query patterns."
+    },
+    {
+      "id": "CTRL-003",
+      "title": "Team Autonomy Matrix widget — reps × action types with tier color coding",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "frontend",
+      "status": "pending",
+      "dependencies": ["CTRL-001"],
+      "blocks": [],
+      "acceptance": [
+        "Widget renders a grid: rows = team members, columns = action types (email.send, task.create, slack.post, crm.update, proposal.send)",
+        "Each cell shows current autonomy tier with color: red=disabled, orange=approve, yellow=suggest, green=auto",
+        "Recent promotions shown with a badge (e.g. '↑ promoted 2 days ago')",
+        "Click on any cell opens a slide-over/tooltip with last 5 autopilot_events for that rep × action type",
+        "Data sourced from autopilot_confidence + autopilot_events via React Query hook useTeamAutonomy()",
+        "Refreshes every 5 minutes"
+      ],
+      "files": [
+        "src/components/control-room/AutonomyMatrix.tsx (new)",
+        "src/lib/hooks/useTeamAutonomy.ts (new)"
+      ],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "CTRL-004",
+      "title": "Credit Health widget — burn gauge, per-agent breakdown, 30-day trend, projected exhaustion",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "frontend",
+      "status": "pending",
+      "dependencies": ["CTRL-001"],
+      "blocks": [],
+      "acceptance": [
+        "Gauge shows today's credit burn vs daily budget (from org credit budget setting), colour coded green/yellow/red",
+        "Donut/pie chart showing credit cost breakdown by agent_type for today (sourced from credit_ledger)",
+        "30-day trend sparkline showing daily credit consumption",
+        "Projected exhaustion date: 'At current burn rate, monthly budget exhausts in X days' — calculated from 7-day rolling average",
+        "React Query hook useCreditHealth() with 5-minute refetch",
+        "Falls back gracefully when no credit_ledger data yet"
+      ],
+      "files": [
+        "src/components/control-room/CreditHealth.tsx (new)",
+        "src/lib/hooks/useCreditHealth.ts (new)"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "Check existing credit_ledger query patterns in admin pages. Use Recharts or existing chart library for sparkline/donut."
+    },
+    {
+      "id": "CTRL-005",
+      "title": "Action Feed widget — cross-team activity stream with filters",
+      "phase": "phase-3",
+      "priority": "P0",
+      "type": "frontend",
+      "status": "pending",
+      "dependencies": ["CTRL-001"],
+      "blocks": ["CTRL-007"],
+      "acceptance": [
+        "Scrollable feed showing cross-team agent actions, newest first",
+        "Each entry: timestamp, agent icon, rep name, action summary (e.g. 'meeting_ended → draft_email sent to sarah@acme.com')",
+        "Primary source: agent_daily_logs (PRD-03). Fallback: command_centre_items + autopilot_events when daily_logs not yet populated",
+        "Filter bar: by rep (multi-select), by agent type, by action type, by outcome (success/failed/cancelled)",
+        "Each entry expandable inline to show action_detail JSONB and decision_reasoning",
+        "Clicking chain_id on an entry filters to show all steps in that chain"
+      ],
+      "files": [
+        "src/components/control-room/ActionFeed.tsx (new)",
+        "src/lib/hooks/useActionFeed.ts (new)"
+      ],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "CTRL-006",
+      "title": "ROI Summary widget — hours saved, follow-up speed, pipeline coverage",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "frontend + backend",
+      "status": "pending",
+      "dependencies": ["CTRL-001"],
+      "blocks": [],
+      "acceptance": [
+        "Three KPI cards in a row: Hours Saved (this week), Median Follow-Up Speed (meeting end → email sent), Pipeline Coverage (% active deals with agent engagement in 7 days)",
+        "Hours saved = count of automated sends × configurable avg_manual_minutes_per_email (default 8 min) from org_settings",
+        "Follow-up speed sourced from: meeting.ended_at vs agent_daily_logs WHERE action_type='send_email' for same chain_id (falls back to command_centre_items created_at when daily_logs not available)",
+        "Pipeline coverage = count(distinct deal_id with command_centre_item or sequence_job in last 7 days) / count(active deals)",
+        "PostgreSQL RPC get_roi_summary(org_id) returns all 3 metrics to avoid N+1 queries",
+        "Migration adds RPC function"
+      ],
+      "files": [
+        "src/components/control-room/ROISummary.tsx (new)",
+        "src/lib/hooks/useROISummary.ts (new)",
+        "supabase/migrations/YYYYMMDD_roi_summary_rpc.sql (new)"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "CTRL-007",
+      "title": "Realtime subscription for Action Feed + 5-minute polling for aggregates",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "frontend",
+      "status": "pending",
+      "dependencies": ["CTRL-005"],
+      "blocks": [],
+      "acceptance": [
+        "Action Feed subscribes to Supabase realtime on agent_daily_logs INSERT events (filtered by org_id)",
+        "New entries prepend to feed with a subtle slide-in animation",
+        "Fleet Pulse, Autonomy Matrix, Credit Health, ROI Summary refetch every 5 minutes via React Query staleTime/refetchInterval",
+        "Realtime subscription cleans up on component unmount (no memory leaks)",
+        "Falls back to polling-only when realtime channel fails to connect (console warning only)"
+      ],
+      "files": [
+        "src/components/control-room/ActionFeed.tsx",
+        "src/lib/hooks/useActionFeed.ts"
+      ],
+      "estimatedMinutes": 15
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 0,
+    "parallelOpportunities": [
+      "CTRL-002, CTRL-003, CTRL-004 parallel (all depend only on CTRL-001)",
+      "CTRL-005, CTRL-006 parallel with each other (both depend on CTRL-001)",
+      "CTRL-007 sequential after CTRL-005"
+    ]
+  }
+}

@@ -79,15 +79,22 @@ export async function checkRateLimit(
       .order('created_at', { ascending: false });
 
     if (error) {
-      // If table doesn't exist (42P01), allow request and log warning
+      // If table doesn't exist (42P01), allow request — rate limiting not set up yet
       if (error.code === '42P01') {
+        return {
+          allowed: true,
+          remaining: config.maxRequests - 1,
+          resetTime: now + config.windowMs,
+          totalRequests: 0
+        };
       }
-      // On error, allow the request but log the issue
+      // On other DB errors, fail CLOSED — reject the request to prevent abuse
+      console.error('[rateLimiter] DB error during rate limit check:', error.message ?? error.code);
       return {
-        allowed: true,
-        remaining: config.maxRequests - 1,
+        allowed: false,
+        remaining: 0,
         resetTime: now + config.windowMs,
-        totalRequests: 0
+        totalRequests: config.maxRequests
       };
     }
 
@@ -122,12 +129,13 @@ export async function checkRateLimit(
     };
 
   } catch (error) {
-    // On error, allow the request to prevent blocking legitimate users
+    // Fail CLOSED — reject the request when rate limiting check fails unexpectedly
+    console.error('[rateLimiter] Unexpected error during rate limit check:', error instanceof Error ? error.message : String(error));
     return {
-      allowed: true,
-      remaining: config.maxRequests - 1,
+      allowed: false,
+      remaining: 0,
       resetTime: now + config.windowMs,
-      totalRequests: 0
+      totalRequests: config.maxRequests
     };
   }
 }
@@ -191,8 +199,21 @@ export async function rateLimitMiddleware(
     return null; // Continue processing
     
   } catch (error) {
-    // On error, allow the request to prevent blocking legitimate users
-    return null;
+    // Fail CLOSED — return 429 when middleware itself fails unexpectedly
+    console.error('[rateLimiter] Middleware error:', error instanceof Error ? error.message : String(error));
+    return new Response(
+      JSON.stringify({
+        error: 'Rate limit check failed — please retry shortly',
+        retryAfter: 5
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': '5'
+        }
+      }
+    );
   }
 }
 

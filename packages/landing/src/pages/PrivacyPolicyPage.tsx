@@ -17,6 +17,7 @@ const tableOfContents: TOCItem[] = [
   { id: 'data-collection', title: 'Data Collection', icon: Shield },
   { id: 'how-collected', title: 'How Data Is Collected', icon: Globe },
   { id: 'data-usage', title: 'How We Use Your Data', icon: Lock },
+  { id: 'google-workspace', title: 'Google Workspace Data', icon: Globe },
   { id: 'disclosures', title: 'Data Disclosures', icon: Users },
   { id: 'international-transfers', title: 'International Transfers', icon: Globe },
   { id: 'data-security', title: 'Data Security', icon: Lock },
@@ -132,7 +133,7 @@ export function PrivacyPolicyPage() {
                     Your privacy and data security is important to us. This policy explains how we collect, use, and protect your personal information.
                   </p>
                   <p className="text-sm text-gray-500 mt-4">
-                    Last Updated: <time dateTime="2026-01-06">6 January 2026</time>
+                    Last Updated: <time dateTime="2026-03-02">2 March 2026</time>
                   </p>
                 </motion.div>
               </div>
@@ -307,6 +308,59 @@ export function PrivacyPolicyPage() {
                     </p>
                     <p className="mt-4">
                       <strong>Cookies:</strong> You can set your browser to refuse cookies. Some parts of the website may become inaccessible if you disable cookies.
+                    </p>
+                  </Subsection>
+                </Section>
+
+                {/* Google Workspace Integration */}
+                <Section id="google-workspace" title="Google Workspace Integration">
+                  <Subsection title="What Google Data We Access">
+                    <DataTypeGrid>
+                      <DataTypeCard
+                        title="Calendar Events"
+                        description="Event titles, times, and attendees — used for meeting scheduling, preparation, and sync"
+                      />
+                      <DataTypeCard
+                        title="Gmail Messages"
+                        description="Read-only access to message subject, sender, and body — used for deal context and communication history"
+                      />
+                      <DataTypeCard
+                        title="Google Drive Files"
+                        description="Read-only access to files shared with you — used for document reference in deal context"
+                      />
+                      <DataTypeCard
+                        title="Google Docs"
+                        description="Read-only access to documents — used for referencing content relevant to deals and meetings"
+                      />
+                    </DataTypeGrid>
+                  </Subsection>
+
+                  <Subsection title="How We Use Google Data">
+                    <ul>
+                      <li><strong>Calendar:</strong> Meeting scheduling, pre-meeting preparation briefs, and calendar sync to keep your pipeline up to date</li>
+                      <li><strong>Email:</strong> Building deal context, tracking follow-ups, and maintaining communication history for active deals</li>
+                      <li><strong>Drive and Docs:</strong> Referencing documents and files associated with deals, contacts, and meetings</li>
+                    </ul>
+                    <p>
+                      We access only the minimum data required to provide these features. We do not read, store, or process Google data for advertising purposes.
+                    </p>
+                  </Subsection>
+
+                  <Subsection title="Google Data Storage and Retention">
+                    <ul>
+                      <li>Google OAuth tokens are encrypted at rest and used solely to access data on your behalf</li>
+                      <li>Email content is processed to extract AI-generated insights — only the resulting summary is stored, not the raw email body</li>
+                      <li>Calendar data is synced and refreshed regularly to reflect your current schedule</li>
+                      <li>You can disconnect Google at any time from your account settings, which immediately revokes our access to your Google data</li>
+                    </ul>
+                  </Subsection>
+
+                  <Subsection title="Google API Services Compliance">
+                    <InfoBox variant="info">
+                      60's use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements.
+                    </InfoBox>
+                    <p className="mt-4">
+                      Our use of Google user data is limited to providing and improving features directly requested by you. We do not use Google data to serve advertisements, share data with third parties for their own purposes, or allow humans to read your data except where you have given explicit permission or it is required for security or legal compliance.
                     </p>
                   </Subsection>
                 </Section>
@@ -506,7 +560,7 @@ export function PrivacyPolicyPage() {
           <div className="flex flex-col items-center gap-4">
             <img src={logoDark} alt="60" className="h-8 w-auto" />
             <p className="text-gray-400 text-sm text-center">
-              © 2025 Sixty Seconds Ltd. All rights reserved.
+              © 2026 Sixty Seconds Ltd. All rights reserved.
             </p>
           </div>
         </div>
