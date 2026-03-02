@@ -16,6 +16,7 @@ import { useActivitiesActions } from '@/lib/hooks/useActivitiesActions';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import { toast } from 'sonner';
 import { ProposalWizard } from '@/components/proposals/ProposalWizard';
+import { ProposalQuickGenerate } from '@/components/proposals/ProposalQuickGenerate';
 import { TalkTimeChart } from '@/components/meetings/analytics/TalkTimeChart';
 import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsights';
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard';
@@ -242,6 +243,7 @@ export function MeetingDetail() {
   const primaryExternal = attendees.find(a => a.is_external);
 
   const [showProposalWizard, setShowProposalWizard] = useState(false);
+  const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
@@ -706,8 +708,8 @@ export function MeetingDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-w-0">
           {/* Left column: video + tabs */}
           <div className="lg:col-span-8 space-y-3 sm:space-y-4 min-w-0">
-            {/* Video player area — h-[320px] matches actual player */}
-            <Skeleton className="w-full h-[320px] rounded-2xl bg-gray-200/60 dark:bg-gray-700/40" />
+            {/* Video player area */}
+            <Skeleton className="w-full aspect-video rounded-2xl bg-gray-200/60 dark:bg-gray-700/40" />
 
             {/* Tab bar */}
             <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 sm:p-6 space-y-4">
@@ -853,7 +855,7 @@ export function MeetingDetail() {
             </div>
           ) : meeting.source_type === '60_notetaker' && meeting.video_url ? (
             /* 60 Notetaker Video Player */
-            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }}>
+            <div className="glassmorphism-card overflow-hidden aspect-video">
               <video
                 controls
                 preload="metadata"
@@ -883,7 +885,7 @@ export function MeetingDetail() {
             </div>
           ) : (meeting.fathom_recording_id || meeting.share_url) ? (
             /* Fathom Video Player */
-            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }} data-player-container>
+            <div className="glassmorphism-card overflow-hidden aspect-video" data-player-container>
               <FathomPlayerV2
                 ref={playerRef}
                 shareUrl={meeting.share_url}
@@ -1003,6 +1005,13 @@ export function MeetingDetail() {
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('outbound')}>Add Outbound</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('proposal')}>Add Proposal</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('sale')}>Add Sale</Button>
+                    <ProposalQuickGenerate
+                      meetingId={meeting.id}
+                      contactId={meeting.primary_contact_id}
+                      hasRecording={!!meeting.fathom_recording_id}
+                      hasNotes={!!meeting.transcript_text}
+                      onProposalStarted={(proposalId) => setActiveProposalId(proposalId)}
+                    />
                   </div>
 
                   {/* AI Structured Summary (classification, outcomes, objections, etc.) */}

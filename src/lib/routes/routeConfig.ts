@@ -318,6 +318,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     badge: 'New',
   },
   {
+    path: '/proposals',
+    access: 'internal',
+    label: 'Proposals',
+    icon: FileText,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3.5,
+    displayGroup: 4,
+  },
+  {
     path: '/action-centre',
     access: 'internal',
     label: 'Action Centre',
