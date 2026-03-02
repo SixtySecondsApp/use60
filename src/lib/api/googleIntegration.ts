@@ -25,14 +25,15 @@ export interface GoogleOAuthResponse {
 export class GoogleIntegrationAPI {
   /**
    * Initiate Google OAuth flow
-   * Calls the google-oauth-initiate Edge Function to generate an authorization URL
+   * Calls the google-oauth-initiate Edge Function to generate an authorization URL.
+   * @param scopeTier - 'base' (default) for sensitive-only scopes, 'full' for restricted scopes (gmail.send)
    */
-  static async initiateOAuth(): Promise<GoogleOAuthResponse> {
+  static async initiateOAuth(scopeTier: 'base' | 'full' = 'base'): Promise<GoogleOAuthResponse> {
     // Get current origin to pass to Edge Function for dynamic redirect URI
     const origin = window.location.origin;
-    
+
     const { data, error } = await supabase.functions.invoke('google-oauth-initiate', {
-      body: { origin }
+      body: { origin, scope_tier: scopeTier }
     });
 
     if (error) {
@@ -385,7 +386,7 @@ interface ServiceTestResult {
 
 // Export convenience methods for easier imports
 export const googleApi = {
-  initiateOAuth: GoogleIntegrationAPI.initiateOAuth,
+  initiateOAuth: (scopeTier?: 'base' | 'full') => GoogleIntegrationAPI.initiateOAuth(scopeTier),
   getStatus: GoogleIntegrationAPI.getIntegrationStatus,
   getServiceStatus: GoogleIntegrationAPI.getServiceStatus,
   getHealth: GoogleIntegrationAPI.getIntegrationHealth,

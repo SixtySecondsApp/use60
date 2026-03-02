@@ -8,12 +8,13 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   Lightbulb, Clock, Briefcase, Smile, Zap, ChevronDown, ChevronUp,
   Copy, Mail, Loader2, Pencil, Check, X, Send, CheckCircle, ListTodo,
-  AlertTriangle,
+  AlertTriangle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { EmailResponse as EmailResponseData } from '../types';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
+import { useGmailSendEnabled } from '@/lib/hooks/useGoogleIntegration';
 
 interface EmailResponseProps {
   data: EmailResponseData;
@@ -109,6 +110,9 @@ export const EmailResponse: React.FC<EmailResponseProps> = ({ data, onActionClic
   // Task creation state
   const [taskCreated, setTaskCreated] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
+
+  // Gmail send scope gating
+  const { canSend: gmailSendEnabled, isLoading: gmailSendLoading } = useGmailSendEnabled();
 
   // Handle tone change - regenerate in-place using the API
   const handleToneChange = useCallback(async (newTone: EmailTone) => {
@@ -492,38 +496,45 @@ export const EmailResponse: React.FC<EmailResponseProps> = ({ data, onActionClic
       </div>
 
       {/* Send Now Button */}
-      <button
-        type="button"
-        onClick={handleSendNow}
-        disabled={isSending || sent}
-        className={cn(
-          'w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
-          sent
-            ? 'bg-green-800/30 text-green-400 cursor-default'
-            : 'bg-violet-600 text-white hover:bg-violet-500 active:bg-violet-700',
-          isSending && 'opacity-70 cursor-not-allowed'
-        )}
-      >
-        {isSending ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Sending...</span>
-          </>
-        ) : sent ? (
-          <>
-            <CheckCircle className="w-4 h-4" />
-            <span>Sent</span>
-          </>
-        ) : (
-          <>
-            <Send className="w-4 h-4" />
-            <span>Send Now</span>
-          </>
-        )}
-      </button>
+      {gmailSendEnabled ? (
+        <button
+          type="button"
+          onClick={handleSendNow}
+          disabled={isSending || sent}
+          className={cn(
+            'w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            sent
+              ? 'bg-green-800/30 text-green-400 cursor-default'
+              : 'bg-violet-600 text-white hover:bg-violet-500 active:bg-violet-700',
+            isSending && 'opacity-70 cursor-not-allowed'
+          )}
+        >
+          {isSending ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Sending...</span>
+            </>
+          ) : sent ? (
+            <>
+              <CheckCircle className="w-4 h-4" />
+              <span>Sent</span>
+            </>
+          ) : (
+            <>
+              <Send className="w-4 h-4" />
+              <span>Send Now</span>
+            </>
+          )}
+        </button>
+      ) : !gmailSendLoading ? (
+        <div className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-800/40 border border-gray-700/40 text-gray-500">
+          <Info className="w-4 h-4" />
+          <span>Email sending will be available in a future update</span>
+        </div>
+      ) : null}
 
       {/* Schedule Quick-Pick */}
-      {!sent && (
+      {!sent && gmailSendEnabled && (
         <div className="flex items-center gap-2 flex-wrap">
           {scheduledId ? (
             <div className="flex items-center gap-2 text-xs text-green-400">

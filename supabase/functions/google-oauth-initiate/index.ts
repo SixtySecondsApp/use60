@@ -40,13 +40,17 @@ serve(async (req) => {
       throw new Error('No authorization header');
     }
 
-    // Get request body to extract redirect URI
+    // Get request body to extract redirect URI and scope tier
     let requestOrigin: string | undefined;
+    let scopeTier: 'base' | 'full' = 'base';
     try {
       const requestBody = await req.json();
       requestOrigin = requestBody.origin;
+      if (requestBody.scope_tier === 'full') {
+        scopeTier = 'full';
+      }
     } catch (error) {
-      // If JSON parsing fails, continue without origin
+      // If JSON parsing fails, continue with defaults
     }
 
     // Allowlist of valid origins to prevent open redirect attacks
@@ -139,33 +143,42 @@ serve(async (req) => {
       throw new Error('Google OAuth not configured');
     }
 
-    // Define the scopes we need
-    const scopes = [
-      // Google Docs
-      'https://www.googleapis.com/auth/documents',
-      'https://www.googleapis.com/auth/drive.file',
-      
-      // Google Drive
-      'https://www.googleapis.com/auth/drive.readonly',
-      'https://www.googleapis.com/auth/drive.metadata.readonly',
-      
-      // Gmail
-      'https://www.googleapis.com/auth/gmail.compose',
-      'https://www.googleapis.com/auth/gmail.send',
+    // Define the base scopes (sensitive-tier only — no restricted scopes)
+    // NOTE: gmail.compose and gmail.send are restricted-tier scopes requiring Google CASA verification.
+    // Phase 1 uses base tier only. Phase 2 will allow opting into 'full' tier once verification completes.
+    const baseScopes = [
+      // User info
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+
+      // Gmail (sensitive-tier scopes only)
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/gmail.labels',
-      
+
       // Google Calendar
       'https://www.googleapis.com/auth/calendar',
       'https://www.googleapis.com/auth/calendar.events',
-      
+
+      // Google Drive
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/drive.metadata.readonly',
+      'https://www.googleapis.com/auth/drive.file',
+
+      // Google Docs
+      'https://www.googleapis.com/auth/documents',
+
       // Google Tasks
       'https://www.googleapis.com/auth/tasks',
-      
-      // User info
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile'
     ];
+
+    // Full tier adds restricted Gmail send/compose scopes (requires Google app verification)
+    const fullScopes = [
+      ...baseScopes,
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.compose',
+    ];
+
+    const scopes = scopeTier === 'full' ? fullScopes : baseScopes;
 
     // Build the authorization URL
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
@@ -178,6 +191,8 @@ serve(async (req) => {
     authUrl.searchParams.set('prompt', 'consent'); // Force consent to get refresh token
     authUrl.searchParams.set('code_challenge', codeChallenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
+    // Preserve previously granted scopes when requesting additional ones (incremental auth)
+    authUrl.searchParams.set('include_granted_scopes', 'true');
     return new Response(
       JSON.stringify({ 
         authUrl: authUrl.toString(),

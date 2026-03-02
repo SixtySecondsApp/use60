@@ -81,6 +81,34 @@ serve(async (req) => {
       try {
         console.log(`[send-scheduled-emails] Processing email ${email.id}...`);
 
+        // Check for gmail.send scope before attempting to send.
+        // gmail.send is a restricted scope removed in Phase 1 — skip gracefully
+        // rather than crashing the entire batch run.
+        const { data: integration } = await supabaseAdmin
+          .from('google_integrations')
+          .select('scopes')
+          .eq('user_id', email.user_id)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        const grantedScopes: string[] = (integration as Record<string, unknown> | null)?.scopes as string[] ?? [];
+        const hasSendScope =
+          grantedScopes.includes('https://www.googleapis.com/auth/gmail.send') ||
+          grantedScopes.includes('https://mail.google.com/');
+
+        if (!hasSendScope) {
+          console.warn(
+            `[send-scheduled-emails] Skipping email ${email.id} for user ${email.user_id}: gmail.send scope not granted. Email sending is not yet available.`
+          );
+          results.failed++;
+          results.errors.push(`Email ${email.id}: Email sending is not yet available`);
+          await supabaseAdmin
+            .from('scheduled_emails')
+            .update({ status: 'failed', error_message: 'Email sending is not yet available. This feature will be enabled in a future update.' })
+            .eq('id', email.id);
+          continue;
+        }
+
         // Mark as sent optimistically to prevent double-fire
         const { error: updateError } = await supabaseAdmin
           .from('scheduled_emails')

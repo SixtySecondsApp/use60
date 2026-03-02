@@ -16,6 +16,7 @@ import { IntroPage } from './pages/IntroPage';
 import { IntroducingPage } from './pages/IntroducingPage';
 import { LearnMore } from './pages/LearnMore';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
+import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import HeroV5Preview from './pages/HeroV5Preview';
 import HeroV5AltPreview from './pages/HeroV5AltPreview';
 import HeroV5BPreview from './pages/HeroV5BPreview';
@@ -66,6 +67,7 @@ function App() {
         <Route path="/waitlist-hero" element={<WaitlistLanding />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsOfServicePage />} />
         <Route path="/hero-v5" element={<HeroV5Preview />} />
         <Route path="/hero-v5-alt" element={<HeroV5AltPreview />} />
         <Route path="/hero-v5b" element={<HeroV5BPreview />} />

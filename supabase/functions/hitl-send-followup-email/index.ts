@@ -581,6 +581,64 @@ ${pricingHtml}
     if (inReplyTo) sendPayload.inReplyTo = inReplyTo;
     if (references) sendPayload.references = references;
 
+    // For the Google path, verify that the gmail.send scope was granted before
+    // attempting to send. gmail.send is a restricted scope removed in Phase 1 of
+    // the Google OAuth flow. Skip gracefully instead of hitting a hard auth error.
+    if (emailProvider !== 'microsoft') {
+      const { data: googleIntegration } = await supabase
+        .from('google_integrations')
+        .select('scopes')
+        .eq('user_id', approval.user_id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      const grantedScopes: string[] = (googleIntegration as Record<string, unknown> | null)?.scopes as string[] ?? [];
+      const hasSendScope =
+        grantedScopes.includes('https://www.googleapis.com/auth/gmail.send') ||
+        grantedScopes.includes('https://mail.google.com/');
+
+      if (!hasSendScope) {
+        console.warn(
+          `[hitl-send-followup-email] Skipping send for approval ${approvalId}: gmail.send scope not granted for user ${approval.user_id}. Email sending is not yet available.`
+        );
+
+        await supabase.from('notifications').insert({
+          user_id: approval.user_id,
+          title: 'Email sending not available',
+          message: 'Email sending is not yet available. This feature will be enabled in a future update.',
+          type: 'warning',
+          category: 'workflow',
+          entity_type: 'email_draft',
+          entity_id: null,
+          action_url: '/meetings',
+          metadata: { approval_id: approvalId, source: 'hitl', reason: 'gmail_send_scope_missing' },
+        });
+
+        await logAgentAction({
+          supabaseClient: supabase,
+          orgId: approval.org_id,
+          userId: approval.user_id ?? null,
+          agentType: 'meeting_ended',
+          actionType: 'send_email',
+          actionDetail: {
+            approval_id: approvalId,
+            action,
+            provider: emailProvider,
+            blocked_reason: 'gmail_send_scope_missing',
+          },
+          outcome: 'skipped',
+          creditCost: 0,
+          chainId: (approval.metadata as Record<string, unknown>)?.chain_id as string ?? null,
+        });
+
+        return jsonResponse(
+          { success: false, approvalId, action, error: 'Email sending is not yet available. This feature will be enabled in a future update.' },
+          req,
+          200
+        );
+      }
+    }
+
     // Route to the appropriate email sending function based on provider (EMAIL-010)
     const sendFunctionName = emailProvider === 'microsoft' ? 'ms-graph-email' : 'google-gmail';
     const sendUrl = `${SUPABASE_URL}/functions/v1/${sendFunctionName}?action=send`;

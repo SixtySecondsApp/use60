@@ -17,7 +17,7 @@
     },
     {
       "id": "followup-email-v2",
-      "name": "Follow-Up Email v2 — Quality + Demo Polish",
+      "name": "Follow-Up Email v2 \u2014 Quality + Demo Polish",
       "status": "complete",
       "consultReport": ".sixty/consult/followup-email-v2.md",
       "createdAt": "2026-02-25"
@@ -30,21 +30,28 @@
     },
     {
       "id": "deal-copilot-v2",
-      "name": "Deal Copilot V2 — Intelligence, Memory & Actions",
+      "name": "Deal Copilot V2 \u2014 Intelligence, Memory & Actions",
       "status": "complete",
       "createdAt": "2026-02-27"
     },
     {
       "id": "edge-function-audit-p2",
-      "name": "Edge Function Audit Phase 2 — Remaining ~380 Functions",
+      "name": "Edge Function Audit Phase 2 \u2014 Remaining ~380 Functions",
       "status": "complete",
       "createdAt": "2026-03-01"
     },
     {
       "id": "audit-fix-sprints",
-      "name": "Audit Fix Sprints — 50 P0 + 147 P1 Remediation",
+      "name": "Audit Fix Sprints \u2014 50 P0 + 147 P1 Remediation",
       "status": "complete",
       "createdAt": "2026-03-01"
+    },
+    {
+      "id": "oauth-scope-staging",
+      "name": "OAuth Scope Staging & Privacy Policy \u2014 Launch Readiness",
+      "status": "complete",
+      "consultReport": null,
+      "createdAt": "2026-03-02"
     }
   ],
   "stories": [
@@ -95,7 +102,7 @@
         "When guidance provided, re-composes email with same RAG context plus user instructions appended to prompt",
         "Frontend shows text input modal when Regenerate button is clicked",
         "Regenerated email replaces previous result with a 'Regenerated' badge",
-        "No re-query of RAG — uses cached context from first generation (saves credits and time)"
+        "No re-query of RAG \u2014 uses cached context from first generation (saves credits and time)"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": 18,
@@ -162,7 +169,7 @@
       "acceptance": [
         "Edit button on email preview switches to editable textarea for body and input for subject",
         "Preview button returns to styled read-only view with edited content",
-        "Edited content persists in state — Copy button copies edited version",
+        "Edited content persists in state \u2014 Copy button copies edited version",
         "Cancel button reverts to original generated content",
         "Edit state does not re-trigger generation"
       ],
@@ -295,7 +302,7 @@
         "SSE result event includes warnings array listing what degraded: missing writing style, no sentiment, RAG partial results, placeholder attendee",
         "Each warning has a severity (info/warn) and human-readable message",
         "Frontend renders warnings as amber badges below the context breakdown",
-        "Warnings are informational only — generation still completes",
+        "Warnings are informational only \u2014 generation still completes",
         "No warnings shown when all data sources returned successfully"
       ],
       "estimatedMinutes": 10,
@@ -329,7 +336,7 @@
         "All 8 seed deals (UUIDs 11111111-..through 88888888-..) deleted from staging deals table",
         "Child records in deal_contacts and deal_health_scores cleaned up first",
         "SELECT count(*) FROM deals WHERE id LIKE '11111111%' returns 0",
-        "Real deals unaffected — verified by count before/after"
+        "Real deals unaffected \u2014 verified by count before/after"
       ],
       "estimatedMinutes": 10,
       "actualMinutes": null,
@@ -385,7 +392,7 @@
     {
       "id": "PIPE-003",
       "feature": "pipeline-migration",
-      "title": "Audit Kanban view — stages, drag-drop, counts",
+      "title": "Audit Kanban view \u2014 stages, drag-drop, counts",
       "type": "frontend",
       "status": "complete",
       "priority": 3,
@@ -419,7 +426,7 @@
     {
       "id": "PIPE-004",
       "feature": "pipeline-migration",
-      "title": "Audit Table view — columns, sort, row click",
+      "title": "Audit Table view \u2014 columns, sort, row click",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
@@ -451,7 +458,7 @@
     {
       "id": "PIPE-005",
       "feature": "pipeline-migration",
-      "title": "Audit deal creation flow — DealForm create mode",
+      "title": "Audit deal creation flow \u2014 DealForm create mode",
       "type": "frontend",
       "status": "complete",
       "priority": 5,
@@ -597,9 +604,9 @@
       "priority": 9,
       "acceptance": [
         "Edge function reads unmaterialized deals from crm_deal_index",
-        "Maps name, amount→value, stage→stage_id (fuzzy match to deal_stages.name), close_date→expected_close_date",
-        "Resolves contact_crm_ids → contacts.id via crm_contact_index",
-        "Resolves company_crm_id → companies.id via crm_company_index",
+        "Maps name, amount\u2192value, stage\u2192stage_id (fuzzy match to deal_stages.name), close_date\u2192expected_close_date",
+        "Resolves contact_crm_ids \u2192 contacts.id via crm_contact_index",
+        "Resolves company_crm_id \u2192 companies.id via crm_company_index",
         "Sets is_materialized=true and materialized_deal_id on crm_deal_index record"
       ],
       "estimatedMinutes": 30,
@@ -895,7 +902,7 @@
         "Overdue tasks fetched: tasks where deal_id match, completed=false, due_date < now()",
         "Deal temperature fetched from deal_signal_temperature table",
         "Email signals fetched from email_signal_events (latest 3 per deal)",
-        "All fetches non-blocking — .catch(() => null) so greeting works if any fail",
+        "All fetches non-blocking \u2014 .catch(() => null) so greeting works if any fail",
         "EnrichmentData interface extended with meetingIntelligence, overdueTasks, temperature, emailSignals"
       ],
       "estimatedMinutes": 20,
@@ -1084,7 +1091,7 @@
       "priority": 7,
       "acceptance": [
         "dealId?: string added to UseCopilotChatOptions interface",
-        "Session loading useEffect branches: dealId → getDealSession, else → getMainSession",
+        "Session loading useEffect branches: dealId \u2192 getDealSession, else \u2192 getMainSession",
         "options.dealId added to useEffect dependency array",
         "isLoadingSession correctly reflects deal session loading state"
       ],
@@ -1173,11 +1180,11 @@
       "completedAt": "2026-03-01T10:20:00Z",
       "priority": 10,
       "acceptance": [
-        "Open deal → greeting shows health + proactive alerts + meeting intel one-liner",
-        "Type / → dropdown with 11 commands, keyboard navigation works, Enter selects",
-        "Select /summary → response renders as structured card (not plain markdown)",
-        "Close sheet, reopen same deal → previous conversation preserved",
-        "Open different deal → fresh conversation, no cross-contamination"
+        "Open deal \u2192 greeting shows health + proactive alerts + meeting intel one-liner",
+        "Type / \u2192 dropdown with 11 commands, keyboard navigation works, Enter selects",
+        "Select /summary \u2192 response renders as structured card (not plain markdown)",
+        "Close sheet, reopen same deal \u2192 previous conversation preserved",
+        "Open different deal \u2192 fresh conversation, no cross-contamination"
       ],
       "estimatedMinutes": 15,
       "files": [],
@@ -1431,7 +1438,7 @@
       "status": "complete",
       "priority": 1,
       "acceptance": [
-        "edgeAuth.ts getAuthContext/authenticateRequest uses supabase.auth.getUser() ONLY — JWT fallback removed",
+        "edgeAuth.ts getAuthContext/authenticateRequest uses supabase.auth.getUser() ONLY \u2014 JWT fallback removed",
         "isServiceRoleAuth() validates JWT signature before trusting role claim",
         "debug-auth function deleted from staging and production",
         "impersonate-user requires admin role + org membership (not anon key)",
@@ -1620,7 +1627,7 @@
       "priority": 7,
       "acceptance": [
         "agentRunner.ts creditsUsed counter incremented on each LLM call",
-        "agentConfig.ts budget_limit_daily_usd enforced — agents stopped when budget exceeded",
+        "agentConfig.ts budget_limit_daily_usd enforced \u2014 agents stopped when budget exceeded",
         "logAICostEvent added to 11 agent functions making untracked LLM calls",
         "rateLimiter.ts fails CLOSED on DB errors (not open)",
         "agentSkillExecutor.ts sanitizes skill content before prompt injection into Claude"
@@ -1709,12 +1716,235 @@
       "blocks": [],
       "parallelWith": [],
       "completedAt": "2026-03-01T19:41:28.844Z"
+    },
+    {
+      "id": "OAUTH-001",
+      "feature": "oauth-scope-staging",
+      "title": "Remove restricted Gmail scopes from OAuth initiation",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "gmail.send and gmail.compose removed from scopes array in google-oauth-initiate/index.ts",
+        "Only sensitive-tier scopes remain: gmail.readonly, gmail.labels, calendar, calendar.events, drive.readonly, drive.metadata.readonly, drive.file, documents, tasks, userinfo.email, userinfo.profile",
+        "OAuth flow tested \u2014 consent screen shows no restricted scope warnings",
+        "Existing scope-check code (email-send-as-rep, check-org-capabilities) gracefully handles missing send scope"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/google-oauth-initiate/index.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "OAUTH-002",
+        "OAUTH-003"
+      ],
+      "parallelWith": []
+    },
+    {
+      "id": "OAUTH-002",
+      "feature": "oauth-scope-staging",
+      "title": "Add scope-aware feature gating for email send UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "EmailResponse.tsx Send Now button disabled when gmail.send scope not present",
+        "Tooltip or message explains email sending is coming soon",
+        "Schedule email buttons also disabled without send scope",
+        "EmailComposerEnhanced shows read-only state without send scope",
+        "No errors thrown when user lacks send scope \u2014 graceful degradation"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/components/copilot/responses/EmailResponse.tsx",
+        "src/lib/hooks/useGoogleIntegration.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "OAUTH-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "OAUTH-003"
+      ]
+    },
+    {
+      "id": "OAUTH-003",
+      "feature": "oauth-scope-staging",
+      "title": "Disable email-send-as-rep gracefully when scope missing",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "email-send-as-rep returns clear error message when gmail.send scope not present",
+        "Error message includes guidance: email sending available in future update",
+        "send-scheduled-emails and scheduled email pg_cron skip sends when scope missing (no crash)",
+        "hitl-send-followup-email checks scope before attempting send",
+        "commandCentre actionExecutor send_email action returns user-friendly error without send scope"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/email-send-as-rep/index.ts",
+        "supabase/functions/send-scheduled-emails/index.ts",
+        "supabase/functions/hitl-send-followup-email/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "OAUTH-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "OAUTH-002"
+      ]
+    },
+    {
+      "id": "OAUTH-004",
+      "feature": "oauth-scope-staging",
+      "title": "Update privacy policy with Google Workspace data handling sections",
+      "type": "content",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "New Google Workspace Integration section added to PrivacyPolicyPage.tsx",
+        "Describes exactly what data is accessed: calendar events, email metadata/content (read-only), drive files, Google Docs",
+        "States purpose for each data type (meeting prep, deal context, document access)",
+        "Includes data retention disclosure (how long Google data is stored)",
+        "Includes Google API Services User Data Policy compliance statement (required for OAuth verification)",
+        "Last Updated date changed to current date"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/pages/PrivacyPolicyPage.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "OAUTH-006"
+      ],
+      "parallelWith": [
+        "OAUTH-001"
+      ]
+    },
+    {
+      "id": "OAUTH-005",
+      "feature": "oauth-scope-staging",
+      "title": "Create Terms of Service page on landing site",
+      "type": "content",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "TermsOfServicePage.tsx created following PrivacyPolicyPage pattern and component reuse",
+        "Route /terms added to App.tsx",
+        "Sections: acceptance, account terms, service description, acceptable use, intellectual property, payment terms, termination, limitation of liability, governing law (England & Wales), contact",
+        "Sixty Seconds Ltd entity details consistent with privacy policy",
+        "Sidebar navigation matches privacy policy style"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/pages/TermsOfServicePage.tsx",
+        "packages/landing/src/App.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "OAUTH-006"
+      ],
+      "parallelWith": [
+        "OAUTH-004"
+      ]
+    },
+    {
+      "id": "OAUTH-006",
+      "feature": "oauth-scope-staging",
+      "title": "Add incremental scope re-auth support for future Gmail send upgrade",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "google-oauth-initiate accepts optional scope_tier parameter (base or full)",
+        "base tier = current sensitive-only scopes (default)",
+        "full tier = base + gmail.send + gmail.compose (for Phase 2)",
+        "include_granted_scopes=true added to OAuth URL to preserve existing grants",
+        "Frontend hook useGoogleOAuthInitiate passes scope tier parameter",
+        "Existing integrations not affected \u2014 backward compatible"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/google-oauth-initiate/index.ts",
+        "src/lib/api/googleIntegration.ts",
+        "src/lib/hooks/useGoogleIntegration.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "OAUTH-004",
+          "OAUTH-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "OAUTH-007"
+      ],
+      "parallelWith": []
+    },
+    {
+      "id": "OAUTH-007",
+      "feature": "oauth-scope-staging",
+      "title": "Deploy Phase 1 to staging and verify OAuth flow end-to-end",
+      "type": "devops",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "google-oauth-initiate deployed to staging with --no-verify-jwt",
+        "email-send-as-rep deployed to staging with --no-verify-jwt",
+        "Landing site deployed to Vercel preview with updated privacy policy and new ToS",
+        "OAuth flow tested: connect Google account with sensitive-only scopes",
+        "Verify no restricted scope warning on consent screen",
+        "Verify calendar sync works post-connect",
+        "Verify email reading works post-connect",
+        "Verify email send UI shows graceful disabled state"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [],
+      "dependencies": {
+        "stories": [
+          "OAUTH-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": []
     }
   ],
   "execution": {
-    "totalStories": 52,
-    "completedStories": 52,
-    "currentFeature": "audit-fix-sprints",
-    "lastUpdated": "2026-03-01T19:46:31.372Z"
+    "totalStories": 59,
+    "completedStories": 59,
+    "currentFeature": "oauth-scope-staging",
+    "lastUpdated": "2026-03-02T12:15:00.000Z"
   }
 }

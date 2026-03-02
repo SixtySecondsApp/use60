@@ -3,6 +3,8 @@ import { googleApi } from '@/lib/api/googleIntegration';
 import { supabase } from '@/lib/supabase/clientV2';
 import type { PostgrestError } from '@supabase/supabase-js';
 
+const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
+
 // Enhanced retry configuration with exponential backoff
 const RETRY_CONFIG = {
   retries: 3,
@@ -75,7 +77,7 @@ export function useGoogleServiceStatus() {
 // OAuth mutation hooks
 export function useGoogleOAuthInitiate() {
   return useMutation({
-    mutationFn: googleApi.initiateOAuth,
+    mutationFn: (scopeTier: 'base' | 'full' = 'base') => googleApi.initiateOAuth(scopeTier),
     onSuccess: (data) => {
       // Redirect to Google OAuth
       window.location.href = data.authUrl;
@@ -567,6 +569,39 @@ export function useGmailTrash() {
       queryClient.invalidateQueries({ queryKey: ['google', 'gmail', 'emails'] });
     },
   });
+}
+
+/**
+ * Check if the user's Google integration has the gmail.send scope.
+ * Returns { canSend, isLoading } so UI can gate send actions.
+ */
+export function useGmailSendEnabled() {
+  const query = useQuery({
+    queryKey: [...GOOGLE_QUERY_KEYS.integration, 'gmail-send-scope'] as const,
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { canSend: false };
+
+      const { data: integration } = await supabase
+        .from('google_integrations')
+        .select('scopes')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!integration?.scopes) return { canSend: false };
+
+      const scopes = integration.scopes.split(' ');
+      return { canSend: scopes.includes(GMAIL_SEND_SCOPE) };
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 1,
+  });
+
+  return {
+    canSend: query.data?.canSend ?? false,
+    isLoading: query.isLoading,
+  };
 }
 
 export function useGmailGetAttachment() {
