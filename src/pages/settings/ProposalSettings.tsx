@@ -965,6 +965,54 @@ function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: st
                     </Badge>
                   )}
                 </div>
+
+                {/* Manual tier override */}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <Lock className="h-3 w-3" />
+                    <span>Cap maximum tier</span>
+                  </div>
+                  <Select
+                    value={row.tier}
+                    onValueChange={(value) =>
+                      overrideMutation.mutate({
+                        actionType: row.action_type,
+                        maxTier: value as AutonomyTier,
+                      })
+                    }
+                    disabled={overrideMutation.isPending}
+                  >
+                    <SelectTrigger className="h-7 w-36 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="disabled" className="text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <X className="h-3 w-3 text-gray-400" />
+                          Disabled
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="suggest" className="text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <Shield className="h-3 w-3 text-blue-500" />
+                          Suggest
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="approve" className="text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <ShieldCheck className="h-3 w-3 text-amber-500" />
+                          Approve
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="auto" className="text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <Zap className="h-3 w-3 text-emerald-500" />
+                          Auto
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
