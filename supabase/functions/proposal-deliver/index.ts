@@ -17,12 +17,24 @@ import { logAICostEvent } from '../_shared/costTracking.ts'
 // Types
 // =============================================================================
 
+interface SlackThread {
+  channel_id: string
+  thread_ts: string
+  bot_token: string
+}
+
 interface DeliverRequest {
   proposal_id: string
   /** If provided, skip fetching from DB */
   pdf_url?: string
   /** Override: don't send Slack DM */
   skip_slack?: boolean
+  /**
+   * AUT-004 / TRG-003: When the pipeline was triggered via Slack, pass the originating
+   * thread context so we can post the final message into that thread rather than
+   * opening a new DM. Takes precedence over the DM path when present.
+   */
+  slack_thread?: SlackThread
 }
 
 interface ProposalRow {
@@ -171,6 +183,48 @@ function buildProposalSlackBlocks(
   }
 
   return blocks
+}
+
+/**
+ * AUT-004 / TRG-003: Post the final proposal message into a specific Slack thread.
+ * Used when the pipeline was triggered via Slack so the delivery lands in the
+ * originating conversation rather than a separate DM.
+ */
+async function sendSlackThreadReply(
+  thread: SlackThread,
+  proposal: ProposalRow,
+  deal: DealRow | null,
+  contact: ContactRow | null,
+): Promise<{ success: boolean; error?: string }> {
+  const appUrl = Deno.env.get('FRONTEND_URL') || 'https://app.use60.com'
+
+  const blocks = buildProposalSlackBlocks(proposal, deal, contact, appUrl)
+
+  try {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${thread.bot_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: thread.channel_id,
+        thread_ts: thread.thread_ts,
+        text: `Proposal ready: ${proposal.title}`,
+        blocks,
+      }),
+    })
+
+    const data = await res.json()
+    if (!data.ok) {
+      return { success: false, error: `chat.postMessage failed: ${data.error}` }
+    }
+
+    return { success: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { success: false, error: message }
+  }
 }
 
 /**
@@ -365,22 +419,47 @@ serve(async (req) => {
 
     // -----------------------------------------------------------------------
     // 4. Send Slack notification
+    //    AUT-004 / TRG-003: if slack_thread is present, post the final message
+    //    back into the originating thread (channel + thread_ts) using the bot
+    //    token from the Slack trigger. Otherwise fall back to a DM.
     // -----------------------------------------------------------------------
     let slackResult = { success: false, error: 'skipped' }
 
     if (!body.skip_slack) {
-      slackResult = await sendSlackNotification(
-        supabase,
-        proposal.user_id,
-        proposal,
-        deal,
-        contact,
-      )
+      if (body.slack_thread) {
+        slackResult = await sendSlackThreadReply(
+          body.slack_thread,
+          proposal,
+          deal,
+          contact,
+        )
 
-      if (slackResult.success) {
-        console.log(`${LOG_PREFIX} Slack DM sent successfully`)
+        if (slackResult.success) {
+          console.log(`${LOG_PREFIX} Slack thread reply sent successfully`)
+        } else {
+          console.warn(`${LOG_PREFIX} Slack thread reply failed (non-fatal): ${slackResult.error}`)
+          // Fall back to DM if thread reply fails
+          slackResult = await sendSlackNotification(supabase, proposal.user_id, proposal, deal, contact)
+          if (slackResult.success) {
+            console.log(`${LOG_PREFIX} Fallback Slack DM sent successfully`)
+          } else {
+            console.warn(`${LOG_PREFIX} Fallback Slack DM also failed (non-fatal): ${slackResult.error}`)
+          }
+        }
       } else {
-        console.warn(`${LOG_PREFIX} Slack DM failed (non-fatal): ${slackResult.error}`)
+        slackResult = await sendSlackNotification(
+          supabase,
+          proposal.user_id,
+          proposal,
+          deal,
+          contact,
+        )
+
+        if (slackResult.success) {
+          console.log(`${LOG_PREFIX} Slack DM sent successfully`)
+        } else {
+          console.warn(`${LOG_PREFIX} Slack DM failed (non-fatal): ${slackResult.error}`)
+        }
       }
     }
 

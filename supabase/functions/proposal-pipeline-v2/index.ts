@@ -277,6 +277,12 @@ async function markFailed(
 // Types
 // =============================================================================
 
+interface SlackThread {
+  channel_id: string
+  thread_ts: string
+  bot_token: string
+}
+
 interface PipelineRequest {
   /** Optional — required when proposal triggered from a meeting */
   meeting_id?: string
@@ -289,6 +295,12 @@ interface PipelineRequest {
   trigger_type: 'auto_post_meeting' | 'manual_button' | 'copilot' | 'slack'
   user_id: string
   org_id: string
+  /**
+   * AUT-004 / TRG-003: When trigger_type is 'slack', pass the originating thread so
+   * proposal-deliver can post the final message back into the thread rather than
+   * opening a new DM.
+   */
+  slack_thread?: SlackThread
 }
 
 interface StageTiming {
@@ -441,7 +453,7 @@ serve(async (req: Request) => {
     return errorResponse('Invalid JSON body', req, 400)
   }
 
-  const { meeting_id, deal_id, contact_id, template_id, trigger_type, user_id, org_id } = body
+  const { meeting_id, deal_id, contact_id, template_id, trigger_type, user_id, org_id, slack_thread } = body
 
   if (!user_id) return errorResponse('user_id is required', req, 400)
   if (!org_id) return errorResponse('org_id is required', req, 400)
@@ -830,6 +842,9 @@ serve(async (req: Request) => {
       () => invokeStage(supabase, 'proposal-deliver', {
         proposal_id: proposalId,
         pdf_url: pdfUrl ?? undefined,
+        // AUT-004 / TRG-003: propagate Slack thread context so deliver can post
+        // the final message into the originating thread rather than a DM.
+        slack_thread: slack_thread ?? undefined,
       }),
       1,
       [1000, 3000, 9000],
