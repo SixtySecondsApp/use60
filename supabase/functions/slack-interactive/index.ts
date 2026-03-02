@@ -44,6 +44,9 @@ import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
 import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
 import { handleAutopilotPromotion } from './handlers/autopilotPromotion.ts';
 import { handlePrepBriefingAction, handlePrepBriefingAskSubmission, handlePrepBriefingFeedbackSubmission } from './handlers/prepBriefing.ts';
+import { enrichContactContext } from '../_shared/orchestrator/adapters/contextEnrichment.ts';
+import { buildFollowupEmailPrompt } from '../_shared/orchestrator/adapters/emailSend.ts';
+import { buildEmailDraftApprovalBlocks } from '../_shared/orchestrator/adapters/emailDraftApproval.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -3326,6 +3329,85 @@ async function handleHITLApprove(
     const propJobId = approval.callback_metadata?.job_id as string | undefined;
     if (propJobId) {
       resumeOrchestratorJob(propJobId, hitlAction.approvalId).catch(() => {});
+    }
+
+    // AUT-002: Record autopilot signal for proposal approval (fire-and-forget).
+    // If the rep edited sections before approving, compute Levenshtein edit distance
+    // and record 'approved_edited' with edit_distance + edit_fields.
+    // Otherwise record plain 'approved' for proposal.send.
+    if (ctx?.userId && approval.org_id) {
+      const approvedAt = Date.now();
+      const createdAt = approval.created_at ? new Date(approval.created_at).getTime() : approvedAt;
+      const timeToRespondMs = approvedAt - createdAt;
+      const proposalId = (approval.original_content?.proposal_id as string | undefined) ||
+        (approval.metadata?.proposal_id as string | undefined);
+
+      Promise.resolve().then(async () => {
+        try {
+          const { recordSignal } = await import('../_shared/autopilot/signals.ts');
+          const { computeProposalEditMetrics } = await import('../_shared/autopilot/editDistance.ts');
+
+          // Determine autonomy tier for this action
+          const { data: tierRow } = await supabase
+            .from('autopilot_confidence')
+            .select('current_tier')
+            .eq('user_id', ctx.userId!)
+            .eq('action_type', 'proposal.send')
+            .maybeSingle();
+          const autonomyTier = (tierRow as Record<string, unknown> | null)?.current_tier as string ?? 'approve';
+
+          // Check for edited sections in edited_content
+          type ProposalSectionRaw = { id: string; title: string; content: string; order: number };
+          const editedSections = (approval.edited_content?.sections as ProposalSectionRaw[] | undefined);
+
+          if (editedSections && editedSections.length > 0 && proposalId) {
+            // Fetch original sections from proposals table
+            const { data: proposalRow } = await supabase
+              .from('proposals')
+              .select('sections')
+              .eq('id', proposalId)
+              .maybeSingle();
+
+            const originalSections = (proposalRow?.sections as ProposalSectionRaw[] | undefined) ?? [];
+
+            if (originalSections.length > 0) {
+              const metrics = computeProposalEditMetrics(originalSections, editedSections);
+              const editFields = metrics.edited_section_ids.map((id) => {
+                const sec = [...originalSections, ...editedSections].find((s) => s.id === id);
+                return sec?.title ?? id;
+              });
+
+              await recordSignal(supabase as Parameters<typeof recordSignal>[0], {
+                user_id: ctx.userId!,
+                org_id: approval.org_id,
+                action_type: 'proposal.send',
+                agent_name: 'proposal-pipeline-v2',
+                signal: 'approved_edited',
+                edit_distance: metrics.overall_distance,
+                edit_fields: editFields,
+                time_to_respond_ms: timeToRespondMs,
+                deal_id: (approval.original_content?.deal_id as string | undefined) ?? undefined,
+                autonomy_tier_at_time: autonomyTier,
+              });
+              return;
+            }
+          }
+
+          // No edits detected — plain approval signal
+          await recordSignal(supabase as Parameters<typeof recordSignal>[0], {
+            user_id: ctx.userId!,
+            org_id: approval.org_id,
+            action_type: 'proposal.send',
+            agent_name: 'proposal-pipeline-v2',
+            signal: 'approved',
+            time_to_respond_ms: timeToRespondMs,
+            deal_id: (approval.original_content?.deal_id as string | undefined) ?? undefined,
+            autonomy_tier_at_time: autonomyTier,
+          });
+        } catch (err) {
+          console.error('[AUT-002] Failed to record proposal approval signal:', err);
+        }
+      }).catch(() => {});
     }
 
     return new Response(JSON.stringify({ ok: true }), {
@@ -8600,12 +8682,13 @@ async function handleDebriefDraftFollowup(
   const bgBotToken = orgConnection.botToken;
   const bgChannelId = channelId;
   const bgSlackUserId = payload.user.id;
+  const bgTeamId = teamId;
 
-  // Fire-and-forget — errors are caught and logged internally
-  (async () => {
+  // Keep background work alive in Edge runtime instead of plain fire-and-forget.
+  const draftPromise = (async () => {
     try {
       await generateAndDeliverEmailDraft(
-        supabase, bgCtx, bgActionData, bgBotToken, bgChannelId, bgSlackUserId
+        supabase, bgCtx, bgActionData, bgBotToken, bgChannelId, bgSlackUserId, bgTeamId
       );
     } catch (err) {
       console.error('[debrief-draft-followup] Background error:', err);
@@ -8627,6 +8710,16 @@ async function handleDebriefDraftFollowup(
     }
   })();
 
+  // @ts-ignore - EdgeRuntime is a Deno Deploy/Supabase global
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(draftPromise);
+  } else {
+    draftPromise.catch((err) => {
+      console.error('[debrief-draft-followup] Background task dropped:', err);
+    });
+  }
+
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -8644,6 +8737,7 @@ async function generateAndDeliverEmailDraft(
   botToken: string,
   channelId: string | undefined,
   slackUserId: string,
+  teamId?: string,
 ): Promise<void> {
   const meetingId = actionData.meetingId;
   const meetingTitle = actionData.meetingTitle || 'Our meeting';
@@ -8677,6 +8771,20 @@ async function generateAndDeliverEmailDraft(
     if (extAttendee?.email) {
       contactEmail = extAttendee.email;
       contactName = extAttendee.name || extAttendee.email;
+    }
+  }
+
+  // Fallback: derive recipient from attendees passed in the action payload.
+  if (!contactEmail && Array.isArray(actionData.attendees) && actionData.attendees.length > 0) {
+    const firstWithEmail = actionData.attendees.find((a) => /<[^>]+>/.test(a) || /\S+@\S+\.\S+/.test(a));
+    if (firstWithEmail) {
+      const bracketEmail = firstWithEmail.match(/<([^>]+)>/)?.[1];
+      const directEmail = firstWithEmail.match(/([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1];
+      const parsedEmail = bracketEmail || directEmail || '';
+      if (parsedEmail) {
+        contactEmail = parsedEmail;
+        contactName = firstWithEmail.replace(/<[^>]+>/g, '').trim() || parsedEmail;
+      }
     }
   }
 
@@ -8721,14 +8829,6 @@ async function generateAndDeliverEmailDraft(
 
   if (anthropicKey && (transcript || summary)) {
     try {
-      // Import shared modules for enrichment and prompt building
-      const { enrichContactContext, formatContactSection, formatRelationshipHistory } = await import(
-        '../_shared/orchestrator/adapters/contextEnrichment.ts'
-      );
-      const { buildFollowupEmailPrompt } = await import(
-        '../_shared/orchestrator/adapters/emailSend.ts'
-      );
-
       const enrichment = await enrichContactContext(supabase, { id: contactEmail, name: contactName, email: contactEmail }, meetingId);
 
       const prompt = buildFollowupEmailPrompt({
@@ -8788,7 +8888,7 @@ async function generateAndDeliverEmailDraft(
   });
   const dmData = await dmResponse.json();
   const dmChannelId = dmData.channel?.id;
-  const slackTeamId = dmData.channel?.context_team_id || '';
+  const slackTeamId = dmData.channel?.context_team_id || teamId || '';
 
   if (!dmChannelId) {
     console.error('[debrief-draft-followup] Failed to open DM channel:', dmData.error);
@@ -8842,10 +8942,6 @@ async function generateAndDeliverEmailDraft(
   const approvalId = approval.id;
 
   // --- 7. Build and post Block Kit message with HITL buttons ---
-  const { buildEmailDraftApprovalBlocks } = await import(
-    '../_shared/orchestrator/adapters/emailDraftApproval.ts'
-  );
-
   const blocks = buildEmailDraftApprovalBlocks({
     approvalId,
     to: contactEmail,

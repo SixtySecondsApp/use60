@@ -101,6 +101,8 @@ export const RUBBER_STAMP_THRESHOLDS: Record<string, number> = {
   'sequence.start':          3000,  // 3s  — sequences have downstream impact
   'slack.notification_send': 1500,  // 1.5s
   'slack.briefing_send':     2000,  // 2s
+  'proposal.generate':       4000,  // 4s  — proposal needs reading before kicking off send
+  'proposal.send':           5000,  // 5s  — sending a proposal is high stakes
 }
 
 /**
