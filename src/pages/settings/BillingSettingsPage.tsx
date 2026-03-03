@@ -103,8 +103,9 @@ export default function BillingSettingsPage() {
   } | null>(null);
 
   const currentPlan = subscription?.plan;
+  const hasSubscription = !!subscription;
   const currentPlanSlug = (currentPlan?.slug ?? 'basic') as PlanSlug;
-  const isBasicUser = currentPlanSlug === 'basic' || currentPlan?.is_free_tier;
+  const isBasicUser = !hasSubscription || currentPlanSlug === 'basic' || currentPlan?.is_free_tier;
   const hasStripeSubscription = !!subscription?.stripe_subscription_id;
   const currentBillingCycle: ModalBillingCycle =
     subscription?.billing_cycle === 'yearly' ? 'annual' : 'monthly';
@@ -125,7 +126,7 @@ export default function BillingSettingsPage() {
   // Monthly cost display
   const monthlyCostDisplay = currentPlan?.price_monthly != null
     ? `${symbol}${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
-    : `${symbol}29/mo`;
+    : hasSubscription ? `${symbol}29/mo` : '—';
 
   // Trial progress
   const daysRemaining = trial?.daysRemaining ?? 0;
@@ -225,12 +226,10 @@ export default function BillingSettingsPage() {
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-xl font-bold text-gray-900 dark:text-white">
-                      {currentPlan?.name ?? 'Basic Plan'}
+                      {hasSubscription ? (currentPlan?.name ?? 'Basic Plan') : 'No Plan Selected'}
                     </span>
-                    {subscription?.status ? (
+                    {subscription?.status && (
                       <StatusBadge status={subscription.status} />
-                    ) : (
-                      <StatusBadge status="active" />
                     )}
                   </div>
 

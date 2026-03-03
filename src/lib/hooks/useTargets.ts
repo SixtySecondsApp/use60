@@ -24,13 +24,13 @@ export function useTargets(userId: string | undefined) {
         .eq('user_id', userId!)
         .lte('start_date', today)
         .gte('end_date', today)
-        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
     enabled: !!userId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0, // Always refetch to ensure values are current after navigation
     gcTime: 10 * 60 * 1000,
   });
 }

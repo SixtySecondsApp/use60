@@ -177,13 +177,32 @@ export function EmailSyncPanel() {
 
       {/* Error Display */}
       {error && (
-        <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-md flex items-start gap-2">
-          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-red-900 dark:text-red-100">Sync Errors</p>
-            <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+        error.includes('No CRM contacts found') ? (
+          <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-md flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-100">No contacts to sync</p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                Add contacts to your CRM first to sync emails. Email sync only matches emails from your existing CRM contacts.
+              </p>
+              <a
+                href="/contacts"
+                className="inline-flex items-center gap-1 mt-2 text-sm font-medium text-amber-800 dark:text-amber-200 underline hover:no-underline"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Go to Contacts
+              </a>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-md flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-900 dark:text-red-100">Sync failed</p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+            </div>
+          </div>
+        )
       )}
 
       {/* Sync Status */}

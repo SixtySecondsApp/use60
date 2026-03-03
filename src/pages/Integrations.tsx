@@ -818,7 +818,7 @@ export default function Integrations() {
     const status = getIntegrationStatus(integrationId);
 
     if (status === 'active' || status === 'syncing') {
-      // Meeting recorders navigate to dedicated settings pages when connected
+      // Integrations with dedicated settings pages navigate there when connected
       if (integrationId === 'fathom') {
         navigate('/settings/integrations/fathom');
         return;
@@ -829,6 +829,14 @@ export default function Integrations() {
       }
       if (integrationId === '60-notetaker') {
         navigate('/meetings/recordings/settings');
+        return;
+      }
+      if (integrationId === 'slack') {
+        navigate('/settings/integrations/slack');
+        return;
+      }
+      if (integrationId === 'justcall') {
+        navigate('/settings/integrations/justcall');
         return;
       }
       // Other integrations use config modals

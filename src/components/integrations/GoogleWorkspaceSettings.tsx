@@ -12,7 +12,7 @@ import { useGoogleIntegration } from '@/lib/stores/integrationStore';
 import { GoogleServiceStatus, googleApi, GoogleTestConnectionResult } from '@/lib/api/googleIntegration';
 import {
   Mail, Calendar, FolderOpen, ListTodo, RefreshCw, Loader2,
-  CheckCircle, XCircle, TestTube2, Sparkles, Tag, ChevronDown, ChevronUp,
+  CheckCircle, XCircle, TestTube2, Sparkles, Tag,
   AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -36,7 +36,7 @@ export function GoogleWorkspaceSettings() {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<GoogleTestConnectionResult | null>(null);
-  const [showCategorizationSettings, setShowCategorizationSettings] = useState(false);
+  const [smartCategorizationEnabled, setSmartCategorizationEnabled] = useState(false);
 
   // Sync local state with store
   useEffect(() => {
@@ -283,21 +283,13 @@ export function GoogleWorkspaceSettings() {
                 </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowCategorizationSettings(!showCategorizationSettings)}
-              className="text-xs"
-            >
-              {showCategorizationSettings ? (
-                <ChevronUp className="w-4 h-4" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
-              )}
-            </Button>
+            <Switch
+              checked={smartCategorizationEnabled}
+              onCheckedChange={setSmartCategorizationEnabled}
+            />
           </div>
 
-          {showCategorizationSettings && (
+          {smartCategorizationEnabled && (
             <div className="pt-3 border-t border-gray-100 dark:border-gray-700/50 space-y-3">
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Emails are categorized every 15 minutes. Categories feed into the Slack Sales Assistant for follow-up reminders.
@@ -346,15 +338,13 @@ export function GoogleWorkspaceSettings() {
               {integration && new Date(integration.created_at).toLocaleDateString()}
             </span>
           </div>
-          {integration?.expires_at && (
-            <div className="flex justify-between">
-              <span className="flex items-center gap-1">
-                <RefreshCw className="w-3 h-3" />
-                Token expires:
-              </span>
-              <span>{new Date(integration.expires_at).toLocaleDateString()}</span>
-            </div>
-          )}
+          <div className="flex justify-between">
+            <span className="flex items-center gap-1">
+              <RefreshCw className="w-3 h-3" />
+              Token:
+            </span>
+            <span>Auto-refreshes</span>
+          </div>
         </div>
       </div>
 
@@ -405,7 +395,7 @@ export function GoogleWorkspaceSettings() {
                     className={`flex items-center gap-1.5 p-2 rounded ${
                       result.ok
                         ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-                        : 'bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400'
+                        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
                     }`}
                   >
                     {result.ok ? (
