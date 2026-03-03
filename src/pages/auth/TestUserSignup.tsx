@@ -13,7 +13,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Building2, Lock, User, Loader2, Mail, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
 
 type SignupStatus = 'loading' | 'ready' | 'submitting' | 'error';
@@ -27,6 +29,7 @@ interface TokenInfo {
 export default function TestUserSignup() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [status, setStatus] = useState<SignupStatus>('loading');
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
@@ -163,6 +166,19 @@ export default function TestUserSignup() {
         navigate('/auth/login');
         return;
       }
+
+      // Load organization memberships and set the new org as active.
+      // Must load orgs first so the store has membership data for the dashboard.
+      await useOrgStore.getState().loadOrganizations();
+      if (result.org_id) {
+        useOrgStore.getState().setActiveOrg(result.org_id);
+      }
+
+      // Invalidate ALL cached queries so dashboard loads fresh data.
+      // signInWithPassword() was called directly (not via AuthContext.signIn()), so
+      // justSignedInRef is never set and the SIGNED_IN handler skips invalidation.
+      // Fresh signup = fresh cache — invalidate everything.
+      await queryClient.invalidateQueries();
 
       // Signed in — go straight to dashboard
       navigate('/dashboard', { replace: true });
