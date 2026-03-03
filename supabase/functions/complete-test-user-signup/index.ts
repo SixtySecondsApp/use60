@@ -116,7 +116,7 @@ serve(async (req) => {
     let userId: string;
     let isExistingUser = false;
 
-    // Look up existing user by email via profiles table (service role, no pagination issues)
+    // Look up existing user by email via profiles table first
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('id')
@@ -124,10 +124,10 @@ serve(async (req) => {
       .maybeSingle();
 
     if (existingProfile) {
-      // User exists — reset them for a fresh start with the magic link org
+      // User exists in profiles — reset them for a fresh start with the magic link org
       userId = existingProfile.id;
       isExistingUser = true;
-      console.log('Existing user found:', userId, 'for email:', request.email);
+      console.log('Existing user found via profile:', userId, 'for email:', request.email);
 
       // Update their password to what they entered on the signup form
       const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
@@ -148,7 +148,7 @@ serve(async (req) => {
         console.log('Cleaned up old memberships for user:', userId);
       }
     } else {
-      // New user — create auth account with email auto-confirmed (admin vouches for them)
+      // No profile found — try to create auth user
       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: request.email.toLowerCase(),
         password: request.password,
@@ -161,14 +161,72 @@ serve(async (req) => {
       });
 
       if (authError) {
-        console.error('Auth user creation error:', authError);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Failed to create account: ' + authError.message }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+        // If user already exists in auth.users (orphaned — profile was deleted but auth wasn't),
+        // look them up via the auth_users view and reclaim the account
+        if (authError.message?.includes('already been registered')) {
+          console.log('Auth user exists without profile, reclaiming:', request.email);
+          const { data: orphanedUser } = await supabaseAdmin
+            .from('auth_users_view')
+            .select('id')
+            .eq('email', request.email.toLowerCase())
+            .maybeSingle();
 
-      userId = authData.user.id;
+          // Fallback: query auth.users directly (service role can access this)
+          let orphanedId = orphanedUser?.id;
+          if (!orphanedId) {
+            const { data: directLookup } = await supabaseAdmin.rpc('get_auth_user_id_by_email', {
+              p_email: request.email.toLowerCase(),
+            });
+            orphanedId = directLookup;
+          }
+
+          // Last resort: list all users and find by email
+          if (!orphanedId) {
+            const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+            const match = listData?.users?.find(
+              (u: any) => u.email?.toLowerCase() === request.email.toLowerCase()
+            );
+            orphanedId = match?.id;
+          }
+
+          if (!orphanedId) {
+            console.error('Could not find orphaned auth user for:', request.email);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Account exists but could not be recovered. Contact support.' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          userId = orphanedId;
+          isExistingUser = true;
+
+          // Update password and metadata for the reclaimed account
+          await supabaseAdmin.auth.admin.updateUserById(userId, {
+            password: request.password,
+            user_metadata: {
+              first_name: request.first_name.trim(),
+              last_name: request.last_name.trim(),
+              full_name: `${request.first_name.trim()} ${request.last_name.trim()}`,
+            },
+          });
+
+          // Clean up any lingering memberships
+          await supabaseAdmin
+            .from('organization_memberships')
+            .delete()
+            .eq('user_id', userId);
+
+          console.log('Reclaimed orphaned auth user:', userId);
+        } else {
+          console.error('Auth user creation error:', authError);
+          return new Response(
+            JSON.stringify({ success: false, error: 'Failed to create account: ' + authError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        userId = authData.user.id;
+      }
     }
 
     // --- Step 3: Create profile (defensive upsert) ---
