@@ -114,10 +114,10 @@ export function ActionTypeStatusCard({
   return (
     <Card
       className={cn(
-        'border bg-gray-900/60 transition-colors',
+        'border bg-white dark:bg-gray-900/60 transition-colors',
         hasPendingPromotion
-          ? 'border-blue-700/50'
-          : 'border-gray-800'
+          ? 'border-blue-200 dark:border-blue-700/50'
+          : 'border-gray-200 dark:border-gray-800'
       )}
     >
       <CardContent className="p-4">
@@ -132,7 +132,7 @@ export function ActionTypeStatusCard({
                 tierConfig.dotCls
               )}
             />
-            <span className="text-sm font-medium text-gray-100 truncate">
+            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
               {label}
             </span>
           </div>

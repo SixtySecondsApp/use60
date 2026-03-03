@@ -164,12 +164,12 @@ export function WhatCanSixtyDoCard({ rows }: WhatCanSixtyDoCardProps) {
   const activeCount = rows.filter((r) => r.current_tier !== 'disabled').length;
 
   return (
-    <Card className="border border-gray-800 bg-gray-900/60">
+    <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/60">
       <CardHeader className="pb-3 pt-4 px-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Zap className="h-4 w-4 text-emerald-400 flex-shrink-0" />
-            <span className="text-sm font-medium text-gray-100">
+            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
               What can 60 do for you?
             </span>
           </div>
@@ -202,7 +202,7 @@ export function WhatCanSixtyDoCard({ rows }: WhatCanSixtyDoCardProps) {
                         key={cap.label}
                         className="flex items-center justify-between"
                       >
-                        <span className="text-sm text-gray-300">
+                        <span className="text-sm text-gray-700 dark:text-gray-300">
                           {cap.label}
                         </span>
                         <span
@@ -226,8 +226,8 @@ export function WhatCanSixtyDoCard({ rows }: WhatCanSixtyDoCardProps) {
                 className={cn(
                   'w-full flex items-center justify-center',
                   'rounded-md px-3 py-1.5 text-xs font-medium',
-                  'bg-gray-800/60 hover:bg-gray-800 transition-colors',
-                  'text-gray-400 hover:text-gray-300'
+                  'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800/60 dark:hover:bg-gray-800 transition-colors',
+                  'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                 )}
               >
                 {expanded ? (

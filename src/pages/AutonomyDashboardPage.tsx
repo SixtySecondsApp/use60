@@ -12,6 +12,7 @@
  * Stories: AUT-001 through AUT-008
  */
 
+import { Helmet } from 'react-helmet-async';
 import { Shield, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -80,7 +81,7 @@ export default function AutonomyDashboardPage() {
 
   if (isError) {
     return (
-      <Card className="border border-gray-800 bg-gray-900/60">
+      <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/60">
         <CardContent className="flex items-center gap-3 py-6 px-5">
           <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
           <p className="text-sm text-gray-400 flex-1">
@@ -107,14 +108,18 @@ export default function AutonomyDashboardPage() {
   });
 
   return (
-    <div className="space-y-8">
+    <>
+      <Helmet>
+        <title>Autonomy Dashboard — 60</title>
+      </Helmet>
+      <div className="space-y-8 p-6">
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                             */}
       {/* ------------------------------------------------------------------ */}
       <div className="flex items-center gap-3">
         <Shield className="h-5 w-5 text-gray-400" />
         <div>
-          <h1 className="text-xl font-semibold text-gray-100">
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Autonomy Dashboard
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -144,7 +149,7 @@ export default function AutonomyDashboardPage() {
           Action Types
         </h2>
         {sortedRows.length === 0 ? (
-          <Card className="border border-gray-800 bg-gray-900/60">
+          <Card className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/60">
             <CardContent className="py-10 text-center">
               <Shield className="h-8 w-8 text-gray-700 mx-auto mb-3" />
               <p className="text-sm text-gray-500">No autonomy data yet.</p>
@@ -188,7 +193,8 @@ export default function AutonomyDashboardPage() {
       {/* History timeline (AUT-004)                                         */}
       {/* ------------------------------------------------------------------ */}
       <AutonomyHistoryTimeline />
-    </div>
+      </div>
+    </>
   );
 }
 

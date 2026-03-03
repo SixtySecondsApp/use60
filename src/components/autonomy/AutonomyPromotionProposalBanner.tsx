@@ -101,17 +101,17 @@ export function AutonomyPromotionProposalBanner() {
         return (
           <Card
             key={p.id}
-            className="border border-blue-700/50 bg-blue-950/20"
+            className="border border-blue-200 bg-blue-50 dark:border-blue-700/50 dark:bg-blue-950/20"
           >
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-3">
                 {/* Left: icon + info */}
                 <div className="flex items-start gap-3 min-w-0">
-                  <div className="mt-0.5 flex-shrink-0 w-8 h-8 rounded-md bg-blue-900/40 flex items-center justify-center">
+                  <div className="mt-0.5 flex-shrink-0 w-8 h-8 rounded-md bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
                     <TrendingUp className="h-4 w-4 text-blue-400" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-gray-200">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-200">
                       Promotion proposal: {label}
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5">
@@ -163,7 +163,7 @@ export function AutonomyPromotionProposalBanner() {
                     variant="outline"
                     onClick={() => handleAction(p.id, 'snooze')}
                     disabled={approvePromotion.isPending}
-                    className="h-7 text-xs border-gray-700 text-gray-400"
+                    className="h-7 text-xs border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <AlarmClock className="h-3.5 w-3.5 mr-1" />
                     Snooze
