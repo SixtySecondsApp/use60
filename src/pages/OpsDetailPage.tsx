@@ -157,8 +157,9 @@ const SOURCE_BADGE: Record<string, { label: string; className: string; icon: Rea
 // Component
 // ---------------------------------------------------------------------------
 
-function OpsDetailPage() {
-  const { tableId } = useParams<{ tableId: string }>();
+function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string; embedded?: boolean } = {}) {
+  const params = useParams<{ tableId: string }>();
+  const tableId = embeddedTableId || params.tableId;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -177,7 +178,7 @@ function OpsDetailPage() {
   const [editNameValue, setEditNameValue] = useState('');
   const [queryInput, setQueryInput] = useState('');
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const [activeViewId, setActiveViewId] = useState<string | null>(searchParams.get('view'));
+  const [activeViewId, setActiveViewId] = useState<string | null>(embedded ? null : searchParams.get('view'));
   const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([]);
   const [showSaveViewDialog, setShowSaveViewDialog] = useState(false);
   // Use ref instead of state to prevent StrictMode double-creation race condition
@@ -2324,13 +2325,15 @@ function OpsDetailPage() {
   if (tableError || !table) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <button
-          onClick={() => navigate('/ops')}
-          className="mb-6 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Ops
-        </button>
+        {!embedded && (
+          <button
+            onClick={() => navigate('/ops')}
+            className="mb-6 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Ops
+          </button>
+        )}
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-red-800/50 bg-red-950/20 px-6 py-20 text-center">
           <p className="text-sm text-red-400">
             {tableError ? 'Failed to load table.' : 'Table not found.'}
@@ -2346,8 +2349,8 @@ function OpsDetailPage() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top section: back nav + query bar + metadata */}
       <div className={`shrink-0 border-b border-gray-800 bg-gray-950 px-6 ${isFullscreen ? 'pb-3 pt-3' : 'pb-4 pt-5'}`}>
-        {/* Back button — hidden in fullscreen */}
-        {!isFullscreen && (
+        {/* Back button — hidden in fullscreen and embedded mode */}
+        {!isFullscreen && !embedded && (
           <button
             onClick={() => navigate('/ops')}
             className="mb-4 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"

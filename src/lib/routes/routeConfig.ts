@@ -166,10 +166,10 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Leads',
     icon: Inbox,
-    showInNav: false, // Phase 2: accessible from Ops standard tables
+    showInNav: true,
     navSection: 'main',
-    order: 2,
-    displayGroup: 3,
+    order: 3,
+    displayGroup: 1,
   },
   {
     path: '/crm',
