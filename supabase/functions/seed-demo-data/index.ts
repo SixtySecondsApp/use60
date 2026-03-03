@@ -178,6 +178,8 @@ serve(async (req: Request) => {
 
     // ------------------------------------------------------------------
     // Step 2: Seed companies
+    // Unique constraints are now per-org (name+clerk_org_id, domain+clerk_org_id)
+    // so the same company names/domains can exist across different orgs.
     // ------------------------------------------------------------------
     const companyIds: string[] = new Array(COMPANIES.length).fill(null);
 
