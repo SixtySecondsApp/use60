@@ -4,6 +4,7 @@ import { ORBIT_RADII, ZOOM_EXTENT, CENTRE_NODE_RADIUS, TIER_COLORS, HEALTH_COLOR
 import { useGraphData } from './hooks/useGraphData';
 import { GraphTooltip } from './GraphTooltip';
 import { GraphToolbar } from './GraphToolbar';
+import { GraphDetailPanel } from './GraphDetailPanel';
 import type { GraphNode, WarmthTier } from './types';
 
 interface RelationshipGraphProps {
@@ -163,12 +164,14 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
         allContactCount={contacts.length}
       />
 
-      {/* SVG Graph */}
+      {/* Main area: SVG + optional detail panel */}
+      <div className="flex flex-1 overflow-hidden">
       <svg
         ref={svgRef}
-        width={dimensions.width}
+        width={selectedNode ? dimensions.width - 370 : dimensions.width}
         height={dimensions.height}
         className="flex-1"
+        style={{ transition: 'width 0.3s ease' }}
         onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
         onClick={(e) => {
           // Click on empty space deselects
@@ -539,6 +542,16 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
           </g>
         </g>
       </svg>
+
+      {/* Detail panel */}
+      {selectedNode && (
+        <GraphDetailPanel
+          node={selectedNode}
+          onClose={handleDeselect}
+          onSelectContact={(id) => setSelectedId(id)}
+        />
+      )}
+      </div>
 
       {/* Hover tooltip (only when no node is selected) */}
       {hoveredNode && !selectedNode && (
