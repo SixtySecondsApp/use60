@@ -248,9 +248,21 @@ html, body {
 
 .section-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 0;
+  position: relative;
+}
+
+.section-header::after {
+  content: "";
+  position: absolute;
+  left: 16px; /* accent bar (4px) + gap (12px) */
+  right: 0;
+  bottom: -10px;
+  height: 2px;
+  background: ${secondaryLight};
 }
 
 .section-accent-bar {
@@ -259,7 +271,8 @@ html, body {
   border-radius: 2px;
   background-color: ${primary_color};
   flex-shrink: 0;
-  margin-top: 4px;
+  margin-top: 0;
+  align-self: center;
 }
 
 .section-title {
@@ -268,8 +281,9 @@ html, body {
   font-weight: 700;
   color: #111827;
   line-height: 1.3;
-  padding-bottom: 10px;
-  border-bottom: 2px solid ${secondaryLight};
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .section-content {

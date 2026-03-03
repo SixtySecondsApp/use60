@@ -26,7 +26,7 @@ import {
   Loader2,
   AlertCircle,
   FileText,
-  Download,
+
   Pencil,
   Send,
   Coins,
@@ -38,6 +38,7 @@ import {
   Clock,
   Save,
   X,
+  Eye,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { cn } from '@/lib/utils';
@@ -169,6 +170,85 @@ function getStageState(
   return 'pending';
 }
 
+/**
+ * Inject a tiny CSS override into rendered proposal HTML for inline iframe previews.
+ * This keeps section accent bars visually centered with headings even when
+ * legacy templates include conflicting heading margins.
+ */
+function withSectionHeadingAlignmentFix(html: string): string {
+  const overrideCss = `
+<style id="proposal-inline-alignment-fix">
+  .section-header,
+  .ss-section-header {
+    align-items: center !important;
+    padding-bottom: 0 !important;
+    margin-bottom: 24px !important;
+    position: relative !important;
+    border-bottom: none !important;
+  }
+
+  .section-header::after,
+  .ss-section-header::after {
+    content: "" !important;
+    position: absolute !important;
+    left: 16px !important;
+    right: 0 !important;
+    bottom: -10px !important;
+    height: 2px !important;
+    background: #dbe5f3 !important;
+  }
+
+  .section-accent-bar,
+  .ss-accent-bar {
+    margin-top: 0 !important;
+    align-self: center !important;
+  }
+
+  .section-title,
+  .ss-section-title {
+    margin: 0 !important;
+    padding-bottom: 0 !important;
+    border-bottom: none !important;
+  }
+</style>
+  `.trim();
+
+  if (html.includes('</head>')) {
+    return html.replace('</head>', `${overrideCss}\n</head>`);
+  }
+
+  return `${overrideCss}\n${html}`;
+}
+
+// ---------------------------------------------------------------------------
+// AnimatedCounter — counts up from 0 to `value` over `duration` ms
+// ---------------------------------------------------------------------------
+
+function AnimatedCounter({ value, duration = 1200, delay = 0 }: { value: number; duration?: number; delay?: number }) {
+  const [display, setDisplay] = useState(0);
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (value <= 0) return;
+    const timeout = setTimeout(() => {
+      started.current = true;
+      const startTime = performance.now();
+      const step = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setDisplay(Math.round(eased * value));
+        if (progress < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [value, duration, delay]);
+
+  return <>{display.toLocaleString()}</>;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -194,6 +274,7 @@ export default function ProposalProgressOverlay({
   const [editingSections, setEditingSections] = useState<EditableSection[]>([]);
   const [editLoading, setEditLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+
 
   // -------------------------------------------------------------------
   // Track elapsed time
@@ -447,11 +528,23 @@ export default function ProposalProgressOverlay({
   }, [open, proposalId, fetchProposal]);
 
   // Re-fetch full row when status reaches ready (to capture pdf_url etc.)
+  // Also fetch the sections so the done-state can display them.
+  const [doneSections, setDoneSections] = useState<EditableSection[]>([]);
   useEffect(() => {
     if (status === 'ready') {
       fetchProposal();
+      // Fetch sections for the done-state summary
+      (async () => {
+        const { data } = await supabase
+          .from('proposals')
+          .select('sections')
+          .eq('id', proposalId)
+          .maybeSingle();
+        const secs = data?.sections as EditableSection[] | null;
+        if (secs && Array.isArray(secs)) setDoneSections(secs);
+      })();
     }
-  }, [status, fetchProposal]);
+  }, [status, fetchProposal, proposalId]);
 
   // -------------------------------------------------------------------
   // Derived state
@@ -490,7 +583,7 @@ export default function ProposalProgressOverlay({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={cn(
         'max-h-[90vh] flex flex-col overflow-hidden',
-        editMode ? 'sm:max-w-lg' : 'sm:max-w-4xl',
+        editMode ? 'sm:max-w-lg' : isDone ? 'sm:max-w-xl' : 'sm:max-w-4xl',
       )}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -604,95 +697,135 @@ export default function ProposalProgressOverlay({
             </motion.div>
           )}
 
-          {/* ---- Done State ---- */}
-          {!editMode && isDone && (
-            <motion.div
-              key="done"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="flex flex-col gap-3 py-2 min-h-0 flex-1 overflow-hidden"
-            >
-              {/* Success header */}
-              <div className="flex items-center gap-3 shrink-0">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-900/20"
-                >
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
-                </motion.div>
-                <div className="min-w-0 flex-1">
+          {/* ---- Done State — Stats + Sections ---- */}
+          {!editMode && isDone && (() => {
+            const wordCount = doneSections.reduce((sum, s) => sum + (s.content?.split(/\s+/).length || 0), 0);
+            const sectionCount = doneSections.length;
+            return (
+              <motion.div
+                key="done"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col gap-4 py-3 min-h-0 flex-1"
+              >
+                {/* Title + badges */}
+                <div className="shrink-0 text-center">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-900/20 mb-3"
+                  >
+                    <CheckCircle2 className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
+                  </motion.div>
                   {proposal?.title && (
-                    <p className="text-sm font-medium text-[#1E293B] dark:text-white truncate">
+                    <motion.p
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.15 }}
+                      className="text-base font-semibold text-[#1E293B] dark:text-white"
+                    >
                       {proposal.title}
-                    </p>
+                    </motion.p>
                   )}
-                  <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.25 }}
+                    className="flex flex-wrap items-center justify-center gap-2 mt-1.5"
+                  >
                     {proposal?.credits_used != null && proposal.credits_used > 0 && (
                       <Badge variant="secondary" className="gap-1">
                         <Coins className="h-3 w-3" />
-                        {proposal.credits_used} credit{proposal.credits_used !== 1 ? 's' : ''} used
+                        {proposal.credits_used} credit{proposal.credits_used !== 1 ? 's' : ''}
                       </Badge>
                     )}
                     {elapsedSeconds != null && (
                       <Badge variant="outline" className="gap-1">
                         <Clock className="h-3 w-3" />
-                        Generated in {elapsedSeconds}s
+                        {elapsedSeconds}s
                       </Badge>
                     )}
-                  </div>
+                  </motion.div>
                 </div>
-              </div>
 
-              {/* Inline preview — show only first page (cover) */}
-              {proposal?.rendered_html ? (
-                <div className="flex-1 min-h-0 w-full px-8 sm:px-16 py-4">
-                  <div className="w-full h-full rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 overflow-hidden shadow-sm">
-                    <iframe
-                      srcDoc={proposal.rendered_html}
-                      title="Proposal preview"
-                      className="w-full h-full border-0"
-                      sandbox="allow-same-origin"
-                      style={{ pointerEvents: 'none' }}
-                    />
-                  </div>
-                </div>
-              ) : thumbnailUrl ? (
-                <div className="flex justify-center">
-                  <div className="flex h-36 w-28 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 shadow-sm dark:border-gray-700 dark:bg-gray-800/50 overflow-hidden">
-                    <img
-                      src={thumbnailUrl}
-                      alt="Proposal thumbnail"
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex justify-center">
-                  <div className="flex h-36 w-28 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 shadow-sm dark:border-gray-700 dark:bg-gray-800/50">
-                    <FileText className="h-10 w-10 text-[#64748B] dark:text-gray-500" />
-                  </div>
-                </div>
-              )}
+                {/* Stat counters */}
+                {sectionCount > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.4 }}
+                    className="grid grid-cols-3 gap-3 shrink-0"
+                  >
+                    {[
+                      { value: sectionCount, label: 'Sections' },
+                      { value: wordCount, label: 'Words' },
+                      { value: Math.max(1, Math.ceil(wordCount / 400)), label: 'Pages' },
+                    ].map((stat, i) => (
+                      <div
+                        key={stat.label}
+                        className="flex flex-col items-center rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 py-3 px-2"
+                      >
+                        <span className="text-2xl font-bold text-[#1E293B] dark:text-white tabular-nums">
+                          <AnimatedCounter value={stat.value} delay={400 + i * 150} />
+                        </span>
+                        <span className="text-xs text-[#64748B] dark:text-gray-400 mt-0.5">{stat.label}</span>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
 
-              {/* Action buttons */}
-              <div className="flex flex-col w-full gap-2 shrink-0">
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    if (proposal?.pdf_url) {
-                      window.open(proposal.pdf_url, '_blank', 'noopener');
-                    }
-                  }}
-                  disabled={!proposal?.pdf_url}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download PDF
-                </Button>
+                {/* Section list */}
+                {sectionCount > 0 && (
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
+                    {doneSections.map((section, idx) => (
+                      <motion.div
+                        key={idx}
+                        initial={{ opacity: 0, x: -12 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.5 + idx * 0.08, duration: 0.35, ease: 'easeOut' }}
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors group"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-50 dark:bg-blue-900/20 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                          {idx + 1}
+                        </span>
+                        <span className="flex-1 text-sm font-medium text-[#1E293B] dark:text-gray-200 truncate">
+                          {section.title}
+                        </span>
+                        <span className="text-xs text-[#94A3B8] dark:text-gray-500 shrink-0 tabular-nums opacity-0 group-hover:opacity-100 transition-opacity">
+                          {section.content?.split(/\s+/).length || 0} words
+                        </span>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
 
-                <div className="flex gap-2">
+                {/* No sections fallback */}
+                {sectionCount === 0 && (
+                  <div className="flex-1 min-h-0 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-2 text-[#94A3B8] dark:text-gray-500">
+                      <FileText className="h-10 w-10" />
+                      <p className="text-sm">Your proposal is ready to preview</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex gap-2 shrink-0 pt-1">
+                  <Button
+                    className="flex-1"
+                    onClick={() => {
+                      if (proposal?.pdf_url) {
+                        window.open(proposal.pdf_url, '_blank', 'noopener');
+                      }
+                    }}
+                    disabled={!proposal?.pdf_url}
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Preview PDF
+                  </Button>
+
                   <Button
                     variant="outline"
                     className="flex-1"
@@ -721,12 +854,12 @@ export default function ProposalProgressOverlay({
                     }}
                   >
                     <Send className="mr-2 h-4 w-4" />
-                    Send to Client
+                    Send
                   </Button>
                 </div>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            );
+          })()}
 
           {/* ---- Progress State ---- */}
           {!editMode && !isDone && !isFailed && (
@@ -872,12 +1005,12 @@ function MiniPage({ children, show }: { children: React.ReactNode; show: boolean
 }
 
 // How long each page's content takes to fully animate (seconds).
-// Used to auto-advance to the next page once the current is done.
-// Page 1 cover: last line delay 1.3 + 0.35 duration ≈ 1.65, + 0.5 entrance buffer
-// Page 2 TOC+sections: last paragraph baseDelay 5.7 + 3×0.12 + 0.35 ≈ 6.4, + 0.5
-// Page 3 approach: last paragraph baseDelay 4.1 + 2×0.12 + 0.35 ≈ 4.7, + 0.5
-// Page 4 tables+bullets: last bullet 3.0 + 4×0.15 + 0.3 ≈ 3.9, + 0.5
-const PAGE_DURATIONS = [2.2, 7, 5.5, 4.5] as const;
+// Tuned so all 4 pages together fill ~56 seconds of generation time.
+// Page 1 cover: ~8s (slow, dramatic reveal)
+// Page 2 TOC + 3 sections: ~18s (lots of content)
+// Page 3 approach + phases: ~16s
+// Page 4 tables + bullets: ~14s
+const PAGE_DURATIONS = [8, 18, 16, 14] as const;
 
 function DocumentAssemblyAnimation({ status }: { status: PipelineStatus | null }) {
   const activeIdx = getActiveStageIndex(status);
@@ -918,87 +1051,101 @@ function DocumentAssemblyAnimation({ status }: { status: PipelineStatus | null }
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-2">
         <div className="grid grid-cols-2 gap-3 max-w-[520px] mx-auto">
 
-          {/* ─── PAGE 1: Cover ─── */}
+          {/* ─── PAGE 1: Cover (~8s) ─── */}
           <MiniPage show={phase >= 0}>
             <motion.div
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
-              transition={{ delay: 0.3, duration: 0.4 }}
+              transition={{ delay: 0.8, duration: 0.6 }}
               style={{ transformOrigin: 'left' }}
               className="h-[3%] bg-[#1e3a5f]"
             />
             <div className="flex flex-col items-center justify-center h-[90%] gap-2 px-4">
-              <SkeletonLine w="35%" delay={0.5} />
-              <SkeletonLine w="65%" delay={0.7} dark />
-              <SkeletonLine w="25%" delay={0.9} />
+              <SkeletonLine w="35%" delay={1.5} />
+              <SkeletonLine w="65%" delay={2.5} dark />
+              <SkeletonLine w="25%" delay={3.5} />
               <div className="mt-2 flex flex-col items-center gap-1">
-                <SkeletonLine w="50%" delay={1.1} />
-                <SkeletonLine w="35%" delay={1.3} />
-                <SkeletonLine w="25%" delay={1.5} />
+                <SkeletonLine w="50%" delay={4.8} />
+                <SkeletonLine w="35%" delay={5.8} />
+                <SkeletonLine w="25%" delay={6.8} />
               </div>
             </div>
             <div className="h-[1.5%] bg-[#4a90d9]" />
           </MiniPage>
 
-          {/* ─── PAGE 2: TOC + Exec Summary + Challenge ─── */}
+          {/* ─── PAGE 2: TOC + Exec Summary + Challenge (~18s) ─── */}
           <MiniPage show={phase >= 1}>
             <div className="p-2.5 space-y-2">
+              {/* TOC block: 0.6 – 2.2s */}
               <div className="space-y-[2px]">
-                <SkeletonLine w="32%" delay={0.5} dark />
+                <SkeletonLine w="32%" delay={0.6} dark />
                 <motion.div
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: 1 }}
-                  transition={{ delay: 0.7, duration: 0.3 }}
+                  transition={{ delay: 1.0, duration: 0.3 }}
                   style={{ transformOrigin: 'left' }}
                   className="h-[1px] bg-gray-200"
                 />
                 {['55%', '45%', '60%', '50%', '40%', '55%', '45%'].map((w, i) => (
                   <div key={i} className="flex items-center gap-[2px]">
-                    <SkeletonLine w="6%" delay={0.8 + i * 0.08} dark />
-                    <SkeletonLine w={w} delay={0.8 + i * 0.08} />
+                    <SkeletonLine w="6%" delay={1.3 + i * 0.15} dark />
+                    <SkeletonLine w={w} delay={1.3 + i * 0.15} />
                   </div>
                 ))}
               </div>
-              <SectionHead titleW="55%" delay={2.0} />
-              <SkeletonParagraph widths={['90%', '95%', '85%', '92%', '78%', '88%', '82%', '90%']} baseDelay={2.2} />
-              <SectionHead titleW="45%" delay={4.0} />
-              <SkeletonParagraph widths={['88%', '92%', '80%', '95%', '85%', '90%']} baseDelay={4.2} />
-              <SectionHead titleW="50%" delay={5.5} />
-              <SkeletonParagraph widths={['92%', '88%', '95%', '80%']} baseDelay={5.7} />
+              {/* Exec Summary: 4 – 8.5s */}
+              <SectionHead titleW="55%" delay={4.0} />
+              <SkeletonParagraph widths={['90%', '95%', '85%', '92%', '78%', '88%', '82%', '90%']} baseDelay={4.5} />
+              {/* Challenge: 9 – 13s */}
+              <SectionHead titleW="45%" delay={9.0} />
+              <SkeletonParagraph widths={['88%', '92%', '80%', '95%', '85%', '90%']} baseDelay={9.5} />
+              {/* Solution intro: 13.5 – 17s */}
+              <SectionHead titleW="50%" delay={13.5} />
+              <SkeletonParagraph widths={['92%', '88%', '95%', '80%']} baseDelay={14.0} />
             </div>
           </MiniPage>
 
-          {/* ─── PAGE 3: Approach + Phases ─── */}
+          {/* ─── PAGE 3: Approach + Phases (~16s) ─── */}
           <MiniPage show={phase >= 2}>
             <div className="p-2.5 space-y-2">
-              <SectionHead titleW="48%" delay={0.5} />
+              {/* Section heading: 0.6s */}
+              <SectionHead titleW="48%" delay={0.6} />
               <div className="space-y-1">
-                <SkeletonLine w="40%" delay={0.7} dark />
-                <SkeletonParagraph widths={['92%', '85%', '90%', '88%']} baseDelay={0.8} />
-                <SkeletonLine w="35%" delay={1.5} dark />
-                <SkeletonParagraph widths={['88%', '95%', '82%', '90%']} baseDelay={1.6} />
+                {/* Phase 1: 1 – 4s */}
+                <SkeletonLine w="40%" delay={1.0} dark />
+                <SkeletonParagraph widths={['92%', '85%', '90%', '88%']} baseDelay={1.5} />
+                {/* Phase 2: 4 – 6.5s */}
+                <SkeletonLine w="35%" delay={4.0} dark />
+                <SkeletonParagraph widths={['88%', '95%', '82%', '90%']} baseDelay={4.5} />
               </div>
-              <SectionHead titleW="50%" delay={2.5} />
+              {/* Approach heading: 7.5s */}
+              <SectionHead titleW="50%" delay={7.5} />
               <div className="space-y-1">
-                <SkeletonLine w="55%" delay={2.7} dark />
-                <SkeletonParagraph widths={['90%', '88%', '82%']} baseDelay={2.8} />
-                <SkeletonLine w="50%" delay={3.5} dark />
-                <SkeletonParagraph widths={['85%', '92%', '78%']} baseDelay={3.6} />
-                <SkeletonLine w="48%" delay={4.1} dark />
-                <SkeletonParagraph widths={['90%', '80%', '88%']} baseDelay={4.2} />
+                {/* Sub-section 1: 8 – 10s */}
+                <SkeletonLine w="55%" delay={8.0} dark />
+                <SkeletonParagraph widths={['90%', '88%', '82%']} baseDelay={8.5} />
+                {/* Sub-section 2: 10.5 – 12.5s */}
+                <SkeletonLine w="50%" delay={10.5} dark />
+                <SkeletonParagraph widths={['85%', '92%', '78%']} baseDelay={11.0} />
+                {/* Sub-section 3: 13 – 15s */}
+                <SkeletonLine w="48%" delay={13.0} dark />
+                <SkeletonParagraph widths={['90%', '80%', '88%']} baseDelay={13.5} />
               </div>
             </div>
           </MiniPage>
 
-          {/* ─── PAGE 4: Timeline Table + Pricing + Terms ─── */}
+          {/* ─── PAGE 4: Timeline Table + Pricing + Terms (~14s) ─── */}
           <MiniPage show={phase >= 3}>
             <div className="p-2.5 space-y-2">
-              <SectionHead titleW="60%" delay={0.5} />
-              <TableSkeleton rows={5} delay={0.7} />
-              <SectionHead titleW="42%" delay={1.8} />
-              <TableSkeleton rows={4} delay={2.0} />
-              <SectionHead titleW="55%" delay={3.1} />
-              <BulletList count={5} delay={3.3} />
+              {/* Timeline table: 0.6 – 4s */}
+              <SectionHead titleW="60%" delay={0.6} />
+              <TableSkeleton rows={5} delay={1.2} />
+              {/* Pricing table: 5 – 8.5s */}
+              <SectionHead titleW="42%" delay={5.0} />
+              <TableSkeleton rows={4} delay={5.6} />
+              {/* Terms bullets: 9.5 – 13s */}
+              <SectionHead titleW="55%" delay={9.5} />
+              <BulletList count={5} delay={10.0} />
             </div>
           </MiniPage>
         </div>

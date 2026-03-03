@@ -204,6 +204,59 @@ function resolveWaitDelay(html: string): string {
 }
 
 /**
+ * Enforce consistent section heading alignment across legacy/custom templates.
+ *
+ * Some saved proposal templates in the DB carry their own section heading CSS
+ * (`.section-*` or `.ss-*`) that can offset the accent bar downward relative
+ * to the heading text. Injecting this override at render-time ensures a
+ * centered bar/text alignment regardless of template origin.
+ */
+function applySectionHeaderAlignmentOverrides(html: string): string {
+  const alignmentOverrideCss = `
+<style id="proposal-section-alignment-fix">
+  .section-header,
+  .ss-section-header {
+    align-items: center !important;
+    padding-bottom: 0 !important;
+    margin-bottom: 24px !important;
+    position: relative !important;
+    border-bottom: none !important;
+  }
+
+  .section-header::after,
+  .ss-section-header::after {
+    content: "" !important;
+    position: absolute !important;
+    left: 16px !important;
+    right: 0 !important;
+    bottom: -10px !important;
+    height: 2px !important;
+    background: #dbe5f3 !important;
+  }
+
+  .section-accent-bar,
+  .ss-accent-bar {
+    margin-top: 0 !important;
+    align-self: center !important;
+  }
+
+  .section-title,
+  .ss-section-title {
+    margin: 0 !important;
+    padding-bottom: 0 !important;
+    border-bottom: none !important;
+  }
+</style>
+  `.trim()
+
+  if (html.includes('</head>')) {
+    return html.replace('</head>', `${alignmentOverrideCss}\n</head>`)
+  }
+
+  return `${alignmentOverrideCss}\n${html}`
+}
+
+/**
  * AUT-006: Send a POST request to a Gotenberg endpoint with:
  *   - Connection: keep-alive header (reuse TCP connection between PDF + thumbnail calls)
  *   - 30-second AbortSignal timeout (prevent hanging on cold starts)
@@ -552,10 +605,11 @@ serve(async (req: Request) => {
     )
 
     // Use custom template HTML if available, otherwise fall back to the default
-    const htmlDocument = generateProposalHTML(
+    const generatedHtml = generateProposalHTML(
       context,
       resolvedTemplate?.html_template ?? undefined,
     )
+    const htmlDocument = applySectionHeaderAlignmentOverrides(generatedHtml)
 
     // -------------------------------------------------------------------------
     // Step 5b: Store rendered HTML for inline preview (non-fatal)

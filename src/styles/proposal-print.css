@@ -434,11 +434,21 @@ hr {
 /* Section header with accent bar */
 .section-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12pt;
   margin-bottom: 16pt;
   padding-bottom: 10pt;
-  border-bottom: 2px solid var(--proposal-secondary-light);
+  position: relative;
+}
+
+.section-header::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--proposal-section-bar-width) + 12pt);
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--proposal-secondary-light);
 }
 
 .section-accent-bar {
@@ -447,7 +457,8 @@ hr {
   border-radius: 2px;
   background: var(--proposal-primary);
   flex-shrink: 0;
-  margin-top: 3pt;
+  margin-top: 0;
+  align-self: center;
 }
 
 .section-title {
@@ -457,6 +468,8 @@ hr {
   color: var(--proposal-heading-color);
   line-height: 1.25;
   margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 /* Section content area */
