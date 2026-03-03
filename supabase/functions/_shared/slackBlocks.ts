@@ -5345,9 +5345,11 @@ export interface CCDigestDataBlock {
     currency_locale?: string;
     proposals_awaiting: number;
   };
+  /** CC-003: Base app URL used for deep links. Defaults to https://app.use60.com */
+  appUrl?: string;
 }
 
-const CC_APP_URL = 'https://app.use60.com/command-centre';
+const CC_APP_URL_DEFAULT = 'https://app.use60.com/command-centre';
 
 const URGENCY_EMOJI: Record<string, string> = {
   critical: '\uD83D\uDD34', // 🔴
@@ -5367,6 +5369,12 @@ const URGENCY_EMOJI: Record<string, string> = {
 export const buildCommandCentreDigest = (data: CCDigestDataBlock): SlackMessage => {
   const blocks: SlackBlock[] = [];
   const MAX_BLOCKS = 50;
+  // CC-003: use caller-provided appUrl for deep links so staging/prod both work.
+  // data.appUrl should be the base app URL (e.g. https://app.use60.com), not including /command-centre.
+  const CC_APP_URL = data.appUrl
+    ? data.appUrl.replace(/\/$/, '') + '/command-centre'
+    : CC_APP_URL_DEFAULT;
+  const buildItemDeepLink = (itemId: string) => `${CC_APP_URL}?item=${itemId}`;
 
   const fmtCurrency = (value: number): string => {
     const code = (data.stats.currency_code || 'GBP').toUpperCase();
@@ -5433,6 +5441,13 @@ export const buildCommandCentreDigest = (data: CCDigestDataBlock): SlackMessage 
           actionId: `cc_dismiss::${item.id}`,
           value: item.id,
           style: 'danger',
+        },
+        // CC-003: Deep link to this specific item in the Command Centre
+        {
+          text: safeButtonText('View in CC'),
+          actionId: `cc_view::${item.id}`,
+          value: item.id,
+          url: buildItemDeepLink(item.id),
         },
       ]),
     );
@@ -5628,7 +5643,7 @@ export function buildAutoExecutionReport(items: AutoExecReportItem[]): any[] {
           emoji: false,
         },
         action_id: 'cc_open_command_centre',
-        url: CC_APP_URL,
+        url: CC_APP_URL_DEFAULT,
         style: 'primary',
       },
       {
