@@ -51,7 +51,7 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: 'Add your details and preferences',
     tooltip: "Helps 60 write in your voice from day one",
     icon: UserCheck,
-    href: '/settings/profile',
+    href: '/settings/account',
     actionLabel: 'Go to Profile',
   },
   {
@@ -60,7 +60,7 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: 'Connect your calendar to start capturing insights',
     tooltip: '60 needs at least one meeting to learn your style',
     icon: Calendar,
-    href: '/settings/integrations',
+    href: '/integrations',
     actionLabel: 'Connect Calendar',
   },
   {
@@ -69,7 +69,7 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: 'Auto-join meetings and capture everything automatically',
     tooltip: "Without this, 60 can't process your meetings",
     icon: Plug,
-    href: '/settings/integrations',
+    href: '/integrations',
     actionLabel: 'Connect Notetaker',
   },
   {
@@ -87,7 +87,7 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: 'Connect your sales tools for a seamless workflow',
     tooltip: 'Auto-updates your pipeline after every call',
     icon: Plug,
-    href: '/settings/integrations',
+    href: '/integrations',
     actionLabel: 'Connect CRM',
   },
   {
@@ -96,7 +96,7 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: 'Collaborate with colleagues and share insights',
     tooltip: 'Team insights unlock coaching and competitive intel',
     icon: Users,
-    href: '/settings/team',
+    href: '/settings/team-members',
     actionLabel: 'Invite Team',
   },
 ];

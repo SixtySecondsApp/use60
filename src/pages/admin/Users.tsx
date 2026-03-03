@@ -529,11 +529,11 @@ export default function Users() {
                                 </span>
                               )}
                             </div>
-                            <div>
-                              <div className="font-medium text-gray-900 dark:text-gray-100">
+                            <div className="min-w-0">
+                              <div className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px]">
                                 {user.first_name} {user.last_name}
                               </div>
-                              <div className="text-sm text-gray-700 dark:text-gray-300">{user.email}</div>
+                              <div className="text-sm text-gray-700 dark:text-gray-300 truncate max-w-[200px]">{user.email}</div>
                             </div>
                           </div>
                         </td>
@@ -863,6 +863,7 @@ export default function Users() {
                     name="first_name"
                     defaultValue={editingUser.first_name || ''}
                     required
+                    maxLength={50}
                     className="w-full bg-gray-100 dark:bg-gray-800/30 border border-gray-300 dark:border-gray-700/30 rounded-xl px-4 py-2 text-gray-900 dark:text-white"
                   />
                 </div>
@@ -873,6 +874,7 @@ export default function Users() {
                     name="last_name"
                     defaultValue={editingUser.last_name || ''}
                     required
+                    maxLength={50}
                     className="w-full bg-gray-100 dark:bg-gray-800/30 border border-gray-300 dark:border-gray-700/30 rounded-xl px-4 py-2 text-gray-900 dark:text-white"
                   />
                 </div>

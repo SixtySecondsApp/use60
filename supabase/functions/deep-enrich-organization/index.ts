@@ -520,7 +520,7 @@ serve(async (req) => {
 
     // Log AI cost for enrichment actions (Gemini + Exa calls are made async in pipeline)
     if (userId && organization_id && (action === 'start' || action === 'manual')) {
-      logAICostEvent(supabase, userId, organization_id, 'gemini', 'gemini-2.5-flash', 1000, 800, 'research_enrichment').catch(() => {});
+      logAICostEvent(supabase, userId, organization_id, 'gemini', 'gemini-2.5-flash', 1000, 800, 'research_enrichment', { source: 'onboarding' }).catch(() => {});
     }
 
     return new Response(JSON.stringify(response), {
@@ -971,18 +971,51 @@ async function runEnrichmentPipeline(
         console.error(`[Pipeline] Error stack:`, skillError?.stack);
         console.error(`[Pipeline] Full error object:`, JSON.stringify(skillError, null, 2));
 
-        // Step 1: Scrape website content (fallback)
-        const scrapedContent = await scrapeWebsite(domain);
+        // Step 1: Scrape website content (fallback), with Gemini Search as safety net
+        let scrapedContent: string | null = null;
+        try {
+          scrapedContent = await scrapeWebsite(domain);
+        } catch (scrapeErr) {
+          console.log(`[enrich] Website scraping failed for ${domain}, falling back to Gemini Search`);
+          const geminiResult = await executeGeminiSearch(domain);
+          if (geminiResult.error || !geminiResult.result) {
+            throw scrapeErr; // Re-throw original error if Gemini also fails
+          }
+          enrichmentData = mapResearchDataToEnrichment(geminiResult.result, domain);
+          enrichmentSource = 'gemini_fallback';
+          scrapedContent = null; // Skip website extraction path below
+        }
 
-        // Update status
-        await supabase
-          .from('organization_enrichment')
-          .update({ status: 'analyzing', raw_scraped_data: scrapedContent })
-          .eq('id', enrichmentId);
+        if (scrapedContent !== null) {
+          // Supplement thin scrape results with Gemini Search (ENRICH-004 quality threshold)
+          const pageCount = scrapedContent.split('\n\n').filter(s => s.startsWith('---')).length;
+          const thinData = pageCount < 2 || scrapedContent.length < 1000;
+          if (thinData) {
+            console.log(`[enrich] Thin scrape data for ${domain} (${pageCount} pages, ${scrapedContent.length} chars), supplementing with Gemini Search`);
+            const geminiSupp = await executeGeminiSearch(domain);
+            if (!geminiSupp.error && geminiSupp.result) {
+              enrichmentData = mapResearchDataToEnrichment(geminiSupp.result, domain);
+              enrichmentSource = 'gemini_supplement';
+              await supabase
+                .from('organization_enrichment')
+                .update({ status: 'analyzing', raw_scraped_data: scrapedContent })
+                .eq('id', enrichmentId);
+              scrapedContent = null; // Skip website extraction path below
+            }
+          }
+        }
 
-        // Step 2: Extract structured data (Prompt 1 - fallback)
-        enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
-        enrichmentSource = 'website_fallback';
+        if (scrapedContent !== null) {
+          // Update status
+          await supabase
+            .from('organization_enrichment')
+            .update({ status: 'analyzing', raw_scraped_data: scrapedContent })
+            .eq('id', enrichmentId);
+
+          // Step 2: Extract structured data (Prompt 1 - fallback)
+          enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
+          enrichmentSource = 'website_fallback';
+        }
       }
 
     } else {
@@ -1110,19 +1143,52 @@ async function runEnrichmentPipeline(
         // Default: Website scraping only (disabled or invalid provider)
         console.log(`[Pipeline] Using legacy scraping for ${domain} (provider: ${provider})`);
 
-        // Step 1: Scrape website content
-        const scrapedContent = await scrapeWebsite(domain);
+        // Step 1: Scrape website content, with Gemini Search as safety net
+        let legacyScrapedContent: string | null = null;
+        try {
+          legacyScrapedContent = await scrapeWebsite(domain);
+        } catch (scrapeErr) {
+          console.log(`[enrich] Website scraping failed for ${domain}, falling back to Gemini Search`);
+          const geminiResult = await executeGeminiSearch(domain);
+          if (geminiResult.error || !geminiResult.result) {
+            throw scrapeErr; // Re-throw original error if Gemini also fails
+          }
+          enrichmentData = mapResearchDataToEnrichment(geminiResult.result, domain);
+          enrichmentSource = 'gemini_fallback';
+          legacyScrapedContent = null; // Skip website extraction path below
+        }
 
-        // Update status
-        await supabase
-          .from('organization_enrichment')
-          .update({ status: 'analyzing', raw_scraped_data: scrapedContent })
-          .eq('id', enrichmentId);
+        if (legacyScrapedContent !== null) {
+          // Supplement thin scrape results with Gemini Search (ENRICH-004 quality threshold)
+          const pageCount = legacyScrapedContent.split('\n\n').filter(s => s.startsWith('---')).length;
+          const thinData = pageCount < 2 || legacyScrapedContent.length < 1000;
+          if (thinData) {
+            console.log(`[enrich] Thin scrape data for ${domain} (${pageCount} pages, ${legacyScrapedContent.length} chars), supplementing with Gemini Search`);
+            const geminiSupp = await executeGeminiSearch(domain);
+            if (!geminiSupp.error && geminiSupp.result) {
+              enrichmentData = mapResearchDataToEnrichment(geminiSupp.result, domain);
+              enrichmentSource = 'gemini_supplement';
+              await supabase
+                .from('organization_enrichment')
+                .update({ status: 'analyzing', raw_scraped_data: legacyScrapedContent })
+                .eq('id', enrichmentId);
+              legacyScrapedContent = null; // Skip website extraction path below
+            }
+          }
+        }
 
-        // Step 2: Extract structured data (Prompt 1)
-        console.log(`[Pipeline] Extracting structured data`);
-        enrichmentData = await extractCompanyData(supabase, scrapedContent, domain);
-        enrichmentSource = 'website';
+        if (legacyScrapedContent !== null) {
+          // Update status
+          await supabase
+            .from('organization_enrichment')
+            .update({ status: 'analyzing', raw_scraped_data: legacyScrapedContent })
+            .eq('id', enrichmentId);
+
+          // Step 2: Extract structured data (Prompt 1)
+          console.log(`[Pipeline] Extracting structured data`);
+          enrichmentData = await extractCompanyData(supabase, legacyScrapedContent, domain);
+          enrichmentSource = 'website';
+        }
       }
     }
 
@@ -1166,18 +1232,34 @@ async function runEnrichmentPipeline(
     // =========================================================================
     // ENRICH-002: Detect and handle enrichment changes
     // =========================================================================
-    // Fetch previous enrichment to compare
-    const { data: previousEnrichment } = await supabase
-      .from('organization_enrichment')
-      .select('company_name, description, products, competitors, generated_skills, enrichment_version')
-      .eq('id', enrichmentId)
-      .single();
+    // Fetch previous enrichment to compare (defensive: version columns may not exist yet)
+    let previousEnrichment: Record<string, unknown> | null = null;
+    try {
+      const { data, error } = await supabase
+        .from('organization_enrichment')
+        .select('company_name, description, products, competitors, generated_skills, enrichment_version, previous_hash, change_summary')
+        .eq('id', enrichmentId)
+        .single();
+      if (error && /column/.test(error.message ?? '')) {
+        console.warn('[Pipeline] Version-tracking columns not in SELECT — falling back to basic columns (migration pending)');
+        const { data: fallbackData } = await supabase
+          .from('organization_enrichment')
+          .select('company_name, description, products, competitors, generated_skills')
+          .eq('id', enrichmentId)
+          .single();
+        previousEnrichment = fallbackData as Record<string, unknown> | null;
+      } else {
+        previousEnrichment = data as Record<string, unknown> | null;
+      }
+    } catch (selectErr) {
+      console.warn('[Pipeline] Failed to fetch previous enrichment for change detection:', selectErr);
+    }
 
     // Calculate data hash for change detection
     const currentHash = generateEnrichmentHash(enrichmentData);
-    const previousHash = previousEnrichment?.previous_hash;
+    const previousHash = (previousEnrichment?.previous_hash as string | undefined);
     const hasChanges = previousHash !== currentHash;
-    const newVersion = (previousEnrichment?.enrichment_version || 0) + 1;
+    const newVersion = ((previousEnrichment?.enrichment_version as number) || 0) + 1;
 
     // Build change summary
     const changeSummary = hasChanges && previousEnrichment ? {
@@ -1192,17 +1274,46 @@ async function runEnrichmentPipeline(
     }
 
     // Save generated skills with change tracking
-    const { error: updateError } = await supabase
-      .from('organization_enrichment')
-      .update({
-        generated_skills: skills,
-        status: 'completed',
-        confidence_score: 0.85,
-        enrichment_version: newVersion,
-        previous_hash: currentHash,
-        change_summary: changeSummary,
-      })
-      .eq('id', enrichmentId);
+    // Try with version-tracking columns first; fall back if migration not applied yet
+    let updateError: unknown = null;
+    try {
+      const { error } = await supabase
+        .from('organization_enrichment')
+        .update({
+          generated_skills: skills,
+          status: 'completed',
+          confidence_score: 0.85,
+          enrichment_version: newVersion,
+          previous_hash: currentHash,
+          change_summary: changeSummary,
+        })
+        .eq('id', enrichmentId);
+      updateError = error ?? null;
+
+      // PostgREST returns a 400-range error with code PGRST204 or message containing
+      // "column" when a column doesn't exist — retry without version-tracking columns
+      if (
+        updateError &&
+        typeof updateError === 'object' &&
+        (
+          (updateError as { code?: string }).code === 'PGRST204' ||
+          /column/.test((updateError as { message?: string }).message ?? '')
+        )
+      ) {
+        console.warn('[Pipeline] Version-tracking columns not found — retrying without them (migration pending)');
+        const { error: fallbackError } = await supabase
+          .from('organization_enrichment')
+          .update({
+            generated_skills: skills,
+            status: 'completed',
+            confidence_score: 0.85,
+          })
+          .eq('id', enrichmentId);
+        updateError = fallbackError ?? null;
+      }
+    } catch (updateException) {
+      updateError = updateException;
+    }
 
     if (updateError) {
       console.error('[Pipeline] CRITICAL: Failed to update enrichment status to completed:', updateError);
@@ -1294,6 +1405,8 @@ async function scrapeWebsite(domain: string): Promise<string> {
           contents.push(`--- ${url} ---\n${text.substring(0, CHARS_PER_PAGE)}`);
           return true;
         }
+      } else {
+        console.log(`[enrich] Fetch failed for ${url}: HTTP ${response.status}`);
       }
     } catch (e) {
       // Silently skip failed fetches
@@ -1315,11 +1428,14 @@ async function scrapeWebsite(domain: string): Promise<string> {
     await Promise.all(productUrls.slice(0, MAX_PAGES - contents.length).map(fetchPage));
   }
 
+  const totalAttempted = fetchedUrls.size;
+  const totalChars = contents.reduce((sum, c) => sum + c.length, 0);
+  console.log(`[enrich] Scraped ${contents.length}/${totalAttempted} pages, ${totalChars} chars from ${domain}`);
+
   if (contents.length === 0) {
     throw new Error(`Could not scrape any content from ${domain}`);
   }
 
-  console.log(`[scrapeWebsite] Scraped ${contents.length} pages from ${domain}`);
   return contents.join('\n\n');
 }
 

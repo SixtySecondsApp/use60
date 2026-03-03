@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic, CheckCircle2, CircleDot } from 'lucide-react';
 import FathomPlayerV2, { FathomPlayerV2Handle } from '@/components/FathomPlayerV2';
 import { VoiceMeetingPlayer } from '@/components/meetings/VoiceMeetingPlayer';
 import { AskAIChat } from '@/components/meetings/AskAIChat';
@@ -232,6 +232,7 @@ export function MeetingDetail() {
   const [thumbnailEnsured, setThumbnailEnsured] = useState(false);
   const [summaryViewTracked, setSummaryViewTracked] = useState(false);
   const [hasStructuredSummary, setHasStructuredSummary] = useState(false);
+  const [hasScorecard, setHasScorecard] = useState(false);
   const [voiceRecordingData, setVoiceRecordingData] = useState<VoiceRecordingData | null>(null);
   const [voiceCurrentTime, setVoiceCurrentTime] = useState(0);
   const [speakerAvatarMap, setSpeakerAvatarMap] = useState<Map<string, string>>(new Map());
@@ -392,6 +393,26 @@ export function MeetingDetail() {
 
         if (actionItemsError) throw actionItemsError;
         setActionItems(actionItemsData || []);
+
+        // Check analysis completion status (non-blocking — failures are ignored)
+        try {
+          const [summaryCheck, scorecardCheck] = await Promise.all([
+            (supabase as any)
+              .from('meeting_structured_summaries')
+              .select('id')
+              .eq('meeting_id', id)
+              .maybeSingle(),
+            (supabase as any)
+              .from('meeting_scorecards')
+              .select('id')
+              .eq('meeting_id', id)
+              .maybeSingle(),
+          ]);
+          if (summaryCheck.data) setHasStructuredSummary(true);
+          if (scorecardCheck.data) setHasScorecard(true);
+        } catch {
+          // Non-fatal — status indicators are best-effort
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load meeting');
       } finally {
@@ -632,6 +653,26 @@ export function MeetingDetail() {
             .eq('meeting_id', meeting.id)
             .order('timestamp_seconds', { ascending: true });
           setActionItems(items || []);
+        }
+
+        // Refresh analysis completion status
+        try {
+          const [summaryCheck, scorecardCheck] = await Promise.all([
+            (supabase as any)
+              .from('meeting_structured_summaries')
+              .select('id')
+              .eq('meeting_id', meeting.id)
+              .maybeSingle(),
+            (supabase as any)
+              .from('meeting_scorecards')
+              .select('id')
+              .eq('meeting_id', meeting.id)
+              .maybeSingle(),
+          ]);
+          if (summaryCheck.data) setHasStructuredSummary(true);
+          if (scorecardCheck.data) setHasScorecard(true);
+        } catch {
+          // Non-fatal
         }
       } else {
         throw new Error(data?.error || 'Reprocessing failed');
@@ -918,50 +959,83 @@ export function MeetingDetail() {
               </div>
             )}
 
-            {/* Missing AI Analysis Alert */}
-            {meeting.transcript_text && (
-              meeting.sentiment_score === null ||
-              meeting.talk_time_rep_pct === null ||
-              meeting.talk_time_customer_pct === null
-            ) && (
-              <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
-                <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <AlertDescription className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="font-medium text-amber-900 dark:text-amber-100">
-                      AI Analysis Incomplete
-                    </p>
-                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                      This meeting has a transcript but is missing {
-                        [
-                          meeting.sentiment_score === null && 'sentiment analysis',
-                          meeting.talk_time_rep_pct === null && 'talk time data',
-                          meeting.talk_time_customer_pct === null && meeting.talk_time_rep_pct !== null && 'coaching insights'
-                        ].filter(Boolean).join(' and ')
-                      }. Click to reprocess with AI.
-                    </p>
+            {/* Analysis Status Section */}
+            {meeting.transcript_text && (() => {
+              const basicDone = meeting.sentiment_score !== null && meeting.talk_time_rep_pct !== null;
+              const allDone = basicDone && hasStructuredSummary && hasScorecard;
+
+              if (allDone) {
+                return (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Full analysis complete</span>
                   </div>
-                  <Button
-                    onClick={handleReprocessMeeting}
-                    disabled={isReprocessing}
-                    size="sm"
-                    className="ml-4 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600"
-                  >
-                    {isReprocessing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Reprocess
-                      </>
-                    )}
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
+                );
+              }
+
+              // Show incomplete alert with per-step status
+              const missingBasic = [
+                meeting.sentiment_score === null && 'sentiment',
+                meeting.talk_time_rep_pct === null && 'talk time',
+              ].filter(Boolean);
+
+              return (
+                <div className="space-y-2">
+                  <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                    <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <AlertDescription className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="font-medium text-amber-900 dark:text-amber-100">
+                          {basicDone ? 'Deep analysis pending' : 'AI Analysis Incomplete'}
+                        </p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                          {basicDone
+                            ? 'Basic analysis is done. Structured summary and scorecard are still processing or can be triggered below.'
+                            : `Missing ${missingBasic.join(' and ')}. Click to run full AI analysis.`}
+                        </p>
+                        {/* Per-step status indicators */}
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          {[
+                            { label: 'Basic Analysis', done: basicDone },
+                            { label: 'Structured Summary', done: hasStructuredSummary },
+                            { label: 'Scorecard', done: hasScorecard },
+                          ].map(({ label, done }) => (
+                            <span key={label} className="flex items-center gap-1 text-xs">
+                              {done
+                                ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                : <CircleDot className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />}
+                              <span className={done
+                                ? 'text-emerald-700 dark:text-emerald-300'
+                                : 'text-amber-700 dark:text-amber-300'}>
+                                {label}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleReprocessMeeting}
+                        disabled={isReprocessing}
+                        size="sm"
+                        className="ml-4 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 shrink-0"
+                      >
+                        {isReprocessing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            {basicDone ? 'Run Deep Analysis' : 'Reprocess'}
+                          </>
+                        )}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              );
+            })()}
 
             {/* Enhanced Talk Time Analytics */}
             {meeting.talk_time_rep_pct !== null && meeting.talk_time_customer_pct !== null && (

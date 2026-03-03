@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth, isClerkAuthEnabled } from '@/lib/contexts/AuthContext';
@@ -16,11 +16,18 @@ export default function ForgotPassword() {
   const [showVerificationStep, setShowVerificationStep] = useState(false);
 
   const navigate = useNavigate();
-  const { resetPassword } = useAuth();
+  const { resetPassword, isAuthenticated, loading: authLoading } = useAuth();
 
-  // Clerk hooks - only used when Clerk auth is enabled
-  const clerkSignIn = isClerkAuthEnabled() ? useSignIn() : null;
-  const { signIn, setActive } = clerkSignIn || {};
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, authLoading, navigate]);
+
+  // Clerk hooks - always called (React Rules of Hooks), guarded at usage
+  const clerkSignIn = useSignIn();
+  const { signIn, setActive } = isClerkAuthEnabled() ? clerkSignIn : {};
 
   // Handle Supabase password reset (sends email with link)
   const handleSupabaseReset = async () => {

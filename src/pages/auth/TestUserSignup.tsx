@@ -100,6 +100,16 @@ export default function TestUserSignup() {
       return;
     }
 
+    // Password strength validation
+    if (!/[A-Z]/.test(formData.password)) {
+      toast.error('Password must include at least one uppercase letter');
+      return;
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>_\-+=[\]\\/~`]/.test(formData.password)) {
+      toast.error('Password must include at least one special character');
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match');
       return;
@@ -301,6 +311,7 @@ export default function TestUserSignup() {
                   <input
                     type="text"
                     required
+                    maxLength={50}
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
@@ -317,6 +328,7 @@ export default function TestUserSignup() {
                   <input
                     type="text"
                     required
+                    maxLength={50}
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
@@ -343,7 +355,7 @@ export default function TestUserSignup() {
                   disabled={status === 'submitting'}
                 />
               </div>
-              <p className="text-xs text-gray-500">Minimum 6 characters</p>
+              <p className="text-xs text-gray-500">Min 6 chars, 1 uppercase, 1 special character</p>
             </div>
 
             {/* Confirm Password */}

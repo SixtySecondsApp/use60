@@ -144,6 +144,7 @@ Return a JSON object with:
       'anthropic', INTENT_CLASSIFICATION_MODEL,
       data.usage.input_tokens || 0, data.usage.output_tokens || 0,
       'skill_builder_classify',
+      { source: 'onboarding' },
     ).catch((e: unknown) => console.warn('[api-skill-builder] classify cost log error:', e));
   }
   const content = data.content[0].text;
@@ -255,6 +256,7 @@ Return only valid JSON.`;
       'anthropic', SKILL_GENERATION_MODEL,
       data.usage.input_tokens || 0, data.usage.output_tokens || 0,
       'skill_builder_generate',
+      { source: 'onboarding' },
     ).catch((e: unknown) => console.warn('[api-skill-builder] generate cost log error:', e));
   }
   const content = data.content[0].text;
@@ -344,6 +346,7 @@ Important: Generate a realistic response as if you had access to mock CRM data. 
         'anthropic', INTENT_CLASSIFICATION_MODEL,
         data.usage.input_tokens || 0, data.usage.output_tokens || 0,
         'skill_builder_test',
+        { source: 'onboarding' },
       ).catch((e: unknown) => console.warn('[api-skill-builder] test cost log error:', e));
     }
     const content = data.content[0].text;

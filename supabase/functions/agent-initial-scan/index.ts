@@ -154,7 +154,7 @@ Write 3-4 sentences. Be specific about the most urgent finding. End with "I'll s
             'anthropic', 'claude-haiku-4-5-20251001',
             result.usage.input_tokens || 0, result.usage.output_tokens || 0,
             'agent_initial_scan',
-            undefined,
+            { source: 'onboarding' },
             { source: 'agent_automated', agentType: 'initial-scan' },
           ).catch((e: unknown) => console.warn('[agent-initial-scan] cost log error:', e));
         }

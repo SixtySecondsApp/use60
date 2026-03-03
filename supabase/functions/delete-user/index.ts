@@ -87,13 +87,17 @@ serve(async (req) => {
 
     // Delete from internal_users if exists
     if (userProfile?.email && !userProfile.email.startsWith('deleted_')) {
-      console.log('[delete-user] Deactivating internal_users for:', userProfile.email)
-      const { error: internalError } = await supabaseAdmin
-        .from('internal_users')
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq('email', userProfile.email.toLowerCase())
-      if (internalError) {
-        console.warn('[delete-user] internal_users deactivation failed (non-fatal):', internalError.message)
+      try {
+        console.log('[delete-user] Deactivating internal_users for:', userProfile.email)
+        const { error: internalError } = await supabaseAdmin
+          .from('internal_users')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq('email', userProfile.email.toLowerCase())
+        if (internalError) {
+          console.warn('[delete-user] internal_users deactivation failed (non-fatal):', internalError.message)
+        }
+      } catch (internalErr) {
+        console.warn('[delete-user] internal_users deactivation threw (non-fatal):', internalErr)
       }
     }
 
@@ -119,54 +123,60 @@ serve(async (req) => {
     }
 
     // Delete from auth.users to revoke access (user can sign up again with same email)
-    // IMPORTANT: auth.admin.deleteUser() returns { data, error } — it does NOT throw.
-    // We must check the returned error object, not rely on try/catch.
     console.log('[delete-user] Deleting auth user:', userId)
-    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+    try {
+      const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
-    if (authDeleteError) {
-      // Only ignore if auth user truly doesn't exist (404)
-      const isNotFound = authDeleteError.status === 404 ||
-        (authDeleteError as any)?.code === 'user_not_found' ||
-        authDeleteError.message?.includes('not found')
+      if (authDeleteError) {
+        // Only ignore if auth user truly doesn't exist (404)
+        const isNotFound = authDeleteError.status === 404 ||
+          (authDeleteError as any)?.code === 'user_not_found' ||
+          authDeleteError.message?.includes('not found')
 
-      if (isNotFound) {
-        console.log('Note: Auth user does not exist (already deleted or never created):', authDeleteError.message)
+        if (isNotFound) {
+          console.log('[delete-user] Auth user does not exist (already deleted):', authDeleteError.message)
+        } else {
+          // Auth deletion failed for a real reason - return error
+          console.error('[delete-user] Error deleting auth user:', authDeleteError.message)
+          return new Response(
+            JSON.stringify({
+              error: `Failed to delete auth user: ${authDeleteError.message || 'Unknown error'}`,
+              code: 'AUTH_DELETION_FAILED',
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
       } else {
-        // Auth deletion failed for a real reason - return error
-        console.error('Error deleting auth user:', authDeleteError)
-        return new Response(
-          JSON.stringify({
-            error: `Failed to delete auth user: ${authDeleteError.message || 'Unknown error'}`,
-            code: 'AUTH_DELETION_FAILED',
-            details: authDeleteError
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        console.log('[delete-user] Auth user deleted successfully:', userId)
       }
-    } else {
-      console.log('Auth user deleted successfully:', userId)
+    } catch (authErr: any) {
+      console.error('[delete-user] auth.admin.deleteUser threw:', authErr?.message || authErr)
+      // Non-fatal for profile-only users (no auth record)
     }
 
     // Reset waitlist entry so user can be re-invited
     // Find by original email (before anonymization) and reset status to 'pending'
     if (userProfile?.email && !userProfile.email.startsWith('deleted_')) {
-      const { error: waitlistError } = await supabaseAdmin
-        .from('meetings_waitlist')
-        .update({
-          status: 'pending',
-          user_id: null,
-          converted_at: null,
-          invitation_accepted_at: null,
-        })
-        .eq('email', userProfile.email.toLowerCase())
-        .in('status', ['converted', 'released'])
+      try {
+        const { error: waitlistError } = await supabaseAdmin
+          .from('meetings_waitlist')
+          .update({
+            status: 'pending',
+            user_id: null,
+            converted_at: null,
+            invitation_accepted_at: null,
+          })
+          .eq('email', userProfile.email.toLowerCase())
+          .in('status', ['converted', 'released'])
 
-      if (waitlistError) {
-        // Non-fatal: log but don't fail the deletion
-        console.warn('Failed to reset waitlist entry (non-fatal):', waitlistError.message)
-      } else {
-        console.log('Waitlist entry reset to pending for:', userProfile.email)
+        if (waitlistError) {
+          // Non-fatal: log but don't fail the deletion
+          console.warn('Failed to reset waitlist entry (non-fatal):', waitlistError.message)
+        } else {
+          console.log('Waitlist entry reset to pending for:', userProfile.email)
+        }
+      } catch (waitlistErr) {
+        console.warn('Waitlist reset threw (non-fatal):', waitlistErr)
       }
     }
 

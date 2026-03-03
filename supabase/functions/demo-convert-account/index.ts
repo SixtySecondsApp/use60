@@ -259,25 +259,35 @@ serve(async (req: Request) => {
     // 4. Write organization_enrichment from research data
     // ------------------------------------------------------------------
     if (company) {
-      const { error: enrichError } = await supabase
+      // Try with enrichment_version; fall back without if migration not applied
+      const enrichPayload: Record<string, unknown> = {
+        organization_id: orgId,
+        domain: companyDomain,
+        status: 'completed',
+        company_name: companyName,
+        description: company.product_summary,
+        industry: company.vertical,
+        employee_count: company.employee_range || null,
+        value_propositions: company.value_props || [],
+        competitors: company.competitors || [],
+        target_market: company.icp?.industry || null,
+        enrichment_source: 'demo-v2',
+        confidence_score: 0.75,
+        enrichment_version: 1,
+      };
+
+      let { error: enrichError } = await supabase
         .from('organization_enrichment')
-        .upsert({
-          organization_id: orgId,
-          domain: companyDomain,
-          status: 'completed',
-          company_name: companyName,
-          description: company.product_summary,
-          industry: company.vertical,
-          employee_count: company.employee_range || null,
-          value_propositions: company.value_props || [],
-          competitors: company.competitors || [],
-          target_market: company.icp?.industry || null,
-          enrichment_source: 'demo-v2',
-          confidence_score: 0.75,
-          enrichment_version: 1,
-        }, {
-          onConflict: 'organization_id',
-        });
+        .upsert(enrichPayload, { onConflict: 'organization_id' });
+
+      if (enrichError && /column/.test(enrichError.message ?? '')) {
+        console.warn('[demo-convert] enrichment_version column not found — retrying without it (migration pending)');
+        delete enrichPayload.enrichment_version;
+        const { error: retryError } = await supabase
+          .from('organization_enrichment')
+          .upsert(enrichPayload, { onConflict: 'organization_id' });
+        enrichError = retryError;
+      }
 
       if (enrichError) {
         console.error('[demo-convert] Enrichment write error:', enrichError);
