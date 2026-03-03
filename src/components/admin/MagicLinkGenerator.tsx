@@ -14,6 +14,8 @@ import {
   Search,
   Check,
   ExternalLink,
+  Building2,
+  ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -69,12 +71,24 @@ export function MagicLinkGenerator() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [newLink, setNewLink] = useState({
     org_name: '',
     email: '',
     is_test_user: true,
     credit_amount: 500,
   });
+
+  // Derive unique orgs from existing magic links (only orgs created via this page)
+  const existingOrgs = (() => {
+    const orgMap = new Map<string, { id: string; name: string }>();
+    for (const link of links) {
+      if (!orgMap.has(link.org_id)) {
+        orgMap.set(link.org_id, { id: link.org_id, name: link.org_name });
+      }
+    }
+    return Array.from(orgMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  })();
 
   useEffect(() => {
     loadLinks();
@@ -98,8 +112,9 @@ export function MagicLinkGenerator() {
   };
 
   const handleCreate = async () => {
-    if (!newLink.org_name.trim()) {
-      toast.error('Organization name is required');
+    // Validate: need either an existing org selected or a new org name
+    if (!selectedOrgId && !newLink.org_name.trim()) {
+      toast.error('Select an existing organization or enter a new name');
       return;
     }
     if (!newLink.email.trim()) {
@@ -109,16 +124,22 @@ export function MagicLinkGenerator() {
 
     try {
       setIsCreating(true);
-      const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await supabase.functions.invoke('generate-test-user-link', {
-        body: {
-          email: newLink.email.trim(),
-          org_name: newLink.org_name.trim(),
-          is_test_user: newLink.is_test_user,
-          credit_amount: newLink.is_test_user ? newLink.credit_amount : 0,
-        },
-      });
+      const body: Record<string, unknown> = {
+        email: newLink.email.trim(),
+        is_test_user: newLink.is_test_user,
+        credit_amount: newLink.is_test_user ? newLink.credit_amount : 0,
+      };
+
+      if (selectedOrgId) {
+        // Invite into existing org
+        body.org_id = selectedOrgId;
+      } else {
+        // Create new org
+        body.org_name = newLink.org_name.trim();
+      }
+
+      const response = await supabase.functions.invoke('generate-test-user-link', { body });
 
       if (response.error) {
         throw new Error(response.error.message || 'Failed to generate link');
@@ -131,9 +152,13 @@ export function MagicLinkGenerator() {
 
       // Copy link to clipboard immediately
       await navigator.clipboard.writeText(result.link);
-      toast.success('Magic link generated and copied to clipboard!');
+      const orgLabel = selectedOrgId
+        ? existingOrgs.find(o => o.id === selectedOrgId)?.name
+        : newLink.org_name.trim();
+      toast.success(`Magic link for "${orgLabel}" copied to clipboard!`);
 
       // Reset form and reload
+      setSelectedOrgId(null);
       setNewLink({ org_name: '', email: '', is_test_user: true, credit_amount: 500 });
       await loadLinks();
     } catch (error: any) {
@@ -195,15 +220,54 @@ export function MagicLinkGenerator() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Organization Name *
+              Organization *
             </label>
-            <input
-              type="text"
-              value={newLink.org_name}
-              onChange={(e) => setNewLink({ ...newLink, org_name: e.target.value })}
-              placeholder="Acme Corp"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent"
-            />
+            {existingOrgs.length > 0 ? (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <select
+                    value={selectedOrgId || '__new__'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '__new__') {
+                        setSelectedOrgId(null);
+                      } else {
+                        setSelectedOrgId(val);
+                        // Clear the new name field when picking existing
+                        setNewLink({ ...newLink, org_name: '' });
+                      }
+                    }}
+                    className="w-full pl-9 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent appearance-none cursor-pointer"
+                  >
+                    <option value="__new__">+ New Organization</option>
+                    {existingOrgs.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+                {!selectedOrgId && (
+                  <input
+                    type="text"
+                    value={newLink.org_name}
+                    onChange={(e) => setNewLink({ ...newLink, org_name: e.target.value })}
+                    placeholder="New org name..."
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent text-sm"
+                  />
+                )}
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={newLink.org_name}
+                onChange={(e) => setNewLink({ ...newLink, org_name: e.target.value })}
+                placeholder="Acme Corp"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent"
+              />
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -252,7 +316,7 @@ export function MagicLinkGenerator() {
           <div className="flex items-end">
             <button
               onClick={handleCreate}
-              disabled={isCreating || !newLink.org_name.trim() || !newLink.email.trim()}
+              disabled={isCreating || (!selectedOrgId && !newLink.org_name.trim()) || !newLink.email.trim()}
               className="w-full px-4 py-2 bg-[#37bd7e] text-white rounded-lg hover:bg-[#2da76c] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isCreating ? (
