@@ -14,7 +14,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, CheckCircle2, Loader2, Circle, XCircle, ExternalLink, ChevronRight, ChevronDown, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkflowOrchestrator, type WorkflowStep } from '@/lib/hooks/useWorkflowOrchestrator';
-import { enrichPromptWithAnswers, type ClarifyingQuestion } from '@/lib/utils/prospectingDetector';
+import {
+  enrichPromptWithAnswers,
+  extractRequestedResultCount,
+  type ClarifyingQuestion,
+} from '@/lib/utils/prospectingDetector';
 import { useActiveICP } from '@/lib/hooks/useActiveICP';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -86,6 +90,7 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
 
     const allAnswers = { ...answers, campaign_name: campaignName };
     const enrichedPrompt = enrichPromptWithAnswers(data.original_prompt, allAnswers);
+    const requestedCount = extractRequestedResultCount(data.original_prompt, allAnswers);
 
     // Build structured config so the orchestrator doesn't rely solely on prompt parsing
     const config = {
@@ -94,6 +99,7 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
       skip_campaign_creation: false,
       num_email_steps: answers.email_steps?.includes('3') ? 3 : answers.email_steps?.includes('5') ? 5 : 0,
       table_name: campaignName,
+      ...(requestedCount ? { max_results: requestedCount } : {}),
       ...(targetTableId ? { target_table_id: targetTableId, skip_search: true } : {}),
     };
 

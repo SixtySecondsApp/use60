@@ -130,7 +130,7 @@ export function StructuredMeetingSummary({
       <OutcomeSignalsSection signals={summary.outcome_signals} />
 
       {/* Key Decisions */}
-      {summary.key_decisions.length > 0 && (
+      {summary.key_decisions?.length > 0 && (
         <Section title="Key Decisions" icon={CheckCircle2}>
           <div className="space-y-2">
             {summary.key_decisions.map((decision, i) => (
@@ -141,9 +141,9 @@ export function StructuredMeetingSummary({
       )}
 
       {/* Commitments */}
-      {(summary.rep_commitments.length > 0 || summary.prospect_commitments.length > 0) && (
+      {(summary.rep_commitments?.length > 0 || summary.prospect_commitments?.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {summary.rep_commitments.length > 0 && (
+          {summary.rep_commitments?.length > 0 && (
             <Section title="Your Commitments" icon={Target} variant="compact">
               <ul className="space-y-1">
                 {summary.rep_commitments.map((commitment, i) => (
@@ -160,7 +160,7 @@ export function StructuredMeetingSummary({
               </ul>
             </Section>
           )}
-          {summary.prospect_commitments.length > 0 && (
+          {summary.prospect_commitments?.length > 0 && (
             <Section title="Prospect Commitments" icon={Users} variant="compact">
               <ul className="space-y-1">
                 {summary.prospect_commitments.map((commitment, i) => (
@@ -176,7 +176,7 @@ export function StructuredMeetingSummary({
       )}
 
       {/* Stakeholders */}
-      {summary.stakeholders_mentioned.length > 0 && (
+      {summary.stakeholders_mentioned?.length > 0 && (
         <Section title="Stakeholders Mentioned" icon={Users}>
           <div className="flex flex-wrap gap-2">
             {summary.stakeholders_mentioned.map((stakeholder, i) => (
@@ -187,14 +187,14 @@ export function StructuredMeetingSummary({
       )}
 
       {/* Pricing Discussion */}
-      {summary.pricing_discussed.mentioned && (
+      {summary.pricing_discussed?.mentioned && (
         <Section title="Pricing Discussion" icon={DollarSign}>
           <PricingSection pricing={summary.pricing_discussed} />
         </Section>
       )}
 
       {/* Technical Requirements */}
-      {summary.technical_requirements.length > 0 && (
+      {summary.technical_requirements?.length > 0 && (
         <Section title="Technical Requirements" icon={Wrench}>
           <div className="space-y-2">
             {summary.technical_requirements.map((req, i) => (
@@ -208,7 +208,7 @@ export function StructuredMeetingSummary({
       )}
 
       {/* Competitor Mentions */}
-      {summary.competitor_mentions.length > 0 && (
+      {summary.competitor_mentions?.length > 0 && (
         <Section title="Competitors Mentioned" icon={Shield}>
           <div className="space-y-2">
             {summary.competitor_mentions.map((competitor, i) => (
@@ -219,7 +219,7 @@ export function StructuredMeetingSummary({
       )}
 
       {/* Objections */}
-      {summary.objections.length > 0 && (
+      {summary.objections?.length > 0 && (
         <Section title="Objections" icon={AlertCircle}>
           <div className="space-y-2">
             {summary.objections.map((objection, i) => (
@@ -263,14 +263,18 @@ function Section({
   );
 }
 
-function OutcomeIndicator({ outcome }: { outcome: 'positive' | 'negative' | 'neutral' }) {
+function OutcomeIndicator({ outcome }: { outcome?: string | null }) {
   const config = {
     positive: { icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10' },
     negative: { icon: TrendingDown, color: 'text-red-500', bg: 'bg-red-500/10' },
     neutral: { icon: Target, color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
   };
 
-  const { icon: Icon, color, bg } = config[outcome];
+  const normalizedOutcome =
+    outcome === 'positive' || outcome === 'negative' || outcome === 'neutral'
+      ? outcome
+      : 'neutral';
+  const { icon: Icon, color, bg } = config[normalizedOutcome];
 
   return (
     <div className={cn('p-2 rounded-full', bg)}>
@@ -280,9 +284,10 @@ function OutcomeIndicator({ outcome }: { outcome: 'positive' | 'negative' | 'neu
 }
 
 function OutcomeSignalsSection({ signals }: { signals: MeetingStructuredSummary['outcome_signals'] }) {
+  if (!signals) return null;
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {signals.positive_signals.length > 0 && (
+      {signals.positive_signals?.length > 0 && (
         <div className="p-3 bg-green-500/5 border border-green-500/20 rounded-lg">
           <h5 className="text-sm font-medium text-green-600 mb-2 flex items-center gap-1">
             <TrendingUp className="h-3 w-3" />
@@ -295,7 +300,7 @@ function OutcomeSignalsSection({ signals }: { signals: MeetingStructuredSummary[
           </ul>
         </div>
       )}
-      {signals.negative_signals.length > 0 && (
+      {signals.negative_signals?.length > 0 && (
         <div className="p-3 bg-red-500/5 border border-red-500/20 rounded-lg">
           <h5 className="text-sm font-medium text-red-600 mb-2 flex items-center gap-1">
             <AlertTriangle className="h-3 w-3" />
@@ -308,7 +313,7 @@ function OutcomeSignalsSection({ signals }: { signals: MeetingStructuredSummary[
           </ul>
         </div>
       )}
-      {signals.next_steps.length > 0 && (
+      {signals.next_steps?.length > 0 && (
         <div className="md:col-span-2 p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
           <h5 className="text-sm font-medium text-blue-600 mb-2 flex items-center gap-1">
             <ArrowRight className="h-3 w-3" />
@@ -477,12 +482,12 @@ function CompactSummary({ summary, className }: { summary: MeetingStructuredSumm
       )}
 
       <div className="flex flex-wrap gap-2 text-xs">
-        {summary.pricing_discussed.mentioned && (
+        {summary.pricing_discussed?.mentioned && (
           <span className="px-2 py-1 bg-blue-500/10 text-blue-600 rounded">💰 Pricing discussed</span>
         )}
-        {summary.competitor_mentions.length > 0 && (
+        {summary.competitor_mentions?.length > 0 && (
           <span className="px-2 py-1 bg-orange-500/10 text-orange-600 rounded">
-            ⚔️ {summary.competitor_mentions.length} competitor(s)
+            ⚔️ {summary.competitor_mentions?.length} competitor(s)
           </span>
         )}
         {summary.objections.filter(o => !o.resolved).length > 0 && (

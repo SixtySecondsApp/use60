@@ -110,6 +110,7 @@ import {
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
 const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
+const RelationshipGraphDemoPage = lazy(() => import('./pages/RelationshipGraphDemoPage'));
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -689,6 +690,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/freepik-flow" element={<AppLayout><div className="h-[calc(100vh-4rem)]"><FreepikFlow /></div></AppLayout>} />
                 <Route path="/test-fallback" element={<ProtectedRoute><TestFallback /></ProtectedRoute>} />
                 <Route path="/test-google-tasks" element={<AppLayout><TestGoogleTasks /></AppLayout>} />
+                <Route path="/relationship-graph-demo" element={<InternalRouteGuard><RelationshipGraphDemoPage /></InternalRouteGuard>} />
               </Routes>
             </Suspense>
           </ProtectedRoute>

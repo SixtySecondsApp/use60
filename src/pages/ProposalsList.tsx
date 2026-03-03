@@ -69,7 +69,7 @@ interface ProposalRow {
   credits_used: number | null;
   pdf_url: string | null;
   created_at: string | null;
-  contacts: { name: string | null; email: string | null } | null;
+  contacts: { full_name: string | null; email: string | null } | null;
   deals: { name: string | null; company: string | null } | null;
 }
 
@@ -179,7 +179,7 @@ function getSortValue(row: ProposalRow, field: SortField): string | number {
     case 'title':
       return (row.title ?? '').toLowerCase();
     case 'client':
-      return (row.contacts?.name ?? '').toLowerCase();
+      return (row.contacts?.full_name ?? '').toLowerCase();
     case 'deal':
       return (row.deals?.name ?? '').toLowerCase();
     case 'created_at':
@@ -226,7 +226,7 @@ const ProposalsList: React.FC = () => {
       let query = supabase
         .from('proposals')
         .select(
-          'id, title, generation_status, status, trigger_type, credits_used, pdf_url, created_at, contacts(name, email), deals(name, company)'
+          'id, title, generation_status, status, trigger_type, credits_used, pdf_url, created_at, contacts(full_name, email), deals(name, company)'
         )
         .order('created_at', { ascending: false });
 
@@ -539,7 +539,7 @@ const ProposalsList: React.FC = () => {
 
                       {/* Client */}
                       <TableCell className="text-sm theme-text-tertiary max-w-[160px] truncate">
-                        {row.contacts?.name || '--'}
+                        {row.contacts?.full_name || '--'}
                       </TableCell>
 
                       {/* Deal */}

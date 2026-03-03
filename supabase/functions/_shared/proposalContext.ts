@@ -496,87 +496,77 @@ export async function assembleProposalContext(
   }
 
   // -------------------------------------------------------------------------
-  // Fetch contact profile + activities in parallel
-  // -------------------------------------------------------------------------
-  const [contactResult, activitiesResult] = await Promise.all([
-    resolvedContactId
-      ? supabase
-          .from('contacts')
-          .select('id, name, email, title, company, metadata, owner_id')
-          .eq('id', resolvedContactId)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-
-    resolvedContactId
-      ? supabase
-          .from('activities')
-          .select('id, activity_type, description, created_at')
-          .eq('contact_id', resolvedContactId)
-          .order('created_at', { ascending: false })
-          .limit(10)
-      : Promise.resolve({ data: null, error: null }),
-  ])
-
-  // -------------------------------------------------------------------------
   // Fetch meeting context (transcript-aware)
   // -------------------------------------------------------------------------
   let meetingContext: MeetingContext | null = null
 
   if (meetingId) {
+    // meetings table: meeting_start (not scheduled_at), summary (not ai_summary),
+    // transcript_text (transcript lives on meetings, not recordings),
+    // no deal_id column — deals link to meetings, not the other way around.
     const { data: meeting } = await supabase
       .from('meetings')
-      .select('id, title, scheduled_at, ai_summary, owner_user_id, deal_id')
+      .select('id, title, meeting_start, summary, transcript_text, owner_user_id, primary_contact_id, contact_id')
       .eq('id', meetingId)
       .maybeSingle()
 
     if (meeting) {
-      // Fetch recording/transcript separately; fall back to ai_summary when > 15k tokens
-      const { data: recording } = await supabase
-        .from('recordings')
-        .select('transcript, ai_summary')
-        .eq('meeting_id', meetingId)
-        .maybeSingle()
-
-      let transcript: string | null = null
-      let usedSummary = false
-
-      const rawTranscript = recording?.transcript ?? null
-      if (rawTranscript && estimateTokens(rawTranscript) > 15000) {
-        // Too long — prefer AI summary
-        transcript = null
-        usedSummary = true
-      } else {
-        transcript = rawTranscript
-        usedSummary = false
+      // Resolve contact from meeting if not provided
+      if (!resolvedContactId) {
+        resolvedContactId = meeting.primary_contact_id ?? meeting.contact_id ?? null
       }
 
-      const aiSummary = meeting.ai_summary ?? recording?.ai_summary ?? null
+      // Use transcript from meetings table first; fall back to recordings table
+      let rawTranscript: string | null = meeting.transcript_text ?? null
 
-      // Previous meetings for the same deal (conversation history)
-      const prevMeetingDealId = meeting.deal_id || dealId
+      if (!rawTranscript) {
+        // Try recordings table as fallback
+        const { data: recording } = await supabase
+          .from('recordings')
+          .select('transcript_text, summary')
+          .eq('meeting_id', meetingId)
+          .maybeSingle()
+
+        if (recording) {
+          rawTranscript = recording.transcript_text ?? null
+        }
+      }
+
+      // Always include transcript (truncation happens later at 12k token budget).
+      // Also always include summary as supplementary context.
+      const transcript: string | null = rawTranscript
+      const usedSummary = !rawTranscript && !!meeting.summary
+
+      const aiSummary = meeting.summary ?? null
+
+      // Previous meetings for the same contact (conversation history)
+      const contactForHistory = resolvedContactId || meeting.primary_contact_id
       let previousMeetings: MeetingContext['previous_meetings'] = []
 
-      if (prevMeetingDealId) {
+      if (contactForHistory) {
         const { data: prevMeetings } = await supabase
           .from('meetings')
-          .select('id, title, scheduled_at, ai_summary')
-          .eq('deal_id', prevMeetingDealId)
+          .select('id, title, meeting_start, summary')
+          .or(`primary_contact_id.eq.${contactForHistory},contact_id.eq.${contactForHistory}`)
           .neq('id', meetingId)
-          .order('scheduled_at', { ascending: false })
+          .order('meeting_start', { ascending: false })
           .limit(5)
 
         previousMeetings = (prevMeetings ?? []).map((m) => ({
           id: m.id,
           title: m.title ?? null,
-          scheduled_at: m.scheduled_at ?? null,
-          ai_summary: m.ai_summary ?? null,
+          scheduled_at: m.meeting_start ?? null,
+          ai_summary: m.summary ?? null,
         }))
+      } else if (dealId) {
+        // Fallback: find previous meetings linked to the same deal via proposals
+        // (meetings don't have a direct deal_id column)
       }
 
       meetingContext = {
         id: meeting.id,
         title: meeting.title ?? null,
-        scheduled_at: meeting.scheduled_at ?? null,
+        scheduled_at: meeting.meeting_start ?? null,
         ai_summary: aiSummary,
         transcript,
         used_summary: usedSummary,
@@ -616,6 +606,27 @@ export async function assembleProposalContext(
   }
 
   // -------------------------------------------------------------------------
+  // Fetch contact + recent activities (after meeting resolves contactId)
+  // -------------------------------------------------------------------------
+  const [contactResult, activitiesResult] = await Promise.all([
+    resolvedContactId
+      ? supabase
+          .from('contacts')
+          .select('id, full_name, email, title, company, metadata, owner_id')
+          .eq('id', resolvedContactId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    resolvedContactId
+      ? supabase
+          .from('activities')
+          .select('id, activity_type, description, created_at')
+          .eq('contact_id', resolvedContactId)
+          .order('created_at', { ascending: false })
+          .limit(10)
+      : Promise.resolve({ data: null, error: null }),
+  ])
+
+  // -------------------------------------------------------------------------
   // Assemble contact profile
   // -------------------------------------------------------------------------
   let contactProfile: ContactProfile | null = null
@@ -623,12 +634,12 @@ export async function assembleProposalContext(
   if (contactResult.data) {
     contactProfile = {
       id: contactResult.data.id,
-      name: contactResult.data.name ?? null,
+      name: contactResult.data.full_name ?? null,
       email: contactResult.data.email ?? null,
       title: contactResult.data.title ?? null,
       company: contactResult.data.company ?? null,
       metadata: (contactResult.data.metadata as Record<string, unknown>) ?? null,
-      recent_activities: (activitiesResult.data ?? []).map((a) => ({
+      recent_activities: (activitiesResult.data ?? []).map((a: { id: string; activity_type: string; description: string | null; created_at: string }) => ({
         id: a.id,
         activity_type: a.activity_type,
         description: a.description ?? null,

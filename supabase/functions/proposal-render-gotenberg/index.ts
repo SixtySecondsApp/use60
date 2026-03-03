@@ -2,7 +2,7 @@
 // GOT-005 + GOT-006: Stage 3+4+5 of the V2 proposal pipeline — Render + Upload + Thumbnail
 //
 // Responsibilities:
-//   1. Load proposal row (content_json, template_id, deal_id, contact_id, user_id)
+//   1. Load proposal row (sections, template_id, deal_id, contact_id, user_id)
 //   2. Load or fall back to a default HTML template and brand config
 //   3. Resolve metadata (client name, company, prepared_by, reference number)
 //   4. Call generateProposalHTML() to merge sections into a self-contained HTML document
@@ -48,7 +48,7 @@ const DEFAULT_BRAND_CONFIG: TemplateContext['brandConfig'] = {
 
 interface RenderRequest {
   proposal_id: string
-  /** Optional override — if null, reads from proposals.content_json */
+  /** Optional override — if null, reads from proposals.sections */
   content_json?: ProposalSection[] | null
   /** Optional override — if null, uses org's default template */
   template_id?: string | null
@@ -61,7 +61,7 @@ interface ProposalRow {
   deal_id: string | null
   contact_id: string | null
   title: string | null
-  content_json: ProposalSection[] | null
+  sections: ProposalSection[] | null
   template_id: string | null
   brand_config: Record<string, unknown> | null
   generation_status: string | null
@@ -83,15 +83,15 @@ interface DealRow {
 
 interface ContactRow {
   id: string
-  first_name: string | null
-  last_name: string | null
+  full_name: string | null
   company: string | null
   email: string | null
 }
 
 interface ProfileRow {
   id: string
-  full_name: string | null
+  first_name: string | null
+  last_name: string | null
   email: string | null
 }
 
@@ -155,6 +155,34 @@ function mergeBrandConfig(
   }
 
   return base
+}
+
+/**
+ * Extract a human-readable company name from an email domain.
+ * e.g. "owen@aprilking.co.uk" → "April King"
+ *      "jane@acme-corp.com"   → "Acme Corp"
+ * Returns null if no usable domain can be extracted.
+ */
+function companyNameFromEmail(email: string | null | undefined): string | null {
+  if (!email) return null
+  const atIndex = email.indexOf('@')
+  if (atIndex < 0) return null
+
+  const domain = email.slice(atIndex + 1).toLowerCase()
+
+  // Skip common free email providers — they don't imply a company
+  const freeProviders = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'protonmail.com', 'me.com', 'live.com', 'mail.com']
+  if (freeProviders.includes(domain)) return null
+
+  // Strip the TLD(s): "aprilking.co.uk" → "aprilking", "acme-corp.com" → "acme-corp"
+  const parts = domain.split('.')
+  const name = parts[0] // Take the first segment before any dots
+
+  // Split on hyphens/underscores, title-case each word
+  return name
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
 }
 
 /**
@@ -378,9 +406,9 @@ serve(async (req: Request) => {
     // -------------------------------------------------------------------------
     const { data: proposal, error: proposalError } = await supabase
       .from('proposals')
-      .select('id, org_id, user_id, deal_id, contact_id, title, content_json, template_id, brand_config, generation_status')
+      .select('id, org_id, user_id, deal_id, contact_id, title, sections, template_id, brand_config, generation_status, context_payload')
       .eq('id', body.proposal_id)
-      .maybeSingle<ProposalRow>()
+      .maybeSingle<ProposalRow & { context_payload: Record<string, unknown> | null }>()
 
     if (proposalError || !proposal) {
       console.error(`${LOG_PREFIX} Proposal not found:`, proposalError?.message)
@@ -388,7 +416,8 @@ serve(async (req: Request) => {
     }
 
     // Determine the sections to use (request override takes priority)
-    const sections: ProposalSection[] = body.content_json ?? proposal.content_json ?? []
+    // Request field keeps its legacy name for API compatibility.
+    const sections: ProposalSection[] = body.content_json ?? proposal.sections ?? []
 
     if (sections.length === 0) {
       return errorResponse('Proposal has no content sections to render', req, 400)
@@ -452,14 +481,14 @@ serve(async (req: Request) => {
       proposal.contact_id
         ? supabase
             .from('contacts')
-            .select('id, first_name, last_name, company, email')
+            .select('id, full_name, company, email')
             .eq('id', proposal.contact_id)
             .maybeSingle<ContactRow>()
         : Promise.resolve({ data: null, error: null }),
 
       supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, first_name, last_name, email')
         .eq('id', proposal.user_id)
         .maybeSingle<ProfileRow>(),
     ])
@@ -468,24 +497,39 @@ serve(async (req: Request) => {
     const contact = contactResult.data
     const profile = profileResult.data
 
-    // Resolve metadata fields
-    const clientName = contact
-      ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Valued Client'
-      : 'Valued Client'
+    // Resolve metadata fields — prefer context_payload (assembled from real data),
+    // fall back to direct queries, then defaults.
+    const ctx = proposal.context_payload as Record<string, unknown> | null
+    const ctxContact = ctx?.contact as Record<string, unknown> | null
+    const ctxDeal = ctx?.deal as Record<string, unknown> | null
+    const ctxOrg = ctx?.org_preferences as Record<string, unknown> | null
+
+    const clientName =
+      (ctxContact?.name as string) ||
+      contact?.full_name ||
+      [contact?.email?.split('@')[0]].filter(Boolean).join('') || // "owen" from email as last resort
+      'Valued Client'
 
     const clientCompany =
+      (ctxDeal?.company as string) ||
+      (ctxContact?.company as string) ||
       deal?.company ||
       contact?.company ||
+      companyNameFromEmail(contact?.email) ||
       org?.name ||
       'Client'
 
+    const profileFullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ')
+
     const preparedBy =
-      profile?.full_name ||
+      (ctxOrg?.company_name as string) ||
+      profileFullName ||
       profile?.email ||
+      org?.name ||
       'Sales Team'
 
     const metadata: TemplateContext['metadata'] = {
-      proposal_title: proposal.title || 'Proposal',
+      proposal_title: proposal.title || (ctxDeal?.name as string) || 'Proposal',
       client_name: clientName,
       client_company: clientCompany,
       prepared_by: preparedBy,
@@ -512,6 +556,27 @@ serve(async (req: Request) => {
       context,
       resolvedTemplate?.html_template ?? undefined,
     )
+
+    // -------------------------------------------------------------------------
+    // Step 5b: Store rendered HTML for inline preview (non-fatal)
+    // -------------------------------------------------------------------------
+    try {
+      const { error: htmlStoreError } = await supabase
+        .from('proposals')
+        .update({
+          rendered_html: htmlDocument,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', proposal.id)
+
+      if (htmlStoreError) {
+        console.warn(`${LOG_PREFIX} Failed to store rendered_html (non-fatal):`, htmlStoreError.message)
+      } else {
+        console.log(`${LOG_PREFIX} rendered_html stored for inline preview`)
+      }
+    } catch (htmlErr) {
+      console.warn(`${LOG_PREFIX} rendered_html store threw (non-fatal):`, htmlErr)
+    }
 
     // -------------------------------------------------------------------------
     // Step 6: Send to Gotenberg → receive PDF bytes

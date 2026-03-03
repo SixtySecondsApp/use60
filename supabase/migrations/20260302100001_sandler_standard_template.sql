@@ -54,6 +54,8 @@ BEGIN
 
   INSERT INTO proposal_templates (
     name,
+    type,
+    content,
     description,
     org_id,
     category,
@@ -66,6 +68,8 @@ BEGIN
   )
   VALUES (
     'Sandler Standard',
+    'proposal',
+    'V2 Sandler Standard — uses html_template column',
 
     'The flagship 60 proposal template. Full-width brand cover with metadata card, structured 8-section layout with left accent bar, professional pricing tables, vertical timeline milestones, action-item next steps with checkboxes, and company stats row. Renders as a pixel-perfect A4 PDF via Gotenberg.',
 

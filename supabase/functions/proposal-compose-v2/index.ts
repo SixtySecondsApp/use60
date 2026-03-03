@@ -116,59 +116,55 @@ interface ComposeRequest {
 // =============================================================================
 
 const DEFAULT_TEMPLATE_SCHEMA: TemplateSectionDef[] = [
-  {
-    type: 'cover',
-    title: 'Cover Page',
-    description: 'Proposal title, date, client name, and prepared-by info.',
-    required: true,
-  },
+  // NOTE: No "cover" section — the PDF template renders the cover page
+  // automatically from metadata (title, client name, date, reference).
   {
     type: 'executive_summary',
     title: 'Executive Summary',
     description:
-      '2–3 paragraphs summarising the discussion, proposed engagement, and clear next steps.',
+      '2–3 substantial paragraphs. Open by reflecting back the client\'s situation and goals (use their words from the transcript). Then explain what you\'re proposing and why it\'s the right fit. Close with a clear, specific next step (e.g. "We recommend a 30-minute platform walkthrough next Tuesday").',
     required: true,
   },
   {
     type: 'problem',
     title: 'The Challenge',
     description:
-      "Restate the client's pain points and goals using their own language from the meeting transcript.",
+      'Restate the client\'s pain points using their EXACT language from the transcript. Quote specific phrases they used. Organise into 2-3 themes. Each theme should be a short paragraph (not just a bullet point). Show you listened.',
     required: true,
   },
   {
     type: 'solution',
     title: 'Our Solution',
     description:
-      'Map specific products/services from the offering profile to each client need identified above.',
+      'Map specific products/services from the offering profile to each pain point above. For each, explain HOW it solves the problem (not just WHAT it is). Use subheadings for each solution component. Include concrete details — feature names, capabilities, integrations.',
     required: true,
   },
   {
     type: 'approach',
     title: 'Our Approach',
     description:
-      'Methodology, process, and how the team will execute. Use bullet lists and short paragraphs.',
+      'Describe the implementation methodology in 3-5 phases. Each phase should have a name, timeframe, and 2-3 sentences describing deliverables and activities. Write in confident prose, not just bullet lists.',
     required: false,
   },
   {
     type: 'timeline',
     title: 'Timeline & Milestones',
     description:
-      'Milestone table derived from deal expected close date. Include phases, owners, and target dates.',
+      'Build an HTML <table> with columns: Phase, Deliverable, Target Date, Owner. Derive dates from the deal expected close date if available. Use realistic timeframes. Include 4-6 milestones minimum.',
     required: false,
   },
   {
     type: 'pricing',
     title: 'Investment',
     description:
-      'Professional pricing table. If deal.value is known, use it. Include line items from offering.pricing_models when available.',
+      'Build a professional HTML <table> with columns: Component, Details, Investment. Use the deal value and offering pricing_models to populate REAL numbers. If deal.value is known, break it into line items that sum to the total. Never use "$XX,XXX" placeholders — use the actual figures, or reasonable estimates based on context.',
     required: true,
   },
   {
     type: 'terms',
     title: 'Terms & Next Steps',
     description:
-      'Extract action items from the meeting, list next steps with clear owners, and include standard terms.',
+      'List 3-5 concrete next steps with owners and specific timeframes (e.g. "Review and sign by 15 March 2026"). Include practical terms: contract duration, payment schedule, implementation start. Extract any commitments made during the meeting.',
     required: true,
   },
 ]
@@ -296,34 +292,80 @@ function buildSystemPrompt(
     )
     .join('\n')
 
-  return `You are an expert B2B sales proposal writer. Your task is to compose a complete, professional proposal for a sales deal.
+  return `You are a world-class B2B sales proposal writer. You write proposals that close deals — not corporate documents that get ignored. Every section must be persuasive, specific, and grounded in the real context provided.
 
 ${styleBlock}
 
 OUTPUT FORMAT:
-Return ONLY a valid JSON array of ProposalSection objects. Do NOT include any explanation, markdown, or wrapper text outside the JSON array.
+Return ONLY a valid JSON array of ProposalSection objects. No explanation, markdown fences, or wrapper text.
 
 Each ProposalSection must have these exact fields:
-  - id: string (e.g. "section-0", "section-1" …)
-  - type: one of "cover" | "executive_summary" | "problem" | "solution" | "approach" | "timeline" | "pricing" | "terms" | "custom"
+  - id: string (e.g. "section-1", "section-2" …)
+  - type: one of "executive_summary" | "problem" | "solution" | "approach" | "timeline" | "pricing" | "terms" | "custom"
   - title: string (the display title for this section)
-  - content: string (rich HTML — use <p>, <ul>, <li>, <table>, <strong>, <em> etc.)
-  - order: number (0-indexed, matching array position)
+  - content: string (rich HTML — use <p>, <ul>, <li>, <table>, <strong>, <em>, <h3> etc.)
+  - order: number (1-indexed, matching array position)
 
-CONTENT GUIDELINES PER SECTION TYPE:
+SECTION DEFINITIONS:
 ${sectionDefs}
 
-GENERAL RULES:
-- Write ALL content as valid HTML fragments (no <html> or <body> wrapper).
-- Use <p> for paragraphs, <ul>/<li> for bullets, <table> for structured data.
-- Cover page: keep content minimal — just a brief intro or leave content as an empty string "".
-- Executive Summary: 2–3 rich paragraphs. Close with a clear next-steps sentence.
-- Problem: quote the client's language from the transcript to make it feel personalised.
-- Solution: specifically name products/services from the offering profile.
-- Pricing: if deal.value is known, build a pricing table with <table>. Make it look professional.
-- Timeline: use a <table> with columns: Phase, Deliverable, Target Date, Owner.
-- Terms & Next Steps: bullet list of agreed actions with owners and deadlines extracted from the meeting.
-- If a section has no supporting context, write a professional placeholder that can be easily edited.`
+═══════════════════════════════════════════════════════════════
+THE 10 RULES OF PROPOSALS THAT CLOSE — FOLLOW ALL OF THESE
+═══════════════════════════════════════════════════════════════
+
+1. LEAD WITH THEIR PROBLEM, NOT YOUR SOLUTION.
+   The first section is always about THEM. What they told you in the call. Their pain. Their goals. Use their exact words from the transcript. Prove you listened before you pitch.
+
+2. KEEP IT CONCISE.
+   Short, dense sections outperform long, watery ones. Every sentence must earn its place.
+
+3. SHOW VALUE BEFORE SHOWING PRICE.
+   Build value first: problem, solution, proof, THEN price. Make the executive summary earn the pricing.
+
+4. WRITE IN THE CLIENT'S LANGUAGE.
+   Match the tone and vocabulary from the transcript. If they say "grow revenue," don't write "optimize monetization." If they're non-technical, no jargon.
+
+5. INCLUDE SOCIAL PROOF BEFORE PRICING.
+   Reference case studies, results, and proof from the offering profile BEFORE the pricing section.
+
+6. ONE DOCUMENT, ONE DECISION.
+   The proposal should make exactly one thing clear: what to do next. Don't ask them to "review and get back to us."
+
+7. BUILD IN RISK REVERSAL.
+   Phased approaches, pilots, money-back language. Show them the safety net.
+
+8. CREATE URGENCY WITHOUT BEING PUSHY.
+   Use real constraints: team availability, pricing validity, market timing. Reference timelines from the call.
+
+9. NEVER USE PLACEHOLDER TEXT.
+   NEVER write "[Client Name]", "[Current Date]", "$XX,XXX", "[Date + 10 days]", or any square-bracket placeholder. Use the REAL data from context. If a value isn't available, make a reasonable estimate or omit the detail entirely.
+
+10. MAKE EVERY SECTION SUBSTANTIAL.
+    2-4 paragraphs minimum per section. Bullet-point-only sections look lazy. Lead with prose, support with bullets. Each section should demonstrate deep understanding.
+
+═══════════════════════════════════════════════════════════════
+CONTEXT USAGE — THIS IS CRITICAL
+═══════════════════════════════════════════════════════════════
+
+You will be given real deal context, meeting transcripts, contact profiles, and offering details. USE ALL OF IT:
+
+• TRANSCRIPT: Read the entire transcript carefully. Extract the client's exact pain points, goals, budget signals, timeline, objections, and specific requests. Quote their words in the proposal.
+• DEAL DATA: Use the deal value for pricing. Use the company name. Use the close date for timeline.
+• CONTACT: Address the proposal to the actual contact by name and title.
+• OFFERING PROFILE: Name specific products, services, features, and pricing models. Don't say "our platform" — say the actual product names with specific capabilities.
+• ORG PREFERENCES: Use the company name, value propositions, and tone guidelines.
+
+If the transcript mentions specific challenges, requirements, or questions — address EACH ONE in the proposal. The client should feel like you wrote this specifically for them after deeply listening to their call.
+
+═══════════════════════════════════════════════════════════════
+HTML FORMATTING
+═══════════════════════════════════════════════════════════════
+
+• Use <p> for paragraphs, <ul>/<li> for bullet lists, <ol>/<li> for numbered lists
+• Use <table> with <thead>/<tbody>/<tfoot> for pricing and timeline tables
+• Use <h3> for sub-headings within sections, <strong> for emphasis
+• Do NOT generate a "cover" section — the PDF template renders this automatically
+• Content should be valid HTML fragments (no <html>, <body>, or <head> wrappers)`
 }
 
 function buildUserPrompt(context: ProposalContextPayload): string {
@@ -376,12 +418,17 @@ function buildUserPrompt(context: ProposalContextPayload): string {
     if (m.scheduled_at)
       parts.push(`- Held on: ${new Date(m.scheduled_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`)
 
-    if (m.transcript && !m.used_summary) {
-      parts.push('\n### FULL TRANSCRIPT')
-      parts.push(m.transcript)
-    } else if (m.ai_summary) {
-      parts.push('\n### AI SUMMARY' + (m.used_summary ? ' (transcript was too long; using summary)' : ''))
+    // Always include summary first (concise overview), then transcript (detail)
+    if (m.ai_summary) {
+      parts.push('\n### MEETING SUMMARY')
       parts.push(m.ai_summary)
+    }
+    if (m.transcript) {
+      parts.push('\n### FULL TRANSCRIPT (read carefully — extract client pain points, goals, budget, timeline)')
+      parts.push(m.transcript)
+    }
+    if (!m.transcript && !m.ai_summary) {
+      parts.push('\n(No transcript or summary available for this meeting)')
     }
 
     if (m.previous_meetings?.length > 0) {
@@ -532,7 +579,7 @@ serve(async (req: Request) => {
     // ── Mark proposal as processing ───────────────────────────────────────────
     await supabase
       .from('proposals')
-      .update({ generation_status: 'processing', updated_at: new Date().toISOString() })
+      .update({ generation_status: 'composing', updated_at: new Date().toISOString() })
       .eq('id', proposal_id)
 
     // ── Build prompts ─────────────────────────────────────────────────────────

@@ -263,12 +263,15 @@ export function generateProposalHTML(
   // Run the full merge pipeline
   const substitutions = substitutionsWithCss
 
-  // Step 1: if/unless blocks
-  let result = processIfBlocks(template, substitutions)
-  result = processUnlessBlocks(result, substitutions)
+  // Step 1: section loops FIRST — renderSectionBlock handles section-scoped
+  // {{#unless section.type_is_cover}} blocks correctly per-section.
+  // Running this before top-level if/unless prevents the top-level pass from
+  // stripping section-scoped conditionals prematurely.
+  let result = processSectionLoop(template, context.sections)
 
-  // Step 2: section loops
-  result = processSectionLoop(result, context.sections)
+  // Step 2: top-level if/unless blocks (e.g. {{#if brand.logo_url}})
+  result = processIfBlocks(result, substitutions)
+  result = processUnlessBlocks(result, substitutions)
 
   // Step 3: scalar substitutions (includes embedded_css)
   result = substituteVariables(result, substitutions)

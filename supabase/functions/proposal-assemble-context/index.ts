@@ -211,7 +211,7 @@ serve(async (req: Request) => {
       .from('proposals')
       .update({
         context_payload: contextPayload as unknown as Record<string, unknown>,
-        generation_status: 'processing',
+        generation_status: 'context_assembled',
         updated_at: new Date().toISOString(),
       })
       .eq('id', proposal_id)

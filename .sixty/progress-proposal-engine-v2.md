@@ -36,80 +36,80 @@ Phase 3 (Gotenberg) ────┘                          Phase 6 (Triggers) 
 
 ---
 
-### Phase 1: Style Fingerprint (5 stories) — PENDING
+### Phase 1: Style Fingerprint (5 stories) — COMPLETE
 
-| Story | Title | Status |
-|-------|-------|--------|
-| STY-001 | Wire user_tone_settings into proposal-compose-v2 prompt | Pending |
-| STY-002 | Extract style patterns from uploaded proposal examples | Pending |
-| STY-003 | Build compound style fingerprint from multiple sources | Pending |
-| STY-004 | Track edit distance on approved_edited proposals | Pending |
-| STY-005 | Style learning loop: aggregate edit patterns into tone settings | Pending |
+| Story | Title | Status | Commit |
+|-------|-------|--------|--------|
+| STY-001 | Wire user_tone_settings into proposal-compose-v2 prompt | Complete | 9c4ed72d |
+| STY-002 | Extract style patterns from uploaded proposal examples | Complete | 9c4ed72d |
+| STY-003 | Build compound style fingerprint from multiple sources | Complete | pre-built |
+| STY-004 | Track edit distance on approved_edited proposals | Complete | 0a74cc53 |
+| STY-005 | Style learning loop: aggregate edit patterns into tone settings | Complete | pre-built |
 
-### Phase 2: Offering Profile (6 stories) — PENDING
+### Phase 2: Offering Profile (6 stories) — COMPLETE
 
-| Story | Title | Status |
-|-------|-------|--------|
-| OFR-001 | Migration: create org_offering_profiles table with RLS | Pending |
-| OFR-002 | Build OfferingUploader component for collateral upload | Pending |
-| OFR-003 | Create offering-extract edge function for AI-powered collateral analysis | Pending |
-| OFR-004 | Offering review UI: display and edit extracted data before saving | Pending |
-| OFR-005 | Wire offering profile into context assembly queries | Pending |
-| OFR-006 | Offering profile settings page: view, edit, delete, upload new | Pending |
+| Story | Title | Status | Commit |
+|-------|-------|--------|--------|
+| OFR-001 | Migration: create org_offering_profiles table with RLS | Complete | pre-built |
+| OFR-002 | Build OfferingUploader component for collateral upload | Complete | 7f49adfa |
+| OFR-003 | Create offering-extract edge function | Complete | 7f49adfa |
+| OFR-004 | Offering review UI: display and edit extracted data | Complete | bca32a32 |
+| OFR-005 | Wire offering profile into context assembly queries | Complete | 1ce7cc20 |
+| OFR-006 | Offering profile settings page | Complete | 484bd1b7 |
 
-### Phase 3: Gotenberg PDF (7 stories) — PENDING
+### Phase 3: Gotenberg PDF (7 stories) — COMPLETE
 
-| Story | Title | Status |
-|-------|-------|--------|
-| GOT-001 | Deploy Gotenberg Docker container on Railway | Pending |
-| GOT-002 | Build HTML template engine with Handlebars-style substitution | Pending |
-| GOT-003 | CSS print media queries for professional PDF output | Pending |
-| GOT-004 | Build 'Sandler Standard' default HTML + CSS print template | Pending |
-| GOT-005 | Create proposal-render-gotenberg edge function | Pending |
-| GOT-006 | PDF first-page thumbnail for UI preview | Pending |
-| GOT-007 | Deprecate proposal-generate-pdf (pdf-lib) with v1_legacy flag | Pending |
+| Story | Title | Status | Commit |
+|-------|-------|--------|--------|
+| GOT-001 | Deploy Gotenberg Docker container on Railway | Complete | 19583550 |
+| GOT-002 | Build HTML template engine | Complete | 19583550 |
+| GOT-003 | CSS print media queries (1087 lines) | Complete | cac27130 |
+| GOT-004 | Sandler Standard template (884-line HTML) | Complete | 5c3a4871 |
+| GOT-005 | Gotenberg render edge function | Complete | dc4c482d |
+| GOT-006 | PDF first-page thumbnail | Complete | 536c8fd0 |
+| GOT-007 | Deprecate pdf-lib with v1_legacy flag | Complete | 536c8fd0 |
 
-### Phase 4: 5-Stage Pipeline (6 stories) — PENDING
+### Phase 4: 5-Stage Pipeline (6 stories) — COMPLETE
 
-| Story | Title | Status |
-|-------|-------|--------|
-| PIP-001 | Build proposal-assemble-context edge function (Stage 1) | Pending |
-| PIP-002 | Build proposal-compose-v2 edge function (Stage 2) | Pending |
-| PIP-003 | Build proposal-deliver edge function (Stage 5) | Pending |
-| PIP-004 | Pipeline orchestration: chain stages with realtime status updates | Pending |
-| PIP-005 | Pipeline error handling and retry logic | Pending |
-| PIP-006 | Pipeline monitoring: timing, credits, error rates per stage | Pending |
+| Story | Title | Status | Commit |
+|-------|-------|--------|--------|
+| PIP-001 | Context assembly edge function (Stage 1) | Complete | a979cddb |
+| PIP-002 | AI composition edge function (Stage 2) | Complete | pre-built |
+| PIP-003 | Delivery edge function (Stage 5) | Complete | 1ce7cc20 |
+| PIP-004 | Pipeline orchestrator with 5-stage chaining | Complete | 9a0c06a2 |
+| PIP-005 | Error handling and retry logic | Complete | 9a0c06a2 |
+| PIP-006 | Monitoring: timing, credits, error rates | Complete | 9a0c06a2 |
 
-### Phase 5: One-Click UX (6 stories) — PENDING
+### Phase 5: One-Click UX (6 stories) — COMPLETE
 
-| Story | Title | Status |
-|-------|-------|--------|
-| UX-001 | Build ProposalQuickGenerate button on meeting detail page | Pending |
-| UX-002 | Build ProposalProgressOverlay with 5-stage progress bar | Pending |
-| UX-003 | Build ProposalPanel copilot response type | Pending |
-| UX-004 | Build Proposals list view with filters and actions | Pending |
-| UX-005 | Wire ProposalWizard as 'Customise' secondary path | Pending |
-| UX-006 | Post-generation edit flow: Done → edit sections → re-render PDF | Pending |
+| Story | Title | Status | Commit |
+|-------|-------|--------|--------|
+| UX-001 | ProposalQuickGenerate button | Complete | 51d0b2ea |
+| UX-002 | ProposalProgressOverlay (5-stage) | Complete | c7b663f0 |
+| UX-003 | ProposalPanel copilot response | Complete | 4de515bd |
+| UX-004 | Proposals list view | Complete | 51d0b2ea |
+| UX-005 | Customise wizard secondary path | Complete | 6f24a5ca |
+| UX-006 | Post-generation edit + re-render PDF | Complete | a769f208 |
 
-### Phase 6: All 4 Triggers (4 stories) — PENDING
+### Phase 6: All 4 Triggers (4 stories) — COMPLETE
 
-| Story | Title | Status |
-|-------|-------|--------|
-| TRG-001 | Update detectProposalIntentAdapter (PROP-001) to use V2 pipeline | Pending |
-| TRG-002 | Consolidate 3 copilot skills into generate-proposal-v2 | Pending |
-| TRG-003 | Update Slack proposal_request handler to use V2 pipeline | Pending |
-| TRG-004 | Manual button trigger wiring (ProposalQuickGenerate → pipeline) | Pending |
+| Story | Title | Status | Commit |
+|-------|-------|--------|--------|
+| TRG-001 | detectProposalIntentAdapter → V2 pipeline | Complete | pre-built |
+| TRG-002 | Consolidate 3 copilot skills into generate-proposal-v2 | Complete | be98f486 |
+| TRG-003 | Slack proposal_request handler → V2 | Complete | 7f742ed2 |
+| TRG-004 | Manual button trigger wiring | Complete | 6f24a5ca |
 
-### Phase 7: Autopilot and Polish (6 stories) — PENDING
+### Phase 7: Autopilot and Polish (6 stories) — COMPLETE
 
-| Story | Title | Status |
-|-------|-------|--------|
-| AUT-001 | Register proposal.generate and proposal.send in RUBBER_STAMP_THRESHOLDS | Pending |
-| AUT-002 | Wire edit distance tracking into autopilot signals for proposals | Pending |
-| AUT-003 | Autonomy tier display in proposal settings | Pending |
-| AUT-004 | QA: test all 4 triggers end-to-end with real meeting data | Pending |
-| AUT-005 | Template refinement: iterate Sandler Standard based on real output | Pending |
-| AUT-006 | Performance tuning: pipeline latency, Gotenberg warm-up, caching | Pending |
+| Story | Title | Status | Commit |
+|-------|-------|--------|--------|
+| AUT-001 | Rubber stamp thresholds for proposals | Complete | 06b4ec29 |
+| AUT-002 | Edit distance → autopilot signals | Complete | 06b4ec29 |
+| AUT-003 | Autonomy tier display in settings | Complete | 9d5f8677 |
+| AUT-004 | QA: all 4 triggers verified | Complete | 18fc3a60 |
+| AUT-005 | Sandler Standard template polish | Complete | c7b663f0 |
+| AUT-006 | Pipeline performance tuning | Complete | 4de515bd |
 
 ---
 

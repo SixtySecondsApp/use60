@@ -382,3 +382,23 @@ verify_jwt = false
 # Auth handled internally; CORS preflight needs to work
 [functions.copilot-dynamic-table]
 verify_jwt = false
+
+# Proposal Engine V2 — all called from browser with user JWT
+# Auth handled internally via getAuthContext; CORS preflight needs to work
+[functions.proposal-pipeline-v2]
+verify_jwt = false
+
+[functions.proposal-assemble-context]
+verify_jwt = false
+
+[functions.proposal-compose-v2]
+verify_jwt = false
+
+[functions.proposal-render-gotenberg]
+verify_jwt = false
+
+[functions.proposal-deliver]
+verify_jwt = false
+
+[functions.offering-extract]
+verify_jwt = false

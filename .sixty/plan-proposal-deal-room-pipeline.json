@@ -1,0 +1,207 @@
+{
+  "feature": "proposal-deal-room-pipeline",
+  "name": "Proposal → Deal → Deal Room Pipeline",
+  "description": "Auto-create/update deals when proposals are generated, advance stage to Opportunity, create Slack deal rooms with full briefing packs, and run async company research to enrich deal + contact records.",
+  "createdAt": "2026-03-03T14:00:00Z",
+  "consultReport": "Inline consult session — 2026-03-03",
+  "prefix": "PDR",
+
+  "context": {
+    "existingInfra": {
+      "slackTables": "ALL EXIST on staging (slack_org_settings, slack_notification_settings, slack_deal_rooms, slack_user_mappings, slack_notifications_sent)",
+      "slackConnected": true,
+      "dealRoomsEnabled": true,
+      "dealStages": ["SQL (603b5020)", "Opportunity (8be6a854)", "Verbal (e23859a1)", "Signed (207a94db)", "Lost (5f17d356)"],
+      "opportunityStageId": "8be6a854-e7d0-41b5-9057-03b2213e7697",
+      "existingFunctions": ["slack-deal-room", "slack-deal-room-update", "slack-deal-room-archive", "proposal-pipeline-v2", "proposal-render-gotenberg", "proposal-deliver"]
+    },
+    "decisions": {
+      "dealStage": "Opportunity (existing stage, no schema change needed)",
+      "dealCreation": "Auto-create if no deal exists, using meeting context",
+      "dealRoomTrigger": "Every proposal that reaches 'ready' status",
+      "dealRoomContent": "Full briefing pack (PDF + deal summary + meeting highlights + next steps + actions)",
+      "dealRoomMembers": "Deal owner + configured stakeholders from org settings",
+      "enrichment": "Async after proposal ready — full company-research skill",
+      "existingDealBehavior": "Advance to Opportunity (if earlier) + post new proposal to existing room"
+    }
+  },
+
+  "stories": [
+    {
+      "id": "PDR-001",
+      "title": "Fix proposal metadata resolution (prepared_by, client name, company)",
+      "type": "bugfix",
+      "status": "complete",
+      "priority": 1,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["PDR-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "Profile query uses first_name + last_name (not full_name which doesn't exist)",
+        "prepared_by shows 'Andrew Bryce' instead of 'Sales Team'",
+        "Client company extracted from email domain as fallback (aprilking.co.uk → April King)",
+        "Client name uses contact name from meeting context when full_name is null"
+      ],
+      "files": [
+        "supabase/functions/proposal-render-gotenberg/index.ts"
+      ],
+      "notes": "Already partially done — profile interface + query fixed. Still need domain extraction helper and metadata fallback chain."
+    },
+    {
+      "id": "PDR-002",
+      "title": "Add deal auto-create/update logic to proposal pipeline",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["PDR-001"], "files": [], "schema": ["deals", "deal_stages"] },
+      "blocks": ["PDR-003", "PDR-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "When proposal is created with no deal_id: auto-create a deal with meeting context (company, contact, value if mentioned)",
+        "New deal stage set to Opportunity (8be6a854)",
+        "deal_id written back to the proposal row",
+        "When proposal has existing deal_id: advance stage to Opportunity if currently at SQL",
+        "Never downgrade a deal stage (Verbal/Signed stays as-is)",
+        "Deal name derived from contact company or meeting title"
+      ],
+      "files": [
+        "supabase/functions/proposal-pipeline-v2/index.ts"
+      ],
+      "notes": "Insert as Stage 0 (pre-assembly). Runs before proposal-assemble-context so the deal_id is available for context assembly. Query deal_stages by name='Opportunity' to get the ID dynamically."
+    },
+    {
+      "id": "PDR-003",
+      "title": "Wire proposal 'ready' status to trigger deal room creation",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["PDR-002"], "files": ["supabase/functions/proposal-pipeline-v2/index.ts"], "schema": ["slack_deal_rooms"] },
+      "blocks": ["PDR-005"],
+      "parallelWith": ["PDR-004"],
+      "acceptance": [
+        "After proposal reaches 'ready' status, pipeline checks for existing deal room",
+        "If no room exists: invoke slack-deal-room to create channel",
+        "If room exists: skip creation (PDR-005 handles posting)",
+        "Slack org connection checked — gracefully skip if not connected",
+        "Non-fatal: deal room failure never blocks proposal delivery"
+      ],
+      "files": [
+        "supabase/functions/proposal-pipeline-v2/index.ts",
+        "supabase/functions/proposal-deliver/index.ts"
+      ],
+      "notes": "Add as Stage 5b in the pipeline, after proposal-deliver. Use the existing slack-deal-room edge function — it already handles channel creation, invites, and stakeholder lookups."
+    },
+    {
+      "id": "PDR-004",
+      "title": "Build full briefing pack Slack message for deal rooms",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["PDR-002"], "files": [], "schema": ["slack_deal_rooms"] },
+      "blocks": ["PDR-005"],
+      "parallelWith": ["PDR-003"],
+      "acceptance": [
+        "Slack Block Kit message includes: proposal PDF link, deal value, contact info, company name",
+        "Includes meeting transcript highlights (top 3 key points from ai_summary)",
+        "Includes next steps section (extracted from proposal terms section)",
+        "Includes action items if available",
+        "Message is threaded if posting to existing room with prior messages",
+        "Formatted with Block Kit sections, dividers, and buttons (Download PDF, View Deal)"
+      ],
+      "files": [
+        "supabase/functions/slack-deal-room-update/index.ts"
+      ],
+      "notes": "Extend slack-deal-room-update to accept a 'proposal_briefing' payload type. Use the existing Block Kit patterns from slack-block-kit skill."
+    },
+    {
+      "id": "PDR-005",
+      "title": "Post briefing pack into deal room on proposal ready",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["PDR-003", "PDR-004"], "files": [], "schema": [] },
+      "blocks": ["PDR-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "After deal room exists (new or existing), post the full briefing pack message",
+        "Uses slack-deal-room-update with proposal_briefing payload",
+        "Includes PDF download button pointing to signed URL",
+        "Records in slack_notifications_sent to prevent duplicate posts",
+        "Works for both new rooms (welcome + briefing) and existing rooms (briefing only)"
+      ],
+      "files": [
+        "supabase/functions/proposal-pipeline-v2/index.ts",
+        "supabase/functions/proposal-deliver/index.ts"
+      ],
+      "notes": "This ties PDR-003 and PDR-004 together. The pipeline calls slack-deal-room-update after ensuring the room exists."
+    },
+    {
+      "id": "PDR-006",
+      "title": "Async company research enrichment after proposal ready",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["PDR-005"], "files": [], "schema": ["deals", "contacts"] },
+      "blocks": ["PDR-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "After proposal reaches 'ready', fire-and-forget async enrichment job",
+        "Extracts domain from contact email (e.g. owen@aprilking.co.uk → aprilking.co.uk)",
+        "Runs company-research or lead-research skill against the domain",
+        "Updates contact record: full_name (if null), title, company name",
+        "Updates deal record: company name, description with enriched intel",
+        "Posts enrichment summary to deal room as a follow-up message (~60s after proposal)",
+        "Graceful failure: enrichment errors logged but never surface to user"
+      ],
+      "files": [
+        "supabase/functions/proposal-pipeline-v2/index.ts",
+        "supabase/functions/proposal-enrich-deal/index.ts"
+      ],
+      "notes": "New edge function: proposal-enrich-deal. Called from pipeline as non-blocking background task. Uses existing company-research skill or web search. Results posted to deal room via slack-deal-room-update."
+    },
+    {
+      "id": "PDR-007",
+      "title": "Update deal room with enrichment results",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["PDR-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "After enrichment completes, post a summary to the deal room",
+        "Includes: company overview, key people, funding/revenue if found, tech stack",
+        "Message is threaded under the original briefing pack message",
+        "Slack ts from PDR-005 briefing message used for threading",
+        "If no deal room exists (Slack not connected), skip silently"
+      ],
+      "files": [
+        "supabase/functions/proposal-enrich-deal/index.ts",
+        "supabase/functions/slack-deal-room-update/index.ts"
+      ],
+      "notes": "This is the async follow-up that lands in the deal room ~60s after the proposal. Gives the rep enriched context before their next touchpoint."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "estimatedMinutes": 140,
+    "estimatedHours": "2-3 hours (with parallel groups)",
+    "parallelGroups": [
+      { "stories": ["PDR-003", "PDR-004"], "reason": "Independent — room creation vs message builder", "timeSaved": "20min" }
+    ],
+    "criticalPath": "PDR-001 → PDR-002 → PDR-003/004 → PDR-005 → PDR-006 → PDR-007",
+    "mvp": {
+      "stories": ["PDR-001", "PDR-002", "PDR-003", "PDR-004", "PDR-005"],
+      "estimate": "1.5-2 hours",
+      "delivers": "Auto deal creation + deal room with full briefing pack. Enrichment deferred."
+    }
+  }
+}

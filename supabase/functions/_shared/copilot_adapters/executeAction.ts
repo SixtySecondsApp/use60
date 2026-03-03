@@ -423,10 +423,11 @@ export async function executeAction(
         }
 
         const pipelineBody: Record<string, unknown> = {
+          proposal_id: skillContext.proposal_id ?? undefined,
           deal_id: skillContext.deal_id ?? undefined,
           meeting_id: skillContext.meeting_id ?? undefined,
           contact_id: skillContext.contact_id ?? undefined,
-          trigger_type: 'copilot',
+          trigger_type: skillContext.trigger_type ?? 'copilot',
           user_id: userId,
           org_id: orgId,
         };

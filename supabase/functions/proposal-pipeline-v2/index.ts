@@ -42,6 +42,10 @@ import {
   errorResponse,
 } from '../_shared/corsHelper.ts'
 import { logAICostEvent } from '../_shared/costTracking.ts'
+import {
+  generateProposalHTML,
+  type ProposalSection,
+} from '../_shared/templateEngine.ts'
 
 // =============================================================================
 // Constants
@@ -284,6 +288,12 @@ interface SlackThread {
 }
 
 interface PipelineRequest {
+  /**
+   * Optional — when provided, the pipeline uses this existing proposal row
+   * instead of creating a new one. The frontend creates the row for instant
+   * overlay feedback, then passes the ID here.
+   */
+  proposal_id?: string
   /** Optional — required when proposal triggered from a meeting */
   meeting_id?: string
   /** Optional — required when proposal linked to a deal. At least one of meeting_id or deal_id must be provided. */
@@ -343,18 +353,22 @@ async function updateProposalStatus(
     }
 
     if (metadataPatch) {
-      // Merge into existing metadata with a Postgres-side merge to avoid clobbers.
-      // We fetch the current metadata first so we can merge safely in JS.
+      // Merge into style_config._pipeline_meta to avoid clobbers.
       const { data: existing } = await supabase
         .from('proposals')
-        .select('metadata')
+        .select('style_config')
         .eq('id', proposalId)
         .maybeSingle()
 
-      const currentMeta: Record<string, unknown> =
-        (existing?.metadata as Record<string, unknown>) ?? {}
+      const currentStyleConfig =
+        (existing?.style_config as Record<string, unknown>) ?? {}
+      const currentMeta =
+        (currentStyleConfig._pipeline_meta as Record<string, unknown>) ?? {}
 
-      updatePayload.metadata = { ...currentMeta, ...metadataPatch }
+      updatePayload.style_config = {
+        ...currentStyleConfig,
+        _pipeline_meta: { ...currentMeta, ...metadataPatch },
+      }
     }
 
     const { error } = await supabase
@@ -453,7 +467,7 @@ serve(async (req: Request) => {
     return errorResponse('Invalid JSON body', req, 400)
   }
 
-  const { meeting_id, deal_id, contact_id, template_id, trigger_type, user_id, org_id, slack_thread } = body
+  const { proposal_id: existingProposalId, meeting_id, deal_id, contact_id, template_id, trigger_type, user_id, org_id, slack_thread } = body
 
   if (!user_id) return errorResponse('user_id is required', req, 400)
   if (!org_id) return errorResponse('org_id is required', req, 400)
@@ -485,13 +499,6 @@ serve(async (req: Request) => {
   const stageTiming: StageTiming = {}
   const monitor = new PipelineMonitor()
 
-  // AUT-006: 120-second hard timeout guard to prevent runaway pipelines
-  const pipelineAbort = new AbortController()
-  const pipelineTimeoutId = setTimeout(() => {
-    pipelineAbort.abort()
-    console.error(`${LOG_PREFIX} Pipeline timeout (120s) exceeded for proposal=${proposalId ?? 'pending'}`)
-  }, 120_000)
-
   // --------------------------------------------------------------------------
   // Step 0: Resolve a proposal title from the deal/meeting (best-effort)
   // --------------------------------------------------------------------------
@@ -522,36 +529,215 @@ serve(async (req: Request) => {
   }
 
   // --------------------------------------------------------------------------
-  // Step 1: Create the proposals row with status 'assembling'
+  // Step 1: Create or adopt the proposals row with status 'assembling'
+  //   When the frontend pre-creates the row for instant overlay feedback,
+  //   proposal_id is passed in — we adopt it and update instead of inserting.
   // --------------------------------------------------------------------------
-  const { data: newProposal, error: createError } = await supabase
-    .from('proposals')
-    .insert({
-      org_id,
-      user_id,
-      deal_id: deal_id ?? null,
-      meeting_id: meeting_id ?? null,
-      contact_id: contact_id ?? null,
-      template_id: template_id ?? null,
-      title: proposalTitle,
-      trigger_type,
-      generation_status: 'assembling',
-      status: 'draft',
-      metadata: {
-        pipeline_version: 2,
-        pipeline_started_at: new Date().toISOString(),
-      },
-    })
-    .select('id')
-    .single()
+  let proposalId: string
 
-  if (createError || !newProposal?.id) {
-    console.error(`${LOG_PREFIX} Failed to create proposal row:`, createError?.message)
-    return errorResponse('Failed to create proposal record', req, 500)
+  if (existingProposalId) {
+    // Adopt pre-created row — update it with full pipeline metadata
+    const { error: adoptError } = await supabase
+      .from('proposals')
+      .update({
+        deal_id: deal_id ?? null,
+        meeting_id: meeting_id ?? null,
+        contact_id: contact_id ?? null,
+        template_id: template_id ?? null,
+        title: proposalTitle,
+        trigger_type,
+        generation_status: 'assembling',
+        pipeline_version: 2,
+        style_config: {
+          _pipeline_meta: {
+            pipeline_version: 2,
+            pipeline_started_at: new Date().toISOString(),
+          },
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingProposalId)
+
+    if (adoptError) {
+      console.error(`${LOG_PREFIX} Failed to adopt proposal row:`, adoptError.message)
+      return errorResponse(`Failed to adopt proposal record: ${adoptError.message}`, req, 500)
+    }
+
+    proposalId = existingProposalId
+    console.log(`${LOG_PREFIX} Adopted existing proposal=${proposalId} status=assembling`)
+  } else {
+    // Create a new row (legacy path — copilot, slack, auto triggers)
+    const { data: newProposal, error: createError } = await supabase
+      .from('proposals')
+      .insert({
+        org_id,
+        user_id,
+        deal_id: deal_id ?? null,
+        meeting_id: meeting_id ?? null,
+        contact_id: contact_id ?? null,
+        template_id: template_id ?? null,
+        title: proposalTitle,
+        type: 'proposal',
+        content: '',
+        trigger_type,
+        generation_status: 'assembling',
+        status: 'draft',
+        pipeline_version: 2,
+        style_config: {
+          _pipeline_meta: {
+            pipeline_version: 2,
+            pipeline_started_at: new Date().toISOString(),
+          },
+        },
+      })
+      .select('id')
+      .single()
+
+    if (createError || !newProposal?.id) {
+      console.error(`${LOG_PREFIX} Failed to create proposal row:`, createError?.message, createError?.details, createError?.hint, createError?.code)
+      return errorResponse(`Failed to create proposal record: ${createError?.message ?? 'unknown'}`, req, 500)
+    }
+
+    proposalId = newProposal.id
+    console.log(`${LOG_PREFIX} Created proposal=${proposalId} status=assembling`)
   }
 
-  const proposalId = newProposal.id
-  console.log(`${LOG_PREFIX} Created proposal=${proposalId} status=assembling`)
+  // ==========================================================================
+  // STAGE 0 — Deal auto-create / advance (PDR-002)
+  //   Ensures every proposal has a linked deal in the Opportunity stage.
+  //   - No deal_id → auto-create from meeting/contact context
+  //   - Existing deal at SQL stage → advance to Opportunity
+  //   - Existing deal at Opportunity or later → no change
+  //   Non-fatal: deal failures never block the pipeline.
+  // ==========================================================================
+  let resolvedDealId: string | null = deal_id ?? null
+
+  try {
+    const { data: oppStage } = await supabase
+      .from('deal_stages')
+      .select('id, order_position')
+      .eq('name', 'Opportunity')
+      .maybeSingle()
+
+    if (oppStage?.id) {
+      if (!resolvedDealId && meeting_id) {
+        // --- Auto-create deal from meeting/contact context ---
+        let contactName: string | null = null
+        let contactEmail: string | null = null
+        let contactCompany: string | null = null
+        const resolvedContactId = contact_id ?? null
+
+        if (resolvedContactId) {
+          const { data: contactRow } = await supabase
+            .from('contacts')
+            .select('full_name, first_name, last_name, company, email')
+            .eq('id', resolvedContactId)
+            .maybeSingle()
+          if (contactRow) {
+            contactName = contactRow.full_name
+              || [contactRow.first_name, contactRow.last_name].filter(Boolean).join(' ')
+              || null
+            contactEmail = contactRow.email
+            contactCompany = contactRow.company
+          }
+        }
+
+        // Extract company name from email domain as fallback
+        let companyFromDomain: string | null = null
+        const emailDomain = contactEmail?.split('@')[1]?.toLowerCase()
+        if (emailDomain) {
+          const freeProviders = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'protonmail.com']
+          if (!freeProviders.includes(emailDomain)) {
+            companyFromDomain = emailDomain.split('.')[0]
+              .split(/[-_]/)
+              .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(' ')
+          }
+        }
+
+        const companyName = contactCompany || companyFromDomain || 'Unknown Company'
+        const dealName = companyName !== 'Unknown Company'
+          ? `${companyName} — Proposal`
+          : proposalTitle
+
+        const { data: newDeal, error: dealCreateErr } = await supabase
+          .from('deals')
+          .insert({
+            name: dealName,
+            company: companyName,
+            value: 0,
+            stage_id: oppStage.id,
+            owner_id: user_id,
+            primary_contact_id: resolvedContactId,
+            contact_name: contactName,
+            contact_email: contactEmail,
+            status: 'active',
+            clerk_org_id: org_id,
+            stage_changed_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single()
+
+        if (newDeal?.id) {
+          resolvedDealId = newDeal.id
+          await supabase
+            .from('proposals')
+            .update({ deal_id: resolvedDealId, updated_at: new Date().toISOString() })
+            .eq('id', proposalId)
+          console.log(`${LOG_PREFIX} PDR-002: Auto-created deal=${resolvedDealId} company="${companyName}" stage=Opportunity`)
+        } else if (dealCreateErr) {
+          console.warn(`${LOG_PREFIX} PDR-002: Deal creation failed (non-fatal):`, dealCreateErr.message)
+        }
+      } else if (resolvedDealId) {
+        // --- Advance existing deal to Opportunity if at an earlier stage ---
+        const { data: currentDeal } = await supabase
+          .from('deals')
+          .select('id, stage_id')
+          .eq('id', resolvedDealId)
+          .maybeSingle()
+
+        if (currentDeal?.stage_id && currentDeal.stage_id !== oppStage.id) {
+          const { data: currentStage } = await supabase
+            .from('deal_stages')
+            .select('id, order_position, is_final')
+            .eq('id', currentDeal.stage_id)
+            .maybeSingle()
+
+          // Only advance if current stage is earlier than Opportunity and not final
+          if (currentStage && !currentStage.is_final && currentStage.order_position < oppStage.order_position) {
+            const { error: advanceErr } = await supabase
+              .from('deals')
+              .update({
+                stage_id: oppStage.id,
+                stage_changed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', resolvedDealId)
+
+            if (!advanceErr) {
+              console.log(`${LOG_PREFIX} PDR-002: Advanced deal=${resolvedDealId} to Opportunity`)
+            } else {
+              console.warn(`${LOG_PREFIX} PDR-002: Stage advance failed (non-fatal):`, advanceErr.message)
+            }
+          } else {
+            console.log(`${LOG_PREFIX} PDR-002: Deal=${resolvedDealId} already at or past Opportunity — no change`)
+          }
+        }
+      }
+    } else {
+      console.warn(`${LOG_PREFIX} PDR-002: Opportunity stage not found in deal_stages — skipping deal resolution`)
+    }
+  } catch (dealErr) {
+    const msg = dealErr instanceof Error ? dealErr.message : String(dealErr)
+    console.warn(`${LOG_PREFIX} PDR-002: Deal resolution failed (non-fatal): ${msg}`)
+  }
+
+  // AUT-006: 120-second hard timeout guard to prevent runaway pipelines
+  const pipelineAbort = new AbortController()
+  const pipelineTimeoutId = setTimeout(() => {
+    pipelineAbort.abort()
+    console.error(`${LOG_PREFIX} Pipeline timeout (120s) exceeded for proposal=${proposalId}`)
+  }, 120_000)
 
   // Partial result returned on any stage failure
   const partialResult = (
@@ -578,12 +764,12 @@ serve(async (req: Request) => {
   // ==========================================================================
   let cachedContextPayload: Record<string, unknown> | null = null
 
-  if (deal_id) {
+  if (resolvedDealId) {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
     const { data: recentProposal } = await supabase
       .from('proposals')
       .select('id, context_payload, created_at')
-      .eq('deal_id', deal_id)
+      .eq('deal_id', resolvedDealId)
       .neq('id', proposalId) // exclude the one we just created
       .gte('created_at', oneHourAgo)
       .not('context_payload', 'is', null)
@@ -594,11 +780,11 @@ serve(async (req: Request) => {
     if (recentProposal?.context_payload) {
       cachedContextPayload = recentProposal.context_payload as Record<string, unknown>
       console.log(
-        `${LOG_PREFIX} AUT-006: Context cache HIT for deal=${deal_id}`,
+        `${LOG_PREFIX} AUT-006: Context cache HIT for deal=${resolvedDealId}`,
         `(source proposal=${recentProposal.id}, created=${recentProposal.created_at})`,
       )
     } else {
-      console.log(`${LOG_PREFIX} AUT-006: Context cache MISS for deal=${deal_id} — will assemble`)
+      console.log(`${LOG_PREFIX} AUT-006: Context cache MISS for deal=${resolvedDealId} — will assemble`)
     }
   }
 
@@ -646,7 +832,7 @@ serve(async (req: Request) => {
         () => invokeStage(supabase, 'proposal-assemble-context', {
           proposal_id: proposalId,
           meeting_id: meeting_id ?? undefined,
-          deal_id: deal_id ?? undefined,
+          deal_id: resolvedDealId ?? undefined,
           contact_id: contact_id ?? undefined,
           user_id,
         }),
@@ -752,6 +938,53 @@ serve(async (req: Request) => {
   await updateProposalStatus(supabase, proposalId, 'composed', {
     stage_timings: { ...stageTiming },
   })
+
+  // ==========================================================================
+  // Early HTML preview — generate preview HTML from composed sections
+  //   Fire-and-forget: the render function overwrites with fully branded HTML.
+  // ==========================================================================
+  try {
+    // Load composed sections from the proposal row
+    const { data: composedRow } = await supabase
+      .from('proposals')
+      .select('sections, title')
+      .eq('id', proposalId)
+      .maybeSingle()
+
+    const composedSections = composedRow?.sections as ProposalSection[] | null
+
+    if (composedSections && composedSections.length > 0) {
+      const earlyHtml = generateProposalHTML({
+        sections: composedSections,
+        brandConfig: {
+          primary_color: '#1e3a5f',
+          secondary_color: '#4a90d9',
+          font_family: 'Inter, Helvetica, Arial, sans-serif',
+          logo_url: null,
+          header_style: 'default',
+        },
+        metadata: {
+          proposal_title: composedRow?.title || proposalTitle || 'Proposal',
+          client_name: 'Client',
+          client_company: 'Company',
+          prepared_by: 'Sales Team',
+          prepared_date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+          reference_number: `PROP-${proposalId.replace(/-/g, '').slice(0, 8).toUpperCase()}`,
+        },
+      })
+
+      await supabase
+        .from('proposals')
+        .update({ rendered_html: earlyHtml, updated_at: new Date().toISOString() })
+        .eq('id', proposalId)
+
+      console.log(`${LOG_PREFIX} Early HTML preview stored (${earlyHtml.length} chars)`)
+    }
+  } catch (earlyHtmlErr) {
+    // Fire-and-forget — never blocks the pipeline
+    const msg = earlyHtmlErr instanceof Error ? earlyHtmlErr.message : String(earlyHtmlErr)
+    console.warn(`${LOG_PREFIX} Early HTML preview failed (non-fatal): ${msg}`)
+  }
 
   // ==========================================================================
   // AUT-006 — Gotenberg warm-up ping (fire before Stage 3)
@@ -920,6 +1153,156 @@ serve(async (req: Request) => {
   )
 
   // ==========================================================================
+  // STAGE 5b — Deal room creation (PDR-003)
+  //   If the proposal has a deal, ensure a Slack deal room exists.
+  //   Non-fatal: deal room failure never blocks proposal delivery.
+  // ==========================================================================
+  if (resolvedDealId) {
+    try {
+      // Check if room already exists
+      const { data: existingRoom } = await supabase
+        .from('slack_deal_rooms')
+        .select('id, slack_channel_id')
+        .eq('deal_id', resolvedDealId)
+        .eq('is_archived', false)
+        .maybeSingle()
+
+      if (existingRoom?.slack_channel_id) {
+        console.log(`${LOG_PREFIX} PDR-003: Deal room exists channel=${existingRoom.slack_channel_id} — skipping creation`)
+      } else {
+        // Check if Slack is connected with deal_rooms enabled
+        const { data: slackSettings } = await supabase
+          .from('slack_notification_settings')
+          .select('id, enabled')
+          .eq('org_id', org_id)
+          .eq('feature', 'deal_rooms')
+          .maybeSingle()
+
+        if (slackSettings?.enabled) {
+          const roomResult = await invokeStage(supabase, 'slack-deal-room', {
+            dealId: resolvedDealId,
+            orgId: org_id,
+            isTest: true, // bypass threshold checks — every proposal creates a room
+          })
+          console.log(`${LOG_PREFIX} PDR-003: Deal room created channel=${roomResult.channelId ?? 'unknown'}`)
+        } else {
+          console.log(`${LOG_PREFIX} PDR-003: Slack deal rooms not enabled for org=${org_id} — skipping`)
+        }
+      }
+    } catch (roomErr) {
+      const msg = roomErr instanceof Error ? roomErr.message : String(roomErr)
+      console.warn(`${LOG_PREFIX} PDR-003: Deal room creation failed (non-fatal): ${msg}`)
+    }
+
+    // Track briefing slack_ts for PDR-007 enrichment threading
+    let briefingSlackTs: string | null = null
+
+    // ========================================================================
+    // STAGE 5c — Post briefing pack to deal room (PDR-005)
+    //   After room exists (new or existing), post the full briefing pack.
+    //   Checks slack_notifications_sent to prevent duplicate posts.
+    //   Non-fatal: briefing post failure never blocks the pipeline.
+    // ========================================================================
+    try {
+      // Check for existing briefing post (dedup by proposal_id)
+      const { data: alreadySent } = await supabase
+        .from('slack_notifications_sent')
+        .select('id')
+        .eq('entity_type', 'proposal_briefing')
+        .eq('entity_id', proposalId)
+        .maybeSingle()
+
+      if (alreadySent) {
+        console.log(`${LOG_PREFIX} PDR-005: Briefing already posted for proposal=${proposalId} — skipping`)
+      } else {
+        // Gather context for the briefing pack
+        const [proposalCtx, dealCtx, contactCtx, meetingCtx] = await Promise.all([
+          supabase
+            .from('proposals')
+            .select('title, context_payload')
+            .eq('id', proposalId)
+            .maybeSingle(),
+          resolvedDealId
+            ? supabase.from('deals').select('name, company, value').eq('id', resolvedDealId).maybeSingle()
+            : Promise.resolve({ data: null }),
+          contact_id
+            ? supabase.from('contacts').select('full_name, first_name, last_name, email, company').eq('id', contact_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+          meeting_id
+            ? supabase.from('meetings').select('title, ai_summary').eq('id', meeting_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+        ])
+
+        const ctxPayload = proposalCtx.data?.context_payload as Record<string, unknown> | null
+        const meetingSummary = meetingCtx.data?.ai_summary as Record<string, unknown> | null
+        const contactRow = contactCtx.data as { full_name?: string; first_name?: string; last_name?: string; email?: string; company?: string } | null
+        const dealRow = dealCtx.data as { name?: string; company?: string; value?: number } | null
+
+        // Extract meeting highlights (top key points from ai_summary)
+        const meetingHighlights: string[] = []
+        if (meetingSummary) {
+          const keyPoints = (meetingSummary.key_points ?? meetingSummary.keyPoints ?? meetingSummary.highlights) as string[] | undefined
+          if (Array.isArray(keyPoints)) {
+            meetingHighlights.push(...keyPoints.slice(0, 3))
+          } else if (typeof meetingSummary.summary === 'string') {
+            meetingHighlights.push(meetingSummary.summary as string)
+          }
+        }
+
+        // Extract next steps and action items from context_payload
+        const ctxMeeting = ctxPayload?.meeting as Record<string, unknown> | null
+        const nextSteps = (ctxMeeting?.next_steps as string) || null
+        const actionItems: string[] = []
+        const rawActions = (ctxMeeting?.action_items ?? ctxMeeting?.actionItems) as Array<Record<string, unknown>> | string[] | undefined
+        if (Array.isArray(rawActions)) {
+          for (const item of rawActions.slice(0, 5)) {
+            if (typeof item === 'string') actionItems.push(item)
+            else if (item?.task) actionItems.push(String(item.task))
+            else if (item?.description) actionItems.push(String(item.description))
+          }
+        }
+
+        const contactName = contactRow?.full_name
+          || [contactRow?.first_name, contactRow?.last_name].filter(Boolean).join(' ')
+          || null
+
+        const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://app.use60.com'
+
+        const briefingResult = await invokeStage(supabase, 'slack-deal-room-update', {
+          dealId: resolvedDealId,
+          orgId: org_id,
+          updateType: 'proposal_briefing',
+          data: {
+            proposalTitle: proposalCtx.data?.title || proposalTitle,
+            proposalId,
+            pdfUrl: pdfUrl ?? null,
+            dealValue: dealRow?.value ?? 0,
+            contactName,
+            contactEmail: contactRow?.email ?? null,
+            companyName: dealRow?.company ?? contactRow?.company ?? null,
+            meetingHighlights,
+            nextSteps,
+            actionItems,
+            triggerType: trigger_type,
+            appUrl,
+            dealId: resolvedDealId,
+          },
+        })
+
+        briefingSlackTs = typeof briefingResult.slackTs === 'string' ? briefingResult.slackTs : null
+
+        console.log(
+          `${LOG_PREFIX} PDR-005: Briefing pack posted to deal room`,
+          `| slackTs=${briefingSlackTs ?? 'unknown'}`,
+        )
+      }
+    } catch (briefingErr) {
+      const msg = briefingErr instanceof Error ? briefingErr.message : String(briefingErr)
+      console.warn(`${LOG_PREFIX} PDR-005: Briefing post failed (non-fatal): ${msg}`)
+    }
+  }
+
+  // ==========================================================================
   // Final status update: ready
   // ==========================================================================
   const total = Date.now() - pipelineStart
@@ -933,6 +1316,28 @@ serve(async (req: Request) => {
       pipeline_total_ms: total,
     }),
   ])
+
+  // ==========================================================================
+  // STAGE 6 — Async enrichment (PDR-006, fire-and-forget)
+  //   Invokes proposal-enrich-deal in the background. This runs company
+  //   research, updates deal/contact records, and posts results to the deal
+  //   room ~60s after the proposal is ready. Non-blocking.
+  // ==========================================================================
+  if (resolvedDealId) {
+    invokeStage(supabase, 'proposal-enrich-deal', {
+      proposal_id: proposalId,
+      deal_id: resolvedDealId,
+      contact_id: contact_id ?? null,
+      org_id,
+      user_id,
+      briefing_slack_ts: briefingSlackTs,
+    }).then(() => {
+      console.log(`${LOG_PREFIX} PDR-006: Enrichment invoked for deal=${resolvedDealId}`)
+    }).catch((enrichErr) => {
+      const msg = enrichErr instanceof Error ? enrichErr.message : String(enrichErr)
+      console.warn(`${LOG_PREFIX} PDR-006: Enrichment trigger failed (non-fatal): ${msg}`)
+    })
+  }
 
   // Log pipeline-level cost event (fire-and-forget)
   logAICostEvent(

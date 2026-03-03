@@ -61,11 +61,6 @@ html, body {
   size: 210mm 297mm;
   margin: 15mm 20mm 20mm 20mm;
 
-  @top-right {
-    content: element(running-header);
-    vertical-align: middle;
-  }
-
   @bottom-center {
     content: "Page " counter(page) " of " counter(pages);
     font-family: ${font_family}, Inter, 'Helvetica Neue', Arial, sans-serif;
@@ -78,36 +73,15 @@ html, body {
   margin: 0;
 }
 
-/* ---------- Running header (logo) ---------- */
-#running-header {
-  position: running(running-header);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 12mm;
-  padding-right: 0;
-}
-
-#running-header .header-logo {
-  height: 28px;
-  width: auto;
-  object-fit: contain;
-}
-
-#running-header .header-company-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: ${primary_color};
-  letter-spacing: 0.03em;
-}
-
 /* ---------- Cover page ---------- */
 .cover-page {
   page: cover-page;
   page-break-after: always;
   display: flex;
   flex-direction: column;
-  min-height: 297mm;
+  /* Use 100vh instead of 297mm so the cover fills exactly one printed page
+     regardless of Gotenberg margin settings (which may override @page margins). */
+  min-height: 100vh;
   position: relative;
   background: #ffffff;
 }
@@ -200,8 +174,9 @@ html, body {
 
 /* ---------- Table of contents ---------- */
 .toc-section {
-  page-break-after: always;
+  page-break-after: auto;
   padding: 12mm 0 8mm 0;
+  page-break-inside: avoid;
 }
 
 .toc-title {
@@ -245,14 +220,30 @@ html, body {
 
 /* ---------- Content sections ---------- */
 .proposal-section {
-  page-break-before: always;
-  padding: 0 0 10mm 0;
-  orphans: 3;
-  widows: 3;
+  padding: 0 0 4mm 0;
+  /* Allow sections to flow across page boundaries instead of
+     forcing entire sections to the next page (which leaves large gaps). */
+  page-break-inside: auto;
+  break-inside: auto;
+  page-break-before: auto;
+  break-before: auto;
 }
 
-.proposal-section:first-of-type {
-  page-break-before: auto;
+/* Keep section headers attached to the start of their content */
+.section-header {
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+/* Keep sub-headings attached to the paragraph that follows them */
+.section-content h3,
+.section-content h4 {
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.proposal-section + .proposal-section {
+  margin-top: 4mm;
 }
 
 .section-header {
@@ -260,8 +251,6 @@ html, body {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 16px;
-  padding-bottom: 10px;
-  border-bottom: 2px solid ${secondaryLight};
 }
 
 .section-accent-bar {
@@ -274,10 +263,13 @@ html, body {
 }
 
 .section-title {
+  flex: 1;
   font-size: 22px;
   font-weight: 700;
   color: #111827;
   line-height: 1.3;
+  padding-bottom: 10px;
+  border-bottom: 2px solid ${secondaryLight};
 }
 
 .section-content {
@@ -325,6 +317,8 @@ h4 {
 .section-content p,
 p {
   margin: 0 0 10px;
+  orphans: 3;
+  widows: 3;
 }
 
 .section-content ul,
@@ -632,14 +626,6 @@ export function getDefaultProposalTemplate(): string {
   </style>
 </head>
 <body>
-
-  <!-- Running header (used by @page named string for headers/footers) -->
-  <div id="running-header">
-    {{#if brand.logo_url}}
-    <img class="header-logo" src="{{brand.logo_url}}" alt="{{metadata.prepared_by}}" />
-    {{/if}}
-    <span class="header-company-name">{{metadata.prepared_by}}</span>
-  </div>
 
   <!-- ======================================================
        COVER PAGE

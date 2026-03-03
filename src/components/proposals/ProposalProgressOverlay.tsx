@@ -87,6 +87,7 @@ interface ProposalRow {
   trigger_type: string | null;
   created_at: string | null;
   updated_at: string | null;
+  rendered_html: string | null;
 }
 
 interface EditableSection {
@@ -188,6 +189,7 @@ export default function ProposalProgressOverlay({
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
+  const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Edit mode state (UX-006)
   const [editMode, setEditMode] = useState(false);
@@ -222,7 +224,7 @@ export default function ProposalProgressOverlay({
   const fetchProposal = useCallback(async () => {
     const { data, error: fetchErr } = await supabase
       .from('proposals')
-      .select('id, title, generation_status, pdf_url, credits_used, metadata, brand_config, style_config, trigger_type, created_at, updated_at')
+      .select('id, title, generation_status, pdf_url, credits_used, metadata, brand_config, style_config, trigger_type, created_at, updated_at, rendered_html')
       .eq('id', proposalId)
       .maybeSingle();
 
@@ -252,7 +254,7 @@ export default function ProposalProgressOverlay({
     try {
       const { data, error: fetchErr } = await supabase
         .from('proposals')
-        .select('content_json')
+        .select('sections')
         .eq('id', proposalId)
         .maybeSingle();
 
@@ -262,7 +264,7 @@ export default function ProposalProgressOverlay({
         return;
       }
 
-      const sections = data?.content_json as EditableSection[] | null;
+      const sections = data?.sections as EditableSection[] | null;
       if (!sections || !Array.isArray(sections) || sections.length === 0) {
         toast.error('No editable sections found in this proposal');
         return;
@@ -285,7 +287,7 @@ export default function ProposalProgressOverlay({
       const { error: updateErr } = await supabase
         .from('proposals')
         .update({
-          content_json: editingSections,
+          sections: editingSections,
           generation_status: 'rendering',
           updated_at: new Date().toISOString(),
         })
@@ -399,7 +401,7 @@ export default function ProposalProgressOverlay({
   }, []);
 
   // -------------------------------------------------------------------
-  // Realtime subscription
+  // Realtime subscription + polling fallback
   // -------------------------------------------------------------------
   useEffect(() => {
     if (!open) return;
@@ -434,9 +436,15 @@ export default function ProposalProgressOverlay({
 
     channelRef.current = channel;
 
+    // Polling fallback — catches updates if Realtime is flaky
+    const pollInterval = setInterval(() => {
+      fetchProposal();
+    }, 3000);
+
     return () => {
       supabase.removeChannel(channel);
       channelRef.current = null;
+      clearInterval(pollInterval);
     };
   }, [open, proposalId, fetchProposal]);
 
@@ -452,6 +460,26 @@ export default function ProposalProgressOverlay({
   // -------------------------------------------------------------------
   const isDone = status === 'ready';
   const isFailed = status === 'failed';
+
+  // Auto-scroll preview iframe to bottom when rendered_html updates during generation
+  useEffect(() => {
+    if (proposal?.rendered_html && !isDone && previewIframeRef.current) {
+      const iframe = previewIframeRef.current;
+      const scrollToBottom = () => {
+        try {
+          const doc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (doc) {
+            doc.documentElement.scrollTop = doc.documentElement.scrollHeight;
+          }
+        } catch {
+          // cross-origin sandbox — ignore
+        }
+      };
+      // Small delay to let iframe render the new content
+      const timer = setTimeout(scrollToBottom, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [proposal?.rendered_html, isDone]);
   // Thumbnail is written to brand_config by proposal-render-gotenberg; fall back to metadata
   const thumbnailUrl =
     ((proposal?.brand_config as Record<string, unknown> | null)?.thumbnail_url as string | undefined) ||
@@ -481,7 +509,10 @@ export default function ProposalProgressOverlay({
   // -------------------------------------------------------------------
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn('sm:max-w-md', editMode && 'sm:max-w-lg')}>
+      <DialogContent className={cn(
+        'max-h-[90vh] flex flex-col overflow-hidden',
+        editMode ? 'sm:max-w-lg' : 'sm:max-w-4xl',
+      )}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {editMode ? <Pencil className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
@@ -603,56 +634,71 @@ export default function ProposalProgressOverlay({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="flex flex-col items-center gap-5 py-4"
+              className="flex flex-col gap-3 py-2 min-h-0 flex-1 overflow-hidden"
             >
-              {/* Success icon */}
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
-                className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-900/20"
-              >
-                <CheckCircle2 className="h-7 w-7 text-emerald-500 dark:text-emerald-400" />
-              </motion.div>
-
-              {/* PDF Thumbnail or placeholder */}
-              <div className="flex h-36 w-28 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 shadow-sm dark:border-gray-700 dark:bg-gray-800/50 overflow-hidden">
-                {thumbnailUrl ? (
-                  <img
-                    src={thumbnailUrl}
-                    alt="Proposal thumbnail"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <FileText className="h-10 w-10 text-[#64748B] dark:text-gray-500" />
-                )}
+              {/* Success header */}
+              <div className="flex items-center gap-3 shrink-0">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-900/20"
+                >
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
+                </motion.div>
+                <div className="min-w-0 flex-1">
+                  {proposal?.title && (
+                    <p className="text-sm font-medium text-[#1E293B] dark:text-white truncate">
+                      {proposal.title}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                    {proposal?.credits_used != null && proposal.credits_used > 0 && (
+                      <Badge variant="secondary" className="gap-1">
+                        <Coins className="h-3 w-3" />
+                        {proposal.credits_used} credit{proposal.credits_used !== 1 ? 's' : ''} used
+                      </Badge>
+                    )}
+                    {elapsedSeconds != null && (
+                      <Badge variant="outline" className="gap-1">
+                        <Clock className="h-3 w-3" />
+                        Generated in {elapsedSeconds}s
+                      </Badge>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* Title */}
-              {proposal?.title && (
-                <p className="text-sm font-medium text-[#1E293B] dark:text-white text-center max-w-xs truncate">
-                  {proposal.title}
-                </p>
+              {/* Inline preview iframe or thumbnail fallback */}
+              {proposal?.rendered_html ? (
+                <div className="flex-1 min-h-0 w-full rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 overflow-hidden">
+                  <iframe
+                    srcDoc={proposal.rendered_html}
+                    title="Proposal preview"
+                    className="w-full h-full border-0"
+                    sandbox="allow-same-origin"
+                  />
+                </div>
+              ) : thumbnailUrl ? (
+                <div className="flex justify-center">
+                  <div className="flex h-36 w-28 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 shadow-sm dark:border-gray-700 dark:bg-gray-800/50 overflow-hidden">
+                    <img
+                      src={thumbnailUrl}
+                      alt="Proposal thumbnail"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  <div className="flex h-36 w-28 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 shadow-sm dark:border-gray-700 dark:bg-gray-800/50">
+                    <FileText className="h-10 w-10 text-[#64748B] dark:text-gray-500" />
+                  </div>
+                </div>
               )}
 
-              {/* Metadata badges */}
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                {proposal?.credits_used != null && proposal.credits_used > 0 && (
-                  <Badge variant="secondary" className="gap-1">
-                    <Coins className="h-3 w-3" />
-                    {proposal.credits_used} credit{proposal.credits_used !== 1 ? 's' : ''} used
-                  </Badge>
-                )}
-                {elapsedSeconds != null && (
-                  <Badge variant="outline" className="gap-1">
-                    <Clock className="h-3 w-3" />
-                    Generated in {elapsedSeconds}s
-                  </Badge>
-                )}
-              </div>
-
               {/* Action buttons */}
-              <div className="flex flex-col w-full gap-2 pt-1">
+              <div className="flex flex-col w-full gap-2 shrink-0">
                 <Button
                   className="w-full"
                   onClick={() => {
@@ -709,9 +755,52 @@ export default function ProposalProgressOverlay({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="py-4"
+              className="py-2 flex-1 min-h-0 flex flex-col"
             >
-              <ProgressStepper status={status} isFailed={false} />
+              {/* Always split layout: stepper left, preview right */}
+              <div className="flex gap-4 flex-1 min-h-0" style={{ minHeight: '50vh' }}>
+                <div className="w-48 shrink-0">
+                  <ProgressStepper status={status} isFailed={false} />
+                </div>
+                <div className="flex-1 min-h-0 rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 overflow-hidden relative">
+                  {proposal?.rendered_html ? (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.4 }}
+                      className="absolute inset-0"
+                    >
+                      <iframe
+                        ref={previewIframeRef}
+                        key={proposal.rendered_html.length}
+                        srcDoc={proposal.rendered_html}
+                        title="Proposal preview (generating)"
+                        className="w-full h-full border-0"
+                        sandbox="allow-same-origin"
+                      />
+                    </motion.div>
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6">
+                      <div className="relative mb-4">
+                        <FileText className="h-12 w-12 text-gray-300 dark:text-gray-600" />
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                          className="absolute -top-1 -right-1"
+                        >
+                          <Loader2 className="h-5 w-5 text-blue-500" />
+                        </motion.div>
+                      </div>
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                        Building your proposal...
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        Preview will appear here as sections are written
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
