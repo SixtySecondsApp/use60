@@ -1,7 +1,9 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
+import { Zap, Loader2 } from 'lucide-react';
 import { ORBIT_RADII, ZOOM_EXTENT, CENTRE_NODE_RADIUS, TIER_COLORS, HEALTH_COLORS, NODE_SIZE_MIN, NODE_SIZE_MAX } from './constants';
 import { useGraphData } from './hooks/useGraphData';
+import { useWarmthBackfill } from './hooks/useWarmthBackfill';
 import { GraphTooltip } from './GraphTooltip';
 import { GraphToolbar } from './GraphToolbar';
 import { GraphDetailPanel } from './GraphDetailPanel';
@@ -57,7 +59,8 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
     return () => { svg.on('.zoom', null); };
   }, [dimensions]);
 
-  const { data: contacts = [], isLoading } = useGraphData();
+  const { data: contacts = [], isLoading, hasWarmthData } = useGraphData();
+  const backfill = useWarmthBackfill();
 
   const cx = 0;
   const cy = 0;
@@ -216,6 +219,27 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
         clustered={clustered}
         onClusteredChange={setClustered}
       />
+
+      {/* Backfill banner — shown when contacts exist but no warmth data */}
+      {!hasWarmthData && !isLoading && contacts.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-500/10 border-b border-indigo-500/20 shrink-0">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-indigo-400 shrink-0" />
+            <span className="text-xs text-gray-300">
+              <span className="font-semibold text-indigo-300">{contacts.length} contacts</span>
+              {' '}found but no warmth data yet. Populate from your meetings, emails, and deals.
+            </span>
+          </div>
+          <button
+            onClick={() => backfill.mutate()}
+            disabled={backfill.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-semibold hover:bg-indigo-500/30 transition-all disabled:opacity-50 shrink-0"
+          >
+            {backfill.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+            {backfill.isPending ? 'Populating...' : 'Populate Graph'}
+          </button>
+        </div>
+      )}
 
       {/* Main area: SVG + optional detail panel */}
       <div className="flex flex-1 overflow-hidden">

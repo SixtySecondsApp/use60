@@ -89,7 +89,7 @@
     {
       "id": "warmth-backfill",
       "name": "Warmth Backfill \u2014 Populate Graph from Historical Data",
-      "status": "pending",
+      "status": "complete",
       "prd": null,
       "createdAt": "2026-03-03"
     }
@@ -4094,7 +4094,7 @@
       "feature": "warmth-backfill",
       "title": "Add backfill banner to RelationshipGraph \u2014 empty state detection and populate button",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 4,
       "acceptance": [
         "Banner appears when hasWarmthData=false, isLoading=false, and contacts.length > 0",
@@ -4120,7 +4120,7 @@
       "designRef": null,
       "ticketId": null,
       "startedAt": null,
-      "completedAt": null
+      "completedAt": "2026-03-03T21:35:00Z"
     }
   ],
   "execution": {
