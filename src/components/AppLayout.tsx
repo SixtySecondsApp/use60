@@ -88,7 +88,6 @@ import { useSubscriptionGate } from '@/lib/hooks/useSubscriptionGate';
 import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
 import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
-import { SetupWizardSidebarIndicator } from '@/components/setup-wizard/SetupWizardSidebarIndicator';
 import { SetupWizardDialog } from '@/components/setup-wizard/SetupWizardDialog';
 import { useTicketsNeedingAttention } from '@/lib/hooks/useTicketsNeedingAttention';
 import { TrialCountdownBadge } from '@/components/TrialCountdownBadge';
@@ -663,7 +662,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
               {/* Fixed Footer with Settings and Logout */}
               <div className="flex-shrink-0 p-4 sm:p-6 border-t border-[#E2E8F0] dark:border-gray-800 space-y-2">
-                <SetupWizardSidebarIndicator />
                 <Link
                   to="/settings"
                   onClick={() => toggleMobileMenu()}
@@ -1045,7 +1043,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             'mt-auto pt-6 border-t border-[#E2E8F0] dark:border-gray-800/50',
             isCollapsed ? 'space-y-1' : 'space-y-1'
           )}>
-            <SetupWizardSidebarIndicator isCollapsed={isCollapsed} />
             <Link
               to="/settings"
               data-tour="settings"
