@@ -80,10 +80,17 @@
     {
       "id": "relationship-graph",
       "name": "Relationship Graph \u2014 AI Command Surface for Pipeline & Network",
-      "status": "pending",
+      "status": "complete",
       "prd": "docs/pipeline/relationship_graph_brief.md",
       "consultReport": null,
       "designRef": "docs/pipeline/relationship_graph_SVG.jsx",
+      "createdAt": "2026-03-03"
+    },
+    {
+      "id": "warmth-backfill",
+      "name": "Warmth Backfill \u2014 Populate Graph from Historical Data",
+      "status": "pending",
+      "prd": null,
       "createdAt": "2026-03-03"
     }
   ],
@@ -3969,12 +3976,157 @@
       "ticketId": null,
       "startedAt": null,
       "completedAt": "2026-03-03T18:30:00Z"
+    },
+    {
+      "id": "WB-001",
+      "feature": "warmth-backfill",
+      "title": "Add partial index for backfill signal cleanup",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Partial index idx_warmth_signals_backfill on contact_warmth_signals(org_id) WHERE metadata->>'source' = 'backfill'",
+        "Migration runs idempotently (IF NOT EXISTS)"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260303100003_warmth_backfill_index.sql"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "contact_warmth_signals"
+        ]
+      },
+      "blocks": [
+        "WB-002"
+      ],
+      "parallelWith": [
+        "WB-003"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": "2026-03-03T21:10:00Z"
+    },
+    {
+      "id": "WB-002",
+      "feature": "warmth-backfill",
+      "title": "Build warmth-backfill edge function \u2014 extract signals from activities, meetings, deals",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "acceptance": [
+        "POST endpoint accepts { org_id } and returns { total_signals, contacts_affected, sources, recalculate }",
+        "Extracts email_sent, call_completed, linkedin_message from activities (type=outbound, status=completed)",
+        "Extracts meeting_held from activities (type=meeting) and meeting_contacts JOIN meetings",
+        "Extracts deal_stage_change from deal_stage_history via deal_contacts + deals",
+        "All signals tagged with metadata.source='backfill' for idempotent re-runs (delete-then-insert)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/warmth-backfill/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "WB-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/corsHelper.ts",
+          "supabase/functions/warmth-recalculate/index.ts"
+        ],
+        "schema": [
+          "contact_warmth_signals",
+          "activities",
+          "meetings",
+          "meeting_contacts",
+          "deal_stage_history",
+          "deal_contacts"
+        ]
+      },
+      "blocks": [
+        "WB-004"
+      ],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "WB-003",
+      "feature": "warmth-backfill",
+      "title": "Add hasWarmthData to useGraphData and create useWarmthBackfill mutation hook",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "useGraphData returns hasWarmthData boolean (true if any contact has non-null warmth_score)",
+        "useWarmthBackfill hook calls supabase.functions.invoke('warmth-backfill') and invalidates graph-data query on success"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/components/Pipeline/RelationshipGraph/hooks/useGraphData.ts",
+        "src/components/Pipeline/RelationshipGraph/hooks/useWarmthBackfill.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "WB-004"
+      ],
+      "parallelWith": [
+        "WB-001"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": "2026-03-03T21:10:00Z"
+    },
+    {
+      "id": "WB-004",
+      "feature": "warmth-backfill",
+      "title": "Add backfill banner to RelationshipGraph \u2014 empty state detection and populate button",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "Banner appears when hasWarmthData=false, isLoading=false, and contacts.length > 0",
+        "Shows contact count and 'Populate Graph' button",
+        "Button triggers useWarmthBackfill mutation with loading state",
+        "Banner disappears after successful backfill (query invalidation refetches)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/Pipeline/RelationshipGraph/RelationshipGraph.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "WB-002",
+          "WB-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
     }
   ],
   "execution": {
-    "totalStories": 109,
+    "totalStories": 113,
     "completedStories": 94,
-    "currentFeature": "relationship-graph",
-    "lastUpdated": "2026-03-03T18:00:00Z"
+    "currentFeature": "warmth-backfill",
+    "lastUpdated": "2026-03-03T21:00:00Z"
   }
 }
