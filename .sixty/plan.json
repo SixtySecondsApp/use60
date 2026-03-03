@@ -17,52 +17,65 @@
     },
     {
       "id": "followup-email-v2",
-      "name": "Follow-Up Email v2 — Quality + Demo Polish",
+      "name": "Follow-Up Email v2 \u2014 Quality + Demo Polish",
       "status": "complete",
       "consultReport": ".sixty/consult/followup-email-v2.md",
       "createdAt": "2026-02-25"
     },
     {
       "id": "skill-gold-standard",
-      "name": "Skill Gold Standard Upgrade — Top 10 Sales Skills",
+      "name": "Skill Gold Standard Upgrade \u2014 Top 10 Sales Skills",
       "status": "complete",
       "consultReport": ".sixty/consult/skill-gold-standard-upgrade.md",
       "createdAt": "2026-02-26"
     },
     {
       "id": "landing-page-builder-ui",
-      "name": "Landing Page Builder — Dedicated UI Screen",
+      "name": "Landing Page Builder \u2014 Dedicated UI Screen",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-02-27"
     },
     {
       "id": "landing-builder-v2",
-      "name": "Landing Builder v2 — Agent Teams + Gemini SVGs",
+      "name": "Landing Builder v2 \u2014 Agent Teams + Gemini SVGs",
       "status": "complete",
       "consultReport": ".sixty/consult/landing-builder-v2.md",
       "createdAt": "2026-02-28"
     },
     {
       "id": "landing-builder-progressive",
-      "name": "Landing Builder — Progressive Assembly + Chat Editor",
+      "name": "Landing Builder \u2014 Progressive Assembly + Chat Editor",
       "status": "complete",
       "prd": "docs/landing-page-builder/landing-page-builder-improvements.md",
       "createdAt": "2026-03-01"
     },
     {
       "id": "landing-builder-ux-redesign",
-      "name": "Landing Builder — UX Redesign (Preview Fix + Layout Overhaul)",
+      "name": "Landing Builder \u2014 UX Redesign (Preview Fix + Layout Overhaul)",
       "status": "complete",
       "consultReport": ".sixty/consult/landing-builder-ux-redesign.md",
       "createdAt": "2026-03-01"
     },
     {
       "id": "landing-builder-react-components",
-      "name": "Landing Builder — React Component Upgrade + Design Improvements",
+      "name": "Landing Builder \u2014 React Component Upgrade + Design Improvements",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-01"
+    },
+    {
+      "id": "cc-notification-bridge",
+      "name": "Command Centre \u2014 Notification Bridge + Agent Type Fix",
+      "status": "complete",
+      "createdAt": "2026-03-03"
+    },
+    {
+      "id": "credits-pricing-settings-fixes",
+      "name": "Fix Credits, Pricing & Settings Issues",
+      "status": "in_progress",
+      "prd": null,
+      "createdAt": "2026-03-03"
     }
   ],
   "stories": [
@@ -113,7 +126,7 @@
         "When guidance provided, re-composes email with same RAG context plus user instructions appended to prompt",
         "Frontend shows text input modal when Regenerate button is clicked",
         "Regenerated email replaces previous result with a 'Regenerated' badge",
-        "No re-query of RAG — uses cached context from first generation (saves credits and time)"
+        "No re-query of RAG \u2014 uses cached context from first generation (saves credits and time)"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": 18,
@@ -180,7 +193,7 @@
       "acceptance": [
         "Edit button on email preview switches to editable textarea for body and input for subject",
         "Preview button returns to styled read-only view with edited content",
-        "Edited content persists in state — Copy button copies edited version",
+        "Edited content persists in state \u2014 Copy button copies edited version",
         "Cancel button reverts to original generated content",
         "Edit state does not re-trigger generation"
       ],
@@ -313,7 +326,7 @@
         "SSE result event includes warnings array listing what degraded: missing writing style, no sentiment, RAG partial results, placeholder attendee",
         "Each warning has a severity (info/warn) and human-readable message",
         "Frontend renders warnings as amber badges below the context breakdown",
-        "Warnings are informational only — generation still completes",
+        "Warnings are informational only \u2014 generation still completes",
         "No warnings shown when all data sources returned successfully"
       ],
       "estimatedMinutes": 10,
@@ -345,7 +358,7 @@
       "priority": 1,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: deal + company enrichment + contact intel + interaction history (RAG) + pricing strategy",
-        "references/proposal-templates.md added with templates by deal stage (discovery, evaluation, negotiation, renewal) — annotated good vs bad examples",
+        "references/proposal-templates.md added with templates by deal stage (discovery, evaluation, negotiation, renewal) \u2014 annotated good vs bad examples",
         "references/pricing-strategy.md added with 3-tier anchoring framework, discount guidelines, competitive pricing context",
         "Instructions include RAG queries: 'pricing discussions with {company}', 'objections about cost from {contact}', 'ROI mentioned in meetings'",
         "Output contract expanded: pricing_rationale, competitive_positioning, roi_metrics, personalization_signals fields added"
@@ -379,7 +392,7 @@
       "priority": 2,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: contact + deal context + meeting RAG (commitments, decisions, concerns) + activity signals + email strategy",
-        "references/followup-templates.md added with templates by type: post-discovery, post-demo, post-proposal, post-negotiation, re-engagement — with annotated examples",
+        "references/followup-templates.md added with templates by type: post-discovery, post-demo, post-proposal, post-negotiation, re-engagement \u2014 with annotated examples",
         "references/personalization-guide.md added with value-add strategies by deal stage, multi-threading guidance (when to switch contacts), send timing research",
         "Instructions include RAG queries: 'commitments made to {contact}', 'concerns raised by {company}', 'next steps discussed'",
         "Output contract expanded: rag_context_used, personalization_signals (min 3), multi_thread_suggestion, confidence_level fields added"
@@ -447,7 +460,7 @@
       "priority": 4,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: objection classification + contact/deal context + RAG (how this objection was handled before) + competitive context + response strategy",
-        "references/objection-playbooks.md added with detailed playbooks for all 7 categories (Price, Timing, Competition, Status Quo, Authority, Need, Trust) — each with 3-5 response templates, bridge questions, proof points",
+        "references/objection-playbooks.md added with detailed playbooks for all 7 categories (Price, Timing, Competition, Status Quo, Authority, Need, Trust) \u2014 each with 3-5 response templates, bridge questions, proof points",
         "references/response-patterns.md added with ACE framework deep dive, multi-turn handling (objection to your response), fake objection detection, when to concede vs push back",
         "Instructions include RAG queries: 'objections from {contact}', 'how {objection_type} was resolved', 'proof points used for {industry}'",
         "Output contract expanded: objection_category, confidence_this_is_real_concern, historical_success_rate, escalation_recommendation fields"
@@ -481,7 +494,7 @@
       "priority": 5,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: contact + deal health/ghost risk + RAG (last real conversation context) + activity decay signals + re-engagement strategy",
-        "references/chase-templates.md added with templates by silence duration (7-day, 14-day, 21-day, 30+ day) — each with 3 tone variants and annotated examples of great vs mediocre re-engagement emails",
+        "references/chase-templates.md added with templates by silence duration (7-day, 14-day, 21-day, 30+ day) \u2014 each with 3 tone variants and annotated examples of great vs mediocre re-engagement emails",
         "references/reengagement-playbook.md added with multi-channel escalation, pattern detection, value-add library by deal stage",
         "Instructions include RAG queries: 'last substantive conversation with {contact}', 'commitments {contact} made', 'topics {contact} engaged with'",
         "Output contract expanded: silence_analysis, channel_recommendation, multi_thread_option, rag_context_used, confidence_level, escalation_path"
@@ -583,7 +596,7 @@
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: lead data + company web research (funding, tech stack, hiring) + contact enrichment (AI Ark/Apollo) + CRM relationship history + qualification strategy",
         "references/scoring-frameworks.md enhanced with web-research-informed scoring (tech stack match, funding stage, hiring signals), behavioral data integration guidance",
-        "references/icp-templates.md enhanced with vertical-specific ICP examples (SaaS, healthcare, fintech, agency), enrichment chaining workflow (lead → AI Ark → Apollo → score)",
+        "references/icp-templates.md enhanced with vertical-specific ICP examples (SaaS, healthcare, fintech, agency), enrichment chaining workflow (lead \u2192 AI Ark \u2192 Apollo \u2192 score)",
         "Instructions include web search queries: '{company} funding', '{company} tech stack', '{company} hiring' and enrichment tool calls for contact depth",
         "Output contract expanded: enrichment_data_used, web_research_signals, tech_stack_match, funding_stage_fit, behavioral_score fields"
       ],
@@ -650,7 +663,7 @@
       "priority": 10,
       "acceptance": [
         "SKILL.md enhanced with meeting outcome confidence scoring (how certain are we about each decision/commitment extracted)",
-        "references/pack-templates.md enhanced with templates by meeting type (discovery, demo, negotiation, renewal) — currently generic",
+        "references/pack-templates.md enhanced with templates by meeting type (discovery, demo, negotiation, renewal) \u2014 currently generic",
         "references/artifact-examples.md enhanced with cross-pack consistency checking (does this follow-up align with last meeting's follow-up?)",
         "Instructions include RAG queries: 'previous follow-up packs for {company}', 'commitments tracking for {deal}' to ensure consistency across touchpoints",
         "Output contract expanded: decision_confidence_scores, consistency_check (vs previous pack), stripped_down_option (when meeting lacked clear decisions)"
@@ -758,7 +771,7 @@
         "useLandingBuilderState hook derives phase state from CopilotMessage[] via useMemo",
         "Phase detection heuristics identify phase completions from assistant message content and structured responses",
         "Hook returns { phases, currentPhase, deliverables, isExpressMode, skippedPhases }",
-        "TypeScript strict compliance — no any types"
+        "TypeScript strict compliance \u2014 no any types"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -965,7 +978,7 @@
         "CopilotResponse.tsx adds 'landing_page_gate' case routing to ApprovalGate component",
         "types.ts in copilot/ adds LandingPageGateData to CopilotResponseType union",
         "LandingPageBuilder passes LandingBuilderEmpty as emptyComponent to AssistantShell",
-        "Full flow verified: navigate to /landing-page-builder → empty state → send message → chat loads"
+        "Full flow verified: navigate to /landing-page-builder \u2192 empty state \u2192 send message \u2192 chat loads"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1173,7 +1186,7 @@
         "After DiscoveryWizard (5Q), Strategist asks 2-3 targeted follow-ups based on gaps in the brief",
         "Uses gemini_research tool to analyze competitor websites and market positioning",
         "Writes enriched brief + strategy + section_list to workspace",
-        "Agent badge shows '🎯 Strategist' on its messages in the chat"
+        "Agent badge shows '\ud83c\udfaf Strategist' on its messages in the chat"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": null,
@@ -1208,7 +1221,7 @@
         "Reads strategy + section_list from workspace (NOT full accumulated context)",
         "Produces A/B copy per section in exact markdown format for CopyPicker parsing",
         "Writes selected copy back to workspace.copy after CopyPicker confirmation",
-        "Agent badge shows '✍️ Copywriter' on its messages"
+        "Agent badge shows '\u270d\ufe0f Copywriter' on its messages"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1242,7 +1255,7 @@
         "Gemini SVG generation calls generate-svg edge function with rich prompts (isometric, detailed, brand-colored)",
         "Generates 2-3 SVGs per section using workspace.strategy.section_list",
         "Nano Banana hero generation uses parseVisualsForImage with workspace brand colors",
-        "All visual assets written to workspace.visuals; agent badge shows '🎨 Visual Artist'"
+        "All visual assets written to workspace.visuals; agent badge shows '\ud83c\udfa8 Visual Artist'"
       ],
       "estimatedMinutes": 30,
       "actualMinutes": null,
@@ -1278,7 +1291,7 @@
         "Reads ALL workspace fields (brief, strategy, copy, visuals) to compose the final component",
         "Embeds approved SVGs directly, uses exact hex colors, exact copy text, approved typography",
         "Code renders in LandingCodePreview iframe (existing component)",
-        "Agent badge shows '⚙️ Builder' on its messages"
+        "Agent badge shows '\u2699\ufe0f Builder' on its messages"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1312,7 +1325,7 @@
         "Badge derived from message metadata (agentRole field) set by each agent",
         "PhaseTimeline shows active agent name next to current phase",
         "Visuals phase shows parallel progress: palette done, SVGs 2/3, hero generating",
-        "Badges are small, non-intrusive — role name in muted text above the message"
+        "Badges are small, non-intrusive \u2014 role name in muted text above the message"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1344,7 +1357,7 @@
       "status": "complete",
       "priority": 10,
       "acceptance": [
-        "DiscoveryWizard reduced from 7 to 5 questions (remove tone and sections — strategist infers these)",
+        "DiscoveryWizard reduced from 7 to 5 questions (remove tone and sections \u2014 strategist infers these)",
         "After wizard submit, Strategist agent asks 2-3 targeted follow-ups in the chat",
         "Follow-ups are based on gaps: missing competitors, unclear audience, vague outcome",
         "User responds in chat, Strategist incorporates answers into enriched brief",
@@ -1451,7 +1464,7 @@
       "status": "complete",
       "priority": 13,
       "acceptance": [
-        "Full flow: DiscoveryWizard → Strategist follow-ups → Strategy approval → Copywriter → CopyPicker → Visual Artist (parallel) → Builder",
+        "Full flow: DiscoveryWizard \u2192 Strategist follow-ups \u2192 Strategy approval \u2192 Copywriter \u2192 CopyPicker \u2192 Visual Artist (parallel) \u2192 Builder",
         "Agent badges appear correctly on each phase's messages",
         "Workspace persists across page refreshes (session resumes)",
         "Gemini SVGs render in SvgPreview with animation",
@@ -1661,7 +1674,7 @@
       "acceptance": [
         "ProgressivePreview wraps LandingCodePreview iframe with section overlays",
         "Asset status badges render per section (spinner for generating, checkmark for complete)",
-        "Shimmer → image/SVG crossfade at 300ms ease-out on asset completion",
+        "Shimmer \u2192 image/SVG crossfade at 300ms ease-out on asset completion",
         "Section highlight pulse (800ms green ring) on completion",
         "Scroll-to-section when highlightSectionId prop changes",
         "Device width toggles (mobile/tablet/desktop) work correctly"
@@ -1841,7 +1854,7 @@
         "Agent reads workspace (strategy + copy + brand config) and produces structured sections",
         "Each section has copy slotted, layout_variant selected, brand colours applied",
         "All sections have image_status: idle and svg_status: idle",
-        "No code generation in agent — sectionRenderer handles code output",
+        "No code generation in agent \u2014 sectionRenderer handles code output",
         "Agent output is parseable as valid JSON array"
       ],
       "estimatedMinutes": 20,
@@ -1975,7 +1988,7 @@
       "acceptance": [
         "exportPolishAgent takes LandingSection[] + BrandConfig + workspace context, returns polished React+Tailwind code",
         "Uses Sonnet to generate production code with custom animations, refined spacing, responsive breakpoints",
-        "Export result cached in workspace.polished_code — instant on re-export until sections change",
+        "Export result cached in workspace.polished_code \u2014 instant on re-export until sections change",
         "Any section edit invalidates the cache (next export triggers fresh AI pass)",
         "Copy Code: clipboard contains polished component, toast confirms",
         "Download HTML: standalone file with CDN dependencies downloads correctly",
@@ -2012,7 +2025,7 @@
         "On workspace load with sections data: skip Strategy/Copy, render sections into preview immediately",
         "Sections with generating status reset to idle on load (interrupted generation)",
         "Chat shows resume prompt: Welcome back, N sections, M need images, continue or edit?",
-        "User says continue → asset queue restarts for idle/failed sections",
+        "User says continue \u2192 asset queue restarts for idle/failed sections",
         "User can jump straight to editing without regenerating"
       ],
       "estimatedMinutes": 15,
@@ -2037,7 +2050,7 @@
     {
       "id": "LB-UX-001",
       "feature": "landing-builder-ux-redesign",
-      "title": "Fix preview render bug — detect raw HTML vs React JSX",
+      "title": "Fix preview render bug \u2014 detect raw HTML vs React JSX",
       "type": "bugfix",
       "status": "complete",
       "priority": 1,
@@ -2071,7 +2084,7 @@
     {
       "id": "LB-UX-002",
       "feature": "landing-builder-ux-redesign",
-      "title": "Wire right panel — section list + properties editor in assembly mode",
+      "title": "Wire right panel \u2014 section list + properties editor in assembly mode",
       "type": "frontend",
       "status": "complete",
       "priority": 2,
@@ -2110,7 +2123,7 @@
     {
       "id": "LB-UX-003",
       "feature": "landing-builder-ux-redesign",
-      "title": "Build FloatingChatBar — centered bottom, collapsible history",
+      "title": "Build FloatingChatBar \u2014 centered bottom, collapsible history",
       "type": "frontend",
       "status": "complete",
       "priority": 2,
@@ -2148,7 +2161,7 @@
     {
       "id": "LB-UX-004",
       "feature": "landing-builder-ux-redesign",
-      "title": "Assemble hero layout — preview fills space, right panel, chat overlay",
+      "title": "Assemble hero layout \u2014 preview fills space, right panel, chat overlay",
       "type": "frontend",
       "status": "complete",
       "priority": 3,
@@ -2182,7 +2195,7 @@
     {
       "id": "LB-UX-005",
       "feature": "landing-builder-ux-redesign",
-      "title": "Polish — transitions, section click wiring, progress indicator",
+      "title": "Polish \u2014 transitions, section click wiring, progress indicator",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
@@ -2207,7 +2220,7 @@
       },
       "blocks": [],
       "parallelWith": [],
-      "notes": "Final pass: smooth animations, wire section click → editor panel selection, clean progress badges.",
+      "notes": "Final pass: smooth animations, wire section click \u2192 editor panel selection, clean progress badges.",
       "startedAt": "2026-03-01T17:33:26.961Z",
       "completedAt": "2026-03-01T17:33:26.961Z",
       "actualMinutes": 8
@@ -2805,7 +2818,7 @@
     {
       "id": "RC-016",
       "feature": "landing-builder-react-components",
-      "title": "Add coexistence header to sectionRenderer.ts — keep as HTML export fallback",
+      "title": "Add coexistence header to sectionRenderer.ts \u2014 keep as HTML export fallback",
       "type": "docs",
       "status": "complete",
       "priority": 5,
@@ -2842,9 +2855,9 @@
       "status": "complete",
       "priority": 5,
       "acceptance": [
-        "assignAssetStrategy() sets hero→image, features→icon, social-proof→none, pricing→none, stats→none, comparison→none",
+        "assignAssetStrategy() sets hero\u2192image, features\u2192icon, social-proof\u2192none, pricing\u2192none, stats\u2192none, comparison\u2192none",
         "Assigns icon_name from Lucide icon set per section type",
-        "Assigns divider type between key section transitions (hero→problem=wave, etc.)",
+        "Assigns divider type between key section transitions (hero\u2192problem=wave, etc.)",
         "Called during parseWorkspaceToSections()"
       ],
       "estimatedMinutes": 18,
@@ -3000,7 +3013,7 @@
     {
       "id": "RC-023",
       "feature": "landing-builder-react-components",
-      "title": "Update editor panels — new section icons, asset strategy selector, divider picker",
+      "title": "Update editor panels \u2014 new section icons, asset strategy selector, divider picker",
       "type": "frontend",
       "status": "complete",
       "priority": 7,
@@ -3134,12 +3147,252 @@
       ],
       "startedAt": "2026-03-01T21:14:29.895Z",
       "completedAt": "2026-03-01T21:14:29.895Z"
+    },
+    {
+      "id": "CCNB-001",
+      "feature": "cc-notification-bridge",
+      "title": "Create notification-to-CC bridge trigger migration",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/migrations/20260222600001_command_centre_items.sql"
+        ],
+        "schema": [
+          "command_centre_items",
+          "notifications"
+        ]
+      },
+      "blocks": [
+        "CCNB-003"
+      ],
+      "parallelWith": [
+        "CCNB-002"
+      ],
+      "acceptance": [
+        "Postgres trigger on notifications AFTER INSERT converts actionable notifications to CC items",
+        "High-value deals (>=50K), deal closed won/lost, low credit, credits exhausted patterns detected",
+        "Dedup check prevents duplicate CC items for same user + deal + item_type",
+        "Fail-soft EXCEPTION WHEN OTHERS wrapper ensures bridge failures never block notification insert",
+        "source_agent set to notification-bridge with source_event_id = notification UUID"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 8,
+      "files": [
+        "supabase/migrations/20260303200000_notification_bridge_to_cc.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-03T00:00:00Z",
+      "completedAt": "2026-03-03T00:01:00Z"
+    },
+    {
+      "id": "CCNB-002",
+      "feature": "cc-notification-bridge",
+      "title": "Update SourceAgent type to match actual runtime values",
+      "type": "refactor",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/commandCentre/types.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CCNB-001"
+      ],
+      "acceptance": [
+        "SourceAgent type includes all values agents actually write: morning-brief, pipeline-analysis, meeting-prep, post-meeting, crm_update, deal_risk, reengagement, health-recalculate, notification-bridge",
+        "No TypeScript compilation errors from existing agent code"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 3,
+      "files": [
+        "supabase/functions/_shared/commandCentre/types.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-03T00:00:00Z",
+      "completedAt": "2026-03-03T00:01:00Z"
+    },
+    {
+      "id": "CCNB-003",
+      "feature": "cc-notification-bridge",
+      "title": "Backfill existing notifications into CC items",
+      "type": "data",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "CCNB-001"
+        ],
+        "files": [],
+        "schema": [
+          "command_centre_items"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "One-time CTE backfills existing actionable notifications into CC items",
+        "NOT EXISTS on source_event_id prevents duplicate inserts",
+        "Only processes notifications matching the same patterns as the trigger"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": 5,
+      "files": [
+        "supabase/migrations/20260303200000_notification_bridge_to_cc.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-03T00:01:00Z",
+      "completedAt": "2026-03-03T00:02:00Z"
+    },
+    {
+      "id": "CPS-001",
+      "feature": "credits-pricing-settings-fixes",
+      "title": "Fix admin gate so org owners can change AI tier and credit settings",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "CPS-004"
+      ],
+      "parallelWith": [
+        "CPS-002",
+        "CPS-003"
+      ],
+      "acceptance": [
+        "SimpleModelTierSelector uses useOrg permissions + useUserPermissions instead of isUserAdmin",
+        "CreditsSettingsPage uses same org-permission pattern from AutonomySettingsPage",
+        "Org owners with canManageSettings see tier selector, top-up, auto top-up, AR budget, and grant credits sections",
+        "No regression for platform admins (isPlatformAdmin still grants access)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/credits/SimpleModelTierSelector.tsx",
+        "src/pages/settings/CreditsSettingsPage.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "CPS-002",
+      "feature": "credits-pricing-settings-fixes",
+      "title": "Fix Pricing page buy buttons to create Stripe checkout sessions",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CPS-001",
+        "CPS-003"
+      ],
+      "acceptance": [
+        "handleSelectPlan calls useCreateCheckoutSession for paid plans instead of startTrial",
+        "Stripe checkout redirect fires on plan selection for logged-in users with an org",
+        "Error toast shown if checkout session creation fails",
+        "Loading state on PricingCard includes createCheckoutSession.isPending"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/Pricing.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "CPS-003",
+      "feature": "credits-pricing-settings-fixes",
+      "title": "Exclude onboarding enrichment cost from user-facing usage chart",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CPS-001",
+        "CPS-002"
+      ],
+      "acceptance": [
+        "UsageChart query filters out ai_cost_events with feature = research_enrichment that occurred within 10 min of org first event",
+        "New users see $0.00 usage after onboarding instead of ~$3",
+        "Enrichment still runs during onboarding (no backend change)",
+        "Existing users with real research_enrichment usage are not affected"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/credits/UsageChart.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "CPS-004",
+      "feature": "credits-pricing-settings-fixes",
+      "title": "TopUp tab: fix modal admin gate and pre-select pack from quick buttons",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": [
+          "CPS-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "CreditPurchaseModal uses org-permission pattern instead of isUserAdmin gate",
+        "CreditPurchaseModal accepts initialPack prop and syncs selectedPack on open",
+        "Quick Top-Up buttons in CreditsSettingsPage pass correct pack type to modal",
+        "Closing and reopening modal with different pack button shows correct pre-selection"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/components/credits/CreditPurchaseModal.tsx",
+        "src/pages/settings/CreditsSettingsPage.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
     }
   ],
   "execution": {
-    "totalStories": 87,
-    "completedStories": 87,
-    "currentFeature": "landing-builder-react-components",
-    "lastUpdated": "2026-03-01T21:14:29.895Z"
+    "totalStories": 94,
+    "completedStories": 90,
+    "currentFeature": "credits-pricing-settings-fixes",
+    "lastUpdated": "2026-03-03T00:02:00Z"
   }
 }

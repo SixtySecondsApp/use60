@@ -5,17 +5,19 @@
  * Used by all agents that write items to the Command Centre.
  */
 
-// Source agent identifiers — matches source_agent column values in command_centre_items
+// Source agent identifiers — matches source_agent column values in command_centre_items.
+// Values here MUST match the literal strings agents write via writeAdapter.
 export type SourceAgent =
-  | 'post_meeting'
-  | 'deal_risk'
-  | 'pipeline_scan'
-  | 'reengagement'
-  | 'coaching'
-  | 'intent_detection'
-  | 'campaign_monitoring'
+  | 'morning-brief'
+  | 'pipeline-analysis'
+  | 'meeting-prep'
+  | 'post-meeting'
   | 'crm_update'
-  | 'pre_meeting';
+  | 'deal_risk'
+  | 'reengagement'
+  | 'health-recalculate'
+  | 'notification-bridge'
+  | 'pipeline_scan';
 
 // Item types — matches item_type column values in command_centre_items
 export type ItemType =
