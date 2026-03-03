@@ -37,6 +37,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 interface SeedRequest {
   org_id: string;
   user_id: string;
+  action?: 'seed' | 'resync_railway';  // default: 'seed'
 }
 
 interface SeedResponse {
@@ -98,7 +99,7 @@ serve(async (req: Request) => {
       );
     }
 
-    const { org_id, user_id } = body;
+    const { org_id, user_id, action } = body;
     if (!org_id || !user_id) {
       return new Response(
         JSON.stringify({ error: "Missing required fields: org_id, user_id" }),
@@ -114,6 +115,72 @@ serve(async (req: Request) => {
         detectSessionInUrl: false,
       },
     });
+
+    // ------------------------------------------------------------------
+    // Action: resync_railway — sync existing meetings to Railway without re-seeding
+    // ------------------------------------------------------------------
+    if (action === "resync_railway") {
+      console.log("[seed-demo-data] resync_railway for org:", org_id);
+
+      const { data: meetings } = await supabase
+        .from("meetings")
+        .select("id, title, transcript_text, meeting_start, duration_minutes, owner_user_id")
+        .eq("org_id", org_id);
+
+      const recordsToSync = (meetings || []).filter((m: any) => m.transcript_text);
+      let synced = 0;
+
+      const batchSize = 3;
+      for (let i = 0; i < recordsToSync.length; i += batchSize) {
+        const batch = recordsToSync.slice(i, i + batchSize);
+        const results = await Promise.allSettled(
+          batch.map(async (m: any) => {
+            const syncRes = await fetch(
+              `${SUPABASE_URL}/functions/v1/meeting-analytics/api/sync/meeting`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                },
+                body: JSON.stringify({
+                  type: "INSERT",
+                  table: "meetings",
+                  record: {
+                    id: m.id,
+                    title: m.title,
+                    transcript_text: m.transcript_text,
+                    meeting_start: m.meeting_start,
+                    duration_minutes: m.duration_minutes,
+                    owner_user_id: m.owner_user_id,
+                  },
+                }),
+              },
+            );
+            if (!syncRes.ok) {
+              const errText = await syncRes.text().catch(() => "unknown");
+              throw new Error(`${syncRes.status} ${errText}`);
+            }
+            return m.id;
+          }),
+        );
+
+        for (const result of results) {
+          if (result.status === "fulfilled") synced++;
+          else console.error("[seed-demo-data] Railway sync failed:", result.reason);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Synced ${synced}/${recordsToSync.length} meetings to Railway`,
+          railway_synced: synced,
+          total_meetings: recordsToSync.length,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     // Look up user email for meeting ownership
     let userEmail: string | null = null;
@@ -371,6 +438,19 @@ serve(async (req: Request) => {
         // We match by email since contactIds is a flat list without index metadata
         const primaryContactEmail = primaryContactSeed.email;
 
+        // Generate a nice thumbnail for this meeting type
+        const meetingTypeColors: Record<string, string> = {
+          discovery: "4f46e5",   // indigo
+          demo: "0891b2",       // cyan
+          follow_up: "059669",  // emerald
+          negotiation: "d97706", // amber
+          closing: "dc2626",    // red
+          general: "7c3aed",    // violet
+        };
+        const thumbBg = meetingTypeColors[template.meetingType] || "6b7280";
+        const thumbInitials = companyName.split(" ").map((w: string) => w[0]).join("").slice(0, 2);
+        const thumbnailUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(thumbInitials)}&background=${thumbBg}&color=fff&size=640&font-size=0.4&bold=true&format=png`;
+
         const { data: insertedMeeting, error: meetingError } = await supabase
           .from("meetings")
           .insert({
@@ -385,6 +465,7 @@ serve(async (req: Request) => {
             transcript_status: "complete",
             summary_status: "complete",
             thumbnail_status: "complete",
+            thumbnail_url: thumbnailUrl,
             sync_status: "synced",
             source_type: "fathom",
             company_id: companyId,
@@ -967,6 +1048,83 @@ serve(async (req: Request) => {
         });
       }
 
+      // 5. Extra current-month activities to ensure dashboard KPIs are populated
+      // Add 15 recent outbound activities across the current month
+      const currentMonthOutbound = [
+        { client: "Meridian Analytics", detail: "Cold outreach with personalized case study", daysAgo: 1 },
+        { client: "ClearPath Finance", detail: "Follow-up email with ROI analysis deck", daysAgo: 1 },
+        { client: "Vantage Health Systems", detail: "LinkedIn connection request with shared article", daysAgo: 2 },
+        { client: "Forge Manufacturing", detail: "Email sequence touch 3 — pricing overview", daysAgo: 2 },
+        { client: "ShipStream Logistics", detail: "Re-engagement email after conference meeting", daysAgo: 3 },
+        { client: "Amplify Marketing", detail: "Sent product comparison document", daysAgo: 4 },
+        { client: "Nexus Cloud Solutions", detail: "Cold email with industry benchmark report", daysAgo: 5 },
+        { client: "Verdant PropTech", detail: "LinkedIn InMail with relevant success story", daysAgo: 6 },
+        { client: "Orion Enterprise Software", detail: "Introduction email via warm referral", daysAgo: 7 },
+        { client: "BrightPath Learning", detail: "Follow-up on webinar attendance", daysAgo: 8 },
+        { client: "Meridian Analytics", detail: "Sent updated proposal with volume discount", daysAgo: 10 },
+        { client: "ClearPath Finance", detail: "Check-in email after product demo", daysAgo: 12 },
+        { client: "Vantage Health Systems", detail: "Shared customer testimonial and case study", daysAgo: 14 },
+        { client: "Forge Manufacturing", detail: "LinkedIn message about upcoming feature", daysAgo: 16 },
+        { client: "ShipStream Logistics", detail: "Email with implementation timeline estimate", daysAgo: 18 },
+      ];
+
+      for (const ob of currentMonthOutbound) {
+        activityRows.push({
+          user_id,
+          type: "outbound",
+          status: "completed",
+          priority: ob.daysAgo <= 3 ? "high" : "medium",
+          client_name: ob.client,
+          sales_rep: "Demo Rep",
+          details: ob.detail,
+          date: new Date(nowMs - ob.daysAgo * 86400000).toISOString(),
+          clerk_org_id: org_id,
+          outbound_type: ob.daysAgo % 3 === 0 ? "linkedin" : "email",
+        });
+      }
+
+      // 6. Extra current-month proposal activities
+      const currentMonthProposals = [
+        { client: "Meridian Analytics", detail: "Sent enterprise proposal — $45,000 annual", daysAgo: 3, amount: 45000 },
+        { client: "Vantage Health Systems", detail: "Sent custom pilot proposal — $28,000 Q1", daysAgo: 7, amount: 28000 },
+        { client: "Nexus Cloud Solutions", detail: "Sent starter package proposal — $12,000/yr", daysAgo: 12, amount: 12000 },
+      ];
+
+      for (const p of currentMonthProposals) {
+        activityRows.push({
+          user_id,
+          type: "proposal",
+          status: "completed",
+          priority: "high",
+          client_name: p.client,
+          sales_rep: "Demo Rep",
+          details: p.detail,
+          date: new Date(nowMs - p.daysAgo * 86400000).toISOString(),
+          clerk_org_id: org_id,
+        });
+      }
+
+      // 7. Extra current-month sale activities (closed deals this month)
+      const currentMonthSales = [
+        { client: "BrightPath Learning", detail: "Deal closed — Annual Platform License. Contract signed.", daysAgo: 5, amount: 18500 },
+        { client: "Amplify Marketing", detail: "Deal closed — Growth Package + onboarding. Revenue booked.", daysAgo: 11, amount: 32000 },
+      ];
+
+      for (const s of currentMonthSales) {
+        activityRows.push({
+          user_id,
+          type: "sale",
+          status: "completed",
+          priority: "high",
+          client_name: s.client,
+          sales_rep: "Demo Rep",
+          details: s.detail,
+          amount: s.amount,
+          date: new Date(nowMs - s.daysAgo * 86400000).toISOString(),
+          clerk_org_id: org_id,
+        });
+      }
+
       if (activityRows.length > 0) {
         // Insert in batches to avoid hitting payload limits; 25 per batch
         const batchSize = 25;
@@ -987,6 +1145,60 @@ serve(async (req: Request) => {
       console.log("[seed-demo-data] Seeded activities:", activitiesCount);
     } catch (activitiesErr) {
       console.error("[seed-demo-data] Unexpected error seeding activities:", activitiesErr);
+    }
+
+    // ------------------------------------------------------------------
+    // Step 12a: Seed sales targets for the current month
+    // ------------------------------------------------------------------
+    let targetsCount = 0;
+    try {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+
+      const { error: targetError } = await supabase
+        .from("targets")
+        .upsert(
+          {
+            user_id: user_id,
+            revenue_target: 75000,
+            outbound_target: 50,
+            meetings_target: 20,
+            proposal_target: 8,
+            start_date: startOfMonth,
+            end_date: endOfMonth,
+            created_by: user_id,
+          },
+          { onConflict: "user_id,start_date,end_date" },
+        );
+
+      if (targetError) {
+        // If upsert fails due to no unique constraint, try plain insert
+        console.warn("[seed-demo-data] targets upsert failed, trying insert:", targetError.message);
+        const { error: insertError } = await supabase
+          .from("targets")
+          .insert({
+            user_id: user_id,
+            revenue_target: 75000,
+            outbound_target: 50,
+            meetings_target: 20,
+            proposal_target: 8,
+            start_date: startOfMonth,
+            end_date: endOfMonth,
+            created_by: user_id,
+          });
+        if (insertError) {
+          console.error("[seed-demo-data] targets insert error:", insertError);
+        } else {
+          targetsCount = 1;
+        }
+      } else {
+        targetsCount = 1;
+      }
+
+      console.log("[seed-demo-data] Seeded targets:", targetsCount);
+    } catch (targetErr) {
+      console.error("[seed-demo-data] Unexpected error seeding targets:", targetErr);
     }
 
     // ------------------------------------------------------------------

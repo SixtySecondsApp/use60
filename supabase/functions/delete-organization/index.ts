@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { captureException } from '../_shared/sentryEdge.ts'
 
@@ -32,7 +32,9 @@ serve(async (req) => {
     // Create Supabase admin client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
 
     // Get the admin user from the JWT token
     const token = authHeader.replace('Bearer ', '')
@@ -46,19 +48,11 @@ serve(async (req) => {
     }
 
     // Verify admin user is a platform admin
-    const { data: adminProfile, error: profileError } = await supabaseAdmin
+    const { data: adminProfile } = await supabaseAdmin
       .from('profiles')
       .select('is_admin')
       .eq('id', adminUser.id)
-      .single()
-
-    if (profileError) {
-      console.error('[delete-organization] Error fetching admin profile:', profileError)
-      return new Response(
-        JSON.stringify({ error: 'Failed to verify admin status', code: 'ADMIN_CHECK_FAILED' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+      .maybeSingle()
 
     if (!adminProfile?.is_admin) {
       return new Response(
@@ -72,7 +66,7 @@ serve(async (req) => {
       .from('organizations')
       .select('id, name')
       .eq('id', orgId)
-      .single()
+      .maybeSingle()
 
     if (orgError || !org) {
       return new Response(
@@ -177,6 +171,40 @@ serve(async (req) => {
       }
     }
 
+    // Step 2.8: Clean Railway PostgreSQL data (meeting-analytics transcripts + segments)
+    // This removes any meeting data synced to the Railway database for AI "Ask Anything"
+    try {
+      const analyticsUrl = `${supabaseUrl}/functions/v1/meeting-analytics`;
+      // Call meeting-analytics health to check if Railway is reachable, then clean directly
+      const railwayDbUrl = Deno.env.get('RAILWAY_DATABASE_URL');
+      if (railwayDbUrl) {
+        // Import postgres dynamically for Railway cleanup
+        const { Pool } = await import('https://deno.land/x/postgres@v0.19.3/mod.ts');
+        const pool = new Pool(railwayDbUrl, 1, true);
+        const client = await pool.connect();
+        try {
+          // Delete segments first (FK to transcripts), then transcripts
+          const segResult = await client.queryObject(
+            `DELETE FROM transcript_segments WHERE transcript_id IN (SELECT id FROM transcripts WHERE org_id = $1)`,
+            [orgId]
+          );
+          const txResult = await client.queryObject(
+            `DELETE FROM transcripts WHERE org_id = $1`,
+            [orgId]
+          );
+          console.log(`[delete-organization] Railway cleanup: removed transcripts and segments for org ${orgId}`);
+        } finally {
+          client.release();
+          await pool.end();
+        }
+      } else {
+        console.log('[delete-organization] RAILWAY_DATABASE_URL not set, skipping Railway cleanup');
+      }
+    } catch (railwayErr) {
+      // Non-fatal — Railway data cleanup should not block org deletion
+      console.warn('[delete-organization] Railway cleanup failed (non-fatal):', railwayErr);
+    }
+
     // Step 3: Delete the organization
     // ON DELETE CASCADE will handle:
     //   - organization_memberships (users become unassigned)
@@ -236,12 +264,16 @@ serve(async (req) => {
     )
   } catch (error: any) {
     console.error('[delete-organization] Fatal error:', error)
-    await captureException(error, {
-      tags: {
-        function: 'delete-organization',
-        integration: 'supabase',
-      },
-    });
+    try {
+      await captureException(error, {
+        tags: {
+          function: 'delete-organization',
+          integration: 'supabase',
+        },
+      });
+    } catch (sentryErr) {
+      console.warn('[delete-organization] Sentry captureException failed (non-fatal):', sentryErr)
+    }
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

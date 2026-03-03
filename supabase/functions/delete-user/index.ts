@@ -33,7 +33,10 @@ serve(async (req) => {
     // Create Supabase admin client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+    console.log('[delete-user] Creating admin client, URL:', supabaseUrl ? 'present' : 'MISSING', 'Key:', supabaseServiceKey ? 'present' : 'MISSING')
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
 
     // Get the admin user from the JWT token
     const token = authHeader.replace('Bearer ', '')
@@ -84,14 +87,19 @@ serve(async (req) => {
 
     // Delete from internal_users if exists
     if (userProfile?.email && !userProfile.email.startsWith('deleted_')) {
-      await supabaseAdmin
+      console.log('[delete-user] Deactivating internal_users for:', userProfile.email)
+      const { error: internalError } = await supabaseAdmin
         .from('internal_users')
         .update({ is_active: false, updated_at: new Date().toISOString() })
         .eq('email', userProfile.email.toLowerCase())
+      if (internalError) {
+        console.warn('[delete-user] internal_users deactivation failed (non-fatal):', internalError.message)
+      }
     }
 
     // Anonymize the profile (skip if already anonymized or no profile)
     if (userProfile && !isAlreadyAnonymized) {
+      console.log('[delete-user] Anonymizing profile for:', userId)
       const { error: profileError } = await supabaseAdmin
         .from('profiles')
         .update({
@@ -105,7 +113,7 @@ serve(async (req) => {
         .eq('id', userId)
 
       if (profileError) {
-        console.error('Error anonymizing profile:', profileError)
+        console.error('[delete-user] Error anonymizing profile:', profileError)
         // Non-fatal — continue to auth deletion
       }
     }
@@ -113,6 +121,7 @@ serve(async (req) => {
     // Delete from auth.users to revoke access (user can sign up again with same email)
     // IMPORTANT: auth.admin.deleteUser() returns { data, error } — it does NOT throw.
     // We must check the returned error object, not rely on try/catch.
+    console.log('[delete-user] Deleting auth user:', userId)
     const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
     if (authDeleteError) {
