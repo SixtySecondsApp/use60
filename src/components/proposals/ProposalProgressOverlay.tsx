@@ -855,152 +855,150 @@ function BulletList({ count, delay }: { count: number; delay: number }) {
   );
 }
 
-// Single mini-page
-function MiniPage({ children, show, delay }: { children: React.ReactNode; show: boolean; delay: number }) {
+// Single mini-page — only mounts children when visible so content
+// animations fire AFTER the page entrance, not before.
+function MiniPage({ children, show }: { children: React.ReactNode; show: boolean }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
-      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+      transition={{ duration: 0.45, ease: 'easeOut' }}
       className="rounded-[3px] border border-gray-200 shadow-sm overflow-hidden shrink-0"
       style={{ width: '100%', aspectRatio: '210 / 297', background: '#ffffff' }}
     >
-      {children}
+      {show && children}
     </motion.div>
   );
 }
 
+// How long each page's content takes to fully animate (seconds).
+// Used to auto-advance to the next page once the current is done.
+// Page 1 cover: last line delay 1.3 + 0.35 duration ≈ 1.65, + 0.5 entrance buffer
+// Page 2 TOC+sections: last paragraph baseDelay 5.7 + 3×0.12 + 0.35 ≈ 6.4, + 0.5
+// Page 3 approach: last paragraph baseDelay 4.1 + 2×0.12 + 0.35 ≈ 4.7, + 0.5
+// Page 4 tables+bullets: last bullet 3.0 + 4×0.15 + 0.3 ≈ 3.9, + 0.5
+const PAGE_DURATIONS = [2.2, 7, 5.5, 4.5] as const;
+
 function DocumentAssemblyAnimation({ status }: { status: PipelineStatus | null }) {
   const activeIdx = getActiveStageIndex(status);
 
-  // Use ref for elapsed so ticking doesn't cause re-renders.
-  // Only the page-visibility flags need to trigger renders.
-  const elapsedRef = useRef(0);
-  const [visiblePages, setVisiblePages] = useState(1);
+  // Phase 0-3 = which page is currently building.
+  // Phase 4 = all pages done.
+  const [phase, setPhase] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Auto-advance: after the current page's content finishes, show the next page
   useEffect(() => {
-    const t0 = Date.now();
-    const tick = setInterval(() => {
-      elapsedRef.current = (Date.now() - t0) / 1000;
-      // Evenly distribute page reveals across the wait
-      let pages = 1;
-      if (elapsedRef.current > 3) pages = 2;
-      if (elapsedRef.current > 14) pages = 3;
-      if (elapsedRef.current > 28) pages = 4;
-      setVisiblePages((prev) => Math.max(prev, pages));
-    }, 500);
-    return () => clearInterval(tick);
-  }, []);
+    if (phase >= 4) return;
+    const timer = setTimeout(() => {
+      setPhase((p) => p + 1);
+    }, PAGE_DURATIONS[phase] * 1000);
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  // Pipeline stages can also advance phases (e.g. if compose is fast)
+  useEffect(() => {
+    if (activeIdx >= 1) setPhase((p) => Math.max(p, 1));
+    if (activeIdx >= 2) setPhase((p) => Math.max(p, 2));
+    if (activeIdx >= 3) setPhase((p) => Math.max(p, 3));
+  }, [activeIdx]);
 
   // Auto-scroll down when the bottom row (pages 3 & 4) appears
   useEffect(() => {
-    if (visiblePages >= 3 && scrollRef.current) {
-      // Small delay to let framer-motion start the page entrance animation
+    if (phase >= 2 && scrollRef.current) {
       const timer = setTimeout(() => {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-      }, 300);
+      }, 400);
       return () => clearTimeout(timer);
     }
-  }, [visiblePages]);
-
-  // Combine stage progress with time-based reveals
-  const showPage1 = activeIdx >= 0;
-  const showPage2 = activeIdx >= 1 || visiblePages >= 2;
-  const showPage3 = activeIdx >= 2 || visiblePages >= 3;
-  const showPage4 = activeIdx >= 3 || visiblePages >= 4;
+  }, [phase]);
 
   return (
     <div className="absolute inset-0 flex flex-col">
-      {/* Scrollable pages area */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-2">
         <div className="grid grid-cols-2 gap-3 max-w-[520px] mx-auto">
 
           {/* ─── PAGE 1: Cover ─── */}
-          <MiniPage show={showPage1} delay={0}>
+          <MiniPage show={phase >= 0}>
             <motion.div
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
-              transition={{ duration: 0.4 }}
+              transition={{ delay: 0.3, duration: 0.4 }}
               style={{ transformOrigin: 'left' }}
               className="h-[3%] bg-[#1e3a5f]"
             />
             <div className="flex flex-col items-center justify-center h-[90%] gap-2 px-4">
-              <SkeletonLine w="35%" delay={0.3} />
-              <SkeletonLine w="65%" delay={0.5} dark />
-              <SkeletonLine w="25%" delay={0.7} />
+              <SkeletonLine w="35%" delay={0.5} />
+              <SkeletonLine w="65%" delay={0.7} dark />
+              <SkeletonLine w="25%" delay={0.9} />
               <div className="mt-2 flex flex-col items-center gap-1">
-                <SkeletonLine w="50%" delay={0.9} />
-                <SkeletonLine w="35%" delay={1.1} />
-                <SkeletonLine w="25%" delay={1.3} />
+                <SkeletonLine w="50%" delay={1.1} />
+                <SkeletonLine w="35%" delay={1.3} />
+                <SkeletonLine w="25%" delay={1.5} />
               </div>
             </div>
             <div className="h-[1.5%] bg-[#4a90d9]" />
           </MiniPage>
 
           {/* ─── PAGE 2: TOC + Exec Summary + Challenge ─── */}
-          <MiniPage show={showPage2} delay={0.3}>
+          <MiniPage show={phase >= 1}>
             <div className="p-2.5 space-y-2">
-              {/* TOC — compact */}
               <div className="space-y-[2px]">
-                <SkeletonLine w="32%" delay={0.3} dark />
+                <SkeletonLine w="32%" delay={0.5} dark />
                 <motion.div
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: 1 }}
-                  transition={{ delay: 0.5, duration: 0.3 }}
+                  transition={{ delay: 0.7, duration: 0.3 }}
                   style={{ transformOrigin: 'left' }}
                   className="h-[1px] bg-gray-200"
                 />
                 {['55%', '45%', '60%', '50%', '40%', '55%', '45%'].map((w, i) => (
                   <div key={i} className="flex items-center gap-[2px]">
-                    <SkeletonLine w="6%" delay={0.6 + i * 0.08} dark />
-                    <SkeletonLine w={w} delay={0.6 + i * 0.08} />
+                    <SkeletonLine w="6%" delay={0.8 + i * 0.08} dark />
+                    <SkeletonLine w={w} delay={0.8 + i * 0.08} />
                   </div>
                 ))}
               </div>
-              {/* Exec Summary */}
-              <SectionHead titleW="55%" delay={1.8} />
-              <SkeletonParagraph widths={['90%', '95%', '85%', '92%', '78%', '88%', '82%', '90%']} baseDelay={2.0} />
-              {/* Challenge */}
-              <SectionHead titleW="45%" delay={3.8} />
-              <SkeletonParagraph widths={['88%', '92%', '80%', '95%', '85%', '90%']} baseDelay={4.0} />
-              {/* Solution intro */}
+              <SectionHead titleW="55%" delay={2.0} />
+              <SkeletonParagraph widths={['90%', '95%', '85%', '92%', '78%', '88%', '82%', '90%']} baseDelay={2.2} />
+              <SectionHead titleW="45%" delay={4.0} />
+              <SkeletonParagraph widths={['88%', '92%', '80%', '95%', '85%', '90%']} baseDelay={4.2} />
               <SectionHead titleW="50%" delay={5.5} />
               <SkeletonParagraph widths={['92%', '88%', '95%', '80%']} baseDelay={5.7} />
             </div>
           </MiniPage>
 
           {/* ─── PAGE 3: Approach + Phases ─── */}
-          <MiniPage show={showPage3} delay={0.3}>
+          <MiniPage show={phase >= 2}>
             <div className="p-2.5 space-y-2">
-              <SectionHead titleW="48%" delay={0.2} />
+              <SectionHead titleW="48%" delay={0.5} />
               <div className="space-y-1">
-                <SkeletonLine w="40%" delay={0.4} dark />
-                <SkeletonParagraph widths={['92%', '85%', '90%', '88%']} baseDelay={0.5} />
-                <SkeletonLine w="35%" delay={1.2} dark />
-                <SkeletonParagraph widths={['88%', '95%', '82%', '90%']} baseDelay={1.3} />
+                <SkeletonLine w="40%" delay={0.7} dark />
+                <SkeletonParagraph widths={['92%', '85%', '90%', '88%']} baseDelay={0.8} />
+                <SkeletonLine w="35%" delay={1.5} dark />
+                <SkeletonParagraph widths={['88%', '95%', '82%', '90%']} baseDelay={1.6} />
               </div>
-              <SectionHead titleW="50%" delay={2.2} />
+              <SectionHead titleW="50%" delay={2.5} />
               <div className="space-y-1">
-                <SkeletonLine w="55%" delay={2.4} dark />
-                <SkeletonParagraph widths={['90%', '88%', '82%']} baseDelay={2.5} />
-                <SkeletonLine w="50%" delay={3.2} dark />
-                <SkeletonParagraph widths={['85%', '92%', '78%']} baseDelay={3.3} />
-                <SkeletonLine w="48%" delay={4.0} dark />
-                <SkeletonParagraph widths={['90%', '80%', '88%']} baseDelay={4.1} />
+                <SkeletonLine w="55%" delay={2.7} dark />
+                <SkeletonParagraph widths={['90%', '88%', '82%']} baseDelay={2.8} />
+                <SkeletonLine w="50%" delay={3.5} dark />
+                <SkeletonParagraph widths={['85%', '92%', '78%']} baseDelay={3.6} />
+                <SkeletonLine w="48%" delay={4.1} dark />
+                <SkeletonParagraph widths={['90%', '80%', '88%']} baseDelay={4.2} />
               </div>
             </div>
           </MiniPage>
 
           {/* ─── PAGE 4: Timeline Table + Pricing + Terms ─── */}
-          <MiniPage show={showPage4} delay={0.3}>
+          <MiniPage show={phase >= 3}>
             <div className="p-2.5 space-y-2">
-              <SectionHead titleW="60%" delay={0.2} />
-              <TableSkeleton rows={5} delay={0.4} />
-              <SectionHead titleW="42%" delay={1.5} />
-              <TableSkeleton rows={4} delay={1.7} />
-              <SectionHead titleW="55%" delay={2.8} />
-              <BulletList count={5} delay={3.0} />
+              <SectionHead titleW="60%" delay={0.5} />
+              <TableSkeleton rows={5} delay={0.7} />
+              <SectionHead titleW="42%" delay={1.8} />
+              <TableSkeleton rows={4} delay={2.0} />
+              <SectionHead titleW="55%" delay={3.1} />
+              <BulletList count={5} delay={3.3} />
             </div>
           </MiniPage>
         </div>

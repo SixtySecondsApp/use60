@@ -300,20 +300,13 @@ BEGIN
 }
 
 .ss-section-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
   margin-bottom: 20px;
   padding-bottom: 12px;
   border-bottom: 1px solid #f3f4f6;
 }
 
 .ss-accent-bar {
-  width: 4px;
-  height: 32px;
-  border-radius: 2px;
-  background: {{brand.primary_color}};
-  flex-shrink: 0;
+  display: none;
 }
 
 .ss-section-title {
@@ -323,6 +316,19 @@ BEGIN
   line-height: 1.2;
   letter-spacing: -0.01em;
   margin: 0;
+  position: relative;
+  padding-left: 18px;
+}
+
+.ss-section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 4px;
+  border-radius: 2px;
+  background: {{brand.primary_color}};
 }
 
 .ss-section-num {
@@ -332,6 +338,7 @@ BEGIN
   letter-spacing: 0.1em;
   text-transform: uppercase;
   margin-bottom: 2px;
+  padding-left: 18px;
 }
 
 .ss-section-body {
