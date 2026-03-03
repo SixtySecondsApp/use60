@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CreditCard, Loader2, Star, ChevronDown, ChevronUp, Zap, TrendingUp, Layers, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -13,16 +13,16 @@ import { Badge } from '@/components/ui/badge';
 import { purchasePack } from '@/lib/services/creditService';
 import { CREDIT_PACKS, STANDARD_PACKS, getCostPerCredit, getPackPrice } from '@/lib/config/creditPacks';
 import type { PackType } from '@/lib/config/creditPacks';
-import { useOrgId } from '@/lib/contexts/OrgContext';
-import { useUser } from '@/lib/hooks/useUser';
+import { useOrgId, useOrg } from '@/lib/contexts/OrgContext';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
-import { isUserAdmin } from '@/lib/utils/adminUtils';
+import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { cn } from '@/lib/utils';
 
 interface CreditPurchaseModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   showPopularBadge?: boolean;
+  initialPack?: PackType;
 }
 
 const PACK_ICONS: Record<string, React.ReactNode> = {
@@ -38,15 +38,21 @@ const COMPARE_ROWS = [
   { label: 'Content generation', feature: 'content_generation' },
 ];
 
-export default function CreditPurchaseModal({ open, onOpenChange, showPopularBadge = true }: CreditPurchaseModalProps) {
+export default function CreditPurchaseModal({ open, onOpenChange, showPopularBadge = true, initialPack }: CreditPurchaseModalProps) {
   const orgId = useOrgId();
-  const { userData } = useUser();
+  const { permissions } = useOrg();
+  const { isPlatformAdmin } = useUserPermissions();
+  const isAdmin = permissions.canManageSettings || permissions.canManageTeam || isPlatformAdmin;
   const { currencyCode, symbol } = useOrgMoney();
   const [selectedPack, setSelectedPack] = useState<PackType>('growth');
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
 
-  if (!isUserAdmin(userData)) {
+  useEffect(() => {
+    if (open && initialPack) setSelectedPack(initialPack);
+  }, [open, initialPack]);
+
+  if (!isAdmin) {
     return null;
   }
 

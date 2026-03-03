@@ -5,7 +5,8 @@ import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Shield, Zap, Users, Clock, ChevronDown, Check, X, Sparkles, Gift } from 'lucide-react';
-import { usePublicPlans, useStartFreeTrial, useCurrentSubscription } from '../lib/hooks/useSubscription';
+import { toast } from 'sonner';
+import { usePublicPlans, useStartFreeTrial, useCreateCheckoutSession, useCurrentSubscription } from '../lib/hooks/useSubscription';
 import { useCurrency } from '../lib/hooks/useCurrency';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrg } from '@/lib/contexts/OrgContext';
@@ -99,6 +100,7 @@ export function PricingPage() {
   const { data: plans, isLoading: plansLoading } = usePublicPlans();
   const { subscription, trial } = useCurrentSubscription();
   const startTrial = useStartFreeTrial();
+  const createCheckoutSession = useCreateCheckoutSession();
   const {
     currency,
     setCurrency,
@@ -166,13 +168,15 @@ export function PricingPage() {
     setSelectedPlan(plan.id);
 
     try {
-      await startTrial.mutateAsync({
+      await createCheckoutSession.mutateAsync({
         org_id: organizationId,
-        plan_id: plan.id,
+        plan_slug: plan.slug as 'basic' | 'pro',
+        billing_cycle: billingCycle,
       });
-      navigate('/dashboard?trial_started=true');
+      // Hook auto-redirects to Stripe Checkout URL on success
     } catch (error) {
-      console.error('Failed to start trial:', error);
+      console.error('Failed to create checkout session:', error);
+      toast.error('Failed to start checkout. Please try again.');
       setSelectedPlan(null);
     }
   };
@@ -401,7 +405,7 @@ export function PricingPage() {
                     isEnterprise={isEnterprise}
                     isFreeTier={isFreeTier}
                     onSelect={handleSelectPlan}
-                    isLoading={selectedPlan === plan.id && startTrial.isPending}
+                    isLoading={selectedPlan === plan.id && (startTrial.isPending || createCheckoutSession.isPending)}
                     formattedPrice={
                       isFreeTier ? '$0' : billingCycle === 'yearly' ? prices.yearlyMonthly : prices.monthlyPrice
                     }

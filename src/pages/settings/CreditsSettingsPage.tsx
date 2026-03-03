@@ -20,7 +20,7 @@ import { useSearchParams } from 'react-router-dom';
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useCreditBalance, creditKeys } from '@/lib/hooks/useCreditBalance';
 import { grantCredits } from '@/lib/services/creditService';
-import { useOrgId } from '@/lib/contexts/OrgContext';
+import { useOrgId, useOrg } from '@/lib/contexts/OrgContext';
 import CreditPurchaseModal from '@/components/credits/CreditPurchaseModal';
 import { UsageChart } from '@/components/credits/UsageChart';
 import { CreditEstimator } from '@/components/credits/CreditEstimator';
@@ -59,9 +59,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { isUserAdmin } from '@/lib/utils/adminUtils';
-import { useUser } from '@/lib/hooks/useUser';
+import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { CREDIT_PACKS, STANDARD_PACKS, getPackPrice } from '@/lib/config/creditPacks';
+import type { PackType } from '@/lib/config/creditPacks';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 // ============================================================================
@@ -104,8 +104,10 @@ export default function CreditsSettingsPage() {
   const { data: balance, isLoading: balanceLoading } = useCreditBalance();
   const { currencyCode } = useOrgMoney();
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
-  const { userData } = useUser();
-  const isAdmin = userData ? isUserAdmin(userData) : false;
+  const [purchaseInitialPack, setPurchaseInitialPack] = useState<PackType | undefined>();
+  const { permissions } = useOrg();
+  const { isPlatformAdmin } = useUserPermissions();
+  const isAdmin = permissions.canManageSettings || permissions.canManageTeam || isPlatformAdmin;
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -335,7 +337,7 @@ export default function CreditsSettingsPage() {
                       <Button
                         key={packType}
                         variant="outline"
-                        onClick={() => setPurchaseModalOpen(true)}
+                        onClick={() => { setPurchaseInitialPack(packType); setPurchaseModalOpen(true); }}
                         className="hover:border-[#37bd7e] hover:text-[#37bd7e] flex items-center gap-2"
                       >
                         <CreditCard className="w-4 h-4" />
@@ -553,7 +555,8 @@ export default function CreditsSettingsPage() {
       {/* Purchase modal */}
       <CreditPurchaseModal
         open={purchaseModalOpen}
-        onOpenChange={setPurchaseModalOpen}
+        onOpenChange={(open) => { setPurchaseModalOpen(open); if (!open) setPurchaseInitialPack(undefined); }}
+        initialPack={purchaseInitialPack}
       />
 
       {/* Post-migration onboarding modal (shown once per user) */}

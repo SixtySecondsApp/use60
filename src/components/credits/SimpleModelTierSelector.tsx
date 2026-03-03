@@ -12,9 +12,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Loader2, Brain, Zap, Cpu, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
-import { useOrgId } from '@/lib/contexts/OrgContext';
-import { useUser } from '@/lib/hooks/useUser';
-import { isUserAdmin } from '@/lib/utils/adminUtils';
+import { useOrgId, useOrg } from '@/lib/contexts/OrgContext';
+import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ACTION_CREDIT_COSTS } from '@/lib/config/creditPacks';
@@ -219,8 +218,9 @@ function formatCreditCost(catKey: string, tier: Tier, actionLabel: string): stri
 
 export function SimpleModelTierSelector() {
   const orgId = useOrgId();
-  const { userData } = useUser();
-  const isAdmin = userData ? isUserAdmin(userData) : false;
+  const { permissions } = useOrg();
+  const { isPlatformAdmin } = useUserPermissions();
+  const isAdmin = permissions.canManageSettings || permissions.canManageTeam || isPlatformAdmin;
   const readOnly = !isAdmin;
 
   const [features, setFeatures] = useState<FeatureConfig[]>([]);

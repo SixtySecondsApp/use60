@@ -72,7 +72,7 @@ function useDailyUsageWithCalls(days: number = 30) {
 
       const { data, error } = await supabase
         .from('ai_cost_events')
-        .select('created_at, estimated_cost')
+        .select('created_at, estimated_cost, feature_key')
         .eq('org_id', orgId!)
         .gte('created_at', sinceIso)
         .order('created_at', { ascending: true });
@@ -81,6 +81,23 @@ function useDailyUsageWithCalls(days: number = 30) {
         console.error('[UsageChart] Error fetching daily usage:', error);
         return [];
       }
+
+      // Filter out onboarding enrichment events (automated enrichment within
+      // the first 10 minutes of the org's earliest event — these are system-
+      // triggered during onboarding and shouldn't count as user-initiated usage)
+      const ONBOARDING_FEATURE_KEYS = new Set([
+        'deep_enrich_organization',
+        'enrich_organization',
+        'research_fact_profile',
+      ]);
+      const rows = data ?? [];
+      const firstEventTime = rows.length > 0 ? new Date(rows[0].created_at).getTime() : 0;
+      const onboardingCutoff = firstEventTime + 10 * 60 * 1000; // 10 minutes
+
+      const filtered = rows.filter((row) => {
+        if (!ONBOARDING_FEATURE_KEYS.has((row as any).feature_key)) return true;
+        return new Date(row.created_at).getTime() > onboardingCutoff;
+      });
 
       // Aggregate by day: both cost and call count
       const dayMap = new Map<string, { cost: number; calls: number }>();
@@ -93,7 +110,7 @@ function useDailyUsageWithCalls(days: number = 30) {
         dayMap.set(key, { cost: 0, calls: 0 });
       }
 
-      for (const row of data ?? []) {
+      for (const row of filtered) {
         const key = row.created_at.slice(0, 10);
         const existing = dayMap.get(key) ?? { cost: 0, calls: 0 };
         existing.cost += row.estimated_cost || 0;
