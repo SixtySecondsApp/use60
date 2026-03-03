@@ -4016,7 +4016,7 @@
       "feature": "warmth-backfill",
       "title": "Build warmth-backfill edge function \u2014 extract signals from activities, meetings, deals",
       "type": "backend",
-      "status": "pending",
+      "status": "complete",
       "priority": 2,
       "acceptance": [
         "POST endpoint accepts { org_id } and returns { total_signals, contacts_affected, sources, recalculate }",
@@ -4054,7 +4054,7 @@
       "designRef": null,
       "ticketId": null,
       "startedAt": null,
-      "completedAt": null
+      "completedAt": "2026-03-03T21:25:00Z"
     },
     {
       "id": "WB-003",
