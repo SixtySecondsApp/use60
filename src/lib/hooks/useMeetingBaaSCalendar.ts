@@ -151,8 +151,15 @@ export function useMeetingBaaSCalendar() {
       if (!response.ok) {
         console.error('[useMeetingBaaSCalendar] Edge function error:', result);
 
-        let errorMessage = result?.error || result?.message || 'Failed to connect calendar';
+        const rawError = result?.error || result?.message || 'Failed to connect calendar';
 
+        // "Calendar already exists" means it's already connected — treat as success
+        if (rawError.toLowerCase().includes('already exists') || rawError.toLowerCase().includes('already connected')) {
+          console.log('[useMeetingBaaSCalendar] Calendar already exists — refreshing data');
+          return { success: true, message: 'Calendar already connected' } as ConnectCalendarResponse;
+        }
+
+        let errorMessage = rawError;
         // Check if this is a refresh token missing error
         if (errorMessage.includes('refresh token')) {
           errorMessage = 'Please reconnect Google Calendar to enable offline access for automatic recording setup';
@@ -162,9 +169,16 @@ export function useMeetingBaaSCalendar() {
       }
 
       if (!result || !result.success) {
-        const errorMsg = result?.error || 'Failed to connect calendar';
-        console.error('[useMeetingBaaSCalendar] Success=false:', errorMsg);
-        throw new Error(errorMsg);
+        const rawError = result?.error || 'Failed to connect calendar';
+
+        // "Calendar already exists" means it's already connected — treat as success
+        if (rawError.toLowerCase().includes('already exists') || rawError.toLowerCase().includes('already connected')) {
+          console.log('[useMeetingBaaSCalendar] Calendar already exists — refreshing data');
+          return { success: true, message: 'Calendar already connected' } as ConnectCalendarResponse;
+        }
+
+        console.error('[useMeetingBaaSCalendar] Success=false:', rawError);
+        throw new Error(rawError);
       }
 
       console.log('[useMeetingBaaSCalendar] Success:', result);
