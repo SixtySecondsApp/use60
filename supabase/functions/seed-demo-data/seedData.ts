@@ -834,7 +834,9 @@ export interface SeedMeetingTemplate {
 }
 
 export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
-  // Meridian Analytics — full sales cycle
+  // =====================================================================
+  // Meridian Analytics — full sales cycle (discovery → closing)
+  // =====================================================================
   {
     companyIndex: 0,
     contactIndices: [0],
@@ -867,8 +869,18 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     daysAgo: 14,
     durationMinutes: 45,
   },
+  {
+    companyIndex: 0,
+    contactIndices: [0, 1, 2],
+    meetingType: 'closing',
+    transcriptIndex: 4,
+    daysAgo: 3,
+    durationMinutes: 40,
+  },
 
-  // ClearPath Finance
+  // =====================================================================
+  // ClearPath Finance — active deal, multiple recent touchpoints
+  // =====================================================================
   {
     companyIndex: 1,
     contactIndices: [3],
@@ -890,11 +902,29 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     contactIndices: [3, 5],
     meetingType: 'follow_up',
     transcriptIndex: 3,
-    daysAgo: 2,
+    daysAgo: 22,
     durationMinutes: 30,
   },
+  {
+    companyIndex: 1,
+    contactIndices: [3, 4],
+    meetingType: 'negotiation',
+    transcriptIndex: 2,
+    daysAgo: 8,
+    durationMinutes: 45,
+  },
+  {
+    companyIndex: 1,
+    contactIndices: [3],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 2,
+    durationMinutes: 25,
+  },
 
-  // Vantage Health Systems
+  // =====================================================================
+  // Vantage Health Systems — large enterprise deal, multi-stakeholder
+  // =====================================================================
   {
     companyIndex: 2,
     contactIndices: [6],
@@ -902,6 +932,14 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     transcriptIndex: 0,
     daysAgo: 75,
     durationMinutes: 60,
+  },
+  {
+    companyIndex: 2,
+    contactIndices: [6, 7],
+    meetingType: 'general',
+    transcriptIndex: 5,
+    daysAgo: 62,
+    durationMinutes: 30,
   },
   {
     companyIndex: 2,
@@ -913,14 +951,32 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
   },
   {
     companyIndex: 2,
+    contactIndices: [6, 7, 9],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 35,
+    durationMinutes: 30,
+  },
+  {
+    companyIndex: 2,
     contactIndices: [6, 7],
     meetingType: 'negotiation',
     transcriptIndex: 2,
     daysAgo: 20,
     durationMinutes: 60,
   },
+  {
+    companyIndex: 2,
+    contactIndices: [6],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 5,
+    durationMinutes: 25,
+  },
 
-  // Forge Manufacturing
+  // =====================================================================
+  // Forge Manufacturing — mid-cycle, stalled slightly
+  // =====================================================================
   {
     companyIndex: 3,
     contactIndices: [10],
@@ -937,8 +993,42 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     daysAgo: 25,
     durationMinutes: 60,
   },
+  {
+    companyIndex: 3,
+    contactIndices: [10],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 10,
+    durationMinutes: 20,
+  },
+  {
+    companyIndex: 3,
+    contactIndices: [10, 12],
+    meetingType: 'negotiation',
+    transcriptIndex: 2,
+    daysAgo: 4,
+    durationMinutes: 50,
+  },
 
-  // ShipStream Logistics — won deal, retrospective meeting
+  // =====================================================================
+  // ShipStream Logistics — won deal, full cycle + onboarding
+  // =====================================================================
+  {
+    companyIndex: 4,
+    contactIndices: [13],
+    meetingType: 'discovery',
+    transcriptIndex: 0,
+    daysAgo: 55,
+    durationMinutes: 35,
+  },
+  {
+    companyIndex: 4,
+    contactIndices: [13, 14],
+    meetingType: 'demo',
+    transcriptIndex: 1,
+    daysAgo: 38,
+    durationMinutes: 55,
+  },
   {
     companyIndex: 4,
     contactIndices: [13],
@@ -952,11 +1042,21 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     contactIndices: [13, 14],
     meetingType: 'follow_up',
     transcriptIndex: 3,
-    daysAgo: 1,
+    daysAgo: 7,
     durationMinutes: 30,
   },
+  {
+    companyIndex: 4,
+    contactIndices: [13, 15],
+    meetingType: 'general',
+    transcriptIndex: 5,
+    daysAgo: 1,
+    durationMinutes: 25,
+  },
 
-  // Amplify Creative
+  // =====================================================================
+  // Amplify Creative — early-stage with demo scheduled
+  // =====================================================================
   {
     companyIndex: 5,
     contactIndices: [16],
@@ -973,8 +1073,26 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     daysAgo: 15,
     durationMinutes: 60,
   },
+  {
+    companyIndex: 5,
+    contactIndices: [16],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 6,
+    durationMinutes: 20,
+  },
+  {
+    companyIndex: 5,
+    contactIndices: [16, 18],
+    meetingType: 'negotiation',
+    transcriptIndex: 2,
+    daysAgo: 1,
+    durationMinutes: 45,
+  },
 
-  // Nexus Cybersecurity
+  // =====================================================================
+  // Nexus Cybersecurity — fast-moving startup deal
+  // =====================================================================
   {
     companyIndex: 6,
     contactIndices: [19],
@@ -988,11 +1106,117 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     contactIndices: [19, 20],
     meetingType: 'demo',
     transcriptIndex: 1,
-    daysAgo: 12,
+    daysAgo: 16,
     durationMinutes: 60,
   },
+  {
+    companyIndex: 6,
+    contactIndices: [19, 21],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 9,
+    durationMinutes: 25,
+  },
+  {
+    companyIndex: 6,
+    contactIndices: [19, 20],
+    meetingType: 'negotiation',
+    transcriptIndex: 2,
+    daysAgo: 3,
+    durationMinutes: 40,
+  },
 
-  // BrightPath EdTech — fast-moving deal
+  // =====================================================================
+  // Verdant PropTech — NEW: mid-cycle deal with good momentum
+  // =====================================================================
+  {
+    companyIndex: 7,
+    contactIndices: [22],
+    meetingType: 'discovery',
+    transcriptIndex: 0,
+    daysAgo: 42,
+    durationMinutes: 40,
+  },
+  {
+    companyIndex: 7,
+    contactIndices: [22, 23],
+    meetingType: 'demo',
+    transcriptIndex: 1,
+    daysAgo: 28,
+    durationMinutes: 55,
+  },
+  {
+    companyIndex: 7,
+    contactIndices: [22],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 17,
+    durationMinutes: 25,
+  },
+  {
+    companyIndex: 7,
+    contactIndices: [22, 24],
+    meetingType: 'negotiation',
+    transcriptIndex: 2,
+    daysAgo: 6,
+    durationMinutes: 50,
+  },
+
+  // =====================================================================
+  // Orion Enterprise Software — NEW: large enterprise, slow cycle
+  // =====================================================================
+  {
+    companyIndex: 8,
+    contactIndices: [25],
+    meetingType: 'discovery',
+    transcriptIndex: 0,
+    daysAgo: 68,
+    durationMinutes: 50,
+  },
+  {
+    companyIndex: 8,
+    contactIndices: [25, 26],
+    meetingType: 'general',
+    transcriptIndex: 5,
+    daysAgo: 52,
+    durationMinutes: 30,
+  },
+  {
+    companyIndex: 8,
+    contactIndices: [25, 26, 27],
+    meetingType: 'demo',
+    transcriptIndex: 1,
+    daysAgo: 40,
+    durationMinutes: 75,
+  },
+  {
+    companyIndex: 8,
+    contactIndices: [25, 28],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 25,
+    durationMinutes: 30,
+  },
+  {
+    companyIndex: 8,
+    contactIndices: [25, 26],
+    meetingType: 'negotiation',
+    transcriptIndex: 2,
+    daysAgo: 12,
+    durationMinutes: 55,
+  },
+  {
+    companyIndex: 8,
+    contactIndices: [25],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 2,
+    durationMinutes: 20,
+  },
+
+  // =====================================================================
+  // BrightPath EdTech — fast-moving deal, recent activity
+  // =====================================================================
   {
     companyIndex: 9,
     contactIndices: [29],
@@ -1000,6 +1224,22 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     transcriptIndex: 0,
     daysAgo: 20,
     durationMinutes: 30,
+  },
+  {
+    companyIndex: 9,
+    contactIndices: [29, 30],
+    meetingType: 'demo',
+    transcriptIndex: 1,
+    daysAgo: 11,
+    durationMinutes: 50,
+  },
+  {
+    companyIndex: 9,
+    contactIndices: [29],
+    meetingType: 'follow_up',
+    transcriptIndex: 3,
+    daysAgo: 5,
+    durationMinutes: 20,
   },
   {
     companyIndex: 9,

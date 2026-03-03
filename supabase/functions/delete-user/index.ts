@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { captureException } from '../_shared/sentryEdge.ts'
 
@@ -51,7 +51,7 @@ serve(async (req) => {
       .from('profiles')
       .select('is_admin')
       .eq('id', adminUser.id)
-      .single()
+      .maybeSingle()
 
     if (!adminProfile?.is_admin) {
       return new Response(
@@ -171,12 +171,16 @@ serve(async (req) => {
     )
   } catch (error: any) {
     console.error('Error in delete-user:', error)
-    await captureException(error, {
-      tags: {
-        function: 'delete-user',
-        integration: 'supabase-auth',
-      },
-    });
+    try {
+      await captureException(error, {
+        tags: {
+          function: 'delete-user',
+          integration: 'supabase-auth',
+        },
+      });
+    } catch (sentryErr) {
+      console.warn('Sentry captureException failed (non-fatal):', sentryErr)
+    }
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
