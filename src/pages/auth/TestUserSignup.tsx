@@ -141,6 +141,20 @@ export default function TestUserSignup() {
       // Set onboarding completed timestamp so ProductTour triggers
       localStorage.setItem('sixty_onboarding_completed_at', String(Date.now()));
 
+      // Clear any previous tour completion flags so the tour runs fresh.
+      // User may be reclaiming an orphaned account with the same ID — the old
+      // `sixty_tour_completed_{userId}` key would block the tour otherwise.
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key?.startsWith('sixty_tour_completed_')) keysToRemove.push(key);
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // localStorage unavailable — non-fatal
+      }
+
       // Set the magic link org as active BEFORE sign-in so orgStore picks it up
       try {
         const stored = JSON.parse(localStorage.getItem('org-store') || '{}');
