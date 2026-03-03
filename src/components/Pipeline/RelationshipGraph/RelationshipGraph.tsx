@@ -1,13 +1,26 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import { ORBIT_RADII, ZOOM_EXTENT, CENTRE_NODE_RADIUS, TIER_COLORS, HEALTH_COLORS, NODE_SIZE_MIN, NODE_SIZE_MAX } from './constants';
 import { useGraphData } from './hooks/useGraphData';
-import type { GraphNode } from './types';
+import { GraphTooltip } from './GraphTooltip';
+import { GraphToolbar } from './GraphToolbar';
+import type { GraphNode, WarmthTier } from './types';
 
-export function RelationshipGraph() {
+interface RelationshipGraphProps {
+  onSelectNode?: (node: GraphNode | null) => void;
+}
+
+export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  // Interaction state
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [filter, setFilter] = useState<WarmthTier | null>(null);
+  const [search, setSearch] = useState('');
 
   // ResizeObserver for responsive dimensions
   useEffect(() => {
@@ -44,11 +57,12 @@ export function RelationshipGraph() {
 
   const { data: contacts = [], isLoading } = useGraphData();
 
-  const cx = 0; // Centre is at origin, transform handles positioning
+  const cx = 0;
   const cy = 0;
   const maxR = Math.min(dimensions.width, dimensions.height) * 0.42;
 
-  const nodes: GraphNode[] = useMemo(() => {
+  // All nodes (unfiltered) for stats
+  const allNodes: GraphNode[] = useMemo(() => {
     if (!contacts.length) return [];
 
     return contacts.map((contact, index) => {
@@ -66,6 +80,26 @@ export function RelationshipGraph() {
       };
     });
   }, [contacts, maxR]);
+
+  // Filtered nodes for display
+  const nodes = useMemo(() => {
+    let filtered = allNodes;
+
+    if (filter) {
+      filtered = filtered.filter((n) => (n.tier ?? 'cold') === filter);
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter((n) => {
+        const name = (n.full_name || `${n.first_name || ''} ${n.last_name || ''}`).toLowerCase();
+        const company = n.company_obj?.name?.toLowerCase() ?? '';
+        return name.includes(q) || company.includes(q);
+      });
+    }
+
+    return filtered;
+  }, [allNodes, filter, search]);
 
   // Compute deal arcs: connect contacts sharing the same deal
   const dealArcs = useMemo(() => {
@@ -100,16 +134,48 @@ export function RelationshipGraph() {
     return arcs;
   }, [nodes]);
 
+  // Lookup for selected/hovered nodes
+  const hoveredNode = hoveredId ? nodes.find((n) => n.id === hoveredId) ?? null : null;
+  const selectedNode = selectedId ? nodes.find((n) => n.id === selectedId) ?? null : null;
+
+  const handleNodeClick = useCallback((node: GraphNode) => {
+    setSelectedId(node.id);
+    onSelectNode?.(node);
+  }, [onSelectNode]);
+
+  const handleDeselect = useCallback(() => {
+    setSelectedId(null);
+    onSelectNode?.(null);
+  }, [onSelectNode]);
+
   return (
     <div
       ref={containerRef}
-      className="relative w-full min-h-[500px] h-[calc(100vh-280px)] rounded-2xl overflow-hidden bg-[#030712] border border-white/[0.06]"
+      className="relative w-full min-h-[500px] h-[calc(100vh-280px)] rounded-2xl overflow-hidden bg-[#030712] border border-white/[0.06] flex flex-col"
     >
+      {/* Stats + Filter toolbar */}
+      <GraphToolbar
+        filter={filter}
+        onFilterChange={setFilter}
+        search={search}
+        onSearchChange={setSearch}
+        nodes={allNodes}
+        allContactCount={contacts.length}
+      />
+
+      {/* SVG Graph */}
       <svg
         ref={svgRef}
         width={dimensions.width}
         height={dimensions.height}
-        className="w-full h-full"
+        className="flex-1"
+        onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
+        onClick={(e) => {
+          // Click on empty space deselects
+          if ((e.target as SVGElement).tagName === 'svg' || (e.target as SVGElement).tagName === 'rect') {
+            handleDeselect();
+          }
+        }}
       >
         <defs>
           {/* Nebula background gradients */}
@@ -137,6 +203,17 @@ export function RelationshipGraph() {
           <filter id="glow-centre" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="8" result="blur" />
             <feFlood floodColor="#6366f1" floodOpacity="0.4" result="color" />
+            <feComposite in="color" in2="blur" operator="in" result="glow" />
+            <feMerge>
+              <feMergeNode in="glow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+
+          {/* Selected node glow filter */}
+          <filter id="glow-selected" x="-150%" y="-150%" width="400%" height="400%">
+            <feGaussianBlur stdDeviation="12" result="blur" />
+            <feFlood floodColor="#a78bfa" floodOpacity="0.7" result="color" />
             <feComposite in="color" in2="blur" operator="in" result="glow" />
             <feMerge>
               <feMergeNode in="glow" />
@@ -262,36 +339,57 @@ export function RelationshipGraph() {
             const tier = node.tier ?? 'cold';
             const tierColor = TIER_COLORS[tier];
             const displayName = node.full_name || `${node.first_name || ''} ${node.last_name || ''}`.trim() || node.email;
-            const showLabel = (node.warmth_score ?? 0) > 0.42;
+            const isSelected = selectedId === node.id;
+            const isHovered = hoveredId === node.id;
+            const r = node.radius + (isSelected ? 6 : isHovered ? 3 : 0);
+            const showLabel = (node.warmth_score ?? 0) > 0.42 || isSelected || isHovered;
+            const glowFilter = isSelected ? 'url(#glow-selected)' : (isHovered || (node.warmth_score ?? 0) > 0.65) ? `url(#glow-${tier})` : undefined;
 
             return (
-              <g key={node.id} style={{ transition: 'transform 0.3s ease-out' }}>
-                {/* Glow halo */}
-                <circle
-                  cx={node.x}
-                  cy={node.y}
-                  r={node.radius * 1.7}
-                  fill={tierColor.glow}
-                  opacity={0.15}
-                  filter={`url(#glow-${tier})`}
-                />
+              <g
+                key={node.id}
+                style={{ cursor: 'pointer', transition: 'transform 0.5s cubic-bezier(0.16,1,0.3,1)' }}
+                onClick={() => handleNodeClick(node)}
+                onMouseEnter={() => setHoveredId(node.id)}
+                onMouseLeave={() => setHoveredId(null)}
+              >
+                {/* Outer glow ring for selected/hovered */}
+                {(isSelected || isHovered || (node.warmth_score ?? 0) > 0.6) && (
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r={r * 2.2}
+                    fill={tierColor.glow}
+                    opacity={isSelected ? 0.12 : isHovered ? 0.08 : 0.04}
+                  >
+                    {isSelected && (
+                      <animate
+                        attributeName="r"
+                        values={`${r * 2};${r * 2.6};${r * 2}`}
+                        dur="2.5s"
+                        repeatCount="indefinite"
+                      />
+                    )}
+                  </circle>
+                )}
 
                 {/* Main node */}
                 <circle
                   cx={node.x}
                   cy={node.y}
-                  r={node.radius}
+                  r={r}
                   fill={`url(#node-gradient-${tier})`}
-                  stroke="rgba(255,255,255,0.15)"
-                  strokeWidth={0.5}
-                  className="cursor-pointer"
+                  filter={glowFilter}
+                  stroke={isSelected ? '#a78bfa' : isHovered ? tierColor.primary : 'rgba(255,255,255,0.08)'}
+                  strokeWidth={isSelected ? 2.5 : isHovered ? 1.5 : 0.5}
+                  style={{ transition: 'all 0.3s ease' }}
                 />
 
                 {/* Deal probability arc */}
                 {node.deals.length > 0 && (() => {
                   const deal = node.deals[0];
                   const prob = deal.probability ?? 0;
-                  const arcR = node.radius + 3;
+                  const arcR = r + 4;
                   const circumference = 2 * Math.PI * arcR;
                   const healthKey = (deal.health_status as keyof typeof HEALTH_COLORS) ?? 'stalled';
                   return (
@@ -315,16 +413,16 @@ export function RelationshipGraph() {
                 {node.company_obj && (
                   <g>
                     <circle
-                      cx={node.x - node.radius * 0.6}
-                      cy={node.y + node.radius * 0.6}
+                      cx={node.x - r * 0.6}
+                      cy={node.y + r * 0.6}
                       r={6.5}
                       fill="#1e1e2e"
                       stroke="rgba(255,255,255,0.1)"
                       strokeWidth={0.5}
                     />
                     <text
-                      x={node.x - node.radius * 0.6}
-                      y={node.y + node.radius * 0.6 + 1}
+                      x={node.x - r * 0.6}
+                      y={node.y + r * 0.6 + 1}
                       textAnchor="middle"
                       dominantBaseline="central"
                       fill="white"
@@ -338,25 +436,58 @@ export function RelationshipGraph() {
 
                 {/* Delta indicator */}
                 {node.warmth_delta !== null && Math.abs(node.warmth_delta) > 0.03 && (
-                  <circle
-                    cx={node.x + node.radius * 0.6}
-                    cy={node.y - node.radius * 0.6}
-                    r={5.5}
-                    fill={node.warmth_delta > 0 ? '#22c55e' : '#ef4444'}
-                  />
+                  <g>
+                    <circle
+                      cx={node.x + r * 0.6}
+                      cy={node.y - r * 0.6}
+                      r={5.5}
+                      fill={node.warmth_delta > 0 ? '#22c55e' : '#ef4444'}
+                      stroke="#030712"
+                      strokeWidth={1.5}
+                    />
+                    <text
+                      x={node.x + r * 0.6}
+                      y={node.y - r * 0.6 + 0.5}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fill="white"
+                      fontSize="7"
+                      fontWeight="800"
+                    >
+                      {node.warmth_delta > 0 ? '\u2191' : '\u2193'}
+                    </text>
+                  </g>
                 )}
 
                 {/* Name label */}
                 {showLabel && (
                   <text
                     x={node.x}
-                    y={node.y + node.radius + 12}
+                    y={node.y + r + 13}
                     textAnchor="middle"
-                    fill="rgba(255,255,255,0.7)"
-                    fontSize="9"
+                    fill="#e2e8f0"
+                    fontSize="10"
+                    fontWeight="600"
                     fontFamily="Inter, system-ui, sans-serif"
+                    opacity={isSelected || isHovered ? 1 : 0.7}
+                    style={{ transition: 'opacity 0.3s', pointerEvents: 'none' }}
                   >
-                    {displayName}
+                    {displayName.split(' ')[0]}
+                  </text>
+                )}
+
+                {/* Role + company on hover */}
+                {isHovered && (
+                  <text
+                    x={node.x}
+                    y={node.y + r + 24}
+                    textAnchor="middle"
+                    fill="#94a3b8"
+                    fontSize="8"
+                    fontFamily="Inter, system-ui, sans-serif"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {node.title}{node.company_obj ? ` \u00b7 ${node.company_obj.name}` : ''}
                   </text>
                 )}
               </g>
@@ -408,6 +539,11 @@ export function RelationshipGraph() {
           </g>
         </g>
       </svg>
+
+      {/* Hover tooltip (only when no node is selected) */}
+      {hoveredNode && !selectedNode && (
+        <GraphTooltip node={hoveredNode} position={mousePos} />
+      )}
     </div>
   );
 }
