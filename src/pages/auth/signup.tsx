@@ -116,8 +116,8 @@ export default function Signup() {
       }
     }
 
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters long');
+    if (formData.password.length < 8) {
+      toast.error('Password must be at least 8 characters long');
       return;
     }
 
@@ -353,7 +353,7 @@ export default function Signup() {
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={8}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
@@ -362,7 +362,7 @@ export default function Signup() {
                 />
               </div>
               <p className="text-xs text-gray-500">
-                Min 6 chars, 1 uppercase, 1 special character
+                Min 8 chars, 1 uppercase, 1 special character
               </p>
             </div>
 
@@ -375,7 +375,7 @@ export default function Signup() {
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={8}
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
