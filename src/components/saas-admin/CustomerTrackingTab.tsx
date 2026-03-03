@@ -578,7 +578,7 @@ export function CustomerTrackingTab({
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center justify-end">
+                  <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
                     <CustomerActionsMenu customer={customer} onRefresh={onRefresh} />
                   </div>
                 </div>

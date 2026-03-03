@@ -719,6 +719,63 @@ export async function adminGrantCredits(
 }
 
 // ============================================================================
+// Admin Member Management
+// ============================================================================
+
+export async function adminRemoveMember(orgId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('organization_memberships')
+    .delete()
+    .eq('org_id', orgId)
+    .eq('user_id', userId);
+
+  if (error) {
+    logger.error('[SaaS Admin] Error removing member:', error);
+    throw error;
+  }
+}
+
+export async function adminAddMember(
+  orgId: string,
+  email: string,
+  role: 'member' | 'admin' | 'owner' = 'member'
+): Promise<void> {
+  // Look up the profile by email
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (profileError) {
+    logger.error('[SaaS Admin] Error looking up profile by email:', profileError);
+    throw profileError;
+  }
+
+  if (!profile) {
+    throw new Error(`No user found with email: ${email}`);
+  }
+
+  const { error } = await supabase
+    .from('organization_memberships')
+    .upsert(
+      { org_id: orgId, user_id: profile.id, role },
+      { onConflict: 'org_id,user_id' }
+    );
+
+  if (error) {
+    logger.error('[SaaS Admin] Error adding member:', error);
+    throw error;
+  }
+}
+
+export async function adminDeleteOrganization(
+  orgId: string
+): Promise<{ success: boolean; affectedUsers: number }> {
+  return deleteOrganization(orgId);
+}
+
+// ============================================================================
 // Admin Dashboard Stats
 // ============================================================================
 

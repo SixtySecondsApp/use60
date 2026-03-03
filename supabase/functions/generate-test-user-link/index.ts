@@ -2,7 +2,7 @@
  * Generate Test User Link Edge Function
  *
  * Admin-only endpoint that:
- * 1. Creates a new organization
+ * 1. Creates a new organization (or uses an existing one via org_id)
  * 2. Generates a magic link token for test user signup
  * 3. Returns the link for the admin to share
  *
@@ -26,7 +26,8 @@ const EDGE_FUNCTION_SECRET = Deno.env.get('EDGE_FUNCTION_SECRET');
 
 interface GenerateTestLinkRequest {
   email: string;
-  org_name: string;
+  org_name?: string;  // required when org_id is not provided
+  org_id?: string;    // if provided, use existing org instead of creating a new one
   is_test_user?: boolean;
   credit_amount?: number;
 }
@@ -108,9 +109,10 @@ serve(async (req) => {
     // --- Parse & validate request ---
     const request: GenerateTestLinkRequest = await req.json();
 
-    if (!request.email || !request.org_name?.trim()) {
+    // org_name is required only when org_id is not provided
+    if (!request.email || (!request.org_id && !request.org_name?.trim())) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing required fields: email and org_name' }),
+        JSON.stringify({ success: false, error: 'Missing required fields: email and either org_id or org_name' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -142,23 +144,56 @@ serve(async (req) => {
       },
     });
 
-    // --- Create organization ---
-    const { data: org, error: orgError } = await supabaseAdmin
-      .from('organizations')
-      .insert({
-        name: request.org_name.trim(),
-        is_active: true,
-        created_by: adminUserId,
-      })
-      .select('id, name')
-      .single();
+    // --- Resolve organization (existing or new) ---
+    let org: { id: string; name: string };
+    let orgCreatedByUs = false;
 
-    if (orgError) {
-      console.error('Failed to create organization:', orgError);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Failed to create organization: ' + orgError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (request.org_id) {
+      // Use existing org — validate it exists
+      const { data: existingOrg, error: orgLookupError } = await supabaseAdmin
+        .from('organizations')
+        .select('id, name')
+        .eq('id', request.org_id)
+        .maybeSingle();
+
+      if (orgLookupError) {
+        console.error('Failed to look up organization:', orgLookupError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to look up organization: ' + orgLookupError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!existingOrg) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Organization not found: ' + request.org_id }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      org = existingOrg;
+    } else {
+      // Create a new organization
+      const { data: newOrg, error: orgError } = await supabaseAdmin
+        .from('organizations')
+        .insert({
+          name: request.org_name!.trim(),
+          is_active: true,
+          created_by: adminUserId,
+        })
+        .select('id, name')
+        .single();
+
+      if (orgError) {
+        console.error('Failed to create organization:', orgError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to create organization: ' + orgError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      org = newOrg;
+      orgCreatedByUs = true;
     }
 
     // --- Generate token ---
@@ -184,8 +219,10 @@ serve(async (req) => {
 
     if (linkError) {
       console.error('Failed to create magic link:', linkError);
-      // Clean up the org we just created
-      await supabaseAdmin.from('organizations').delete().eq('id', org.id);
+      // Only clean up the org if we created it — don't touch a pre-existing org
+      if (orgCreatedByUs) {
+        await supabaseAdmin.from('organizations').delete().eq('id', org.id);
+      }
       return new Response(
         JSON.stringify({ success: false, error: 'Failed to generate magic link: ' + linkError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
