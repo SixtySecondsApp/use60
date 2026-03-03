@@ -1061,6 +1061,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             .insert({
               name: organizationName,
               company_domain: domain,
+              company_website: websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`,
               created_by: session.user.id,
               is_active: true,
             })
