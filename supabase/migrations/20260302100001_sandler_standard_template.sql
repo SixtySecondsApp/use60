@@ -301,7 +301,7 @@ BEGIN
 
 .ss-section-header {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 14px;
   margin-bottom: 20px;
   padding-bottom: 12px;
@@ -310,6 +310,7 @@ BEGIN
 
 .ss-accent-bar {
   width: 4px;
+  height: 32px;
   border-radius: 2px;
   background: {{brand.primary_color}};
   flex-shrink: 0;
