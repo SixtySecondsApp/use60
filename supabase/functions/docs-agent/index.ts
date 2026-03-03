@@ -84,11 +84,18 @@ Your job is to help users find answers to their questions about 60's features, i
 3. Synthesize a clear, helpful answer from the documentation
 4. Always cite your sources by mentioning the article title
 
+## Common questions you can answer:
+- How do I add a Google account? → Search "google" or "integrations"
+- How do meetings work? → Search "meetings"
+- How do I add credits? → Search "credits"
+- How do I invite team members? → Search "team" or "settings"
+- How does the AI Notetaker work? → Search "notetaker" or "meetings"
+
 ## Rules:
 - ALWAYS search the docs before answering — never guess or make up features
 - Provide direct, actionable answers (not link dumps)
 - Keep answers concise (2-5 sentences for simple questions, more for complex ones)
-- If you can't find an answer, say so honestly and suggest they open a support ticket
+- If you can't find a specific answer in the docs, say honestly: "I don't have specific documentation on that yet, but I'd suggest opening a support ticket so our team can help you directly."
 - Include the article title(s) as sources at the end of your response
 - Format your response as plain text (the frontend will render it)
 
@@ -207,11 +214,54 @@ async function handleSearchDocs(
     similarity: number;
   }>;
 
-  const filtered = category
+  let filtered = category
     ? results.filter(
         (r) => r.category?.toLowerCase() === category.toLowerCase()
       )
     : results;
+
+  // Fallback: if vector search returns nothing, do a full-text search
+  if (filtered.length === 0) {
+    console.log('[docs-agent] Vector search returned no results, falling back to full-text search');
+    const queryLower = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const searchTerm = queryLower.join(' | ');
+
+    let ftQuery = serviceClient
+      .from('docs_articles')
+      .select('slug, title, category, content')
+      .eq('published', true)
+      .order('order_index', { ascending: true })
+      .limit(limit || 5);
+
+    if (category) {
+      ftQuery = ftQuery.eq('category', category);
+    }
+
+    // Use postgres full-text search if supported, otherwise ilike on title
+    const { data: ftData } = await ftQuery.ilike('title', `%${queryLower[0] || query}%`);
+
+    if (ftData && ftData.length > 0) {
+      filtered = (ftData as Array<{ slug: string; title: string; category: string; content: string }>).map((r) => ({
+        ...r,
+        similarity: 0.5, // Nominal similarity score for fallback
+      }));
+    } else {
+      // Last resort: return top articles from Getting Started category
+      const { data: topArticles } = await serviceClient
+        .from('docs_articles')
+        .select('slug, title, category, content')
+        .eq('published', true)
+        .order('order_index', { ascending: true })
+        .limit(3);
+
+      if (topArticles) {
+        filtered = (topArticles as Array<{ slug: string; title: string; category: string; content: string }>).map((r) => ({
+          ...r,
+          similarity: 0.3,
+        }));
+      }
+    }
+  }
 
   return filtered.map((r) => ({
     slug: r.slug,
