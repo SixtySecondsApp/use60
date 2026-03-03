@@ -73,42 +73,41 @@ serve(async (req) => {
       .from('profiles')
       .select('email, first_name, last_name')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
-    if (!userProfile) {
-      return new Response(
-        JSON.stringify({ error: 'User not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    // If profile is already anonymized or missing, still proceed with auth deletion
+    const isAlreadyAnonymized = userProfile?.email?.startsWith('deleted_')
+    if (!userProfile && !isAlreadyAnonymized) {
+      // No profile at all — try auth deletion directly in case of orphaned auth user
+      console.log('No profile found for user, attempting auth-only deletion:', userId)
     }
 
     // Delete from internal_users if exists
-    if (userProfile.email) {
+    if (userProfile?.email && !userProfile.email.startsWith('deleted_')) {
       await supabaseAdmin
         .from('internal_users')
         .update({ is_active: false, updated_at: new Date().toISOString() })
         .eq('email', userProfile.email.toLowerCase())
     }
 
-    // Anonymize the profile: clear personal data but keep name visible for audit trail in meetings/tasks
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .update({
-        email: `deleted_${userId}@deleted.local`,
-        avatar_url: null,
-        bio: null,
-        clerk_user_id: null,
-        auth_provider: 'deleted',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId)
+    // Anonymize the profile (skip if already anonymized or no profile)
+    if (userProfile && !isAlreadyAnonymized) {
+      const { error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .update({
+          email: `deleted_${userId}@deleted.local`,
+          avatar_url: null,
+          bio: null,
+          clerk_user_id: null,
+          auth_provider: 'deleted',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
 
-    if (profileError) {
-      console.error('Error anonymizing profile:', profileError)
-      return new Response(
-        JSON.stringify({ error: `Failed to delete profile: ${profileError.message}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      if (profileError) {
+        console.error('Error anonymizing profile:', profileError)
+        // Non-fatal — continue to auth deletion
+      }
     }
 
     // Delete from auth.users to revoke access (user can sign up again with same email)
@@ -142,7 +141,7 @@ serve(async (req) => {
 
     // Reset waitlist entry so user can be re-invited
     // Find by original email (before anonymization) and reset status to 'pending'
-    if (userProfile.email) {
+    if (userProfile?.email && !userProfile.email.startsWith('deleted_')) {
       const { error: waitlistError } = await supabaseAdmin
         .from('meetings_waitlist')
         .update({
