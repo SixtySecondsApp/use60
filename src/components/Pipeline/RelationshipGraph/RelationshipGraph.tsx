@@ -22,6 +22,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [filter, setFilter] = useState<WarmthTier | null>(null);
   const [search, setSearch] = useState('');
+  const [clustered, setClustered] = useState(false);
 
   // ResizeObserver for responsive dimensions
   useEffect(() => {
@@ -135,6 +136,56 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
     return arcs;
   }, [nodes]);
 
+  // Company clusters: when enabled, group contacts by company with centroid nodes
+  interface CompanyCluster {
+    id: string;
+    name: string;
+    initial: string;
+    contacts: GraphNode[];
+    cx: number;
+    cy: number;
+    totalDealValue: number;
+    size: number;
+  }
+
+  const companyClusters = useMemo((): CompanyCluster[] => {
+    if (!clustered) return [];
+
+    const groups: Record<string, GraphNode[]> = {};
+    nodes.forEach((n) => {
+      const companyId = n.company_id ?? 'unknown';
+      (groups[companyId] = groups[companyId] || []).push(n);
+    });
+
+    return Object.entries(groups).map(([companyId, contactNodes]) => {
+      const centroidX = contactNodes.reduce((s, n) => s + n.x, 0) / contactNodes.length;
+      const centroidY = contactNodes.reduce((s, n) => s + n.y, 0) / contactNodes.length;
+      const companyObj = contactNodes[0].company_obj;
+
+      const seen = new Set<string>();
+      let totalDealValue = 0;
+      contactNodes.forEach((n) => {
+        n.deals.forEach((d) => {
+          if (!seen.has(d.id) && d.value != null) {
+            seen.add(d.id);
+            totalDealValue += d.value;
+          }
+        });
+      });
+
+      return {
+        id: companyId,
+        name: companyObj?.name ?? 'Unknown',
+        initial: (companyObj?.name ?? '?')[0].toUpperCase(),
+        contacts: contactNodes,
+        cx: centroidX,
+        cy: centroidY,
+        totalDealValue,
+        size: 12 + contactNodes.length * 4,
+      };
+    });
+  }, [nodes, clustered]);
+
   // Lookup for selected/hovered nodes
   const hoveredNode = hoveredId ? nodes.find((n) => n.id === hoveredId) ?? null : null;
   const selectedNode = selectedId ? nodes.find((n) => n.id === selectedId) ?? null : null;
@@ -162,6 +213,8 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
         onSearchChange={setSearch}
         nodes={allNodes}
         allContactCount={contacts.length}
+        clustered={clustered}
+        onClusteredChange={setClustered}
       />
 
       {/* Main area: SVG + optional detail panel */}
@@ -335,6 +388,76 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
               strokeOpacity={0.35}
               style={{ transition: 'all 0.6s ease' }}
             />
+          ))}
+
+          {/* Company cluster nodes */}
+          {companyClusters.map((cluster) => (
+            <g key={`cluster-${cluster.id}`} style={{ transition: 'all 0.5s ease' }}>
+              {/* Cluster background circle */}
+              <circle
+                cx={cluster.cx}
+                cy={cluster.cy}
+                r={cluster.size * 2.5}
+                fill="rgba(99,102,241,0.04)"
+                stroke="rgba(99,102,241,0.08)"
+                strokeWidth={1}
+                strokeDasharray="3 6"
+              />
+              {/* Company node at centroid */}
+              <circle
+                cx={cluster.cx}
+                cy={cluster.cy}
+                r={cluster.size}
+                fill="rgba(30,30,46,0.9)"
+                stroke="rgba(99,102,241,0.3)"
+                strokeWidth={1.5}
+              />
+              <text
+                x={cluster.cx}
+                y={cluster.cy - 2}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="#a5b4fc"
+                fontSize={cluster.size * 0.6}
+                fontWeight="700"
+                fontFamily="Inter, system-ui, sans-serif"
+              >
+                {cluster.initial}
+              </text>
+              <text
+                x={cluster.cx}
+                y={cluster.cy + cluster.size + 10}
+                textAnchor="middle"
+                fill="rgba(255,255,255,0.5)"
+                fontSize="8"
+                fontFamily="Inter, system-ui, sans-serif"
+              >
+                {cluster.name}
+              </text>
+              {cluster.totalDealValue > 0 && (
+                <text
+                  x={cluster.cx}
+                  y={cluster.cy + cluster.size + 20}
+                  textAnchor="middle"
+                  fill="rgba(255,255,255,0.3)"
+                  fontSize="7"
+                  fontFamily="Inter, system-ui, sans-serif"
+                >
+                  £{(cluster.totalDealValue / 1000).toFixed(0)}k
+                </text>
+              )}
+              {/* Single-contact indicator */}
+              {cluster.contacts.length === 1 && (
+                <circle
+                  cx={cluster.cx + cluster.size * 0.7}
+                  cy={cluster.cy - cluster.size * 0.7}
+                  r={4}
+                  fill="#f59e0b"
+                  stroke="#030712"
+                  strokeWidth={1}
+                />
+              )}
+            </g>
           ))}
 
           {/* Contact nodes */}

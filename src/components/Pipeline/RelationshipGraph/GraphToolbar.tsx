@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Building2 } from 'lucide-react';
 import { TIER_COLORS } from './constants';
 import type { GraphNode, WarmthTier } from './types';
 
@@ -10,11 +10,13 @@ interface GraphToolbarProps {
   onSearchChange: (value: string) => void;
   nodes: GraphNode[];
   allContactCount: number;
+  clustered: boolean;
+  onClusteredChange: (value: boolean) => void;
 }
 
 const TIERS: WarmthTier[] = ['hot', 'warm', 'cool', 'cold'];
 
-export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, nodes, allContactCount }: GraphToolbarProps) {
+export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, nodes, allContactCount, clustered, onClusteredChange }: GraphToolbarProps) {
   const tierCounts = useMemo(() => {
     const counts: Record<WarmthTier, number> = { hot: 0, warm: 0, cool: 0, cold: 0 };
     nodes.forEach((n) => { counts[n.tier ?? 'cold']++; });
@@ -82,6 +84,22 @@ export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, n
       <span className="text-gray-500 text-[11px]">Trending</span>
       <span className="text-green-500 text-xs font-bold">{trendingUp} ↑</span>
       <span className="text-red-500 text-xs font-bold ml-0.5">{trendingDown} ↓</span>
+
+      <div className="w-px h-5 bg-white/[0.08] mx-1" />
+
+      {/* Cluster toggle */}
+      <button
+        onClick={() => onClusteredChange(!clustered)}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-all"
+        style={{
+          borderColor: clustered ? '#6366f1' : 'rgba(100,116,139,0.2)',
+          background: clustered ? 'rgba(99,102,241,0.15)' : 'rgba(30,30,46,0.5)',
+          color: clustered ? '#a5b4fc' : '#94a3b8',
+        }}
+      >
+        <Building2 className="w-3 h-3" />
+        Company
+      </button>
 
       {/* Search */}
       <div className="ml-auto relative">
