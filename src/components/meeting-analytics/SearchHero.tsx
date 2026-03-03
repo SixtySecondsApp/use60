@@ -15,7 +15,7 @@ export function SearchHero({ className }: SearchHeroProps) {
       transition={{ delay: 0.1 }}
       className={cn('mb-6', className)}
     >
-      <Card className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 shadow-lg dark:shadow-xl dark:shadow-black/10 rounded-2xl overflow-hidden">
+      <Card data-tour="meeting-ask-anything" className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 shadow-lg dark:shadow-xl dark:shadow-black/10 rounded-2xl overflow-hidden">
         {/* Gradient accent bar */}
         <div className="h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
 

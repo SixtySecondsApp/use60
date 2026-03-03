@@ -75,6 +75,7 @@ function useDailyUsageWithCalls(days: number = 30) {
         .select('created_at, estimated_cost')
         .eq('org_id', orgId!)
         .gte('created_at', sinceIso)
+        .or('metadata->>source.neq.onboarding,metadata.is.null')
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -198,7 +199,7 @@ function CustomTooltip({ active, payload, label }: any) {
             />
             <span className="text-gray-400">{labels[entry.dataKey] ?? entry.dataKey}:</span>
             <span className="text-white font-medium tabular-nums">
-              ${Number(entry.value).toFixed(4)}
+              {Number(entry.value).toFixed(2)} credits
             </span>
           </div>
         );
@@ -214,7 +215,7 @@ function renderLegend(props: any) {
   if (!payload) return null;
 
   const labels: Record<string, { label: string; icon: typeof Cpu }> = {
-    cost: { label: 'Actual spend', icon: Cpu },
+    cost: { label: 'Credits used', icon: Cpu },
     projLow: { label: 'Low tier projection', icon: Cpu },
     projMed: { label: 'Medium tier projection', icon: Brain },
     projHigh: { label: 'High tier projection', icon: Zap },
@@ -353,14 +354,14 @@ export function UsageChart({ days = 30 }: { days?: number }) {
           <div className="text-right">
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Actual</p>
             <p className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
-              ${totalCost.toFixed(2)}
+              {totalCost.toFixed(1)} credits
             </p>
           </div>
           {projectedMonthly && projectedMonthly.current > 0 && (
             <div className="text-right">
               <p className="text-[10px] text-gray-500 uppercase tracking-wider">30d est.</p>
               <p className="text-sm font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
-                ${projectedMonthly.current.toFixed(2)}
+                {projectedMonthly.current.toFixed(1)} credits
               </p>
             </div>
           )}
@@ -381,7 +382,7 @@ export function UsageChart({ days = 30 }: { days?: number }) {
                 <span className={cn('text-[10px] font-medium', color)}>{tier}</span>
               </div>
               <p className={cn('text-sm font-bold tabular-nums mt-0.5', color)}>
-                ${cost.toFixed(2)}/mo
+                {cost.toFixed(1)} credits/mo
               </p>
             </div>
           ))}
@@ -411,7 +412,7 @@ export function UsageChart({ days = 30 }: { days?: number }) {
               minTickGap={50}
             />
             <YAxis
-              tickFormatter={(v) => `$${v}`}
+              tickFormatter={(v) => `${v} cr`}
               tick={{ fontSize: 10, fill: '#94a3b8' }}
               width={50}
             />

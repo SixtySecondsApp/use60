@@ -68,6 +68,7 @@ import { useTaskNotifications } from '@/lib/hooks/useTaskNotifications';
 import { SmartSearch } from '@/components/SmartSearch';
 import { CreditWidget } from '@/components/credits/CreditWidget';
 import { LowBalanceBanner } from '@/components/credits/LowBalanceBanner';
+import { CreditTopUpProvider } from '@/components/credits/CreditTopUpPrompt';
 import { useNavigate } from 'react-router-dom';
 import { CommandCenter } from '@/components/command-center';
 // MeetingUsageIndicator moved to MeetingsList page
@@ -79,15 +80,21 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useTheme } from '@/hooks/useTheme';
 import { TrialBanner } from '@/components/subscription/TrialBanner';
+import { GracePeriodBanner } from '@/components/GracePeriodBanner';
 import { TrialConversionModal } from '@/components/billing/TrialConversionModal';
 import { useTrialStatus, useOrgSubscription } from '@/lib/hooks/useSubscription';
 import { useOrg } from '@/lib/contexts/OrgContext';
+import { useSubscriptionGate } from '@/lib/hooks/useSubscriptionGate';
 import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
 import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
 import { SetupWizardSidebarIndicator } from '@/components/setup-wizard/SetupWizardSidebarIndicator';
 import { SetupWizardDialog } from '@/components/setup-wizard/SetupWizardDialog';
 import { useTicketsNeedingAttention } from '@/lib/hooks/useTicketsNeedingAttention';
+import { TrialCountdownBadge } from '@/components/TrialCountdownBadge';
+import { TrialUpgradeModal } from '@/components/TrialUpgradeModal';
+import { WelcomeSplash } from '@/components/WelcomeSplash';
+import { ProductTour } from '@/components/ProductTour';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { userData, isImpersonating, stopImpersonating } = useUser();
@@ -97,12 +104,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: orgSubscription } = useOrgSubscription(activeOrgId);
   const hasIntegrationAlerts = useHasIntegrationAlerts();
   const location = useLocation();
+  const subscriptionGate = useSubscriptionGate(activeOrgId);
 
   // Check if user has integration that needs reconnection (must be before isIntegrationBannerVisible)
   const { needsReconnect: integrationNeedsReconnect } = useIntegrationReconnectNeeded();
 
-  // Show the trial conversion modal when the trial has expired
-  const isTrialExpired = orgSubscription?.status === 'expired';
+  // TrialConversionModal is no longer triggered on 'expired' status —
+  // ProtectedRoute now redirects expired users to /trial-expired instead.
+  // The modal is kept for approaching-expiry warnings only (isTrialing).
+  const isTrialApproachingExpiry = trialStatus.isTrialing && !trialStatus.isLoading;
 
   // Check if trial banner should be showing (same logic as TrialBanner component)
   const isTrialBannerVisible = useMemo(() => {
@@ -120,9 +130,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     // Show for trialing (with 75%+ usage — TrialBanner handles the threshold internally)
-    // or expired (banner also shows for expired status)
-    return (trialStatus.isTrialing || isTrialExpired) && !trialStatus.isLoading;
-  }, [trialStatus.isTrialing, trialStatus.isLoading, isTrialExpired]);
+    return trialStatus.isTrialing && !trialStatus.isLoading;
+  }, [trialStatus.isTrialing, trialStatus.isLoading]);
+
+  // Grace period banner is shown when status is 'grace_period'
+  const isGracePeriodBannerVisible = !subscriptionGate.isLoading && subscriptionGate.status === 'grace_period';
 
   // Check if integration reconnect banner should be showing
   const isIntegrationBannerVisible = hasIntegrationAlerts || !!integrationNeedsReconnect;
@@ -131,19 +143,23 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Some pages (e.g. Copilot chat) need a reliable way to compute the remaining viewport height
   // without hard-coding "4rem" and accidentally creating extra scroll space.
   const topOffsetPx = useMemo(() => {
-    // Base top bar is 64px (pt-16). Impersonation adds 44px. Trial banner adds ~50px. Integration banner adds ~50px.
+    // Base top bar is 64px (pt-16). Impersonation adds 44px. Trial banner adds ~50px. Grace period banner adds ~50px. Integration banner adds ~50px.
     let offset = 64; // Base top bar
     if (isImpersonating) offset += 44;
     if (isTrialBannerVisible) offset += 50;
+    if (isGracePeriodBannerVisible) offset += 50;
     if (isIntegrationBannerVisible) offset += 50;
     return offset;
-  }, [isTrialBannerVisible, isImpersonating, isIntegrationBannerVisible]);
+  }, [isTrialBannerVisible, isGracePeriodBannerVisible, isImpersonating, isIntegrationBannerVisible]);
 
-  // Calculate the additional offset for IntegrationReconnectBanner (appears below TrialBanner)
+  // Calculate the additional offset for IntegrationReconnectBanner (appears below TrialBanner or GracePeriodBanner)
   const integrationBannerTopOffset = useMemo(() => {
-    // TrialBanner is at top-[65px] and is ~50px tall
-    return isTrialBannerVisible ? 50 : 0;
-  }, [isTrialBannerVisible]);
+    // Each banner above adds ~50px
+    let extra = 0;
+    if (isTrialBannerVisible) extra += 50;
+    if (isGracePeriodBannerVisible) extra += 50;
+    return extra;
+  }, [isTrialBannerVisible, isGracePeriodBannerVisible]);
 
   // Note: topOffsetPx is used for inline paddingTop style since dynamic Tailwind classes
   // like pt-[${px}px] don't work at runtime (Tailwind JIT needs to see them at build time)
@@ -155,7 +171,22 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [isSmartSearchOpen, setIsSmartSearchOpen] = useState(false);
   const [isMobileUserMenuOpen, setIsMobileUserMenuOpen] = useState(false);
+  const [showSplash, setShowSplash] = useState(false);
+  const [splashDismissed, setSplashDismissed] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const userId = userData?.id;
+    if (!userId) return;
+    const completedAt = localStorage.getItem('sixty_onboarding_completed_at');
+    const tourDone = localStorage.getItem(`sixty_tour_completed_${userId}`);
+    if (completedAt && !tourDone) {
+      const elapsed = Date.now() - Number(completedAt);
+      if (elapsed < 3600000) {
+        setShowSplash(true);
+      }
+    }
+  }, [userData?.id]);
 
   // Allow decoupled components (assistant/chat panels/etc) to open Quick Add.
   useEventListener(
@@ -336,6 +367,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }, [effectiveUserType, isAdmin, isOrgAdmin, isViewingAsExternal]);
 
   return (
+    <CreditTopUpProvider>
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-gradient-to-br dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 text-[#1E293B] dark:text-gray-100 transition-colors duration-200">
       {/* Impersonation Banner at the top - highest priority */}
       <ImpersonationBanner />
@@ -348,6 +380,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Trial Banner - shown when organization is in trial period */}
       <TrialBanner />
+
+      {/* Grace Period Banner - shown when trial has ended but user is in read-only grace period */}
+      <GracePeriodBanner />
 
       {/* Integration Reconnect Banner - shown when user has integration alerts or needs reconnection */}
       <IntegrationReconnectBanner
@@ -757,7 +792,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <NotificationBell />
             </>
           )}
-          {activeOrgId && <CreditWidget />}
+          <TrialCountdownBadge />
+          {activeOrgId && <div data-tour="credits"><CreditWidget /></div>}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-gray-800/50 transition-colors">
@@ -949,6 +985,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   </>
                 );
 
+                const tourAttr =
+                  item.href === '/dashboard' ? 'dashboard' :
+                  item.href === '/meetings' ? 'meetings' :
+                  item.href === '/meeting-analytics' ? 'intelligence' :
+                  item.href === '/integrations' ? 'integrations' :
+                  item.href === '/copilot' ? 'copilot' :
+                  undefined;
+
                 return (
                   <div key={item.href + item.label}>
                     {item.isExternal ? (
@@ -957,6 +1001,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         target="_blank"
                         rel="noopener noreferrer"
                         className={navLinkClasses}
+                        {...(tourAttr ? { 'data-tour': tourAttr } : {})}
                       >
                         {navLinkContent}
                       </a>
@@ -964,6 +1009,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       <Link
                         to={item.href}
                         className={navLinkClasses}
+                        {...(tourAttr ? { 'data-tour': tourAttr } : {})}
                       >
                         {navLinkContent}
                       </Link>
@@ -1002,6 +1048,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <SetupWizardSidebarIndicator isCollapsed={isCollapsed} />
             <Link
               to="/settings"
+              data-tour="settings"
               className={cn(
                 'flex items-center transition-colors text-sm font-medium',
                 isCollapsed
@@ -1198,7 +1245,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         />
 
         {/* Trial Conversion Modal - shown when trial expires, cannot be dismissed */}
-        <TrialConversionModal isOpen={isTrialExpired} />
+        <TrialConversionModal isOpen={isTrialApproachingExpiry} />
+
+        {/* Trial Upgrade Modal - shown once on day 12 (2 days remaining) for org admins */}
+        <TrialUpgradeModal />
+
+        {/* Welcome splash → product tour sequence for users who just completed onboarding */}
+        {showSplash && !splashDismissed && (
+          <WelcomeSplash
+            firstName={userData?.first_name || ''}
+            companyName={activeOrg?.name || ''}
+            onDismiss={() => {
+              setSplashDismissed(true);
+              setShowSplash(false);
+            }}
+          />
+        )}
+        {userData?.id && (
+          <ProductTour userId={userData.id} />
+        )}
 
         {/* SmartSearch - Hidden */}
         {/* <SmartSearch
@@ -1255,5 +1320,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
     </div>
     </div>
+    </CreditTopUpProvider>
   );
 }

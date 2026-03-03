@@ -8,9 +8,10 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { loadPrompt, interpolateVariables } from '../_shared/promptLoader.ts';
 import { captureException } from '../_shared/sentryEdge.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -143,7 +144,19 @@ async function analyzeEmailWithAI(
     ? data.choices[0].message.content
     : data.content[0].text;
 
-  return parseClaudeResponse(content);
+  const result = parseClaudeResponse(content);
+  // Return usage metadata alongside result for cost logging
+  (result as any).__usage = {
+    inputTokens: isOpenRouter
+      ? (data.usage?.prompt_tokens || 0)
+      : (data.usage?.input_tokens || 0),
+    outputTokens: isOpenRouter
+      ? (data.usage?.completion_tokens || 0)
+      : (data.usage?.output_tokens || 0),
+    model: promptConfig.model,
+    provider: isOpenRouter ? 'openrouter' : 'anthropic',
+  };
+  return result;
 }
 
 serve(async (req) => {
@@ -173,6 +186,18 @@ serve(async (req) => {
       },
       supabase
     );
+
+    // Log AI cost event (fire-and-forget)
+    const usage = (analysis as any).__usage;
+    delete (analysis as any).__usage;
+    if (user_id && usage?.inputTokens > 0) {
+      logAICostEvent(
+        supabase, user_id, null,
+        usage.provider || 'anthropic', usage.model || 'unknown',
+        usage.inputTokens, usage.outputTokens,
+        'analyze_email',
+      ).catch((e: unknown) => console.warn('[analyze-email] cost log error:', e));
+    }
 
     return new Response(
       JSON.stringify(analysis),

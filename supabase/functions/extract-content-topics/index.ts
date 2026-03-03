@@ -15,7 +15,9 @@
  * Body: { meeting_id: string, force_refresh?: boolean }
  */
 
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { logAICostEvent } from '../_shared/costTracking.ts'
+import { validateTranscript } from '../_shared/transcriptValidation.ts'
 
 // ============================================================================
 // Types & Interfaces
@@ -210,12 +212,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 5. Validate Transcript Availability
     // ========================================================================
 
-    if (!meeting.transcript_text || meeting.transcript_text.trim().length < 50) {
+    const transcriptValidation = validateTranscript(meeting.transcript_text)
+    if (!transcriptValidation.valid) {
       return jsonResponse<ErrorResponse>(
         {
           success: false,
-          error: 'This meeting does not have a transcript yet',
-          details: 'Please wait for the transcript to be processed',
+          error: transcriptValidation.error,
+          details: transcriptValidation.details,
         },
         422
       )
@@ -314,6 +317,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const costCents = Math.ceil(
       inputTokens * INPUT_COST_PER_TOKEN * 100 + outputTokens * OUTPUT_COST_PER_TOKEN * 100
     )
+
+    // Log AI cost event (fire-and-forget)
+    {
+      const svcClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      )
+      const { data: mem } = await svcClient
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle()
+      logAICostEvent(
+        svcClient, userId, mem?.org_id ?? null,
+        'anthropic', MODEL,
+        inputTokens, outputTokens,
+        'extract_content_topics',
+      ).catch((e: unknown) => console.warn('[extract-content-topics] cost log error:', e))
+    }
+
     // ========================================================================
     // 8. Enrich Topics with Fathom URLs
     // ========================================================================

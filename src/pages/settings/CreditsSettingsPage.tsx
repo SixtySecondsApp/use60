@@ -409,7 +409,7 @@ export default function CreditsSettingsPage() {
             <div>
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-[#37bd7e]" />
-                Spend Trend (30 Days)
+                Usage Trend (30 Days)
               </h3>
               <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5">
                 <UsageChart days={30} />
@@ -491,7 +491,7 @@ export default function CreditsSettingsPage() {
                 </h3>
                 <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-4">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Add credits directly to this organization without payment. Appears as "bonus" in the transaction log.
+                    Add credits directly to this organization without payment. Appears as &quot;bonus&quot; in the transaction log.
                   </p>
                   <div className="flex flex-wrap items-end gap-3">
                     <div className="flex-1 min-w-[120px] max-w-[200px]">

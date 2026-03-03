@@ -62,6 +62,8 @@ import {
 import { MeetingUsageBar } from '@/components/MeetingUsageIndicator'
 import type { UnifiedMeeting, UnifiedSource } from '@/lib/types/unifiedMeeting'
 import type { RecordingStatus, MeetingPlatform } from '@/lib/types/meetingBaaS'
+import { useTourStore } from '@/lib/stores/tourStore'
+import { TOUR_DEMO_MEETING, TOUR_DEMO_MEETING_ID } from '@/components/tour/tourDemoData'
 
 // ============================================================================
 // Helpers
@@ -397,6 +399,13 @@ const UnifiedMeetingsList: React.FC = () => {
     navigate(item.detailPath)
   }
 
+  // During the product tour, inject the demo meeting at the top of the list
+  const isTourActive = useTourStore((s) => s.isTourActive)
+  const displayItems = useMemo<UnifiedMeeting[]>(
+    () => (isTourActive ? [TOUR_DEMO_MEETING, ...items] : items),
+    [isTourActive, items]
+  )
+
   const clearAllFilters = () => {
     setSearchQuery('')
     setSortField('meeting_start')
@@ -486,7 +495,7 @@ const UnifiedMeetingsList: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-x-hidden">
+    <div data-tour="meetings-list" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-x-hidden">
       {/* Meeting Usage Bar */}
       <MeetingUsageBar />
 
@@ -640,7 +649,7 @@ const UnifiedMeetingsList: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate('/settings/meeting-settings')}
+            onClick={() => navigate('/meetings/settings')}
             className="gap-2"
           >
             <Settings className="h-4 w-4" />
@@ -787,19 +796,29 @@ const UnifiedMeetingsList: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((item, index) => (
+                  {displayItems.map((item, index) => {
+                    const isDemoRow = item.id === TOUR_DEMO_MEETING_ID
+                    return (
                     <motion.tr
                       key={`${item.sourceTable}-${item.id}`}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.3, delay: index * 0.03 }}
-                      className="border-gray-200/50 dark:border-gray-700/30 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer group"
+                      className={cn(
+                        "border-gray-200/50 dark:border-gray-700/30 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer group",
+                        isDemoRow && "border-l-2 border-l-violet-500"
+                      )}
                       onClick={() => openItem(item)}
                     >
                       <TableCell className="font-medium text-gray-900 dark:text-gray-200 max-w-[200px] sm:max-w-xs">
                         <div className="flex items-center gap-2">
                           {renderThumbnail(item, 'w-12 h-8 flex-shrink-0')}
                           <span className="break-words line-clamp-2">{item.title}</span>
+                          {isDemoRow && (
+                            <span className="ml-1 flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300 leading-none">
+                              Demo
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
@@ -859,7 +878,7 @@ const UnifiedMeetingsList: React.FC = () => {
                         </Button>
                       </TableCell>
                     </motion.tr>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             </div>
@@ -873,14 +892,21 @@ const UnifiedMeetingsList: React.FC = () => {
             transition={{ duration: 0.2 }}
             className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 w-full"
           >
-            {items.map((item, index) => (
+            {displayItems.map((item, index) => {
+              const isDemoCard = item.id === TOUR_DEMO_MEETING_ID
+              return (
               <motion.div
                 key={`${item.sourceTable}-${item.id}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: index * 0.03 }}
                 whileHover={{ y: -2 }}
-                className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-3 sm:p-5 border border-gray-200/50 dark:border-gray-700/30 hover:border-gray-300/50 dark:hover:border-gray-600/40 transition-all duration-300 cursor-pointer group w-full"
+                className={cn(
+                  "bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-3 sm:p-5 border transition-all duration-300 cursor-pointer group w-full",
+                  isDemoCard
+                    ? "border-gray-200/50 dark:border-gray-700/30 border-l-2 border-l-violet-500 hover:border-l-violet-400"
+                    : "border-gray-200/50 dark:border-gray-700/30 hover:border-gray-300/50 dark:hover:border-gray-600/40"
+                )}
                 onClick={() => openItem(item)}
               >
                 {/* Thumbnail */}
@@ -923,9 +949,16 @@ const UnifiedMeetingsList: React.FC = () => {
                 {/* Content */}
                 <div className="space-y-3">
                   <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-1">
-                      {item.title}
-                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-1">
+                        {item.title}
+                      </h3>
+                      {isDemoCard && (
+                        <span className="flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300 leading-none">
+                          Demo
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                       {item.companyName || (item.source === '60_notetaker' && item.platform ? platformConfig[item.platform]?.label : 'No company')}
                     </p>
@@ -987,7 +1020,7 @@ const UnifiedMeetingsList: React.FC = () => {
                   </div>
                 </div>
               </motion.div>
-            ))}
+            )})}
           </motion.div>
         )}
       </AnimatePresence>

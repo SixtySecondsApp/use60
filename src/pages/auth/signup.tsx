@@ -23,11 +23,18 @@ export default function Signup() {
   });
   const [existingAccountError, setExistingAccountError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { signUp } = useAuth();
+  const { signUp, isAuthenticated, loading: authLoading } = useAuth();
   const accessCode = useAccessCode();
 
   // Get redirect destination from URL params (e.g., when coming from /invite/:token)
   const redirectPath = searchParams.get('redirect') || null;
+
+  // Redirect authenticated users to their intended destination
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      navigate(redirectPath || '/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, authLoading, navigate, redirectPath]);
   const emailParam = searchParams.get('email') || null;
 
   // Pre-fill form from invitation email param, waitlist data, or localStorage
@@ -109,13 +116,23 @@ export default function Signup() {
       }
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
+    if (formData.password.length < 6) {
+      toast.error('Password must be at least 6 characters long');
       return;
     }
 
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters long');
+    // Password strength validation
+    if (!/[A-Z]/.test(formData.password)) {
+      toast.error('Password must include at least one uppercase letter');
+      return;
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>_\-+=[\]\\/~`]/.test(formData.password)) {
+      toast.error('Password must include at least one special character');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('Passwords do not match');
       return;
     }
 
@@ -259,6 +276,7 @@ export default function Signup() {
                   <input
                     type="text"
                     required
+                    maxLength={50}
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
@@ -277,6 +295,7 @@ export default function Signup() {
                   <input
                     type="text"
                     required
+                    maxLength={50}
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
@@ -321,7 +340,7 @@ export default function Signup() {
                 />
               </div>
               <p className="text-xs text-gray-500">
-                We'll use this to customize your experience
+                We&apos;ll use this to customize your experience
               </p>
             </div>
 
@@ -343,7 +362,7 @@ export default function Signup() {
                 />
               </div>
               <p className="text-xs text-gray-500">
-                Must be at least 6 characters
+                Min 6 chars, 1 uppercase, 1 special character
               </p>
             </div>
 

@@ -51,7 +51,7 @@ const sanitizeInput = (input: string): string => {
 
 export function SkillsConfigStep() {
   const queryClient = useQueryClient();
-  const { skillConfigs, updateSkillConfig, setStep, saveAllSkills, organizationId, enrichment, resetAndCleanup } =
+  const { skillConfigs, updateSkillConfig, setStep, persistSkillsToServer, organizationId, enrichment, resetAndCleanup } =
     useOnboardingV2Store();
   const [isResetting, setIsResetting] = useState(false);
 
@@ -95,19 +95,19 @@ export function SkillsConfigStep() {
     if (currentSkillIndex < SKILLS.length - 1) {
       setCurrentSkillIndex(currentSkillIndex + 1);
     } else {
-      // All skills reviewed, save and complete
+      // All skills reviewed, save then advance to notetaker_connection
       if (organizationId) {
-        const success = await saveAllSkills(organizationId);
+        const success = await persistSkillsToServer(organizationId);
         if (success) {
-          setStep('complete');
+          setStep('notetaker_connection');
         } else {
           toast.error('Failed to save skills. Please try again.');
         }
       } else {
-        setStep('complete');
+        setStep('notetaker_connection');
       }
     }
-  }, [currentSkillIndex, organizationId, saveAllSkills, setStep]);
+  }, [currentSkillIndex, organizationId, persistSkillsToServer, setStep]);
 
   const movePrev = useCallback(() => {
     if (currentSkillIndex > 0) {
@@ -132,7 +132,7 @@ export function SkillsConfigStep() {
   }, [activeSkill.id, moveNext]);
 
   const handleSkipAll = useCallback(async () => {
-    // Mark all remaining skills as skipped and go to complete
+    // Mark all remaining skills as skipped then advance to notetaker_connection
     const updated = { ...skillStatuses };
     for (const skill of SKILLS) {
       if (updated[skill.id] === 'pending') {
@@ -142,14 +142,16 @@ export function SkillsConfigStep() {
     setSkillStatuses(updated);
 
     if (organizationId) {
-      const success = await saveAllSkills(organizationId);
+      const success = await persistSkillsToServer(organizationId);
       if (success) {
-        setStep('complete');
+        setStep('notetaker_connection');
+      } else {
+        toast.error('Failed to save skill preferences. Please try again.');
       }
     } else {
-      setStep('complete');
+      setStep('notetaker_connection');
     }
-  }, [skillStatuses, organizationId, saveAllSkills, setStep]);
+  }, [skillStatuses, organizationId, persistSkillsToServer, setStep]);
 
   const renderSkillConfig = () => {
     if (!activeConfig) return null;

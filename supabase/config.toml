@@ -11,6 +11,11 @@
 # Development branch uses connection pooler for better performance
 pooler = { enabled = true, port = 6543, pool_mode = "transaction" }
 
+[functions.seed-demo-data]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/seed-demo-data/index.ts"
+
 [functions.process-single-activity]
 enabled = true
 verify_jwt = true
@@ -282,6 +287,21 @@ verify_jwt = false
 [functions.validate-waitlist-token]
 verify_jwt = false
 
+# Generate test user magic link - called from admin panel with user JWT
+# Admin auth handled manually inside the function (CORS preflight needs to work)
+[functions.generate-test-user-link]
+verify_jwt = false
+
+# Validate test user magic link - public endpoint for test user signup
+# No auth needed - validates token from database
+[functions.validate-test-user-link]
+verify_jwt = false
+
+# Complete test user signup - public endpoint for test user account creation
+# Token-based auth - creates user, org membership, grants credits
+[functions.complete-test-user-signup]
+verify_jwt = false
+
 # Delete organization - called from admin panel with user JWT
 # We handle auth verification manually inside the function (admin check)
 [functions.delete-organization]
@@ -365,3 +385,15 @@ verify_jwt = false
 # Uses service role internally; CORS handled in function
 [functions.meeting-process-structured-summary]
 verify_jwt = false
+
+# Instant Replay orchestrator - called from browser during onboarding "wow moment"
+# SSE streaming; handles user JWT auth internally (staging ES256 JWT issue)
+[functions.instant-replay]
+verify_jwt = false
+
+# Stripe webhook - receives payment events from Stripe using HMAC signatures
+# Stripe does not send Supabase JWTs; signature is verified inside the function
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-webhook/index.ts"

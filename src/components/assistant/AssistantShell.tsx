@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import type { RichInputPayload, EntityReference } from '@/lib/types/entitySearch';
+import { useCreditGatedAction } from '@/lib/hooks/useCreditGatedAction';
 
 type AssistantShellMode = 'overlay' | 'page';
 
@@ -22,6 +23,7 @@ interface AssistantShellProps {
 
 export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
   const { messages, isLoading, sendMessage, cancelRequest, autonomousMode } = useCopilot();
+  const { execute: executeCreditGated } = useCreditGatedAction('copilot_chat', 1);
   const [inputValue, setInputValue] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -113,20 +115,23 @@ export function AssistantShell({ mode, onOpenQuickAdd }: AssistantShellProps) {
   // ---------------------------------------------------------------------------
   const handleSend = () => {
     if (!inputValue.trim() || isLoading) return;
-    sendMessage(inputValue);
+    const text = inputValue;
     setInputValue('');
+    executeCreditGated(() => sendMessage(text));
   };
 
   /** Handle submit from the RichCopilotInput */
   const handleRichSubmit = useCallback((payload: RichInputPayload) => {
     if (isLoading) return;
-    // Send message with entity metadata — CopilotContext will resolve context
-    sendMessage(payload.text, {
-      entities: payload.entities,
-      skillCommand: payload.skillCommand,
-    } as any);
     richInputRef.current?.clear();
-  }, [isLoading, sendMessage]);
+    // Send message with entity metadata — CopilotContext will resolve context
+    executeCreditGated(() =>
+      sendMessage(payload.text, {
+        entities: payload.entities,
+        skillCommand: payload.skillCommand,
+      } as any)
+    );
+  }, [isLoading, sendMessage, executeCreditGated]);
 
   /** Entity selected from @ mention dropdown */
   const handleEntitySelect = useCallback((entity: EntityReference) => {

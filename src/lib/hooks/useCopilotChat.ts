@@ -11,11 +11,12 @@
  * - Integration with memory system
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 import { CopilotSessionService } from '@/lib/services/copilotSessionService';
 import type { CopilotMessage as PersistedMessage, CopilotMessageMetadata } from '@/lib/types/copilot';
+import { toast } from 'sonner';
 
 // =============================================================================
 // Types
@@ -58,6 +59,8 @@ export interface ChatMessage {
 export interface UseCopilotChatOptions {
   organizationId: string;
   userId: string;
+  /** If provided, load this conversation on mount instead of auto-creating a main session */
+  conversationId?: string | null;
   /** Initial context to pass to every request */
   initialContext?: Record<string, unknown>;
   /** Callback when a tool call starts */
@@ -111,6 +114,10 @@ export interface UseCopilotChatReturn {
   stopGeneration: () => void;
   /** Current conversation ID */
   conversationId: string | null;
+  /** Set conversation ID externally (e.g. from CopilotContext) */
+  setConversationId: (id: string | null) => void;
+  /** Ensure a conversation exists in the DB via RPC, returns the conversation record */
+  ensureConversation: (id: string, title?: string) => Promise<{ id: string; user_id: string; org_id: string | null; title: string; created_at: string; updated_at: string }>;
   /** Whether session is loading */
   isLoadingSession: boolean;
   /** Active specialist agents during multi-agent execution */
@@ -145,7 +152,8 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
   const conversationIdRef = useRef<string | null>(null);
 
   // Keep ref in sync with state so SSE handlers never use a stale conversationId
-  useEffect(() => {
+  // useLayoutEffect ensures immediate sync before any paint/effect
+  useLayoutEffect(() => {
     conversationIdRef.current = conversationId;
   }, [conversationId]);
 
@@ -187,11 +195,32 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
       // Use ref to avoid stale closure — conversationId state may lag behind actual session load
       const currentConvId = conversationIdRef.current;
       if (persistSession && currentConvId && sessionServiceRef.current) {
-        sessionServiceRef.current.addMessage({
+        const userMsgPayload = {
           conversation_id: currentConvId,
-          role: 'user',
+          role: 'user' as const,
           content: message,
-        }).catch((err) => console.warn('[useCopilotChat] Error persisting user message:', err));
+        };
+        sessionServiceRef.current.addMessage(userMsgPayload).catch(async (err) => {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          // FK constraint violation (23503) — conversation row missing, auto-create and retry
+          if (errMsg.includes('foreign key') || errMsg.includes('23503')) {
+            try {
+              await supabase.rpc('ensure_copilot_conversation', {
+                p_id: currentConvId,
+                p_user_id: options.userId,
+                p_org_id: options.organizationId || null,
+                p_title: 'New Conversation',
+              });
+              await sessionServiceRef.current!.addMessage(userMsgPayload);
+            } catch (retryErr) {
+              console.error('[useCopilotChat] Retry failed for user message:', retryErr);
+              toast.error('Message may not be saved — conversation sync issue');
+            }
+          } else {
+            console.warn('[useCopilotChat] Error persisting user message:', err);
+            toast.error('Message may not be saved');
+          }
+        });
       }
 
       // Create placeholder assistant message
@@ -486,12 +515,32 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                         metadata.strategy = data.strategy;
                       }
 
-                      sessionServiceRef.current.addMessage({
+                      const assistantMsgPayload = {
                         conversation_id: persistConvId,
-                        role: 'assistant',
+                        role: 'assistant' as const,
                         content: accumulatedContent,
                         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-                      }).catch((err) => console.error('[useCopilotChat] Error persisting assistant message:', err));
+                      };
+                      sessionServiceRef.current.addMessage(assistantMsgPayload).catch(async (err) => {
+                        const errMsg = err instanceof Error ? err.message : String(err);
+                        if (errMsg.includes('foreign key') || errMsg.includes('23503')) {
+                          try {
+                            await supabase.rpc('ensure_copilot_conversation', {
+                              p_id: persistConvId,
+                              p_user_id: options.userId,
+                              p_org_id: options.organizationId || null,
+                              p_title: 'New Conversation',
+                            });
+                            await sessionServiceRef.current!.addMessage(assistantMsgPayload);
+                          } catch (retryErr) {
+                            console.error('[useCopilotChat] Retry failed for assistant message:', retryErr);
+                            toast.error('AI response may not be saved — conversation sync issue');
+                          }
+                        } else {
+                          console.error('[useCopilotChat] Error persisting assistant message:', err);
+                          toast.error('AI response may not be saved');
+                        }
+                      });
                     } else if (persistSession && !accumulatedContent) {
                       console.warn('[useCopilotChat] Assistant message not persisted — accumulatedContent empty at done event');
                     }
@@ -561,7 +610,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
         currentMessageIdRef.current = null;
       }
     },
-    [options, persistSession, conversationId]
+    [options, persistSession]
   );
 
   /**
@@ -599,23 +648,51 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
     }
   }, []);
 
-  // Load persisted session on mount
+  /**
+   * Ensure a conversation exists in the DB via the ensure_copilot_conversation RPC.
+   * Returns the conversation record (created or existing).
+   */
+  const ensureConversation = useCallback(
+    async (id: string, title?: string) => {
+      const { data, error: rpcError } = await supabase.rpc('ensure_copilot_conversation', {
+        p_id: id,
+        p_user_id: options.userId,
+        p_org_id: options.organizationId || null,
+        p_title: title || 'New Conversation',
+      });
+
+      if (rpcError) throw rpcError;
+      if (!data || data.length === 0) throw new Error('ensure_copilot_conversation returned no data');
+
+      const record = data[0];
+      setConversationId(record.id);
+      return record;
+    },
+    [options.userId, options.organizationId]
+  );
+
+  // Load conversation messages when conversationId is provided via options
   useEffect(() => {
-    if (!persistSession || !options.userId) return;
+    const convId = options.conversationId;
+    if (!persistSession || !options.userId || !convId) {
+      setIsLoadingSession(false);
+      return;
+    }
 
     let cancelled = false;
 
-    async function loadSession() {
+    async function loadConversationMessages() {
       try {
         const service = sessionServiceRef.current!;
-        const session = await service.getMainSession(options.userId, options.organizationId);
 
-        if (cancelled) return;
-        setConversationId(session.id);
+        // Set the conversation ID immediately
+        if (!cancelled) {
+          setConversationId(convId!);
+        }
 
-        // Load recent messages
+        // Load recent messages for this conversation
         const persistedMessages = await service.loadMessages({
-          conversation_id: session.id,
+          conversation_id: convId!,
           limit: historyLimit,
           include_compacted: false,
         });
@@ -628,22 +705,24 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
             role: m.role as MessageRole,
             content: m.content,
             timestamp: new Date(m.created_at),
-            toolCalls: m.metadata?.tool_calls?.map((tc) => ({
+            toolCalls: m.metadata?.tool_calls?.map((tc: Record<string, unknown>) => ({
               id: tc.id,
               name: tc.name,
               input: tc.input,
               status: tc.status,
               result: tc.result,
               error: tc.error,
-              startedAt: new Date(),
+              startedAt: tc.startedAt ? new Date(tc.startedAt as string) : new Date(),
             })),
             structuredResponse: (m.metadata as Record<string, unknown>)?.structuredResponse,
           }));
           setMessages(chatMessages);
+        } else {
+          setMessages([]);
         }
       } catch (err) {
-        console.error('[useCopilotChat] Error loading session:', err);
-        // Non-fatal - user can still chat without persistence
+        console.error('[useCopilotChat] Error loading conversation messages:', err);
+        toast.error('Could not load conversation history');
       } finally {
         if (!cancelled) {
           setIsLoadingSession(false);
@@ -651,12 +730,12 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
       }
     }
 
-    loadSession();
+    loadConversationMessages();
 
     return () => {
       cancelled = true;
     };
-  }, [options.userId, options.organizationId, persistSession, historyLimit]);
+  }, [options.conversationId, options.userId, persistSession, historyLimit]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -679,6 +758,8 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
     injectMessages,
     stopGeneration,
     conversationId,
+    setConversationId,
+    ensureConversation,
     isLoadingSession,
     activeAgents,
   };

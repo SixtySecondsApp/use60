@@ -11,7 +11,8 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -87,7 +88,10 @@ const INTENT_CATEGORIES = [
 
 async function classifyIntent(
   query: string,
-  skillKeys: string[]
+  skillKeys: string[],
+  supabase?: any,
+  userId?: string,
+  orgId?: string,
 ): Promise<ClassifyIntentResponse> {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
@@ -133,6 +137,16 @@ Return a JSON object with:
   }
 
   const data = await response.json();
+  // Log AI cost event (fire-and-forget)
+  if (supabase && data.usage && userId) {
+    logAICostEvent(
+      supabase, userId, orgId ?? null,
+      'anthropic', INTENT_CLASSIFICATION_MODEL,
+      data.usage.input_tokens || 0, data.usage.output_tokens || 0,
+      'skill_builder_classify',
+      { source: 'onboarding' },
+    ).catch((e: unknown) => console.warn('[api-skill-builder] classify cost log error:', e));
+  }
   const content = data.content[0].text;
 
   // Parse JSON from response
@@ -157,7 +171,7 @@ const CAPABILITY_DESCRIPTIONS: Record<string, string> = {
   task: 'Ability to create and manage tasks',
 };
 
-async function generateSkill(request: GenerateSkillRequest): Promise<GeneratedSkill> {
+async function generateSkill(request: GenerateSkillRequest, supabase?: any, userId?: string, orgId?: string): Promise<GeneratedSkill> {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
@@ -235,6 +249,16 @@ Return only valid JSON.`;
   }
 
   const data = await response.json();
+  // Log AI cost event (fire-and-forget)
+  if (supabase && data.usage && userId) {
+    logAICostEvent(
+      supabase, userId, orgId ?? null,
+      'anthropic', SKILL_GENERATION_MODEL,
+      data.usage.input_tokens || 0, data.usage.output_tokens || 0,
+      'skill_builder_generate',
+      { source: 'onboarding' },
+    ).catch((e: unknown) => console.warn('[api-skill-builder] generate cost log error:', e));
+  }
   const content = data.content[0].text;
 
   // Parse JSON from response
@@ -271,7 +295,7 @@ interface TestSkillResponse {
   executionTimeMs: number;
 }
 
-async function testSkill(request: TestSkillRequest): Promise<TestSkillResponse> {
+async function testSkill(request: TestSkillRequest, supabase?: any, userId?: string, orgId?: string): Promise<TestSkillResponse> {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
@@ -315,6 +339,16 @@ Important: Generate a realistic response as if you had access to mock CRM data. 
     }
 
     const data = await response.json();
+    // Log AI cost event (fire-and-forget)
+    if (supabase && data.usage && userId) {
+      logAICostEvent(
+        supabase, userId, orgId ?? null,
+        'anthropic', INTENT_CLASSIFICATION_MODEL,
+        data.usage.input_tokens || 0, data.usage.output_tokens || 0,
+        'skill_builder_test',
+        { source: 'onboarding' },
+      ).catch((e: unknown) => console.warn('[api-skill-builder] test cost log error:', e));
+    }
     const content = data.content[0].text;
 
     return {
@@ -373,6 +407,21 @@ serve(async (req) => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Optionally extract caller identity for cost tracking (non-blocking)
+    let callerId: string | undefined;
+    let callerOrgId: string | undefined;
+    try {
+      const authHeader = req.headers.get('Authorization');
+      if (authHeader) {
+        const { data: { user } } = await createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY') || SUPABASE_SERVICE_ROLE_KEY).auth.getUser(authHeader.replace('Bearer ', ''));
+        if (user) {
+          callerId = user.id;
+          const { data: mem } = await supabase.from('organization_memberships').select('org_id').eq('user_id', user.id).limit(1).maybeSingle();
+          callerOrgId = mem?.org_id;
+        }
+      }
+    } catch { /* non-fatal */ }
+
     switch (path) {
       case 'generate': {
         if (req.method !== 'POST') {
@@ -392,7 +441,7 @@ serve(async (req) => {
         }
 
         console.log(`[skill-builder] Generating ${body.type} for intent: ${body.intent}`);
-        const skill = await generateSkill(body);
+        const skill = await generateSkill(body, supabase, callerId, callerOrgId);
 
         return new Response(
           JSON.stringify(skill),
@@ -426,7 +475,7 @@ serve(async (req) => {
         const skillKeys = skills?.map(s => s.skill_key) || [];
 
         console.log(`[skill-builder] Classifying query: ${body.query.substring(0, 50)}...`);
-        const classification = await classifyIntent(body.query, body.skillKeys || skillKeys);
+        const classification = await classifyIntent(body.query, body.skillKeys || skillKeys, supabase, callerId, callerOrgId);
 
         // Save to analytics in background (don't wait)
         saveQueryIntent(supabase, body.query, classification, null).catch(console.error);
@@ -455,7 +504,7 @@ serve(async (req) => {
         }
 
         console.log(`[skill-builder] Testing skill: ${body.skillKey}`);
-        const result = await testSkill(body);
+        const result = await testSkill(body, supabase, callerId, callerOrgId);
 
         return new Response(
           JSON.stringify(result),

@@ -14,6 +14,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../costTracking.ts';
 import type { CommandCentreItem, DraftedAction } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -339,6 +340,28 @@ export async function synthesiseAndDraft(
     const userPrompt = buildUserPrompt(item, enrichmentContext);
 
     const rawText = await callProvider(modelConfig, systemPrompt, userPrompt);
+
+    // Log AI cost with an estimated token count (provider-agnostic)
+    // We estimate based on prompt length since callProvider() abstracts away raw usage
+    if (modelConfig.provider === 'anthropic' && item.user_id) {
+      const { data: member } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', item.user_id)
+        .limit(1)
+        .maybeSingle();
+      if (member?.org_id) {
+        logAICostEvent(
+          supabase, item.user_id, member.org_id,
+          'anthropic', modelConfig.model,
+          Math.round((systemPrompt.length + userPrompt.length) / 4), // estimate ~4 chars/token
+          Math.round((rawText?.length || 0) / 4),
+          'command_centre_draft',
+          undefined,
+          { source: 'agent_automated', agentType: 'action-drafter' },
+        ).catch((e: unknown) => console.warn('[cc-drafter] cost log error:', e));
+      }
+    }
 
     if (!rawText) {
       throw new Error(`Empty response from ${modelConfig.provider}`);

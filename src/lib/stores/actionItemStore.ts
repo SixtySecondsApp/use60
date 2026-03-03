@@ -222,6 +222,10 @@ export const useActionItemStore = create<ActionItemStore>()(
     {
       name: 'copilot-action-items',
       version: 1,
+      migrate: (persistedState: any, version: number) => {
+        // v0 → v1: no schema changes, just versioning
+        return persistedState as ActionItemStore;
+      },
     }
   )
 );

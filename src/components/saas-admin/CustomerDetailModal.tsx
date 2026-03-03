@@ -16,6 +16,9 @@ import {
   Video,
   Save,
   AlertCircle,
+  Trash2,
+  UserPlus,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -38,9 +41,13 @@ import {
   updateSubscription,
   createSubscription,
   getCustomerMembers,
+  adminRemoveMember,
+  adminAddMember,
+  adminDeleteOrganization,
 } from '@/lib/services/saasAdminService';
 import type { OrganizationMembership } from '@/lib/types/saasAdmin';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase/clientV2';
 
 interface CustomerDetailModalProps {
   customer: CustomerWithDetails;
@@ -52,6 +59,8 @@ interface CustomerDetailModalProps {
 const statusOptions: { value: SubscriptionStatus; label: string }[] = [
   { value: 'active', label: 'Active' },
   { value: 'trialing', label: 'Trialing' },
+  { value: 'grace_period', label: 'Grace Period' },
+  { value: 'expired', label: 'Expired' },
   { value: 'past_due', label: 'Past Due' },
   { value: 'paused', label: 'Paused' },
   { value: 'canceled', label: 'Canceled' },
@@ -74,6 +83,12 @@ export function CustomerDetailModal({
   const [members, setMembers] = useState<OrganizationMembership[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Delete org dialog state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form state for subscription editing
   const [selectedPlanId, setSelectedPlanId] = useState(customer.subscription?.plan_id || '');
@@ -116,6 +131,13 @@ export function CustomerDetailModal({
       setAdminNotes(customer.subscription.admin_notes || '');
     }
   }, [customer.subscription]);
+
+  // Fetch current user ID on mount (for self-removal guard)
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserId(data.user?.id ?? null);
+    });
+  }, []);
 
   // Load members when tab changes
   useEffect(() => {
@@ -163,6 +185,22 @@ export function CustomerDetailModal({
       toast.error('Failed to save subscription');
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleDeleteOrganization() {
+    if (deleteConfirmName !== customer.name) return;
+    setIsDeleting(true);
+    try {
+      await adminDeleteOrganization(customer.id);
+      toast.success(`Organization "${customer.name}" deleted`);
+      onClose();
+      onRefresh();
+    } catch (error) {
+      console.error('Error deleting organization:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete organization');
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -241,7 +279,14 @@ export function CustomerDetailModal({
           )}
 
           {activeTab === 'members' && (
-            <MembersTab members={members} isLoading={isLoadingMembers} />
+            <MembersTab
+              members={members}
+              isLoading={isLoadingMembers}
+              orgId={customer.id}
+              orgName={customer.name}
+              currentUserId={currentUserId}
+              onRefresh={loadMembers}
+            />
           )}
 
           {activeTab === 'usage' && (
@@ -249,7 +294,7 @@ export function CustomerDetailModal({
           )}
         </div>
 
-        {/* Footer - only show for subscription tab */}
+        {/* Footer - subscription save OR overview delete */}
         {activeTab === 'subscription' && (
           <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3">
             <Button variant="outline" onClick={onClose}>
@@ -267,7 +312,84 @@ export function CustomerDetailModal({
             </Button>
           </div>
         )}
+
+        {activeTab === 'overview' && (
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex justify-end">
+            <Button
+              variant="outline"
+              className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 dark:text-red-400 dark:border-red-900/50 dark:hover:bg-red-900/20"
+              onClick={() => {
+                setDeleteConfirmName('');
+                setShowDeleteDialog(true);
+              }}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Organization
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Delete Organization Confirmation Dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Delete Organization
+                </h3>
+                <p className="text-sm text-red-600 dark:text-red-400 font-medium">
+                  This cannot be undone
+                </p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Permanently delete <span className="font-semibold text-gray-900 dark:text-gray-100">{customer.name}</span>?
+              All members, meetings, data, and the subscription will be permanently destroyed.
+            </p>
+
+            <div className="space-y-2 mb-6">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Type <span className="font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-gray-900 dark:text-gray-100">{customer.name}</span> to confirm
+              </label>
+              <Input
+                value={deleteConfirmName}
+                onChange={(e) => setDeleteConfirmName(e.target.value)}
+                placeholder={customer.name}
+                className="font-mono"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && deleteConfirmName === customer.name) {
+                    handleDeleteOrganization();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteDialog(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={handleDeleteOrganization}
+                disabled={deleteConfirmName !== customer.name || isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Organization'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -368,6 +490,7 @@ interface SubscriptionTabProps {
 }
 
 function SubscriptionTab({
+  customer,
   plans,
   selectedPlanId,
   setSelectedPlanId,
@@ -437,6 +560,42 @@ function SubscriptionTab({
         </div>
       </div>
 
+      {/* Trial / Grace Period Dates (read-only) */}
+      {(customer.subscription?.trial_ends_at || customer.subscription?.grace_period_ends_at) && (
+        <div className="grid grid-cols-2 gap-4">
+          {customer.subscription?.trial_ends_at && (
+            <div className="space-y-1">
+              <Label className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                <Calendar className="w-3.5 h-3.5" />
+                Trial Ends
+              </Label>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                {new Date(customer.subscription.trial_ends_at).toLocaleDateString(undefined, {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </p>
+            </div>
+          )}
+          {customer.subscription?.grace_period_ends_at && (
+            <div className="space-y-1">
+              <Label className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                <Calendar className="w-3.5 h-3.5" />
+                Grace Period Ends
+              </Label>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                {new Date(customer.subscription.grace_period_ends_at).toLocaleDateString(undefined, {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Custom Limits */}
       <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
         <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-4">
@@ -492,69 +651,212 @@ function SubscriptionTab({
 function MembersTab({
   members,
   isLoading,
+  orgId,
+  orgName,
+  currentUserId,
+  onRefresh,
 }: {
   members: OrganizationMembership[];
   isLoading: boolean;
+  orgId: string;
+  orgName: string;
+  currentUserId: string | null;
+  onRefresh: () => void;
 }) {
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="flex items-center gap-3 p-3 animate-pulse">
-            <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-800" />
-            <div className="flex-1 space-y-2">
-              <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3" />
-              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/4" />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+  const [addEmail, setAddEmail] = useState('');
+  const [addRole, setAddRole] = useState<'member' | 'admin' | 'owner'>('member');
+  const [isAdding, setIsAdding] = useState(false);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<OrganizationMembership | null>(null);
+
+  async function handleAddMember(e: React.FormEvent) {
+    e.preventDefault();
+    if (!addEmail.trim()) return;
+    setIsAdding(true);
+    try {
+      await adminAddMember(orgId, addEmail.trim(), addRole);
+      toast.success(`${addEmail.trim()} added to ${orgName}`);
+      setAddEmail('');
+      setAddRole('member');
+      onRefresh();
+    } catch (error) {
+      console.error('Error adding member:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to add member');
+    } finally {
+      setIsAdding(false);
+    }
   }
 
-  if (members.length === 0) {
-    return (
-      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-        <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-        <p>No members found</p>
-      </div>
-    );
+  async function handleRemoveMember(member: OrganizationMembership) {
+    setRemovingUserId(member.user_id);
+    try {
+      await adminRemoveMember(orgId, member.user_id);
+      const name = member.user
+        ? `${member.user.first_name ?? ''} ${member.user.last_name ?? ''}`.trim() || member.user.email
+        : member.user_id;
+      toast.success(`${name} removed from ${orgName}`);
+      setConfirmRemove(null);
+      onRefresh();
+    } catch (error) {
+      console.error('Error removing member:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to remove member');
+    } finally {
+      setRemovingUserId(null);
+    }
   }
 
   return (
-    <div className="space-y-2">
-      {members.map((member) => (
-        <div
-          key={member.user_id}
-          className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50"
-        >
-          <div className="flex items-center gap-3">
-            {member.user?.avatar_url ? (
-              <img
-                src={member.user.avatar_url}
-                alt=""
-                className="w-10 h-10 rounded-full object-cover"
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                  {member.user?.first_name?.[0]}
-                  {member.user?.last_name?.[0]}
-                </span>
+    <div className="space-y-4">
+      {/* Add Member Form */}
+      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+          <UserPlus className="w-4 h-4 text-emerald-500" />
+          Add Member
+        </h4>
+        <form onSubmit={handleAddMember} className="flex gap-2">
+          <Input
+            type="email"
+            placeholder="user@example.com"
+            value={addEmail}
+            onChange={(e) => setAddEmail(e.target.value)}
+            className="flex-1"
+            required
+          />
+          <Select value={addRole} onValueChange={(v) => setAddRole(v as 'member' | 'admin' | 'owner')}>
+            <SelectTrigger className="w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="member">Member</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="owner">Owner</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button type="submit" disabled={isAdding || !addEmail.trim()} className="shrink-0">
+            {isAdding ? 'Adding...' : 'Add'}
+          </Button>
+        </form>
+      </div>
+
+      {/* Members List */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 animate-pulse">
+              <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-800" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3" />
+                <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/4" />
               </div>
-            )}
-            <div>
-              <p className="font-medium text-gray-900 dark:text-gray-100">
-                {member.user?.first_name} {member.user?.last_name}
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{member.user?.email}</p>
+            </div>
+          ))}
+        </div>
+      ) : members.length === 0 ? (
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+          <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <p>No members found</p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {members.map((member) => {
+            const isSelf = member.user_id === currentUserId;
+            const isRemoving = removingUserId === member.user_id;
+            const displayName =
+              member.user
+                ? `${member.user.first_name ?? ''} ${member.user.last_name ?? ''}`.trim() || member.user.email
+                : member.user_id;
+
+            return (
+              <div
+                key={member.user_id}
+                className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50"
+              >
+                <div className="flex items-center gap-3">
+                  {member.user?.avatar_url ? (
+                    <img
+                      src={member.user.avatar_url}
+                      alt=""
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                      <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                        {member.user?.first_name?.[0]}
+                        {member.user?.last_name?.[0]}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
+                      {member.user?.first_name} {member.user?.last_name}
+                      {isSelf && (
+                        <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">(you)</span>
+                      )}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{member.user?.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 capitalize">
+                    {member.role}
+                  </span>
+                  {!isSelf && (
+                    <button
+                      onClick={() => setConfirmRemove(member)}
+                      disabled={isRemoving}
+                      title={`Remove ${displayName}`}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Remove Member Confirmation Dialog */}
+      {confirmRemove && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Remove Member
+              </h3>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Remove{' '}
+              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                {confirmRemove.user
+                  ? `${confirmRemove.user.first_name ?? ''} ${confirmRemove.user.last_name ?? ''}`.trim() || confirmRemove.user.email
+                  : confirmRemove.user_id}
+              </span>{' '}
+              from <span className="font-semibold text-gray-900 dark:text-gray-100">{orgName}</span>?
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setConfirmRemove(null)}
+                disabled={!!removingUserId}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={() => handleRemoveMember(confirmRemove)}
+                disabled={!!removingUserId}
+              >
+                {removingUserId ? 'Removing...' : 'Remove'}
+              </Button>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 capitalize">
-            {member.role}
-          </span>
         </div>
-      ))}
+      )}
     </div>
   );
 }

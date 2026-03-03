@@ -44,6 +44,7 @@ import { format, parseISO } from 'date-fns';
 import { User, Target } from '@/lib/hooks/useUsers';
 import logger from '@/lib/utils/logger';
 import { AuthCodeGenerator } from '@/components/admin/AuthCodeGenerator';
+import { MagicLinkGenerator } from '@/components/admin/MagicLinkGenerator';
 
 // Define a union type for the editing user state
 type EditingUserState =
@@ -51,7 +52,7 @@ type EditingUserState =
   | { isNew: true; editingTargets?: never;[key: string]: any };
 
 export default function Users() {
-  const [activeTab, setActiveTab] = useState<'users' | 'authCodes'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'authCodes' | 'magicLinks'>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStage, setSelectedStage] = useState('all');
@@ -337,11 +338,22 @@ export default function Users() {
           >
             Authentication Codes
           </button>
+          <button
+            onClick={() => setActiveTab('magicLinks')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'magicLinks'
+              ? 'border-[#37bd7e] text-[#37bd7e]'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+          >
+            Magic Links
+          </button>
         </div>
 
         {/* Tab Content */}
         {activeTab === 'authCodes' ? (
           <AuthCodeGenerator />
+        ) : activeTab === 'magicLinks' ? (
+          <MagicLinkGenerator />
         ) : (
           <>
 
@@ -517,11 +529,11 @@ export default function Users() {
                                 </span>
                               )}
                             </div>
-                            <div>
-                              <div className="font-medium text-gray-900 dark:text-gray-100">
+                            <div className="min-w-0">
+                              <div className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px]">
                                 {user.first_name} {user.last_name}
                               </div>
-                              <div className="text-sm text-gray-700 dark:text-gray-300">{user.email}</div>
+                              <div className="text-sm text-gray-700 dark:text-gray-300 truncate max-w-[200px]">{user.email}</div>
                             </div>
                           </div>
                         </td>
@@ -614,19 +626,21 @@ export default function Users() {
                               <AlertDialogContent className="bg-gray-900/95 backdrop-blur-xl border border-gray-800/50">
                                 <AlertDialogHeader>
                                   <AlertDialogTitle className="text-red-400">Permanently Delete User</AlertDialogTitle>
-                                  <AlertDialogDescription className="space-y-3 text-gray-300">
-                                    <p>
-                                      You are about to permanently delete <span className="font-semibold text-white">{user.first_name} {user.last_name}</span> ({user.email}).
-                                    </p>
-                                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-2">
-                                      <p className="text-sm font-medium text-red-400">⚠️ This action will:</p>
-                                      <ul className="text-sm space-y-1 ml-2 text-gray-300">
-                                        <li>• Permanently remove the user's authentication access</li>
-                                        <li>• Allow this email to be used for a new account signup</li>
-                                        <li>• Delete all user data from the system</li>
-                                        <li>• Remove associated activities, tasks, and targets</li>
-                                      </ul>
-                                      <p className="text-xs text-red-300 mt-2">This action <span className="font-semibold">cannot be undone</span>.</p>
+                                  <AlertDialogDescription asChild>
+                                    <div className="space-y-3 text-gray-300">
+                                      <p>
+                                        You are about to permanently delete <span className="font-semibold text-white">{user.first_name} {user.last_name}</span> ({user.email}).
+                                      </p>
+                                      <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-2">
+                                        <p className="text-sm font-medium text-red-400">This action will:</p>
+                                        <ul className="text-sm space-y-1 ml-2 text-gray-300">
+                                          <li>- Permanently remove the user's authentication access</li>
+                                          <li>- Allow this email to be used for a new account signup</li>
+                                          <li>- Delete all user data from the system</li>
+                                          <li>- Remove associated activities, tasks, and targets</li>
+                                        </ul>
+                                        <p className="text-xs text-red-300 mt-2">This action <span className="font-semibold">cannot be undone</span>.</p>
+                                      </div>
                                     </div>
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
@@ -849,6 +863,7 @@ export default function Users() {
                     name="first_name"
                     defaultValue={editingUser.first_name || ''}
                     required
+                    maxLength={50}
                     className="w-full bg-gray-100 dark:bg-gray-800/30 border border-gray-300 dark:border-gray-700/30 rounded-xl px-4 py-2 text-gray-900 dark:text-white"
                   />
                 </div>
@@ -859,6 +874,7 @@ export default function Users() {
                     name="last_name"
                     defaultValue={editingUser.last_name || ''}
                     required
+                    maxLength={50}
                     className="w-full bg-gray-100 dark:bg-gray-800/30 border border-gray-300 dark:border-gray-700/30 rounded-xl px-4 py-2 text-gray-900 dark:text-white"
                   />
                 </div>

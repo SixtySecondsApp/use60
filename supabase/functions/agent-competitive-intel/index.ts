@@ -20,6 +20,7 @@ import {
   errorResponse,
   jsonResponse,
 } from '../_shared/corsHelper.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 
 // =============================================================================
 // Config
@@ -164,7 +165,7 @@ async function handleExtract(
   const dealId = dealMeeting?.deal_id || null;
 
   // 2. Call Claude Haiku to extract competitor mentions
-  const mentions = await extractMentionsWithAI(meeting.transcript_text, meeting.title);
+  const mentions = await extractMentionsWithAI(meeting.transcript_text, meeting.title, supabase, effectiveOrgId);
 
   if (!mentions.length) {
     console.log(`[agent-competitive-intel] No competitor mentions found in meeting ${meeting_id}`);
@@ -306,7 +307,7 @@ async function handleAggregate(
   // 3. Generate auto-battlecard if threshold met
   let autoBattlecard: string | null = null;
   if (mentions.length >= BATTLECARD_MENTION_THRESHOLD && ANTHROPIC_API_KEY) {
-    autoBattlecard = await generateBattlecard(normalizedName, commonStrengths, commonWeaknesses, effectiveCounters, winRate, mentions.length);
+    autoBattlecard = await generateBattlecard(normalizedName, commonStrengths, commonWeaknesses, effectiveCounters, winRate, mentions.length, supabase, org_id);
     if (autoBattlecard) result.battlecard_generated = true;
   }
 
@@ -355,7 +356,12 @@ async function handleAggregate(
 // AI: Extract competitor mentions from transcript
 // =============================================================================
 
-async function extractMentionsWithAI(transcript: string, title: string | null): Promise<MentionExtraction[]> {
+async function extractMentionsWithAI(
+  transcript: string,
+  title: string | null,
+  supabase?: any,
+  orgId?: string,
+): Promise<MentionExtraction[]> {
   if (!ANTHROPIC_API_KEY) {
     console.warn('[agent-competitive-intel] No ANTHROPIC_API_KEY, skipping AI extraction');
     return [];
@@ -408,6 +414,25 @@ Return ONLY the JSON array, no other text.`,
     }
 
     const data = await resp.json();
+    // Log AI cost event (fire-and-forget)
+    if (supabase && orgId && data.usage) {
+      const { data: member } = await supabase
+        .from('organization_memberships')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .limit(1)
+        .maybeSingle();
+      if (member?.user_id) {
+        logAICostEvent(
+          supabase, member.user_id, orgId,
+          'anthropic', 'claude-haiku-4-5-20251001',
+          data.usage.input_tokens || 0, data.usage.output_tokens || 0,
+          'competitive_intel_extract',
+          undefined,
+          { source: 'agent_automated', agentType: 'competitive-intel' },
+        ).catch((e: unknown) => console.warn('[agent-competitive-intel] cost log error:', e));
+      }
+    }
     const text = data?.content?.[0]?.text || '[]';
 
     // Parse JSON from response (handle markdown code blocks)
@@ -446,7 +471,9 @@ async function generateBattlecard(
   weaknesses: Array<{ weakness: string; count: number }>,
   effectiveCounters: Array<{ counter: string | undefined; category: string }>,
   winRate: number | null,
-  mentionCount: number
+  mentionCount: number,
+  supabase?: any,
+  orgId?: string,
 ): Promise<string | null> {
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -493,6 +520,25 @@ Keep it concise and actionable. Focus on what helps a rep win, not encyclopedic 
     if (!resp.ok) return null;
 
     const data = await resp.json();
+    // Log AI cost event (fire-and-forget)
+    if (supabase && orgId && data.usage) {
+      const { data: member } = await supabase
+        .from('organization_memberships')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .limit(1)
+        .maybeSingle();
+      if (member?.user_id) {
+        logAICostEvent(
+          supabase, member.user_id, orgId,
+          'anthropic', 'claude-haiku-4-5-20251001',
+          data.usage.input_tokens || 0, data.usage.output_tokens || 0,
+          'competitive_intel_battlecard',
+          undefined,
+          { source: 'agent_automated', agentType: 'competitive-intel' },
+        ).catch((e: unknown) => console.warn('[agent-competitive-intel] battlecard cost log error:', e));
+      }
+    }
     return data?.content?.[0]?.text || null;
 
   } catch {

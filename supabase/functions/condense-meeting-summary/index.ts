@@ -9,6 +9,8 @@
  */
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +20,8 @@ const corsHeaders = {
 interface CondenseRequest {
   summary: string
   meetingTitle?: string
+  user_id?: string
+  org_id?: string
 }
 
 interface CondenseResponse {
@@ -73,6 +77,12 @@ async function condenseSummaryWithClaude(
     // Parse JSON response
     const result = parseClaudeResponse(content)
 
+    // Attach token usage for caller to log costs
+    ;(result as any).__usage = {
+      inputTokens: data.usage?.input_tokens || 0,
+      outputTokens: data.usage?.output_tokens || 0,
+      model,
+    }
     return result
   } catch (error) {
     throw error
@@ -195,6 +205,23 @@ serve(async (req) => {
     // Try AI condensing first
     try {
       const result = await condenseSummaryWithClaude(body.summary, body.meetingTitle)
+
+      // Log AI cost event (fire-and-forget)
+      const usage = (result as any).__usage
+      delete (result as any).__usage
+      if (body.user_id && usage?.inputTokens > 0) {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+        )
+        logAICostEvent(
+          supabase, body.user_id, body.org_id ?? null,
+          'anthropic', usage.model || 'claude-haiku-4-5-20251001',
+          usage.inputTokens, usage.outputTokens,
+          'condense_meeting_summary',
+        ).catch((e: unknown) => console.warn('[condense-meeting-summary] cost log error:', e))
+      }
+
       return new Response(
         JSON.stringify({
           success: true,

@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrgId } from '@/lib/contexts/OrgContext';
 import { toast } from 'sonner';
 
 // =============================================================================
@@ -48,7 +49,7 @@ interface ConnectCalendarResponse {
 
 const meetingBaaSKeys = {
   all: ['meetingbaas'] as const,
-  calendars: (userId: string) => [...meetingBaaSKeys.all, 'calendars', userId] as const,
+  calendars: (userId: string, orgId: string | null) => [...meetingBaaSKeys.all, 'calendars', userId, orgId] as const,
 };
 
 // =============================================================================
@@ -57,6 +58,7 @@ const meetingBaaSKeys = {
 
 export function useMeetingBaaSCalendar() {
   const { user } = useAuth();
+  const orgId = useOrgId();
   const queryClient = useQueryClient();
   const userId = user?.id;
 
@@ -67,16 +69,23 @@ export function useMeetingBaaSCalendar() {
     error,
     refetch,
   } = useQuery<MeetingBaaSCalendar[]>({
-    queryKey: meetingBaaSKeys.calendars(userId || ''),
+    queryKey: meetingBaaSKeys.calendars(userId || '', orgId),
     queryFn: async () => {
       if (!userId) return [];
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('meetingbaas_calendars')
-        .select('*')
+        .select('id, user_id, org_id, meetingbaas_calendar_id, raw_calendar_id, platform, email, name, is_active, last_sync_at, sync_error, created_at, updated_at')
         .eq('user_id', userId)
         .eq('is_active', true)
         .order('created_at', { ascending: false });
+
+      // Enforce org-level isolation — only show calendars belonging to this org
+      if (orgId) {
+        query = query.eq('org_id', orgId);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         // Table might not exist yet
@@ -167,12 +176,12 @@ export function useMeetingBaaSCalendar() {
       });
       console.log('[useMeetingBaaSCalendar] Invalidating queries for userId:', userId);
       // Invalidate and refetch to ensure UI updates
-      queryClient.invalidateQueries({ queryKey: meetingBaaSKeys.calendars(userId || '') });
+      queryClient.invalidateQueries({ queryKey: meetingBaaSKeys.calendars(userId || '', orgId) });
       // Also invalidate the base key to catch any related queries
       queryClient.invalidateQueries({ queryKey: meetingBaaSKeys.all });
       // Force refetch after a short delay to ensure DB has committed
       setTimeout(() => {
-        queryClient.refetchQueries({ queryKey: meetingBaaSKeys.calendars(userId || '') });
+        queryClient.refetchQueries({ queryKey: meetingBaaSKeys.calendars(userId || '', orgId) });
       }, 500);
     },
     onError: (error) => {
@@ -227,7 +236,7 @@ export function useMeetingBaaSCalendar() {
       toast.success('Calendar disconnected', {
         description: 'Bot scheduling has been stopped. You can reconnect at any time.',
       });
-      queryClient.invalidateQueries({ queryKey: meetingBaaSKeys.calendars(userId || '') });
+      queryClient.invalidateQueries({ queryKey: meetingBaaSKeys.calendars(userId || '', orgId) });
       queryClient.invalidateQueries({ queryKey: meetingBaaSKeys.all });
       queryClient.invalidateQueries({ queryKey: ['notetaker'] });
     },
