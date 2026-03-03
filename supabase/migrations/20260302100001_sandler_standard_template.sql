@@ -301,7 +301,7 @@ BEGIN
 
 .ss-section-header {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 14px;
   margin-bottom: 20px;
   padding-bottom: 12px;
@@ -310,11 +310,9 @@ BEGIN
 
 .ss-accent-bar {
   width: 4px;
-  min-height: 36px;
   border-radius: 2px;
   background: {{brand.primary_color}};
   flex-shrink: 0;
-  margin-top: 3px;
 }
 
 .ss-section-title {

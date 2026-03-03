@@ -21,7 +21,6 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   CheckCircle2,
   Loader2,
@@ -189,7 +188,6 @@ export default function ProposalProgressOverlay({
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
-  const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // Edit mode state (UX-006)
   const [editMode, setEditMode] = useState(false);
@@ -461,25 +459,6 @@ export default function ProposalProgressOverlay({
   const isDone = status === 'ready';
   const isFailed = status === 'failed';
 
-  // Auto-scroll preview iframe to bottom when rendered_html updates during generation
-  useEffect(() => {
-    if (proposal?.rendered_html && !isDone && previewIframeRef.current) {
-      const iframe = previewIframeRef.current;
-      const scrollToBottom = () => {
-        try {
-          const doc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (doc) {
-            doc.documentElement.scrollTop = doc.documentElement.scrollHeight;
-          }
-        } catch {
-          // cross-origin sandbox — ignore
-        }
-      };
-      // Small delay to let iframe render the new content
-      const timer = setTimeout(scrollToBottom, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [proposal?.rendered_html, isDone]);
   // Thumbnail is written to brand_config by proposal-render-gotenberg; fall back to metadata
   const thumbnailUrl =
     ((proposal?.brand_config as Record<string, unknown> | null)?.thumbnail_url as string | undefined) ||
@@ -529,51 +508,49 @@ export default function ProposalProgressOverlay({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="flex flex-col gap-4 py-2"
+              className="flex flex-col gap-4 py-2 flex-1 min-h-0"
             >
-              <ScrollArea className="max-h-[60vh] pr-3">
-                <div className="flex flex-col gap-4">
-                  {editingSections.map((section, idx) => (
-                    <div
-                      key={idx}
-                      className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 dark:border-gray-700 dark:bg-gray-800/30"
-                    >
-                      <div className="mb-1">
-                        <Badge variant="outline" className="text-xs mb-2">
-                          {section.type}
-                        </Badge>
+              <div className="flex-1 min-h-0 overflow-y-auto pr-3 space-y-4">
+                {editingSections.map((section, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 dark:border-gray-700 dark:bg-gray-800/30"
+                  >
+                    <div className="mb-1">
+                      <Badge variant="outline" className="text-xs mb-2">
+                        {section.type}
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <Label htmlFor={`section-title-${idx}`} className="text-xs text-muted-foreground">
+                          Title
+                        </Label>
+                        <Input
+                          id={`section-title-${idx}`}
+                          value={section.title}
+                          onChange={(e) => updateSection(idx, 'title', e.target.value)}
+                          className="mt-1"
+                        />
                       </div>
-                      <div className="space-y-2">
-                        <div>
-                          <Label htmlFor={`section-title-${idx}`} className="text-xs text-muted-foreground">
-                            Title
-                          </Label>
-                          <Input
-                            id={`section-title-${idx}`}
-                            value={section.title}
-                            onChange={(e) => updateSection(idx, 'title', e.target.value)}
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor={`section-content-${idx}`} className="text-xs text-muted-foreground">
-                            Content
-                          </Label>
-                          <Textarea
-                            id={`section-content-${idx}`}
-                            value={section.content}
-                            onChange={(e) => updateSection(idx, 'content', e.target.value)}
-                            rows={4}
-                            className="mt-1 resize-y"
-                          />
-                        </div>
+                      <div>
+                        <Label htmlFor={`section-content-${idx}`} className="text-xs text-muted-foreground">
+                          Content
+                        </Label>
+                        <Textarea
+                          id={`section-content-${idx}`}
+                          value={section.content}
+                          onChange={(e) => updateSection(idx, 'content', e.target.value)}
+                          rows={4}
+                          className="mt-1 resize-y"
+                        />
                       </div>
                     </div>
-                  ))}
-                </div>
-              </ScrollArea>
+                  </div>
+                ))}
+              </div>
 
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1 shrink-0">
                 <Button
                   variant="outline"
                   className="flex-1"
@@ -669,15 +646,18 @@ export default function ProposalProgressOverlay({
                 </div>
               </div>
 
-              {/* Inline preview iframe or thumbnail fallback */}
+              {/* Inline preview — show only first page (cover) */}
               {proposal?.rendered_html ? (
-                <div className="flex-1 min-h-0 w-full rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 overflow-hidden">
-                  <iframe
-                    srcDoc={proposal.rendered_html}
-                    title="Proposal preview"
-                    className="w-full h-full border-0"
-                    sandbox="allow-same-origin"
-                  />
+                <div className="flex-1 min-h-0 w-full px-8 sm:px-16 py-4">
+                  <div className="w-full h-full rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 overflow-hidden shadow-sm">
+                    <iframe
+                      srcDoc={proposal.rendered_html}
+                      title="Proposal preview"
+                      className="w-full h-full border-0"
+                      sandbox="allow-same-origin"
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  </div>
                 </div>
               ) : thumbnailUrl ? (
                 <div className="flex justify-center">
@@ -757,48 +737,12 @@ export default function ProposalProgressOverlay({
               exit={{ opacity: 0 }}
               className="py-2 flex-1 min-h-0 flex flex-col"
             >
-              {/* Always split layout: stepper left, preview right */}
               <div className="flex gap-4 flex-1 min-h-0" style={{ minHeight: '50vh' }}>
                 <div className="w-48 shrink-0">
                   <ProgressStepper status={status} isFailed={false} />
                 </div>
                 <div className="flex-1 min-h-0 rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 overflow-hidden relative">
-                  {proposal?.rendered_html ? (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.4 }}
-                      className="absolute inset-0"
-                    >
-                      <iframe
-                        ref={previewIframeRef}
-                        key={proposal.rendered_html.length}
-                        srcDoc={proposal.rendered_html}
-                        title="Proposal preview (generating)"
-                        className="w-full h-full border-0"
-                        sandbox="allow-same-origin"
-                      />
-                    </motion.div>
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6">
-                      <div className="relative mb-4">
-                        <FileText className="h-12 w-12 text-gray-300 dark:text-gray-600" />
-                        <motion.div
-                          animate={{ rotate: 360 }}
-                          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                          className="absolute -top-1 -right-1"
-                        >
-                          <Loader2 className="h-5 w-5 text-blue-500" />
-                        </motion.div>
-                      </div>
-                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                        Building your proposal...
-                      </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                        Preview will appear here as sections are written
-                      </p>
-                    </div>
-                  )}
+                  <DocumentAssemblyAnimation status={status} />
                 </div>
               </div>
             </motion.div>
@@ -806,6 +750,277 @@ export default function ProposalProgressOverlay({
         </AnimatePresence>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DocumentAssemblyAnimation — animated page build tied to pipeline stages
+// ---------------------------------------------------------------------------
+
+/**
+ * A 4-page miniature document that visually assembles as pipeline stages
+ * complete. White pages with dark skeleton lines for text, tables, and
+ * timeline sections. Designed to fill ~60s of wait time.
+ */
+// Pre-computed bullet widths so they don't change on re-render
+const BULLET_WIDTHS = [72, 85, 63, 78, 90, 68, 82, 75] as const;
+
+// Skeleton line — animates width from 0
+function SkeletonLine({ w, delay, dark = false }: { w: string; delay: number; dark?: boolean }) {
+  return (
+    <motion.div
+      initial={{ width: 0 }}
+      animate={{ width: w }}
+      transition={{ delay, duration: 0.35, ease: 'easeOut' }}
+      className={cn('h-[2px] rounded-full', dark ? 'bg-gray-600' : 'bg-gray-300')}
+    />
+  );
+}
+
+// Section heading bar + title line
+function SectionHead({ titleW, delay }: { titleW: string; delay: number }) {
+  return (
+    <div className="flex items-center gap-1 mb-1">
+      <motion.div
+        initial={{ height: 0 }}
+        animate={{ height: 8 }}
+        transition={{ delay, duration: 0.3 }}
+        className="w-[2px] rounded-full bg-[#1e3a5f] shrink-0"
+      />
+      <SkeletonLine w={titleW} delay={delay + 0.1} dark />
+    </div>
+  );
+}
+
+// Paragraph block (staggered lines)
+function SkeletonParagraph({ widths, baseDelay }: { widths: string[]; baseDelay: number }) {
+  return (
+    <div className="space-y-[2px]">
+      {widths.map((w, i) => (
+        <div key={i}><SkeletonLine w={w} delay={baseDelay + i * 0.12} /></div>
+      ))}
+    </div>
+  );
+}
+
+// Table skeleton
+function TableSkeleton({ rows, delay }: { rows: number; delay: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay, duration: 0.4 }}
+      className="border border-gray-200 rounded-[2px] overflow-hidden"
+    >
+      <div className="bg-[#1e3a5f] h-[5px]" />
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className={cn('flex gap-1 px-1 py-[2px]', i % 2 === 0 ? 'bg-white' : 'bg-gray-50')}
+        >
+          <div className="h-[2px] rounded-full bg-gray-300 flex-[2]" />
+          <div className="h-[2px] rounded-full bg-gray-200 flex-[3]" />
+          <div className="h-[2px] rounded-full bg-gray-300 flex-1" />
+        </div>
+      ))}
+      <div className="flex gap-1 px-1 py-[2px] border-t border-gray-200 bg-gray-50">
+        <div className="h-[2px] rounded-full bg-gray-600 flex-[2]" />
+        <div className="flex-[3]" />
+        <div className="h-[2px] rounded-full bg-gray-600 flex-1" />
+      </div>
+    </motion.div>
+  );
+}
+
+// Bullet list with stable widths
+function BulletList({ count, delay }: { count: number; delay: number }) {
+  return (
+    <div className="space-y-[3px] pl-2">
+      {Array.from({ length: count }).map((_, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, x: -4 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: delay + i * 0.15, duration: 0.3 }}
+          className="flex items-center gap-1"
+        >
+          <div className="w-[3px] h-[3px] rounded-full bg-gray-400 shrink-0" />
+          <div
+            className="h-[2px] rounded-full bg-gray-300"
+            style={{ width: `${BULLET_WIDTHS[i % BULLET_WIDTHS.length]}%` }}
+          />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// Single mini-page
+function MiniPage({ children, show, delay }: { children: React.ReactNode; show: boolean; delay: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
+      transition={{ delay, duration: 0.5, ease: 'easeOut' }}
+      className="rounded-[3px] border border-gray-200 shadow-sm overflow-hidden shrink-0"
+      style={{ width: '100%', aspectRatio: '210 / 297', background: '#ffffff' }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function DocumentAssemblyAnimation({ status }: { status: PipelineStatus | null }) {
+  const activeIdx = getActiveStageIndex(status);
+
+  // Use ref for elapsed so ticking doesn't cause re-renders.
+  // Only the page-visibility flags need to trigger renders.
+  const elapsedRef = useRef(0);
+  const [visiblePages, setVisiblePages] = useState(1);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const t0 = Date.now();
+    const tick = setInterval(() => {
+      elapsedRef.current = (Date.now() - t0) / 1000;
+      // Evenly distribute page reveals across the wait
+      let pages = 1;
+      if (elapsedRef.current > 3) pages = 2;
+      if (elapsedRef.current > 14) pages = 3;
+      if (elapsedRef.current > 28) pages = 4;
+      setVisiblePages((prev) => Math.max(prev, pages));
+    }, 500);
+    return () => clearInterval(tick);
+  }, []);
+
+  // Auto-scroll down when the bottom row (pages 3 & 4) appears
+  useEffect(() => {
+    if (visiblePages >= 3 && scrollRef.current) {
+      // Small delay to let framer-motion start the page entrance animation
+      const timer = setTimeout(() => {
+        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [visiblePages]);
+
+  // Combine stage progress with time-based reveals
+  const showPage1 = activeIdx >= 0;
+  const showPage2 = activeIdx >= 1 || visiblePages >= 2;
+  const showPage3 = activeIdx >= 2 || visiblePages >= 3;
+  const showPage4 = activeIdx >= 3 || visiblePages >= 4;
+
+  return (
+    <div className="absolute inset-0 flex flex-col">
+      {/* Scrollable pages area */}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-2">
+        <div className="grid grid-cols-2 gap-3 max-w-[520px] mx-auto">
+
+          {/* ─── PAGE 1: Cover ─── */}
+          <MiniPage show={showPage1} delay={0}>
+            <motion.div
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={{ duration: 0.4 }}
+              style={{ transformOrigin: 'left' }}
+              className="h-[3%] bg-[#1e3a5f]"
+            />
+            <div className="flex flex-col items-center justify-center h-[90%] gap-2 px-4">
+              <SkeletonLine w="35%" delay={0.3} />
+              <SkeletonLine w="65%" delay={0.5} dark />
+              <SkeletonLine w="25%" delay={0.7} />
+              <div className="mt-2 flex flex-col items-center gap-1">
+                <SkeletonLine w="50%" delay={0.9} />
+                <SkeletonLine w="35%" delay={1.1} />
+                <SkeletonLine w="25%" delay={1.3} />
+              </div>
+            </div>
+            <div className="h-[1.5%] bg-[#4a90d9]" />
+          </MiniPage>
+
+          {/* ─── PAGE 2: TOC + Exec Summary + Challenge ─── */}
+          <MiniPage show={showPage2} delay={0.3}>
+            <div className="p-2.5 space-y-2">
+              {/* TOC — compact */}
+              <div className="space-y-[2px]">
+                <SkeletonLine w="32%" delay={0.3} dark />
+                <motion.div
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: 1 }}
+                  transition={{ delay: 0.5, duration: 0.3 }}
+                  style={{ transformOrigin: 'left' }}
+                  className="h-[1px] bg-gray-200"
+                />
+                {['55%', '45%', '60%', '50%', '40%', '55%', '45%'].map((w, i) => (
+                  <div key={i} className="flex items-center gap-[2px]">
+                    <SkeletonLine w="6%" delay={0.6 + i * 0.08} dark />
+                    <SkeletonLine w={w} delay={0.6 + i * 0.08} />
+                  </div>
+                ))}
+              </div>
+              {/* Exec Summary */}
+              <SectionHead titleW="55%" delay={1.8} />
+              <SkeletonParagraph widths={['90%', '95%', '85%', '92%', '78%', '88%', '82%', '90%']} baseDelay={2.0} />
+              {/* Challenge */}
+              <SectionHead titleW="45%" delay={3.8} />
+              <SkeletonParagraph widths={['88%', '92%', '80%', '95%', '85%', '90%']} baseDelay={4.0} />
+              {/* Solution intro */}
+              <SectionHead titleW="50%" delay={5.5} />
+              <SkeletonParagraph widths={['92%', '88%', '95%', '80%']} baseDelay={5.7} />
+            </div>
+          </MiniPage>
+
+          {/* ─── PAGE 3: Approach + Phases ─── */}
+          <MiniPage show={showPage3} delay={0.3}>
+            <div className="p-2.5 space-y-2">
+              <SectionHead titleW="48%" delay={0.2} />
+              <div className="space-y-1">
+                <SkeletonLine w="40%" delay={0.4} dark />
+                <SkeletonParagraph widths={['92%', '85%', '90%', '88%']} baseDelay={0.5} />
+                <SkeletonLine w="35%" delay={1.2} dark />
+                <SkeletonParagraph widths={['88%', '95%', '82%', '90%']} baseDelay={1.3} />
+              </div>
+              <SectionHead titleW="50%" delay={2.2} />
+              <div className="space-y-1">
+                <SkeletonLine w="55%" delay={2.4} dark />
+                <SkeletonParagraph widths={['90%', '88%', '82%']} baseDelay={2.5} />
+                <SkeletonLine w="50%" delay={3.2} dark />
+                <SkeletonParagraph widths={['85%', '92%', '78%']} baseDelay={3.3} />
+                <SkeletonLine w="48%" delay={4.0} dark />
+                <SkeletonParagraph widths={['90%', '80%', '88%']} baseDelay={4.1} />
+              </div>
+            </div>
+          </MiniPage>
+
+          {/* ─── PAGE 4: Timeline Table + Pricing + Terms ─── */}
+          <MiniPage show={showPage4} delay={0.3}>
+            <div className="p-2.5 space-y-2">
+              <SectionHead titleW="60%" delay={0.2} />
+              <TableSkeleton rows={5} delay={0.4} />
+              <SectionHead titleW="42%" delay={1.5} />
+              <TableSkeleton rows={4} delay={1.7} />
+              <SectionHead titleW="55%" delay={2.8} />
+              <BulletList count={5} delay={3.0} />
+            </div>
+          </MiniPage>
+        </div>
+      </div>
+
+      {/* Status label */}
+      <motion.p
+        key={status}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="shrink-0 py-2 text-center text-xs text-gray-400 dark:text-gray-500"
+      >
+        {status === 'assembling' && 'Gathering context...'}
+        {(status === 'context_assembled' || status === 'composing') && 'Writing sections...'}
+        {(status === 'composed' || status === 'rendering') && 'Applying your brand...'}
+        {status === 'rendered' && 'Rendering PDF...'}
+        {status === 'delivering' && 'Almost there...'}
+        {!status && 'Starting...'}
+      </motion.p>
+    </div>
   );
 }
 

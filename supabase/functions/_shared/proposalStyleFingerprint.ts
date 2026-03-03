@@ -244,6 +244,8 @@ export function styleFingerPrintToPromptBlock(fp: StyleFingerprint): string {
     'WRITING STYLE REQUIREMENTS:',
     `- Tone: ${formalityLabel}, ${directnessLabel}, ${warmthLabel}`,
     `- Length preference: ${fp.preferred_length} — ${lengthLabel}`,
+    '- Language: British English spelling (e.g. "optimise" not "optimize", "colour" not "color", "centre" not "center", "specialised" not "specialized")',
+    '- Punctuation: Use en-dashes (–) not em-dashes (—). Prefer commas or semicolons over dashes where possible.',
   ]
 
   if (fp.words_to_avoid.length > 0) {
