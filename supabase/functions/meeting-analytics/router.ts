@@ -124,7 +124,7 @@ export async function routeRequest(req: Request): Promise<Response> {
 
   // --- Search ---
   if (apiPath === 'search/ask' && req.method === 'POST') {
-    return handleAsk(req, orgId);
+    return handleAsk(req, orgId, auth.userId);
   }
   if (apiPath === 'search' && req.method === 'POST') {
     return handleSearch(req, orgId);

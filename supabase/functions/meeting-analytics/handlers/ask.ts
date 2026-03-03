@@ -3,8 +3,10 @@
  * Ports the RAG logic from meeting-translation search route to the Deno edge function.
  */
 
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getRailwayDb } from '../db.ts';
 import { successResponse, errorResponse } from '../helpers.ts';
+import { logAICostEvent } from '../../_shared/costTracking.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -93,7 +95,7 @@ interface SearchResult {
 // Main handler
 // ---------------------------------------------------------------------------
 
-export async function handleAsk(req: Request, orgId: string): Promise<Response> {
+export async function handleAsk(req: Request, orgId: string, userId?: string): Promise<Response> {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -391,6 +393,35 @@ Provide a clear, specific answer. For questions about promises, proposals, or co
 
     const completionJson = await completionRes.json();
     const answer = completionJson.choices?.[0]?.message?.content || 'Unable to generate answer';
+
+    // ============================================
+    // STEP 7b: Charge credits for AI usage
+    // ============================================
+    if (userId) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+        if (supabaseUrl && serviceRoleKey) {
+          const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+          const completionUsage = completionJson.usage || {};
+          const embeddingInputTokens = question.length; // approximate
+          await logAICostEvent(
+            supabaseAdmin,
+            userId,
+            orgId,
+            'openrouter',
+            'gpt-4o-mini',
+            (completionUsage.prompt_tokens || 0) + embeddingInputTokens,
+            completionUsage.completion_tokens || 0,
+            'meeting_ask_anything',
+            { question: question.substring(0, 100), meetingsAnalyzed: validStructuredData.length },
+          );
+        }
+      } catch (costErr) {
+        // Non-fatal — never block the answer
+        console.warn('[meeting-analytics/ask] Credit charging failed (non-fatal):', costErr);
+      }
+    }
 
     // ============================================
     // STEP 8: Return answer with source citations

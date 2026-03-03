@@ -57,6 +57,7 @@ interface SeedResponse {
     activities: number;
     org_enrichment: number;
     org_context: number;
+    railway_synced: number;
   };
   ids?: {
     companyIds: string[];
@@ -989,6 +990,74 @@ serve(async (req: Request) => {
     }
 
     // ------------------------------------------------------------------
+    // Step 12b: Sync seeded meetings to Railway (meeting-analytics)
+    // This pushes transcript data to the Railway PostgreSQL database so that
+    // the AI "Ask Anything" feature can query them via vector search.
+    // Fire-and-forget per meeting — failures are non-fatal.
+    // ------------------------------------------------------------------
+    let railwaySyncCount = 0;
+
+    if (meetingIds.length > 0) {
+      console.log("[seed-demo-data] Syncing", meetingIds.length, "meetings to Railway...");
+
+      // Fetch all meeting records in one query
+      const { data: meetingRecords } = await supabase
+        .from("meetings")
+        .select("id, title, transcript_text, meeting_start, duration_minutes, owner_user_id")
+        .in("id", meetingIds);
+
+      const recordsToSync = (meetingRecords || []).filter((m: any) => m.transcript_text);
+
+      // Sync in parallel batches of 3 to avoid overloading the sync endpoint
+      // (each sync call generates OpenAI embeddings which takes a few seconds)
+      const batchSize = 3;
+      for (let i = 0; i < recordsToSync.length; i += batchSize) {
+        const batch = recordsToSync.slice(i, i + batchSize);
+        const results = await Promise.allSettled(
+          batch.map(async (meetingRecord: any) => {
+            const syncRes = await fetch(
+              `${SUPABASE_URL}/functions/v1/meeting-analytics/api/sync/meeting`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                },
+                body: JSON.stringify({
+                  type: "INSERT",
+                  table: "meetings",
+                  record: {
+                    id: meetingRecord.id,
+                    title: meetingRecord.title,
+                    transcript_text: meetingRecord.transcript_text,
+                    meeting_start: meetingRecord.meeting_start,
+                    duration_minutes: meetingRecord.duration_minutes,
+                    owner_user_id: meetingRecord.owner_user_id,
+                  },
+                }),
+              },
+            );
+            if (!syncRes.ok) {
+              const errText = await syncRes.text().catch(() => "unknown");
+              throw new Error(`${syncRes.status} ${errText}`);
+            }
+            return meetingRecord.id;
+          }),
+        );
+
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            railwaySyncCount++;
+          } else {
+            console.error(`[seed-demo-data] Railway sync failed:`, result.reason);
+          }
+        }
+      }
+
+      console.log("[seed-demo-data] Railway sync complete:", railwaySyncCount, "/", recordsToSync.length);
+    }
+
+    // ------------------------------------------------------------------
     // Step 13: Seed organization_enrichment
     // ------------------------------------------------------------------
     let orgEnrichmentCount = 0;
@@ -1141,6 +1210,7 @@ serve(async (req: Request) => {
         activities: activitiesCount,
         org_enrichment: orgEnrichmentCount,
         org_context: orgContextCount,
+        railway_synced: railwaySyncCount,
       },
       ids: {
         companyIds: filteredCompanyIds,
