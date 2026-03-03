@@ -11,8 +11,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   AlertTriangle,
-  ArrowUp,
-  Bell,
   ChevronDown,
   Filter,
   RefreshCw,
@@ -40,6 +38,7 @@ import { CCDetailPanel } from '@/components/commandCentre/CCDetailPanel';
 import { CCEmptyState } from '@/components/commandCentre/CCEmptyState';
 import { CCFilterBar, type CCFilter } from '@/components/commandCentre/CCFilterBar';
 import { CCItemCard } from '@/components/commandCentre/CCItemCard';
+import { URGENCY_CONFIG, URGENCY_OPTIONS } from '@/components/commandCentre/constants';
 
 // ============================================================================
 // Skeleton loader
@@ -118,31 +117,6 @@ function StatsBar({
 // ============================================================================
 // Urgency/Agent filter pills (sub-filters within the main filter)
 // ============================================================================
-
-const URGENCY_CONFIG = {
-  critical: {
-    label: 'Critical',
-    badgeClass: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400',
-    icon: AlertTriangle,
-  },
-  high: {
-    label: 'High',
-    badgeClass: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400',
-    icon: ArrowUp,
-  },
-  normal: {
-    label: 'Normal',
-    badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
-    icon: Bell,
-  },
-  low: {
-    label: 'Low',
-    badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-    icon: ChevronDown,
-  },
-} as const;
-
-const URGENCY_OPTIONS = ['critical', 'high', 'normal', 'low'] as const;
 
 interface SubFilterBarProps {
   urgencyFilter: string | null;

@@ -12,11 +12,7 @@
  */
 
 import {
-  AlertTriangle,
-  ArrowUp,
-  Bell,
   Check,
-  ChevronDown,
   Clock,
   Loader2,
   RotateCcw,
@@ -27,33 +23,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
-
-// ============================================================================
-// Urgency helpers
-// ============================================================================
-
-const URGENCY_CONFIG = {
-  critical: {
-    label: 'Critical',
-    badgeClass: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400',
-    icon: AlertTriangle,
-  },
-  high: {
-    label: 'High',
-    badgeClass: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400',
-    icon: ArrowUp,
-  },
-  normal: {
-    label: 'Normal',
-    badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
-    icon: Bell,
-  },
-  low: {
-    label: 'Low',
-    badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-    icon: ChevronDown,
-  },
-} as const;
+import { URGENCY_CONFIG } from './constants';
 
 function UrgencyBadge({ urgency }: { urgency: CCItem['urgency'] }) {
   const config = URGENCY_CONFIG[urgency] ?? URGENCY_CONFIG.normal;
@@ -249,7 +219,8 @@ export function CCItemCard({
               {(item.status === 'open' || item.status === 'ready') && (
                 <Button
                   size="sm"
-                  className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                  variant="success"
+                  className="h-7 px-3 text-xs"
                   onClick={() => onApprove(item.id)}
                   disabled={isPending}
                 >
