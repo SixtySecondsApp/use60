@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+
 export type TicketCategory = 'bug' | 'feature_request' | 'billing' | 'how_to' | 'other';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type TicketStatus = 'open' | 'in_progress' | 'waiting_on_customer' | 'resolved' | 'closed';
@@ -82,17 +84,39 @@ export function useCreateSupportTicket() {
           priority: payload.priority,
           status: 'open',
         })
-        .select('id, subject')
+        .select('id, subject, description')
         .single();
 
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['support-tickets'] });
       toast.success(`Ticket created — #${data.id.slice(0, 8).toUpperCase()}`, {
         description: data.subject,
       });
+
+      // Fire email notification in background — don't await, don't block UX
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (accessToken && SUPABASE_URL) {
+        fetch(`${SUPABASE_URL}/functions/v1/send-support-ticket-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            ticket_id: data.id,
+            subject: data.subject,
+            description: variables.description,
+            category: variables.category,
+            priority: variables.priority,
+            user_email: sessionData?.session?.user?.email || '',
+            user_name: sessionData?.session?.user?.user_metadata?.full_name || '',
+          }),
+        }).catch((err) => console.warn('[useSupportTickets] Email notification failed:', err));
+      }
     },
     onError: (error: Error) => {
       toast.error('Failed to create ticket', { description: error.message });

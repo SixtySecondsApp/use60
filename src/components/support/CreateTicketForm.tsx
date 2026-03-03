@@ -144,7 +144,7 @@ export function CreateTicketForm({ open, onClose }: CreateTicketFormProps) {
             <div className="flex items-start gap-2 p-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-lg">
               <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
               <p className="text-xs text-orange-700 dark:text-orange-400">
-                Urgent tickets are escalated immediately. For immediate help, please also contact us via Slack.
+                Urgent tickets are escalated immediately. You will receive a confirmation email and we will respond as quickly as possible.
               </p>
             </div>
           )}
