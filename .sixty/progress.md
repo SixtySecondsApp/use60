@@ -78,3 +78,20 @@ All 5 DEDUP stories delivered:
 - **DEDUP-004**: Audited source files for orphaned feature references. Routes `/action-centre` and `/email-actions` correctly marked `showInNav: false` with deprecation comments. No marketing-facing orphaned references found.
 - **DEDUP-005**: Architecture diagram reviewed — `command-centre.mermaid` and `slack-copilot.mermaid` references are architecture diagrams (not feature catalogue entries) and are correct.
 
+### 2026-03-03 — COMP-001 through COMP-007 (impl-1)
+
+**PRD-105: Competitive Intelligence Library — COMPLETE**
+
+All 7 COMP stories were already implemented in prior sessions. Verified and lint-checked:
+
+- **COMP-001**: `CompetitiveIntelPage.tsx` — two-panel layout with sidebar competitor list, search, win/loss mini-bar, auto-select first competitor.
+- **COMP-002**: `CompetitorProfileView.tsx` + `BattlecardViewer.tsx` — viewable/editable battlecard, admin-gated edit mode, AI-generated badge.
+- **COMP-003**: `MentionFrequencyChart.tsx` — Recharts BarChart with 30/60/90d toggle, weekly bucketing for longer windows.
+- **COMP-004**: `MentionedInDeals.tsx` — deal links with sentiment icon, outcome badge, mention context, show more/less.
+- **COMP-005**: Win/loss ratio stats card in `CompetitorProfileView.tsx` — win rate %, wins, losses, progress bar.
+- **COMP-006**: `DealCompetitorSection.tsx` wired into `DealIntelligenceSheet.tsx:876` — competitor badges link to `/intelligence/competitive?competitor=NAME`.
+- **COMP-007**: `useCompetitiveIntel.ts` — `useCompetitorProfiles`, `useCompetitorProfile`, `useMentionFrequency`, `useMentionsWithDeals`, `useUpdateBattlecard` hooks.
+- Route `/intelligence/competitive` registered in `routeConfig.ts` and `App.tsx`.
+
+No new code written — all stories pre-implemented.
+
