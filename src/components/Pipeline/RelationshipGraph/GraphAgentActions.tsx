@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { Mail, FileText, RefreshCw, CheckSquare, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import type { GraphNode } from './types';
 
 interface GraphAgentActionsProps {
@@ -81,17 +84,55 @@ const ACTION_CARDS: ActionCard[] = [
   },
 ];
 
+// Map frontend IDs to edge function action_type
+const ACTION_TYPE_MAP: Record<string, string> = {
+  'draft-followup': 'draft_followup',
+  'meeting-prep': 'meeting_prep',
+  're-engage': 'reengage',
+  'create-task': 'create_task',
+  'enrich-profile': 'enrich_profile',
+};
+
 export function GraphAgentActions({ node }: GraphAgentActionsProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [triggeredIds, setTriggeredIds] = useState<Set<string>>(new Set());
+  const [errorId, setErrorId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const activeOrgId = useOrgStore((state) => state.activeOrgId);
 
   function handleToggle(id: string) {
     setExpandedId((prev) => (prev === id ? null : id));
   }
 
-  function handleTrigger(e: React.MouseEvent, id: string) {
+  async function handleTrigger(e: React.MouseEvent, id: string) {
     e.stopPropagation();
-    setTriggeredIds((prev) => new Set(prev).add(id));
+    setErrorId(null);
+
+    const actionType = ACTION_TYPE_MAP[id];
+    if (!actionType || !user?.id || !activeOrgId) return;
+
+    try {
+      const { error } = await supabase.functions.invoke('graph-agent-trigger', {
+        body: {
+          action_type: actionType,
+          contact_id: node.id,
+          deal_id: node.deals[0]?.id ?? null,
+          org_id: activeOrgId,
+          user_id: user.id,
+        },
+      });
+
+      if (error) {
+        console.error('[GraphAgentActions] trigger error:', error.message);
+        setErrorId(id);
+        return;
+      }
+
+      setTriggeredIds((prev) => new Set(prev).add(id));
+    } catch (err) {
+      console.error('[GraphAgentActions] unexpected error:', err);
+      setErrorId(id);
+    }
   }
 
   return (
@@ -183,6 +224,11 @@ export function GraphAgentActions({ node }: GraphAgentActionsProps) {
                   >
                     {action.credits === 0 ? 'Run Free' : `Run · ${action.credits} credit${action.credits !== 1 ? 's' : ''}`}
                   </button>
+                )}
+                {errorId === action.id && (
+                  <div className="mt-1.5 text-[10px] text-red-400 text-center">
+                    Failed to trigger — try again
+                  </div>
                 )}
               </div>
             )}
