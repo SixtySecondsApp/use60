@@ -56,6 +56,27 @@ interface ConfigMeta {
   prominent: boolean;
 }
 
+// Month names for fiscal year dropdown display (index 0 = January = value '1')
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Display labels for sales methodology values
+const METHODOLOGY_LABELS: Record<string, string> = {
+  generic: 'Generic',
+  meddic: 'MEDDIC',
+  bant: 'BANT',
+  spin: 'SPIN',
+  challenger: 'Challenger',
+};
+
+// Tooltip descriptions for sales methodology options (US-017)
+const METHODOLOGY_TOOLTIPS: Record<string, string> = {
+  generic: 'A flexible, general-purpose sales approach',
+  meddic: 'Metrics, Economic Buyer, Decision Criteria, Decision Process, Identify Pain, Champion',
+  bant: 'Budget, Authority, Need, Timeline',
+  spin: 'Situation, Problem, Implication, Need-Payoff',
+  challenger: 'The Challenger Sale — teach, tailor, and take control of the conversation',
+};
+
 const CONFIG_META: Record<string, ConfigMeta> = {
   sales_methodology: {
     label: 'Sales Methodology',
@@ -214,6 +235,8 @@ function ConfidenceDot({ confidence }: { confidence: 'high' | 'medium' | 'low' }
 // Editable tag list
 // ---------------------------------------------------------------------------
 
+const MAX_ITEMS = 10;
+
 function TagEditor({
   values,
   onChange,
@@ -222,10 +245,11 @@ function TagEditor({
   onChange: (v: string[]) => void;
 }) {
   const [draft, setDraft] = useState('');
+  const atLimit = values.length >= MAX_ITEMS;
 
   const add = () => {
     const trimmed = draft.trim();
-    if (trimmed && !values.includes(trimmed)) {
+    if (trimmed && !values.includes(trimmed) && !atLimit) {
       onChange([...values, trimmed]);
     }
     setDraft('');
@@ -236,35 +260,42 @@ function TagEditor({
   };
 
   return (
-    <div className="flex flex-wrap gap-1 mt-1">
-      {values.map((v, i) => (
-        <span
-          key={i}
-          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-violet-900/50 text-violet-200"
-        >
-          {v}
-          <button
-            onClick={() => remove(i)}
-            className="text-violet-400 hover:text-white transition-colors"
+    <div className="space-y-1">
+      <div className="flex flex-wrap gap-1 mt-1">
+        {values.map((v, i) => (
+          <span
+            key={i}
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-violet-900/50 text-violet-200"
           >
-            <X className="w-3 h-3" />
-          </button>
-        </span>
-      ))}
-      <input
-        type="text"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ',') {
-            e.preventDefault();
-            add();
-          }
-        }}
-        onBlur={add}
-        placeholder="Add…"
-        className="px-2 py-0.5 text-xs rounded-md bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 min-w-[70px]"
-      />
+            {v}
+            <button
+              onClick={() => remove(i)}
+              className="text-violet-400 hover:text-white transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
+        {!atLimit && (
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                add();
+              }
+            }}
+            onBlur={add}
+            placeholder="Add…"
+            className="px-2 py-0.5 text-xs rounded-md bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 min-w-[70px]"
+          />
+        )}
+      </div>
+      {atLimit && (
+        <p className="text-xs text-yellow-500">Maximum {MAX_ITEMS} items</p>
+      )}
     </div>
   );
 }
@@ -323,7 +354,7 @@ function ConfigRow({ item, onValueChange }: ConfigRowProps) {
         {item.confidence === 'low' && (
           <div className="flex items-center gap-1 text-xs text-yellow-500 mb-1">
             <AlertTriangle className="w-3 h-3 shrink-0" />
-            <span>We're not sure about this — you can change it anytime</span>
+            <span>We&apos;re not sure about this — you can change it anytime</span>
           </div>
         )}
 
@@ -360,17 +391,40 @@ function ConfigRow({ item, onValueChange }: ConfigRowProps) {
             {isTagInput ? (
               <TagEditor values={tagValues} onChange={setTagValues} />
             ) : isDropdown && meta.options ? (
-              <select
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                className="w-full px-2 py-1 text-sm rounded-md bg-gray-800 border border-gray-700 text-white focus:outline-none focus:border-violet-500"
-              >
-                {meta.options.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
+              item.config_key === 'sales_methodology' ? (
+                <div>
+                  <select
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    className="w-full px-2 py-1 text-sm rounded-md bg-gray-800 border border-gray-700 text-white focus:outline-none focus:border-violet-500"
+                  >
+                    {meta.options.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {METHODOLOGY_LABELS[opt] ?? opt}
+                      </option>
+                    ))}
+                  </select>
+                  {METHODOLOGY_TOOLTIPS[draft] && (
+                    <p className="mt-1 text-xs text-gray-400">
+                      {METHODOLOGY_TOOLTIPS[draft]}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <select
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  className="w-full px-2 py-1 text-sm rounded-md bg-gray-800 border border-gray-700 text-white focus:outline-none focus:border-violet-500"
+                >
+                  {meta.options.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {item.config_key === 'fiscal_year_start_month'
+                        ? MONTH_NAMES[Number(opt) - 1] ?? opt
+                        : opt}
+                    </option>
+                  ))}
+                </select>
+              )
             ) : (
               <input
                 type={meta?.inputType === 'number' ? 'number' : 'text'}
@@ -597,7 +651,7 @@ export function AgentConfigConfirmStep() {
           </div>
           <div className="p-6 text-center">
             <p className="text-gray-400 mb-6">
-              We weren't able to infer any configuration yet. You can customise your AI agent
+              We weren&apos;t able to infer any configuration yet. You can customise your AI agent
               settings later from the Settings page.
             </p>
             <button
@@ -634,7 +688,7 @@ export function AgentConfigConfirmStep() {
             <div>
               <h2 className="font-bold text-white">Your AI agent is almost ready</h2>
               <p className="text-violet-100 text-sm">
-                We've inferred your sales setup — confirm or edit before we lock it in
+                We&apos;ve inferred your sales setup — confirm or edit before we lock it in
               </p>
             </div>
           </div>
@@ -800,7 +854,7 @@ function buildClientSideFallback(enrichment: ReturnType<typeof useOnboardingV2St
       ),
       confidence: 'high',
       source: 'enrichment',
-      agent_type: 'research',
+      agent_type: 'crm_update',
     });
   }
 
