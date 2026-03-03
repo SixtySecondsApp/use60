@@ -890,7 +890,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     contactIndices: [3, 5],
     meetingType: 'follow_up',
     transcriptIndex: 3,
-    daysAgo: 10,
+    daysAgo: 2,
     durationMinutes: 30,
   },
 
@@ -952,7 +952,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     contactIndices: [13, 14],
     meetingType: 'follow_up',
     transcriptIndex: 3,
-    daysAgo: 5,
+    daysAgo: 1,
     durationMinutes: 30,
   },
 
@@ -1006,7 +1006,7 @@ export const MEETING_TEMPLATES: SeedMeetingTemplate[] = [
     contactIndices: [30, 31],
     meetingType: 'general',
     transcriptIndex: 5,
-    daysAgo: 7,
+    daysAgo: 0,
     durationMinutes: 45,
   },
 ];

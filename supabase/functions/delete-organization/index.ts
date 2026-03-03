@@ -133,11 +133,55 @@ serve(async (req) => {
       console.log(`[delete-organization] Reset onboarding progress for ${memberUserIds.length} users`)
     }
 
+    // Step 2.5: Delete auth.users for all org members
+    // This ensures users can re-register with the same email after org deletion
+    if (memberUserIds.length > 0) {
+      for (const memberId of memberUserIds) {
+        try {
+          const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(memberId);
+          if (authDeleteError) {
+            // Ignore "not found" errors — user may already be deleted
+            const isNotFound = authDeleteError.status === 404 ||
+              (authDeleteError as any)?.code === 'user_not_found' ||
+              authDeleteError.message?.includes('not found');
+            if (!isNotFound) {
+              console.error(`[delete-organization] Failed to delete auth user ${memberId}:`, authDeleteError);
+            }
+          } else {
+            console.log(`[delete-organization] Deleted auth user: ${memberId}`);
+          }
+        } catch (e) {
+          console.error(`[delete-organization] Exception deleting auth user ${memberId}:`, e);
+        }
+      }
+    }
+
+    // Step 2.7: Delete sales data scoped by clerk_org_id (text field, no FK cascade)
+    // These tables reference the org via a plain text clerk_org_id column, not a FK,
+    // so CASCADE on the organizations row does NOT reach them.
+    const orgIdStr = orgId;
+    const tablesToClean = ['activities', 'deals', 'contacts', 'companies'];
+    for (const table of tablesToClean) {
+      try {
+        const { error } = await supabaseAdmin
+          .from(table)
+          .delete()
+          .eq('clerk_org_id', orgIdStr);
+        if (error) {
+          console.error(`[delete-organization] Failed to clean ${table}:`, error);
+        } else {
+          console.log(`[delete-organization] Cleaned ${table} for org ${orgIdStr}`);
+        }
+      } catch (e) {
+        console.error(`[delete-organization] Exception cleaning ${table}:`, e);
+      }
+    }
+
     // Step 3: Delete the organization
     // ON DELETE CASCADE will handle:
     //   - organization_memberships (users become unassigned)
     //   - org-scoped data (integrations, AI data, billing, settings)
-    // Core sales data (contacts, deals, activities) uses clerk_org_id (text, no FK) — preserved
+    // Sales data (contacts, deals, activities, companies) already cleaned in Step 2.7
     const { error: deleteError } = await supabaseAdmin
       .from('organizations')
       .delete()
@@ -155,6 +199,30 @@ serve(async (req) => {
     }
 
     console.log(`[delete-organization] Organization ${orgId} (${org.name}) deleted successfully`)
+
+    // Step 4: Anonymize profiles for deleted members
+    // auth.users records were deleted in Step 2.5; profile rows are left as tombstones
+    // for referential integrity but scrubbed of PII.
+    if (memberUserIds.length > 0) {
+      for (const memberId of memberUserIds) {
+        try {
+          await supabaseAdmin
+            .from('profiles')
+            .update({
+              email: `deleted_${memberId}@deleted.local`,
+              avatar_url: null,
+              bio: null,
+              clerk_user_id: null,
+              auth_provider: 'deleted',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', memberId);
+        } catch (e) {
+          console.error(`[delete-organization] Failed to anonymize profile ${memberId}:`, e);
+        }
+      }
+      console.log(`[delete-organization] Anonymized profiles for ${memberUserIds.length} members`)
+    }
 
     return new Response(
       JSON.stringify({

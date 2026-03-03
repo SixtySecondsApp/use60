@@ -114,6 +114,19 @@ serve(async (req: Request) => {
       },
     });
 
+    // Look up user email for meeting ownership
+    let userEmail: string | null = null;
+    try {
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("id", user_id)
+        .maybeSingle();
+      userEmail = userProfile?.email ?? null;
+    } catch (e) {
+      console.error("[seed-demo-data] Failed to look up user email:", e);
+    }
+
     // ------------------------------------------------------------------
     // Idempotency guard
     // ------------------------------------------------------------------
@@ -362,6 +375,7 @@ serve(async (req: Request) => {
           .insert({
             title: rendered.title,
             owner_user_id: user_id,
+            owner_email: userEmail,
             org_id,
             meeting_start: meetingStart,
             meeting_end: meetingEnd,
