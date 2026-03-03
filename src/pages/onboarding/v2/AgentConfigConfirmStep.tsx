@@ -183,6 +183,9 @@ function formatValue(value: unknown, configKey: string): string {
     const idx = Number(value) - 1;
     return months[idx] ?? String(value);
   }
+  if (configKey === 'sales_methodology') {
+    return METHODOLOGY_LABELS[String(value)] ?? String(value);
+  }
   return String(value);
 }
 

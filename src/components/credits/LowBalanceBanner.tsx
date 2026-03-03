@@ -73,7 +73,7 @@ export function LowBalanceBanner() {
     return (
       <div className="flex items-center gap-3 px-4 py-2 text-sm bg-emerald-50 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200">
         <Sparkles className="w-4 h-4 flex-shrink-0" />
-        <span className="flex-1">10 Free AI credits have been added!</span>
+        <span className="flex-1">Free AI credits have been added to your account!</span>
         <button
           onClick={() => {
             if (welcomeKey) localStorage.removeItem(welcomeKey);
@@ -88,9 +88,11 @@ export function LowBalanceBanner() {
     );
   }
 
-  // Suppress the red "depleted" banner for brand-new users who haven't used any AI yet.
-  // If balance is <= 0 and there are no cost events (and no welcome flag), just hide the banner.
+  // Suppress the red "depleted" banner for brand-new users.
+  // Two conditions: (1) no cost events at all, or (2) welcome credits were recently granted
+  // (onboarding fires research-fact-profile which creates cost events, so we can't rely on count alone)
   if (isZero && !costEventsLoading && (costEventCount ?? 0) === 0) return null;
+  if (isZero && showWelcome) return null; // Still in onboarding welcome phase
 
   if (!isZero && !isRedLow && !isAmberLow) return null;
 

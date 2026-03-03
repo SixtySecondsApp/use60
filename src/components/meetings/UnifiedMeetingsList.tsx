@@ -10,6 +10,7 @@ import { MeetingsFilterBar } from './MeetingsFilterBar'
 import { useDateRangeFilter } from '@/components/ui/DateRangeFilter'
 import { toast } from 'sonner'
 import { recordingService } from '@/lib/services/recordingService'
+import { supabase } from '@/lib/supabase/clientV2'
 import { useRecordingUsage } from '@/lib/hooks/useRecordings'
 import { JoinMeetingModal } from '@/components/recordings/JoinMeetingModal'
 import { useUnifiedMeetings } from '@/lib/hooks/useUnifiedMeetings'
@@ -348,13 +349,25 @@ const UnifiedMeetingsList: React.FC = () => {
     setCurrentPage(1)
   }, [scope, activeOrgId, sortField, sortDirection, dateFilter.dateRange, selectedRepId, durationBucket, sentimentCategory, coachingCategory, sourceFilter, statusFilter, platformFilter])
 
-  // Join meeting handler
+  // Join meeting handler — limits 1 bot per meeting URL
   const handleJoinMeeting = async (meetingUrl: string, meetingTitle?: string) => {
     if (!activeOrgId || !user?.id) {
       return { success: false, error: 'Not authenticated' }
     }
     setIsJoining(true)
     try {
+      // Check for an active bot already in this meeting
+      const { data: activeBot } = await supabase
+        .from('recordings')
+        .select('id, status')
+        .eq('org_id', activeOrgId)
+        .eq('meeting_url', meetingUrl)
+        .in('status', ['joining', 'in_meeting', 'recording', 'pending'])
+        .maybeSingle()
+      if (activeBot) {
+        return { success: false, error: 'A 60 Notetaker bot is already in this meeting.' }
+      }
+
       const result = await recordingService.startRecording(activeOrgId, user.id, { meetingUrl, meetingTitle })
       if (result.success) {
         toast.success('Bot is joining the meeting', {

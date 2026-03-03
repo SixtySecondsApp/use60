@@ -129,11 +129,11 @@ export const useSetupWizardStore = create<SetupWizardState>((set, get) => ({
 
   completeStep: async (userId, orgId, step) => {
     try {
-      const { data, error } = await (supabase.rpc as any)('complete_setup_wizard_step', {
+      const { data, error } = await supabase.rpc('complete_setup_wizard_step', {
         p_user_id: userId,
         p_org_id: orgId,
         p_step: step,
-      });
+      } as any);
 
       if (error) {
         console.error('Failed to complete setup wizard step:', error);

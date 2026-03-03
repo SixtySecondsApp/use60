@@ -96,7 +96,7 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: 'Collaborate with colleagues and share insights',
     tooltip: 'Team insights unlock coaching and competitive intel',
     icon: Users,
-    href: '/settings/team-members',
+    href: '/settings/organization-management',
     actionLabel: 'Invite Team',
   },
 ];
