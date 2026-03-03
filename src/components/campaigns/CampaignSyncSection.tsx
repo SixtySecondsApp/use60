@@ -66,9 +66,9 @@ export function CampaignSyncSection({ orgId, userId, campaignId, campaignName }:
   return (
     <div className="space-y-4">
       {/* Sync trigger */}
-      <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
-        <h4 className="text-sm font-medium text-white mb-1">Engagement Sync</h4>
-        <p className="text-xs text-gray-500 mb-3">
+      <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-4">
+        <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Engagement Sync</h4>
+        <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
           Pull the latest open, click, and reply data from Instantly for &ldquo;{campaignName}&rdquo;.
         </p>
         <Button
@@ -88,8 +88,8 @@ export function CampaignSyncSection({ orgId, userId, campaignId, campaignName }:
 
       {/* History */}
       <div>
-        <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-1.5">
-          <Clock className="h-3.5 w-3.5 text-gray-500" />
+        <h4 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+          <Clock className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
           Sync History
         </h4>
 
@@ -98,30 +98,30 @@ export function CampaignSyncSection({ orgId, userId, campaignId, campaignName }:
             <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
           </div>
         ) : history.length === 0 ? (
-          <p className="text-sm text-gray-500 py-4 text-center">No sync history yet</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">No sync history yet</p>
         ) : (
           <div className="space-y-2">
             {history.map((entry) => (
               <div
                 key={entry.id}
-                className="rounded-lg border border-gray-800 bg-gray-900/30 px-3 py-2.5"
+                className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/30 px-3 py-2.5"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <ArrowDownToLine className="h-3.5 w-3.5 text-blue-400" />
-                    <span className="text-xs font-medium text-gray-300">Engagement Sync</span>
+                    <ArrowDownToLine className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Engagement Sync</span>
                   </div>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
                     {formatDistanceToNow(new Date(entry.synced_at), { addSuffix: true })}
                   </span>
                 </div>
-                <div className="mt-1.5 text-xs space-y-0.5 text-gray-400">
+                <div className="mt-1.5 text-xs space-y-0.5 text-gray-500 dark:text-gray-400">
                   <p>Matched {entry.updated_leads_count} leads</p>
                   {entry.sync_duration_ms != null && (
-                    <p className="text-gray-600">{(entry.sync_duration_ms / 1000).toFixed(1)}s</p>
+                    <p className="text-gray-400 dark:text-gray-600">{(entry.sync_duration_ms / 1000).toFixed(1)}s</p>
                   )}
                   {entry.error_message && (
-                    <p className="text-red-400">{entry.error_message}</p>
+                    <p className="text-red-600 dark:text-red-400">{entry.error_message}</p>
                   )}
                 </div>
               </div>
