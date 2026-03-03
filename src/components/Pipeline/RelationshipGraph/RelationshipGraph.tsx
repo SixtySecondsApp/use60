@@ -670,6 +670,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
       {selectedNode && (
         <GraphDetailPanel
           node={selectedNode}
+          allNodes={allNodes}
           onClose={handleDeselect}
           onSelectContact={(id) => setSelectedId(id)}
         />

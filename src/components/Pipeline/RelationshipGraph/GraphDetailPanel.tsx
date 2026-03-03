@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { X, Mail, Phone, Video, Linkedin } from 'lucide-react';
 import { TIER_COLORS, HEALTH_COLORS } from './constants';
 import type { GraphNode, WarmthTier } from './types';
+import { GraphTimeline } from './GraphTimeline';
+import { GraphAgentActions } from './GraphAgentActions';
 
 interface GraphDetailPanelProps {
   node: GraphNode;
+  allNodes: GraphNode[];
   onClose: () => void;
   onSelectContact?: (id: string) => void;
 }
@@ -19,7 +22,7 @@ const SIGNAL_BARS: { label: string; key: keyof GraphNode; color: string }[] = [
   { label: 'Sentiment', key: 'sentiment_score', color: '#22c55e' },
 ];
 
-export function GraphDetailPanel({ node, onClose, onSelectContact }: GraphDetailPanelProps) {
+export function GraphDetailPanel({ node, allNodes, onClose, onSelectContact }: GraphDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>('overview');
   const tier: WarmthTier = node.tier ?? 'cold';
   const tierColor = TIER_COLORS[tier];
@@ -109,13 +112,13 @@ export function GraphDetailPanel({ node, onClose, onSelectContact }: GraphDetail
       {/* Tab content */}
       <div className="flex-1 overflow-auto p-4">
         {activeTab === 'overview' && (
-          <OverviewTab node={node} tierColor={tierColor} onSelectContact={onSelectContact} />
+          <OverviewTab node={node} allNodes={allNodes} tierColor={tierColor} onSelectContact={onSelectContact} />
         )}
         {activeTab === 'timeline' && (
-          <div className="text-gray-500 text-xs text-center pt-8">Timeline — coming in RG-013</div>
+          <GraphTimeline contactId={node.id} orgId={node.owner_id ?? ''} />
         )}
         {activeTab === 'agents' && (
-          <div className="text-gray-500 text-xs text-center pt-8">Agent actions — coming in RG-014</div>
+          <GraphAgentActions node={node} />
         )}
       </div>
     </div>
@@ -124,14 +127,19 @@ export function GraphDetailPanel({ node, onClose, onSelectContact }: GraphDetail
 
 function OverviewTab({
   node,
+  allNodes,
   tierColor,
   onSelectContact,
 }: {
   node: GraphNode;
+  allNodes: GraphNode[];
   tierColor: (typeof TIER_COLORS)[WarmthTier];
   onSelectContact?: (id: string) => void;
 }) {
   const topDeal = node.deals[0];
+  const relatedContacts = node.company_id
+    ? allNodes.filter((n) => n.company_id === node.company_id && n.id !== node.id)
+    : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -217,6 +225,22 @@ function OverviewTab({
         </div>
       )}
 
+      {/* AI next step */}
+      <div
+        className="rounded-xl p-3 border"
+        style={{
+          background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))',
+          borderColor: 'rgba(99,102,241,0.2)',
+        }}
+      >
+        <div className="text-indigo-300 text-[9px] font-bold uppercase tracking-wider mb-1">
+          AI Suggested Next Step
+        </div>
+        <div className="text-gray-200 text-xs">
+          {getAiSuggestion(node)}
+        </div>
+      </div>
+
       {/* Trending indicator */}
       {node.trending_direction && node.trending_direction !== 'stable' && (
         <div
@@ -236,6 +260,59 @@ function OverviewTab({
           </div>
         </div>
       )}
+
+      {/* Related contacts at same company */}
+      {relatedContacts.length > 0 && (
+        <div>
+          <div className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide mb-2">
+            Related at {node.company_obj?.name ?? 'Company'}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {relatedContacts.map((rc) => {
+              const rcTier = rc.tier ?? 'cold';
+              const rcName = rc.full_name || `${rc.first_name || ''} ${rc.last_name || ''}`.trim() || rc.email;
+              return (
+                <button
+                  key={rc.id}
+                  onClick={() => onSelectContact?.(rc.id)}
+                  className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-[#1e1e2e]/40 hover:bg-[#1e1e2e]/80 border border-white/[0.04] transition-colors text-left w-full"
+                >
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                    style={{ background: `linear-gradient(135deg, ${TIER_COLORS[rcTier].primary}, ${TIER_COLORS[rcTier].gradient[1]})` }}
+                  >
+                    {(rc.first_name || rc.email)[0]?.toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-gray-200 text-[11px] font-semibold truncate">{rcName}</div>
+                    <div className="text-gray-500 text-[9px] truncate">{rc.title}</div>
+                  </div>
+                  <span
+                    className="text-[10px] font-bold shrink-0"
+                    style={{ color: TIER_COLORS[rcTier].primary }}
+                  >
+                    {((rc.warmth_score ?? 0) * 100).toFixed(0)}%
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function getAiSuggestion(node: GraphNode): string {
+  const name = node.first_name || node.full_name?.split(' ')[0] || 'this contact';
+  const tier = node.tier ?? 'cold';
+  const hasDeal = node.deals.length > 0;
+
+  if (tier === 'hot' && hasDeal) return `Send ${name} the contract revision \u2014 they're highly engaged and the deal is progressing.`;
+  if (tier === 'hot') return `${name} is very engaged. Schedule a discovery call to explore opportunities.`;
+  if (tier === 'warm' && hasDeal) return `Follow up with ${name} on pricing concerns. Keep the momentum going.`;
+  if (tier === 'warm') return `Share a relevant case study with ${name} to deepen the relationship.`;
+  if (tier === 'cool' && hasDeal) return `Re-engage ${name} with a personalised message about the deal.`;
+  if (tier === 'cool') return `Send ${name} a check-in message. The relationship needs attention.`;
+  return `Enrich ${name}'s profile and consider a cold reactivation sequence.`;
 }
