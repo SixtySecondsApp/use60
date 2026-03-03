@@ -400,7 +400,17 @@ export default function CreditsSettingsPage() {
               <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5">
                 <UsageBreakdownChart
                   usageByFeature={balance?.usageByFeature ?? []}
-                  storageCostCredits={balance?.storage?.projectedMonthlyCostCredits}
+                  storageCostCredits={
+                    // Only include projected storage cost when the org has actual storage usage.
+                    // New orgs with 0 audio/transcripts/docs show phantom storage fees otherwise.
+                    balance?.storage &&
+                    (balance.storage.audioHours > 0 ||
+                      balance.storage.transcriptCount > 0 ||
+                      balance.storage.documentCount > 0 ||
+                      balance.storage.enrichmentRecords > 0)
+                      ? balance.storage.projectedMonthlyCostCredits
+                      : undefined
+                  }
                 />
               </div>
             </div>

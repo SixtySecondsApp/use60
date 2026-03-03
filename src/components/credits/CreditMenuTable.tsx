@@ -376,6 +376,12 @@ export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
     high: 'High',
   };
 
+  const TIER_TOOLTIPS: Record<IntelligenceTier, string> = {
+    low: 'Low — fastest & most affordable models',
+    medium: 'Medium — balanced quality and speed',
+    high: 'High — maximum intelligence, highest cost',
+  };
+
   return (
     <div className="space-y-6">
       {/* ── Credit Pack Comparison ──────────────────────────────────── */}
@@ -470,8 +476,9 @@ export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
                           {(['low', 'medium', 'high'] as IntelligenceTier[]).map((tier) => (
                             <TableHead
                               key={tier}
+                              title={TIER_TOOLTIPS[tier]}
                               className={cn(
-                                'text-center w-[14%]',
+                                'text-center w-[14%] cursor-help',
                                 currentTier === tier &&
                                   'text-indigo-600 dark:text-indigo-400 font-semibold'
                               )}
