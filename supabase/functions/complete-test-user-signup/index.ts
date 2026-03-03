@@ -5,7 +5,7 @@
  * 1. Validates the magic link token
  * 2. Creates auth user with email + password
  * 3. Creates profile record
- * 4. Links user to the pre-created organization as owner
+ * 4. Links user to the pre-created organization (owner for new orgs, member for existing)
  * 5. Marks onboarding as complete (skips onboarding)
  * 6. Grants credits if test user flag is set
  * 7. Marks token as used
@@ -245,13 +245,22 @@ serve(async (req) => {
       // Non-fatal — profile trigger may handle it
     }
 
-    // --- Step 4: Create organization membership as owner ---
+    // --- Step 4: Create organization membership ---
+    // First user in the org becomes 'owner'; subsequent users join as 'member'
+    const { count: existingMemberCount } = await supabaseAdmin
+      .from('organization_memberships')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('org_id', tokenData.org_id);
+
+    const membershipRole = (existingMemberCount ?? 0) > 0 ? 'member' : 'owner';
+    console.log(`Assigning role '${membershipRole}' (existing members: ${existingMemberCount ?? 0})`);
+
     const { error: membershipError } = await supabaseAdmin
       .from('organization_memberships')
       .upsert({
         org_id: tokenData.org_id,
         user_id: userId,
-        role: 'owner',
+        role: membershipRole,
       }, { onConflict: 'org_id,user_id' });
 
     if (membershipError) {
@@ -354,6 +363,8 @@ serve(async (req) => {
           : 'Account created! You can log in now.',
         org_id: tokenData.org_id,
         existing_user: isExistingUser,
+        role: membershipRole,
+        show_tour: true,  // Signal frontend to trigger product tour after login
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -224,6 +224,22 @@ serve(async (req: Request) => {
     }
 
     // ------------------------------------------------------------------
+    // Check if org already has seeded data from another user.
+    // If so, reuse the existing companies/contacts and only create
+    // user-scoped data (meetings, deals, activities) for the new user.
+    // ------------------------------------------------------------------
+    let isJoiningExistingOrg = false;
+    const { count: orgCompanyCount } = await supabase
+      .from("companies")
+      .select("id", { count: "exact", head: true })
+      .eq("clerk_org_id", org_id);
+
+    if ((orgCompanyCount ?? 0) > 3) {
+      isJoiningExistingOrg = true;
+      console.log("[seed-demo-data] Org already has data — seeding user-scoped data only for:", user_id);
+    }
+
+    // ------------------------------------------------------------------
     // Step 1: Look up existing deal stages
     // deals.stage_id references deal_stages (not the stages table).
     // The seed data maps stageIndex: 0=Lead→SQL, 1=Qualified→Opportunity,
@@ -258,108 +274,130 @@ serve(async (req: Request) => {
     }
 
     // ------------------------------------------------------------------
-    // Step 2: Seed companies
-    // Unique constraints are now per-org (name+clerk_org_id, domain+clerk_org_id)
-    // so the same company names/domains can exist across different orgs.
+    // Step 2 & 3: Companies & Contacts
+    // If joining an existing org, look up existing records.
+    // Otherwise, create new companies and contacts.
     // ------------------------------------------------------------------
     const companyIds: string[] = new Array(COMPANIES.length).fill(null);
-
-    try {
-      const companyRows = COMPANIES.map((c) => ({
-        name: c.name,
-        domain: c.domain,
-        industry: c.industry,
-        size: c.size,
-        website: c.website,
-        description: c.description,
-        linkedin_url: c.linkedin_url,
-        owner_id: user_id,
-        clerk_org_id: org_id,
-        source: "manual",
-        first_seen_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
-
-      const { data: insertedCompanies, error: companiesError } = await supabase
-        .from("companies")
-        .insert(companyRows)
-        .select("id, name");
-
-      if (companiesError) {
-        console.error("[seed-demo-data] Companies insert error:", companiesError);
-      } else if (insertedCompanies) {
-        // Map inserted company names back to their original index position
-        insertedCompanies.forEach((inserted) => {
-          const idx = COMPANIES.findIndex((c) => c.name === inserted.name);
-          if (idx !== -1) {
-            companyIds[idx] = inserted.id;
-          }
-        });
-        console.log(
-          "[seed-demo-data] Seeded companies:",
-          insertedCompanies.length,
-        );
-      }
-    } catch (companyErr) {
-      console.error("[seed-demo-data] Unexpected error seeding companies:", companyErr);
-    }
-
-    // ------------------------------------------------------------------
-    // Step 3: Seed contacts
-    // Link each contact to its company via company_id using the mapped IDs
-    // from Step 2. Skip contacts whose company failed to insert.
-    // ------------------------------------------------------------------
     const contactIds: string[] = [];
     const primaryContactByCompany: Record<string, string> = {};
 
-    try {
-      const contactRows = CONTACTS
-        .filter((c) => companyIds[c.companyIndex] != null)
-        .map((c) => {
-          const companyId = companyIds[c.companyIndex];
-          return {
-            email: c.email,
-            first_name: c.first_name,
-            last_name: c.last_name,
-            full_name: c.full_name,
-            title: c.title,
-            company: c.company,
-            company_id: companyId,
-            phone: c.phone,
-            linkedin_url: c.linkedin_url,
-            engagement_level: c.engagement_level,
-            source: c.source,
-            is_primary: c.is_primary,
-            owner_id: user_id,
-            clerk_org_id: org_id,
-            first_seen_at: new Date().toISOString(),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-        });
+    if (isJoiningExistingOrg) {
+      // --- Reuse existing org companies & contacts ---
+      try {
+        const { data: existingCompanies } = await supabase
+          .from("companies")
+          .select("id, name")
+          .eq("clerk_org_id", org_id);
 
-      const { data: insertedContacts, error: contactsError } = await supabase
-        .from("contacts")
-        .insert(contactRows)
-        .select("id, company_id, is_primary, email");
+        if (existingCompanies) {
+          existingCompanies.forEach((c) => {
+            const idx = COMPANIES.findIndex((seed) => seed.name === c.name);
+            if (idx !== -1) companyIds[idx] = c.id;
+          });
+          console.log("[seed-demo-data] Reusing", existingCompanies.length, "existing companies");
+        }
 
-      if (contactsError) {
-        console.error("[seed-demo-data] Contacts insert error:", contactsError);
-      } else if (insertedContacts) {
-        insertedContacts.forEach((inserted) => {
-          contactIds.push(inserted.id);
-          if (inserted.is_primary && inserted.company_id) {
-            primaryContactByCompany[inserted.company_id] = inserted.id;
-          }
-        });
-        console.log(
-          "[seed-demo-data] Seeded contacts:",
-          insertedContacts.length,
-        );
+        const { data: existingContacts } = await supabase
+          .from("contacts")
+          .select("id, company_id, is_primary, email")
+          .eq("clerk_org_id", org_id);
+
+        if (existingContacts) {
+          existingContacts.forEach((c) => {
+            contactIds.push(c.id);
+            if (c.is_primary && c.company_id) {
+              primaryContactByCompany[c.company_id] = c.id;
+            }
+          });
+          console.log("[seed-demo-data] Reusing", existingContacts.length, "existing contacts");
+        }
+      } catch (reuseErr) {
+        console.error("[seed-demo-data] Error loading existing org data:", reuseErr);
       }
-    } catch (contactErr) {
-      console.error("[seed-demo-data] Unexpected error seeding contacts:", contactErr);
+    } else {
+      // --- Create new companies ---
+      try {
+        const companyRows = COMPANIES.map((c) => ({
+          name: c.name,
+          domain: c.domain,
+          industry: c.industry,
+          size: c.size,
+          website: c.website,
+          description: c.description,
+          linkedin_url: c.linkedin_url,
+          owner_id: user_id,
+          clerk_org_id: org_id,
+          source: "manual",
+          first_seen_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+
+        const { data: insertedCompanies, error: companiesError } = await supabase
+          .from("companies")
+          .insert(companyRows)
+          .select("id, name");
+
+        if (companiesError) {
+          console.error("[seed-demo-data] Companies insert error:", companiesError);
+        } else if (insertedCompanies) {
+          insertedCompanies.forEach((inserted) => {
+            const idx = COMPANIES.findIndex((c) => c.name === inserted.name);
+            if (idx !== -1) companyIds[idx] = inserted.id;
+          });
+          console.log("[seed-demo-data] Seeded companies:", insertedCompanies.length);
+        }
+      } catch (companyErr) {
+        console.error("[seed-demo-data] Unexpected error seeding companies:", companyErr);
+      }
+
+      // --- Create new contacts ---
+      try {
+        const contactRows = CONTACTS
+          .filter((c) => companyIds[c.companyIndex] != null)
+          .map((c) => {
+            const companyId = companyIds[c.companyIndex];
+            return {
+              email: c.email,
+              first_name: c.first_name,
+              last_name: c.last_name,
+              full_name: c.full_name,
+              title: c.title,
+              company: c.company,
+              company_id: companyId,
+              phone: c.phone,
+              linkedin_url: c.linkedin_url,
+              engagement_level: c.engagement_level,
+              source: c.source,
+              is_primary: c.is_primary,
+              owner_id: user_id,
+              clerk_org_id: org_id,
+              first_seen_at: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+          });
+
+        const { data: insertedContacts, error: contactsError } = await supabase
+          .from("contacts")
+          .insert(contactRows)
+          .select("id, company_id, is_primary, email");
+
+        if (contactsError) {
+          console.error("[seed-demo-data] Contacts insert error:", contactsError);
+        } else if (insertedContacts) {
+          insertedContacts.forEach((inserted) => {
+            contactIds.push(inserted.id);
+            if (inserted.is_primary && inserted.company_id) {
+              primaryContactByCompany[inserted.company_id] = inserted.id;
+            }
+          });
+          console.log("[seed-demo-data] Seeded contacts:", insertedContacts.length);
+        }
+      } catch (contactErr) {
+        console.error("[seed-demo-data] Unexpected error seeding contacts:", contactErr);
+      }
     }
 
     // ------------------------------------------------------------------

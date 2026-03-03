@@ -156,14 +156,15 @@ export default function TestUserSignup() {
       }
 
       // Set the magic link org as active BEFORE sign-in so orgStore picks it up
+      const assignedRole = result.role || 'member';
       try {
         const stored = JSON.parse(localStorage.getItem('org-store') || '{}');
-        stored.state = { ...stored.state, activeOrgId: result.org_id, activeOrgRole: 'owner' };
+        stored.state = { ...stored.state, activeOrgId: result.org_id, activeOrgRole: assignedRole };
         localStorage.setItem('org-store', JSON.stringify(stored));
       } catch {
         // Fallback: create fresh store state
         localStorage.setItem('org-store', JSON.stringify({
-          state: { activeOrgId: result.org_id, activeOrgRole: 'owner' },
+          state: { activeOrgId: result.org_id, activeOrgRole: assignedRole },
           version: 0,
         }));
       }

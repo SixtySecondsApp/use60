@@ -232,10 +232,11 @@ export function MagicLinkGenerator() {
                       const val = e.target.value;
                       if (val === '__new__') {
                         setSelectedOrgId(null);
+                        setNewLink({ ...newLink, org_name: '', credit_amount: 500 });
                       } else {
                         setSelectedOrgId(val);
-                        // Clear the new name field when picking existing
-                        setNewLink({ ...newLink, org_name: '' });
+                        // Clear the new name field and zero out credits — existing org already has them
+                        setNewLink({ ...newLink, org_name: '', credit_amount: 0 });
                       }
                     }}
                     className="w-full pl-9 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent appearance-none cursor-pointer"
@@ -309,7 +310,11 @@ export function MagicLinkGenerator() {
                 />
               )}
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {newLink.is_test_user ? 'credits' : 'No credits'}
+                {newLink.is_test_user
+                ? selectedOrgId
+                  ? 'extra credits (org already has credits)'
+                  : 'credits'
+                : 'No credits'}
               </span>
             </div>
           </div>
