@@ -131,6 +131,28 @@ export async function createInvitation({
       return { data: null, error: 'You do not have permission to invite members to this organization' };
     }
 
+    // Enforce 20-member invite limit
+    const MAX_MEMBERS = 20;
+    const { count: memberCount } = await supabase
+      .from('organization_memberships')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', orgId);
+
+    const { count: pendingInviteCount } = await supabase
+      .from('organization_invitations')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .is('accepted_at', null)
+      .gt('expires_at', new Date().toISOString());
+
+    const totalCount = (memberCount || 0) + (pendingInviteCount || 0);
+    if (totalCount >= MAX_MEMBERS) {
+      return {
+        data: null,
+        error: `Organization has reached the maximum of ${MAX_MEMBERS} members. Remove existing members or revoke pending invitations to invite more.`,
+      };
+    }
+
     // Check if user already exists and is a member
     const { data: profileData } = await supabase
       .from('profiles')
