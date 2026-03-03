@@ -167,7 +167,7 @@ export function SkillsConfigStep() {
                   Qualification Criteria
                 </label>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
-                  Click to edit
+                  Editable Suggestions
                 </span>
               </div>
               <div className="space-y-1.5">
@@ -777,10 +777,7 @@ export function SkillsConfigStep() {
         <div className="p-4 sm:p-6">
           <div className="mb-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-white">{activeSkill.name}</h3>
-                <p className="text-sm text-gray-400">{activeSkill.description}</p>
-              </div>
+              <p className="text-sm text-gray-400">{activeSkill.description}</p>
               <span className="text-sm text-gray-500">
                 {currentSkillIndex + 1} of {SKILLS.length}
               </span>
@@ -794,7 +791,7 @@ export function SkillsConfigStep() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
-              className="max-h-[calc(100vh-300px)] overflow-y-auto pr-1"
+              className="max-h-[calc(100vh-240px)] overflow-y-auto pr-1"
             >
               {renderSkillConfig()}
             </motion.div>
