@@ -8,6 +8,7 @@
  */
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { Download, Users2 } from 'lucide-react';
 import { PipelineHeader } from './PipelineHeader';
 import { PipelineKanban } from './PipelineKanban';
 import { PipelineTable } from './PipelineTable';
@@ -19,6 +20,13 @@ import { AttioImportWizard } from '../ops/AttioImportWizard';
 import { usePipelineData } from './hooks/usePipelineData';
 import { usePipelineFilters, PIPELINE_PAGE_SIZE } from './hooks/usePipelineFilters';
 import { PipelinePagination } from './PipelinePagination';
+import { PipelineSavedViewsPanel } from './PipelineSavedViewsPanel';
+import { PipelineColumnCustomizer } from './PipelineColumnCustomizer';
+import { PipelineManagerView } from './PipelineManagerView';
+import { BulkActionBar } from './BulkActionBar';
+import { usePipelineColumns } from './hooks/usePipelineColumns';
+import { exportDealsToCSV } from './pipelineUtils';
+import type { PipelineSavedView } from './hooks/usePipelineSavedViews';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useOrgStore } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
@@ -87,6 +95,15 @@ export function PipelineView() {
   // Sheet state
   const [selectedDealId, setSelectedDealId] = React.useState<string | null>(null);
 
+  // Multi-select state (PIPE-ADV-002)
+  const [selectedDealIds, setSelectedDealIds] = useState<Set<string>>(new Set());
+
+  // Manager view toggle (PIPE-ADV-003)
+  const [showManagerView, setShowManagerView] = useState(false);
+
+  // Column customization (PIPE-ADV-004)
+  const { visibleColumns, visibleColumnIds, allColumns, toggleColumn, resetColumns } = usePipelineColumns();
+
   // Deal form state
   const [showDealForm, setShowDealForm] = useState(false);
   const [initialStageId, setInitialStageId] = useState<string | null>(null);
@@ -125,6 +142,20 @@ export function PipelineView() {
     });
     return grouped;
   }, [pipelineData.data.deals, pipelineData.data.stageMetrics]);
+
+  // Apply a saved view (PIPE-ADV-001)
+  const handleApplySavedView = useCallback((view: PipelineSavedView) => {
+    const f = view.filters;
+    if (f.stage_ids !== undefined) filterState.setStageIds(f.stage_ids || []);
+    if (f.health_status !== undefined) filterState.setHealthStatus(f.health_status || []);
+    if (f.risk_level !== undefined) filterState.setRiskLevel(f.risk_level || []);
+    if (f.owner_ids !== undefined) filterState.setOwnerIds(f.owner_ids || []);
+    if (f.search !== undefined) filterState.setSearch(f.search || '');
+    if (f.sort_by) filterState.setSortBy(f.sort_by as any);
+    if (f.sort_dir) filterState.setSortDir(f.sort_dir as any);
+    if (f.view_mode) filterState.setViewMode(f.view_mode as any);
+    toast.success(`View "${view.name}" applied`);
+  }, [filterState]);
 
   // Handle deal click - open sheet
   const handleDealClick = (dealId: string) => {
@@ -268,6 +299,48 @@ export function PipelineView() {
         onImportFromCRM={(source) => setImportSource(source)}
       />
 
+      {/* Table toolbar: saved views, columns, export, manager view (PIPE-ADV-001/004/005/003) */}
+      {isTableView && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <PipelineSavedViewsPanel
+            currentFilters={{
+              ...filterState.filters,
+              sort_by: filterState.sortBy,
+              sort_dir: filterState.sortDir,
+              view_mode: filterState.viewMode,
+            }}
+            onApply={handleApplySavedView}
+          />
+
+          <PipelineColumnCustomizer
+            allColumns={allColumns}
+            visibleColumnIds={visibleColumnIds}
+            onToggle={toggleColumn}
+            onReset={resetColumns}
+          />
+
+          <button
+            onClick={() => setShowManagerView(!showManagerView)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium backdrop-blur-xl transition-all ${
+              showManagerView
+                ? 'bg-blue-50 dark:bg-blue-500/[0.08] border border-blue-200 dark:border-blue-500/30 text-blue-600 dark:text-blue-400'
+                : 'bg-white/60 dark:bg-white/[0.02] border border-gray-200/80 dark:border-white/[0.09] text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/[0.13] hover:text-gray-800 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.04]'
+            }`}
+          >
+            <Users2 className="w-3.5 h-3.5" />
+            Manager
+          </button>
+
+          <button
+            onClick={() => exportDealsToCSV(pipelineData.data.deals)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-white/60 dark:bg-white/[0.02] border border-gray-200/80 dark:border-white/[0.09] text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/[0.13] hover:text-gray-800 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.04] backdrop-blur-xl transition-all"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+        </div>
+      )}
+
       {filterState.viewMode === 'kanban' ? (
         <PipelineKanban
           stageMetrics={pipelineData.data.stageMetrics}
@@ -275,6 +348,12 @@ export function PipelineView() {
           onDealClick={handleDealClick}
           onDealStageChange={handleDealStageChange}
           onAddDealClick={handleAddDealClick}
+        />
+      ) : showManagerView ? (
+        <PipelineManagerView
+          deals={pipelineData.data.deals}
+          stageMetrics={pipelineData.data.stageMetrics}
+          onDealClick={handleDealClick}
         />
       ) : filterState.viewMode === 'graph' ? (
         <RelationshipGraph />
@@ -292,16 +371,29 @@ export function PipelineView() {
               filterState.setSortDir('desc');
             }
           }}
+          selectedIds={selectedDealIds}
+          onSelectionChange={setSelectedDealIds}
+          visibleColumns={visibleColumns}
         />
       )}
 
-      {isTableView && totalPages > 1 && (
+      {isTableView && totalPages > 1 && !showManagerView && (
         <PipelinePagination
           currentPage={filterState.page}
           totalPages={totalPages}
           totalCount={pipelineData.data.totalCount}
           pageSize={PIPELINE_PAGE_SIZE}
           onPageChange={filterState.setPage}
+        />
+      )}
+
+      {/* Bulk action bar (PIPE-ADV-002) */}
+      {isTableView && selectedDealIds.size > 0 && (
+        <BulkActionBar
+          selectedIds={selectedDealIds}
+          stageMetrics={pipelineData.data.stageMetrics}
+          onClear={() => setSelectedDealIds(new Set())}
+          onRefresh={() => pipelineData.refetch().catch((err) => logger.warn('Refetch after bulk action failed:', err))}
         />
       )}
 

@@ -114,6 +114,7 @@ export function PipelineKanban({
             onDealClick={onDealClick}
             onAddDealClick={(stageId) => onAddDealClick(stageId)}
             batchedMetadata={{ nextActions: {}, healthScores: {}, sentimentData: {} }}
+            stageMetric={{ weighted_value: stage.weighted_value, total_value: stage.total_value }}
           />
         ))}
       </div>

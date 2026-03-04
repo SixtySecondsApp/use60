@@ -4,10 +4,14 @@
  * Shows users what they can do with X credits.
  * Uses pack-based credit costs from creditPacks config.
  * Quick-pick: Starter (100 credits), Growth (250 credits), Scale (500 credits), My Balance.
+ *
+ * Extended for ROUTE-007: model-aware cost preview.
+ * Pass `modelTierHint` to pre-select a quality tier (economy/standard/premium).
+ * Pass `featureLabel` + `featureKey` to show a single-feature cost preview.
  */
 
 import { useState, useMemo } from 'react';
-import { Calculator, MessageSquare, Users, FileText, Mic } from 'lucide-react';
+import { Calculator, MessageSquare, Users, FileText, Mic, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCreditBalance } from '@/lib/hooks/useCreditBalance';
 import {
@@ -17,6 +21,77 @@ import {
   type PackType,
   type IntelligenceTier,
 } from '@/lib/config/creditPacks';
+
+// ─── Model-aware cost preview (ROUTE-007) ────────────────────────────────────
+
+type QualityTier = 'economy' | 'standard' | 'premium';
+
+const QUALITY_TO_INTELLIGENCE: Record<QualityTier, IntelligenceTier> = {
+  economy: 'low',
+  standard: 'medium',
+  premium: 'high',
+};
+
+const QUALITY_LABELS: Record<QualityTier, string> = {
+  economy: 'Economy',
+  standard: 'Standard',
+  premium: 'Premium',
+};
+
+interface ModelAwareCostPreviewProps {
+  featureKey: keyof typeof ACTION_CREDIT_COSTS;
+  featureLabel: string;
+  /** Org's configured quality tier for this feature */
+  qualityTier: QualityTier;
+  /** Optional callback to navigate to model preferences */
+  onChangeTier?: () => void;
+}
+
+/**
+ * Inline cost preview that reflects the org's quality tier for a specific feature.
+ * Shown before expensive operations (ROUTE-007).
+ */
+export function ModelAwareCostPreview({
+  featureKey,
+  featureLabel,
+  qualityTier,
+  onChangeTier,
+}: ModelAwareCostPreviewProps) {
+  const intelligenceTier = QUALITY_TO_INTELLIGENCE[qualityTier];
+  const costPerAction = ACTION_CREDIT_COSTS[featureKey][intelligenceTier];
+
+  const tierColors: Record<QualityTier, string> = {
+    economy: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20',
+    standard: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20',
+    premium: 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20',
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+      <Info className="w-3.5 h-3.5 flex-shrink-0" />
+      <span>
+        This will use{' '}
+        <span className="font-medium text-gray-700 dark:text-gray-200">
+          ~{costPerAction} credits
+        </span>{' '}
+        ({featureLabel}) at{' '}
+        <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium', tierColors[qualityTier])}>
+          {QUALITY_LABELS[qualityTier]}
+        </span>{' '}
+        tier.
+      </span>
+      {onChangeTier && (
+        <button
+          type="button"
+          onClick={onChangeTier}
+          className="text-[#37bd7e] hover:underline whitespace-nowrap"
+        >
+          Change tier
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ─── Categories ──────────────────────────────────────────────────────────
 

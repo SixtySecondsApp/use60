@@ -32,6 +32,11 @@ interface PipelineColumnProps {
     healthScores: Record<string, { overall_health_score: number; health_status: string }>;
     sentimentData: Record<string, { avg_sentiment: number | null; sentiment_history: number[]; trend_direction: string; trend_delta: number; meeting_count: number }>;
   };
+  /** Stage metric for metrics overlay (PIPE-ADV-006) */
+  stageMetric?: {
+    weighted_value: number;
+    total_value: number;
+  };
 }
 
 export function PipelineColumn({
@@ -41,6 +46,7 @@ export function PipelineColumn({
   onAddDealClick,
   onConvertToSubscription,
   batchedMetadata = { nextActions: {}, healthScores: {}, sentimentData: {} },
+  stageMetric,
 }: PipelineColumnProps) {
   const { formatMoney: fmtMoney } = useOrgMoney();
 
@@ -142,7 +148,7 @@ export function PipelineColumn({
           </button>
         </div>
 
-        {/* Stage Value */}
+        {/* Stage Value + Metrics Overlay (PIPE-ADV-006) */}
         <div className="flex items-center gap-3">
           <span className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">
             {formattedTotal}
@@ -152,6 +158,15 @@ export function PipelineColumn({
             {stage.default_probability}%
           </span>
         </div>
+        {/* Weighted value overlay */}
+        {stageMetric && stageMetric.weighted_value > 0 && (
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">Wtd:</span>
+            <span className="text-[10px] font-semibold text-gray-600 dark:text-gray-400">
+              {fmtMoney(stageMetric.weighted_value, { compact: true })}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Droppable Deal Container */}

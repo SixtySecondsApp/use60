@@ -5,6 +5,9 @@
  * 1. Auto-detect HubSpot field names and map them to sixty fields
  * 2. Set write policies per field (auto / approval / suggest / disabled)
  * 3. Test the current mapping against live sample records
+ * 4. Configure per-field auto-update rules (CRM-CFG-001 + CRM-CFG-002)
+ * 5. Preview what the AI would update from a transcript (CRM-CFG-005)
+ * 6. View mutation audit trail + undo recent changes (CRM-CFG-003 + CRM-CFG-004)
  */
 
 import { useState, useEffect } from 'react';
@@ -35,6 +38,9 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { FieldMappingTable, type FieldRow } from '@/components/settings/FieldMappingTable';
 import { WritePolicyEditor } from '@/components/settings/WritePolicyEditor';
+import { CRMAutoUpdateRules } from '@/components/settings/CRMAutoUpdateRules';
+import { CRMAuditTrail } from '@/components/settings/CRMAuditTrail';
+import { CRMPreviewMode } from '@/components/settings/CRMPreviewMode';
 import {
   useCRMFieldMappings,
   useSaveCRMFieldMappings,
@@ -331,8 +337,17 @@ export default function CRMFieldMappingSettings() {
           </Card>
         )}
 
-        {/* Write Policies */}
+        {/* Write Policies (legacy) */}
         <WritePolicyEditor crm_object={selectedObject} />
+
+        {/* Per-field Auto-Update Rules (CRM-CFG-001 + CRM-CFG-002) */}
+        <CRMAutoUpdateRules crm_object={selectedObject} />
+
+        {/* Preview Mode (CRM-CFG-005) */}
+        <CRMPreviewMode />
+
+        {/* Mutation Audit Trail + Undo (CRM-CFG-003 + CRM-CFG-004) */}
+        <CRMAuditTrail />
 
         {/* Info note */}
         <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 px-1">
