@@ -25,7 +25,7 @@ import {
   useSkipQuestion,
 } from '@/lib/services/configQuestionService';
 import { useOrg } from '@/lib/contexts/OrgContext';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth } from '@/lib/contexts/AuthContext';
 
 // ============================================================================
 // Category label

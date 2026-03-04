@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { usePendingConfigQuestions } from '@/lib/services/configQuestionService';
 import { useOrg } from '@/lib/contexts/OrgContext';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth } from '@/lib/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface QuestionNotificationBadgeProps {

@@ -195,3 +195,11 @@ export function DropdownMenuSeparator({ className = '' }: { className?: string }
     <div className={`-mx-1 my-1 h-px bg-slate-200 dark:bg-gray-700 ${className}`} />
   );
 }
+
+export function DropdownMenuLabel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`px-2 py-1.5 text-sm font-semibold text-slate-900 dark:text-gray-200 ${className}`}>
+      {children}
+    </div>
+  );
+}

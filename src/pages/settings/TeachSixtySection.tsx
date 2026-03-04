@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOrg } from '@/lib/contexts/OrgContext';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth } from '@/lib/contexts/AuthContext';
 import { usePendingConfigQuestions, type QuestionCategory } from '@/lib/services/configQuestionService';
 import { ConfigCompletenessWidget } from '@/components/learning/ConfigCompletenessWidget';
 import { InAppQuestionCard } from '@/components/learning/InAppQuestionCard';

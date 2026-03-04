@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import type { WaitlistEntry } from '@/lib/types/waitlist';
 import { useWaitlistAdmin } from '@/lib/hooks/useWaitlistAdmin';
 import { grantAccess } from '@/lib/services/waitlistAdminService';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth } from '@/lib/contexts/AuthContext';
 
 interface WaitlistTableProps {
   entries: WaitlistEntry[];
