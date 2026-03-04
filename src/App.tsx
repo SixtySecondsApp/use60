@@ -81,13 +81,17 @@ import {
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
-  PipelinePage, FormDisplay, CompaniesTable, CompanyProfile,
+  PipelinePage, ForecastPage, FormDisplay, CompaniesTable, CompanyProfile,
   ContactsTable, ContactRecord, DealRecord, LeadsInbox, Clients,
   HealthMonitoring,
   // Features
-  MeetingsPage, ProposalsList, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
+  MeetingsPage, MeetingLibraryPage, ProposalsList, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage,
+  CampaignsPage,
+  OutreachAnalyticsPage,
+  WinLossPage,
+  FollowUpDraftsPage,
   OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
   ProductProfileViewPage, ProductProfileEditPage,
   // Settings
@@ -95,8 +99,8 @@ import {
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
-  CreditPurchaseSuccess, CreditsSettingsPage, BillingSettingsPage, SalesGoalsPage,
+  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, AutonomyDashboardPage, SearchResultsPage, CompetitiveIntelPage, CoachingDashboardPage, CoachingRepDetailPage, TeachSixtySection, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
+  CreditPurchaseSuccess, CreditsSettingsPage, ModelPreferencesPage, BillingSettingsPage, SalesGoalsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage, MeetingSettingsPage,
   OrgBilling,
   // Insights
@@ -543,11 +547,16 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Email Action Center - Unified email draft review and sending */}
                 <Route path="/email-actions" element={<AppLayout><EmailActionCenter /></AppLayout>} />
                 <Route path="/email-actions/:id" element={<AppLayout><EmailActionCenter /></AppLayout>} />
-                {/* Internal-only: Pipeline, Tasks */}
+                {/* Internal-only: Pipeline, Forecast, Tasks */}
                 <Route path="/pipeline" element={<InternalRouteGuard><AppLayout><PipelinePage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/forecast" element={<InternalRouteGuard><AppLayout><ForecastPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/tasks" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/crm/tasks" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/projects" element={<Navigate to="/command-centre" replace />} />
+                <Route path="/campaigns" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><CampaignsPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                <Route path="/outreach/analytics" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><OutreachAnalyticsPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                <Route path="/analytics/win-loss" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><WinLossPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                <Route path="/follow-ups/drafts" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><FollowUpDraftsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
@@ -613,6 +622,11 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/ai-personalization" element={<AppLayout><AIPersonalizationPage /></AppLayout>} />
                 <Route path="/settings/ai-intelligence" element={<AppLayout><AIIntelligencePage /></AppLayout>} />
                 <Route path="/settings/autonomy" element={<OrgAdminRouteGuard><AppLayout><AutonomySettingsPage /></AppLayout></OrgAdminRouteGuard>} />
+                <Route path="/autonomy" element={<InternalRouteGuard><AppLayout><AutonomyDashboardPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/search" element={<AppLayout><SearchResultsPage /></AppLayout>} />
+                <Route path="/intelligence/competitive" element={<AppLayout><CompetitiveIntelPage /></AppLayout>} />
+                <Route path="/coaching" element={<InternalRouteGuard><AppLayout><CoachingDashboardPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/coaching/rep/:userId" element={<InternalRouteGuard><AppLayout><CoachingRepDetailPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/methodology" element={<OrgAdminRouteGuard><AppLayout><SalesMethodologySettings /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/crm-field-mapping" element={<OrgAdminRouteGuard><AppLayout><CRMFieldMappingSettings /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/custom-sops" element={<OrgAdminRouteGuard><AppLayout><CustomSOPBuilderPage /></AppLayout></OrgAdminRouteGuard>} />
@@ -637,6 +651,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 } />
                 <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><BillingSettingsPage /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/credits" element={<AppLayout><CreditsSettingsPage /></AppLayout>} />
+                <Route path="/settings/model-preferences" element={<OrgAdminRouteGuard><AppLayout><ModelPreferencesPage /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/credits/success" element={<AppLayout><CreditPurchaseSuccess /></AppLayout>} />
                 <Route path="/settings/goals" element={<AppLayout><SalesGoalsPage /></AppLayout>} />
                 {/* Slack Settings - visible only when Slack is connected (enforced inside page) */}
@@ -674,6 +689,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/follow-ups" element={<AppLayout><FollowUpSettings /></AppLayout>} />
                 <Route path="/settings/proposal-workflows" element={<Navigate to="/settings/follow-ups" replace />} />
                 <Route path="/settings/coaching" element={<AppLayout><CoachingPreferences /></AppLayout>} />
+                <Route path="/settings/teach-sixty" element={<AppLayout><TeachSixtySection /></AppLayout>} />
                 <Route path="/meeting-analytics/:transcriptId" element={<AppLayout><MeetingAnalyticsPage /></AppLayout>} />
                 <Route path="/meeting-analytics" element={<AppLayout><MeetingAnalyticsPage /></AppLayout>} />
                 <Route path="/insights/team" element={<AppLayout><TeamAnalytics /></AppLayout>} />
@@ -681,6 +697,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/roadmap" element={<AppLayout><Roadmap /></AppLayout>} />
                 <Route path="/roadmap/ticket/:ticketId" element={<AppLayout><Roadmap /></AppLayout>} />
                 <Route path="/releases" element={<AppLayout><Releases /></AppLayout>} />
+                <Route path="/meetings/library" element={<AppLayout><MeetingLibraryPage /></AppLayout>} />
                 <Route path="/proposals" element={<InternalRouteGuard><AppLayout><ProposalsList /></AppLayout></InternalRouteGuard>} />
                 <Route path="/meetings/*" element={<AppLayout><MeetingsPage /></AppLayout>} />
                 {/* Meeting detail and recordings are handled by nested routing in /meetings/* (src/pages/MeetingsPage.tsx) */}

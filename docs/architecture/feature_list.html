@@ -306,7 +306,7 @@
   <div class="hsep"></div>
   <a class="header-link" href="architecture-diagram.html">Architecture Diagrams</a>
   <div class="header-right">
-    <span class="hbg">86 features &middot; Feb 2026</span>
+    <span class="hbg">68 features &middot; Mar 2026</span>
   </div>
 </header>
 
@@ -317,7 +317,7 @@
 </div>
 
 <div class="stats-bar">
-  <div class="stat"><div class="stat-num">86</div><div class="stat-label">Features</div></div>
+  <div class="stat"><div class="stat-num">68</div><div class="stat-label">Features</div></div>
   <div class="stat"><div class="stat-num">285</div><div class="stat-label">Edge Functions</div></div>
   <div class="stat"><div class="stat-num">14</div><div class="stat-label">Integrations</div></div>
   <div class="stat"><div class="stat-num">6</div><div class="stat-label">AI Agents</div></div>
@@ -367,8 +367,8 @@
 <button class="btt" id="btt" onclick="window.scrollTo({top:0,behavior:'smooth'})">&#8593;</button>
 
 <footer>
-  60 &mdash; The AI Command Centre for Sales &middot; use60.com &middot; Updated Feb 2026<br>
-  <span style="color:var(--txt3);font-size:11px">86 features across 285 edge functions, 14 integrations, 6 specialist AI agents</span>
+  60 &mdash; The AI Command Centre for Sales &middot; use60.com &middot; Updated Mar 2026<br>
+  <span style="color:var(--txt3);font-size:11px">68 features across 285 edge functions, 14 integrations, 6 specialist AI agents</span>
 </footer>
 
 <script>
@@ -635,7 +635,7 @@ const FEATURES = [
     ]
   },
   {
-    id: 'crm-writeback',
+    id: 'crm-auto-update',
     name: 'Autonomous CRM Updates',
     cat: 'after',
     desc: 'AI extracts deal stage, next steps, stakeholders, and MEDDIC fields from meetings and proposes CRM updates. Approve in Slack or let the AI auto-apply based on your autonomy settings.',
@@ -756,6 +756,20 @@ const FEATURES = [
     ]
   },
   {
+    id: 'forecast-dashboard',
+    name: 'AI Forecast Dashboard',
+    cat: 'pipeline',
+    desc: 'Revenue forecast by quarter with weighted and best-case scenarios. Stage-by-stage funnel breakdown, deal-by-deal probability scoring, and AI-generated forecast commentary. Compare to quota and prior periods.',
+    ai: true, unique: false, isNew: true, highlight: false,
+    wow: 4, pain: 4, trust: 4,
+    diff: 'AI-generated forecast commentary explains the numbers. Deal-level probability scoring from meeting sentiment and activity patterns, not just manual stage. Adapts to your sales cycle length.',
+    comps: [
+      { name: 'Gong', status: 'matches' },
+      { name: 'HubSpot', status: 'matches' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
     id: 'dashboard-kpi',
     name: 'Sales Dashboard & KPIs',
     cat: 'pipeline',
@@ -838,6 +852,20 @@ const FEATURES = [
     ]
   },
   {
+    id: 'outreach-analytics',
+    name: 'Outreach Analytics Dashboard',
+    cat: 'outreach',
+    desc: 'Full-funnel campaign analytics: sent, opens, replies, interested rate, and booked meetings. Reply classification by intent. Campaign health scoring with AI-generated improvement suggestions.',
+    ai: true, unique: false, isNew: true, highlight: false,
+    wow: 3, pain: 4, trust: 4,
+    diff: 'Intent-classified reply analytics (not just open rate). Campaign health scoring with specific improvement recommendations — not a data dump but an action plan.',
+    comps: [
+      { name: 'Sendr', status: 'beats' },
+      { name: 'Apollo', status: 'beats' },
+      { name: 'Salesloft', status: 'matches' },
+    ]
+  },
+  {
     id: 'campaign-monitoring',
     name: 'AI Campaign Monitoring',
     cat: 'outreach',
@@ -907,6 +935,20 @@ const FEATURES = [
 
   // ─── PLATFORM & INTELLIGENCE ───
   {
+    id: 'command-centre',
+    name: 'Command Centre',
+    cat: 'platform',
+    desc: 'Unified inbox for every AI-generated action. One place where agents surface follow-ups, CRM updates, risk alerts, and outreach — each with approve/dismiss/snooze. Slack notifications link directly back to the item.',
+    ai: true, unique: true, isNew: true, highlight: true,
+    wow: 5, pain: 5, trust: 5,
+    diff: 'Not a notification list — an action queue. Every item has a drafted action and a confidence score. Approve with one click; the AI executes. Autonomy escalation means items graduate from "ask me" to "just do it" as trust builds.',
+    comps: [
+      { name: 'Gong', status: 'beats' },
+      { name: 'HubSpot', status: 'beats' },
+      { name: 'Salesloft', status: 'beats' },
+    ]
+  },
+  {
     id: 'copilot',
     name: 'AI Copilot (Conversational Agent)',
     cat: 'platform',
@@ -921,34 +963,6 @@ const FEATURES = [
     ]
   },
   {
-    id: 'slack-copilot',
-    name: 'Slack Sales Assistant',
-    cat: 'platform',
-    desc: 'Full copilot experience in Slack DM. Ask about deals, contacts, pipeline, coaching, and competitive intel without leaving Slack. Slash commands and button-driven workflows.',
-    ai: true, unique: true, isNew: true, highlight: true,
-    wow: 5, pain: 5, trust: 3,
-    diff: 'A complete sales assistant in Slack, not just notifications. "What\'s the status on the Acme deal?" or "Draft a follow-up to Sarah" works in your Slack DM. Gong and HubSpot send alerts to Slack; 60 lives in Slack.',
-    comps: [
-      { name: 'Gong', status: 'beats' },
-      { name: 'HubSpot', status: 'beats' },
-      { name: 'Salesloft', status: 'beats' },
-    ]
-  },
-  {
-    id: 'agent-fleet',
-    name: '6-Agent Specialist Fleet',
-    cat: 'platform',
-    desc: 'Six specialist AI agents (Pipeline, Outreach, Research, CRM Ops, Meetings, Prospecting) work autonomously on your behalf. Circuit breakers prevent cascading failures. Dead-letter queue for retry.',
-    ai: true, unique: true, isNew: true, highlight: true,
-    wow: 5, pain: 4, trust: 5,
-    diff: 'Production-grade agent architecture with circuit breakers, health monitoring, and autonomy escalation. Not a single chatbot &mdash; a fleet of specialists. No other sales platform has this.',
-    comps: [
-      { name: 'Gong', status: 'beats' },
-      { name: 'HubSpot', status: 'beats' },
-      { name: 'Clay', status: 'beats' },
-    ]
-  },
-  {
     id: 'autonomy-system',
     name: 'Autonomy Escalation Engine',
     cat: 'platform',
@@ -960,32 +974,6 @@ const FEATURES = [
       { name: 'Gong', status: 'beats' },
       { name: 'HubSpot', status: 'beats' },
       { name: 'Salesloft', status: 'beats' },
-    ]
-  },
-  {
-    id: 'command-centre',
-    name: 'Command Centre (Action Hub)',
-    cat: 'platform',
-    desc: 'Unified hub for all AI-generated actions awaiting your approval. Task chains, writing canvas, CRM update previews, Slack previews. Approve, edit, or reject everything in one place.',
-    ai: true, unique: true, isNew: true, highlight: true,
-    wow: 4, pain: 5, trust: 4,
-    diff: 'One place to review and approve everything the AI has done. Not scattered across dashboards. Task chains show the full context of why an action was generated.',
-    comps: [
-      { name: 'Gong', status: 'beats' },
-      { name: 'HubSpot', status: 'beats' },
-    ]
-  },
-  {
-    id: 'email-action-centre',
-    name: 'Email Action Centre',
-    cat: 'platform',
-    desc: 'Dedicated inbox for AI-drafted emails awaiting human review. Edit subject, body, recipients. Approve to send from your Gmail. Reject with feedback to improve future drafts.',
-    ai: true, unique: true, isNew: true, highlight: false,
-    wow: 3, pain: 4, trust: 4,
-    diff: 'Centralised email approval queue. Most tools scatter AI-drafted emails across features. 60 gives you one inbox to review everything before it goes out.',
-    comps: [
-      { name: 'Salesloft', status: 'beats' },
-      { name: 'Sendr', status: 'beats' },
     ]
   },
   {
@@ -1030,18 +1018,6 @@ const FEATURES = [
     ]
   },
   {
-    id: 'semantic-search',
-    name: 'Semantic Meeting Search',
-    cat: 'platform',
-    desc: 'Search across all your meeting transcripts using natural language. "Meetings where pricing objections came up" or "Calls where they mentioned competitor X." Vector-powered semantic matching.',
-    ai: true, unique: false, isNew: false, highlight: false,
-    wow: 4, pain: 3, trust: 4,
-    diff: 'Semantic (meaning-based) search, not keyword matching. Finds relevant moments even when the exact words differ. Indexed with pgvector embeddings.',
-    comps: [
-      { name: 'Gong', status: 'matches' },
-    ]
-  },
-  {
     id: 'memory-system',
     name: 'AI Memory & Relationship Graph',
     cat: 'platform',
@@ -1056,7 +1032,7 @@ const FEATURES = [
     ]
   },
   {
-    id: 'competitive-intel',
+    id: 'competitive-intel-agent',
     name: 'Competitive Intelligence',
     cat: 'platform',
     desc: 'Tracks competitor mentions across meetings. Auto-generates battlecards with positioning, objection responses, and win/loss insights. Searchable from Slack.',

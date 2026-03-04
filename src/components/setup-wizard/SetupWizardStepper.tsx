@@ -15,7 +15,7 @@ export function SetupWizardStepper() {
           <button
             key={step}
             onClick={() => setCurrentStep(step)}
-            className="group"
+            className="group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded-full"
             title={meta.label}
           >
             <div
