@@ -85,7 +85,7 @@ import {
   ContactsTable, ContactRecord, DealRecord, LeadsInbox, Clients,
   HealthMonitoring,
   // Features
-  MeetingsPage, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
+  MeetingsPage, MeetingLibraryPage, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage,
   CampaignsPage,
@@ -691,6 +691,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/roadmap" element={<AppLayout><Roadmap /></AppLayout>} />
                 <Route path="/roadmap/ticket/:ticketId" element={<AppLayout><Roadmap /></AppLayout>} />
                 <Route path="/releases" element={<AppLayout><Releases /></AppLayout>} />
+                <Route path="/meetings/library" element={<AppLayout><MeetingLibraryPage /></AppLayout>} />
                 <Route path="/meetings/*" element={<AppLayout><MeetingsPage /></AppLayout>} />
                 {/* Meeting detail and recordings are handled by nested routing in /meetings/* (src/pages/MeetingsPage.tsx) */}
                 {/* Recordings are now at /meetings/recordings/* - integrated into meetings */}

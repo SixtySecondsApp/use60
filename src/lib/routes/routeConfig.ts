@@ -123,6 +123,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     displayGroup: 1,
   },
   {
+    path: '/meetings/library',
+    access: 'any',
+    label: 'Call Library',
+    icon: Video,
+    showInNav: false, // Accessible from /meetings nav section
+    navSection: 'main',
+    order: 3,
+    displayGroup: 1,
+  },
+  {
     path: '/meetings/intelligence',
     access: 'any',
     label: 'Intelligence',
@@ -305,6 +315,17 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: true,
     navSection: 'tools',
     order: 3.9,
+    displayGroup: 4,
+  },
+  // Follow-Up Draft Inbox (FU-001)
+  {
+    path: '/follow-ups/drafts',
+    access: 'internal',
+    label: 'Follow-Up Drafts',
+    icon: Mail,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3.8,
     displayGroup: 4,
   },
   // Competitive Intelligence Library (COMP-001)
