@@ -49,7 +49,7 @@ BEGIN
   )
   INTO v_result
   FROM deals
-  WHERE clerk_org_id = p_org_id
+  WHERE clerk_org_id = p_org_id::text
     AND status NOT IN ('won', 'lost')
     AND forecast_category IS DISTINCT FROM 'omitted'
     AND (

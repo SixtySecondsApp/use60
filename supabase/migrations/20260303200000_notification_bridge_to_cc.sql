@@ -175,6 +175,7 @@ COMMENT ON FUNCTION bridge_notification_to_cc IS
 -- =============================================================================
 
 DROP TRIGGER IF EXISTS trg_notification_bridge_to_cc ON notifications;
+DROP TRIGGER IF EXISTS trg_notification_bridge_to_cc ON notifications;
 CREATE TRIGGER trg_notification_bridge_to_cc
   AFTER INSERT ON notifications
   FOR EACH ROW

@@ -43,6 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_email_sends_approval
 ALTER TABLE public.scheduled_email_sends ENABLE ROW LEVEL SECURITY;
 
 -- Service role bypass (cron poller uses service role)
+DROP POLICY IF EXISTS "service_role_all_scheduled_email_sends" ON public.scheduled_email_sends;
 CREATE POLICY "service_role_all_scheduled_email_sends"
   ON public.scheduled_email_sends
   FOR ALL
@@ -51,6 +52,7 @@ CREATE POLICY "service_role_all_scheduled_email_sends"
   WITH CHECK (true);
 
 -- Users can read/cancel their own rows
+DROP POLICY IF EXISTS "users_own_scheduled_email_sends" ON public.scheduled_email_sends;
 CREATE POLICY "users_own_scheduled_email_sends"
   ON public.scheduled_email_sends
   FOR ALL

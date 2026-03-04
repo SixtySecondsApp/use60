@@ -28,7 +28,7 @@ export interface RecentEvent {
   user_name: string | null;
   provider: string;
   model: string;
-  feature_key: string | null;
+  feature: string | null;
   input_tokens: number;
   output_tokens: number;
   estimated_cost: number;
@@ -148,7 +148,7 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
         // Recent events for visualization (last 100 events)
         supabase
           .from('ai_cost_events')
-          .select('id, user_id, provider, model, feature_key, input_tokens, output_tokens, estimated_cost, created_at')
+          .select('id, user_id, provider, model, feature, input_tokens, output_tokens, estimated_cost, created_at')
           .order('created_at', { ascending: false })
           .limit(100),
 

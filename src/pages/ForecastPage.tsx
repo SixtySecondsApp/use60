@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarRange } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase/clientV2';
-import { useActiveOrgId } from '@/lib/stores/orgStore';
+import { useActiveOrgId, useOrgStore } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
 
 import { ForecastSummaryCards } from '@/components/forecast/ForecastSummaryCards';
@@ -31,6 +31,10 @@ interface ForecastTotals {
 export function ForecastPage() {
   const [period, setPeriod] = useState<Period>('quarter');
   const orgId = useActiveOrgId();
+  const orgCurrency = useOrgStore((state) => {
+    const org = state.organizations.find((o) => o.id === state.activeOrgId);
+    return org?.currency_code || 'USD';
+  });
 
   const { data: totals, isLoading: totalsLoading } = useQuery({
     queryKey: ['forecast-totals', orgId, period],
@@ -94,7 +98,7 @@ export function ForecastPage() {
         </div>
 
         {/* FORE-001: Summary cards */}
-        <ForecastSummaryCards data={totals} isLoading={totalsLoading} />
+        <ForecastSummaryCards data={totals} isLoading={totalsLoading} currency={orgCurrency} />
 
         {/* Row: Forecast vs Actual + Rep Calibration */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

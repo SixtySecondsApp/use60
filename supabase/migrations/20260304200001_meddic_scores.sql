@@ -43,12 +43,13 @@ ALTER TABLE meddic_scores ENABLE ROW LEVEL SECURITY;
 
 -- Read: org members can read scores for deals they have access to
 DO $$ BEGIN
-  CREATE POLICY "Org members can read meddic scores"
+  DROP POLICY IF EXISTS "Org members can read meddic scores" ON meddic_scores;
+CREATE POLICY "Org members can read meddic scores"
     ON meddic_scores FOR SELECT
     USING (
       deal_id IN (
         SELECT d.id FROM deals d
-        JOIN organization_memberships om ON om.org_id = d.clerk_org_id
+        JOIN organization_memberships om ON om.org_id = d.clerk_org_id::uuid
         WHERE om.user_id = auth.uid()
       )
     );
@@ -56,19 +57,20 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Write: org members can upsert scores for their org's deals
 DO $$ BEGIN
-  CREATE POLICY "Org members can write meddic scores"
+  DROP POLICY IF EXISTS "Org members can write meddic scores" ON meddic_scores;
+CREATE POLICY "Org members can write meddic scores"
     ON meddic_scores FOR ALL
     USING (
       deal_id IN (
         SELECT d.id FROM deals d
-        JOIN organization_memberships om ON om.org_id = d.clerk_org_id
+        JOIN organization_memberships om ON om.org_id = d.clerk_org_id::uuid
         WHERE om.user_id = auth.uid()
       )
     )
     WITH CHECK (
       deal_id IN (
         SELECT d.id FROM deals d
-        JOIN organization_memberships om ON om.org_id = d.clerk_org_id
+        JOIN organization_memberships om ON om.org_id = d.clerk_org_id::uuid
         WHERE om.user_id = auth.uid()
       )
     );
@@ -76,7 +78,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Service role full access
 DO $$ BEGIN
-  CREATE POLICY "Service role full access meddic_scores"
+  DROP POLICY IF EXISTS "Service role full access meddic_scores" ON meddic_scores;
+CREATE POLICY "Service role full access meddic_scores"
     ON meddic_scores FOR ALL
     TO service_role
     USING (true)
@@ -110,7 +113,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM deals d
-    JOIN organization_memberships om ON om.org_id = d.clerk_org_id
+    JOIN organization_memberships om ON om.org_id = d.clerk_org_id::uuid
     WHERE d.id = p_deal_id AND om.user_id = auth.uid()
   ) THEN
     RETURN;

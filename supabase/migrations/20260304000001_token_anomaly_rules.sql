@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS token_anomaly_rules (
 ALTER TABLE token_anomaly_rules ENABLE ROW LEVEL SECURITY;
 
 -- Platform admins can read all rules
+DROP POLICY IF EXISTS "Platform admins can read anomaly rules" ON token_anomaly_rules;
 CREATE POLICY "Platform admins can read anomaly rules"
   ON token_anomaly_rules FOR SELECT
   USING (
@@ -35,6 +36,7 @@ CREATE POLICY "Platform admins can read anomaly rules"
   );
 
 -- Platform admins can manage rules
+DROP POLICY IF EXISTS "Platform admins can manage anomaly rules" ON token_anomaly_rules;
 CREATE POLICY "Platform admins can manage anomaly rules"
   ON token_anomaly_rules FOR ALL
   USING (

@@ -142,6 +142,7 @@ END;
 $$;
 
 DROP TRIGGER IF EXISTS trg_deal_stakeholders_updated_at ON deal_stakeholders;
+DROP TRIGGER IF EXISTS trg_deal_stakeholders_updated_at ON deal_stakeholders;
 CREATE TRIGGER trg_deal_stakeholders_updated_at
   BEFORE UPDATE ON deal_stakeholders
   FOR EACH ROW
@@ -156,7 +157,8 @@ ALTER TABLE deal_stakeholders ENABLE ROW LEVEL SECURITY;
 -- Org members can view stakeholders for their deals
 DROP POLICY IF EXISTS "Org members can view deal stakeholders" ON deal_stakeholders;
 DO $$ BEGIN
-  CREATE POLICY "Org members can view deal stakeholders"
+  DROP POLICY IF EXISTS "Org members can view deal stakeholders" ON deal_stakeholders;
+CREATE POLICY "Org members can view deal stakeholders"
   ON deal_stakeholders FOR SELECT
   TO authenticated
   USING (
@@ -172,7 +174,8 @@ END $$;
 -- Org members can insert stakeholders for their deals
 DROP POLICY IF EXISTS "Org members can insert deal stakeholders" ON deal_stakeholders;
 DO $$ BEGIN
-  CREATE POLICY "Org members can insert deal stakeholders"
+  DROP POLICY IF EXISTS "Org members can insert deal stakeholders" ON deal_stakeholders;
+CREATE POLICY "Org members can insert deal stakeholders"
   ON deal_stakeholders FOR INSERT
   TO authenticated
   WITH CHECK (
@@ -188,7 +191,8 @@ END $$;
 -- Org members can update stakeholders for their deals
 DROP POLICY IF EXISTS "Org members can update deal stakeholders" ON deal_stakeholders;
 DO $$ BEGIN
-  CREATE POLICY "Org members can update deal stakeholders"
+  DROP POLICY IF EXISTS "Org members can update deal stakeholders" ON deal_stakeholders;
+CREATE POLICY "Org members can update deal stakeholders"
   ON deal_stakeholders FOR UPDATE
   TO authenticated
   USING (
@@ -211,7 +215,8 @@ END $$;
 -- Org members can delete stakeholders for their deals
 DROP POLICY IF EXISTS "Org members can delete deal stakeholders" ON deal_stakeholders;
 DO $$ BEGIN
-  CREATE POLICY "Org members can delete deal stakeholders"
+  DROP POLICY IF EXISTS "Org members can delete deal stakeholders" ON deal_stakeholders;
+CREATE POLICY "Org members can delete deal stakeholders"
   ON deal_stakeholders FOR DELETE
   TO authenticated
   USING (
@@ -227,7 +232,8 @@ END $$;
 -- Service role has full access
 DROP POLICY IF EXISTS "Service role has full access to deal_stakeholders" ON deal_stakeholders;
 DO $$ BEGIN
-  CREATE POLICY "Service role has full access to deal_stakeholders"
+  DROP POLICY IF EXISTS "Service role has full access to deal_stakeholders" ON deal_stakeholders;
+CREATE POLICY "Service role has full access to deal_stakeholders"
   ON deal_stakeholders FOR ALL
   TO service_role
   USING (true)

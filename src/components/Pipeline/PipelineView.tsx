@@ -8,7 +8,8 @@
  */
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { Download, Users2 } from 'lucide-react';
+import { Download, Users2, CalendarRange } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { PipelineHeader } from './PipelineHeader';
 import { PipelineKanban } from './PipelineKanban';
 import { PipelineTable } from './PipelineTable';
@@ -27,8 +28,15 @@ import { BulkActionBar } from './BulkActionBar';
 import { usePipelineColumns } from './hooks/usePipelineColumns';
 import { exportDealsToCSV } from './pipelineUtils';
 import type { PipelineSavedView } from './hooks/usePipelineSavedViews';
+import { ForecastSummaryCards } from '@/components/forecast/ForecastSummaryCards';
+import { ForecastVsActualChart } from '@/components/forecast/ForecastVsActualChart';
+import { RepCalibrationCards } from '@/components/forecast/RepCalibrationCards';
+import { PipelineWaterfallChart } from '@/components/forecast/PipelineWaterfallChart';
+import { WeightedPipelineChart } from '@/components/forecast/WeightedPipelineChart';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useOrgStore } from '@/lib/stores/orgStore';
+import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 
@@ -79,8 +87,37 @@ function PipelineSkeleton() {
 
 export function PipelineView() {
   const activeOrgId = useOrgStore((state) => state.activeOrgId);
+  const orgCurrency = useOrgStore((state) => {
+    const org = state.organizations.find((o) => o.id === state.activeOrgId);
+    return org?.currency_code || 'USD';
+  });
   const filterState = usePipelineFilters();
   const isTableView = filterState.viewMode === 'table';
+  const isForecastView = filterState.viewMode === 'forecast';
+
+  // Forecast state
+  const [forecastPeriod, setForecastPeriod] = useState<'month' | 'quarter'>('quarter');
+  const forecastOrgId = useActiveOrgId();
+  const { data: forecastTotals, isLoading: forecastLoading } = useQuery({
+    queryKey: ['forecast-totals', forecastOrgId, forecastPeriod],
+    queryFn: async () => {
+      if (!forecastOrgId) return null;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data, error } = await supabase.rpc('get_forecast_totals', {
+        p_org_id: forecastOrgId,
+        p_user_id: user.id,
+        p_period: forecastPeriod,
+      });
+      if (error) {
+        toast.error('Failed to load forecast totals');
+        throw error;
+      }
+      return data as { commit_total: number; best_case_total: number; pipeline_total: number; period: string };
+    },
+    enabled: !!forecastOrgId && isForecastView,
+    staleTime: 5 * 60 * 1000,
+  });
   const pipelineData = usePipelineData({
     filters: filterState.filters,
     sortBy: filterState.sortBy as any,
@@ -264,11 +301,11 @@ export function PipelineView() {
     }
   };
 
-  if (pipelineData.isLoading) {
+  if (!isForecastView && pipelineData.isLoading) {
     return <PipelineSkeleton />;
   }
 
-  if (pipelineData.error) {
+  if (!isForecastView && pipelineData.error) {
     return (
       <div className="flex flex-col items-center justify-center p-8">
         <div className="text-red-500 mb-4">Error loading pipeline data</div>
@@ -357,6 +394,54 @@ export function PipelineView() {
         />
       ) : filterState.viewMode === 'graph' ? (
         <RelationshipGraph />
+      ) : isForecastView ? (
+        <div className="space-y-6">
+          {/* Period selector */}
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {forecastPeriod === 'quarter' ? 'This quarter' : 'This month'} — pipeline health and revenue forecast
+            </p>
+            <div className="flex items-center gap-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-white/5 p-1">
+              <Button
+                variant={forecastPeriod === 'month' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={() => setForecastPeriod('month')}
+              >
+                <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+                Month
+              </Button>
+              <Button
+                variant={forecastPeriod === 'quarter' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={() => setForecastPeriod('quarter')}
+              >
+                <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+                Quarter
+              </Button>
+            </div>
+          </div>
+
+          {/* Summary cards */}
+          <ForecastSummaryCards data={forecastTotals} isLoading={forecastLoading} currency={orgCurrency} />
+
+          {/* Forecast vs Actual + Rep Calibration */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <ForecastVsActualChart />
+            </div>
+            <div>
+              <RepCalibrationCards />
+            </div>
+          </div>
+
+          {/* Pipeline Waterfall + Weighted Pipeline */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <PipelineWaterfallChart />
+            <WeightedPipelineChart />
+          </div>
+        </div>
       ) : (
         <PipelineTable
           deals={pipelineData.data.deals}

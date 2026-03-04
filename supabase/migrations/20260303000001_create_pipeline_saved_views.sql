@@ -19,27 +19,31 @@ CREATE INDEX IF NOT EXISTS pipeline_saved_views_user_idx ON pipeline_saved_views
 -- RLS: Users can see their own views plus shared views from their org
 ALTER TABLE pipeline_saved_views ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "users can read own and shared views" ON pipeline_saved_views;
 CREATE POLICY "users can read own and shared views"
   ON pipeline_saved_views
   FOR SELECT
   USING (
     user_id = auth.uid()
     OR (is_shared = true AND org_id IN (
-      SELECT organization_id FROM organization_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     ))
   );
 
+DROP POLICY IF EXISTS "users can insert own views" ON pipeline_saved_views;
 CREATE POLICY "users can insert own views"
   ON pipeline_saved_views
   FOR INSERT
   WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "users can update own views" ON pipeline_saved_views;
 CREATE POLICY "users can update own views"
   ON pipeline_saved_views
   FOR UPDATE
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "users can delete own views" ON pipeline_saved_views;
 CREATE POLICY "users can delete own views"
   ON pipeline_saved_views
   FOR DELETE
@@ -54,6 +58,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS pipeline_saved_views_updated_at ON pipeline_saved_views;
 CREATE TRIGGER pipeline_saved_views_updated_at
   BEFORE UPDATE ON pipeline_saved_views
   FOR EACH ROW EXECUTE FUNCTION update_pipeline_saved_views_updated_at();

@@ -36,18 +36,21 @@ CREATE INDEX IF NOT EXISTS idx_landing_builder_sessions_user_org
 -- ---------------------------------------------------------------------------
 ALTER TABLE public.landing_builder_sessions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "users_select_own_landing_builder_sessions" ON public.landing_builder_sessions;
 CREATE POLICY "users_select_own_landing_builder_sessions"
   ON public.landing_builder_sessions
   FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "users_insert_own_landing_builder_sessions" ON public.landing_builder_sessions;
 CREATE POLICY "users_insert_own_landing_builder_sessions"
   ON public.landing_builder_sessions
   FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "users_update_own_landing_builder_sessions" ON public.landing_builder_sessions;
 CREATE POLICY "users_update_own_landing_builder_sessions"
   ON public.landing_builder_sessions
   FOR UPDATE
@@ -55,6 +58,7 @@ CREATE POLICY "users_update_own_landing_builder_sessions"
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "users_delete_own_landing_builder_sessions" ON public.landing_builder_sessions;
 CREATE POLICY "users_delete_own_landing_builder_sessions"
   ON public.landing_builder_sessions
   FOR DELETE
@@ -64,6 +68,7 @@ CREATE POLICY "users_delete_own_landing_builder_sessions"
 -- ---------------------------------------------------------------------------
 -- 4. updated_at trigger (reuses baseline function)
 -- ---------------------------------------------------------------------------
+DROP TRIGGER IF EXISTS set_landing_builder_sessions_updated_at ON public.landing_builder_sessions;
 CREATE TRIGGER set_landing_builder_sessions_updated_at
   BEFORE UPDATE ON public.landing_builder_sessions
   FOR EACH ROW

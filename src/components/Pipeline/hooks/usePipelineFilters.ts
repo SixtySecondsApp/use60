@@ -10,7 +10,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useCallback, useMemo } from 'react';
 import type { PipelineFilters } from './usePipelineData';
 
-export type PipelineViewMode = 'kanban' | 'table' | 'graph';
+export type PipelineViewMode = 'kanban' | 'table' | 'graph' | 'forecast';
 export type PipelineSortBy = 'value' | 'health_score' | 'days_in_stage' | 'close_date' | 'created_at' | 'name';
 export type PipelineSortDir = 'asc' | 'desc';
 

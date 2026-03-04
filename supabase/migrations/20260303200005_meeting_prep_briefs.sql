@@ -30,14 +30,17 @@ CREATE INDEX IF NOT EXISTS idx_prep_briefs_user_id
 -- RLS
 ALTER TABLE meeting_prep_briefs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can read own prep briefs" ON meeting_prep_briefs;
 CREATE POLICY "Users can read own prep briefs"
   ON meeting_prep_briefs FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own prep briefs" ON meeting_prep_briefs;
 CREATE POLICY "Users can insert own prep briefs"
   ON meeting_prep_briefs FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own prep briefs" ON meeting_prep_briefs;
 CREATE POLICY "Users can update own prep briefs"
   ON meeting_prep_briefs FOR UPDATE
   USING (auth.uid() = user_id);

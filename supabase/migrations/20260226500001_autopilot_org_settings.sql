@@ -90,7 +90,8 @@ ALTER TABLE public.autopilot_org_settings ENABLE ROW LEVEL SECURITY;
 
 -- All authenticated users in the org can read their org's settings
 DO $$ BEGIN
-  CREATE POLICY "autopilot_org_settings_member_select"
+  DROP POLICY IF EXISTS "autopilot_org_settings_member_select" ON public.autopilot_org_settings;
+CREATE POLICY "autopilot_org_settings_member_select"
   ON public.autopilot_org_settings FOR SELECT
   TO authenticated
   USING (
@@ -107,7 +108,8 @@ END $$;
 
 -- Org admins / owners can insert new ceiling settings
 DO $$ BEGIN
-  CREATE POLICY "autopilot_org_settings_admin_insert"
+  DROP POLICY IF EXISTS "autopilot_org_settings_admin_insert" ON public.autopilot_org_settings;
+CREATE POLICY "autopilot_org_settings_admin_insert"
   ON public.autopilot_org_settings FOR INSERT
   TO authenticated
   WITH CHECK (
@@ -125,7 +127,8 @@ END $$;
 
 -- Org admins / owners can update their org's ceiling settings
 DO $$ BEGIN
-  CREATE POLICY "autopilot_org_settings_admin_update"
+  DROP POLICY IF EXISTS "autopilot_org_settings_admin_update" ON public.autopilot_org_settings;
+CREATE POLICY "autopilot_org_settings_admin_update"
   ON public.autopilot_org_settings FOR UPDATE
   TO authenticated
   USING (
@@ -153,7 +156,8 @@ END $$;
 
 -- Org admins / owners can delete their org's ceiling settings
 DO $$ BEGIN
-  CREATE POLICY "autopilot_org_settings_admin_delete"
+  DROP POLICY IF EXISTS "autopilot_org_settings_admin_delete" ON public.autopilot_org_settings;
+CREATE POLICY "autopilot_org_settings_admin_delete"
   ON public.autopilot_org_settings FOR DELETE
   TO authenticated
   USING (
@@ -171,7 +175,8 @@ END $$;
 
 -- Service role: full access (edge functions read/write via service-role client)
 DO $$ BEGIN
-  CREATE POLICY "autopilot_org_settings_service_all"
+  DROP POLICY IF EXISTS "autopilot_org_settings_service_all" ON public.autopilot_org_settings;
+CREATE POLICY "autopilot_org_settings_service_all"
   ON public.autopilot_org_settings FOR ALL
   TO service_role
   USING (true)

@@ -106,7 +106,8 @@ ALTER TABLE public.autopilot_signals ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own signals
 DO $$ BEGIN
-  CREATE POLICY "autopilot_signals_user_select"
+  DROP POLICY IF EXISTS "autopilot_signals_user_select" ON public.autopilot_signals;
+CREATE POLICY "autopilot_signals_user_select"
   ON public.autopilot_signals FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
@@ -115,7 +116,8 @@ END $$;
 
 -- Org admins can read all signals within their org
 DO $$ BEGIN
-  CREATE POLICY "autopilot_signals_admin_select"
+  DROP POLICY IF EXISTS "autopilot_signals_admin_select" ON public.autopilot_signals;
+CREATE POLICY "autopilot_signals_admin_select"
   ON public.autopilot_signals FOR SELECT
   TO authenticated
   USING (
@@ -132,7 +134,8 @@ END $$;
 
 -- Service role: full access for inserts and analytics
 DO $$ BEGIN
-  CREATE POLICY "autopilot_signals_service_all"
+  DROP POLICY IF EXISTS "autopilot_signals_service_all" ON public.autopilot_signals;
+CREATE POLICY "autopilot_signals_service_all"
   ON public.autopilot_signals FOR ALL
   TO service_role
   USING (true)

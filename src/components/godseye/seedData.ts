@@ -122,7 +122,7 @@ export function generateSeedRecentEvents(
       user_name: user.user_name,
       provider: model.provider,
       model: model.model_id,
-      feature_key: randomChoice(FEATURE_KEYS),
+      feature: randomChoice(FEATURE_KEYS),
       input_tokens: inputTokens,
       output_tokens: outputTokens,
       estimated_cost: cost,

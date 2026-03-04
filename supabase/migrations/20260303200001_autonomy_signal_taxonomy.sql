@@ -85,7 +85,8 @@ CREATE INDEX IF NOT EXISTS idx_signal_overrides_org
 ALTER TABLE public.autonomy_signal_taxonomy ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
-  CREATE POLICY "signal_taxonomy_authenticated_select"
+  DROP POLICY IF EXISTS "signal_taxonomy_authenticated_select" ON public.autonomy_signal_taxonomy;
+CREATE POLICY "signal_taxonomy_authenticated_select"
   ON public.autonomy_signal_taxonomy FOR SELECT
   TO authenticated
   USING (true);
@@ -93,7 +94,8 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE POLICY "signal_taxonomy_service_all"
+  DROP POLICY IF EXISTS "signal_taxonomy_service_all" ON public.autonomy_signal_taxonomy;
+CREATE POLICY "signal_taxonomy_service_all"
   ON public.autonomy_signal_taxonomy FOR ALL
   TO service_role
   USING (true)
@@ -105,7 +107,8 @@ END $$;
 ALTER TABLE public.autonomy_signal_taxonomy_overrides ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
-  CREATE POLICY "signal_overrides_admin_all"
+  DROP POLICY IF EXISTS "signal_overrides_admin_all" ON public.autonomy_signal_taxonomy_overrides;
+CREATE POLICY "signal_overrides_admin_all"
   ON public.autonomy_signal_taxonomy_overrides FOR ALL
   TO authenticated
   USING (
@@ -128,7 +131,8 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE POLICY "signal_overrides_member_select"
+  DROP POLICY IF EXISTS "signal_overrides_member_select" ON public.autonomy_signal_taxonomy_overrides;
+CREATE POLICY "signal_overrides_member_select"
   ON public.autonomy_signal_taxonomy_overrides FOR SELECT
   TO authenticated
   USING (
@@ -142,7 +146,8 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE POLICY "signal_overrides_service_all"
+  DROP POLICY IF EXISTS "signal_overrides_service_all" ON public.autonomy_signal_taxonomy_overrides;
+CREATE POLICY "signal_overrides_service_all"
   ON public.autonomy_signal_taxonomy_overrides FOR ALL
   TO service_role
   USING (true)
@@ -209,10 +214,12 @@ END;
 $$;
 
 DROP TRIGGER IF EXISTS signal_taxonomy_updated_at ON public.autonomy_signal_taxonomy;
+DROP TRIGGER IF EXISTS signal_taxonomy_updated_at ON public.autonomy_signal_taxonomy;
 CREATE TRIGGER signal_taxonomy_updated_at
   BEFORE UPDATE ON public.autonomy_signal_taxonomy
   FOR EACH ROW EXECUTE FUNCTION public.update_signal_taxonomy_updated_at();
 
+DROP TRIGGER IF EXISTS signal_overrides_updated_at ON public.autonomy_signal_taxonomy_overrides;
 DROP TRIGGER IF EXISTS signal_overrides_updated_at ON public.autonomy_signal_taxonomy_overrides;
 CREATE TRIGGER signal_overrides_updated_at
   BEFORE UPDATE ON public.autonomy_signal_taxonomy_overrides

@@ -21,6 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_deal_dossiers_org_id ON public.deal_dossiers(org_
 ALTER TABLE public.deal_dossiers ENABLE ROW LEVEL SECURITY;
 
 -- Users can read dossiers for deals in their org
+DROP POLICY IF EXISTS "Users can read dossiers in their org" ON public.deal_dossiers;
 CREATE POLICY "Users can read dossiers in their org"
   ON public.deal_dossiers FOR SELECT
   USING (
@@ -31,6 +32,7 @@ CREATE POLICY "Users can read dossiers in their org"
   );
 
 -- Users can insert dossiers for deals in their org
+DROP POLICY IF EXISTS "Users can insert dossiers in their org" ON public.deal_dossiers;
 CREATE POLICY "Users can insert dossiers in their org"
   ON public.deal_dossiers FOR INSERT
   WITH CHECK (
@@ -41,6 +43,7 @@ CREATE POLICY "Users can insert dossiers in their org"
   );
 
 -- Users can update dossiers for deals in their org
+DROP POLICY IF EXISTS "Users can update dossiers in their org" ON public.deal_dossiers;
 CREATE POLICY "Users can update dossiers in their org"
   ON public.deal_dossiers FOR UPDATE
   USING (
@@ -51,6 +54,7 @@ CREATE POLICY "Users can update dossiers in their org"
   );
 
 -- Service role bypass for edge functions (cron jobs, webhooks)
+DROP POLICY IF EXISTS "Service role full access" ON public.deal_dossiers;
 CREATE POLICY "Service role full access"
   ON public.deal_dossiers FOR ALL
   USING (auth.role() = 'service_role');

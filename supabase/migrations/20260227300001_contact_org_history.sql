@@ -66,7 +66,8 @@ ALTER TABLE public.contact_org_history ENABLE ROW LEVEL SECURITY;
 -- Authenticated users can read history rows for contacts they own.
 -- Contacts use owner_id for user attribution (not org_id).
 DO $$ BEGIN
-  CREATE POLICY "contact_org_history_owner_select"
+  DROP POLICY IF EXISTS "contact_org_history_owner_select" ON public.contact_org_history;
+CREATE POLICY "contact_org_history_owner_select"
   ON public.contact_org_history FOR SELECT
   TO authenticated
   USING (
@@ -82,7 +83,8 @@ END $$;
 
 -- Service role: full access for edge function writes and enrichment pipelines
 DO $$ BEGIN
-  CREATE POLICY "contact_org_history_service_all"
+  DROP POLICY IF EXISTS "contact_org_history_service_all" ON public.contact_org_history;
+CREATE POLICY "contact_org_history_service_all"
   ON public.contact_org_history FOR ALL
   TO service_role
   USING (true)

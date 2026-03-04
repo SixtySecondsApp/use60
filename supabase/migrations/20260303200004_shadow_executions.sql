@@ -55,7 +55,8 @@ CREATE INDEX IF NOT EXISTS idx_shadow_exec_matched
 ALTER TABLE public.autonomy_shadow_executions ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
-  CREATE POLICY "shadow_exec_user_select"
+  DROP POLICY IF EXISTS "shadow_exec_user_select" ON public.autonomy_shadow_executions;
+CREATE POLICY "shadow_exec_user_select"
   ON public.autonomy_shadow_executions FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
@@ -63,7 +64,8 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE POLICY "shadow_exec_admin_select"
+  DROP POLICY IF EXISTS "shadow_exec_admin_select" ON public.autonomy_shadow_executions;
+CREATE POLICY "shadow_exec_admin_select"
   ON public.autonomy_shadow_executions FOR SELECT
   TO authenticated
   USING (
@@ -78,7 +80,8 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE POLICY "shadow_exec_service_all"
+  DROP POLICY IF EXISTS "shadow_exec_service_all" ON public.autonomy_shadow_executions;
+CREATE POLICY "shadow_exec_service_all"
   ON public.autonomy_shadow_executions FOR ALL
   TO service_role
   USING (true)

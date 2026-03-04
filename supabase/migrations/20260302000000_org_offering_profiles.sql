@@ -63,8 +63,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 DO $$ BEGIN
-    CREATE TRIGGER trigger_update_org_offering_profiles_updated_at
-        BEFORE UPDATE ON public.org_offering_profiles
+    DROP TRIGGER IF EXISTS trigger_update_org_offering_profiles_updated_at ON public.org_offering_profiles;
+CREATE TRIGGER trigger_update_org_offering_profiles_updated_at
+  BEFORE UPDATE ON public.org_offering_profiles
         FOR EACH ROW
         EXECUTE FUNCTION public.update_org_offering_profiles_updated_at();
 EXCEPTION WHEN duplicate_object THEN NULL;
@@ -78,7 +79,8 @@ ALTER TABLE public.org_offering_profiles ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: any org member can view their org's offering profiles
 DO $$ BEGIN
-    CREATE POLICY "Org members can view offering profiles"
+    DROP POLICY IF EXISTS "Org members can view offering profiles" ON public.org_offering_profiles;
+CREATE POLICY "Org members can view offering profiles"
     ON public.org_offering_profiles
     FOR SELECT
     USING (
@@ -92,7 +94,8 @@ END $$;
 
 -- INSERT: org members can create profiles (created_by must match caller)
 DO $$ BEGIN
-    CREATE POLICY "Org members can create offering profiles"
+    DROP POLICY IF EXISTS "Org members can create offering profiles" ON public.org_offering_profiles;
+CREATE POLICY "Org members can create offering profiles"
     ON public.org_offering_profiles
     FOR INSERT
     WITH CHECK (
@@ -107,7 +110,8 @@ END $$;
 
 -- UPDATE: creator or org admin/owner can update
 DO $$ BEGIN
-    CREATE POLICY "Creator or admin can update offering profiles"
+    DROP POLICY IF EXISTS "Creator or admin can update offering profiles" ON public.org_offering_profiles;
+CREATE POLICY "Creator or admin can update offering profiles"
     ON public.org_offering_profiles
     FOR UPDATE
     USING (
@@ -123,7 +127,8 @@ END $$;
 
 -- DELETE: creator or org admin/owner can delete
 DO $$ BEGIN
-    CREATE POLICY "Creator or admin can delete offering profiles"
+    DROP POLICY IF EXISTS "Creator or admin can delete offering profiles" ON public.org_offering_profiles;
+CREATE POLICY "Creator or admin can delete offering profiles"
     ON public.org_offering_profiles
     FOR DELETE
     USING (
@@ -139,7 +144,8 @@ END $$;
 
 -- Service role bypass for edge functions and cron jobs
 DO $$ BEGIN
-    CREATE POLICY "Service role full access to offering profiles"
+    DROP POLICY IF EXISTS "Service role full access to offering profiles" ON public.org_offering_profiles;
+CREATE POLICY "Service role full access to offering profiles"
     ON public.org_offering_profiles
     FOR ALL
     USING (auth.role() = 'service_role');

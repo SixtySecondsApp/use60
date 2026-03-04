@@ -18,6 +18,7 @@ interface ForecastTotals {
 interface ForecastSummaryCardsProps {
   data?: ForecastTotals | null;
   isLoading: boolean;
+  currency?: string;
 }
 
 const CARDS = [
@@ -64,7 +65,7 @@ function SummaryCardSkeleton(): React.ReactElement {
   );
 }
 
-export function ForecastSummaryCards({ data, isLoading }: ForecastSummaryCardsProps): React.ReactElement {
+export function ForecastSummaryCards({ data, isLoading, currency = 'USD' }: ForecastSummaryCardsProps): React.ReactElement {
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -95,7 +96,7 @@ export function ForecastSummaryCards({ data, isLoading }: ForecastSummaryCardsPr
                     {label}
                   </p>
                   <p className="text-2xl font-bold tabular-nums mt-0.5">
-                    {formatCurrencyCompact(value)}
+                    {formatCurrencyCompact(value, currency)}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">{description}</p>
                 </div>

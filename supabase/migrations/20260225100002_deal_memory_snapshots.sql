@@ -78,7 +78,8 @@ END $$;
 
 DROP POLICY IF EXISTS "service_role_all_deal_memory_snapshots" ON deal_memory_snapshots;
 DO $$ BEGIN
-  CREATE POLICY "service_role_all_deal_memory_snapshots"
+  DROP POLICY IF EXISTS "service_role_all_deal_memory_snapshots" ON deal_memory_snapshots;
+CREATE POLICY "service_role_all_deal_memory_snapshots"
   ON deal_memory_snapshots FOR ALL
   TO service_role
   USING (true) WITH CHECK (true);

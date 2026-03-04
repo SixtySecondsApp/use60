@@ -59,6 +59,7 @@ RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$;
 
 DROP TRIGGER IF EXISTS trg_model_preferences_updated_at ON model_preferences;
+DROP TRIGGER IF EXISTS trg_model_preferences_updated_at ON model_preferences;
 CREATE TRIGGER trg_model_preferences_updated_at
   BEFORE UPDATE ON model_preferences
   FOR EACH ROW EXECUTE FUNCTION update_model_preferences_updated_at();
@@ -68,7 +69,8 @@ ALTER TABLE model_preferences ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Org members can read model_preferences" ON model_preferences;
 DO $$ BEGIN
-  CREATE POLICY "Org members can read model_preferences"
+  DROP POLICY IF EXISTS "Org members can read model_preferences" ON model_preferences;
+CREATE POLICY "Org members can read model_preferences"
     ON model_preferences FOR SELECT TO authenticated
     USING (org_id IN (
       SELECT org_id::text FROM organization_memberships WHERE user_id = auth.uid()
@@ -77,7 +79,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DROP POLICY IF EXISTS "Org admins can upsert model_preferences" ON model_preferences;
 DO $$ BEGIN
-  CREATE POLICY "Org admins can upsert model_preferences"
+  DROP POLICY IF EXISTS "Org admins can upsert model_preferences" ON model_preferences;
+CREATE POLICY "Org admins can upsert model_preferences"
     ON model_preferences FOR ALL TO authenticated
     USING (org_id IN (
       SELECT org_id::text FROM organization_memberships
@@ -91,7 +94,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DROP POLICY IF EXISTS "Service role full access to model_preferences" ON model_preferences;
 DO $$ BEGIN
-  CREATE POLICY "Service role full access to model_preferences"
+  DROP POLICY IF EXISTS "Service role full access to model_preferences" ON model_preferences;
+CREATE POLICY "Service role full access to model_preferences"
     ON model_preferences FOR ALL TO service_role
     USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -119,13 +123,15 @@ ALTER TABLE feature_model_map ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "All authenticated users can read feature_model_map" ON feature_model_map;
 DO $$ BEGIN
-  CREATE POLICY "All authenticated users can read feature_model_map"
+  DROP POLICY IF EXISTS "All authenticated users can read feature_model_map" ON feature_model_map;
+CREATE POLICY "All authenticated users can read feature_model_map"
     ON feature_model_map FOR SELECT TO authenticated USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DROP POLICY IF EXISTS "Service role full access to feature_model_map" ON feature_model_map;
 DO $$ BEGIN
-  CREATE POLICY "Service role full access to feature_model_map"
+  DROP POLICY IF EXISTS "Service role full access to feature_model_map" ON feature_model_map;
+CREATE POLICY "Service role full access to feature_model_map"
     ON feature_model_map FOR ALL TO service_role USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
@@ -190,6 +196,7 @@ RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$;
 
 DROP TRIGGER IF EXISTS trg_org_model_restrictions_updated_at ON org_model_restrictions;
+DROP TRIGGER IF EXISTS trg_org_model_restrictions_updated_at ON org_model_restrictions;
 CREATE TRIGGER trg_org_model_restrictions_updated_at
   BEFORE UPDATE ON org_model_restrictions
   FOR EACH ROW EXECUTE FUNCTION update_org_model_restrictions_updated_at();
@@ -198,7 +205,8 @@ ALTER TABLE org_model_restrictions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Org admins can manage restrictions" ON org_model_restrictions;
 DO $$ BEGIN
-  CREATE POLICY "Org admins can manage restrictions"
+  DROP POLICY IF EXISTS "Org admins can manage restrictions" ON org_model_restrictions;
+CREATE POLICY "Org admins can manage restrictions"
     ON org_model_restrictions FOR ALL TO authenticated
     USING (org_id IN (
       SELECT org_id::text FROM organization_memberships
@@ -212,7 +220,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DROP POLICY IF EXISTS "Org members can read restrictions" ON org_model_restrictions;
 DO $$ BEGIN
-  CREATE POLICY "Org members can read restrictions"
+  DROP POLICY IF EXISTS "Org members can read restrictions" ON org_model_restrictions;
+CREATE POLICY "Org members can read restrictions"
     ON org_model_restrictions FOR SELECT TO authenticated
     USING (org_id IN (
       SELECT org_id::text FROM organization_memberships WHERE user_id = auth.uid()
@@ -221,7 +230,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DROP POLICY IF EXISTS "Service role full access to org_model_restrictions" ON org_model_restrictions;
 DO $$ BEGIN
-  CREATE POLICY "Service role full access to org_model_restrictions"
+  DROP POLICY IF EXISTS "Service role full access to org_model_restrictions" ON org_model_restrictions;
+CREATE POLICY "Service role full access to org_model_restrictions"
     ON org_model_restrictions FOR ALL TO service_role USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 

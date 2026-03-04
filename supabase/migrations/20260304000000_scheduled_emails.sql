@@ -19,6 +19,21 @@ CREATE TABLE IF NOT EXISTS scheduled_emails (
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
+-- Ensure all required columns exist (earlier migration may have a different schema)
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS org_id uuid;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS scheduled_at timestamptz;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS to_email text;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS subject text;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS body text;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS sent_at timestamptz;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS error_message text;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS draft_id uuid;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS meeting_id uuid;
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS status text DEFAULT 'pending';
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+ALTER TABLE scheduled_emails ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+
 -- Indexes for cron query performance
 CREATE INDEX IF NOT EXISTS scheduled_emails_status_scheduled_at_idx
   ON scheduled_emails (status, scheduled_at)
@@ -40,6 +55,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS scheduled_emails_updated_at ON scheduled_emails;
 CREATE TRIGGER scheduled_emails_updated_at
   BEFORE UPDATE ON scheduled_emails
   FOR EACH ROW EXECUTE FUNCTION update_scheduled_emails_updated_at();
@@ -48,6 +64,7 @@ CREATE TRIGGER scheduled_emails_updated_at
 ALTER TABLE scheduled_emails ENABLE ROW LEVEL SECURITY;
 
 -- Users can only see their own org's scheduled emails
+DROP POLICY IF EXISTS "scheduled_emails_select" ON scheduled_emails;
 CREATE POLICY "scheduled_emails_select" ON scheduled_emails
   FOR SELECT USING (
     org_id IN (
@@ -56,6 +73,7 @@ CREATE POLICY "scheduled_emails_select" ON scheduled_emails
   );
 
 -- Users can only insert their own scheduled emails
+DROP POLICY IF EXISTS "scheduled_emails_insert" ON scheduled_emails;
 CREATE POLICY "scheduled_emails_insert" ON scheduled_emails
   FOR INSERT WITH CHECK (
     user_id = auth.uid()
@@ -65,6 +83,7 @@ CREATE POLICY "scheduled_emails_insert" ON scheduled_emails
   );
 
 -- Users can update/cancel their own scheduled emails
+DROP POLICY IF EXISTS "scheduled_emails_update" ON scheduled_emails;
 CREATE POLICY "scheduled_emails_update" ON scheduled_emails
   FOR UPDATE USING (
     user_id = auth.uid()
@@ -74,6 +93,7 @@ CREATE POLICY "scheduled_emails_update" ON scheduled_emails
   );
 
 -- Users can delete (cancel) their own scheduled emails
+DROP POLICY IF EXISTS "scheduled_emails_delete" ON scheduled_emails;
 CREATE POLICY "scheduled_emails_delete" ON scheduled_emails
   FOR DELETE USING (
     user_id = auth.uid()
@@ -124,12 +144,14 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS follow_up_drafts_updated_at ON follow_up_drafts;
 CREATE TRIGGER follow_up_drafts_updated_at
   BEFORE UPDATE ON follow_up_drafts
   FOR EACH ROW EXECUTE FUNCTION update_follow_up_drafts_updated_at();
 
 ALTER TABLE follow_up_drafts ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "follow_up_drafts_select" ON follow_up_drafts;
 CREATE POLICY "follow_up_drafts_select" ON follow_up_drafts
   FOR SELECT USING (
     org_id IN (
@@ -137,6 +159,7 @@ CREATE POLICY "follow_up_drafts_select" ON follow_up_drafts
     )
   );
 
+DROP POLICY IF EXISTS "follow_up_drafts_insert" ON follow_up_drafts;
 CREATE POLICY "follow_up_drafts_insert" ON follow_up_drafts
   FOR INSERT WITH CHECK (
     user_id = auth.uid()
@@ -145,6 +168,7 @@ CREATE POLICY "follow_up_drafts_insert" ON follow_up_drafts
     )
   );
 
+DROP POLICY IF EXISTS "follow_up_drafts_update" ON follow_up_drafts;
 CREATE POLICY "follow_up_drafts_update" ON follow_up_drafts
   FOR UPDATE USING (
     org_id IN (
@@ -152,6 +176,7 @@ CREATE POLICY "follow_up_drafts_update" ON follow_up_drafts
     )
   );
 
+DROP POLICY IF EXISTS "follow_up_drafts_delete" ON follow_up_drafts;
 CREATE POLICY "follow_up_drafts_delete" ON follow_up_drafts
   FOR DELETE USING (
     user_id = auth.uid()

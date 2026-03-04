@@ -63,7 +63,8 @@ END $$;
 
 DROP POLICY IF EXISTS "service_role_all_contact_memory" ON contact_memory;
 DO $$ BEGIN
-  CREATE POLICY "service_role_all_contact_memory"
+  DROP POLICY IF EXISTS "service_role_all_contact_memory" ON contact_memory;
+CREATE POLICY "service_role_all_contact_memory"
   ON contact_memory FOR ALL
   TO service_role
   USING (true) WITH CHECK (true);
@@ -148,7 +149,8 @@ ALTER TABLE rep_memory ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "users_select_own_rep_memory" ON rep_memory;
 <<<<<<< HEAD
 DO $$ BEGIN
-  CREATE POLICY "users_select_own_rep_memory"
+  DROP POLICY IF EXISTS "users_select_own_rep_memory" ON rep_memory;
+CREATE POLICY "users_select_own_rep_memory"
   ON rep_memory FOR SELECT
   USING (user_id = auth.uid());
 EXCEPTION WHEN duplicate_object THEN NULL;
@@ -159,6 +161,7 @@ DROP POLICY IF EXISTS "managers_select_org_rep_memory" ON rep_memory;
 DO $$ BEGIN
   CREATE POLICY "managers_select_org_rep_memory"
 =======
+DROP POLICY IF EXISTS "users_select_own_rep_memory" ON rep_memory;
 CREATE POLICY "users_select_own_rep_memory"
   ON rep_memory FOR SELECT
   USING (user_id = auth.uid());
@@ -179,7 +182,8 @@ END $$;
 -- Service role full access
 DROP POLICY IF EXISTS "service_role_all_rep_memory" ON rep_memory;
 DO $$ BEGIN
-  CREATE POLICY "service_role_all_rep_memory"
+  DROP POLICY IF EXISTS "service_role_all_rep_memory" ON rep_memory;
+CREATE POLICY "service_role_all_rep_memory"
   ON rep_memory FOR ALL
   TO service_role
   USING (true) WITH CHECK (true);
