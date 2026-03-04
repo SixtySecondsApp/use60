@@ -43,6 +43,7 @@ import {
   LifeBuoy,
   FileText,
   LayoutGrid,
+  Eye,
   Swords,
   type LucideIcon,
 } from 'lucide-react';
@@ -628,6 +629,15 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: false,
     navSection: 'platform',
     order: 3.6,
+  },
+  {
+    path: '/platform/godseye',
+    access: 'platformAdmin',
+    label: 'God\'s Eye',
+    icon: Eye,
+    showInNav: true,
+    navSection: 'platform',
+    order: 3.7,
   },
   {
     path: '/platform/engagement',
