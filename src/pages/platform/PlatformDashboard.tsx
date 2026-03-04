@@ -201,6 +201,15 @@ const platformSections: Record<string, PlatformSection[]> = {
   ],
   'AI & Intelligence': [
     {
+      id: 'godseye',
+      title: 'God\'s Eye',
+      description: 'Real-time token flow visualization across all users and LLM endpoints',
+      icon: Eye,
+      href: '/platform/godseye',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
+      badge: 'New',
+    },
+    {
       id: 'ai-settings',
       title: 'AI Configuration',
       description: 'Configure AI providers, models, and intelligent features',
