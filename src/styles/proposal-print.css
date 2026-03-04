@@ -435,7 +435,7 @@ hr {
 .section-header {
   display: flex;
   align-items: center;
-  gap: 12pt;
+  gap: 0;
   margin-bottom: 16pt;
   padding-bottom: 10pt;
   position: relative;
@@ -452,24 +452,33 @@ hr {
 }
 
 .section-accent-bar {
-  width: var(--proposal-section-bar-width);
-  height: 32pt;
-  border-radius: 2px;
-  background: var(--proposal-primary);
-  flex-shrink: 0;
-  margin-top: 0;
-  align-self: center;
+  display: none;
 }
 
 .section-title {
+  position: relative;
   font-family: var(--proposal-heading-font);
   font-size: 22pt;
   font-weight: 700;
   color: var(--proposal-heading-color);
-  line-height: 1.25;
+  line-height: 1.2;
   margin: 0;
+  padding-left: calc(var(--proposal-section-bar-width) + 12pt);
   padding-bottom: 0;
   border-bottom: none;
+}
+
+.section-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--proposal-section-bar-width);
+  height: 1em;
+  min-height: 1em;
+  border-radius: 2px;
+  background: var(--proposal-primary);
 }
 
 /* Section content area */

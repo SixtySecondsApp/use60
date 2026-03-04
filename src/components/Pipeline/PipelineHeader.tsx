@@ -11,6 +11,7 @@ import {
   X,
   LayoutGrid,
   Table2,
+  Network,
   ChevronDown,
   Filter,
   Heart,
@@ -167,6 +168,22 @@ export function PipelineHeader({
               <Table2 className="w-3.5 h-3.5" />
               Table
               {viewMode === 'table' && (
+                <span className="absolute bottom-0 left-[20%] right-[20%] h-[2px] bg-blue-500 rounded-sm" />
+              )}
+            </button>
+            <button
+              onClick={() => onViewModeChange('graph')}
+              className={`
+                flex items-center gap-1.5 px-4 py-[7px] text-[12.5px] font-medium transition-all relative
+                ${viewMode === 'graph'
+                  ? 'text-gray-900 dark:text-white bg-white dark:bg-blue-500/20'
+                  : 'text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.02]'
+                }
+              `}
+            >
+              <Network className="w-3.5 h-3.5" />
+              Graph
+              {viewMode === 'graph' && (
                 <span className="absolute bottom-0 left-[20%] right-[20%] h-[2px] bg-blue-500 rounded-sm" />
               )}
             </button>

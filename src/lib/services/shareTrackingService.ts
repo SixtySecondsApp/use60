@@ -50,12 +50,13 @@ async function trackShareViaRPC(entryId: string, platform: string): Promise<Trac
       return { success: false };
     }
 
-    if (data && typeof data === 'object' && data.success) {
-      console.log(`[ShareTracking] Share tracked via RPC: +${data.points_awarded} points`);
+    const rpcResult = data as Record<string, unknown> | null;
+    if (rpcResult && typeof rpcResult === 'object' && rpcResult.success) {
+      console.log(`[ShareTracking] Share tracked via RPC: +${rpcResult.points_awarded} points`);
       return {
         success: true,
-        points_awarded: data.points_awarded,
-        entry: data.entry
+        points_awarded: rpcResult.points_awarded as number,
+        entry: rpcResult.entry as TrackShareResult['entry']
       };
     }
 
@@ -257,12 +258,13 @@ async function claimBoostViaRPC(entryId: string, platform: 'twitter' | 'linkedin
     console.log(`[ShareTracking] RPC result for ${platform} boost:`, data);
 
     // The RPC returns a JSON object
-    if (data && typeof data === 'object') {
+    const rpcResult = data as Record<string, unknown> | null;
+    if (rpcResult && typeof rpcResult === 'object') {
       return {
-        success: data.success === true,
-        boosted: data.boosted === true,
-        error: data.error,
-        entry: data.entry
+        success: rpcResult.success === true,
+        boosted: rpcResult.boosted === true,
+        error: rpcResult.error as string | undefined,
+        entry: rpcResult.entry as { total_points: number; effective_position: number; twitter_boost_claimed: boolean; linkedin_boost_claimed: boolean; email_boost_claimed: boolean; referral_count: number; } | undefined
       };
     }
 

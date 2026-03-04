@@ -200,15 +200,31 @@ function withSectionHeadingAlignmentFix(html: string): string {
 
   .section-accent-bar,
   .ss-accent-bar {
-    margin-top: 0 !important;
-    align-self: center !important;
+    display: none !important;
   }
 
   .section-title,
   .ss-section-title {
+    position: relative !important;
+    padding-left: 16px !important;
     margin: 0 !important;
+    line-height: 1.2 !important;
     padding-bottom: 0 !important;
     border-bottom: none !important;
+  }
+
+  .section-title::before,
+  .ss-section-title::before {
+    content: "" !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 4px !important;
+    height: 1em !important;
+    min-height: 1em !important;
+    border-radius: 2px !important;
+    background: #1e3a5f !important;
   }
 </style>
   `.trim();

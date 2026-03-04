@@ -304,15 +304,16 @@ serve(async (req) => {
     // Post-change side effects
     // =========================================================================
 
-    // 1. On upgrade to Pro: grant subscription credits immediately.
+    // 1. On upgrade to any plan with bundled credits: grant immediately.
     //    The stripe-webhook will also call this on the next invoice.paid event,
     //    but granting here ensures credits are available right away.
-    if (isUpgrade && new_plan_slug === "pro") {
-      const bundledCredits = (newPlan.features as Record<string, unknown>)?.bundled_credits;
-      const creditAmount = typeof bundledCredits === "number" && bundledCredits > 0
-        ? bundledCredits
-        : PRO_SUBSCRIPTION_CREDITS;
+    //    Subscription credits are use-or-lose (expire at cycle end).
+    const bundledCredits = (newPlan.features as Record<string, unknown>)?.bundled_credits;
+    const creditAmount = typeof bundledCredits === "number" && bundledCredits > 0
+      ? bundledCredits
+      : 0;
 
+    if (isUpgrade && creditAmount > 0) {
       const { data: newBalance, error: creditError } = await supabase.rpc(
         "grant_subscription_credits",
         {

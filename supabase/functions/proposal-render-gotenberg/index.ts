@@ -52,6 +52,8 @@ interface RenderRequest {
   content_json?: ProposalSection[] | null
   /** Optional override — if null, uses org's default template */
   template_id?: string | null
+  /** Optional vertical offset (px) for section accent bar alignment tuning */
+  line_y_offset_px?: number | null
 }
 
 interface ProposalRow {
@@ -211,7 +213,7 @@ function resolveWaitDelay(html: string): string {
  * to the heading text. Injecting this override at render-time ensures a
  * centered bar/text alignment regardless of template origin.
  */
-function applySectionHeaderAlignmentOverrides(html: string): string {
+function applySectionHeaderAlignmentOverrides(html: string, lineYOffsetPx: number = 0): string {
   const alignmentOverrideCss = `
 <style id="proposal-section-alignment-fix">
   .section-header,
@@ -236,15 +238,31 @@ function applySectionHeaderAlignmentOverrides(html: string): string {
 
   .section-accent-bar,
   .ss-accent-bar {
-    margin-top: 0 !important;
-    align-self: center !important;
+    display: none !important;
   }
 
   .section-title,
   .ss-section-title {
+    position: relative !important;
+    padding-left: 16px !important;
     margin: 0 !important;
+    line-height: 1.2 !important;
     padding-bottom: 0 !important;
     border-bottom: none !important;
+  }
+
+  .section-title::before,
+  .ss-section-title::before {
+    content: "" !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 50% !important;
+    transform: translateY(calc(-50% + ${lineYOffsetPx}px)) !important;
+    width: 4px !important;
+    height: 1em !important;
+    min-height: 1em !important;
+    border-radius: 2px !important;
+    background: #1e3a5f !important;
   }
 </style>
   `.trim()
@@ -609,7 +627,11 @@ serve(async (req: Request) => {
       context,
       resolvedTemplate?.html_template ?? undefined,
     )
-    const htmlDocument = applySectionHeaderAlignmentOverrides(generatedHtml)
+    const lineYOffsetRaw = typeof body.line_y_offset_px === 'number' ? body.line_y_offset_px : 0
+    const lineYOffsetPx = Number.isFinite(lineYOffsetRaw)
+      ? Math.max(-20, Math.min(20, Math.round(lineYOffsetRaw)))
+      : 0
+    const htmlDocument = applySectionHeaderAlignmentOverrides(generatedHtml, lineYOffsetPx)
 
     // -------------------------------------------------------------------------
     // Step 5b: Store rendered HTML for inline preview (non-fatal)

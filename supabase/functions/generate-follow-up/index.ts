@@ -32,6 +32,9 @@ import {
   composeFirstMeetingFollowUp,
 } from '../_shared/follow-up/composer.ts';
 import { sendSlackDM } from '../_shared/proactive/deliverySlack.ts';
+import { createDealMemoryReader } from '../_shared/memory/reader.ts';
+import { RAGClient } from '../_shared/memory/ragClient.ts';
+import type { DealContext } from '../_shared/memory/types.ts';
 
 // ============================================================================
 // Constants
@@ -632,6 +635,67 @@ async function handleGenerateFollowUp(
           .maybeSingle();
 
         // ----------------------------------------------------------------
+        // Step 7b: Load deal memory context (MW-002)
+        // ----------------------------------------------------------------
+        let dealMemoryContext: DealContext | null = null;
+        let resolvedDealId: string | null = null;
+
+        // Try to resolve a deal_id for this meeting's company
+        if (meeting.company_id) {
+          const { data: companyDeal } = await supabase
+            .from('deals')
+            .select('id')
+            .eq('company', meeting.company_id)
+            .eq('owner_id', userId)
+            .not('stage_id', 'is', null)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          resolvedDealId = companyDeal?.id ?? null;
+        }
+
+        if (resolvedDealId && meeting.org_id) {
+          try {
+            sendEvent('step', {
+              id: 'deal_memory',
+              status: 'running',
+              label: 'Loading deal memory context',
+            });
+
+            const memoryRagClient = new RAGClient(
+              SUPABASE_URL,
+              SUPABASE_SERVICE_ROLE_KEY,
+              meeting.org_id as string,
+            );
+            const memoryReader = createDealMemoryReader(supabase, memoryRagClient);
+            dealMemoryContext = await memoryReader.getDealContext(
+              resolvedDealId,
+              meeting.org_id as string,
+            );
+
+            const commitmentCount = dealMemoryContext.openCommitments.length;
+            const eventCount = dealMemoryContext.recentEvents.length;
+
+            sendEvent('step', {
+              id: 'deal_memory',
+              status: 'complete',
+              label: `${commitmentCount} commitments, ${eventCount} recent events`,
+            });
+          } catch (memErr) {
+            console.error(
+              '[generate-follow-up] deal memory load failed (non-fatal):',
+              memErr instanceof Error ? memErr.message : String(memErr),
+            );
+            sendEvent('step', {
+              id: 'deal_memory',
+              status: 'skipped',
+              label: 'Deal memory unavailable',
+            });
+          }
+        }
+
+        // ----------------------------------------------------------------
         // Step 8: Compose email
         // ----------------------------------------------------------------
         sendEvent('step', {
@@ -652,7 +716,25 @@ async function handleGenerateFollowUp(
             email: primaryAttendee.email!,
             companyName,
           },
-          deal: null,
+          deal: dealMemoryContext ? {
+            commitments: dealMemoryContext.openCommitments.map(c => ({
+              owner: c.owner,
+              action: c.action,
+              deadline: c.deadline,
+              status: c.status,
+            })),
+            recentEvents: dealMemoryContext.recentEvents.slice(0, 10).map(e => ({
+              type: e.event_type,
+              summary: e.summary,
+              date: e.source_timestamp,
+            })),
+            narrative: dealMemoryContext.snapshot?.narrative ?? null,
+            riskFactors: dealMemoryContext.riskFactors.map(r => r.detail),
+            stakeholders: dealMemoryContext.stakeholderMap.map(s => ({
+              name: s.name,
+              role: s.role,
+            })),
+          } : null,
           writingStyle,
           senderFirstName: (userProfile?.first_name as string | null) ?? 'Team',
           senderLastName: (userProfile?.last_name as string | null) ?? undefined,

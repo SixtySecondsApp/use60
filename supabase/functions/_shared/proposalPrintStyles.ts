@@ -249,7 +249,7 @@ html, body {
 .section-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0;
   margin-bottom: 24px;
   padding-bottom: 0;
   position: relative;
@@ -266,24 +266,33 @@ html, body {
 }
 
 .section-accent-bar {
-  width: 4px;
-  height: 32px;
-  border-radius: 2px;
-  background-color: ${primary_color};
-  flex-shrink: 0;
-  margin-top: 0;
-  align-self: center;
+  display: none;
 }
 
 .section-title {
   flex: 1;
+  position: relative;
   font-size: 22px;
   font-weight: 700;
   color: #111827;
-  line-height: 1.3;
+  line-height: 1.2;
   margin: 0;
+  padding-left: 16px;
   padding-bottom: 0;
   border-bottom: none;
+}
+
+.section-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 1em;
+  min-height: 1em;
+  border-radius: 2px;
+  background-color: ${primary_color};
 }
 
 .section-content {

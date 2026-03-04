@@ -71,6 +71,8 @@ export interface CommandCentreItem {
   updated_at: string;
   enriched_at?: string;
   resolved_at?: string;
+  /** Context risk score (0.0–1.0) from contextRiskScorer. Default 0.0. (AE2-006) */
+  context_risk_score?: number;
   deal_id?: string;
   contact_id?: string;
   parent_item_id?: string;

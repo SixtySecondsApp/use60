@@ -2,114 +2,80 @@
  * AutonomySettingsPage
  *
  * Org admin page for configuring AI autonomy policies:
- * - Preset selector (Conservative / Balanced / Autonomous / Custom)
+ * - Two-step role-based preset selector (Role + Style) — AE2-011
  * - Per-action-type policy toggle grid
  * - User-level override permissions section
+ * - Safety rules: impact weight config & demotion explanation (AE2-015)
+ *
+ * Preset name stored as "role:<role>/<style>" (e.g. "role:sdr/balanced")
+ * or legacy style names for backward compatibility.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Loader2,
-  ShieldCheck,
-  Zap,
-  CheckCircle,
-  Lightbulb,
   Save,
-  AlertCircle,
   Users,
+  Shield,
+  History,
 } from 'lucide-react';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { ActionPolicyGrid, type PolicyValue, type ActionType } from '@/components/agent/ActionPolicyGrid';
+import { RolePresetSelector, type RoleName, type StyleName } from '@/components/agent/RolePresetSelector';
 import { UserOverridePermissions } from '@/components/agent/UserOverridePermissions';
 import { ManagerAutonomyControls } from '@/components/settings/ManagerAutonomyControls';
 import { AutonomyProgressionDashboard } from '@/components/settings/AutonomyProgressionDashboard';
 import AutopilotDashboard from '@/components/platform/autopilot/AutopilotDashboard';
 import TeamAutopilotView from '@/components/platform/autopilot/TeamAutopilotView';
+import { SafetyRulesConfig } from '@/components/agent/SafetyRulesConfig';
+import { AutonomyTimeline } from '@/components/agent/AutonomyTimeline';
+import { ShadowExecutionInsight } from '@/components/agent/ShadowExecutionInsight';
 
 // ============================================================================
-// Types
+// Types & helpers
 // ============================================================================
 
-type PresetName = 'conservative' | 'balanced' | 'autonomous' | 'custom';
+/** Stored preset_name: "role:<role>/<style>" | legacy style name | null */
+type PresetNameStored = string | null;
 
-interface PresetDefinition {
-  key: PresetName;
-  label: string;
-  description: string;
-  icon: React.ElementType;
-  policies: Record<string, PolicyValue>;
+const VALID_ROLES: RoleName[] = ['sdr', 'ae', 'vp_sales', 'cs'];
+const VALID_STYLES: StyleName[] = ['conservative', 'balanced', 'autonomous'];
+
+/** Parse a stored preset_name into role + style. Returns nulls if legacy or custom. */
+function parsePresetName(preset: string | null): { role: RoleName | null; style: StyleName | null } {
+  if (!preset) return { role: null, style: null };
+
+  // New format: "role:sdr/balanced"
+  const match = preset.match(/^role:(\w+)\/(\w+)$/);
+  if (match) {
+    const role = match[1] as RoleName;
+    const style = match[2] as StyleName;
+    if (VALID_ROLES.includes(role) && VALID_STYLES.includes(style)) {
+      return { role, style };
+    }
+  }
+
+  // Legacy format: bare style name like "conservative" / "balanced" / "autonomous"
+  if (VALID_STYLES.includes(preset as StyleName)) {
+    return { role: null, style: preset as StyleName };
+  }
+
+  return { role: null, style: null };
 }
 
-// ============================================================================
-// Preset definitions (mirrors migration seed)
-// ============================================================================
-
-const PRESETS: PresetDefinition[] = [
-  {
-    key: 'conservative',
-    label: 'Conservative',
-    description: 'Require human approval for all AI-initiated actions. Maximum oversight.',
-    icon: ShieldCheck,
-    policies: {
-      crm_stage_change: 'approve',
-      crm_field_update: 'approve',
-      crm_contact_create: 'approve',
-      send_email: 'approve',
-      send_slack: 'approve',
-      create_task: 'approve',
-      enrich_contact: 'suggest',
-      draft_proposal: 'suggest',
-    },
-  },
-  {
-    key: 'balanced',
-    label: 'Balanced',
-    description: 'Auto-approve low-risk actions. Require approval for high-risk actions.',
-    icon: CheckCircle,
-    policies: {
-      crm_stage_change: 'approve',
-      crm_field_update: 'suggest',
-      crm_contact_create: 'suggest',
-      send_email: 'approve',
-      send_slack: 'auto',
-      create_task: 'auto',
-      enrich_contact: 'auto',
-      draft_proposal: 'suggest',
-    },
-  },
-  {
-    key: 'autonomous',
-    label: 'Autonomous',
-    description: 'Maximize automation. Only destructive actions require review.',
-    icon: Zap,
-    policies: {
-      crm_stage_change: 'auto',
-      crm_field_update: 'auto',
-      crm_contact_create: 'auto',
-      send_email: 'approve',
-      send_slack: 'auto',
-      create_task: 'auto',
-      enrich_contact: 'auto',
-      draft_proposal: 'approve',
-    },
-  },
-  {
-    key: 'custom',
-    label: 'Custom',
-    description: 'Manually configure each action type individually.',
-    icon: Lightbulb,
-    policies: {},
-  },
-];
+/** Serialize role + style into the stored preset_name format. */
+function serializePresetName(role: RoleName | null, style: StyleName | null): PresetNameStored {
+  if (role && style) return `role:${role}/${style}`;
+  if (style) return style; // legacy style-only
+  return null; // custom
+}
 
 // ============================================================================
 // Action type catalog (mirrors migration seed)
@@ -167,6 +133,21 @@ const ACTION_TYPES: ActionType[] = [
 ];
 
 // ============================================================================
+// Default policies (balanced style) used before DB load
+// ============================================================================
+
+const DEFAULT_POLICIES: Record<string, PolicyValue> = {
+  crm_stage_change: 'approve',
+  crm_field_update: 'suggest',
+  crm_contact_create: 'suggest',
+  send_email: 'approve',
+  send_slack: 'auto',
+  create_task: 'auto',
+  enrich_contact: 'auto',
+  draft_proposal: 'suggest',
+};
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -176,10 +157,12 @@ export default function AutonomySettingsPage() {
   const { isPlatformAdmin } = useUserPermissions();
   const isAdmin = permissions.canManageSettings || permissions.canManageTeam || isPlatformAdmin;
 
-  const [selectedPreset, setSelectedPreset] = useState<PresetName>('balanced');
-  const [policies, setPolicies] = useState<Record<string, PolicyValue>>({
-    ...PRESETS.find((p) => p.key === 'balanced')!.policies,
-  });
+  // Role + style state (parsed from stored preset_name)
+  const [activeRole, setActiveRole] = useState<RoleName | null>(null);
+  const [activeStyle, setActiveStyle] = useState<StyleName | null>(null);
+  const [isCustom, setIsCustom] = useState(false);
+
+  const [policies, setPolicies] = useState<Record<string, PolicyValue>>({ ...DEFAULT_POLICIES });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -205,13 +188,12 @@ export default function AutonomySettingsPage() {
           }
           setPolicies(loaded);
 
-          // Detect which preset is active (or custom)
+          // Parse preset_name from any row that has one
           const presetRow = data.find((r) => r.preset_name);
-          if (presetRow?.preset_name) {
-            setSelectedPreset(presetRow.preset_name as PresetName);
-          } else {
-            setSelectedPreset('custom');
-          }
+          const { role, style } = parsePresetName(presetRow?.preset_name ?? null);
+          setActiveRole(role);
+          setActiveStyle(style);
+          setIsCustom(!presetRow?.preset_name);
         }
       } catch (err) {
         console.error('[AutonomySettingsPage] load error:', err);
@@ -223,32 +205,37 @@ export default function AutonomySettingsPage() {
     load();
   }, [orgId]);
 
-  const handlePresetSelect = (preset: PresetDefinition) => {
-    if (preset.key === 'custom') {
-      setSelectedPreset('custom');
-      return;
-    }
-    setSelectedPreset(preset.key);
-    setPolicies({ ...preset.policies });
-  };
+  // Handle role+style selection from the RolePresetSelector
+  const handleRoleSelect = useCallback(
+    (role: RoleName, style: StyleName, newPolicies: Record<string, PolicyValue>) => {
+      setActiveRole(role);
+      setActiveStyle(style);
+      setIsCustom(false);
+      setPolicies(newPolicies);
+    },
+    []
+  );
 
-  const handlePolicyChange = (actionKey: string, policy: PolicyValue) => {
+  // Handle individual policy toggle in the grid
+  const handlePolicyChange = useCallback((actionKey: string, policy: PolicyValue) => {
     setPolicies((prev) => ({ ...prev, [actionKey]: policy }));
-    // Any individual toggle => custom
-    setSelectedPreset('custom');
-  };
+    // Any individual toggle switches to custom mode
+    setIsCustom(true);
+  }, []);
 
-  const handleSave = async () => {
+  // Save to DB
+  const handleSave = useCallback(async () => {
     if (!orgId || !isAdmin) return;
     setSaving(true);
     try {
-      // Upsert one row per action type
+      const presetName = isCustom ? null : serializePresetName(activeRole, activeStyle);
+
       const rows = ACTION_TYPES.map((at) => ({
         org_id: orgId,
         user_id: null,
         action_type: at.key,
         policy: policies[at.key] ?? 'approve',
-        preset_name: selectedPreset !== 'custom' ? selectedPreset : null,
+        preset_name: presetName,
       }));
 
       const { error } = await supabase
@@ -263,23 +250,43 @@ export default function AutonomySettingsPage() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [orgId, isAdmin, isCustom, activeRole, activeStyle, policies]);
 
+  // ---- Non-admin view: personal autonomy only ----
   if (!isAdmin) {
     return (
       <SettingsPageWrapper
         title="Autonomy & Approvals"
         description="Your personal autonomy profile — track which actions the AI agent handles automatically for you."
       >
-        <AutopilotDashboard />
+        <div className="space-y-8">
+          <AutopilotDashboard />
+
+          {/* Non-admin role selection (read-only summary) */}
+          <section>
+            <div className="mb-4">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Your Role Preset</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Your organization's active role preset determines the baseline autonomy policies.
+              </p>
+            </div>
+            <RolePresetSelector
+              activeRole={activeRole}
+              activeStyle={activeStyle}
+              onSelect={() => {}}
+              isAdmin={false}
+            />
+          </section>
+        </div>
       </SettingsPageWrapper>
     );
   }
 
+  // ---- Admin view ----
   return (
     <SettingsPageWrapper
       title="Autonomy & Approvals"
-      description="Control how the AI agent executes actions. Choose a preset or configure each action type individually."
+      description="Control how the AI agent executes actions. Choose a role preset or configure each action type individually."
     >
       <div className="space-y-8">
         {/* Per-rep autonomy dashboard — always visible for the current user */}
@@ -292,6 +299,9 @@ export default function AutonomySettingsPage() {
           </div>
           <AutopilotDashboard />
         </section>
+
+        {/* Shadow execution promotion nudge — AE2-013 */}
+        <ShadowExecutionInsight mode="banner" />
 
         {/* Team-wide autonomy view */}
         <section>
@@ -311,56 +321,29 @@ export default function AutonomySettingsPage() {
           </div>
         ) : (
           <>
-            {/* Preset Selector */}
+            {/* Role-Based Preset Selector — AE2-011 */}
             <section>
               <div className="mb-4">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Autonomy Preset</h2>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                  Role Preset
+                </h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Select a preset to configure all actions at once, or switch to Custom to adjust individually.
+                  Choose your team's role to apply role-appropriate automation defaults, then fine-tune the intensity style.
                 </p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {PRESETS.map((preset) => {
-                  const Icon = preset.icon;
-                  const isSelected = selectedPreset === preset.key;
-                  return (
-                    <button
-                      key={preset.key}
-                      onClick={() => handlePresetSelect(preset)}
-                      className={cn(
-                        'flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-all',
-                        isSelected
-                          ? 'border-blue-600 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20'
-                          : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/20 hover:border-gray-300 dark:hover:border-gray-600'
-                      )}
-                    >
-                      <div className={cn(
-                        'h-8 w-8 rounded-lg flex items-center justify-center',
-                        isSelected
-                          ? 'bg-blue-600 dark:bg-blue-500 text-white'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                      )}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                            {preset.label}
-                          </span>
-                          {isSelected && (
-                            <Badge className="text-xs px-1.5 py-0 h-4 bg-blue-600 text-white dark:bg-blue-500">
-                              Active
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
-                          {preset.description}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <RolePresetSelector
+                activeRole={activeRole}
+                activeStyle={activeStyle}
+                onSelect={handleRoleSelect}
+                isAdmin={isAdmin}
+              />
+              {isCustom && activeRole && (
+                <div className="mt-3">
+                  <Badge variant="warning" className="text-xs">
+                    Custom overrides active — individual policy changes below override the role preset.
+                  </Badge>
+                </div>
+              )}
             </section>
 
             {/* Action Toggle Grid */}
@@ -409,6 +392,31 @@ export default function AutonomySettingsPage() {
                 </p>
               </div>
               <ManagerAutonomyControls />
+            </section>
+
+            {/* Safety Rules — AE2-015 */}
+            <section>
+              <div className="mb-4 flex items-center gap-2">
+                <Shield className="h-4 w-4 text-gray-500" />
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Safety Rules</h2>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Configure impact weights that determine how aggressively the agent responds when actions are undone.
+                Higher-impact situations trigger stricter safety measures.
+              </p>
+              {orgId && <SafetyRulesConfig orgId={orgId} />}
+            </section>
+
+            {/* Audit Trail — AE2-009 */}
+            <section>
+              <div className="mb-4 flex items-center gap-2">
+                <History className="h-4 w-4 text-gray-500" />
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Audit Trail</h2>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Complete history of autonomy tier changes from org-level policies and per-user signals.
+              </p>
+              <AutonomyTimeline />
             </section>
 
             {/* Save Button */}

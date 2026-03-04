@@ -32,6 +32,21 @@ export interface DemotionTriggerResult {
   undo_count?: number
   undo_rate?: number
   window_days?: number
+  /** AE2-014: Impact multiplier applied to this demotion */
+  impact_multiplier?: number
+  /** AE2-014: Breakdown of impact factors */
+  impact_factors?: {
+    deal_value_factor: number
+    seniority_factor: number
+    reversibility_factor: number
+  }
+}
+
+/** AE2-014: Optional deal/contact context for impact-weighted demotion */
+export interface DemotionContext {
+  dealValue?: number
+  contactTitle?: string
+  actionReversibility?: number  // 0.0 (easy to undo) to 1.0 (irreversible)
 }
 
 // =============================================================================
@@ -247,6 +262,77 @@ function buildEmergencyBlocks(actionType: string): unknown[] {
 }
 
 // =============================================================================
+// AE2-014: Impact Multiplier Calculation
+// =============================================================================
+
+/** Reversibility ratings per action type (0.0 = easy to undo, 1.0 = irreversible) */
+const ACTION_REVERSIBILITY: Record<string, number> = {
+  'task.create': 0.0,
+  'task.assign': 0.1,
+  'crm.note_add': 0.1,
+  'crm.activity_log': 0.1,
+  'crm.contact_enrich': 0.2,
+  'crm.next_steps_update': 0.2,
+  'crm.deal_field_update': 0.3,
+  'crm.deal_stage_change': 0.3,
+  'crm.deal_amount_change': 0.4,
+  'crm.deal_close_date_change': 0.4,
+  'calendar.create_event': 0.3,
+  'calendar.reschedule': 0.4,
+  'slack.notification_send': 0.5,
+  'slack.briefing_send': 0.3,
+  'sequence.start': 0.6,
+  'email.draft_save': 0.0,
+  'email.send': 0.8,
+  'email.follow_up_send': 0.8,
+  'email.check_in_send': 0.7,
+  'proposal.generate': 0.2,
+  'proposal.send': 0.9,
+}
+
+/**
+ * AE2-014: Calculates the impact multiplier based on deal/contact context.
+ * The multiplier amplifies demotion severity for high-stakes situations.
+ *
+ * Formula: 1 + (deal_value_factor + seniority_factor + reversibility_factor)
+ * Range: 1.0 (no amplification) to 4.0 (maximum amplification)
+ */
+function calculateImpactMultiplier(
+  actionType: string,
+  context?: DemotionContext,
+): { multiplier: number; factors: DemotionTriggerResult['impact_factors'] } {
+  // Deal value factor: <$25K = 0.0, $25K-$100K = 0.5, >$100K = 1.0
+  let dealValueFactor = 0
+  if (context?.dealValue !== undefined) {
+    if (context.dealValue >= 100000) dealValueFactor = 1.0
+    else if (context.dealValue >= 25000) dealValueFactor = 0.5
+  }
+
+  // Contact seniority factor from title
+  let seniorityFactor = 0
+  if (context?.contactTitle) {
+    const title = context.contactTitle.toLowerCase()
+    if (/\b(ceo|cto|cfo|coo|cmo|cro|chief)\b/.test(title)) seniorityFactor = 1.0
+    else if (/\b(vp|vice president)\b/.test(title)) seniorityFactor = 0.7
+    else if (/\bdirector\b/.test(title)) seniorityFactor = 0.5
+    else if (/\b(manager|head of)\b/.test(title)) seniorityFactor = 0.3
+  }
+
+  // Reversibility factor from action type
+  const reversibilityFactor = context?.actionReversibility ?? (ACTION_REVERSIBILITY[actionType] ?? 0.3)
+
+  const factors = {
+    deal_value_factor: dealValueFactor,
+    seniority_factor: seniorityFactor,
+    reversibility_factor: reversibilityFactor,
+  }
+
+  const multiplier = Math.min(4.0, 1 + dealValueFactor + seniorityFactor + reversibilityFactor)
+
+  return { multiplier, factors }
+}
+
+// =============================================================================
 // Core API
 // =============================================================================
 
@@ -260,10 +346,13 @@ function buildEmergencyBlocks(actionType: string): unknown[] {
  *   3. DEMOTE:    > 8% undo rate in 14 days with >= 10 actions
  *   4. WARN:      > 10% undo rate in 7 days with >= 5 actions
  *
+ * AE2-014: When context is provided, impact multiplier > 2.0 escalates to EMERGENCY.
+ *
  * @param supabase   - Service role client
  * @param userId     - User to evaluate
  * @param orgId      - Org ID
  * @param actionType - The action type that was undone
+ * @param context    - AE2-014: Optional deal/contact context for impact weighting
  * @returns DemotionTriggerResult
  */
 export async function evaluateDemotionTriggers(
@@ -271,6 +360,7 @@ export async function evaluateDemotionTriggers(
   userId: string,
   orgId: string,
   actionType: string,
+  context?: DemotionContext,
 ): Promise<DemotionTriggerResult> {
   // -------------------------------------------------------------------------
   // Step 1 — Check current tier — only evaluate 'auto' tier users
@@ -356,7 +446,7 @@ export async function evaluateDemotionTriggers(
 
   // Rule 3: DEMOTE — >8% undo rate over 14 days with >= 10 actions
   if (undoRate14d > 0.08 && total14d >= 10) {
-    return {
+    const result: DemotionTriggerResult = {
       triggered: true,
       severity: 'demote',
       trigger_name: 'sustained_undo_rate',
@@ -365,11 +455,29 @@ export async function evaluateDemotionTriggers(
       undo_rate: undoRate14d,
       window_days: 14,
     }
+
+    // AE2-014: Apply impact multiplier — escalate if high-stakes context
+    if (context) {
+      const { multiplier, factors } = calculateImpactMultiplier(actionType, context)
+      result.impact_multiplier = multiplier
+      result.impact_factors = factors
+
+      if (multiplier > 2.0) {
+        result.severity = 'emergency'
+        result.trigger_name = 'impact_escalated_demote'
+        result.trigger_reason += ` — escalated to emergency (impact multiplier: ${multiplier.toFixed(1)})`
+        console.log('[autopilot/demotionEngine] Impact-escalated demote→emergency', {
+          userId, actionType, multiplier, factors,
+        })
+      }
+    }
+
+    return result
   }
 
   // Rule 4: WARN — >10% undo rate over 7 days with >= 5 actions
   if (undoRate7d > 0.10 && total7d >= 5) {
-    return {
+    const result: DemotionTriggerResult = {
       triggered: true,
       severity: 'warn',
       trigger_name: 'undo_rate_rising',
@@ -378,6 +486,24 @@ export async function evaluateDemotionTriggers(
       undo_rate: undoRate7d,
       window_days: 7,
     }
+
+    // AE2-014: Apply impact multiplier — escalate if high-stakes context
+    if (context) {
+      const { multiplier, factors } = calculateImpactMultiplier(actionType, context)
+      result.impact_multiplier = multiplier
+      result.impact_factors = factors
+
+      if (multiplier > 2.0) {
+        result.severity = 'emergency'
+        result.trigger_name = 'impact_escalated_warn'
+        result.trigger_reason += ` — escalated to emergency (impact multiplier: ${multiplier.toFixed(1)})`
+        console.log('[autopilot/demotionEngine] Impact-escalated warn→emergency', {
+          userId, actionType, multiplier, factors,
+        })
+      }
+    }
+
+    return result
   }
 
   return { triggered: false }

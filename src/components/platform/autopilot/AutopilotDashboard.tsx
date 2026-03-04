@@ -14,6 +14,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useAutopilotDashboard, type ActionTypeStats } from '@/lib/hooks/useAutopilotDashboard';
 import { useTimeSaved } from '@/lib/hooks/useTimeSaved';
 import AutonomyProgressionChart from './AutonomyProgressionChart';
+import TrustCapitalCard from '@/components/agent/TrustCapitalCard';
+import { ShadowExecutionInsight } from '@/components/agent/ShadowExecutionInsight';
 
 // ============================================================================
 // Constants
@@ -446,6 +448,11 @@ export default function AutopilotDashboard() {
       </Card>
 
       {/* ------------------------------------------------------------------ */}
+      {/* Trust Capital                                                     */}
+      {/* ------------------------------------------------------------------ */}
+      <TrustCapitalCard />
+
+      {/* ------------------------------------------------------------------ */}
       {/* Autonomy progression chart                                        */}
       {/* ------------------------------------------------------------------ */}
       <div>
@@ -453,6 +460,16 @@ export default function AutopilotDashboard() {
           Autonomy Progression (Last 90 Days)
         </h3>
         <AutonomyProgressionChart days={90} />
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Shadow execution analytics — AE2-013                             */}
+      {/* ------------------------------------------------------------------ */}
+      <div>
+        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-500 uppercase tracking-wider mb-3">
+          Shadow Execution Evidence
+        </h3>
+        <ShadowExecutionInsight mode="breakdown" />
       </div>
 
       {/* ------------------------------------------------------------------ */}

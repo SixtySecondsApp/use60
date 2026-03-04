@@ -92,6 +92,13 @@
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-03"
+    },
+    {
+      "id": "memory-wiring",
+      "name": "Memory Layer Wiring \u2014 Connect Existing Infrastructure to Agents",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-03"
     }
   ],
   "stories": [
@@ -4121,12 +4128,164 @@
       "ticketId": null,
       "startedAt": null,
       "completedAt": "2026-03-03T21:35:00Z"
+    },
+    {
+      "id": "MW-001",
+      "feature": "memory-wiring",
+      "title": "Build extract-deal-memory-events edge function \u2014 parse transcripts into deal_memory_events",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Edge function accepts { meeting_id, deal_id, org_id } and reads meeting transcript + structured summary",
+        "Extracts commitment_made, objection_raised, competitor_mentioned, budget_confirmed, timeline_slipped events using Claude",
+        "Writes events to deal_memory_events via _shared/memory/writer.ts",
+        "Triggers shouldRegenerateSnapshot() and regenerates if needed",
+        "Matches fleet route: sequence_key='deal_memory_extraction', skill='extract-deal-memory-events'"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/extract-deal-memory-events/index.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/memory/writer.ts",
+          "supabase/functions/_shared/memory/types.ts",
+          "supabase/functions/_shared/memory/snapshot.ts"
+        ],
+        "schema": [
+          "deal_memory_events",
+          "deal_memory_snapshots"
+        ]
+      },
+      "blocks": [
+        "MW-003"
+      ],
+      "parallelWith": [
+        "MW-002",
+        "MW-004"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-03T22:45:00Z",
+      "completedAt": "2026-03-03T22:50:00Z"
+    },
+    {
+      "id": "MW-002",
+      "feature": "memory-wiring",
+      "title": "Inject deal memory context into generate-follow-up edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "generate-follow-up calls getDealContext() from _shared/memory/reader.ts when deal_id is available",
+        "Injects commitments, recent events, and snapshot narrative into the follow-up prompt",
+        "Follow-up emails reference past commitments and deal history when available",
+        "Graceful fallback \u2014 works identically to today if no memory data exists"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/generate-follow-up/index.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/memory/reader.ts"
+        ],
+        "schema": [
+          "deal_memory_events"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "MW-001",
+        "MW-004"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-03T22:50:00Z",
+      "completedAt": "2026-03-03T22:55:00Z"
+    },
+    {
+      "id": "MW-003",
+      "feature": "memory-wiring",
+      "title": "Inject deal memory context into meeting-prep briefingComposer",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "briefingComposer calls getDealContext() when deal_id is present on the calendar event",
+        "Meeting prep includes open commitments, recent objections, and stakeholder narrative",
+        "AI-generated talking points reference deal memory when available",
+        "Graceful fallback \u2014 works identically to today if no memory data exists"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/briefingComposer.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "MW-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/memory/reader.ts"
+        ],
+        "schema": [
+          "deal_memory_events"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-03T22:55:00Z",
+      "completedAt": "2026-03-03T23:00:00Z"
+    },
+    {
+      "id": "MW-004",
+      "feature": "memory-wiring",
+      "title": "Feed contact warmth scores into deal health recalculation",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "health-recalculate reads contact_warmth_scores for all contacts on a deal via deal_contacts",
+        "Champion warmth decline (tier drop or delta < -0.05) triggers health penalty",
+        "Single-threaded deals (only 1 warm+ contact) get engagement_score penalty",
+        "deal_health_scores.risk_factors includes relationship-based risks when detected"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/health-recalculate/index.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "contact_warmth_scores",
+          "deal_contacts"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "MW-001",
+        "MW-002"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-03T23:00:00Z",
+      "completedAt": "2026-03-03T23:05:00Z"
     }
   ],
   "execution": {
-    "totalStories": 113,
-    "completedStories": 94,
-    "currentFeature": "warmth-backfill",
-    "lastUpdated": "2026-03-03T21:00:00Z"
+    "totalStories": 117,
+    "completedStories": 117,
+    "currentFeature": "memory-wiring",
+    "lastUpdated": "2026-03-03T23:10:00Z"
   }
 }

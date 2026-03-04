@@ -16,7 +16,7 @@ import type {
   AttendeeComparison,
   PrepBriefingResult,
 } from './types.ts';
-import type { RAGResult } from '../memory/types.ts';
+import type { RAGResult, DealContext, Commitment, RiskFactor } from '../memory/types.ts';
 import type { ResearchResults } from './attendeeResearcher.ts';
 
 // ---- Prompt Templates -------------------------------------------------------
@@ -53,6 +53,12 @@ interface ReturnMeetingInput {
   historicalContext: HistoricalContext;
   hubspotContext: string; // formatted deal properties
   companyNews: string; // formatted company news
+  dealMemory?: {
+    openCommitments: Commitment[];
+    recentObjections: string[];
+    stakeholderNarrative: string | null;
+    riskFactors: RiskFactor[];
+  } | null;
 }
 
 interface FirstMeetingInput {
@@ -118,6 +124,41 @@ export function buildReturnMeetingPrompt(input: ReturnMeetingInput): string {
     }
   }
   sections.push('');
+
+  // MW-003: Deal memory context (commitments, objections, risks, stakeholder narrative)
+  if (input.dealMemory) {
+    sections.push('## DEAL MEMORY (Institutional Knowledge)');
+
+    if (input.dealMemory.stakeholderNarrative) {
+      sections.push(`Narrative: ${input.dealMemory.stakeholderNarrative}`);
+      sections.push('');
+    }
+
+    if (input.dealMemory.openCommitments.length > 0) {
+      sections.push('Open commitments:');
+      for (const c of input.dealMemory.openCommitments) {
+        const deadline = c.deadline ? ` (due: ${c.deadline})` : '';
+        sections.push(`  - [${c.owner}] ${c.action}${deadline} — ${c.status}`);
+      }
+      sections.push('');
+    }
+
+    if (input.dealMemory.recentObjections.length > 0) {
+      sections.push('Recent objections:');
+      for (const obj of input.dealMemory.recentObjections) {
+        sections.push(`  - ${obj}`);
+      }
+      sections.push('');
+    }
+
+    if (input.dealMemory.riskFactors.length > 0) {
+      sections.push('Risk factors:');
+      for (const rf of input.dealMemory.riskFactors) {
+        sections.push(`  - [${rf.severity}] ${rf.detail}`);
+      }
+      sections.push('');
+    }
+  }
 
   if (input.hubspotContext) {
     sections.push('## HUBSPOT CONTEXT');

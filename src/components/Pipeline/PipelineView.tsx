@@ -11,6 +11,7 @@ import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { PipelineHeader } from './PipelineHeader';
 import { PipelineKanban } from './PipelineKanban';
 import { PipelineTable } from './PipelineTable';
+import { RelationshipGraph } from './RelationshipGraph';
 import { DealIntelligenceSheet } from './DealIntelligenceSheet';
 import { DealForm } from './DealForm';
 import { HubSpotImportWizard } from '../ops/HubSpotImportWizard';
@@ -275,6 +276,8 @@ export function PipelineView() {
           onDealStageChange={handleDealStageChange}
           onAddDealClick={handleAddDealClick}
         />
+      ) : filterState.viewMode === 'graph' ? (
+        <RelationshipGraph />
       ) : (
         <PipelineTable
           deals={pipelineData.data.deals}
