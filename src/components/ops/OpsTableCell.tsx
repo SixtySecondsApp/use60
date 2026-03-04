@@ -830,6 +830,24 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
 
   // Button / Action column
   if (columnType === 'button' || columnType === 'action') {
+    // Conditional visibility: hide button if condition is not met
+    if (buttonConfig?.condition) {
+      const cond = buttonConfig.condition;
+      const cellVal = rowCellValues?.[cond.column_key] ?? '';
+      let conditionMet = true;
+      const normCell = cellVal.trim().toLowerCase();
+      const normCond = (cond.value ?? '').trim().toLowerCase();
+      switch (cond.operator) {
+        case 'equals': conditionMet = normCell === normCond; break;
+        case 'not_equals': conditionMet = normCell !== normCond; break;
+        case 'contains': conditionMet = cellVal.includes(cond.value ?? ''); break;
+        case 'is_empty': conditionMet = !cellVal; break;
+        case 'is_not_empty': conditionMet = !!cellVal; break;
+      }
+      if (!conditionMet) {
+        return <div className="w-full h-full" />;
+      }
+    }
     const isRunning = cell.status === 'pending' || cell.status === 'running';
     const isDone = cell.status === 'complete';
     const isFailed = cell.status === 'failed';
@@ -1420,6 +1438,133 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
           </div>
         )}
       </div>
+    );
+  }
+
+  // Check if cell value looks like JSON
+  const isJsonValue = (() => {
+    if (!cell.value) return false;
+    const t = cell.value.trim();
+    return (t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'));
+  })();
+
+  // JSON text cell — click to view in overlay
+  if (isJsonValue) {
+    let prettyJson = cell.value!;
+    try { prettyJson = JSON.stringify(JSON.parse(cell.value!), null, 2); } catch { /* use raw */ }
+    return (
+      <>
+        <div
+          className="w-full h-full flex items-center cursor-pointer group/json"
+          onClick={() => setExpanded(true)}
+        >
+          <span className="truncate text-sm text-gray-400 font-mono group-hover/json:text-violet-300 transition-colors">
+            {cell.value}
+          </span>
+        </div>
+        {expanded && createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center"
+            onClick={() => { setExpanded(false); setCopied(false); }}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div
+              className="relative z-10 w-full max-w-xl mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                <span className="text-sm font-medium text-gray-200">{columnLabel || 'JSON'}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(prettyJson); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                    className="p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+                    title="Copy JSON"
+                  >
+                    {copied ? <CheckCheck className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setExpanded(false); setCopied(false); }}
+                    className="p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <pre className="p-4 text-xs text-gray-300 font-mono overflow-auto max-h-[60vh] whitespace-pre-wrap">
+                {prettyJson}
+              </pre>
+            </div>
+          </div>,
+          document.body,
+        )}
+      </>
+    );
+  }
+
+  // Long text cell — click to read in overlay (for emails, multi-line content)
+  const isLongText = !!(cell.value && !isJsonValue && (cell.value.includes('\n') || cell.value.length > 100));
+  if (isLongText) {
+    return (
+      <>
+        <div
+          className="w-full h-full flex items-center cursor-pointer group/longtext"
+          onClick={() => setExpanded(true)}
+        >
+          <span className="truncate text-sm text-gray-400 group-hover/longtext:text-blue-300 transition-colors">
+            {cell.value}
+          </span>
+        </div>
+        {expanded && createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center"
+            onClick={() => { setExpanded(false); setCopied(false); }}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div
+              className="relative z-10 w-full max-w-2xl mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                <span className="text-sm font-medium text-gray-200">{columnLabel || 'Content'}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(cell.value!); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                    className="p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+                    title="Copy"
+                  >
+                    {copied ? <CheckCheck className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setExpanded(false); setCopied(false); }}
+                    className="p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-4 overflow-auto max-h-[60vh] whitespace-pre-wrap text-sm text-gray-200 leading-relaxed">
+                {cell.value}
+              </div>
+              {onEdit && (
+                <div className="flex justify-end px-4 py-3 border-t border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => { setExpanded(false); startEditing(); }}
+                    className="px-3 py-1.5 text-xs rounded-md bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-gray-100 transition-colors"
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
+      </>
     );
   }
 

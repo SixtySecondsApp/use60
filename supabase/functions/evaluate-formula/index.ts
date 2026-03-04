@@ -203,6 +203,38 @@ function evaluateExpression(expr: string, cellValues: Map<string, string>): stri
     return parts.length > 0 ? parts.join('') : ''
   }
 
+  // Handle JSON_GET(@column, "key.path") — resolve @refs from original expression
+  // to avoid comma-splitting issues with inline JSON
+  if (expr.trim().toUpperCase().startsWith('JSON_GET(') && expr.trim().endsWith(')')) {
+    const inner = expr.trim().slice(9, -1)
+    const args = splitArgs(inner)
+    if (args.length !== 2) return 'ERR'
+    // Resolve @column_key reference to raw cell value
+    const colRef = args[0].trim()
+    let jsonStr: string
+    if (colRef.startsWith('@')) {
+      const key = colRef.slice(1)
+      jsonStr = cellValues.get(key) ?? ''
+    } else {
+      jsonStr = stripQuotes(colRef).replace(/\x00N\/A\x00/g, '')
+    }
+    const keyPath = stripQuotes(args[1].trim())
+    if (!jsonStr || !keyPath) return ''
+    try {
+      const obj = JSON.parse(jsonStr)
+      const parts = keyPath.split('.')
+      let current: unknown = obj
+      for (const part of parts) {
+        if (current == null || typeof current !== 'object') return ''
+        current = (current as Record<string, unknown>)[part]
+      }
+      if (current == null) return ''
+      return typeof current === 'object' ? JSON.stringify(current) : String(current)
+    } catch {
+      return ''
+    }
+  }
+
   // Handle IF()
   if (trimmed.toUpperCase().startsWith('IF(') && trimmed.endsWith(')')) {
     const inner = trimmed.slice(3, -1)

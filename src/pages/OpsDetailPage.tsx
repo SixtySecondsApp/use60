@@ -31,6 +31,7 @@ import {
   Shield,
   MoreHorizontal,
   Inbox,
+  Play,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -239,6 +240,12 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [isLoadingLists, setIsLoadingLists] = useState(false);
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
+
+  // ---- Run All Pipeline ----
+  const [isRunningPipeline, setIsRunningPipeline] = useState(false);
+  const [pipelineProgress, setPipelineProgress] = useState('');
+  const [pipelineBannerDismissed, setPipelineBannerDismissed] = useState(false);
+  const [viewPromptText, setViewPromptText] = useState<string | null>(null);
 
   // ---- Campaign wizard ----
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
@@ -569,6 +576,90 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       return 0;
     });
   }, [tableData?.rows, normalizedSorts]);
+
+  // ---- Run All Pipeline handler ----
+  const handleRunAllPipeline = useCallback(async () => {
+    if (!tableId || !rows.length || !columns.length) return;
+
+    // Find button columns with run_prompt actions, ordered by position
+    const promptButtonCols = columns
+      .filter((c) => (c.column_type === 'button' || c.column_type === 'action') && c.action_config)
+      .filter((c) => {
+        const cfg = c.action_config as any;
+        return cfg?.actions?.some((a: any) => a.type === 'run_prompt');
+      })
+      .sort((a, b) => a.position - b.position);
+
+    if (promptButtonCols.length === 0) {
+      toast.error('No AI prompt buttons found in this table');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Run AI pipeline on ${rows.length} rows?\n\n${promptButtonCols.map((c, i) => `Step ${i + 1}: ${(c.action_config as any)?.label || c.label}`).join('\n')}`
+    );
+    if (!confirmed) return;
+
+    setIsRunningPipeline(true);
+
+    try {
+      for (let stepIdx = 0; stepIdx < promptButtonCols.length; stepIdx++) {
+        const col = promptButtonCols[stepIdx];
+        const buttonConfig = col.action_config as any;
+        const promptAction = buttonConfig?.actions?.find((a: any) => a.type === 'run_prompt');
+        if (!promptAction) continue;
+
+        const outputKey = promptAction.config?.output_column_key;
+
+        for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+          const row = rows[rowIdx];
+          const rowCellValues: Record<string, string> = {};
+          if (row.cells) {
+            for (const [key, c] of Object.entries(row.cells)) {
+              if ((c as any).value) rowCellValues[key] = (c as any).value;
+            }
+          }
+
+          // Skip if output already has a value
+          if (outputKey && rowCellValues[outputKey]) continue;
+
+          // Check condition
+          if (buttonConfig.condition) {
+            const cond = buttonConfig.condition;
+            const cellVal = rowCellValues[cond.column_key] ?? '';
+            let condMet = true;
+            switch (cond.operator) {
+              case 'equals': condMet = cellVal === cond.value; break;
+              case 'not_equals': condMet = cellVal !== cond.value; break;
+              case 'contains': condMet = cellVal.includes(cond.value ?? ''); break;
+              case 'is_empty': condMet = !cellVal; break;
+              case 'is_not_empty': condMet = !!cellVal; break;
+            }
+            if (!condMet) continue;
+          }
+
+          setPipelineProgress(`Step ${stepIdx + 1}/${promptButtonCols.length} — Row ${rowIdx + 1}/${rows.length}`);
+
+          try {
+            const { data, error } = await supabase.functions.invoke('run-prompt', {
+              body: { table_id: tableId, row_id: row.id, action_config: promptAction.config },
+            });
+            if (error) console.error(`Pipeline error row ${rowIdx + 1}:`, error);
+          } catch (err) {
+            console.error(`Pipeline error row ${rowIdx + 1}:`, err);
+          }
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      toast.success('Pipeline complete');
+    } catch (err: any) {
+      toast.error(err.message || 'Pipeline failed');
+    } finally {
+      setIsRunningPipeline(false);
+      setPipelineProgress('');
+    }
+  }, [tableId, rows, columns, queryClient]);
 
   // ---- Integration polling ----
   useIntegrationPolling(tableId, columns, rows);
@@ -1383,8 +1474,22 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             }
           }
 
-          // Set cell to pending
+          // Set cell to pending + optimistic update for instant spinner
           cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+          queryClient.setQueryData(['ops-table-data', tableId], (prev: any) => {
+            if (!prev?.rows) return prev;
+            return {
+              ...prev,
+              rows: prev.rows.map((r: any) =>
+                r.id === rowId
+                  ? { ...r, cells: { ...r.cells, [columnKey]: { ...r.cells[columnKey], status: 'pending' } } }
+                  : r,
+              ),
+            };
+          });
+
+          const actionLabel = buttonConfig.label || col.label || 'Action';
+          toast.info(`Running: ${actionLabel}...`);
 
           executeButton.mutate(
             {
@@ -1400,9 +1505,24 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             {
               onSuccess: () => {
                 cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+                // Re-evaluate any formula columns that reference the output column
+                const outputKeys = new Set(
+                  (buttonConfig.actions ?? [])
+                    .filter((a: any) => a.type === 'run_prompt' && a.config?.output_column_key)
+                    .map((a: any) => a.config.output_column_key),
+                );
+                if (outputKeys.size > 0) {
+                  columns
+                    .filter((c) => c.column_type === 'formula' && c.formula_expression)
+                    .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)))
+                    .forEach((c) => recalcFormulaMutation.mutate(c.id));
+                }
+                queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+                toast.success(`Done: ${actionLabel}`);
               },
               onError: () => {
                 cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+                toast.error(`Failed: ${actionLabel}`);
               },
             },
           );
@@ -2346,7 +2466,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   // ---- Render ----
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-y-auto">
       {/* Top section: back nav + query bar + metadata */}
       <div className={`shrink-0 border-b border-gray-800 bg-gray-950 px-6 ${isFullscreen ? 'pb-3 pt-3' : 'pb-4 pt-5'}`}>
         {/* Back button — hidden in fullscreen and embedded mode */}
@@ -2604,6 +2724,22 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Enriching
               </div>
+            )}
+            {/* Run All Pipeline */}
+            {columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
+              <button
+                onClick={handleRunAllPipeline}
+                disabled={isRunningPipeline}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-900/40 hover:text-emerald-200 disabled:opacity-50"
+                title={pipelineProgress || 'Run AI pipeline on all rows'}
+              >
+                {isRunningPipeline ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+                {isRunningPipeline ? pipelineProgress || 'Running...' : 'Run All'}
+              </button>
             )}
             {/* Add Row */}
             <button
@@ -2944,9 +3080,19 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       {/* Table area */}
       {activeTab === 'data' && (
         <div
-          className="flex-1 min-h-0 min-w-0 overflow-hidden px-6 py-4"
+          className="flex-1 min-h-[50vh] min-w-0 overflow-hidden px-6 pt-4 pb-16"
           style={{ '--ops-table-max-height': isFullscreen ? 'calc(100vh - 90px)' : 'calc(100vh - 220px)' } as React.CSSProperties}
         >
+          {/* Pipeline info banner */}
+          {!pipelineBannerDismissed && columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
+            <div className="mb-3 flex items-center gap-3 rounded-lg border border-violet-700/30 bg-violet-900/10 px-4 py-2.5 text-xs text-violet-300">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span>This table has AI pipeline steps. Click action buttons to process rows, or use <strong>Run All</strong> to process everything. Edit prompts via column header menu.</span>
+              <button onClick={() => setPipelineBannerDismissed(true)} className="ml-auto shrink-0 text-violet-400 hover:text-violet-200">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           <OpsTable
             tableId={tableId}
             columns={columns}
@@ -3182,8 +3328,17 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           onEditFormula={activeColumn.column_type === 'formula' ? () => {
             setEditFormulaColumn(activeColumn);
           } : undefined}
-          onEditButton={activeColumn.column_type === 'button' ? () => {
+          onEditButton={(activeColumn.column_type === 'button' || activeColumn.column_type === 'action') ? () => {
             setEditButtonColumn(activeColumn);
+          } : undefined}
+          onViewPrompt={(activeColumn.column_type === 'button' || activeColumn.column_type === 'action') ? () => {
+            const config = activeColumn.action_config as any;
+            const prompt = config?.actions?.find((a: any) => a.type === 'run_prompt')?.config?.system_prompt;
+            if (prompt) {
+              setViewPromptText(prompt);
+            } else {
+              toast.info('No AI prompt configured for this column');
+            }
           } : undefined}
           onEditApollo={(activeColumn.column_type === 'apollo_property' || activeColumn.column_type === 'apollo_org_property') ? () => {
             setEditApolloColumn(activeColumn);
@@ -3344,6 +3499,26 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           columnLabel={editButtonColumn.label}
           existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
         />
+      )}
+
+      {/* View Prompt Dialog */}
+      {viewPromptText && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setViewPromptText(null)}>
+          <div className="relative max-w-2xl w-full mx-4 max-h-[70vh] overflow-auto rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-violet-400" />
+                System Prompt
+              </h3>
+              <button onClick={() => setViewPromptText(null)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap text-xs text-zinc-300 font-mono leading-relaxed bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
+              {viewPromptText}
+            </pre>
+          </div>
+        </div>
       )}
 
       {/* Edit Apollo Settings Modal */}

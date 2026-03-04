@@ -37,7 +37,8 @@ export type ButtonActionType =
   | 'push_to_crm'
   | 'push_to_instantly'
   | 're_enrich'
-  | 'start_sequence';
+  | 'start_sequence'
+  | 'run_prompt';
 
 export interface ButtonAction {
   type: ButtonActionType;
@@ -51,11 +52,18 @@ export interface ButtonAction {
   // start_sequence:   { sequence_id: string; input_mapping?: Record<string, string> }
 }
 
+export interface ButtonCondition {
+  column_key: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty';
+  value?: string;
+}
+
 export interface ButtonConfig {
   label: string;              // Static text or formula with @column refs e.g. "Email @first_name"
   color: string;              // Hex color e.g. "#8b5cf6"
   icon?: string;              // Lucide icon name e.g. "send", "zap", "play"
   actions: ButtonAction[];    // Ordered list of actions (executed sequentially)
+  condition?: ButtonCondition; // Optional visibility condition
 }
 
 export interface OpsTableColumn {
