@@ -90,7 +90,7 @@ export function TeamLeaderboard({ onRepSelect, selectedUserId }: TeamLeaderboard
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-800">
+          <tr className="border-b border-gray-200 dark:border-gray-800">
             <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 w-10">#</th>
             <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500">Rep</th>
             <th className="py-2 pr-3 text-xs font-medium text-gray-500">
@@ -114,7 +114,7 @@ export function TeamLeaderboard({ onRepSelect, selectedUserId }: TeamLeaderboard
             <th className="text-left py-2 text-xs font-medium text-gray-500">Grade</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-800/50">
+        <tbody className="divide-y divide-gray-200 dark:divide-gray-800/50">
           {sorted.map((rep, idx) => {
             const isTopThree = idx < 3;
             const grade = dominantGrade(rep.grade_distribution);
@@ -128,7 +128,7 @@ export function TeamLeaderboard({ onRepSelect, selectedUserId }: TeamLeaderboard
                   'cursor-pointer transition-colors',
                   isSelected
                     ? 'bg-indigo-500/10'
-                    : 'hover:bg-gray-800/40'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-800/40'
                 )}
               >
                 {/* Rank */}
@@ -148,8 +148,8 @@ export function TeamLeaderboard({ onRepSelect, selectedUserId }: TeamLeaderboard
                 {/* Name */}
                 <td className="py-2.5 pr-3">
                   <div>
-                    <p className="font-medium text-gray-200 text-sm">{rep.user_name}</p>
-                    <p className="text-xs text-gray-600 truncate max-w-[150px]">{rep.user_email}</p>
+                    <p className="font-medium text-gray-800 dark:text-gray-200 text-sm">{rep.user_name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-600 truncate max-w-[150px]">{rep.user_email}</p>
                   </div>
                 </td>
 

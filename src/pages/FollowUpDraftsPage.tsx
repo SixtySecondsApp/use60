@@ -83,7 +83,7 @@ function DraftCard({
         'flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-all',
         isActive
           ? 'border-[#37bd7e]/40 bg-[#37bd7e]/5'
-          : 'border-gray-800 bg-gray-900/40 hover:border-gray-700 hover:bg-gray-900/60',
+          : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/40 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/60',
         isSelected && 'ring-1 ring-[#37bd7e]/30'
       )}
       onClick={() => onOpen(draft)}
@@ -100,7 +100,7 @@ function DraftCard({
           type="checkbox"
           checked={isSelected}
           onChange={() => {}}
-          className="w-4 h-4 rounded border-gray-600 bg-gray-800 accent-[#37bd7e] cursor-pointer"
+          className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 accent-[#37bd7e] cursor-pointer"
         />
       </div>
 
@@ -112,12 +112,12 @@ function DraftCard({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-white truncate">
+          <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
             {draft.to_name ?? draft.to_email}
           </span>
           <StatusBadge status={draft.status} />
         </div>
-        <p className="text-sm text-gray-300 truncate mb-1">{draft.subject}</p>
+        <p className="text-sm text-gray-600 dark:text-gray-300 truncate mb-1">{draft.subject}</p>
         <div className="flex items-center gap-3 text-xs text-gray-500">
           {draft.meeting_id && (
             <span className="flex items-center gap-1">
@@ -186,12 +186,12 @@ export default function FollowUpDraftsPage() {
 
       <div className="flex h-full min-h-0">
         {/* Left panel: draft list */}
-        <div className="w-full max-w-md flex flex-col border-r border-gray-800 min-h-0">
+        <div className="w-full max-w-md flex flex-col border-r border-gray-200 dark:border-gray-800 min-h-0">
           {/* Header */}
-          <div className="p-4 border-b border-gray-800 flex-shrink-0">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h1 className="text-lg font-semibold text-white flex items-center gap-2">
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <Mail className="w-5 h-5 text-[#37bd7e]" />
                   Follow-Up Drafts
                   {pendingCount > 0 && (
@@ -206,7 +206,7 @@ export default function FollowUpDraftsPage() {
               </div>
               <button
                 onClick={() => refetch()}
-                className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                className="p-2 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 title="Refresh"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -223,7 +223,7 @@ export default function FollowUpDraftsPage() {
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
                     statusFilter === f.value
                       ? 'bg-[#37bd7e]/20 text-[#37bd7e] border border-[#37bd7e]/30'
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800 border border-transparent'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 border border-transparent'
                   )}
                 >
                   {f.icon}
@@ -299,7 +299,7 @@ export default function FollowUpDraftsPage() {
                 />
 
                 {showScheduler && (
-                  <div className="border-t border-gray-800 flex-shrink-0">
+                  <div className="border-t border-gray-200 dark:border-gray-800 flex-shrink-0">
                     <ScheduleSendPicker
                       draft={activeDraft}
                       orgId={activeOrgId ?? ''}
@@ -312,7 +312,7 @@ export default function FollowUpDraftsPage() {
                 )}
 
                 {showHistory && (
-                  <div className="border-t border-gray-800 flex-shrink-0 max-h-60 overflow-y-auto">
+                  <div className="border-t border-gray-200 dark:border-gray-800 flex-shrink-0 max-h-60 overflow-y-auto">
                     <DraftHistoryTimeline draft={activeDraft} />
                   </div>
                 )}
@@ -320,7 +320,7 @@ export default function FollowUpDraftsPage() {
 
               {/* Meeting context sidebar */}
               {activeDraft.meeting_id && (
-                <div className="w-72 border-l border-gray-800 flex-shrink-0 overflow-y-auto">
+                <div className="w-72 border-l border-gray-200 dark:border-gray-800 flex-shrink-0 overflow-y-auto">
                   <MeetingContextSidebar meetingId={activeDraft.meeting_id} />
                 </div>
               )}

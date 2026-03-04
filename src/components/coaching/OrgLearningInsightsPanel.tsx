@@ -67,7 +67,7 @@ function InsightCard({ insight }: { insight: OrgLearningInsight }) {
   const confidencePct = Math.round((insight.confidence_score ?? 0) * 100);
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-4 space-y-3">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 p-4 space-y-3">
       {/* Type badge + icon */}
       <div className="flex items-start gap-3">
         <div className={cn('p-2 rounded-lg border flex-shrink-0', config.colour.split(' ').slice(1).join(' '))}>
@@ -77,17 +77,17 @@ function InsightCard({ insight }: { insight: OrgLearningInsight }) {
           <span className={cn('text-xs font-medium', config.colour.split(' ')[0])}>
             {config.label}
           </span>
-          <h4 className="text-sm font-semibold text-gray-100 mt-0.5 leading-snug">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mt-0.5 leading-snug">
             {insight.title}
           </h4>
         </div>
       </div>
 
       {/* Insight text */}
-      <p className="text-sm text-gray-400 leading-relaxed">{insight.insight_text}</p>
+      <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{insight.insight_text}</p>
 
       {/* Footer: evidence + confidence + updated */}
-      <div className="flex items-center gap-3 text-xs text-gray-600">
+      <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-600">
         <span>{insight.evidence_count} evidence point{insight.evidence_count !== 1 ? 's' : ''}</span>
         <span>·</span>
         <span>{confidencePct}% confidence</span>

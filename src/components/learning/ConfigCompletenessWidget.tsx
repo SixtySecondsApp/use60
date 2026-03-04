@@ -122,7 +122,7 @@ export function ConfigCompletenessWidget({
       </div>
 
       {/* Progress bar */}
-      <div className="h-1.5 w-full rounded-full bg-gray-800 overflow-hidden">
+      <div className="h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
         <div
           className={cn('h-full rounded-full transition-all duration-700', tierCfg.barCls)}
           style={{ width: `${Math.min(pct, 100)}%` }}
@@ -130,7 +130,7 @@ export function ConfigCompletenessWidget({
       </div>
 
       {/* Summary */}
-      <p className="text-[10px] text-gray-600">
+      <p className="text-[10px] text-gray-500 dark:text-gray-600">
         {data.answered_questions} of {data.total_questions} config items answered
       </p>
 
@@ -139,7 +139,7 @@ export function ConfigCompletenessWidget({
         <>
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-1 text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+            className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-400 transition-colors"
           >
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             {expanded ? 'Hide' : 'Show'} breakdown
@@ -155,13 +155,13 @@ export function ConfigCompletenessWidget({
                   <div key={key} className="flex items-center gap-2">
                     <Icon className="h-3 w-3 text-gray-600 flex-shrink-0" />
                     <span className="text-[10px] text-gray-500 w-28 truncate">{label}</span>
-                    <div className="flex-1 h-1 rounded-full bg-gray-800 overflow-hidden">
+                    <div className="flex-1 h-1 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
                       <div
                         className={cn('h-full rounded-full', tierCfg.barCls)}
                         style={{ width: `${Math.min(cat.percentage, 100)}%` }}
                       />
                     </div>
-                    <span className="text-[10px] text-gray-600 w-8 text-right">
+                    <span className="text-[10px] text-gray-500 dark:text-gray-600 w-8 text-right">
                       {cat.answered}/{cat.total}
                     </span>
                   </div>

@@ -44,8 +44,8 @@ function ScorecardRow({ id, meetingId, overallScore, grade, createdAt, selected,
     <button
       onClick={onClick}
       className={cn(
-        'w-full text-left flex items-center gap-3 px-4 py-3 border-b border-gray-800 transition-colors',
-        selected ? 'bg-indigo-500/10' : 'hover:bg-gray-800/40'
+        'w-full text-left flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800 transition-colors',
+        selected ? 'bg-indigo-500/10' : 'hover:bg-gray-100 dark:hover:bg-gray-800/40'
       )}
     >
       <div className={cn('h-9 w-9 rounded-lg border flex items-center justify-center flex-shrink-0', gradeBgColour(grade))}>
@@ -93,9 +93,9 @@ export default function CoachingRepDetailPage() {
         <title>Rep Coaching Detail | 60</title>
       </Helmet>
 
-      <div className="flex flex-col h-full bg-gray-950">
+      <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950">
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-800">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200 dark:border-gray-800">
           <button
             onClick={() => navigate('/coaching')}
             className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors"
@@ -109,8 +109,8 @@ export default function CoachingRepDetailPage() {
           <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
             {/* Skill Progression Chart */}
             {activeOrgId && (
-              <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5">
-                <h3 className="text-sm font-semibold text-gray-200 mb-4 flex items-center gap-2">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 p-5">
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-indigo-400" />
                   Skill Progression
                 </h3>
@@ -121,9 +121,9 @@ export default function CoachingRepDetailPage() {
             {/* Scorecard History */}
             <div className="grid gap-6 lg:grid-cols-2">
               {/* List */}
-              <div className="rounded-xl border border-gray-800 bg-gray-900/50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-800">
-                  <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
                     <FileText className="h-4 w-4 text-gray-400" />
                     Scorecard History
                   </h3>
@@ -157,7 +157,7 @@ export default function CoachingRepDetailPage() {
               </div>
 
               {/* Detail */}
-              <div className="rounded-xl border border-gray-800 bg-gray-900/50 overflow-hidden">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 overflow-hidden">
                 {selectedMeetingId ? (
                   <RepScorecardView
                     meetingId={selectedMeetingId}

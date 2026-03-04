@@ -6,7 +6,7 @@
  * Toggle per-skill visibility.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Loader2, BarChart2 } from 'lucide-react';
 import {
   LineChart,
@@ -54,6 +54,17 @@ interface SkillProgressionChartProps {
 export function SkillProgressionChart({ userId, orgId, className }: SkillProgressionChartProps) {
   const { data: rows, isLoading, error } = useSkillProgression(userId, orgId);
   const [hidden, setHidden] = useState<Set<SkillKey>>(new Set());
+  const [isDark, setIsDark] = useState(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   const toggleSkill = (key: SkillKey) => {
     setHidden((prev) => {
@@ -97,7 +108,7 @@ export function SkillProgressionChart({ userId, orgId, className }: SkillProgres
                 'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all',
                 active
                   ? 'border-transparent text-white'
-                  : 'border-gray-700 text-gray-500 bg-transparent'
+                  : 'border-gray-300 dark:border-gray-700 text-gray-500 bg-transparent'
               )}
               style={active ? { backgroundColor: skill.colour + '33', borderColor: skill.colour + '66', color: skill.colour } : {}}
             >
@@ -115,7 +126,7 @@ export function SkillProgressionChart({ userId, orgId, className }: SkillProgres
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+            <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1f2937' : '#e5e7eb'} />
             <XAxis
               dataKey="week"
               tick={{ fontSize: 10, fill: '#6b7280' }}
@@ -130,12 +141,12 @@ export function SkillProgressionChart({ userId, orgId, className }: SkillProgres
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#111827',
-                border: '1px solid #1f2937',
+                backgroundColor: isDark ? '#111827' : '#ffffff',
+                border: `1px solid ${isDark ? '#1f2937' : '#e5e7eb'}`,
                 borderRadius: '8px',
                 fontSize: '12px',
               }}
-              labelStyle={{ color: '#9ca3af' }}
+              labelStyle={{ color: isDark ? '#9ca3af' : '#6b7280' }}
             />
             {SKILLS.map((skill) =>
               hidden.has(skill.key) ? null : (

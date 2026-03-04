@@ -142,7 +142,7 @@ export function QBRPrep({ brief, accountHealth }: QBRPrepProps) {
             </div>
           )}
           {ah.revenue_attainment != null && (
-            <div className="flex flex-col items-center rounded-md border border-gray-700 bg-gray-800/30 px-2 py-2">
+            <div className="flex flex-col items-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/30 px-2 py-2">
               <span className="text-[10px] text-gray-500 uppercase tracking-wide">Attainment</span>
               <span
                 className={cn(
@@ -159,9 +159,9 @@ export function QBRPrep({ brief, accountHealth }: QBRPrepProps) {
             </div>
           )}
           {ah.forecast != null && (
-            <div className="flex flex-col items-center rounded-md border border-gray-700 bg-gray-800/30 px-2 py-2">
+            <div className="flex flex-col items-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800/30 px-2 py-2">
               <span className="text-[10px] text-gray-500 uppercase tracking-wide">Forecast</span>
-              <span className="text-sm font-semibold text-gray-200 mt-0.5">
+              <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 mt-0.5">
                 {formatCurrency(ah.forecast, ah.currency)}
               </span>
             </div>
@@ -174,15 +174,15 @@ export function QBRPrep({ brief, accountHealth }: QBRPrepProps) {
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5 text-red-400 flex-shrink-0" />
-            <h4 className="text-xs font-semibold text-gray-300">{riskSection.title}</h4>
+            <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300">{riskSection.title}</h4>
           </div>
           <div className="pl-4 space-y-1">
             {riskSection.body.split('\n').map((line, i) => {
               if (!line.trim()) return null;
-              const text = line.replace(/^[•\-\*]\s/, '');
+              const text = line.replace(/^[•\-*]\s/, '');
               return (
-                <div key={i} className="flex items-start gap-1.5 text-xs text-gray-400">
-                  <span className="flex-shrink-0 mt-0.5 text-red-600">•</span>
+                <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  <span className="flex-shrink-0 mt-0.5 text-red-500 dark:text-red-600">•</span>
                   <span>{text}</span>
                 </div>
               );
@@ -193,18 +193,18 @@ export function QBRPrep({ brief, accountHealth }: QBRPrepProps) {
 
       {/* Opportunity section */}
       {opportunitySection && (
-        <div className="space-y-2 border-t border-gray-800 pt-3">
+        <div className="space-y-2 border-t border-gray-200 dark:border-gray-800 pt-3">
           <div className="flex items-center gap-1.5">
             <Lightbulb className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
-            <h4 className="text-xs font-semibold text-gray-300">{opportunitySection.title}</h4>
+            <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300">{opportunitySection.title}</h4>
           </div>
           <div className="pl-4 space-y-1">
             {opportunitySection.body.split('\n').map((line, i) => {
               if (!line.trim()) return null;
-              const text = line.replace(/^[•\-\*]\s/, '');
+              const text = line.replace(/^[•\-*]\s/, '');
               return (
-                <div key={i} className="flex items-start gap-1.5 text-xs text-gray-400">
-                  <span className="flex-shrink-0 mt-0.5 text-amber-600">•</span>
+                <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  <span className="flex-shrink-0 mt-0.5 text-amber-500 dark:text-amber-600">•</span>
                   <span>{text}</span>
                 </div>
               );
@@ -215,18 +215,18 @@ export function QBRPrep({ brief, accountHealth }: QBRPrepProps) {
 
       {/* Action items from previous QBR */}
       {actionSection && (
-        <div className="space-y-2 border-t border-gray-800 pt-3">
+        <div className="space-y-2 border-t border-gray-200 dark:border-gray-800 pt-3">
           <div className="flex items-center gap-1.5">
             <CheckCircle2 className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
-            <h4 className="text-xs font-semibold text-gray-300">{actionSection.title}</h4>
+            <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300">{actionSection.title}</h4>
           </div>
           <div className="pl-4 space-y-1.5">
             {actionSection.body.split('\n').map((line, i) => {
               if (!line.trim()) return null;
-              const text = line.replace(/^[•\-\*\[\] ]+/, '');
+              const text = line.replace(/^[•\-*[\] ]+/, '');
               return (
-                <div key={i} className="flex items-start gap-1.5 text-xs text-gray-400">
-                  <span className="h-3 w-3 rounded border border-gray-700 flex-shrink-0 mt-0.5" />
+                <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  <span className="h-3 w-3 rounded border border-gray-300 dark:border-gray-700 flex-shrink-0 mt-0.5" />
                   <span>{text}</span>
                 </div>
               );
@@ -237,27 +237,27 @@ export function QBRPrep({ brief, accountHealth }: QBRPrepProps) {
 
       {/* Other sections */}
       {otherSections.map((section, i) => (
-        <div key={i} className="space-y-2 border-t border-gray-800 pt-3">
-          <h4 className="text-xs font-semibold text-gray-300">{section.title}</h4>
+        <div key={i} className="space-y-2 border-t border-gray-200 dark:border-gray-800 pt-3">
+          <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300">{section.title}</h4>
           <div className="space-y-1">
             {section.body.split('\n').map((line, j) => {
               if (!line.trim()) return null;
-              if (line.match(/^[•\-\*]\s/)) {
+              if (line.match(/^[•\-*]\s/)) {
                 return (
-                  <div key={j} className="flex items-start gap-1.5 text-xs text-gray-400">
-                    <span className="flex-shrink-0 mt-0.5 text-gray-600">•</span>
-                    <span>{line.replace(/^[•\-\*]\s/, '')}</span>
+                  <div key={j} className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <span className="flex-shrink-0 mt-0.5 text-gray-400 dark:text-gray-600">•</span>
+                    <span>{line.replace(/^[•\-*]\s/, '')}</span>
                   </div>
                 );
               }
-              return <p key={j} className="text-xs text-gray-400">{line}</p>;
+              return <p key={j} className="text-xs text-gray-500 dark:text-gray-400">{line}</p>;
             })}
           </div>
         </div>
       ))}
 
       {!ah && brief.sections.length === 0 && (
-        <p className="text-xs text-gray-600 text-center py-2">
+        <p className="text-xs text-gray-500 dark:text-gray-600 text-center py-2">
           Generating QBR prep brief...
         </p>
       )}

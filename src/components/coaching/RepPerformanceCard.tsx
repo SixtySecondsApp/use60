@@ -65,24 +65,24 @@ export function RepPerformanceCard({
         'w-full text-left rounded-xl border p-4 transition-all duration-150 hover:border-gray-600',
         selected
           ? 'border-indigo-500/50 bg-indigo-500/5'
-          : 'border-gray-800 bg-gray-900/50 hover:bg-gray-900'
+          : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 hover:bg-gray-50 dark:hover:bg-gray-900'
       )}
     >
       {/* Header row */}
       <div className="flex items-start gap-3">
         {/* Avatar */}
-        <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500/30 to-purple-500/30 flex items-center justify-center border border-gray-700">
+        <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500/30 to-purple-500/30 flex items-center justify-center border border-gray-300 dark:border-gray-700">
           {profile.avatar_url ? (
             <img src={profile.avatar_url} alt={profile.name} className="h-10 w-10 rounded-full object-cover" />
           ) : (
-            <span className="text-sm font-semibold text-gray-300">{initials}</span>
+            <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">{initials}</span>
           )}
         </div>
 
         {/* Name + score */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-gray-100 truncate">{profile.name}</p>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{profile.name}</p>
             {hasData && dominantGrade !== '-' && (
               <span className={cn('text-xs font-bold px-1.5 py-0.5 rounded border', gradeBgColour(dominantGrade))}>
                 {dominantGrade}
@@ -146,7 +146,7 @@ export function RepPerformanceCard({
       )}
 
       {/* Scorecard count */}
-      <div className="mt-2 text-xs text-gray-600">
+      <div className="mt-2 text-xs text-gray-500 dark:text-gray-600">
         {stats.scorecard_count} scorecard{stats.scorecard_count !== 1 ? 's' : ''}
       </div>
     </button>

@@ -73,22 +73,22 @@ function SectionBody({ body }: { body: string }) {
       {body.split('\n').map((line, i) => {
         if (!line.trim()) return <div key={i} className="h-1" />;
         if (line.startsWith('## ')) {
-          return <p key={i} className="text-xs font-semibold text-gray-300 mt-2">{line.slice(3)}</p>;
+          return <p key={i} className="text-xs font-semibold text-gray-600 dark:text-gray-300 mt-2">{line.slice(3)}</p>;
         }
         if (line.startsWith('**') && line.endsWith('**')) {
-          return <p key={i} className="text-xs font-semibold text-gray-200">{line.slice(2, -2)}</p>;
+          return <p key={i} className="text-xs font-semibold text-gray-700 dark:text-gray-200">{line.slice(2, -2)}</p>;
         }
-        if (line.match(/^[•\-\*]\s/)) {
-          const text = line.replace(/^[•\-\*]\s/, '');
+        if (line.match(/^[•\-*]\s/)) {
+          const text = line.replace(/^[•\-*]\s/, '');
           // Bold inline **text**
           const parts = text.split(/\*\*(.*?)\*\*/g);
           return (
-            <div key={i} className="flex items-start gap-1.5 text-xs text-gray-400">
-              <span className="flex-shrink-0 mt-0.5 text-gray-600">•</span>
+            <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <span className="flex-shrink-0 mt-0.5 text-gray-400 dark:text-gray-600">•</span>
               <span>
                 {parts.map((p, j) =>
                   j % 2 === 1
-                    ? <strong key={j} className="text-gray-200 font-medium">{p}</strong>
+                    ? <strong key={j} className="text-gray-700 dark:text-gray-200 font-medium">{p}</strong>
                     : p
                 )}
               </span>
@@ -98,10 +98,10 @@ function SectionBody({ body }: { body: string }) {
         // Inline bold pass
         const parts = line.split(/\*\*(.*?)\*\*/g);
         return (
-          <p key={i} className="text-xs text-gray-400">
+          <p key={i} className="text-xs text-gray-500 dark:text-gray-400">
             {parts.map((p, j) =>
               j % 2 === 1
-                ? <strong key={j} className="text-gray-200 font-medium">{p}</strong>
+                ? <strong key={j} className="text-gray-700 dark:text-gray-200 font-medium">{p}</strong>
                 : p
             )}
           </p>
@@ -195,14 +195,14 @@ function PrepSectionBlock({ section }: { section: PrepSection }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
-        <Icon className="h-3.5 w-3.5 text-gray-500 flex-shrink-0" />
-        <h4 className="text-xs font-semibold text-gray-300">{section.title}</h4>
+        <Icon className="h-3.5 w-3.5 text-gray-500 dark:text-gray-500 flex-shrink-0" />
+        <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300">{section.title}</h4>
       </div>
       <SectionBody body={previewBody} />
       {needsExpand && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1 text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+          className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-400 transition-colors"
         >
           {expanded
             ? <><ChevronUp className="h-3 w-3" />Show less</>
@@ -229,11 +229,11 @@ export function PrepBriefCard({ brief }: PrepBriefCardProps) {
   const typeConfig = INTERNAL_TYPE_CONFIG[brief.meeting_type] ?? INTERNAL_TYPE_CONFIG.general;
 
   return (
-    <Card className="border-gray-800 bg-gray-900/40">
+    <Card className="border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/40">
       <CardHeader className="pb-2 pt-4 px-4">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1">
-            <CardTitle className="text-sm font-medium text-gray-100 flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-purple-400 flex-shrink-0" />
               Meeting Prep
             </CardTitle>
@@ -241,7 +241,7 @@ export function PrepBriefCard({ brief }: PrepBriefCardProps) {
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="flex items-center gap-1 text-[10px] text-gray-600">
+            <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-600">
               <Clock className="h-3 w-3" />
               {formatAge(brief.generated_at)}
             </div>
@@ -272,14 +272,14 @@ export function PrepBriefCard({ brief }: PrepBriefCardProps) {
               {typeConfig.label}
             </Badge>
             {brief.is_lightweight && (
-              <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-500">
+              <Badge variant="outline" className="text-[10px] border-gray-300 dark:border-gray-700 text-gray-500">
                 Lightweight
               </Badge>
             )}
           </div>
 
           {/* Sections */}
-          <div className="space-y-4 divide-y divide-gray-800">
+          <div className="space-y-4 divide-y divide-gray-200 dark:divide-gray-800">
             {brief.sections.map((section, i) => (
               <div key={i} className={cn(i > 0 && 'pt-4')}>
                 <PrepSectionBlock section={section} />
@@ -288,7 +288,7 @@ export function PrepBriefCard({ brief }: PrepBriefCardProps) {
           </div>
 
           {brief.sections.length === 0 && (
-            <p className="text-xs text-gray-600 text-center py-2">
+            <p className="text-xs text-gray-500 dark:text-gray-600 text-center py-2">
               Prep brief is being generated...
             </p>
           )}

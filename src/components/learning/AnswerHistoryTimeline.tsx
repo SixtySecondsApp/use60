@@ -80,7 +80,7 @@ function TimelineEntry({ question }: { question: ReturnType<typeof useAllConfigQ
     : formatDistanceToNow(new Date(question.created_at), { addSuffix: true });
 
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-gray-800/60 last:border-0">
+    <div className="flex items-start gap-3 py-3 border-b border-gray-200 dark:border-gray-800/60 last:border-0">
       {/* Status icon */}
       <div className="flex-shrink-0 mt-0.5">
         <Icon className={cn('h-4 w-4', statusCfg.cls)} />
@@ -88,7 +88,7 @@ function TimelineEntry({ question }: { question: ReturnType<typeof useAllConfigQ
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-200 leading-snug">{question.question_text}</p>
+        <p className="text-sm text-gray-800 dark:text-gray-200 leading-snug">{question.question_text}</p>
 
         {/* Answer */}
         {question.answer_value && (
@@ -99,14 +99,14 @@ function TimelineEntry({ question }: { question: ReturnType<typeof useAllConfigQ
 
         {/* Meta row */}
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          <span className="text-[10px] text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded">
+          <span className="text-[10px] text-gray-500 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
             {catLabel}
           </span>
           <span className={cn('text-[10px] font-medium', statusCfg.cls)}>
             {statusCfg.label}
           </span>
           {question.delivery_channel && (
-            <span className="flex items-center gap-0.5 text-[10px] text-gray-600">
+            <span className="flex items-center gap-0.5 text-[10px] text-gray-500 dark:text-gray-600">
               {question.delivery_channel === 'slack' ? (
                 <MessageSquare className="h-2.5 w-2.5" />
               ) : (
@@ -115,7 +115,7 @@ function TimelineEntry({ question }: { question: ReturnType<typeof useAllConfigQ
               {question.delivery_channel === 'slack' ? 'Slack' : 'In-app'}
             </span>
           )}
-          <span className="text-[10px] text-gray-600 ml-auto" title={dateStr}>
+          <span className="text-[10px] text-gray-500 dark:text-gray-600 ml-auto" title={dateStr}>
             {relativeDate}
           </span>
         </div>
@@ -203,7 +203,7 @@ export function AnswerHistoryTimeline({ className }: AnswerHistoryTimelineProps)
           <p className="text-sm">No questions yet</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/40 overflow-hidden">
           <div className="divide-y divide-gray-800/0 px-4">
             {paginated.map((q) => (
               <TimelineEntry key={q.id} question={q} />
@@ -212,10 +212,10 @@ export function AnswerHistoryTimeline({ className }: AnswerHistoryTimelineProps)
 
           {/* Load more */}
           {page + 1 < totalPages && (
-            <div className="px-4 py-3 border-t border-gray-800">
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800">
               <button
                 onClick={() => setPage((p) => p + 1)}
-                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
               >
                 <ChevronDown className="h-3.5 w-3.5" />
                 Load more ({filtered.length - paginated.length} remaining)

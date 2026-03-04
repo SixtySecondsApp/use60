@@ -133,7 +133,7 @@ export function PipelineReviewPrep({ brief, pipelineSnapshot }: PipelineReviewPr
 
       {/* AI-generated sections from the brief */}
       {brief.sections.length > 0 && (
-        <div className="space-y-3 border-t border-gray-800 pt-3">
+        <div className="space-y-3 border-t border-gray-200 dark:border-gray-800 pt-3">
           {brief.sections.map((section, i) => (
             <div key={i} className="space-y-1.5">
               <div className="flex items-center gap-1.5">
@@ -144,21 +144,21 @@ export function PipelineReviewPrep({ brief, pipelineSnapshot }: PipelineReviewPr
                 ) : (
                   <Target className="h-3 w-3 text-gray-500 flex-shrink-0" />
                 )}
-                <h4 className="text-xs font-semibold text-gray-300">{section.title}</h4>
+                <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300">{section.title}</h4>
               </div>
               <div className="pl-4 space-y-1">
                 {section.body.split('\n').map((line, j) => {
                   if (!line.trim()) return null;
-                  if (line.match(/^[•\-\*]\s/)) {
+                  if (line.match(/^[•\-*]\s/)) {
                     return (
-                      <div key={j} className="flex items-start gap-1.5 text-xs text-gray-400">
-                        <span className="flex-shrink-0 mt-0.5 text-gray-600">•</span>
-                        <span>{line.replace(/^[•\-\*]\s/, '')}</span>
+                      <div key={j} className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <span className="flex-shrink-0 mt-0.5 text-gray-400 dark:text-gray-600">•</span>
+                        <span>{line.replace(/^[•\-*]\s/, '')}</span>
                       </div>
                     );
                   }
                   return (
-                    <p key={j} className="text-xs text-gray-400">{line}</p>
+                    <p key={j} className="text-xs text-gray-500 dark:text-gray-400">{line}</p>
                   );
                 })}
               </div>
@@ -168,7 +168,7 @@ export function PipelineReviewPrep({ brief, pipelineSnapshot }: PipelineReviewPr
       )}
 
       {!snap && brief.sections.length === 0 && (
-        <p className="text-xs text-gray-600 text-center py-2">
+        <p className="text-xs text-gray-500 dark:text-gray-600 text-center py-2">
           Pipeline data loading...
         </p>
       )}

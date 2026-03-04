@@ -118,7 +118,7 @@ export function OneOnOnePrep({ brief, scorecard }: OneOnOnePrepProps) {
 
       {/* Rep scorecard */}
       {scorecard && (
-        <div className="rounded-md border border-gray-800 bg-gray-900/40 px-3 py-2 space-y-0.5">
+        <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/40 px-3 py-2 space-y-0.5">
           <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">
             Rep scorecard
           </p>
@@ -133,16 +133,16 @@ export function OneOnOnePrep({ brief, scorecard }: OneOnOnePrepProps) {
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
             <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
-            <h4 className="text-xs font-semibold text-gray-300">{actionSection.title}</h4>
+            <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300">{actionSection.title}</h4>
           </div>
           <div className="pl-4 space-y-1.5">
             {actionSection.body.split('\n').map((line, i) => {
               if (!line.trim()) return null;
-              const isBullet = line.match(/^[•\-\*]\s/);
-              const text = isBullet ? line.replace(/^[•\-\*]\s/, '') : line;
+              const isBullet = line.match(/^[•\-*]\s/);
+              const text = isBullet ? line.replace(/^[•\-*]\s/, '') : line;
               return (
-                <div key={i} className="flex items-start gap-2 text-xs text-gray-400">
-                  <Circle className="h-3 w-3 text-gray-700 flex-shrink-0 mt-0.5" />
+                <div key={i} className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <Circle className="h-3 w-3 text-gray-400 dark:text-gray-700 flex-shrink-0 mt-0.5" />
                   <span>{text}</span>
                 </div>
               );
@@ -153,7 +153,7 @@ export function OneOnOnePrep({ brief, scorecard }: OneOnOnePrepProps) {
 
       {/* Other sections (coaching notes, deal highlights) */}
       {otherSections.map((section, i) => (
-        <div key={i} className="space-y-2 border-t border-gray-800 pt-3">
+        <div key={i} className="space-y-2 border-t border-gray-200 dark:border-gray-800 pt-3">
           <div className="flex items-center gap-1.5">
             {section.title.toLowerCase().includes('coach') ? (
               <MessageSquare className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />
@@ -162,27 +162,27 @@ export function OneOnOnePrep({ brief, scorecard }: OneOnOnePrepProps) {
             ) : (
               <CheckCircle2 className="h-3.5 w-3.5 text-gray-500 flex-shrink-0" />
             )}
-            <h4 className="text-xs font-semibold text-gray-300">{section.title}</h4>
+            <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300">{section.title}</h4>
           </div>
           <div className="pl-4 space-y-1">
             {section.body.split('\n').map((line, j) => {
               if (!line.trim()) return null;
-              if (line.match(/^[•\-\*]\s/)) {
+              if (line.match(/^[•\-*]\s/)) {
                 return (
-                  <div key={j} className="flex items-start gap-1.5 text-xs text-gray-400">
-                    <span className="flex-shrink-0 mt-0.5 text-gray-600">•</span>
-                    <span>{line.replace(/^[•\-\*]\s/, '')}</span>
+                  <div key={j} className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <span className="flex-shrink-0 mt-0.5 text-gray-400 dark:text-gray-600">•</span>
+                    <span>{line.replace(/^[•\-*]\s/, '')}</span>
                   </div>
                 );
               }
-              return <p key={j} className="text-xs text-gray-400">{line}</p>;
+              return <p key={j} className="text-xs text-gray-500 dark:text-gray-400">{line}</p>;
             })}
           </div>
         </div>
       ))}
 
       {!scorecard && brief.sections.length === 0 && (
-        <p className="text-xs text-gray-600 text-center py-2">
+        <p className="text-xs text-gray-500 dark:text-gray-600 text-center py-2">
           Generating 1:1 prep brief...
         </p>
       )}
