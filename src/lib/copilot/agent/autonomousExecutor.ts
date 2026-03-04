@@ -18,6 +18,8 @@ import type { SkillFrontmatterV2 } from '../../types/skills';
 import { cleanUnresolvedVariables, hasUnresolvedVariables } from '../../utils/templateUtils';
 import { creditBudgetService, CreditExhaustedError } from '../../services/creditBudgetService';
 import { creditLedger } from '../../services/creditLedger';
+import { checkAutonomyGate } from './autonomyGate';
+import type { AutonomyDecision, AutonomyTier } from './autonomyGate';
 
 // =============================================================================
 // Types
@@ -86,6 +88,23 @@ export interface ToolResultInfo {
   isError: boolean;
 }
 
+/**
+ * A tool call that was blocked by the autonomy gate and surfaced to the caller
+ * instead of being executed.
+ */
+export interface GatedToolCall {
+  /** The skill_key / tool name that was blocked */
+  skillName: string;
+  /** The tier that blocked execution */
+  tier: AutonomyTier;
+  /** The resolved autonomy decision (source, preset, action_type) */
+  decision: AutonomyDecision;
+  /** Human-readable explanation from the gate */
+  explanation: string;
+  /** The raw input Claude passed to the tool — shown to the user for review */
+  proposedPayload: Record<string, unknown>;
+}
+
 export interface ExecutorResult {
   success: boolean;
   response: string;
@@ -97,6 +116,13 @@ export interface ExecutorResult {
   totalInputTokens?: number;
   /** Total output tokens consumed across all iterations */
   totalOutputTokens?: number;
+  /** Why the executor stopped, if not a normal completion */
+  stoppedReason?: 'credits_exhausted' | 'max_iterations' | null;
+  /**
+   * Tool calls that were gated (approve / suggest / disabled) instead of executed.
+   * Non-empty when at least one skill required human review.
+   */
+  gatedActions?: GatedToolCall[];
 }
 
 // =============================================================================
@@ -363,6 +389,7 @@ export class AutonomousExecutor {
 
     const messages: ExecutorMessage[] = [];
     const toolsUsed: string[] = [];
+    const gatedActions: GatedToolCall[] = [];
     let iterations = 0;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
@@ -386,20 +413,28 @@ export class AutonomousExecutor {
 
     try {
       // Agentic loop - let Claude decide what to do
+      let shouldStopForCredits = false;
+
       while (iterations < this.config.maxIterations) {
         iterations++;
 
-        // Pre-flight budget check (non-critical: background executor)
-        const budgetCheck = await creditBudgetService.checkBudget(
-          this.config.organizationId,
-          { isCritical: false }
-        );
-        if (!budgetCheck.allowed) {
-          throw new CreditExhaustedError(
-            budgetCheck.reason ?? 'Credit budget exhausted',
-            budgetCheck.percentUsed,
-            this.config.organizationId
-          );
+        // Budget check: if flagged from previous iteration, stop gracefully
+        // (the previous action already completed, so we stop BEFORE the next one)
+        if (shouldStopForCredits) {
+          const creditMsg =
+            'This action was completed but the agent loop was paused — your credit balance is low. Top up to continue.';
+          messages.push({ role: 'assistant', content: creditMsg });
+          return {
+            success: true,
+            response: creditMsg,
+            messages,
+            toolsUsed: [...new Set(toolsUsed)],
+            iterations: iterations - 1,
+            totalInputTokens,
+            totalOutputTokens,
+            stoppedReason: 'credits_exhausted',
+            gatedActions: gatedActions.length > 0 ? gatedActions : undefined,
+          };
         }
 
         // Call Claude
@@ -444,6 +479,7 @@ export class AutonomousExecutor {
             iterations,
             totalInputTokens,
             totalOutputTokens,
+            gatedActions: gatedActions.length > 0 ? gatedActions : undefined,
           };
         }
 
@@ -459,20 +495,80 @@ export class AutonomousExecutor {
           const toolCalls: ToolCallInfo[] = [];
           const toolResults: ToolResultInfo[] = [];
 
-          // Execute each tool call
+          // Execute each tool call — check autonomy gate before executing
           for (const toolUse of toolUseBlocks) {
+            const toolInput = toolUse.input as Record<string, unknown>;
+
             toolCalls.push({
               id: toolUse.id,
               name: toolUse.name,
-              input: toolUse.input as Record<string, unknown>,
+              input: toolInput,
             });
 
             toolsUsed.push(toolUse.name);
 
+            // --- Autonomy gate ---
+            // Resolve the effective policy for this skill before executing.
+            // Skills without an action_type mapping (read-only / generation)
+            // are always allowed; only side-effecting skills are gated.
+            const gate = await checkAutonomyGate(
+              supabase,
+              this.config.organizationId,
+              this.config.userId,
+              toolUse.name,
+              toolInput,
+            );
+
+            if (!gate.allowed) {
+              // Record the gated action for the caller to surface to the user.
+              const gated: GatedToolCall = {
+                skillName: toolUse.name,
+                tier: gate.tier,
+                decision: gate.decision,
+                explanation: gate.explanation,
+                proposedPayload: toolInput,
+              };
+              gatedActions.push(gated);
+
+              // Build a tool result that describes what happened so Claude can
+              // incorporate it into its final response without executing anything.
+              let toolResultContent: string;
+
+              if (gate.tier === 'approve') {
+                toolResultContent = JSON.stringify({
+                  status: 'pending_approval',
+                  message: gate.explanation,
+                  proposed_action: toolInput,
+                });
+              } else if (gate.tier === 'suggest') {
+                toolResultContent = JSON.stringify({
+                  status: 'suggestion_only',
+                  message: gate.explanation,
+                  suggested_action: toolInput,
+                });
+              } else {
+                // 'disabled'
+                toolResultContent = JSON.stringify({
+                  status: 'disabled',
+                  message: gate.explanation,
+                });
+              }
+
+              toolResults.push({
+                toolUseId: toolUse.id,
+                result: JSON.parse(toolResultContent),
+                isError: false,
+              });
+
+              // Do not call executeTool — skip to the next tool in the batch.
+              continue;
+            }
+            // --- End autonomy gate ---
+
             try {
               const result = await this.executeTool(
                 toolUse.name,
-                toolUse.input as Record<string, unknown>
+                toolInput,
               );
 
               toolResults.push({
@@ -521,6 +617,16 @@ export class AutonomousExecutor {
             toolResults,
           });
 
+          // Post-iteration budget check: flag for graceful stop on NEXT iteration
+          // This ensures the current action completes before we stop
+          const postBudgetCheck = await creditBudgetService.checkBudget(
+            this.config.organizationId,
+            { isCritical: false }
+          );
+          if (!postBudgetCheck.allowed) {
+            shouldStopForCredits = true;
+          }
+
           // Continue the loop for Claude to process results
           continue;
         }
@@ -542,6 +648,8 @@ export class AutonomousExecutor {
         error: 'max_iterations_reached',
         totalInputTokens,
         totalOutputTokens,
+        stoppedReason: 'max_iterations',
+        gatedActions: gatedActions.length > 0 ? gatedActions : undefined,
       };
     } catch (error) {
       if (error instanceof CreditExhaustedError) {
@@ -554,6 +662,8 @@ export class AutonomousExecutor {
           error: 'credit_exhausted',
           totalInputTokens,
           totalOutputTokens,
+          stoppedReason: 'credits_exhausted',
+          gatedActions: gatedActions.length > 0 ? gatedActions : undefined,
         };
       }
 
@@ -569,6 +679,7 @@ export class AutonomousExecutor {
         error: errorMsg,
         totalInputTokens,
         totalOutputTokens,
+        gatedActions: gatedActions.length > 0 ? gatedActions : undefined,
       };
     }
   }

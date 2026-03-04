@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { toast } from 'sonner';
 import {
   AutonomousExecutor,
   createAutonomousExecutor,
@@ -73,6 +74,7 @@ export function useAutonomousExecutor(
   const [isInitialized, setIsInitialized] = useState(false);
 
   const executorRef = useRef<AutonomousExecutor | null>(null);
+  const lastCreditToastRef = useRef<number>(0);
 
   // Initialize executor
   useEffect(() => {
@@ -148,6 +150,21 @@ export function useAutonomousExecutor(
 
         if (!result.success && result.error) {
           setError(result.error);
+        }
+
+        // Show toast when agent loop paused due to low credits (debounce 5s)
+        if (result.stoppedReason === 'credits_exhausted') {
+          const now = Date.now();
+          if (now - lastCreditToastRef.current > 5000) {
+            lastCreditToastRef.current = now;
+            toast.warning('Agent paused — credit balance is low. Top up to continue.', {
+              action: {
+                label: 'Top up',
+                onClick: () => window.location.assign('/settings/credits'),
+              },
+              duration: 8000,
+            });
+          }
         }
 
         options.onExecutionComplete?.(result);

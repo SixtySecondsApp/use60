@@ -14,6 +14,17 @@ const LOG_PREFIX = '[proposal-parse-document]'
 // Types
 // =============================================================================
 
+// Writing style extracted from the document text (STY-002)
+interface StyleAnalysis {
+  avg_sentence_length: number        // average words per sentence
+  vocabulary_formality: 'casual' | 'professional' | 'technical' | 'academic'
+  tone_formality: 'formal' | 'semi-formal' | 'casual'
+  tone_directness: 'direct' | 'diplomatic'
+  tone_warmth: 'warm' | 'neutral' | 'cool'
+  common_transition_phrases: string[]
+  style_summary: string              // 1–2 sentence plain-English description
+}
+
 interface TemplateExtraction {
   sections: Array<{
     id: string
@@ -26,6 +37,7 @@ interface TemplateExtraction {
     primary_color: string | null
     secondary_color: string | null
     font_family: string | null
+    style_analysis: StyleAnalysis | null
   }
   metadata: {
     page_count: number | null
@@ -188,6 +200,104 @@ async function parsePdf(arrayBuffer: ArrayBuffer): Promise<{
 }
 
 // =============================================================================
+// AI Style Analysis via OpenRouter (STY-002)
+// =============================================================================
+
+/**
+ * Extract writing-style patterns from document text using Claude Haiku.
+ * This is a lightweight, cost-efficient pass that runs in parallel with the
+ * structure analysis.  Returns null on any failure so the caller can degrade
+ * gracefully and still return the template structure.
+ */
+async function analyzeWritingStyle(
+  content: string,
+  apiKey: string
+): Promise<StyleAnalysis | null> {
+  // Truncate to keep cost low — 4 000 chars is plenty for style signals
+  const sample = content.length > 4000 ? content.substring(0, 4000) + '\n\n[... truncated ...]' : content
+
+  const prompt = `Analyze the writing style of the following proposal document excerpt and return ONLY valid JSON.
+
+Return this exact JSON schema (no markdown fencing, no extra keys):
+{
+  "avg_sentence_length": <number — average words per sentence, integer>,
+  "vocabulary_formality": "<casual|professional|technical|academic>",
+  "tone_formality": "<formal|semi-formal|casual>",
+  "tone_directness": "<direct|diplomatic>",
+  "tone_warmth": "<warm|neutral|cool>",
+  "common_transition_phrases": [<up to 6 short phrases found in the text>],
+  "style_summary": "<1–2 sentence plain-English description of the writing style>"
+}
+
+Document excerpt:
+---
+${sample}
+---`
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://app.use60.com',
+        'X-Title': 'use60 Proposal Style Analysis',
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3-haiku-20240307',
+        max_tokens: 512,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text()
+      console.warn(`${LOG_PREFIX} Style analysis API error ${response.status}:`, errText)
+      return null
+    }
+
+    const data = await response.json()
+    const aiContent: string = data.choices?.[0]?.message?.content || ''
+
+    // Extract JSON — handle any accidental markdown fencing
+    const jsonMatch = aiContent.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.warn(`${LOG_PREFIX} Style analysis: no JSON in AI response`)
+      return null
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as StyleAnalysis
+
+    // Light validation — ensure required discriminated union fields are present
+    const validVocab = ['casual', 'professional', 'technical', 'academic']
+    const validFormality = ['formal', 'semi-formal', 'casual']
+    const validDirectness = ['direct', 'diplomatic']
+    const validWarmth = ['warm', 'neutral', 'cool']
+
+    if (
+      typeof parsed.avg_sentence_length !== 'number' ||
+      !validVocab.includes(parsed.vocabulary_formality) ||
+      !validFormality.includes(parsed.tone_formality) ||
+      !validDirectness.includes(parsed.tone_directness) ||
+      !validWarmth.includes(parsed.tone_warmth)
+    ) {
+      console.warn(`${LOG_PREFIX} Style analysis: invalid field values in AI response`)
+      return null
+    }
+
+    // Ensure transition phrases is an array
+    if (!Array.isArray(parsed.common_transition_phrases)) {
+      parsed.common_transition_phrases = []
+    }
+
+    return parsed
+  } catch (err) {
+    console.warn(`${LOG_PREFIX} Style analysis failed (non-fatal):`, err)
+    return null
+  }
+}
+
+// =============================================================================
 // AI Section Analysis via OpenRouter
 // =============================================================================
 
@@ -195,7 +305,8 @@ async function analyzeDocumentStructure(
   content: string,
   fileType: 'docx' | 'pdf',
   brandHints: { colors: string[]; fontFamily: string | null },
-  apiKey: string
+  apiKey: string,
+  styleAnalysis: StyleAnalysis | null = null
 ): Promise<TemplateExtraction> {
   // Truncate content if too long (keep first ~12k chars for Haiku)
   const truncated = content.length > 12000 ? content.substring(0, 12000) + '\n\n[... content truncated ...]' : content
@@ -303,6 +414,7 @@ ${truncated}
       primary_color: parsed.primary_color || brandHints.colors[0] || null,
       secondary_color: parsed.secondary_color || brandHints.colors[1] || null,
       font_family: brandHints.fontFamily,
+      style_analysis: styleAnalysis,
     },
     metadata: {
       page_count: null,
@@ -419,16 +531,26 @@ serve(async (req: Request) => {
       throw new Error('Could not extract meaningful text from the document. The file may be image-based or encrypted.')
     }
 
-    // 4. Send to AI for section analysis
-    console.log(`${LOG_PREFIX} Analyzing document structure via AI...`)
-    const extraction = await analyzeDocumentStructure(textContent, fileType, brandHints, openRouterApiKey)
+    // 4. Run structure analysis and style analysis in parallel (STY-002)
+    // Style analysis uses a small Haiku call and is non-blocking — a failure
+    // returns null and the structure extraction still succeeds.
+    console.log(`${LOG_PREFIX} Analyzing document structure and writing style in parallel...`)
+    const [extraction, styleAnalysis] = await Promise.all([
+      analyzeDocumentStructure(textContent, fileType, brandHints, openRouterApiKey),
+      analyzeWritingStyle(textContent, openRouterApiKey),
+    ])
+
+    // Merge style analysis into brand_config (stored alongside existing brand data)
+    extraction.brand_config.style_analysis = styleAnalysis
 
     // Set page count from PDF parsing
     if (pageCount !== null) {
       extraction.metadata.page_count = pageCount
     }
 
-    console.log(`${LOG_PREFIX} Extraction complete: ${extraction.sections.length} sections, type: ${extraction.metadata.detected_type}`)
+    console.log(
+      `${LOG_PREFIX} Extraction complete: ${extraction.sections.length} sections, type: ${extraction.metadata.detected_type}, style_analysis: ${styleAnalysis ? 'present' : 'unavailable'}`,
+    )
 
     return new Response(JSON.stringify(extraction), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

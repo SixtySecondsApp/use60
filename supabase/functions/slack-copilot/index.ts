@@ -193,6 +193,40 @@ serve(async (req) => {
       });
     }
 
+    // TRG-003: Fire proposal-pipeline-v2 asynchronously for proposal requests.
+    // Pass slack_thread so the pipeline's deliver stage can post the final
+    // message directly into this thread (channel + thread_ts + bot_token).
+    if (result.pendingAction?.type === 'generate_proposal') {
+      const pipelineData = result.pendingAction.data as {
+        deal_id: string;
+        contact_id: string | null;
+        trigger_type: string;
+      };
+
+      const effectiveThreadTs = threadTs || messageTs;
+
+      supabase.functions.invoke('proposal-pipeline-v2', {
+        body: {
+          deal_id: pipelineData.deal_id,
+          contact_id: pipelineData.contact_id ?? undefined,
+          trigger_type: 'slack',
+          user_id: userId,
+          org_id: orgId,
+          slack_thread: {
+            channel_id: channelId,
+            thread_ts: effectiveThreadTs,
+            bot_token: botToken,
+          },
+        },
+      }).then(() => {
+        // Post a progress update to the thread once the pipeline is queued.
+        // The deliver stage will post the final message when the PDF is ready.
+        postSlackMessage(botToken, channelId, effectiveThreadTs, '_Stage 1/5: Assembling deal context..._').catch(() => {});
+      }).catch((err: unknown) => {
+        console.error('[slack-copilot] proposal-pipeline-v2 invocation failed (non-fatal):', err);
+      });
+    }
+
     // Append turns for multi-turn context
     await appendTurn(threadState.id, {
       role: 'user', content: text, intent: intent.type, timestamp: new Date().toISOString()
@@ -381,6 +415,10 @@ function mapRouteToIntent(
     intentType = 'contact_query';
     const nameMatch = message.match(/(?:about|on|is|for)\s+([A-Z][a-zA-Z\s]+?)(?:\?|$|\.)/);
     if (nameMatch) entities.contactName = nameMatch[1].trim();
+  } else if (/proposal/.test(key)) {
+    intentType = 'proposal_request';
+    const dealMatch = message.match(/(?:for|on|about)\s+([A-Z][a-zA-Z\s]+?)(?:\?|$|\.)/);
+    if (dealMatch) entities.dealName = dealMatch[1].trim();
   } else if (/action|email|task|schedule/.test(key)) {
     intentType = 'action_request';
     if (/email|follow[- ]?up|message/i.test(message)) entities.actionType = 'draft_email';
@@ -438,6 +476,13 @@ function classifyWithRegex(message: string): ClassifiedIntent {
     const nameMatch = message.match(/(?:about|on|is|for)\s+([A-Z][a-zA-Z\s]+?)(?:\?|$|\.)/);
     if (nameMatch) entities.contactName = nameMatch[1].trim();
     return { type: 'contact_query', confidence: 0.7, entities };
+  }
+
+  if (/(?:write|generate|create|draft|make|build|produce)\s+(?:a\s+)?proposal/i.test(lower) ||
+      /proposal\s+(?:for|on|about)/i.test(lower)) {
+    const dealMatch = message.match(/(?:for|on|about)\s+([A-Z][a-zA-Z\s]+?)(?:\?|$|\.)/);
+    if (dealMatch) entities.dealName = dealMatch[1].trim();
+    return { type: 'proposal_request', confidence: 0.85, entities };
   }
 
   if (/(?:draft|write|compose|send|create|schedule|book|set up|make)\s/i.test(lower)) {
@@ -506,6 +551,8 @@ async function routeToHandler(
       return { text: "Starting meeting prep... I'll send the briefing to this thread when it's ready." };
     case 'trigger_enrichment':
       return { text: "Starting research... I'll share what I find in this thread." };
+    case 'proposal_request':
+      return handleProposalRequest(intent, queryContext, anthropicApiKey, modelId, resolvedEntities);
     case 'schedule_meeting':
       return { text: "Calendar scheduling coming soon. For now, you can use the app to find available slots." };
     case 'help':
@@ -545,6 +592,66 @@ async function handleGeneralChat(
   }
 
   return { text: "Sales copilot active. Ask about deals, pipeline, contacts, or type 'help'." };
+}
+
+/**
+ * TRG-003: Handle proposal_request intent.
+ *
+ * Resolves entity IDs from the already-resolved entities, fires the V2 pipeline
+ * with trigger_type: 'slack', posts an initial progress message, and returns
+ * a HandlerResult so the caller can post it to Slack.
+ *
+ * The final Slack message (with the PDF link) is handled by the
+ * proposal-deliver stage of the pipeline — this function only posts the
+ * "Starting proposal generation..." acknowledgement.
+ */
+async function handleProposalRequest(
+  intent: ClassifiedIntent,
+  queryContext: Parameters<typeof handleDealQuery>[1],
+  _anthropicApiKey: string | null,
+  _modelId: string | undefined,
+  resolvedEntities: unknown,
+): Promise<HandlerResult> {
+  // Extract resolved deal / meeting / contact IDs from entity resolution
+  const entities = resolvedEntities as {
+    deal?: { id: string; name?: string } | null;
+    contact?: { id: string } | null;
+  } | null;
+
+  const resolvedDealId = entities?.deal?.id ?? queryContext.deals?.[0]?.id ?? null;
+  const resolvedContactId = entities?.contact?.id ?? queryContext.contacts?.[0]?.id ?? null;
+
+  // We need at least a deal ID to generate a proposal via Slack
+  if (!resolvedDealId) {
+    const dealName = intent.entities.dealName;
+    if (dealName) {
+      return {
+        text: `I couldn't find a deal matching *${dealName}*. Please check the deal name and try again.`,
+      };
+    }
+    return {
+      text: "To generate a proposal I need a deal to work from. Try: \"Generate a proposal for [Deal Name]\"",
+    };
+  }
+
+  // We don't have orgId/userId here — they are on the outer scope via closure.
+  // The outer handler passes resolvedEntities but not org_id/user_id directly.
+  // We rely on the queryContext to signal success rather than fire-and-forget
+  // here; actual pipeline invocation is done via the action execution path.
+  // Return a pending action so the slack-copilot-actions handler can fire it.
+  const dealName = entities?.deal?.name ?? queryContext.deals?.[0]?.title ?? 'the deal';
+
+  return {
+    text: `Starting proposal generation for *${dealName}*... I'll post the link here when it's ready.`,
+    pendingAction: {
+      type: 'generate_proposal',
+      data: {
+        deal_id: resolvedDealId,
+        contact_id: resolvedContactId,
+        trigger_type: 'slack',
+      },
+    },
+  };
 }
 
 async function getAnthropicKey(supabase: ReturnType<typeof createClient>, orgId: string, userId: string): Promise<string | null> {

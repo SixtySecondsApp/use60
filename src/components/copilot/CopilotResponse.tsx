@@ -66,6 +66,7 @@ import { OpsTableListResponse } from './responses/OpsTableListResponse';
 import type { OpsTableListResponseData } from './responses/OpsTableListResponse';
 import { OpsEnrichmentStatusResponse } from './responses/OpsEnrichmentStatusResponse';
 import type { OpsEnrichmentStatusResponseData } from './responses/OpsEnrichmentStatusResponse';
+import { ProposalPanel } from './responses/ProposalPanel';
 import type {
   CopilotResponse as CopilotResponseType,
   PipelineResponse as PipelineResponseType,
@@ -110,6 +111,7 @@ import type {
   DealSlippageGuardrailsResponse as DealSlippageGuardrailsResponseType,
   DailyBriefResponse as DailyBriefResponseType,
   PipelineOutreachResponse as PipelineOutreachResponseType,
+  ProposalPanelResponse as ProposalPanelResponseType,
   MeetingCountResponseData,
   MeetingBriefingResponseData,
   MeetingListResponseData,
@@ -318,6 +320,9 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
 
     case 'landing_page_gate':
       return <LandingPageGate data={(response as any).data} onActionClick={onActionClick} />;
+
+    case 'proposal_panel':
+      return <ProposalPanel data={response as ProposalPanelResponseType} onActionClick={onActionClick} />;
 
     default:
       // Fallback to text response if type is unknown

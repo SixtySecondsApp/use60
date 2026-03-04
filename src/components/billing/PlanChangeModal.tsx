@@ -58,9 +58,9 @@ export interface PlanChangeModalProps {
 // Helpers
 // ============================================================================
 
-const PLAN_PRICES: Record<PlanSlug, { monthly: number; annual: number; name: string; currency: string }> = {
-  basic: { monthly: 29, annual: 290, name: 'Basic', currency: '£' },
-  pro:   { monthly: 99, annual: 990, name: 'Pro',   currency: '£' },
+const PLAN_PRICES: Record<PlanSlug, { monthly: number; annual: number; name: string; currency: string; bundledCredits: number }> = {
+  basic: { monthly: 29, annual: 290, name: 'Basic', currency: '£', bundledCredits: 50 },
+  pro:   { monthly: 99, annual: 990, name: 'Pro',   currency: '£', bundledCredits: 250 },
 };
 
 const TIER_ORDER: Record<PlanSlug, number> = { basic: 0, pro: 1 };
@@ -216,8 +216,10 @@ export function PlanChangeModal({
                   Upgrade takes effect immediately
                 </p>
                 <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                  You'll be charged a prorated amount for the remainder of this billing period.
-                  250 bundled credits will be added to your account right away.
+                  You&apos;ll be charged a prorated amount for the remainder of this billing period.
+                  {targetPlanInfo.bundledCredits > 0 && (
+                    <> {targetPlanInfo.bundledCredits} bundled credits will be added to your account right away.</>
+                  )}
                 </p>
               </div>
             </div>
@@ -232,9 +234,15 @@ export function PlanChangeModal({
                   <span className="font-semibold">{formatDate(currentPeriodEnd)}</span>
                 </p>
                 <p className="text-sm text-amber-700 dark:text-amber-300">
-                  After that, you'll be on {targetPlanInfo.name} at {formatPrice(targetPlanSlug, targetBillingCycle, symbol)}.
+                  After that, you&apos;ll be on {targetPlanInfo.name} at {formatPrice(targetPlanSlug, targetBillingCycle, symbol)}.
                   No charge or refund will be applied for the current period.
                 </p>
+                {currentPlanInfo.bundledCredits > targetPlanInfo.bundledCredits && (
+                  <p className="text-sm text-amber-700 dark:text-amber-300 font-medium">
+                    Unused subscription credits ({currentPlanInfo.bundledCredits}/mo) will expire at the end of
+                    your current billing period. Purchased credit packs are not affected.
+                  </p>
+                )}
               </div>
             </div>
           )}

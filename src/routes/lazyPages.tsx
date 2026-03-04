@@ -144,6 +144,7 @@ export const HealthMonitoring = lazyWithRetry(() => import('@/pages/HealthMonito
 // ============================================================
 export const MeetingsPage = lazyWithRetry(() => import('@/pages/MeetingsPage'));
 export const MeetingLibraryPage = lazyWithRetry(() => import('@/pages/MeetingLibraryPage'));
+export const ProposalsList = lazyWithRetry(() => import('@/pages/ProposalsList'));
 // MeetingIntelligence and MeetingSentimentAnalytics removed — V1 Intelligence deleted
 export const Calls = lazyWithRetry(() => import('@/pages/Calls'));
 export const CallDetail = lazyWithRetry(() => import('@/pages/CallDetail'));

@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { logAICostEvent, checkCreditBalance } from '../_shared/costTracking.ts'
+import { getStyleFingerprint, styleFingerPrintToPromptBlock } from '../_shared/proposalStyleFingerprint.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -995,6 +996,38 @@ async function processJob(
 
     const { transcripts, goals, contact_name, company_name, focus_areas, length_target, word_limit, page_target, proposal_id: proposalId } = job.input_data
 
+    // STY-001: Fetch style fingerprint for proposal generation actions.
+    // Non-blocking — falls back to professional defaults if anything fails.
+    let stylePromptBlock = ''
+    if (action === 'generate_proposal' || action === 'stream_proposal') {
+      try {
+        // Look up org_id via organization_memberships for the style fingerprint
+        const { data: membership } = await supabase
+          .from('organization_memberships')
+          .select('org_id')
+          .eq('user_id', userId)
+          .limit(1)
+          .maybeSingle()
+        const orgId = membership?.org_id || ''
+
+        const fingerprint = await getStyleFingerprint(supabase, userId, orgId)
+        stylePromptBlock = styleFingerPrintToPromptBlock(fingerprint)
+        console.log(`[STY-001] Style fingerprint fetched (source: ${fingerprint.source})`)
+
+        // Persist style_config to the proposals row (fire and forget — non-blocking)
+        if (proposalId) {
+          supabase
+            .from('proposals')
+            .update({ style_config: fingerprint })
+            .eq('id', proposalId)
+            .then(() => console.log(`[STY-001] style_config stored on proposal ${proposalId}`))
+            .catch((err: Error) => console.warn('[STY-001] Failed to store style_config (non-fatal):', err.message))
+        }
+      } catch (err) {
+        console.warn('[STY-001] Style fingerprint fetch failed (non-fatal), using defaults:', err)
+      }
+    }
+
     // REL-004: Signal that generation has started
     await updateProposalProgress(supabase, proposalId, 'analyzing', 10, 'Analyzing input and loading templates...')
 
@@ -1219,7 +1252,8 @@ Generate the HTML in complete, logical blocks that build the proposal like a vis
 3. End with closing </body></html> tags as final block
 4. Each section should be fully formed and visually complete before moving to the next
 5. This allows the user to watch their proposal build up section by section in a visually appealing way
-6. Think of it like assembling a beautiful presentation one slide at a time, not streaming raw code`
+6. Think of it like assembling a beautiful presentation one slide at a time, not streaming raw code
+${stylePromptBlock ? `\n${stylePromptBlock}` : ''}`
 
       const lengthGuidance = length_target === 'short' 
         ? 'Keep the proposal concise: under 1000 words, approximately 2 pages. Use fewer slides and more concise content.'

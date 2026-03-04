@@ -1,0 +1,1140 @@
+/* ==========================================================================
+   PROPOSAL PRINT CSS — GOT-003
+   Professional PDF output via Gotenberg (headless Chromium) → A4
+   ========================================================================== */
+
+/* ---------- CSS Custom Properties (theming) ---------- */
+:root {
+  --proposal-primary: #2563eb;
+  --proposal-secondary: #64748b;
+  --proposal-accent: #f59e0b;
+  --proposal-font: -apple-system, 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  --proposal-heading-font: var(--proposal-font);
+  --proposal-body-size: 11pt;
+  --proposal-heading-color: #1e293b;
+  --proposal-text-color: #334155;
+  --proposal-muted-color: #94a3b8;
+  --proposal-border-color: #e2e8f0;
+  --proposal-bg-subtle: #f8fafc;
+  --proposal-cover-bar-height: 8px;
+  --proposal-section-bar-width: 3px;
+
+  /* Derived tints via color-mix (Chromium-supported) */
+  --proposal-primary-light: color-mix(in srgb, var(--proposal-primary) 12%, white);
+  --proposal-primary-wash: color-mix(in srgb, var(--proposal-primary) 6%, white);
+  --proposal-secondary-light: color-mix(in srgb, var(--proposal-secondary) 15%, white);
+  --proposal-secondary-wash: color-mix(in srgb, var(--proposal-secondary) 8%, white);
+  --proposal-accent-light: color-mix(in srgb, var(--proposal-accent) 10%, white);
+}
+
+
+/* ==========================================================================
+   @PAGE RULES — A4 (210mm x 297mm)
+   ========================================================================== */
+
+@page {
+  size: 210mm 297mm;
+  margin: 15mm 20mm 20mm 20mm;
+
+  @top-right {
+    content: element(running-header);
+    vertical-align: middle;
+  }
+
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: var(--proposal-font);
+    font-size: 9pt;
+    color: var(--proposal-muted-color);
+    letter-spacing: 0.02em;
+  }
+}
+
+/* Cover page — no header, no margins (full bleed) */
+@page cover-page {
+  margin: 0;
+
+  @top-right {
+    content: none;
+  }
+
+  @bottom-center {
+    content: none;
+  }
+}
+
+/* First content page after cover — suppress header for cleaner look */
+@page first-content {
+  @top-right {
+    content: none;
+  }
+}
+
+
+/* ==========================================================================
+   BASE RESET & TYPOGRAPHY
+   ========================================================================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  counter-reset: page-number;
+}
+
+html, body {
+  font-family: var(--proposal-font);
+  font-size: var(--proposal-body-size);
+  line-height: 1.6;
+  color: var(--proposal-text-color);
+  background: #ffffff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Heading hierarchy */
+h1 {
+  font-family: var(--proposal-heading-font);
+  font-size: 28pt;
+  font-weight: 700;
+  color: var(--proposal-heading-color);
+  line-height: 1.2;
+  margin: 24pt 0 12pt;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-family: var(--proposal-heading-font);
+  font-size: 22pt;
+  font-weight: 700;
+  color: var(--proposal-heading-color);
+  line-height: 1.25;
+  margin: 20pt 0 10pt;
+  letter-spacing: -0.005em;
+}
+
+h3 {
+  font-family: var(--proposal-heading-font);
+  font-size: 18pt;
+  font-weight: 600;
+  color: var(--proposal-heading-color);
+  line-height: 1.3;
+  margin: 16pt 0 8pt;
+}
+
+h4 {
+  font-family: var(--proposal-heading-font);
+  font-size: 15pt;
+  font-weight: 600;
+  color: var(--proposal-text-color);
+  line-height: 1.35;
+  margin: 12pt 0 6pt;
+}
+
+p {
+  margin: 0 0 10pt;
+  orphans: 3;
+  widows: 3;
+}
+
+strong {
+  font-weight: 600;
+  color: var(--proposal-heading-color);
+}
+
+em {
+  font-style: italic;
+}
+
+a {
+  color: var(--proposal-primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+ul, ol {
+  margin: 8pt 0 12pt 20pt;
+}
+
+li {
+  margin-bottom: 4pt;
+  line-height: 1.55;
+}
+
+/* Blockquotes as pull-quotes */
+blockquote {
+  border-left: 4px solid var(--proposal-secondary);
+  padding: 10pt 18pt;
+  margin: 14pt 0;
+  background: var(--proposal-secondary-wash);
+  border-radius: 0 4px 4px 0;
+  color: #475569;
+  font-style: italic;
+  font-size: 10.5pt;
+  line-height: 1.7;
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Code inline */
+code {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.9em;
+  padding: 1pt 4pt;
+  background: var(--proposal-bg-subtle);
+  border: 1px solid var(--proposal-border-color);
+  border-radius: 3px;
+}
+
+/* Horizontal rule as section divider */
+hr {
+  border: none;
+  height: 1px;
+  background: var(--proposal-border-color);
+  margin: 20pt 0;
+}
+
+
+/* ==========================================================================
+   RUNNING HEADER (positioned via @page)
+   ========================================================================== */
+
+#running-header {
+  position: running(running-header);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 12mm;
+}
+
+#running-header .header-logo {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+}
+
+#running-header .header-company-name {
+  font-size: 9pt;
+  font-weight: 600;
+  color: var(--proposal-primary);
+  letter-spacing: 0.03em;
+}
+
+
+/* ==========================================================================
+   COVER PAGE
+   ========================================================================== */
+
+.cover-page {
+  page: cover-page;
+  page-break-after: always;
+  break-after: page;
+  display: flex;
+  flex-direction: column;
+  min-height: 297mm;
+  position: relative;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+/* Top accent stripe */
+.cover-brand-bar {
+  height: var(--proposal-cover-bar-height);
+  background: var(--proposal-primary);
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* Main cover content area */
+.cover-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30mm 25mm 25mm 25mm;
+  text-align: center;
+  gap: 6pt;
+}
+
+/* Company logo on cover */
+.cover-logo {
+  height: 64px;
+  width: auto;
+  object-fit: contain;
+  margin-bottom: 10pt;
+}
+
+/* Client logo on cover (if present) */
+.cover-client-logo {
+  height: 48px;
+  width: auto;
+  object-fit: contain;
+  margin-top: 16pt;
+  opacity: 0.85;
+}
+
+/* "PREPARED BY" label */
+.cover-company-label {
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--proposal-primary);
+  margin-bottom: 4pt;
+}
+
+/* Proposal title */
+.cover-title {
+  font-family: var(--proposal-heading-font);
+  font-size: 34pt;
+  font-weight: 700;
+  color: var(--proposal-heading-color);
+  line-height: 1.15;
+  max-width: 440px;
+  margin: 0 auto;
+  letter-spacing: -0.02em;
+}
+
+/* "Proposal" / subtitle */
+.cover-subtitle {
+  font-size: 14pt;
+  color: var(--proposal-muted-color);
+  margin-top: 4pt;
+  font-weight: 400;
+}
+
+/* Metadata block */
+.cover-meta {
+  margin-top: 28pt;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5pt;
+}
+
+.cover-meta-row {
+  font-size: 11pt;
+  color: var(--proposal-text-color);
+}
+
+.cover-meta-row strong {
+  color: var(--proposal-heading-color);
+  font-weight: 600;
+}
+
+.cover-date {
+  font-size: 10pt;
+  color: var(--proposal-muted-color);
+  margin-top: 8pt;
+}
+
+.cover-reference {
+  font-size: 8pt;
+  color: #cbd5e1;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  letter-spacing: 0.08em;
+  margin-top: 2pt;
+}
+
+/* Bottom bar on cover */
+.cover-footer-bar {
+  height: 3mm;
+  background: var(--proposal-secondary);
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* Optional: dual-bar cover footer for extra polish */
+.cover-footer-bar-accent {
+  height: 1mm;
+  background: var(--proposal-accent);
+  width: 100%;
+  flex-shrink: 0;
+}
+
+
+/* ==========================================================================
+   TABLE OF CONTENTS
+   ========================================================================== */
+
+.toc-section {
+  page-break-after: always;
+  break-after: page;
+  padding: 12mm 0 8mm 0;
+}
+
+.toc-title {
+  font-family: var(--proposal-heading-font);
+  font-size: 22pt;
+  font-weight: 700;
+  color: var(--proposal-primary);
+  border-bottom: 2px solid var(--proposal-secondary);
+  padding-bottom: 8pt;
+  margin-bottom: 20pt;
+}
+
+.toc-list {
+  list-style: none;
+  padding: 0;
+}
+
+.toc-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8pt;
+  padding: 6pt 0;
+  font-size: 11pt;
+  color: var(--proposal-text-color);
+  border-bottom: 1px dashed var(--proposal-border-color);
+  transition: none;
+}
+
+.toc-item-number {
+  font-weight: 600;
+  color: var(--proposal-primary);
+  min-width: 24pt;
+}
+
+.toc-item-title {
+  flex: 1;
+}
+
+.toc-item-page {
+  font-size: 9pt;
+  color: var(--proposal-muted-color);
+}
+
+
+/* ==========================================================================
+   CONTENT SECTIONS
+   ========================================================================== */
+
+.proposal-section {
+  page-break-before: always;
+  break-before: page;
+  padding: 0 0 10mm 0;
+  orphans: 3;
+  widows: 3;
+}
+
+/* First section after TOC doesn't need a forced break */
+.proposal-section:first-of-type {
+  page-break-before: auto;
+}
+
+/* Section header with accent bar */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 16pt;
+  padding-bottom: 10pt;
+  position: relative;
+}
+
+.section-header::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--proposal-section-bar-width) + 12pt);
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--proposal-secondary-light);
+}
+
+.section-accent-bar {
+  display: none;
+}
+
+.section-title {
+  position: relative;
+  font-family: var(--proposal-heading-font);
+  font-size: 22pt;
+  font-weight: 700;
+  color: var(--proposal-heading-color);
+  line-height: 1.2;
+  margin: 0;
+  padding-left: calc(var(--proposal-section-bar-width) + 12pt);
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.section-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--proposal-section-bar-width);
+  height: 1em;
+  min-height: 1em;
+  border-radius: 2px;
+  background: var(--proposal-primary);
+}
+
+/* Section content area */
+.section-content {
+  font-size: var(--proposal-body-size);
+  line-height: 1.7;
+  color: var(--proposal-text-color);
+}
+
+.section-content p {
+  margin: 0 0 10pt;
+}
+
+.section-content ul,
+.section-content ol {
+  margin: 8pt 0 12pt 20pt;
+}
+
+.section-content li {
+  margin-bottom: 4pt;
+}
+
+.section-content strong {
+  font-weight: 600;
+  color: var(--proposal-heading-color);
+}
+
+.section-content a {
+  color: var(--proposal-primary);
+  text-decoration: underline;
+}
+
+.section-content blockquote {
+  border-left: 4px solid var(--proposal-secondary);
+  padding: 10pt 18pt;
+  margin: 14pt 0;
+  background: var(--proposal-secondary-wash);
+  border-radius: 0 4px 4px 0;
+  color: #475569;
+  font-style: italic;
+}
+
+/* Section content heading overrides */
+.section-content h1 { font-size: 28pt; margin: 20pt 0 10pt; }
+.section-content h2 { font-size: 22pt; color: var(--proposal-primary); margin: 18pt 0 8pt; }
+.section-content h3 { font-size: 18pt; margin: 14pt 0 6pt; }
+.section-content h4 { font-size: 15pt; margin: 10pt 0 4pt; }
+
+/* Executive summary: slightly larger body text */
+.proposal-section[data-section-type="executive_summary"] .section-content,
+.proposal-section[data-section-type="executive-summary"] .section-content {
+  font-size: 12pt;
+  line-height: 1.75;
+}
+
+
+/* ==========================================================================
+   TABLES (GENERIC)
+   ========================================================================== */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  page-break-inside: avoid;
+  margin: 14pt 0;
+  font-size: 10.5pt;
+}
+
+figure {
+  page-break-inside: avoid;
+}
+
+thead {
+  background: var(--proposal-primary);
+  color: #ffffff;
+}
+
+thead th {
+  padding: 10pt 14pt;
+  text-align: left;
+  font-weight: 600;
+  font-size: 9pt;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+tbody tr:nth-child(even) {
+  background: var(--proposal-primary-light);
+}
+
+tbody tr:nth-child(odd) {
+  background: #ffffff;
+}
+
+tbody tr {
+  break-inside: avoid;
+}
+
+tbody td {
+  padding: 9pt 14pt;
+  border-bottom: 1px solid var(--proposal-border-color);
+  vertical-align: top;
+}
+
+tfoot tr {
+  background: var(--proposal-bg-subtle);
+  font-weight: 700;
+  break-inside: avoid;
+}
+
+tfoot td {
+  padding: 10pt 14pt;
+  border-top: 2px solid var(--proposal-primary);
+}
+
+
+/* ==========================================================================
+   PRICING TABLE (SPECIFIC)
+   ========================================================================== */
+
+.pricing-table {
+  width: 100%;
+  border-collapse: collapse;
+  page-break-inside: avoid;
+  margin: 18pt 0;
+  border: 1px solid var(--proposal-border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pricing-table thead {
+  background: var(--proposal-primary);
+}
+
+.pricing-table thead th {
+  padding: 12pt 16pt;
+  font-size: 9pt;
+  font-weight: 700;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Right-align the last column (price) by default */
+.pricing-table thead th:last-child {
+  text-align: right;
+}
+
+.pricing-table tbody tr:nth-child(even) {
+  background: var(--proposal-primary-light);
+}
+
+.pricing-table tbody tr:nth-child(odd) {
+  background: #ffffff;
+}
+
+.pricing-table tbody tr {
+  break-inside: avoid;
+}
+
+.pricing-table tbody td {
+  padding: 10pt 16pt;
+  font-size: 10.5pt;
+  border-bottom: 1px solid var(--proposal-border-color);
+  vertical-align: middle;
+}
+
+/* Price column */
+.pricing-table .price-col {
+  text-align: right;
+  font-weight: 600;
+  color: var(--proposal-heading-color);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Quantity column */
+.pricing-table .qty-col {
+  text-align: center;
+  color: var(--proposal-muted-color);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Description column */
+.pricing-table .desc-col {
+  color: var(--proposal-text-color);
+}
+
+.pricing-table .desc-col small {
+  display: block;
+  font-size: 9pt;
+  color: var(--proposal-muted-color);
+  margin-top: 2pt;
+}
+
+/* Subtotal row */
+.pricing-table .subtotal-row td {
+  font-weight: 600;
+  border-top: 1px solid var(--proposal-border-color);
+  background: var(--proposal-bg-subtle);
+  color: var(--proposal-text-color);
+}
+
+/* Footer / total row */
+.pricing-table tfoot tr {
+  background: var(--proposal-bg-subtle);
+}
+
+.pricing-table tfoot td {
+  padding: 12pt 16pt;
+  font-size: 12pt;
+  font-weight: 700;
+  color: var(--proposal-heading-color);
+  border-top: 2px solid var(--proposal-primary);
+}
+
+.pricing-table tfoot .price-col {
+  color: var(--proposal-primary);
+  font-size: 14pt;
+}
+
+/* Optional discount row */
+.pricing-table .discount-row td {
+  color: #16a34a;
+  font-style: italic;
+}
+
+/* Optional notes below pricing */
+.pricing-notes {
+  font-size: 9pt;
+  color: var(--proposal-muted-color);
+  margin-top: 6pt;
+  line-height: 1.5;
+}
+
+
+/* ==========================================================================
+   TIMELINE SECTION
+   ========================================================================== */
+
+.timeline-list {
+  list-style: none;
+  padding: 0;
+  position: relative;
+}
+
+.timeline-item {
+  display: flex;
+  gap: 16pt;
+  padding: 8pt 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+/* Marker column: dot + connecting line */
+.timeline-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 20pt;
+}
+
+.timeline-dot {
+  width: 12pt;
+  height: 12pt;
+  border-radius: 50%;
+  background: var(--proposal-primary);
+  border: 2pt solid #ffffff;
+  box-shadow: 0 0 0 2pt var(--proposal-primary);
+  flex-shrink: 0;
+  margin-top: 3pt;
+}
+
+/* Active/current milestone variant */
+.timeline-item.is-current .timeline-dot {
+  background: var(--proposal-accent);
+  box-shadow: 0 0 0 2pt var(--proposal-accent);
+}
+
+/* Completed milestone variant */
+.timeline-item.is-completed .timeline-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 2pt #22c55e;
+}
+
+.timeline-line {
+  width: 2pt;
+  flex: 1;
+  background: color-mix(in srgb, var(--proposal-secondary) 40%, white);
+  margin: 4pt auto 0;
+}
+
+/* Last item hides the trailing line */
+.timeline-item:last-child .timeline-line {
+  display: none;
+}
+
+/* Content column */
+.timeline-content {
+  flex: 1;
+  padding-bottom: 16pt;
+}
+
+.timeline-phase {
+  font-size: 9pt;
+  font-weight: 700;
+  color: var(--proposal-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2pt;
+}
+
+.timeline-title {
+  font-size: 12pt;
+  font-weight: 600;
+  color: var(--proposal-heading-color);
+  margin-bottom: 3pt;
+}
+
+.timeline-dates {
+  font-size: 9pt;
+  color: var(--proposal-muted-color);
+  margin-bottom: 4pt;
+}
+
+.timeline-description {
+  font-size: 10.5pt;
+  color: #475569;
+  line-height: 1.6;
+}
+
+/* Deliverables list within timeline */
+.timeline-deliverables {
+  list-style: none;
+  padding: 0;
+  margin-top: 6pt;
+}
+
+.timeline-deliverables li {
+  font-size: 9.5pt;
+  color: var(--proposal-text-color);
+  padding-left: 14pt;
+  position: relative;
+  margin-bottom: 3pt;
+}
+
+.timeline-deliverables li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6pt;
+  width: 5pt;
+  height: 5pt;
+  border-radius: 50%;
+  background: var(--proposal-secondary);
+}
+
+
+/* ==========================================================================
+   TERMS & CONDITIONS
+   ========================================================================== */
+
+.terms-section ol {
+  padding-left: 20pt;
+  counter-reset: terms-counter;
+}
+
+.terms-section ol > li {
+  margin-bottom: 10pt;
+  font-size: 10.5pt;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.terms-section ol > li strong {
+  color: var(--proposal-heading-color);
+}
+
+
+/* ==========================================================================
+   SIGNATURE / ACCEPTANCE BLOCK
+   ========================================================================== */
+
+.acceptance-block {
+  page-break-inside: avoid;
+  break-inside: avoid;
+  margin-top: 24pt;
+  padding: 20pt;
+  border: 1px solid var(--proposal-border-color);
+  border-radius: 6px;
+  background: var(--proposal-bg-subtle);
+}
+
+.acceptance-block h3 {
+  font-size: 14pt;
+  margin-bottom: 14pt;
+  color: var(--proposal-heading-color);
+}
+
+.signature-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24pt;
+}
+
+.signature-field {
+  display: flex;
+  flex-direction: column;
+  gap: 20pt;
+}
+
+.signature-line {
+  border-bottom: 1px solid var(--proposal-text-color);
+  padding-bottom: 4pt;
+  min-height: 36pt;
+}
+
+.signature-label {
+  font-size: 9pt;
+  color: var(--proposal-muted-color);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4pt;
+}
+
+
+/* ==========================================================================
+   CALLOUT / HIGHLIGHT BOXES
+   ========================================================================== */
+
+.callout {
+  page-break-inside: avoid;
+  padding: 14pt 18pt;
+  margin: 14pt 0;
+  border-radius: 6px;
+  border-left: 4px solid var(--proposal-primary);
+  background: var(--proposal-primary-wash);
+  font-size: 10.5pt;
+  line-height: 1.65;
+}
+
+.callout-accent {
+  border-left-color: var(--proposal-accent);
+  background: var(--proposal-accent-light);
+}
+
+.callout-success {
+  border-left-color: #22c55e;
+  background: color-mix(in srgb, #22c55e 6%, white);
+}
+
+.callout p:last-child {
+  margin-bottom: 0;
+}
+
+.callout strong {
+  color: var(--proposal-heading-color);
+}
+
+
+/* ==========================================================================
+   KEY METRICS / STATS ROW
+   ========================================================================== */
+
+.stats-row {
+  display: flex;
+  gap: 16pt;
+  margin: 18pt 0;
+  page-break-inside: avoid;
+}
+
+.stat-card {
+  flex: 1;
+  text-align: center;
+  padding: 16pt 12pt;
+  border: 1px solid var(--proposal-border-color);
+  border-radius: 6px;
+  background: var(--proposal-bg-subtle);
+}
+
+.stat-value {
+  font-family: var(--proposal-heading-font);
+  font-size: 24pt;
+  font-weight: 700;
+  color: var(--proposal-primary);
+  line-height: 1;
+  margin-bottom: 4pt;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 9pt;
+  color: var(--proposal-muted-color);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+
+/* ==========================================================================
+   TEAM / ABOUT SECTION
+   ========================================================================== */
+
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140pt, 1fr));
+  gap: 16pt;
+  margin: 14pt 0;
+}
+
+.team-member {
+  text-align: center;
+  page-break-inside: avoid;
+}
+
+.team-avatar {
+  width: 60pt;
+  height: 60pt;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2pt solid var(--proposal-border-color);
+  margin-bottom: 8pt;
+}
+
+.team-name {
+  font-size: 11pt;
+  font-weight: 600;
+  color: var(--proposal-heading-color);
+}
+
+.team-role {
+  font-size: 9pt;
+  color: var(--proposal-muted-color);
+}
+
+
+/* ==========================================================================
+   PAGE BREAK UTILITIES
+   ========================================================================== */
+
+.page-break-before {
+  page-break-before: always;
+}
+
+.page-break-after {
+  page-break-after: always;
+}
+
+.no-page-break {
+  page-break-inside: avoid;
+}
+
+.keep-together {
+  page-break-inside: avoid;
+}
+
+
+/* ==========================================================================
+   @MEDIA PRINT — Chromium PDF Overrides
+   ========================================================================== */
+
+@media print {
+  /* Ensure brand colors print correctly */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+
+  /* Hide interactive / screen-only elements */
+  .no-print,
+  .screen-only,
+  button,
+  nav,
+  .nav,
+  .sidebar,
+  [role="navigation"],
+  [role="toolbar"],
+  input,
+  select,
+  textarea {
+    display: none !important;
+  }
+
+  /* Show full URLs after links (opt-in via parent class) */
+  .show-urls a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 8pt;
+    color: var(--proposal-muted-color);
+    word-break: break-all;
+    font-weight: 400;
+    font-style: normal;
+  }
+
+  /* Don't show URL for internal/anchor links */
+  .show-urls a[href^="#"]::after,
+  .show-urls a[href^="javascript"]::after {
+    content: none;
+  }
+
+  /* Page break control for key elements */
+  table,
+  figure,
+  blockquote,
+  img,
+  .callout,
+  .acceptance-block,
+  .stats-row,
+  .stat-card,
+  .team-member {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Table rows should not split */
+  tbody tr,
+  .pricing-table tbody tr {
+    break-inside: avoid;
+  }
+
+  /* Orphan/widow control */
+  p, li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Headings should stay with following content */
+  h1, h2, h3, h4 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* Section headers must not be orphaned from content */
+  .section-header {
+    break-after: avoid;
+  }
+
+  /* Images don't overflow margins */
+  img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Sections get proper breaks */
+  .proposal-section {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .proposal-section:first-of-type {
+    page-break-before: auto;
+    break-before: auto;
+  }
+
+  /* No background on body in print (save ink if someone physically prints) */
+  body {
+    background: #ffffff;
+  }
+}

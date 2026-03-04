@@ -201,10 +201,34 @@ async function calculateDealHealth(
   // Fetch deal contacts to scope meetings to this deal
   const { data: dealContacts } = await supabase
     .from('deal_contacts')
-    .select('contact_id')
+    .select('contact_id, role')
     .eq('deal_id', dealId);
 
   const dealContactIds = dealContacts?.map((dc: any) => dc.contact_id) || [];
+
+  // MW-004: Fetch contact warmth scores for relationship-based risk signals
+  let warmthScores: Array<{
+    contact_id: string;
+    warmth_score: number;
+    warmth_delta: number;
+    tier: string;
+    trending_direction: string;
+  }> = [];
+
+  if (dealContactIds.length > 0) {
+    const { data: warmthData } = await supabase
+      .from('contact_warmth_scores')
+      .select('contact_id, warmth_score, warmth_delta, tier, trending_direction')
+      .in('contact_id', dealContactIds);
+
+    warmthScores = (warmthData ?? []) as typeof warmthScores;
+  }
+
+  // Build a map of contact_id → role for champion detection
+  const contactRoles = new Map<string, string>();
+  for (const dc of dealContacts ?? []) {
+    contactRoles.set((dc as any).contact_id, (dc as any).role);
+  }
 
   // Fetch meetings linked to this deal's contacts via activities
   let dealMeetings: any[] = [];
@@ -270,7 +294,24 @@ async function calculateDealHealth(
     : 50; // Neutral default
 
   // Engagement score (based on meeting frequency)
-  const engagementScore = Math.min(100, meetingCount30Days * 20);
+  let engagementScore = Math.min(100, meetingCount30Days * 20);
+
+  // MW-004: Penalize engagement score for single-threaded warmth
+  const warmPlusContacts = warmthScores.filter(
+    (ws) => ws.tier === 'warm' || ws.tier === 'hot',
+  );
+  if (dealContactIds.length > 1 && warmPlusContacts.length <= 1) {
+    engagementScore = Math.max(0, engagementScore - 15);
+  }
+
+  // MW-004: Penalize for champion warmth decline
+  const championDecline = warmthScores.some((ws) => {
+    const role = contactRoles.get(ws.contact_id);
+    return role === 'champion' && (ws.warmth_delta < -0.05 || ws.trending_direction === 'down');
+  });
+  if (championDecline) {
+    engagementScore = Math.max(0, engagementScore - 10);
+  }
 
   // Activity score (based on all activities)
   const activityScore = Math.min(100, activityCount30Days * 10);
@@ -300,6 +341,24 @@ async function calculateDealHealth(
   if (daysSinceLastActivity !== null && daysSinceLastActivity > 14) riskFactors.push('no_activity');
   if (sentimentTrend === 'declining') riskFactors.push('sentiment_decline');
   if (meetingCount30Days === 0) riskFactors.push('no_meetings');
+
+  // MW-004: Warmth-based risk factors
+  // Champion warmth decline: tier drop or delta < -0.05
+  for (const ws of warmthScores) {
+    const role = contactRoles.get(ws.contact_id);
+    if (role === 'champion' && (ws.warmth_delta < -0.05 || ws.trending_direction === 'down')) {
+      riskFactors.push('champion_warmth_decline');
+      break; // one risk factor is enough
+    }
+  }
+
+  // Single-threaded warmth: only 1 contact at warm+ tier
+  const warmOrHotContacts = warmthScores.filter(
+    (ws) => ws.tier === 'warm' || ws.tier === 'hot',
+  );
+  if (dealContactIds.length > 1 && warmOrHotContacts.length <= 1) {
+    riskFactors.push('single_thread_warmth');
+  }
 
   // Determine risk level
   let riskLevel: DealHealthScore['risk_level'];

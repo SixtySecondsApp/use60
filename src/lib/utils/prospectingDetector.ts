@@ -116,6 +116,40 @@ export function enrichPromptWithAnswers(prompt: string, answers: Record<string, 
   return additions.length ? `${prompt}. ${additions.join(', ')}.` : prompt;
 }
 
+/**
+ * Extract an explicit result count from prompt/answers for deterministic workflow config.
+ * Ignores numeric ranges like "1-50 employees" and only returns direct result requests.
+ */
+export function extractRequestedResultCount(
+  prompt: string,
+  answers?: Record<string, string>
+): number | null {
+  // Highest priority: explicit preflight answer
+  const answerCountRaw = answers?.result_count?.trim();
+  if (answerCountRaw && /^\d+$/.test(answerCountRaw)) {
+    const value = Number(answerCountRaw);
+    if (Number.isFinite(value) && value >= 1) return Math.min(value, 100);
+  }
+
+  const lower = prompt.toLowerCase();
+
+  // Strong signal: "<number> <results/leads/people/...>"
+  const entityMatch = lower.match(/\b(\d{1,3})\s+(?:results?|leads?|contacts?|people|prospects?|companies)\b/);
+  if (entityMatch) {
+    const value = Number(entityMatch[1]);
+    if (Number.isFinite(value) && value >= 1) return Math.min(value, 100);
+  }
+
+  // Secondary signal: search verb + number, while rejecting ranges like "1-50"
+  const verbMatch = lower.match(/\b(?:find|get|show|list|search|build)\b[^\d]{0,30}(\d{1,3})(?!\s*[-,]\s*\d)/);
+  if (verbMatch) {
+    const value = Number(verbMatch[1]);
+    if (Number.isFinite(value) && value >= 1) return Math.min(value, 100);
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Workflow prompt detector
 // ---------------------------------------------------------------------------

@@ -85,7 +85,7 @@ import {
   ContactsTable, ContactRecord, DealRecord, LeadsInbox, Clients,
   HealthMonitoring,
   // Features
-  MeetingsPage, MeetingLibraryPage, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
+  MeetingsPage, MeetingLibraryPage, ProposalsList, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage,
   CampaignsPage,
@@ -114,6 +114,8 @@ import {
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
 const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
+const RelationshipGraphDemoPage = lazy(() => import('./pages/RelationshipGraphDemoPage'));
+const ProposalLineTunerPage = lazy(() => import('./pages/platform/ProposalLineTunerPage'));
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -503,6 +505,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/dev/billing-analytics" element={<PlatformAdminRouteGuard><AppLayout><BillingAnalytics /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/functions" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/function-testing" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/dev/proposal-line-tuner" element={<InternalRouteGuard><AppLayout><ProposalLineTunerPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/platform/onboarding-simulator" element={<InternalRouteGuard><AppLayout><OnboardingSimulator /></AppLayout></InternalRouteGuard>} />
                 <Route path="/platform/quickadd-simulator" element={<PlatformAdminRouteGuard><AppLayout><QuickAddSimulator /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/trial-timeline" element={<InternalRouteGuard><AppLayout><TrialTimelineSimulator /></AppLayout></InternalRouteGuard>} />
@@ -693,6 +696,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/roadmap/ticket/:ticketId" element={<AppLayout><Roadmap /></AppLayout>} />
                 <Route path="/releases" element={<AppLayout><Releases /></AppLayout>} />
                 <Route path="/meetings/library" element={<AppLayout><MeetingLibraryPage /></AppLayout>} />
+                <Route path="/proposals" element={<InternalRouteGuard><AppLayout><ProposalsList /></AppLayout></InternalRouteGuard>} />
                 <Route path="/meetings/*" element={<AppLayout><MeetingsPage /></AppLayout>} />
                 {/* Meeting detail and recordings are handled by nested routing in /meetings/* (src/pages/MeetingsPage.tsx) */}
                 {/* Recordings are now at /meetings/recordings/* - integrated into meetings */}
@@ -705,6 +709,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/freepik-flow" element={<AppLayout><div className="h-[calc(100vh-4rem)]"><FreepikFlow /></div></AppLayout>} />
                 <Route path="/test-fallback" element={<ProtectedRoute><TestFallback /></ProtectedRoute>} />
                 <Route path="/test-google-tasks" element={<AppLayout><TestGoogleTasks /></AppLayout>} />
+                <Route path="/relationship-graph-demo" element={<InternalRouteGuard><RelationshipGraphDemoPage /></InternalRouteGuard>} />
               </Routes>
             </Suspense>
           </ProtectedRoute>

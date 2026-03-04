@@ -32,7 +32,7 @@ export const PLAN_DETAILS: Record<'basic' | 'pro', PlanDetail> = {
     features: [
       { name: 'AI Intelligence Tier', value: 'Medium (default)', included: true },
       { name: 'Meeting Processing', value: 'Unlimited (Low free, Med/High use credits)', included: true },
-      { name: 'Bundled Credits', value: 'None — purchase packs', included: false },
+      { name: 'Bundled Credits', value: '50 credits/month (refresh monthly)', included: true },
       { name: 'CRM Integration', value: 'HubSpot read/write', included: true },
       { name: 'AI Copilot', value: 'Available (uses credits)', included: true },
       { name: 'Calendar Integration', value: 'Full read/write', included: true },

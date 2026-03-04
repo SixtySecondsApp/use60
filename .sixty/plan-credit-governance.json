@@ -1,0 +1,309 @@
+{
+  "project": {
+    "name": "Credit Governance & Budget Enforcement — Hardening + Subscription Layer",
+    "template": "existing-codebase",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "payments": "stripe",
+      "styling": "tailwind"
+    },
+    "createdAt": "2026-03-03T21:00:00Z",
+    "branch": "feat/credit-governance",
+    "context": "The credit consumption side is production-grade (37+ stories shipped). This plan closes the remaining governance gaps: graceful fleet degradation, Basic plan bundled credits, and subscription management UI. References but does not duplicate plan-billing-completeness-audit.json (GAP-001–010) which covers unwired edge functions and CORS fixes."
+  },
+
+  "features": [
+    {
+      "id": "fleet-graceful",
+      "name": "Graceful Fleet Degradation",
+      "status": "complete",
+      "description": "When credits run low during autonomous agent loops, complete the current action before stopping. Currently throws CreditExhaustedError mid-loop which aborts ungracefully. User gets notified that the agent paused."
+    },
+    {
+      "id": "basic-sub",
+      "name": "Basic Plan Bundled Credits + Subscription Flow",
+      "status": "complete",
+      "description": "Wire bundled credits for Basic (£29/month) plan. Pro (250 credits) already works. Basic needs its own credit allocation on creation, renewal, and upgrade. Also verify the self-serve subscription checkout flow works end-to-end."
+    },
+    {
+      "id": "sub-mgmt-ui",
+      "name": "Subscription Management UI Polish",
+      "status": "complete",
+      "description": "BillingSettingsPage exists but the subscription management experience needs polish: current plan display, upgrade/downgrade flow, cancel with credit expiry warning, and billing portal integration."
+    },
+    {
+      "id": "agent-attribution",
+      "name": "Agent-Level Cost Attribution in UI",
+      "status": "complete",
+      "description": "Usage charts exist but don't show per-agent breakdowns. Add source_agent grouping to usage dashboard so users can see which agents burn most credits."
+    }
+  ],
+
+  "stories": [
+
+    {
+      "id": "CGV-001",
+      "feature": "fleet-graceful",
+      "title": "Graceful budget exhaustion in autonomousExecutor — complete current action, stop loop",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["src/lib/copilot/agent/autonomousExecutor.ts", "src/lib/services/creditBudgetService.ts"], "schema": [] },
+      "blocks": ["CGV-002"],
+      "parallelWith": ["CGV-003"],
+      "acceptance": [
+        "When checkBudget returns allowed=false BEFORE a Claude API call, the agent loop exits cleanly (does not throw CreditExhaustedError)",
+        "The current in-flight iteration completes normally — the check only prevents the NEXT iteration from starting",
+        "The execute() return object includes a new field: `stoppedReason: 'credits_exhausted' | 'max_iterations' | null`",
+        "A user-facing message is appended to the response: 'This action was completed but the agent loop was paused — your credit balance is low.'",
+        "The existing CreditExhaustedError throw is preserved as a fallback for cases where deduction itself fails mid-action (safety net)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/copilot/agent/autonomousExecutor.ts"
+      ],
+      "notes": "The budget check already runs at the top of each iteration (line 393). Move the check AFTER the current iteration completes its Claude call, so the in-flight action finishes. Use a flag `shouldStop` that breaks the while loop after the current tool execution completes. Do NOT change the catch block for CreditExhaustedError — keep it as a safety net for edge cases where deduction fails mid-action."
+    },
+
+    {
+      "id": "CGV-002",
+      "feature": "fleet-graceful",
+      "title": "Credit exhaustion toast notification and CopilotContext handling",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": ["CGV-001"], "files": ["src/lib/contexts/CopilotContext.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "When autonomousExecutor returns stoppedReason='credits_exhausted', CopilotContext shows a toast: 'Agent paused — credit balance is low. Top up to continue.'",
+        "The toast includes an action button linking to /settings/credits (the existing credits page)",
+        "The agent response is still displayed normally — only the toast is new",
+        "No duplicate toasts if multiple agents hit the limit simultaneously (debounce 5s)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/contexts/CopilotContext.tsx"
+      ],
+      "notes": "Use toast.warning from sonner with an action button. The CopilotContext already handles agent execution results — add a check for the new stoppedReason field."
+    },
+
+    {
+      "id": "CGV-003",
+      "feature": "basic-sub",
+      "title": "Add bundled_credits to Basic plan and update credit grant logic",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": ["supabase/functions/stripe-webhook/index.ts", "supabase/functions/update-subscription/index.ts"], "schema": ["subscription_plans"] },
+      "blocks": ["CGV-004"],
+      "parallelWith": ["CGV-001"],
+      "acceptance": [
+        "Migration updates subscription_plans.features JSONB for 'basic' plan to include bundled_credits: 50 (or configured amount)",
+        "handleSubscriptionCreated: grants bundled credits for BOTH 'basic' and 'pro' plans (not just pro)",
+        "handleSubscriptionUpdated: grants credits on upgrade to basic OR pro (not just pro)",
+        "handleInvoicePaid subscription_cycle renewal: refreshes credits for both basic and pro plans",
+        "update-subscription edge function: grants credits immediately on upgrade to either plan",
+        "handleSubscriptionDeleted: expire_subscription_credits already works for any plan (no change needed)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260303210001_basic_plan_bundled_credits.sql",
+        "supabase/functions/stripe-webhook/index.ts",
+        "supabase/functions/update-subscription/index.ts"
+      ],
+      "notes": "The webhook currently checks `planSlug === 'pro'` in 3 places. Change to check `bundledCredits > 0` instead, which is plan-agnostic. The grant_subscription_credits and expire_subscription_credits RPCs are already plan-agnostic — no changes needed there."
+    },
+
+    {
+      "id": "CGV-004",
+      "feature": "basic-sub",
+      "title": "Verify and fix self-serve subscription checkout flow end-to-end",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["CGV-003"], "files": ["src/pages/Pricing.tsx", "supabase/functions/create-checkout-session/index.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CGV-005"],
+      "acceptance": [
+        "Pricing page 'Subscribe' button for Basic (£29/mo) creates a Stripe Checkout session with mode='subscription' and correct price_id",
+        "Pricing page 'Subscribe' button for Pro (£99/mo) creates a Stripe Checkout session with mode='subscription' and correct price_id",
+        "Checkout session metadata includes org_id and plan_slug for webhook to use",
+        "After successful Stripe payment, webhook creates/updates organization_subscription and grants bundled credits",
+        "User is redirected back to billing settings page with success state",
+        "If user already has an active subscription, the button shows 'Manage Plan' and links to Stripe Customer Portal"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/Pricing.tsx",
+        "supabase/functions/create-checkout-session/index.ts"
+      ],
+      "notes": "The create-checkout-session edge function and Pricing page were recently fixed (CPS-002 on 2026-03-03). This story verifies the complete flow rather than building from scratch. May need to add plan_slug to the checkout session metadata if missing."
+    },
+
+    {
+      "id": "CGV-005",
+      "feature": "sub-mgmt-ui",
+      "title": "Subscription status card on BillingSettingsPage with plan details and credit allowance",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": ["src/pages/settings/BillingSettingsPage.tsx"], "schema": [] },
+      "blocks": ["CGV-006"],
+      "parallelWith": ["CGV-004"],
+      "acceptance": [
+        "New SubscriptionStatusCard component shows: current plan name (Basic/Pro/Trial), monthly price, billing cycle dates, next renewal date",
+        "Shows bundled credits included with plan (e.g. '50 credits/month' for Basic, '250 credits/month' for Pro)",
+        "Shows subscription credit balance vs purchased credit balance separately",
+        "If trialing: shows trial end date and 'Upgrade to keep access' CTA",
+        "If cancelled: shows 'Subscription ends on [date]' with re-subscribe CTA",
+        "Uses existing useCurrentSubscription() hook — no new data fetching"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/billing/SubscriptionStatusCard.tsx",
+        "src/pages/settings/BillingSettingsPage.tsx"
+      ],
+      "notes": "BillingSettingsPage already renders CreditBalanceSection and TransactionHistorySection. Add SubscriptionStatusCard above the credit section. Data comes from useCurrentSubscription() and useCreditBalance() hooks which already exist."
+    },
+
+    {
+      "id": "CGV-006",
+      "feature": "sub-mgmt-ui",
+      "title": "Plan change flow with credit impact warning",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["CGV-005"], "files": ["src/components/billing/PlanChangeModal.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CGV-007"],
+      "acceptance": [
+        "PlanChangeModal shows current plan vs target plan comparison (price, bundled credits, features)",
+        "Upgrade path (Basic→Pro): shows 'You will receive 250 credits/month instead of 50. Prorated charge applies.'",
+        "Downgrade path (Pro→Basic): shows warning 'Your bundled credits will reduce to 50/month. Unused subscription credits are use-or-lose — they expire at period end. Your purchased credit packs are unaffected.'",
+        "Cancel path: shows 'Your subscription credits (use-or-lose) will expire on [period end]. Your purchased credit packs never expire and remain fully available.'",
+        "Confirm button calls update-subscription edge function (upgrade/downgrade) or creates Stripe portal session (cancel)",
+        "Success/error toast feedback after action completes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/billing/PlanChangeModal.tsx"
+      ],
+      "notes": "PlanChangeModal.tsx already exists. This story enhances it with credit impact warnings. The update-subscription edge function already handles upgrade/downgrade with credit granting. For cancellation, use the existing useCreatePortalSession() hook to redirect to Stripe's cancellation flow."
+    },
+
+    {
+      "id": "CGV-007",
+      "feature": "agent-attribution",
+      "title": "Add source_agent grouping to usage breakdown chart",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": ["src/components/credits/UsageChart.tsx", "src/lib/services/creditService.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CGV-006"],
+      "acceptance": [
+        "UsageChart supports a new 'By Agent' tab alongside existing 'By Feature' view",
+        "Groups credit_logs by source column (user_initiated, agent_automated, sequence_step, scheduled)",
+        "For agent_automated entries, further groups by the action field to show which agent actions cost most",
+        "Shows top 5 cost-consuming actions with a 'Show all' expansion",
+        "Uses existing get_user_credit_logs RPC — adds groupBy parameter or client-side aggregation"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/credits/UsageChart.tsx",
+        "src/lib/services/creditService.ts"
+      ],
+      "notes": "credit_logs table already has source and action columns. The data exists — this is purely a UI grouping change. Prefer client-side aggregation from the existing credit_logs query rather than a new RPC to keep it simple."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 7,
+    "currentFeature": "credit-governance",
+    "lastUpdated": "2026-03-03T23:15:00Z",
+    "estimatedTotalMinutes": 155,
+    "estimatedHours": "2.5–3.5 hours (with parallel execution)",
+    "parallelGroups": [
+      {
+        "name": "Phase 1: Graceful Degradation + Basic Credits (P1)",
+        "stories": ["CGV-001", "CGV-003"],
+        "note": "Independent — fleet degradation and plan credit logic can run in parallel."
+      },
+      {
+        "name": "Phase 1b: Fleet UX + Checkout Verification (P1/P2)",
+        "stories": ["CGV-002", "CGV-004"],
+        "note": "CGV-002 depends on CGV-001. CGV-004 depends on CGV-003. Both can run in parallel with each other."
+      },
+      {
+        "name": "Phase 2: Subscription UI (P2)",
+        "stories": ["CGV-005", "CGV-006"],
+        "note": "Sequential — status card first, then plan change modal builds on it."
+      },
+      {
+        "name": "Phase 3: Attribution (P3)",
+        "stories": ["CGV-007"],
+        "note": "Independent of all other stories. Can run anytime."
+      }
+    ]
+  },
+
+  "existingInfrastructure": {
+    "alreadyBuilt": [
+      "Credit packs: CRED-001–023 (complete). FIFO deduction, auto top-up, credit menu, 20 UI components.",
+      "Credit ledger: CREDIT-001–006 (complete). creditLedger.ts, creditBudgetService.ts, autonomous executor wiring.",
+      "Stripe webhooks: subscription.created/updated/deleted, invoice.paid/failed/finalized, payment_intent.succeeded/failed — ALL handled with idempotency.",
+      "Subscription credit lifecycle: Pro plan gets 250 credits on creation, refresh on renewal (invoice.paid subscription_cycle), expire on cancellation.",
+      "Auto top-up: fire-and-forget charge creation → webhook-confirmed fulfillment (payment_intent.succeeded). 2-failure auto-disable. Monthly caps.",
+      "Budget enforcement: 80% soft-warn (blocks non-critical), hard-kill at grace threshold, fail-open on error, 60s cache.",
+      "Model router: model_config table, circuit breaker, 3 tiers (low/medium/high), 5 features, org-level overrides.",
+      "Atomic deduction: deduct_credits_fifo() with FOR UPDATE row lock. No double-spending possible.",
+      "Pricing page: Recently fixed (CPS-002, 2026-03-03) to create Stripe checkout sessions."
+    ],
+    "doNotRebuild": "All of the above is working. This plan only addresses graceful degradation, Basic plan credits, subscription UI, and agent attribution."
+  },
+
+  "relatedPlans": {
+    "plan-billing-completeness-audit.json": {
+      "stories": "GAP-001 to GAP-010",
+      "covers": "Unwired edge functions (18+ money leak), CORS fixes, margin tracking, billing analytics, activation checklist",
+      "status": "Planned but unstarted — should be executed alongside or before this plan",
+      "recommendation": "Run GAP-002/003/004 (credit deduction wiring) BEFORE this plan ships, as unwired functions will burn unmetered credits regardless of governance."
+    }
+  },
+
+  "outOfScope": [
+    "Wiring credit deduction to 18+ unwired edge functions — covered by plan-billing-completeness-audit.json (GAP-002/003/004/009)",
+    "Auto top-up Stripe flow changes — already webhook-confirmed, not fire-and-forget as initially thought",
+    "Budget cap daily/weekly reset logic — already implemented in credit_budget_caps migration, just needs testing",
+    "Concurrent stress testing — testing concern, not a code story",
+    "CORS fixes in Stripe functions — covered by GAP-005",
+    "Provider cost margin tracking — covered by GAP-006/007",
+    "Intelligence tier downgrade on low credits — user chose 'complete current, stop loop' over tier cascading",
+    "Invoice generation / itemised billing — handled by Stripe Customer Portal",
+    "Currency normalisation (GBP/USD) — larger refactor, out of scope"
+  ],
+
+  "businessRules": {
+    "subscriptionCredits": "Use or lose. Granted at cycle start, expire at cycle end. Consumed FIRST in deduction order (before packs). Already implemented: grant_subscription_credits sets expiry, expire_subscription_credits sweeps at renewal/cancellation, deduct_credits_ordered consumes subscription credits first.",
+    "creditPacks": "Never expire. credit_packs.expires_at defaults to NULL. Consumed LAST via FIFO (bonus packs before oldest purchased). Already implemented correctly.",
+    "deductionOrder": "subscription credits → onboarding credits → credit packs (FIFO: bonus first, then oldest purchased_at)",
+    "pricingModel": "Subscription (£29/month Basic, £99/month Pro) with bundled credits + top-up credit packs"
+  },
+
+  "consultAnswers": {
+    "pricingModel": "Subscription (£29/month Basic, £99/month Pro) with bundled credits + top-up credit packs",
+    "failPosture": "Keep fail-open (availability over accuracy, reconcile after)",
+    "fleetDegradation": "Complete current action, stop loop, notify user",
+    "prdScope": "Both — Phase 1 hardens existing, Phase 2 builds subscription layer"
+  },
+
+  "summary": {
+    "keyInsight": "The credit system is 90% production-grade, not 'stubs only'. 37+ stories shipped across 4 major phases. The real gaps are: (1) graceful fleet degradation instead of hard-abort, (2) Basic plan bundled credits (only Pro is wired), (3) subscription management UI polish, and (4) agent-level cost attribution visibility.",
+    "afterCompletion": "Full hybrid SaaS + consumption model: £29/mo Basic (50 bundled credits), £99/mo Pro (250 bundled credits), credit packs for top-ups, graceful agent degradation, and per-agent usage visibility. Combined with the billing-completeness-audit plan (GAP-001–010), the billing system will be 100% complete.",
+    "criticalDependency": "GAP-002/003/004/009 from plan-billing-completeness-audit MUST run before or alongside — 18+ edge functions currently burn unmetered credits. No governance system matters if costs aren't being tracked."
+  }
+}

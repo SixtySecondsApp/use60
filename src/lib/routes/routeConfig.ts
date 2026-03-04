@@ -179,10 +179,10 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Leads',
     icon: Inbox,
-    showInNav: false, // Phase 2: accessible from Ops standard tables
+    showInNav: true,
     navSection: 'main',
-    order: 2,
-    displayGroup: 3,
+    order: 3,
+    displayGroup: 1,
   },
   {
     path: '/crm',
@@ -400,6 +400,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: true,
     navSection: 'tools',
     order: 3,
+    displayGroup: 4,
+  },
+  {
+    path: '/proposals',
+    access: 'internal',
+    label: 'Proposals',
+    icon: FileText,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3.5,
     displayGroup: 4,
   },
   {

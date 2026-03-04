@@ -28,6 +28,9 @@ const ACTION_TYPE_MAP: Record<string, string> = {
   create_task: 'task.create',
   enrich_contact: 'crm.contact_enrich',
   draft_proposal: 'email.draft_save',
+  // AUT-002: Proposal V2 action types
+  generate_proposal: 'proposal.generate',
+  send_proposal: 'proposal.send',
 };
 
 /**

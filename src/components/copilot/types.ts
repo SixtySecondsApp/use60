@@ -186,7 +186,8 @@ export type CopilotResponseType =
   | 'task_deliverable'
   | 'meeting_intelligence'
   | 'meeting_context'
-  | 'landing_page_gate';
+  | 'landing_page_gate'
+  | 'proposal_panel';
 
 export interface CopilotResponse {
   type: CopilotResponseType;
@@ -273,7 +274,8 @@ export type ResponseData =
   | DealSlippageGuardrailsResponseData
   | DailyBriefResponseData
   | MeetingIntelligenceResponseData
-  | MeetingContextResponseData;
+  | MeetingContextResponseData
+  | ProposalPanelResponseData;
 
 // ============================================================================
 // Demo-grade sequence panels (Top 3 workflows)
@@ -2434,5 +2436,29 @@ export interface MeetingContextResponseData {
     meetingsAnalyzed: number;
     totalMeetings: number;
   };
+}
+
+// ============================================================================
+// Proposal Panel Response
+// ============================================================================
+
+export interface ProposalPanelResponse extends CopilotResponse {
+  type: 'proposal_panel';
+  data: ProposalPanelResponseData;
+}
+
+export interface ProposalPanelResponseData {
+  proposal_id: string;
+  title: string;
+  client_name?: string;
+  client_company?: string;
+  deal_id?: string;
+  deal_name?: string;
+  pdf_url?: string | null;
+  thumbnail_url?: string | null;
+  status: 'generating' | 'assembling' | 'composing' | 'rendering' | 'ready' | 'sent' | 'failed';
+  credits_used?: number;
+  trigger_type?: string;
+  created_at?: string;
 }
 
