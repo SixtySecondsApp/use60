@@ -203,12 +203,21 @@ function evaluateExpression(expr: string, cellValues: Map<string, string>): stri
     return parts.length > 0 ? parts.join('') : ''
   }
 
-  // Handle JSON_GET(@column, "key.path")
-  if (trimmed.toUpperCase().startsWith('JSON_GET(') && trimmed.endsWith(')')) {
-    const inner = trimmed.slice(9, -1)
+  // Handle JSON_GET(@column, "key.path") — resolve @refs from original expression
+  // to avoid comma-splitting issues with inline JSON
+  if (expr.trim().toUpperCase().startsWith('JSON_GET(') && expr.trim().endsWith(')')) {
+    const inner = expr.trim().slice(9, -1)
     const args = splitArgs(inner)
     if (args.length !== 2) return 'ERR'
-    const jsonStr = stripQuotes(args[0].trim()).replace(/\x00N\/A\x00/g, '')
+    // Resolve @column_key reference to raw cell value
+    const colRef = args[0].trim()
+    let jsonStr: string
+    if (colRef.startsWith('@')) {
+      const key = colRef.slice(1)
+      jsonStr = cellValues.get(key) ?? ''
+    } else {
+      jsonStr = stripQuotes(colRef).replace(/\x00N\/A\x00/g, '')
+    }
     const keyPath = stripQuotes(args[1].trim())
     if (!jsonStr || !keyPath) return ''
     try {

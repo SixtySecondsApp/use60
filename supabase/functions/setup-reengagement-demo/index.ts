@@ -53,6 +53,20 @@ const PROMPT_2_SYSTEM = `You are a copywriter generating email merge variables f
 const PROMPT_2_USER = `Analysis for {{first_name}} {{last_name}} ({{company}}):
 {{transcript_analysis}}`
 
+const PROMPT_3_SYSTEM = `You are a sales rep writing a short, warm re-engagement email. Use the provided merge variables to compose the email. Keep it under 150 words. No subject line — just the body. Write in first person, casual-professional tone. Don't be salesy. Reference something specific from the original meeting. End with a soft CTA (e.g. "Would it make sense to grab 15 minutes?").
+
+Output the email body as plain text — no JSON, no markdown, no formatting.`
+
+const PROMPT_3_USER = `Write a re-engagement email to {{first_name}} at {{company}}.
+
+Variables:
+- Hook line: {{hook_line}}
+- Pain reference: {{pain_ref}}
+- Time reference: {{time_ref}}
+- 60 intro: {{use60_intro}}
+- Pain reframe: {{pain_reframe}}
+- Capability match: {{capability_match}}`
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -83,17 +97,19 @@ serve(async (req: Request) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey)
+    console.log('[setup-reengagement-demo] Starting for org:', org_id, 'user:', user.id)
 
     // 1. Fetch 5 meetings with transcripts
     const { data: meetings, error: meetError } = await supabase
       .from('meetings')
-      .select('id, title, meeting_date, owner_user_id, transcript_text, contact_id')
-      .eq('organization_id', org_id)
+      .select('id, title, meeting_start, owner_user_id, transcript_text, contact_id')
+      .eq('org_id', org_id)
       .not('transcript_text', 'is', null)
-      .order('meeting_date', { ascending: false })
+      .order('meeting_start', { ascending: false })
       .limit(5)
 
     if (meetError) throw meetError
+    console.log('[setup-reengagement-demo] Meetings found:', meetings?.length ?? 0)
 
     // Get contact details
     const contactIds = (meetings ?? []).map(m => m.contact_id).filter(Boolean)
@@ -108,49 +124,53 @@ serve(async (req: Request) => {
       }
     }
 
-    // Get user names for rep_name
-    const ownerIds = (meetings ?? []).map(m => m.owner_user_id).filter(Boolean)
-    let userMap: Record<string, string> = {}
-    if (ownerIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', ownerIds)
-      for (const p of profiles ?? []) {
-        userMap[p.id] = p.full_name ?? 'Unknown'
+    // 2. Find a unique table name (append number if duplicates exist)
+    const baseName = 'Re-Engagement Pipeline (Demo)'
+    const { data: existingTables } = await supabase
+      .from('dynamic_tables')
+      .select('name')
+      .eq('organization_id', org_id)
+      .like('name', 'Re-Engagement Pipeline (Demo)%')
+
+    let tableName = baseName
+    if (existingTables && existingTables.length > 0) {
+      const taken = new Set(existingTables.map(t => t.name))
+      let n = 1
+      while (taken.has(tableName)) {
+        tableName = `${baseName} ${n}`
+        n++
       }
     }
 
-    // 2. Create the ops table
     const { data: table, error: tableError } = await supabase
       .from('dynamic_tables')
       .insert({
         organization_id: org_id,
         created_by: user.id,
-        name: 'Re-Engagement Pipeline (Demo)',
+        name: tableName,
         description: 'AI-powered re-engagement pipeline: analyse transcripts → generate personalised email variables',
         source_type: 'manual',
         row_count: meetings?.length ?? 0,
       })
       .select('id')
       .single()
-
     if (tableError) throw tableError
     const tableId = table.id
+    console.log('[setup-reengagement-demo] Created table:', tableId, tableName)
+    console.log('[setup-reengagement-demo] Table created:', tableId)
 
-    // 3. Create columns
+    // 3. Create columns — keep it lean, use JSON_GET formulas to extract key fields
     const columnDefs = [
-      // Source data columns
+      // Source data
       { key: 'first_name', label: 'First Name', column_type: 'text', position: 0 },
       { key: 'last_name', label: 'Last Name', column_type: 'text', position: 1 },
       { key: 'company', label: 'Company', column_type: 'text', position: 2 },
       { key: 'meeting_date', label: 'Meeting Date', column_type: 'date', position: 3 },
-      { key: 'rep_name', label: 'Rep', column_type: 'text', position: 4 },
-      { key: 'transcript_text', label: 'Transcript', column_type: 'text', position: 5 },
+      { key: 'transcript_text', label: 'Transcript', column_type: 'text', position: 4 },
 
-      // Step 1 button
+      // Step 1: Analyse button
       {
-        key: 'analyse_btn', label: 'Analyse', column_type: 'button', position: 6,
+        key: 'analyse_btn', label: 'Analyse', column_type: 'action', position: 5,
         action_config: {
           label: 'Analyse Transcript',
           color: '#8b5cf6',
@@ -169,24 +189,17 @@ serve(async (req: Request) => {
         },
       },
 
-      // Step 1 output
-      { key: 'transcript_analysis', label: 'Analysis (JSON)', column_type: 'text', position: 7 },
+      // Step 1: Raw JSON output (hidden by default — formulas extract what matters)
+      { key: 'transcript_analysis', label: 'Analysis (JSON)', column_type: 'text', position: 6 },
 
-      // Step 1 formula extractors
-      { key: 'qualified', label: 'Qualified', column_type: 'formula', position: 8, formula_expression: 'JSON_GET(@transcript_analysis, "qualified")' },
-      { key: 'months_ago', label: 'Months Ago', column_type: 'formula', position: 9, formula_expression: 'JSON_GET(@transcript_analysis, "months_ago")' },
-      { key: 'specific_pain', label: 'Pain Point', column_type: 'formula', position: 10, formula_expression: 'JSON_GET(@transcript_analysis, "specific_pain")' },
-      { key: 'budget_signal', label: 'Budget Signal', column_type: 'formula', position: 11, formula_expression: 'JSON_GET(@transcript_analysis, "budget_signal")' },
-      { key: 'interest_areas', label: 'Interest Areas', column_type: 'formula', position: 12, formula_expression: 'JSON_GET(@transcript_analysis, "interest_areas")' },
-      { key: 'company_context', label: 'Company Context', column_type: 'formula', position: 13, formula_expression: 'JSON_GET(@transcript_analysis, "company_context")' },
-      { key: 'suggested_tier', label: 'Suggested Tier', column_type: 'formula', position: 14, formula_expression: 'JSON_GET(@transcript_analysis, "suggested_tier")' },
-      { key: 'personalisation_hook', label: 'Hook', column_type: 'formula', position: 15, formula_expression: 'JSON_GET(@transcript_analysis, "personalisation_hook")' },
-      { key: 'use60_angle', label: '60 Angle', column_type: 'formula', position: 16, formula_expression: 'JSON_GET(@transcript_analysis, "use60_angle")' },
-      { key: 'tone_notes', label: 'Tone', column_type: 'formula', position: 17, formula_expression: 'JSON_GET(@transcript_analysis, "tone_notes")' },
+      // Step 1: Key extracted fields
+      { key: 'qualified', label: 'Qualified', column_type: 'formula', position: 7, formula_expression: 'JSON_GET(@transcript_analysis, "qualified")' },
+      { key: 'specific_pain', label: 'Pain Point', column_type: 'formula', position: 8, formula_expression: 'JSON_GET(@transcript_analysis, "specific_pain")' },
+      { key: 'suggested_tier', label: 'Tier', column_type: 'formula', position: 9, formula_expression: 'JSON_GET(@transcript_analysis, "suggested_tier")' },
 
-      // Step 2 button (conditional on qualified = true)
+      // Step 2: Personalise button (only shows when qualified = true)
       {
-        key: 'personalise_btn', label: 'Personalise', column_type: 'button', position: 18,
+        key: 'personalise_btn', label: 'Personalise', column_type: 'action', position: 10,
         action_config: {
           label: 'Write Personalisation',
           color: '#10b981',
@@ -210,17 +223,44 @@ serve(async (req: Request) => {
         },
       },
 
-      // Step 2 output
-      { key: 'email_variables', label: 'Email Vars (JSON)', column_type: 'text', position: 19 },
+      // Step 2: Raw JSON output
+      { key: 'email_variables', label: 'Email Vars (JSON)', column_type: 'text', position: 11 },
 
-      // Step 2 formula extractors
-      { key: 'time_ref', label: 'Time Ref', column_type: 'formula', position: 20, formula_expression: 'JSON_GET(@email_variables, "time_ref")' },
-      { key: 'pain_ref', label: 'Pain Ref', column_type: 'formula', position: 21, formula_expression: 'JSON_GET(@email_variables, "pain_ref")' },
-      { key: 'pain_short', label: 'Pain Short', column_type: 'formula', position: 22, formula_expression: 'JSON_GET(@email_variables, "pain_short")' },
-      { key: 'hook_line', label: 'Hook Line', column_type: 'formula', position: 23, formula_expression: 'JSON_GET(@email_variables, "hook_line")' },
-      { key: 'use60_intro', label: '60 Intro', column_type: 'formula', position: 24, formula_expression: 'JSON_GET(@email_variables, "use60_intro")' },
-      { key: 'pain_reframe', label: 'Pain Reframe', column_type: 'formula', position: 25, formula_expression: 'JSON_GET(@email_variables, "pain_reframe")' },
-      { key: 'capability_match', label: 'Capability Match', column_type: 'formula', position: 26, formula_expression: 'JSON_GET(@email_variables, "capability_match")' },
+      // Step 2: Key extracted fields
+      { key: 'hook_line', label: 'Hook Line', column_type: 'formula', position: 12, formula_expression: 'JSON_GET(@email_variables, "hook_line")' },
+      { key: 'pain_ref', label: 'Pain Ref', column_type: 'formula', position: 13, formula_expression: 'JSON_GET(@email_variables, "pain_ref")' },
+      { key: 'time_ref', label: 'Time Ref', column_type: 'formula', position: 14, formula_expression: 'JSON_GET(@email_variables, "time_ref")' },
+      { key: 'use60_intro', label: '60 Intro', column_type: 'formula', position: 15, formula_expression: 'JSON_GET(@email_variables, "use60_intro")' },
+      { key: 'pain_reframe', label: 'Pain Reframe', column_type: 'formula', position: 16, formula_expression: 'JSON_GET(@email_variables, "pain_reframe")' },
+      { key: 'capability_match', label: 'Capability', column_type: 'formula', position: 17, formula_expression: 'JSON_GET(@email_variables, "capability_match")' },
+
+      // Step 3: Write Email button (only shows when email_variables exist)
+      {
+        key: 'write_email_btn', label: 'Write Email', column_type: 'action', position: 18,
+        action_config: {
+          label: 'Write Email',
+          color: '#f59e0b',
+          actions: [{
+            type: 'run_prompt',
+            config: {
+              system_prompt: PROMPT_3_SYSTEM,
+              user_message_template: PROMPT_3_USER,
+              model: 'claude-sonnet-4-5-20250929',
+              provider: 'anthropic',
+              temperature: 0.6,
+              max_tokens: 1024,
+              output_column_key: 'email_draft',
+            },
+          }],
+          condition: {
+            column_key: 'email_variables',
+            operator: 'is_not_empty',
+          },
+        },
+      },
+
+      // Step 3: Email output
+      { key: 'email_draft', label: 'Email Draft', column_type: 'text', position: 19 },
     ]
 
     const columnInserts = columnDefs.map((col) => ({
@@ -241,7 +281,7 @@ serve(async (req: Request) => {
       .insert(columnInserts)
       .select('id, key')
 
-    if (colInsertError) throw colInsertError
+    if (colInsertError) { console.error('[setup-reengagement-demo] Column insert error:', JSON.stringify(colInsertError)); throw colInsertError }
 
     const colKeyToId: Record<string, string> = {}
     for (const c of createdColumns ?? []) {
@@ -251,7 +291,6 @@ serve(async (req: Request) => {
     // 4. Create rows and cells from meetings
     for (const meeting of meetings ?? []) {
       const contact = meeting.contact_id ? contactMap[meeting.contact_id] : null
-      const repName = meeting.owner_user_id ? userMap[meeting.owner_user_id] : 'Unknown'
 
       const { data: row, error: rowError } = await supabase
         .from('dynamic_table_rows')
@@ -265,9 +304,8 @@ serve(async (req: Request) => {
         first_name: contact?.first_name ?? 'Unknown',
         last_name: contact?.last_name ?? '',
         company: contact?.company ?? meeting.title ?? '',
-        meeting_date: meeting.meeting_date ?? '',
-        rep_name: repName,
-        transcript_text: (meeting.transcript_text ?? '').slice(0, 10000), // Cap at 10k chars
+        meeting_date: meeting.meeting_start ?? '',
+        transcript_text: (meeting.transcript_text ?? '').slice(0, 10000),
       }
 
       const cells = Object.entries(cellData)
@@ -298,9 +336,12 @@ serve(async (req: Request) => {
       { status: 200, headers: JSON_HEADERS },
     )
   } catch (error: any) {
-    console.error('[setup-reengagement-demo] Error:', error)
+    const msg = error?.message ?? String(error)
+    const detail = error?.details ?? error?.hint ?? ''
+    const code = error?.code ?? ''
+    console.error('[setup-reengagement-demo] Error:', msg, detail, code, JSON.stringify(error))
     return new Response(
-      JSON.stringify({ error: error.message ?? 'Internal error' }),
+      JSON.stringify({ error: msg, detail, code }),
       { status: 500, headers: JSON_HEADERS },
     )
   }

@@ -187,6 +187,12 @@ serve(async (req: Request) => {
       resultText = data.choices?.[0]?.message?.content ?? ''
     }
 
+    // Strip markdown code fences if the model wrapped the JSON
+    resultText = resultText.trim()
+    if (resultText.startsWith('```')) {
+      resultText = resultText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim()
+    }
+
     // 5. Write result to output column cell
     if (output_column_key) {
       const outputColumnId = columnKeyToId.get(output_column_key)

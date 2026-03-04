@@ -41,6 +41,7 @@ interface ColumnHeaderMenuProps {
   onEditEmailGeneration?: () => void;
   onRegenerateEmails?: () => void;
   onCreateCampaignFromSteps?: () => void;
+  onViewPrompt?: () => void;
   onRefreshAll?: () => void;
   isAutoEnrichEnabled?: boolean;
   onToggleAutoEnrich?: () => void;
@@ -72,6 +73,7 @@ export function ColumnHeaderMenu({
   onEditEmailGeneration,
   onRegenerateEmails,
   onCreateCampaignFromSteps,
+  onViewPrompt,
   onRefreshAll,
   isAutoEnrichEnabled,
   onToggleAutoEnrich,
@@ -384,12 +386,24 @@ export function ColumnHeaderMenu({
       )}
 
       {/* Edit button config (button columns only) */}
-      {column.column_type === 'button' && onEditButton && (
+      {(column.column_type === 'button' || column.column_type === 'action') && onEditButton && (
         <MenuItem
           icon={<Settings className="h-4 w-4" />}
           label="Edit button"
           onClick={() => {
             onEditButton();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* View prompt (action columns with run_prompt) */}
+      {(column.column_type === 'button' || column.column_type === 'action') && onViewPrompt && (
+        <MenuItem
+          icon={<Sparkles className="h-4 w-4" />}
+          label="View prompt"
+          onClick={() => {
+            onViewPrompt();
             onClose();
           }}
         />

@@ -116,6 +116,8 @@ const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePa
 const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
 const RelationshipGraphDemoPage = lazy(() => import('./pages/RelationshipGraphDemoPage'));
 const ProposalLineTunerPage = lazy(() => import('./pages/platform/ProposalLineTunerPage'));
+const DemoReengagementPage = lazy(() => import('./pages/demo/DemoReengagementPage'));
+const PipelineGalleryPage = lazy(() => import('./pages/ops/PipelineGalleryPage'));
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -559,6 +561,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/follow-ups/drafts" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><FollowUpDraftsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/ops/pipelines" element={<InternalRouteGuard><AppLayout><PipelineGalleryPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/ops/demo-reengagement" element={<InternalRouteGuard><AppLayout><DemoReengagementPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
                 {/* Unified profiles routes */}
                 <Route path="/profiles" element={<InternalRouteGuard><AppLayout><ProfilesPage /></AppLayout></InternalRouteGuard>} />
