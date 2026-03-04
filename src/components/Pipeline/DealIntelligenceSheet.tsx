@@ -40,6 +40,10 @@ import { DealTemperatureSummary } from '@/components/signals/DealTemperatureSumm
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
+import { DealMemoryTab } from '@/components/deal-memory/DealMemoryTab';
+import { DealCompetitorSection } from '@/components/intelligence/DealCompetitorSection';
+import { StakeholderMapPanel } from '@/components/deals/StakeholderMapPanel';
+import { StakeholderSummaryCard } from '@/components/deals/StakeholderSummaryCard';
 
 interface DealIntelligenceSheetProps {
   dealId: string | null;
@@ -191,6 +195,7 @@ export function DealIntelligenceSheet({
   const { formatMoney: fmtMoney } = useOrgMoney();
   const formatCurrency = (value: number | null) => fmtMoney(value ?? 0);
   const [chatMode, setChatMode] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'memory' | 'stakeholders'>('overview');
   const [chatInput, setChatInput] = useState('');
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
@@ -211,13 +216,19 @@ export function DealIntelligenceSheet({
     );
   }, [chatInput, showSlashMenu]);
 
-  // Reset chat mode when sheet closes or deal changes
+  // Reset chat mode and tab when sheet closes or deal changes
   useEffect(() => {
     if (!open) {
       setChatMode(false);
+      setActiveTab('overview');
       dealChatResetRef.current();
     }
   }, [open, _dealId]);
+
+  // Reset to overview tab when deal changes
+  useEffect(() => {
+    setActiveTab('overview');
+  }, [_dealId]);
 
   // Auto-scroll chat on new messages
   useEffect(() => {
@@ -615,7 +626,45 @@ export function DealIntelligenceSheet({
               </div>
             </SheetHeader>
 
-            <div className="px-5 pb-5 space-y-5">
+            {/* ---------------------------------------------------------------- */}
+            {/* Tab bar — Overview | Memory                                       */}
+            {/* ---------------------------------------------------------------- */}
+            <div className="flex border-b border-gray-200/80 dark:border-white/[0.06] px-5">
+              {([
+                { id: 'overview', label: 'Overview' },
+                { id: 'stakeholders', label: 'Stakeholders' },
+                { id: 'memory', label: 'Memory' },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`py-2.5 px-4 text-[12.5px] font-medium border-b-2 transition-all -mb-px ${
+                    activeTab === tab.id
+                      ? 'border-violet-500 text-violet-600 dark:text-violet-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* ---------------------------------------------------------------- */}
+            {/* Memory Tab                                                        */}
+            {/* ---------------------------------------------------------------- */}
+            {activeTab === 'memory' && (
+              <DealMemoryTab dealId={deal.id} />
+            )}
+
+            {activeTab === 'stakeholders' && (
+              <div className="px-5 py-5">
+                {activeOrgId && (
+                  <StakeholderMapPanel dealId={deal.id} orgId={activeOrgId} />
+                )}
+              </div>
+            )}
+
+            {activeTab === 'overview' && <div className="px-5 pb-5 space-y-5">
               {/* ---------------------------------------------------------------- */}
               {/* Stat Grid (2x2)                                                  */}
               {/* ---------------------------------------------------------------- */}
@@ -704,6 +753,19 @@ export function DealIntelligenceSheet({
                   </div>
                 </div>
               )}
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Stakeholder Summary                                               */}
+              {/* ---------------------------------------------------------------- */}
+              <div>
+                <h3 className="text-[10.5px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3 after:content-[''] after:flex-1 after:h-px after:bg-gray-200 dark:after:bg-white/[0.06]">
+                  Buying Committee
+                </h3>
+                <StakeholderSummaryCard
+                  dealId={deal.id}
+                  onOpen={() => setActiveTab('stakeholders')}
+                />
+              </div>
 
               {/* ---------------------------------------------------------------- */}
               {/* Copilot CTA                                                       */}
@@ -807,6 +869,19 @@ export function DealIntelligenceSheet({
               </div>
 
               {/* ---------------------------------------------------------------- */}
+              {/* Stakeholder Summary Card (STAKE-008)                             */}
+              {/* ---------------------------------------------------------------- */}
+              <div>
+                <h3 className="text-[10.5px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3 after:content-[''] after:flex-1 after:h-px after:bg-gray-200 dark:after:bg-white/[0.06]">
+                  Buying Committee
+                </h3>
+                <StakeholderSummaryCard
+                  dealId={deal.id}
+                  onOpen={() => setActiveTab('stakeholders')}
+                />
+              </div>
+
+              {/* ---------------------------------------------------------------- */}
               {/* Deal Temperature                                                  */}
               {/* ---------------------------------------------------------------- */}
               {activeOrgId && (
@@ -836,6 +911,11 @@ export function DealIntelligenceSheet({
                   />
                 </div>
               )}
+
+              {/* ---------------------------------------------------------------- */}
+              {/* Competitive Intel                                                 */}
+              {/* ---------------------------------------------------------------- */}
+              <DealCompetitorSection dealId={deal.id} />
 
               {/* ---------------------------------------------------------------- */}
               {/* Next Actions                                                      */}
@@ -941,7 +1021,7 @@ export function DealIntelligenceSheet({
 
               {/* Bottom spacer for sticky footer */}
               <div className="h-20" />
-            </div>
+            </div>}
           </div>
 
           {/* ---------------------------------------------------------------- */}
