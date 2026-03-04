@@ -91,6 +91,7 @@ import {
   CampaignsPage,
   OutreachAnalyticsPage,
   WinLossPage,
+  FollowUpDraftsPage,
   OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
   ProductProfileViewPage, ProductProfileEditPage,
   // Settings
@@ -98,7 +99,7 @@ import {
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, AutonomyDashboardPage, SearchResultsPage, CompetitiveIntelPage, CoachingDashboardPage, CoachingRepDetailPage, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
+  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, AutonomyDashboardPage, SearchResultsPage, CompetitiveIntelPage, CoachingDashboardPage, CoachingRepDetailPage, TeachSixtySection, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
   CreditPurchaseSuccess, CreditsSettingsPage, BillingSettingsPage, SalesGoalsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage, MeetingSettingsPage,
   OrgBilling,
@@ -550,6 +551,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/campaigns" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><CampaignsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/outreach/analytics" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><OutreachAnalyticsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/analytics/win-loss" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><WinLossPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                <Route path="/follow-ups/drafts" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><FollowUpDraftsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
@@ -681,6 +683,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/follow-ups" element={<AppLayout><FollowUpSettings /></AppLayout>} />
                 <Route path="/settings/proposal-workflows" element={<Navigate to="/settings/follow-ups" replace />} />
                 <Route path="/settings/coaching" element={<AppLayout><CoachingPreferences /></AppLayout>} />
+                <Route path="/settings/teach-sixty" element={<AppLayout><TeachSixtySection /></AppLayout>} />
                 <Route path="/meeting-analytics/:transcriptId" element={<AppLayout><MeetingAnalyticsPage /></AppLayout>} />
                 <Route path="/meeting-analytics" element={<AppLayout><MeetingAnalyticsPage /></AppLayout>} />
                 <Route path="/insights/team" element={<AppLayout><TeamAnalytics /></AppLayout>} />

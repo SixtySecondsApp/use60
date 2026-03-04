@@ -44,6 +44,7 @@ import { DealMemoryTab } from '@/components/deal-memory/DealMemoryTab';
 import { DealCompetitorSection } from '@/components/intelligence/DealCompetitorSection';
 import { StakeholderMapPanel } from '@/components/deals/StakeholderMapPanel';
 import { StakeholderSummaryCard } from '@/components/deals/StakeholderSummaryCard';
+import { MEDDICPanel } from '@/components/deals/MEDDICPanel';
 
 interface DealIntelligenceSheetProps {
   dealId: string | null;
@@ -195,7 +196,7 @@ export function DealIntelligenceSheet({
   const { formatMoney: fmtMoney } = useOrgMoney();
   const formatCurrency = (value: number | null) => fmtMoney(value ?? 0);
   const [chatMode, setChatMode] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'memory' | 'stakeholders'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'meddic' | 'memory' | 'stakeholders'>('overview');
   const [chatInput, setChatInput] = useState('');
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
@@ -629,9 +630,10 @@ export function DealIntelligenceSheet({
             {/* ---------------------------------------------------------------- */}
             {/* Tab bar — Overview | Memory                                       */}
             {/* ---------------------------------------------------------------- */}
-            <div className="flex border-b border-gray-200/80 dark:border-white/[0.06] px-5">
+            <div className="flex border-b border-gray-200/80 dark:border-white/[0.06] px-5 overflow-x-auto">
               {([
                 { id: 'overview', label: 'Overview' },
+                { id: 'meddic', label: 'MEDDIC' },
                 { id: 'stakeholders', label: 'Stakeholders' },
                 { id: 'memory', label: 'Memory' },
               ] as const).map((tab) => (
@@ -661,6 +663,23 @@ export function DealIntelligenceSheet({
                 {activeOrgId && (
                   <StakeholderMapPanel dealId={deal.id} orgId={activeOrgId} />
                 )}
+              </div>
+            )}
+
+            {/* ---------------------------------------------------------------- */}
+            {/* MEDDIC Tab (MEDDIC-006)                                          */}
+            {/* ---------------------------------------------------------------- */}
+            {activeTab === 'meddic' && (
+              <div className="px-5 py-5">
+                <div className="mb-3">
+                  <h3 className="text-[10.5px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    MEDDIC Qualification
+                  </h3>
+                  <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-1">
+                    Auto-populated from meeting transcripts. Click any field to edit.
+                  </p>
+                </div>
+                <MEDDICPanel dealId={deal.id} />
               </div>
             )}
 
@@ -866,6 +885,21 @@ export function DealIntelligenceSheet({
                     );
                   })()}
                 </div>
+              </div>
+
+              {/* ---------------------------------------------------------------- */}
+              {/* MEDDIC Summary (MEDDIC-006)                                      */}
+              {/* ---------------------------------------------------------------- */}
+              <div>
+                <h3
+                  className="text-[10.5px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3 after:content-[''] after:flex-1 after:h-px after:bg-gray-200 dark:after:bg-white/[0.06] cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  onClick={() => setActiveTab('meddic')}
+                  title="Open MEDDIC tab"
+                >
+                  MEDDIC
+                  <ChevronRight className="w-3 h-3 ml-auto opacity-40" />
+                </h3>
+                <MEDDICPanel dealId={deal.id} />
               </div>
 
               {/* ---------------------------------------------------------------- */}
