@@ -222,6 +222,7 @@ export const InstantlySettings = lazyWithRetry(() => import('@/pages/settings/In
 export const SmartListeningSettings = lazyWithRetry(() => import('@/pages/settings/SmartListeningSettings'));
 export const CreditPurchaseSuccess = lazyWithRetry(() => import('@/pages/settings/CreditPurchaseSuccess'));
 export const CreditsSettingsPage = lazyWithRetry(() => import('@/pages/settings/CreditsSettingsPage'));
+export const ModelPreferencesPage = lazyWithRetry(() => import('@/pages/settings/ModelPreferencesPage'));
 export const BillingSettingsPage = lazyWithRetry(() => import('@/pages/settings/BillingSettingsPage'));
 export const SalesGoalsPage = lazyWithRetry(() => import('@/pages/settings/SalesGoalsPage'));
 // Integration settings pages (dedicated settings for each integration)
