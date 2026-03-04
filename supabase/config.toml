@@ -397,3 +397,8 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/stripe-webhook/index.ts"
+
+# Support ticket email - called from browser after ticket creation (CORS preflight must pass)
+# Handles auth internally; verify_jwt = false avoids ES256 JWT issue on staging
+[functions.send-support-ticket-email]
+verify_jwt = false

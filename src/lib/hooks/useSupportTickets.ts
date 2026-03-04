@@ -44,6 +44,7 @@ export function useSupportTickets(statusFilter: TicketStatusFilter = 'all', cate
       let query = supabase
         .from('support_tickets')
         .select('id, org_id, user_id, subject, description, category, priority, status, assigned_to, created_at, updated_at, resolved_at')
+        .eq('user_id', user!.id)
         .order('created_at', { ascending: false });
 
       if (statusFilter === 'open') {

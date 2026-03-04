@@ -1,7 +1,8 @@
 import { useRef, useEffect } from 'react';
-import { Bot, User, Loader2 } from 'lucide-react';
+import { Shield, User, Loader2 } from 'lucide-react';
 import { useSupportMessages, type SupportMessage } from '@/lib/hooks/useSupportMessages';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useUserProfileById } from '@/lib/hooks/useUserProfile';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -11,9 +12,14 @@ interface TicketConversationProps {
 
 function MessageBubble({ message }: { message: SupportMessage }) {
   const { user } = useAuth();
+  const { data: userProfile } = useUserProfileById(user?.id);
   const isOwn = message.sender_id === user?.id && message.sender_type === 'user';
   const isAgent = message.sender_type === 'agent';
   const isSystem = message.sender_type === 'system';
+
+  const initials = userProfile
+    ? `${userProfile.first_name?.[0] ?? ''}${userProfile.last_name?.[0] ?? ''}`.toUpperCase() || '?'
+    : '?';
 
   if (isSystem) {
     return (
@@ -35,7 +41,7 @@ function MessageBubble({ message }: { message: SupportMessage }) {
             : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
         )}>
           {isAgent ? (
-            <Bot className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
+            <Shield className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
           ) : (
             <User className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
           )}
@@ -45,7 +51,7 @@ function MessageBubble({ message }: { message: SupportMessage }) {
       <div className={cn('max-w-[75%] space-y-1', isOwn ? 'items-end' : 'items-start')}>
         {!isOwn && (
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium px-1">
-            {isAgent ? 'Support Agent' : 'You'}
+            {isAgent ? 'System Administrator' : 'You'}
           </p>
         )}
         <div
@@ -64,9 +70,17 @@ function MessageBubble({ message }: { message: SupportMessage }) {
       </div>
 
       {isOwn && (
-        <div className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 h-fit mt-0.5 shrink-0">
-          <User className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
-        </div>
+        userProfile?.avatar_url ? (
+          <img
+            src={userProfile.avatar_url}
+            alt={initials}
+            className="w-7 h-7 rounded-lg object-cover mt-0.5 shrink-0 border border-gray-200 dark:border-gray-700"
+          />
+        ) : (
+          <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 h-fit mt-0.5 shrink-0 flex items-center justify-center">
+            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">{initials}</span>
+          </div>
+        )
       )}
     </div>
   );
