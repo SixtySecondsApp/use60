@@ -126,6 +126,7 @@ export const Onboarding = lazyWithRetry(() => import('@/pages/onboarding'));
 // ============================================================
 // CRM and ElegantCRM removed — replaced by Ops
 export const PipelinePage = lazyWithRetry(() => import('@/pages/PipelinePage').then(module => ({ default: module.PipelinePage })));
+export const ForecastPage = lazyWithRetry(() => import('@/pages/ForecastPage'));
 export const FormDisplay = lazyWithRetry(() => import('@/pages/FormDisplay'));
 export const CompaniesTable = lazyWithRetry(() => import('@/pages/companies/CompaniesTable'));
 export const CompanyProfile = lazyWithRetry(() => import('@/pages/companies/CompanyProfile'));
@@ -156,6 +157,9 @@ export const FreepikFlow = lazyWithRetry(() => import('@/components/workflows/Fr
 export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m => ({ default: m.Copilot })));
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const LandingPageBuilderPage = lazyWithRetry(() => import('@/pages/LandingPageBuilderPage'));
+export const CampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/CampaignsPage'));
+export const OutreachAnalyticsPage = lazyWithRetry(() => import('@/pages/OutreachAnalyticsPage'));
+export const WinLossPage = lazyWithRetry(() => import('@/pages/WinLossPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
 export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));
@@ -197,6 +201,11 @@ export const LogoSettings = lazyWithRetry(() => import('@/pages/settings/LogoSet
 export const SlackSettings = lazyWithRetry(() => import('@/pages/settings/SlackSettings'));
 export const ProactiveAgentSettings = lazyWithRetry(() => import('@/pages/settings/ProactiveAgentSettings'));
 export const AutonomySettingsPage = lazyWithRetry(() => import('@/pages/settings/AutonomySettingsPage'));
+export const AutonomyDashboardPage = lazyWithRetry(() => import('@/pages/AutonomyDashboardPage'));
+export const SearchResultsPage = lazyWithRetry(() => import('@/pages/SearchResultsPage'));
+export const CompetitiveIntelPage = lazyWithRetry(() => import('@/pages/CompetitiveIntelPage'));
+export const CoachingDashboardPage = lazyWithRetry(() => import('@/pages/CoachingDashboardPage'));
+export const CoachingRepDetailPage = lazyWithRetry(() => import('@/pages/CoachingRepDetailPage'));
 export const SalesMethodologySettings = lazyWithRetry(() => import('@/pages/settings/SalesMethodologySettings'));
 export const CRMFieldMappingSettings = lazyWithRetry(() => import('@/pages/settings/CRMFieldMappingSettings'));
 export const CustomSOPBuilderPage = lazyWithRetry(() => import('@/pages/settings/CustomSOPBuilderPage'));

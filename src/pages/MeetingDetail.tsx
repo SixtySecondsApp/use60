@@ -23,6 +23,9 @@ import { ShareMeetingModal } from '@/components/meetings/ShareMeetingModal';
 import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary';
 import { useActivationTracking } from '@/lib/hooks/useActivationTracking';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
+import { InternalMeetingTypeBadge } from '@/components/meetings/InternalMeetingTypeBadge';
+import { PrepBriefCard } from '@/components/meetings/PrepBriefCard';
+import { useMeetingPrepBrief } from '@/lib/hooks/useMeetingPrepBrief';
 
 // Processing status type for real-time UI updates
 type ProcessingStatus = 'pending' | 'processing' | 'complete' | 'failed';
@@ -234,6 +237,9 @@ export function MeetingDetail() {
   const [voiceRecordingData, setVoiceRecordingData] = useState<VoiceRecordingData | null>(null);
   const [voiceCurrentTime, setVoiceCurrentTime] = useState(0);
   const [speakerAvatarMap, setSpeakerAvatarMap] = useState<Map<string, string>>(new Map());
+
+  // IMP-UI-002: Meeting prep brief (internal meetings)
+  const { data: prepBrief } = useMeetingPrepBrief(id ?? null);
 
   // Activation tracking for North Star metric
   const { trackFirstSummaryViewed } = useActivationTracking();
@@ -813,9 +819,12 @@ export function MeetingDetail() {
         </div>
 
         <div className="flex flex-wrap gap-2 sm:flex-nowrap sm:flex-shrink-0">
-          {meeting.meeting_type && (
-            <Badge 
-              variant="outline" 
+          {/* IMP-UI-001: Internal meeting type badge */}
+          {prepBrief ? (
+            <InternalMeetingTypeBadge meetingType={prepBrief.meeting_type} isInternal />
+          ) : meeting.meeting_type && (
+            <Badge
+              variant="outline"
               className="capitalize bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-blue-200 dark:border-blue-500/20"
             >
               {meeting.meeting_type.replace('_', ' ')}
@@ -1266,6 +1275,11 @@ export function MeetingDetail() {
 
         {/* Right Column - Sidebar */}
         <div className="lg:col-span-4 space-y-3 sm:space-y-4 min-w-0">
+          {/* IMP-UI-002: Prep brief card for internal meetings */}
+          {prepBrief && (
+            <PrepBriefCard brief={prepBrief} />
+          )}
+
           {/* Quick Actions */}
           {meeting && (
             <QuickActionsCard
