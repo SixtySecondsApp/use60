@@ -337,7 +337,7 @@ export function SupportAgentDashboard() {
       </div>
 
       {openTicket && (
-        <TicketDetail ticket={openTicket} open={!!openTicket} onClose={() => setOpenTicket(null)} />
+        <TicketDetail ticket={openTicket} open={!!openTicket} onClose={() => setOpenTicket(null)} isAdmin />
       )}
     </div>
   );
