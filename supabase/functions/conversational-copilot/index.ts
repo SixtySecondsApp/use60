@@ -19,6 +19,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { ModelResolver } from '../_shared/ai/modelResolver.ts';
 import { assembleContext } from '../_shared/slack-copilot/contextAssembler.ts';
 import { getOrCreateThread, loadThreadHistory, saveMessage, appendTurn, trackIntentAndCredits, getActiveEntities, updateActiveEntities } from '../_shared/slack-copilot/threadMemory.ts';
 import { resolveConversationalEntities } from '../_shared/slack-copilot/entityResolver.ts';
@@ -369,7 +370,10 @@ serve(async (req: Request) => {
       ?? Deno.env.get('ANTHROPIC_API_KEY')
       ?? null;
 
-    const modelId = 'claude-haiku-4-5-20251001';
+    // Resolve model via routing layer (fallback to Haiku if resolver fails)
+    const _resolver = new ModelResolver(supabase);
+    const _resolved = await _resolver.resolve(orgId, 'copilot_chat').catch(() => null);
+    const modelId = (_resolved?.provider === 'anthropic' ? _resolved.modelId : null) ?? 'claude-haiku-4-5-20251001';
 
     // ---- Intent classification ----------------------------------------------
     const intent = await classifyIntent(message, orgId, user.id, session_id, threadHistory);
