@@ -19,11 +19,20 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path TO 'public'
 AS $$
 DECLARE
   v_start_date TIMESTAMPTZ;
   v_half_date TIMESTAMPTZ;
 BEGIN
+  -- Verify caller belongs to the org
+  IF NOT EXISTS (
+    SELECT 1 FROM organization_memberships
+    WHERE org_id = p_org_id AND user_id = auth.uid()
+  ) THEN
+    RETURN;
+  END IF;
+
   -- Compute date range
   v_start_date := CASE p_period
     WHEN '7d'   THEN NOW() - INTERVAL '7 days'
@@ -103,8 +112,17 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path TO 'public'
 AS $$
 BEGIN
+  -- Verify caller belongs to the org
+  IF NOT EXISTS (
+    SELECT 1 FROM organization_memberships
+    WHERE org_id = p_org_id AND user_id = auth.uid()
+  ) THEN
+    RETURN;
+  END IF;
+
   RETURN QUERY
   SELECT
     oi.id,

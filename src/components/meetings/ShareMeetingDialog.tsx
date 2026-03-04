@@ -130,6 +130,16 @@ export function ShareMeetingDialog({
       const token = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
       const exp = expiresAt(expiry);
 
+      // Hash password client-side before storing
+      let hashedPassword: string | null = null;
+      if (accessLevel === 'password' && password) {
+        const encoded = new TextEncoder().encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+        hashedPassword = Array.from(new Uint8Array(hashBuffer))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+      }
+
       const { error } = await supabase
         .from('meeting_shares')
         .upsert(
@@ -138,7 +148,7 @@ export function ShareMeetingDialog({
             org_id: activeOrgId,
             token,
             access_level: accessLevel,
-            password_hash: accessLevel === 'password' ? password : null,
+            password_hash: hashedPassword,
             expires_at: exp,
             include_summary: includeSummary,
             include_transcript: includeTranscript,

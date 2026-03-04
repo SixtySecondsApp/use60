@@ -51,7 +51,7 @@ ALTER TABLE scheduled_emails ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "scheduled_emails_select" ON scheduled_emails
   FOR SELECT USING (
     org_id IN (
-      SELECT org_id FROM org_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     )
   );
 
@@ -60,7 +60,7 @@ CREATE POLICY "scheduled_emails_insert" ON scheduled_emails
   FOR INSERT WITH CHECK (
     user_id = auth.uid()
     AND org_id IN (
-      SELECT org_id FROM org_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     )
   );
 
@@ -69,7 +69,7 @@ CREATE POLICY "scheduled_emails_update" ON scheduled_emails
   FOR UPDATE USING (
     user_id = auth.uid()
     AND org_id IN (
-      SELECT org_id FROM org_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     )
   );
 
@@ -78,7 +78,7 @@ CREATE POLICY "scheduled_emails_delete" ON scheduled_emails
   FOR DELETE USING (
     user_id = auth.uid()
     AND org_id IN (
-      SELECT org_id FROM org_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     )
   );
 
@@ -133,7 +133,7 @@ ALTER TABLE follow_up_drafts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "follow_up_drafts_select" ON follow_up_drafts
   FOR SELECT USING (
     org_id IN (
-      SELECT org_id FROM org_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     )
   );
 
@@ -141,14 +141,14 @@ CREATE POLICY "follow_up_drafts_insert" ON follow_up_drafts
   FOR INSERT WITH CHECK (
     user_id = auth.uid()
     AND org_id IN (
-      SELECT org_id FROM org_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     )
   );
 
 CREATE POLICY "follow_up_drafts_update" ON follow_up_drafts
   FOR UPDATE USING (
     org_id IN (
-      SELECT org_id FROM org_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     )
   );
 
@@ -156,6 +156,6 @@ CREATE POLICY "follow_up_drafts_delete" ON follow_up_drafts
   FOR DELETE USING (
     user_id = auth.uid()
     AND org_id IN (
-      SELECT org_id FROM org_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     )
   );
