@@ -830,6 +830,22 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
 
   // Button / Action column
   if (columnType === 'button' || columnType === 'action') {
+    // Conditional visibility: hide button if condition is not met
+    if (buttonConfig?.condition) {
+      const cond = buttonConfig.condition;
+      const cellVal = rowCellValues?.[cond.column_key] ?? '';
+      let conditionMet = true;
+      switch (cond.operator) {
+        case 'equals': conditionMet = cellVal === cond.value; break;
+        case 'not_equals': conditionMet = cellVal !== cond.value; break;
+        case 'contains': conditionMet = cellVal.includes(cond.value ?? ''); break;
+        case 'is_empty': conditionMet = !cellVal; break;
+        case 'is_not_empty': conditionMet = !!cellVal; break;
+      }
+      if (!conditionMet) {
+        return <div className="w-full h-full" />;
+      }
+    }
     const isRunning = cell.status === 'pending' || cell.status === 'running';
     const isDone = cell.status === 'complete';
     const isFailed = cell.status === 'failed';

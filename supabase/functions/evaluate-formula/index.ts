@@ -203,6 +203,29 @@ function evaluateExpression(expr: string, cellValues: Map<string, string>): stri
     return parts.length > 0 ? parts.join('') : ''
   }
 
+  // Handle JSON_GET(@column, "key.path")
+  if (trimmed.toUpperCase().startsWith('JSON_GET(') && trimmed.endsWith(')')) {
+    const inner = trimmed.slice(9, -1)
+    const args = splitArgs(inner)
+    if (args.length !== 2) return 'ERR'
+    const jsonStr = stripQuotes(args[0].trim()).replace(/\x00N\/A\x00/g, '')
+    const keyPath = stripQuotes(args[1].trim())
+    if (!jsonStr || !keyPath) return ''
+    try {
+      const obj = JSON.parse(jsonStr)
+      const parts = keyPath.split('.')
+      let current: unknown = obj
+      for (const part of parts) {
+        if (current == null || typeof current !== 'object') return ''
+        current = (current as Record<string, unknown>)[part]
+      }
+      if (current == null) return ''
+      return typeof current === 'object' ? JSON.stringify(current) : String(current)
+    } catch {
+      return ''
+    }
+  }
+
   // Handle IF()
   if (trimmed.toUpperCase().startsWith('IF(') && trimmed.endsWith(')')) {
     const inner = trimmed.slice(3, -1)

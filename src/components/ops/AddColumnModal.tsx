@@ -75,7 +75,29 @@ function evaluateFormulaPreview(expression: string, sampleValues: Record<string,
       return val !== undefined && val !== '' ? `"${val}"` : '""';
     });
 
-    // Step 2: Handle CONCAT(...) — extract args, strip quotes, join (skip empty)
+    // Step 2a: Handle JSON_GET(@col, "key.path")
+    expr = expr.replace(/JSON_GET\s*\(([^)]*)\)/gi, (_, argsStr: string) => {
+      const args = splitArgs(argsStr);
+      if (args.length !== 2) return '""';
+      const jsonStr = stripQuotes(args[0].trim());
+      const keyPath = stripQuotes(args[1].trim());
+      if (!jsonStr || !keyPath) return '""';
+      try {
+        const obj = JSON.parse(jsonStr);
+        const parts = keyPath.split('.');
+        let current: unknown = obj;
+        for (const part of parts) {
+          if (current == null || typeof current !== 'object') return '""';
+          current = (current as Record<string, unknown>)[part];
+        }
+        if (current == null) return '""';
+        return `"${typeof current === 'object' ? JSON.stringify(current) : String(current)}"`;
+      } catch {
+        return '""';
+      }
+    });
+
+    // Step 2b: Handle CONCAT(...) — extract args, strip quotes, join (skip empty)
     expr = expr.replace(/CONCAT\s*\(([^)]*)\)/gi, (_, argsStr: string) => {
       const args = splitArgs(argsStr);
       const resolved = args.map(stripQuotes).filter((v) => v !== '' && v !== 'N/A');

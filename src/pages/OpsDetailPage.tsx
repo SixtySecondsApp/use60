@@ -31,6 +31,7 @@ import {
   Shield,
   MoreHorizontal,
   Inbox,
+  Play,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -239,6 +240,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [isLoadingLists, setIsLoadingLists] = useState(false);
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
+
+  // ---- Run All Pipeline ----
+  const [isRunningPipeline, setIsRunningPipeline] = useState(false);
+  const [pipelineProgress, setPipelineProgress] = useState('');
 
   // ---- Campaign wizard ----
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
@@ -452,6 +457,90 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
   // ---- Button/Action execution ----
   const { executeButton, executeSingleAction } = useActionExecution(tableId);
+
+  // ---- Run All Pipeline handler ----
+  const handleRunAllPipeline = useCallback(async () => {
+    if (!tableId || !rows.length || !columns.length) return;
+
+    // Find button columns with run_prompt actions, ordered by position
+    const promptButtonCols = columns
+      .filter((c) => (c.column_type === 'button') && c.action_config)
+      .filter((c) => {
+        const cfg = c.action_config as any;
+        return cfg?.actions?.some((a: any) => a.type === 'run_prompt');
+      })
+      .sort((a, b) => a.position - b.position);
+
+    if (promptButtonCols.length === 0) {
+      toast.error('No AI prompt buttons found in this table');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Run AI pipeline on ${rows.length} rows?\n\n${promptButtonCols.map((c, i) => `Step ${i + 1}: ${(c.action_config as any)?.label || c.label}`).join('\n')}`
+    );
+    if (!confirmed) return;
+
+    setIsRunningPipeline(true);
+
+    try {
+      for (let stepIdx = 0; stepIdx < promptButtonCols.length; stepIdx++) {
+        const col = promptButtonCols[stepIdx];
+        const buttonConfig = col.action_config as any;
+        const promptAction = buttonConfig?.actions?.find((a: any) => a.type === 'run_prompt');
+        if (!promptAction) continue;
+
+        const outputKey = promptAction.config?.output_column_key;
+
+        for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+          const row = rows[rowIdx];
+          const rowCellValues: Record<string, string> = {};
+          if (row.cells) {
+            for (const [key, c] of Object.entries(row.cells)) {
+              if ((c as any).value) rowCellValues[key] = (c as any).value;
+            }
+          }
+
+          // Skip if output already has a value
+          if (outputKey && rowCellValues[outputKey]) continue;
+
+          // Check condition
+          if (buttonConfig.condition) {
+            const cond = buttonConfig.condition;
+            const cellVal = rowCellValues[cond.column_key] ?? '';
+            let condMet = true;
+            switch (cond.operator) {
+              case 'equals': condMet = cellVal === cond.value; break;
+              case 'not_equals': condMet = cellVal !== cond.value; break;
+              case 'contains': condMet = cellVal.includes(cond.value ?? ''); break;
+              case 'is_empty': condMet = !cellVal; break;
+              case 'is_not_empty': condMet = !!cellVal; break;
+            }
+            if (!condMet) continue;
+          }
+
+          setPipelineProgress(`Step ${stepIdx + 1}/${promptButtonCols.length} — Row ${rowIdx + 1}/${rows.length}`);
+
+          try {
+            const { data, error } = await supabase.functions.invoke('run-prompt', {
+              body: { table_id: tableId, row_id: row.id, action_config: promptAction.config },
+            });
+            if (error) console.error(`Pipeline error row ${rowIdx + 1}:`, error);
+          } catch (err) {
+            console.error(`Pipeline error row ${rowIdx + 1}:`, err);
+          }
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      toast.success('Pipeline complete');
+    } catch (err: any) {
+      toast.error(err.message || 'Pipeline failed');
+    } finally {
+      setIsRunningPipeline(false);
+      setPipelineProgress('');
+    }
+  }, [tableId, rows, columns, queryClient]);
 
   // ---- Derived data ----
 
@@ -2604,6 +2693,22 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Enriching
               </div>
+            )}
+            {/* Run All Pipeline */}
+            {columns.some((c) => c.column_type === 'button' && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
+              <button
+                onClick={handleRunAllPipeline}
+                disabled={isRunningPipeline}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-900/40 hover:text-emerald-200 disabled:opacity-50"
+                title={pipelineProgress || 'Run AI pipeline on all rows'}
+              >
+                {isRunningPipeline ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+                {isRunningPipeline ? pipelineProgress || 'Running...' : 'Run All'}
+              </button>
             )}
             {/* Add Row */}
             <button
