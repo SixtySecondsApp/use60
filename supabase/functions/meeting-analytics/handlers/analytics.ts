@@ -4,11 +4,11 @@
  */
 
 import { getRailwayDb } from '../db.ts';
-import { successResponse, errorResponse } from '../helpers.ts';
+import { successResponse, errorResponse, buildOrgFilter } from '../helpers.ts';
 
 export async function handleTalkTime(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
-  const includeDemo = url.searchParams.get('includeDemo') !== 'false';
+  const includeDemo = url.searchParams.get('includeDemo') === 'true';
   const demoOnly = url.searchParams.get('demoOnly') === 'true';
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
 
@@ -19,7 +19,7 @@ export async function handleTalkTime(req: Request, orgId: string): Promise<Respo
   const db = getRailwayDb();
   const transcripts = await db.unsafe(
     `SELECT t.id, t.title, t.full_text, t.created_at
-     FROM transcripts t WHERE t.org_id = $1 ${demoCondition}
+     FROM transcripts t WHERE ${buildOrgFilter(1)} ${demoCondition}
      ORDER BY t.created_at DESC LIMIT $2`,
     [orgId, limit]
   );
@@ -64,7 +64,7 @@ export async function handleTalkTime(req: Request, orgId: string): Promise<Respo
 
 export async function handleConversion(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
-  const includeDemo = url.searchParams.get('includeDemo') !== 'false';
+  const includeDemo = url.searchParams.get('includeDemo') === 'true';
   const demoOnly = url.searchParams.get('demoOnly') === 'true';
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
 
@@ -75,7 +75,7 @@ export async function handleConversion(req: Request, orgId: string): Promise<Res
   const db = getRailwayDb();
   const transcripts = await db.unsafe(
     `SELECT t.id, t.title, t.created_at
-     FROM transcripts t WHERE t.org_id = $1 ${demoCondition}
+     FROM transcripts t WHERE ${buildOrgFilter(1)} ${demoCondition}
      ORDER BY t.created_at DESC LIMIT $2`,
     [orgId, limit]
   );
@@ -121,7 +121,7 @@ export async function handleConversion(req: Request, orgId: string): Promise<Res
 
 export async function handleSentimentTrends(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
-  const includeDemo = url.searchParams.get('includeDemo') !== 'false';
+  const includeDemo = url.searchParams.get('includeDemo') === 'true';
   const demoOnly = url.searchParams.get('demoOnly') === 'true';
   const days = Math.min(parseInt(url.searchParams.get('days') || '30'), 90);
 
@@ -136,7 +136,7 @@ export async function handleSentimentTrends(req: Request, orgId: string): Promis
     `SELECT sa.sentiment, sa.positive_score, sa.negative_score, sa.neutral_score,
             t.id as transcript_id, t.title, t.created_at
      FROM sentiment_analysis sa
-     JOIN transcripts t ON t.id = sa.transcript_id AND t.org_id = $1
+     JOIN transcripts t ON t.id = sa.transcript_id AND ${buildOrgFilter(1)}
      WHERE sa.segment_id IS NULL AND t.created_at >= $2 ${demoCondition}
      ORDER BY t.created_at ASC`,
     [orgId, since]

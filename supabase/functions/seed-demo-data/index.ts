@@ -30,6 +30,9 @@ declare const Deno: { env: { get(key: string): string | undefined } };
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+/** Well-known org_id shared by all demo transcripts in Railway. */
+const SHARED_DEMO_ORG_ID = "00000000-0000-0000-0000-000000000060";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -153,6 +156,7 @@ serve(async (req: Request) => {
                     meeting_start: m.meeting_start,
                     duration_minutes: m.duration_minutes,
                     owner_user_id: m.owner_user_id,
+                    org_id: SHARED_DEMO_ORG_ID,
                   },
                 }),
               },
@@ -1283,6 +1287,7 @@ serve(async (req: Request) => {
                     meeting_start: meetingRecord.meeting_start,
                     duration_minutes: meetingRecord.duration_minutes,
                     owner_user_id: meetingRecord.owner_user_id,
+                    org_id: SHARED_DEMO_ORG_ID,
                   },
                 }),
               },

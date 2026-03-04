@@ -17,6 +17,7 @@ import {
   handleGetReportHistory,
   handleGetReport,
   handleTestSlack,
+  handleTestEmail,
 } from './handlers/reports.ts';
 import {
   handleGetNotificationSettings,
@@ -30,6 +31,7 @@ import {
   handleSentimentTrends,
 } from './handlers/analytics.ts';
 import { handleBackfillOrgIds } from './handlers/backfillOrgIds.ts';
+import { handleGetIndexStatus } from './handlers/indexStatus.ts';
 import { successResponse, errorResponse, getApiPath, jsonResponse } from './helpers.ts';
 import { checkRailwayConnection } from './db.ts';
 
@@ -158,6 +160,9 @@ export async function routeRequest(req: Request): Promise<Response> {
   if (apiPath === 'reports/test/slack' && req.method === 'POST') {
     return handleTestSlack(req, orgId);
   }
+  if (apiPath === 'reports/test/email' && req.method === 'POST') {
+    return handleTestEmail(req, orgId);
+  }
 
   // --- Notification Settings ---
   if (apiPath === 'notifications/settings' && req.method === 'GET') {
@@ -184,6 +189,11 @@ export async function routeRequest(req: Request): Promise<Response> {
   }
   if (apiPath === 'analytics/sentiment-trends' && req.method === 'GET') {
     return handleSentimentTrends(req, orgId);
+  }
+
+  // --- Index Status ---
+  if (apiPath === 'index/status' && req.method === 'GET') {
+    return handleGetIndexStatus(req, orgId);
   }
 
   return errorResponse(`Cannot ${req.method} ${path}`, 404, req);

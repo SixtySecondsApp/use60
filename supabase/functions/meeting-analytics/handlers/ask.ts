@@ -132,7 +132,7 @@ export async function handleAsk(req: Request, orgId: string, userId?: string): P
     let transcriptSql = `
       SELECT id, title, full_text, created_at, is_demo
       FROM transcripts
-      WHERE org_id = $1
+      WHERE (org_id = $1 OR org_id = '00000000-0000-0000-0000-000000000060')
     `;
     const transcriptParams: unknown[] = [orgId];
 
