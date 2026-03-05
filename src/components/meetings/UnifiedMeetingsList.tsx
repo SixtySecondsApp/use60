@@ -265,7 +265,7 @@ const UnifiedMeetingsList: React.FC = () => {
   const [scope, setScope] = useState<'me' | 'team'>('me')
 
   // Infinite scroll
-  const ITEMS_PER_BATCH = 30
+  const ITEMS_PER_BATCH = 12
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
 
@@ -355,7 +355,7 @@ const UnifiedMeetingsList: React.FC = () => {
           setVisibleCount((prev) => prev + ITEMS_PER_BATCH)
         }
       },
-      { rootMargin: '200px' }
+      { rootMargin: '600px' }
     )
     observer.observe(el)
     return () => observer.disconnect()
@@ -831,9 +831,9 @@ const UnifiedMeetingsList: React.FC = () => {
                     return (
                     <motion.tr
                       key={`${item.sourceTable}-${item.id}`}
-                      initial={{ opacity: 0, y: 20 }}
+                      initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: index * 0.03 }}
+                      transition={{ duration: 0.2, delay: index < ITEMS_PER_BATCH ? index * 0.02 : 0 }}
                       className={cn(
                         "border-gray-200/50 dark:border-gray-700/30 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer group",
                         isDemoRow && "border-l-2 border-l-violet-500"
@@ -927,9 +927,9 @@ const UnifiedMeetingsList: React.FC = () => {
               return (
               <motion.div
                 key={`${item.sourceTable}-${item.id}`}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.03 }}
+                transition={{ duration: 0.2, delay: index < ITEMS_PER_BATCH ? index * 0.02 : 0 }}
                 whileHover={{ y: -2 }}
                 className={cn(
                   "bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-3 sm:p-5 border transition-all duration-300 cursor-pointer group w-full",
@@ -1060,7 +1060,7 @@ const UnifiedMeetingsList: React.FC = () => {
         <>
           {view === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 w-full">
-              {Array.from({ length: Math.min(allItems.length - items.length, 6) }).map((_, i) => (
+              {Array.from({ length: Math.min(allItems.length - items.length, 3) }).map((_, i) => (
                 <MeetingCardSkeleton key={`skel-${i}`} />
               ))}
             </div>
@@ -1069,7 +1069,7 @@ const UnifiedMeetingsList: React.FC = () => {
               <div className="w-full overflow-x-auto">
                 <Table>
                   <TableBody>
-                    {Array.from({ length: Math.min(allItems.length - items.length, 6) }).map((_, i) => (
+                    {Array.from({ length: Math.min(allItems.length - items.length, 4) }).map((_, i) => (
                       <MeetingRowSkeleton key={`skel-${i}`} />
                     ))}
                   </TableBody>
