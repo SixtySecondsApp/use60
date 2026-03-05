@@ -232,7 +232,7 @@ export function useFathomIntegration() {
       }
 
       // Per-user OAuth: no org_id needed, Edge Function uses user_id from token
-      const response = await supabase.functions.invoke('fathom-oauth-initiate', {
+      const response = await supabase.functions.invoke('oauth-initiate/fathom', {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },

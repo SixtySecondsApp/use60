@@ -973,7 +973,7 @@ export default function BullhornSettings() {
         return;
       }
 
-      const resp = await supabase.functions.invoke('bullhorn-oauth-initiate', {
+      const resp = await supabase.functions.invoke('oauth-initiate/bullhorn', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',

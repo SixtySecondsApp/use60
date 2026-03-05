@@ -9,6 +9,29 @@
 | Tier 3 — Differentiators | 5 | 36 | Pending |
 | **Total** | **22** | **157** | **0 complete** |
 
+## Active Feature: Edge Function Consolidation (EFC)
+
+**Goal**: Reduce edge function count from ~500 → ~420 (save ~80 functions)
+**Stories**: 20 (EFC-001 through EFC-020)
+**Estimated**: 6-8 hours total
+
+| Phase | Stories | Functions Saved | Status |
+|-------|---------|----------------|--------|
+| 1: Delete orphaned/test/demo/deprecated | EFC-001, 002, 003 | 37 | Complete |
+| 2: API v1 consolidation | EFC-004, 005 | 5 | Complete |
+| 3: OAuth consolidation | EFC-006, 007, 008, 009, 020 | 8 | Complete |
+| 4: Polling consolidation | EFC-010, 011 | 5 | Complete |
+| 5: Cleanup + backfill consolidation | EFC-012, 013, 014, 015 | 11 | Complete |
+| 6: Webhook consolidation | EFC-016, 017, 018, 019 | 12 | Complete |
+
+**Parallel Groups**:
+- Phase 1: EFC-001 + EFC-002 + EFC-003 (all independent)
+- Phase 3: EFC-006 + EFC-008 (both create new functions, independent)
+- Phase 5: EFC-012 + EFC-014 (cleanup + backfill, independent)
+- Phase 6: EFC-016 + EFC-017 + EFC-018 (all three webhook routers, independent)
+
+---
+
 ## Codebase Patterns
 
 - Edge function calls: `supabase.functions.invoke('name', { body: { action, org_id, ... } })`

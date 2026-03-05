@@ -140,7 +140,7 @@ export function StandardTablesGallery({ onTableClick, existingTables }: Standard
     if (!silent) setBackfilling(true);
     try {
       await supabase.auth.refreshSession();
-      const { data, error } = await supabase.functions.invoke('backfill-standard-ops-tables');
+      const { data, error } = await supabase.functions.invoke('backfill-runner/standard-ops-tables');
 
       if (error) {
         // Extract actual error body from FunctionsHttpError

@@ -36,7 +36,7 @@ export const EXTERNAL_ACCESSIBLE_FUNCTIONS = [
   'ask-meeting-ai',
 
   // Meeting Data
-  'api-v1-meetings',
+  'api-v1',
   'fetch-transcript',
   'fetch-summary',
   'condense-meeting-summary',
@@ -46,7 +46,7 @@ export const EXTERNAL_ACCESSIBLE_FUNCTIONS = [
 
   // Fathom Integration
   'fathom-sync',
-  'fathom-oauth-initiate',
+  'oauth-initiate',
   'fathom-oauth-callback',
   'proxy-fathom-video',
 
@@ -128,13 +128,13 @@ export const FUNCTION_DATABASE_TARGET: Record<string, DatabaseTarget> = {
   'meeting-intelligence-index': 'external',
   'meeting-intelligence-process-queue': 'external',
   'ask-meeting-ai': 'external',
-  'api-v1-meetings': 'external',
+  'api-v1': 'external',
   'fetch-transcript': 'external',
   'fetch-summary': 'external',
 
   // These still query internal (integration state, etc.)
   'fathom-sync': 'internal', // Syncs TO external, but reads config from internal
-  'fathom-oauth-initiate': 'internal',
+  'oauth-initiate': 'internal',
   'fathom-oauth-callback': 'internal',
 };
 

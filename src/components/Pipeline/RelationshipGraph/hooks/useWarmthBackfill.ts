@@ -21,7 +21,7 @@ export function useWarmthBackfill() {
     mutationFn: async (): Promise<BackfillResult> => {
       if (!activeOrgId) throw new Error('No active org');
 
-      const { data, error } = await supabase.functions.invoke('warmth-backfill', {
+      const { data, error } = await supabase.functions.invoke('backfill-runner/warmth', {
         body: { org_id: activeOrgId },
       });
 

@@ -210,7 +210,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Forecast',
     icon: TrendingUp,
-    showInNav: true,
+    showInNav: false,
     navSection: 'main',
     order: 4.5,
     displayGroup: 1,

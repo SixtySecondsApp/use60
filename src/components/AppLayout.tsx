@@ -44,7 +44,6 @@ import {
   History,
   Workflow,
   Sparkles,
-  Search,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -65,8 +64,6 @@ import { getNavigationItems } from '@/lib/routes/routeConfig';
 import logger from '@/lib/utils/logger';
 import { useEventListener } from '@/lib/communication/EventBus';
 import { useTaskNotifications } from '@/lib/hooks/useTaskNotifications';
-import { SmartSearch } from '@/components/SmartSearch';
-import { CommandPalette } from '@/components/command-palette/CommandPalette';
 import { CreditWidget } from '@/components/credits/CreditWidget';
 import { LowBalanceBanner } from '@/components/credits/LowBalanceBanner';
 import { CreditTopUpProvider } from '@/components/credits/CreditTopUpPrompt';
@@ -185,7 +182,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [hasMounted, setHasMounted] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
-  const [isSmartSearchOpen, setIsSmartSearchOpen] = useState(false);
   const [isMobileUserMenuOpen, setIsMobileUserMenuOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(false);
   const [splashDismissed, setSplashDismissed] = useState(false);
@@ -310,17 +306,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/') || location.pathname.startsWith('/landing-page-builder') || location.pathname === '/platform/godseye';
   }, [location.pathname]);
 
-  // Keyboard shortcut for CommandPalette (⌘K / Ctrl+K)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsSmartSearchOpen((v) => !v);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   // Dynamic navigation based on user type (internal vs external)
   // Uses centralized route config with access levels
@@ -795,19 +780,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         'transition-all duration-300 ease-in-out',
         isImpersonating ? 'top-[44px]' : 'top-0'
       )}>
-        {/* Search Button (Cmd+K) */}
-        <button
-          onClick={() => setIsSmartSearchOpen(true)}
-          aria-label="Open search (⌘K)"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-800/70 transition-colors text-sm text-gray-500 dark:text-gray-400"
-        >
-          <Search className="w-4 h-4" />
-          <span className="hidden xl:inline">Search...</span>
-          <kbd className="hidden xl:inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded">
-            <span className="text-[10px]">⌘</span>K
-          </kbd>
-        </button>
-
         {/* User Profile with Dropdown */}
         <div className="flex items-center gap-3 ml-auto">
           {effectiveUserType !== 'external' && (
@@ -1301,11 +1273,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <ProductTour userId={userData.id} />
         )}
 
-        {/* CommandPalette — Cmd+K global search */}
-        <CommandPalette
-          isOpen={isSmartSearchOpen}
-          onClose={() => setIsSmartSearchOpen(false)}
-        />
       </main>
     </div>
     </div>

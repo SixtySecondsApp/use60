@@ -345,7 +345,7 @@ export function useSendTestNotification() {
       // External release: keep "test" safe + low-friction.
       // Some feature endpoints require real entity IDs (meetingId/dealId). For settings UX,
       // a simple bot-post verification is sufficient.
-      const functionName = feature === 'daily_digest' ? 'slack-daily-digest' : 'slack-test-message';
+      const functionName = 'slack-daily-digest';
 
       const { data, error } = await supabase.functions.invoke(functionName, {
         // For daily digests, ensure a "safe" test mode (e.g. avoid DMing the whole org).
