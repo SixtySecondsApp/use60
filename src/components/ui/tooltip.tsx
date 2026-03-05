@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 interface TooltipProviderProps {
   children: React.ReactNode;
@@ -108,10 +109,10 @@ export function TooltipContent({
   const { isOpen } = React.useContext(TooltipContext);
 
   const sideStyles = {
-    top: 'bottom-full mb-2',
-    bottom: 'top-full mt-2',
-    left: 'right-full mr-2',
-    right: 'left-full ml-2',
+    top: 'bottom-full mb-1',
+    bottom: 'top-full mt-1',
+    left: 'right-full mr-1',
+    right: 'left-full ml-1',
   }[side];
 
   return (
@@ -122,7 +123,11 @@ export function TooltipContent({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.1 }}
-          className={`absolute z-50 px-3 py-1.5 text-xs font-medium rounded-md shadow-md whitespace-nowrap bg-slate-900 text-white dark:bg-white dark:text-slate-900 left-1/2 -translate-x-1/2 ${sideStyles} ${className}`}
+          className={cn(
+            'absolute z-50 px-3 py-1.5 text-xs font-medium rounded-md shadow-md whitespace-nowrap bg-slate-900 text-white dark:bg-white dark:text-slate-900 left-1/2 -translate-x-1/2',
+            sideStyles,
+            className
+          )}
         >
           {children}
         </motion.div>

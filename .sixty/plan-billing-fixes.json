@@ -1,0 +1,90 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth"
+    }
+  },
+  "features": [
+    {
+      "id": "billing-fix",
+      "name": "Billing Settings Page Fixes",
+      "status": "pending",
+      "createdAt": "2026-03-04"
+    }
+  ],
+  "stories": [
+    {
+      "id": "BILL-001",
+      "feature": "billing-fix",
+      "title": "Fix 'Current Plan: Basic' badge for users with no subscription",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["BILL-002"],
+      "acceptance": [
+        "Users with no subscription see 'No Active Plan' instead of 'Basic Plan' in header",
+        "Plan comparison cards do NOT show 'Current Plan' badge on Basic when user has no subscription",
+        "Basic card shows 'Get Started' button (not disabled 'Current Plan') when no subscription exists",
+        "Users on actual Basic plan still see 'Current Plan' badge correctly"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/settings/BillingSettingsPage.tsx"
+      ]
+    },
+    {
+      "id": "BILL-002",
+      "feature": "billing-fix",
+      "title": "Fix contradictory plan card buttons and add 'no plan' state",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["BILL-001"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Users with no subscription see 'Get Started' on Basic card and 'Upgrade to Pro' on Pro card",
+        "Current plan stats section shows dashes for cost/cycle/next-billing when no subscription",
+        "No contradictory buttons visible at any time",
+        "'Upgrade to Pro' CTA in header only shows for users ON Basic (not users with no plan)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/settings/BillingSettingsPage.tsx"
+      ]
+    },
+    {
+      "id": "BILL-003",
+      "feature": "billing-fix",
+      "title": "Surface specific error messages from checkout edge function",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["BILL-001"],
+      "acceptance": [
+        "403 from edge function shows 'You don't have permission to manage billing' toast",
+        "404 shows 'Plan not found' toast",
+        "Generic errors show the actual error message from the response body, not 'Edge Function returned non-2xx'",
+        "Edge function membership check uses maybeSingle() instead of single() to avoid PGRST116 crash"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/services/subscriptionService.ts",
+        "supabase/functions/create-checkout-session/index.ts"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 3,
+    "completedStories": 0,
+    "currentFeature": "billing-fix",
+    "lastUpdated": "2026-03-04"
+  }
+}

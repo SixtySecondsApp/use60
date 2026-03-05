@@ -1,0 +1,199 @@
+{
+  "feature": {
+    "id": "credits-page-cleanup",
+    "name": "Credits Page Cleanup (TSK-0453)",
+    "status": "pending",
+    "createdAt": "2026-03-04T12:00:00Z",
+    "description": "Update credit pack pricing, add tier tooltips, wire CreditEstimator to credit_menu DB table, and verify Stripe + auto top-up integration."
+  },
+
+  "analysis": {
+    "existingState": {
+      "stripePurchase": "ALREADY WORKING — CreditPurchaseModal → create-credit-checkout edge fn → Stripe Checkout Session → stripe-webhook fulfills pack",
+      "autoTopUp": "ALREADY WORKING — AutoTopUpSettings component + credit-auto-topup edge fn + auto_top_up_settings/log tables",
+      "creditMenu": "ALREADY EXISTS — credit_menu table with 22 seeded actions, get-credit-menu edge fn, CreditMenuTable reads from DB",
+      "tierTooltips": "PARTIAL — CreditMenuTable has tier badges, but CreditEstimator and SimpleModelTierSelector show hardcoded costs without tier explanation tooltips",
+      "pricing": "NEEDS UPDATE — creditPacks.ts has Starter £49, Growth £99, Scale £149 but task requires Signal £15, Insight £30, Intelligence £50",
+      "estimator": "NEEDS UPDATE — CreditEstimator uses hardcoded ACTION_CREDIT_COSTS instead of fetching from credit_menu table"
+    },
+    "subtaskMapping": {
+      "subtask1_tier_tooltips": "Add hover tooltips explaining low/medium/high tiers to CreditEstimator and SimpleModelTierSelector",
+      "subtask2_topup_packs": "Update pack pricing in creditPacks.ts: Signal 100/£15, Insight 250/£30, Intelligence 500/£50",
+      "subtask3_stripe_payment": "Already working. Verify create-credit-checkout uses updated prices. No code change needed if creditPacks.ts is the source of truth.",
+      "subtask4_auto_topup": "Already fully implemented. No code change needed.",
+      "subtask5_credit_variables": "Wire CreditEstimator to fetch costs from credit_menu table instead of hardcoded ACTION_CREDIT_COSTS",
+      "subtask6_unknown": "Not visible in screenshot — likely cosmetic or edge case"
+    }
+  },
+
+  "stories": [
+    {
+      "id": "CRED-001",
+      "feature": "credits-page-cleanup",
+      "title": "Update credit pack pricing to new values",
+      "type": "config",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["CRED-002", "CRED-003"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Starter pack: 100 credits, £15 GBP (label: Signal)",
+        "Growth pack: 250 credits, £30 GBP (label: Insight)",
+        "Scale pack: 500 credits, £50 GBP (label: Intelligence)",
+        "USD and EUR prices updated proportionally",
+        "Agency pack pricing unchanged"
+      ],
+
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/config/creditPacks.ts",
+        "supabase/functions/_shared/creditPacks.ts"
+      ],
+
+      "designRef": null,
+      "ticketId": "TSK-0453",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "CRED-002",
+      "feature": "credits-page-cleanup",
+      "title": "Add intelligence tier tooltips to CreditEstimator and SimpleModelTierSelector",
+      "type": "ui",
+      "status": "pending",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/components/credits/CreditEstimator.tsx", "src/components/credits/SimpleModelTierSelector.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["CRED-003"],
+
+      "acceptance": [
+        "Hovering low/medium/high tier labels shows tooltip with description (e.g. 'Low: Fastest, cheapest. Uses Haiku-class models.')",
+        "Tooltips appear in CreditEstimator tier selector",
+        "Tooltips appear in SimpleModelTierSelector tier cards",
+        "Tooltips use existing Tooltip/TooltipTrigger/TooltipContent from UI library"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/credits/CreditEstimator.tsx",
+        "src/components/credits/SimpleModelTierSelector.tsx"
+      ],
+
+      "designRef": null,
+      "ticketId": "TSK-0453",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "CRED-003",
+      "feature": "credits-page-cleanup",
+      "title": "Wire CreditEstimator to credit_menu table instead of hardcoded costs",
+      "type": "feature",
+      "status": "pending",
+      "priority": 3,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/components/credits/CreditEstimator.tsx"],
+        "schema": ["credit_menu"]
+      },
+      "blocks": [],
+      "parallelWith": ["CRED-002"],
+
+      "acceptance": [
+        "CreditEstimator fetches action costs from get-credit-menu edge function",
+        "Falls back to hardcoded ACTION_CREDIT_COSTS if fetch fails",
+        "Loading state while fetching credit menu",
+        "Cost values match credit_menu table (not hardcoded constants)"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/credits/CreditEstimator.tsx",
+        "src/lib/services/adminCreditMenuService.ts"
+      ],
+
+      "designRef": null,
+      "ticketId": "TSK-0453",
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "CRED-004",
+      "feature": "credits-page-cleanup",
+      "title": "Verify Stripe checkout and auto top-up work with updated pack prices",
+      "type": "verification",
+      "status": "pending",
+      "priority": 4,
+
+      "dependencies": {
+        "stories": ["CRED-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "CreditPurchaseModal shows updated pack names and prices",
+        "Quick Top-Up buttons on Credits page show Signal £15, Insight £30, Intelligence £50",
+        "AutoTopUpSettings pack selector shows updated names and prices",
+        "create-credit-checkout edge function picks up correct GBP price from shared creditPacks.ts"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/credits/CreditPurchaseModal.tsx",
+        "src/components/credits/AutoTopUpSettings.tsx",
+        "supabase/functions/create-credit-checkout/index.ts"
+      ],
+
+      "designRef": null,
+      "ticketId": "TSK-0453",
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 0,
+    "estimatedMinutes": 70,
+    "order": ["CRED-001", "CRED-002", "CRED-003", "CRED-004"],
+    "parallelGroups": [
+      ["CRED-002", "CRED-003"]
+    ]
+  },
+
+  "verification": {
+    "manual": [
+      "Navigate to Settings → Credits & AI → Top Up tab — pack buttons show Signal £15, Insight £30, Intelligence £50",
+      "Click a pack → CreditPurchaseModal shows correct pricing",
+      "Open Credit Estimator → tier selector shows tooltips on hover",
+      "Estimator costs match credit_menu table values",
+      "Settings tab → Auto Top-Up pack selector shows updated names",
+      "Settings tab → AI Model Configuration tier labels have tooltips",
+      "Pricing tab → CreditMenuTable still loads from DB correctly"
+    ]
+  }
+}

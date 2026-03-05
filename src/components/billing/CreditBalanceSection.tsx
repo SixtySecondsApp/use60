@@ -214,6 +214,7 @@ export function CreditBalanceSection() {
       <CreditPurchaseModal
         open={purchaseModalOpen}
         onOpenChange={setPurchaseModalOpen}
+        defaultPack={selectedPackType}
       />
     </>
   );

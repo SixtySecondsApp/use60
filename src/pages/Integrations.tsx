@@ -991,9 +991,12 @@ export default function Integrations() {
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Integrations</h1>
               <HelpPanel docSlug="integrations-overview" tooltip="Integrations help" />
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Connect your favorite tools to supercharge your sales workflow.
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Connect your favorite tools to supercharge your sales workflow.
+              </p>
+            </div>
           </div>
         </div>
       </div>

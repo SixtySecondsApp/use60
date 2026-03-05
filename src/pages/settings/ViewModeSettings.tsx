@@ -149,7 +149,7 @@ export default function ViewModeSettings() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {[
               { label: 'Meetings', key: 'meetings' as const, icon: '📅' },
-              { label: 'Meeting Analytics', key: 'meetingAnalytics' as const, icon: '📊' },
+              { label: 'Insights', key: 'meetingAnalytics' as const, icon: '📊' },
               { label: 'Team Insights', key: 'teamInsights' as const, icon: '👥' },
               { label: 'CRM', key: 'crm' as const, icon: '💼' },
               { label: 'Pipeline', key: 'pipeline' as const, icon: '📈' },

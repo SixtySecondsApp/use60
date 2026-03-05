@@ -7,72 +7,15 @@ import { useActivities } from '@/lib/hooks/useActivities';
 import { useActivityFilters } from '@/lib/hooks/useActivityFilters';
 import { useNavigate } from 'react-router-dom';
 import { useDateRangeFilter } from '@/components/ui/DateRangeFilter';
-import { Activity, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Activity, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 // Note: Only using the hook for month navigation state — no calendar popover on this page
 
 function HeatmapSkeleton() {
-  const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  // Render 6 week rows to cover worst-case months (e.g. Feb starting on Wed = 4 rows but Oct with 31 days starting on Sat = 6 rows)
-  const WEEK_ROWS = 6;
-
   return (
     <div className="p-4 sm:p-6 lg:p-8 mt-12 lg:mt-0 flex flex-col">
       <div className="max-w-7xl mx-auto w-full">
-        {/* Header — icon + title/subtitle + month nav pill + legend pill */}
-        <div className="mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <Skeleton className="w-12 h-12 rounded-2xl" />
-              <div>
-                <Skeleton className="h-7 w-44 mb-1.5" />
-                <Skeleton className="h-4 w-56" />
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              {/* Month navigator pill */}
-              <div className="flex items-center gap-1 bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl px-2 py-1.5 shadow-sm">
-                <Skeleton className="w-7 h-7 rounded-lg" />
-                <Skeleton className="h-5 w-32 mx-2" />
-                <Skeleton className="w-7 h-7 rounded-lg" />
-              </div>
-              {/* Legend pill */}
-              <Skeleton className="h-9 w-72 rounded-xl" />
-            </div>
-          </div>
-        </div>
-
-        {/* Calendar grid — same structure as real: grid-cols-[30px_repeat(7,1fr)] gap-1 */}
-        <div className="flex-1 bg-white dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700/50 shadow-sm dark:shadow-none p-3 sm:p-4 overflow-hidden flex flex-col">
-          <div className="grid grid-cols-[30px_repeat(7,1fr)] gap-1">
-            {/* Header row: empty week-label cell + 7 day labels */}
-            <div className="py-2" />
-            {DAY_LABELS.map((day) => (
-              <Skeleton key={day} className="h-5 w-full rounded" />
-            ))}
-
-            {/* Week rows */}
-            {Array.from({ length: WEEK_ROWS }).map((_, w) => (
-              <React.Fragment key={w}>
-                {/* Week number label */}
-                <Skeleton className="h-full w-5 rounded justify-self-end" />
-                {/* 7 day cells — aspect-square matches the real ActivityHeatmapCell */}
-                {Array.from({ length: 7 }).map((_, d) => (
-                  <Skeleton key={d} className="aspect-square w-full rounded-lg" />
-                ))}
-              </React.Fragment>
-            ))}
-          </div>
-
-          {/* Legend row placeholder */}
-          <div className="flex items-center gap-2 mt-3 p-2 bg-gray-100 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50">
-            <Skeleton className="h-3 w-6 rounded" />
-            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="w-3 h-3 rounded" />
-            ))}
-            <Skeleton className="h-3 w-6 rounded" />
-            <Skeleton className="h-3 w-24 rounded ml-2" />
-          </div>
+        <div className="bg-white dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700/50 shadow-sm dark:shadow-none p-8 flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-6 w-6 text-gray-400 animate-spin" />
         </div>
       </div>
     </div>

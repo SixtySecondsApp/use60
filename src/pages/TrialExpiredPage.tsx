@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Clock, Check, Zap, Shield, RefreshCw, LogOut } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -40,6 +40,13 @@ export default function TrialExpiredPage() {
 
   const isInGracePeriod = gate.status === 'grace_period';
   const graceDaysRemaining = gate.graceDaysRemaining ?? 0;
+
+  // If the gate says this org has access (internal admin, active sub, etc.), redirect to dashboard
+  useEffect(() => {
+    if (!gate.isLoading && gate.hasAccess && gate.action === 'none') {
+      navigate('/', { replace: true });
+    }
+  }, [gate.isLoading, gate.hasAccess, gate.action, navigate]);
 
   const handleSubscribe = async (planSlug: 'basic' | 'pro') => {
     if (!activeOrg?.id) {

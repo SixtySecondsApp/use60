@@ -192,7 +192,7 @@ export async function createInvitation({
 
       // If invitation hasn't expired, reuse and regenerate token for security
       if (existingExpiry > now) {
-        logger.log('[InvitationService] Reusing pending invitation and regenerating token:', existingInvite.id);
+        logger.log('[InvitationService] Reusing pending invitation and regenerating token:', existingInvite.id, '| Previous role:', existingInvite.role, '| New role:', role);
 
         // Update with new token, role, and 7-day expiration
         const { data: updatedInvite, error: updateError } = await supabase
@@ -206,7 +206,7 @@ export async function createInvitation({
             role, // Update role in case it changed from the original invite
           } as any)
           .eq('id', existingInvite.id)
-          .select()
+          .select('id, org_id, email, role, token, expires_at, accepted_at, created_at')
           .single();
 
         if (updateError) {
@@ -215,6 +215,7 @@ export async function createInvitation({
         }
 
         const invitationData = updatedInvite as unknown as Invitation;
+        logger.log('[InvitationService] Invitation updated — confirmed role in DB:', invitationData?.role);
 
         // Send invitation email with new token
         const { data: { user } } = await supabase.auth.getUser();

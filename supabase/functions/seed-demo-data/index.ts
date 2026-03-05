@@ -480,18 +480,37 @@ serve(async (req: Request) => {
         // We match by email since contactIds is a flat list without index metadata
         const primaryContactEmail = primaryContactSeed.email;
 
-        // Generate a nice thumbnail for this meeting type
-        const meetingTypeColors: Record<string, string> = {
-          discovery: "4f46e5",   // indigo
-          demo: "0891b2",       // cyan
-          follow_up: "059669",  // emerald
-          negotiation: "d97706", // amber
-          closing: "dc2626",    // red
-          general: "7c3aed",    // violet
-        };
-        const thumbBg = meetingTypeColors[template.meetingType] || "6b7280";
-        const thumbInitials = companyName.split(" ").map((w: string) => w[0]).join("").slice(0, 2);
-        const thumbnailUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(thumbInitials)}&background=${thumbBg}&color=fff&size=640&font-size=0.4&bold=true&format=png`;
+        // Generate call-grid SVG thumbnail (dark 2x2 video call style)
+        const thumbParticipants: { initials: string; name: string }[] = [
+          { initials: "DR", name: "Demo Rep" },
+        ];
+        for (const ci of template.contactIndices.slice(0, 3)) {
+          const c = CONTACTS[ci];
+          if (!c) continue;
+          const parts = c.full_name.trim().split(/\s+/);
+          const initials = parts.map((p: string) => p[0]).join("").slice(0, 2).toUpperCase();
+          const name = c.full_name.length > 14 ? c.full_name.slice(0, 12) + "…" : c.full_name;
+          thumbParticipants.push({ initials, name });
+        }
+        const tileCount = Math.min(thumbParticipants.length, 4);
+        const cols = tileCount <= 1 ? 1 : 2;
+        const rows = tileCount <= 2 ? 1 : 2;
+        const tileW = Math.floor((640 - 9) / cols);
+        const tileH = Math.floor((480 - 9) / rows);
+        let tilesXml = "";
+        for (let i = 0; i < tileCount; i++) {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const x = 3 + col * (tileW + 3);
+          const y = 3 + row * (tileH + 3);
+          const p = thumbParticipants[i];
+          tilesXml += `<rect x="${x}" y="${y}" width="${tileW}" height="${tileH}" rx="6" fill="#1e293b"/>`;
+          tilesXml += `<circle cx="${x + tileW / 2}" cy="${y + tileH / 2 - 12}" r="24" fill="#334155"/>`;
+          tilesXml += `<text x="${x + tileW / 2}" y="${y + tileH / 2 - 6}" text-anchor="middle" fill="#cbd5e1" font-size="16" font-weight="600" font-family="sans-serif">${p.initials}</text>`;
+          tilesXml += `<text x="${x + tileW / 2}" y="${y + tileH / 2 + 18}" text-anchor="middle" fill="#64748b" font-size="10" font-family="sans-serif">${p.name}</text>`;
+        }
+        const svgThumb = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="640" height="480" fill="#0f172a"/>${tilesXml}<circle cx="12" cy="470" r="3" fill="#ef4444"><animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/></circle><text x="20" y="474" fill="#f87171" font-size="8" font-weight="500" font-family="sans-serif" opacity="0.7">REC</text></svg>`;
+        const thumbnailUrl = `data:image/svg+xml;base64,${btoa(svgThumb)}`;
 
         const { data: insertedMeeting, error: meetingError } = await supabase
           .from("meetings")

@@ -14,7 +14,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getCreditMenu, getBudgetCap, setBudgetCap } from '@/lib/services/creditService';
-import type { IntelligenceTier } from '@/lib/config/creditPacks';
+import type { IntelligenceTier, PackType } from '@/lib/config/creditPacks';
 import { CREDIT_PACKS, STANDARD_PACKS, getCostPerCredit, getPackPrice } from '@/lib/config/creditPacks';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
@@ -275,6 +275,7 @@ const PACK_ICONS: Record<string, React.ElementType> = {
 
 function PackComparisonCards() {
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
+  const [purchasePack, setPurchasePack] = useState<PackType | undefined>(undefined);
   const { currencyCode, symbol: orgSymbol } = useOrgMoney();
 
   return (
@@ -335,7 +336,7 @@ function PackComparisonCards() {
                   <Button
                     size="sm"
                     variant={pack.popular ? 'default' : 'outline'}
-                    onClick={() => setPurchaseModalOpen(true)}
+                    onClick={() => { setPurchasePack(packType); setPurchaseModalOpen(true); }}
                     className={cn(
                       'w-full',
                       pack.popular && 'bg-indigo-600 hover:bg-indigo-700 text-white border-0'
@@ -353,6 +354,7 @@ function PackComparisonCards() {
       <CreditPurchaseModal
         open={purchaseModalOpen}
         onOpenChange={setPurchaseModalOpen}
+        defaultPack={purchasePack}
       />
     </>
   );

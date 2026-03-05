@@ -27,7 +27,7 @@ export const TOUR_DEMO_MEETING: UnifiedMeeting = {
   durationMinutes: 52,
   companyName: 'DataFlow Systems',
   ownerEmail: 'sarah.chen@meridian.io',
-  thumbnailUrl: null,
+  thumbnailUrl: '/tour-demo-thumbnail.svg',
   summary: JSON.stringify({
     overview:
       'High-energy platform demo with DataFlow Systems engineering and product leadership. Jake Torres confirmed the Jira integration solves their 18-month pain point. Lisa Park needs analytics depth validation. Sophie Wright signed off on SCIM/Okta compliance. Strong buying signals — CTO involvement requested for follow-up.',

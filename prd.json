@@ -1,148 +1,166 @@
 {
-  "project": "Support & Docs Page Fixes",
-  "runSlug": "support-docs-fixes",
+  "project": "Go-Live Polish — Insights, Integrations & Reports Fixes",
+  "runSlug": "golive-polish",
   "branchName": "feature/support-docs-fixes",
-  "description": "Fix all bugs from Drue's testing of Support Centre, Docs, and AI Chat: markdown rendering, text overflow, missing navigation, DOM warnings, duplicate messages, profile photos, and CORS error.",
-  "aiDevHubProjectId": "081215a7-149b-4287-adec-39e0628b2a44",
-  "createdAt": "2026-03-04T11:00:00.000Z",
+  "description": "Batch of 5 in-progress tickets (10 stories) covering Insights rename, sync error, Slack branding, help panel, and 6 Reports subtask bugs blocking go-live sign-off.",
+  "aiDevHubProjectId": null,
+  "createdAt": "2026-03-04T14:00:00.000Z",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Fix TableOfContents Text Overflow & Duplicate Keys",
-      "description": "As a user reading docs, I want the 'On this page' sidebar to display properly without text going off-screen.",
+      "title": "Rename Intelligence to Insights in Navigation and Page Heading",
+      "description": "As a user, I want the nav item and page heading to say 'Insights' instead of 'Intelligence' / 'Meeting Analytics' so the branding is consistent.",
       "acceptanceCriteria": [
-        "TOC items truncate with ellipsis when text exceeds container width",
-        "Duplicate heading slugs get unique keys (append -N suffix for duplicates)",
-        "No 'Encountered two children with the same key' warning in console",
+        "Navigation sidebar label changed from 'Intelligence' to 'Insights' in routeConfig.ts",
+        "Page heading changed from 'Meeting Analytics' to 'Insights' in MeetingAnalyticsPage.tsx",
+        "data-tour attribute updated if it references 'intelligence'",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "File: src/components/docs/TableOfContents.tsx",
-      "aiDevHubTaskId": "c2c6316b-2a69-4aac-bd11-864f413f3715"
+      "notes": "TSK-0503 | Nav/heading already Insights, updated data-tour attribute",
+      "aiDevHubTaskId": null
     },
     {
       "id": "US-002",
-      "title": "Add Back Button to Support Page",
-      "description": "As a user on the Support Centre page, I want a back/home button so I can navigate away.",
+      "title": "Fix Sync Button Error Message",
+      "description": "As a user clicking the Sync button, I want a helpful error message instead of the confusing 'Sync your meetings/calls first to enable AI search'.",
       "acceptanceCriteria": [
-        "Back arrow button in hero area navigates to previous page or dashboard",
-        "Uses ArrowLeft icon from lucide-react",
+        "Error message changed to 'No conversations to index. Please ensure integrations are configured correctly'",
+        "Message only shows when there are genuinely no meetings/calls to index",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "File: src/pages/SupportCentrePage.tsx",
-      "aiDevHubTaskId": "2eec3380-e15b-4190-8346-acc766ed2a57"
+      "notes": "TSK-0504 | Already fixed in useMeetingIntelligence.ts line 657-658",
+      "aiDevHubTaskId": null
     },
     {
       "id": "US-003",
-      "title": "Render Markdown in AI Chat Responses",
-      "description": "As a user chatting with the AI assistant, I want responses to render bold text, lists, and paragraphs properly instead of raw markdown.",
+      "title": "Fix Slack App Display Name",
+      "description": "As a user connecting Slack, I want to see 'Use60' as the app name, not 'use60 (staging)'.",
       "acceptanceCriteria": [
-        "Assistant messages use ReactMarkdown with remarkGfm",
-        "**bold** renders as bold, lists render as lists, paragraphs have spacing",
-        "Styling matches existing chat bubble theme",
-        "Links open in new tab with rel='noopener noreferrer'",
+        "Slack OAuth app name displays as 'Use60' during connection flow",
+        "Review Slack app permissions are correctly scoped",
+        "If Slack API dashboard config change, document what was changed",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 1,
+      "priority": 2,
       "passes": true,
-      "notes": "File: src/components/support/SupportAIChat.tsx line 111. react-markdown already installed.",
-      "aiDevHubTaskId": "3d14e434-c6f5-43a5-ab5f-6d1262f6b5fb"
+      "notes": "TSK-0507 | NOT a code fix — app name is set in Slack API dashboard (api.slack.com/apps). Rename from 'use60 (staging)' to 'Use60' there.",
+      "aiDevHubTaskId": null
     },
     {
       "id": "US-004",
-      "title": "Fix Suggested Questions Double-Send Bug",
-      "description": "As a user clicking a suggested question in the hero, the AI chat should send exactly one message, not two.",
+      "title": "Fix Help Panel on Integrations Page",
+      "description": "As a user clicking the '?' help icon next to Integrations, I want the help panel to show actual documentation instead of 'Documentation not available yet.'",
       "acceptanceCriteria": [
-        "Replace initialQuerySent state with ref tracking last sent query string",
-        "Clicking a suggested question sends exactly 1 message",
-        "Clicking a different suggested question also sends exactly 1 message",
+        "Help panel loads and displays documentation content for the Integrations page",
+        "If no docs_articles record exists, create seed content or show useful fallback",
+        "Evaluate whether HelpPanel should appear on other pages",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 1,
+      "priority": 2,
       "passes": true,
-      "notes": "File: src/components/support/SupportAIChat.tsx",
-      "aiDevHubTaskId": "4d1bc7a8-5c92-4a1d-9737-828ec253404e"
+      "notes": "TSK-0506 | Fallback already updated to 'coming soon' with docs.use60.com link. Slug is integrations-overview — needs docs_articles seed.",
+      "aiDevHubTaskId": null
     },
     {
       "id": "US-005",
-      "title": "Fix Duplicate Key Warning on Source Articles",
-      "description": "As a developer, the SupportAIChat should not produce React key warnings.",
+      "title": "Fix Reports History Showing Pre-User Dates",
+      "description": "As a user viewing Reports, I should only see reports generated after my account was created, not phantom historical reports.",
       "acceptanceCriteria": [
-        "Source article links use ${article.slug}-${index} as key",
-        "No 'Each child in a list should have a unique key' warning in console",
-        "Typecheck passes"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "File: src/components/support/SupportAIChat.tsx line 118",
-      "aiDevHubTaskId": "86eea1bb-a8bf-4875-b13f-e2a5bcedd838"
-    },
-    {
-      "id": "US-006",
-      "title": "Add User Profile Photos to Ticket Conversation",
-      "description": "As a user viewing a support ticket conversation, I want to see real profile photos and proper sender labels.",
-      "acceptanceCriteria": [
-        "User messages show avatar_url from profiles table (fallback to initials)",
-        "Agent messages show 'System Administrator' label",
-        "Agent messages use Shield icon instead of generic Bot icon",
+        "Report history query filters by user's created_at or org membership date",
+        "No reports appear dated before the user's account creation",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 2,
+      "priority": 3,
       "passes": true,
-      "notes": "Files: src/components/support/TicketConversation.tsx, may need profile query",
-      "aiDevHubTaskId": "7403d1c5-0762-418e-8dc1-70d89c3fd325"
+      "notes": "TSK-0505 subtask 1 | Files: ReportsTab.tsx, useMaReportHistory",
+      "aiDevHubTaskId": null
     },
     {
-      "id": "US-007",
-      "title": "Fix SlackChannelSelector Nested Button Warning",
-      "description": "As a developer, the SlackChannelSelector should not produce DOM nesting warnings.",
+      "id": "US-006",
+      "title": "Fix Send to All Channels Email Notifications",
+      "description": "As a user clicking 'Send to All Channels' after adding an email in Notification Settings, I want the email to actually be delivered.",
       "acceptanceCriteria": [
-        "Clear (X) button changed from <button> to <span role='button'>",
-        "No 'button cannot appear as descendant of button' warning in console",
-        "Clear functionality still works",
-        "Typecheck passes"
+        "Email notification is sent to configured email address",
+        "Success toast only shows after API call succeeds",
+        "If email sending fails, show error toast instead of success",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "File: src/components/settings/SlackChannelSelector.tsx line 142",
-      "aiDevHubTaskId": "68b7b322-41d6-4eb3-bafc-9f0cae73fdc7"
+      "notes": "TSK-0505 subtask 2 | Files: ReportsTab.tsx, useMaSendReport",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-007",
+      "title": "Fix Generate Preview Button UX",
+      "description": "As a user on the Reports tab, the 'Generate Preview' button should clearly communicate what it does.",
+      "acceptanceCriteria": [
+        "Button label or tooltip clarifies the action",
+        "Button behavior matches user expectation — generates preview before sending",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "TSK-0505 subtask 3 | Files: ReportsTab.tsx",
+      "aiDevHubTaskId": null
     },
     {
       "id": "US-008",
-      "title": "Fix Support Ticket Email CORS Error",
-      "description": "As a user creating a support ticket, the email notification should not fail with a CORS error.",
+      "title": "Fix Total Meetings Count Showing 0",
+      "description": "As a user with meetings, the Reports section should show the correct meeting count instead of 0.",
       "acceptanceCriteria": [
-        "Add send-support-ticket-email to supabase/config.toml with verify_jwt = false",
-        "Email notification fires without CORS error",
-        "Ticket still creates successfully even if email fails",
-        "Typecheck passes"
+        "Total meetings metric reflects actual meeting count for the user",
+        "Query uses correct column meetings.owner_user_id (NOT user_id)",
+        "Count matches what the user sees in other parts of the app",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
-      "priority": 2,
+      "priority": 3,
       "passes": true,
-      "notes": "File: supabase/config.toml. Needs deployment after change.",
-      "aiDevHubTaskId": "59e3e528-a820-4c8a-8bca-ef69008050ea"
+      "notes": "TSK-0505 subtask 4 | Files: ReportsTab.tsx, useMaReportHistory",
+      "aiDevHubTaskId": null
     },
     {
       "id": "US-009",
-      "title": "Add User ID Filter to Support Tickets Query",
-      "description": "As a defense-in-depth measure, the support tickets query should explicitly filter by user_id.",
+      "title": "Fix Generic AI Tips When No Transcripts Exist",
+      "description": "As a user with no meeting transcripts, the Reports section should not show AI-generated coaching tips that have no data basis.",
       "acceptanceCriteria": [
-        "useSupportTickets hook adds .eq('user_id', user.id) to query",
-        "Users only see their own tickets",
-        "Typecheck passes"
+        "If user has zero transcripts, AI tips section is hidden or shows fallback message",
+        "Tips only appear when there is actual transcript data to derive them from",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
-      "priority": 2,
+      "priority": 3,
       "passes": true,
-      "notes": "File: src/lib/hooks/useSupportTickets.ts",
-      "aiDevHubTaskId": "e37dd5ff-7eb6-4f86-8061-ea1feb294924"
+      "notes": "TSK-0505 subtask 5 | Files: ReportsTab.tsx",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-010",
+      "title": "Fix Notification Settings Slack Webhook URL Overflow",
+      "description": "As a user adding a Slack webhook URL in Notification Settings, the popup should not break layout with a wide scrollbar.",
+      "acceptanceCriteria": [
+        "Webhook URL input truncates or wraps long URLs within popup width",
+        "No horizontal scrollbar appears in notification settings popup",
+        "URL still fully accessible via tooltip or expandable field",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "TSK-0505 subtask 6 | Files: ReportsTab.tsx (notification settings modal)",
+      "aiDevHubTaskId": null
     }
   ]
 }

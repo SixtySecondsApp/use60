@@ -58,6 +58,9 @@ export interface UnifiedMeeting {
   hitlRequired: boolean
   speakers: RecordingSpeaker[] | null
 
+  // Attendees (for thumbnail display)
+  attendeeNames: string[]
+
   // Navigation
   detailPath: string
 
@@ -111,6 +114,9 @@ export interface MeetingRow {
   tasks?: {
     status: string
   }[]
+  meeting_attendees?: {
+    name: string
+  }[]
 }
 
 // ============================================================================
@@ -151,6 +157,7 @@ export function meetingToUnified(m: MeetingRow): UnifiedMeeting {
     recordingS3Key: null,
     hitlRequired: false,
     speakers: null,
+    attendeeNames: m.meeting_attendees?.map(a => a.name).filter(Boolean) || [],
     detailPath: `/meetings/${m.id}`,
     shareUrl: m.share_url,
     fathomRecordingId: m.fathom_recording_id,
@@ -158,6 +165,12 @@ export function meetingToUnified(m: MeetingRow): UnifiedMeeting {
 }
 
 export function recordingToUnified(r: any): UnifiedMeeting {
+  // Build attendee names from multiple sources (speakers > attendees > empty)
+  const speakerNames: string[] = r.speakers?.map((s: any) => s.name).filter(Boolean) || []
+  const attendeeNames: string[] = speakerNames.length > 0
+    ? speakerNames
+    : (r.attendees?.map((a: any) => a.name).filter(Boolean) || [])
+
   return {
     id: r.id,
     source: '60_notetaker',
@@ -184,6 +197,7 @@ export function recordingToUnified(r: any): UnifiedMeeting {
     recordingS3Key: r.recording_s3_key || null,
     hitlRequired: r.hitl_required || false,
     speakers: r.speakers || null,
+    attendeeNames,
     detailPath: `/meetings/recordings/${r.id}`,
     shareUrl: null,
     fathomRecordingId: null,

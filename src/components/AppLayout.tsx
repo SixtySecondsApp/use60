@@ -108,10 +108,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Check if user has integration that needs reconnection (must be before isIntegrationBannerVisible)
   const { needsReconnect: integrationNeedsReconnect } = useIntegrationReconnectNeeded();
 
+  // Internal admin orgs bypass all subscription/trial UI
+  const isInternalAdminOrg = !subscriptionGate.isLoading && subscriptionGate.status === 'internal_admin';
+
   // TrialConversionModal is no longer triggered on 'expired' status —
   // ProtectedRoute now redirects expired users to /trial-expired instead.
   // The modal is kept for approaching-expiry warnings only (isTrialing).
-  const isTrialApproachingExpiry = trialStatus.isTrialing && !trialStatus.isLoading;
+  // Internal admin orgs never see trial modals.
+  const isTrialApproachingExpiry = !isInternalAdminOrg && trialStatus.isTrialing && !trialStatus.isLoading;
 
   // Check if trial banner should be showing (same logic as TrialBanner component)
   const isTrialBannerVisible = useMemo(() => {
@@ -128,12 +132,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       // Ignore errors
     }
 
+    // Internal admin orgs never see trial banners
+    if (isInternalAdminOrg) return false;
+
     // Show for trialing (with 75%+ usage — TrialBanner handles the threshold internally)
     return trialStatus.isTrialing && !trialStatus.isLoading;
-  }, [trialStatus.isTrialing, trialStatus.isLoading]);
+  }, [trialStatus.isTrialing, trialStatus.isLoading, isInternalAdminOrg]);
 
-  // Grace period banner is shown when status is 'grace_period'
-  const isGracePeriodBannerVisible = !subscriptionGate.isLoading && subscriptionGate.status === 'grace_period';
+  // Grace period banner is shown when status is 'grace_period' (never for internal admins)
+  const isGracePeriodBannerVisible = !isInternalAdminOrg && !subscriptionGate.isLoading && subscriptionGate.status === 'grace_period';
 
   // Check if integration reconnect banner should be showing
   const isIntegrationBannerVisible = hasIntegrationAlerts || !!integrationNeedsReconnect;
@@ -986,7 +993,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 const tourAttr =
                   item.href === '/dashboard' ? 'dashboard' :
                   item.href === '/meetings' ? 'meetings' :
-                  item.href === '/meeting-analytics' ? 'intelligence' :
+                  item.href === '/meeting-analytics' ? 'insights' :
                   item.href === '/integrations' ? 'integrations' :
                   item.href === '/copilot' ? 'copilot' :
                   undefined;

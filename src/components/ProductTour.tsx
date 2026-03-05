@@ -137,9 +137,9 @@ const TOUR_STEPS: TourStep[] = [
     },
   },
 
-  // ── Step 7 — Sidebar: Intelligence ────────────────────────────────────────
+  // ── Step 7 — Sidebar: Insights ────────────────────────────────────────────
   {
-    element: '[data-tour="intelligence"]',
+    element: '[data-tour="insights"]',
     popover: {
       title: 'Analytics & Insights',
       description:
@@ -162,9 +162,9 @@ const TOUR_STEPS: TourStep[] = [
     },
   },
 
-  // ── Step 9 — Page: Intelligence dashboard ─────────────────────────────────
+  // ── Step 9 — Page: Insights dashboard ─────────────────────────────────
   {
-    element: '[data-tour="intelligence-dashboard"]',
+    element: '[data-tour="insights-dashboard"]',
     route: '/meeting-analytics',
     popover: {
       title: 'Team Analytics',

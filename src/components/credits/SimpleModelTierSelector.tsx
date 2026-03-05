@@ -19,6 +19,12 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ACTION_CREDIT_COSTS } from '@/lib/config/creditPacks';
 import type { IntelligenceTier } from '@/lib/config/creditPacks';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@/components/ui/tooltip';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -99,6 +105,14 @@ export const SIMPLE_CATEGORIES: SimpleCategory[] = [
     typicalOutputTokens: 1500,
   },
 ];
+
+// ─── Tier tooltips ──────────────────────────────────────────────────────
+
+const TIER_TOOLTIPS: Record<Tier, string> = {
+  low: 'Fastest responses, lowest cost. Uses efficient models like Haiku.',
+  medium: 'Balanced speed and quality. Uses capable models like Sonnet.',
+  high: 'Maximum intelligence, highest cost. Uses frontier models like Opus.',
+};
 
 // ─── Tier definitions ───────────────────────────────────────────────────
 
@@ -397,54 +411,62 @@ export function SimpleModelTierSelector() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                {(['low', 'medium', 'high'] as Tier[]).map((tier) => {
-                  const meta = TIER_META[tier];
-                  const Icon = meta.icon;
-                  const isSelected = currentTier === tier;
+              <TooltipProvider>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['low', 'medium', 'high'] as Tier[]).map((tier) => {
+                    const meta = TIER_META[tier];
+                    const Icon = meta.icon;
+                    const isSelected = currentTier === tier;
 
-                  return (
-                    <button
-                      key={tier}
-                      disabled={readOnly}
-                      onClick={() =>
-                        setSelectedTiers((prev) => ({ ...prev, [cat.key]: tier }))
-                      }
-                      className={cn(
-                        'relative flex flex-col items-center gap-1 rounded-lg border p-3 transition-all',
-                        isSelected
-                          ? meta.selectedBg
-                          : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700',
-                        readOnly && 'opacity-60 cursor-not-allowed'
-                      )}
-                    >
-                      {isSelected && (
-                        <div className="absolute top-1.5 right-1.5">
-                          <Check className={cn('w-3.5 h-3.5', meta.color)} />
-                        </div>
-                      )}
-                      <Icon className={cn('w-5 h-5', isSelected ? meta.color : 'text-gray-400')} />
-                      <span
-                        className={cn(
-                          'text-xs font-semibold',
-                          isSelected ? meta.color : 'text-gray-600 dark:text-gray-400'
-                        )}
-                      >
-                        {meta.label}
-                      </span>
-                      <span className="text-[10px] text-gray-500 dark:text-gray-500 text-center leading-tight">
-                        {meta.description}
-                      </span>
-                      <span className={cn(
-                        'text-[10px] font-medium tabular-nums mt-0.5',
-                        isSelected ? meta.color : 'text-gray-400'
-                      )}>
-                        {formatCreditCost(cat.key, tier, cat.actionLabel)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                    return (
+                      <Tooltip key={tier}>
+                        <TooltipTrigger asChild>
+                          <button
+                            disabled={readOnly}
+                            onClick={() =>
+                              setSelectedTiers((prev) => ({ ...prev, [cat.key]: tier }))
+                            }
+                            className={cn(
+                              'relative flex flex-col items-center gap-1 rounded-lg border p-3 transition-all',
+                              isSelected
+                                ? meta.selectedBg
+                                : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700',
+                              readOnly && 'opacity-60 cursor-not-allowed'
+                            )}
+                          >
+                            {isSelected && (
+                              <div className="absolute top-1.5 right-1.5">
+                                <Check className={cn('w-3.5 h-3.5', meta.color)} />
+                              </div>
+                            )}
+                            <Icon className={cn('w-5 h-5', isSelected ? meta.color : 'text-gray-400')} />
+                            <span
+                              className={cn(
+                                'text-xs font-semibold',
+                                isSelected ? meta.color : 'text-gray-600 dark:text-gray-400'
+                              )}
+                            >
+                              {meta.label}
+                            </span>
+                            <span className="text-[10px] text-gray-500 dark:text-gray-500 text-center leading-tight">
+                              {meta.description}
+                            </span>
+                            <span className={cn(
+                              'text-[10px] font-medium tabular-nums mt-0.5',
+                              isSelected ? meta.color : 'text-gray-400'
+                            )}>
+                              {formatCreditCost(cat.key, tier, cat.actionLabel)}
+                            </span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] whitespace-normal text-center">
+                          {TIER_TOOLTIPS[tier]}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              </TooltipProvider>
             </div>
           );
         })}
