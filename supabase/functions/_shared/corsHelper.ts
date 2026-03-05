@@ -32,6 +32,7 @@ function getAllowedOrigins(): string[] {
     'https://www.use60.com',
     'https://app.use60.com',
     'https://staging.use60.com',
+    'https://dev.use60.com',
     'https://sixtyseconds.video',
     'https://www.sixtyseconds.video',
     'https://app.sixtyseconds.video',
