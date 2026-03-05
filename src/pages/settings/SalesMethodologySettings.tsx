@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { ChevronRight, Eye, Loader2, Lock } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, Loader2, Lock, Target, MessageSquare, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useOrg } from '@/lib/contexts/OrgContext';
+import { useAuth } from '@/lib/contexts/AuthContext';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
 import {
@@ -29,10 +30,48 @@ import {
   useAgentConfig,
   useApplyMethodology,
 } from '@/lib/hooks/useAgentConfig';
+import { usePendingConfigQuestions } from '@/lib/services/configQuestionService';
 import { MethodologySelector } from '@/components/agent/MethodologySelector';
 import { StageMappingEditor } from '@/components/agent/StageMappingEditor';
 import { QualificationCriteriaEditor } from '@/components/agent/QualificationCriteriaEditor';
 import { CustomMethodologyWizard } from '@/components/agent/CustomMethodologyWizard';
+import { InAppQuestionCard } from '@/components/learning/InAppQuestionCard';
+
+function TechnicalDiffToggle({ diff }: { diff: Array<{ key: string; oldValue: unknown; newValue: unknown }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
+      >
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+        {open ? 'Hide' : 'Show'} technical details
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1">
+          {diff.map((item) => (
+            <div
+              key={item.key}
+              className="flex items-start gap-2 text-xs bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2"
+            >
+              <span className="font-mono text-gray-700 dark:text-gray-300 flex-1 truncate">{item.key}</span>
+              {item.oldValue !== undefined && (
+                <span className="text-red-500 line-through truncate max-w-[80px]">
+                  {String(item.oldValue).slice(0, 20)}
+                </span>
+              )}
+              <span className="text-emerald-600 dark:text-emerald-400 truncate max-w-[80px]">
+                {String(item.newValue ?? '').slice(0, 20)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SalesMethodologySettings() {
   const orgId = useActiveOrgId();
@@ -45,9 +84,15 @@ export default function SalesMethodologySettings() {
 
   const applyMethodology = useApplyMethodology();
 
+  const { user } = useAuth();
+
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [showCustomWizard, setShowCustomWizard] = useState(false);
+
+  // Methodology-category config questions
+  const { data: pendingQuestions } = usePendingConfigQuestions(orgId ?? '', user?.id);
+  const methodologyQuestions = (pendingQuestions ?? []).filter((q) => q.category === 'methodology');
 
   // Determine current methodology from config
   const currentMethodologyKey =
@@ -99,8 +144,29 @@ export default function SalesMethodologySettings() {
   return (
     <SettingsPageWrapper
       title="Sales Methodology"
-      description="Choose the sales framework that guides how 60 analyzes your deals and coaches your conversations"
+      description="Tell 60 how you sell, and it'll coach you in your language."
     >
+      {/* Impact cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        {[
+          { icon: Target, title: 'Deal Scoring', desc: '60 flags deals missing your key qualification criteria' },
+          { icon: MessageSquare, title: 'Meeting Coaching', desc: 'Post-call feedback aligned to your chosen framework' },
+          { icon: BarChart3, title: 'Pipeline Health', desc: 'Risk alerts weighted to what matters in your process' },
+        ].map(({ icon: Icon, title, desc }) => (
+          <Card key={title} className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl border-gray-200 dark:border-gray-800/60">
+            <CardContent className="p-4 flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 shrink-0">
+                <Icon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{title}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
       <Tabs defaultValue="methodology" className="space-y-6">
         <TabsList className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200 dark:border-gray-800/60">
           <TabsTrigger value="methodology">Methodology</TabsTrigger>
@@ -179,6 +245,30 @@ export default function SalesMethodologySettings() {
               </Button>
             </div>
           )}
+
+          {/* Refine Your Setup — inline methodology questions (only when there are questions) */}
+          {orgId && methodologyQuestions.length > 0 && (
+            <Card className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl border-gray-200 dark:border-gray-800/60">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Refine Your Setup
+                </CardTitle>
+                <CardDescription>
+                  Answer these questions to help 60 understand your sales process better.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {methodologyQuestions.slice(0, 3).map((q) => (
+                  <InAppQuestionCard key={q.id} question={q} />
+                ))}
+                {methodologyQuestions.length > 3 && (
+                  <p className="text-xs text-gray-400 text-center">
+                    +{methodologyQuestions.length - 3} more questions
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Stage Mapping tab */}
@@ -204,32 +294,63 @@ export default function SalesMethodologySettings() {
       <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Preview: Switch to {selectedTemplate?.name}</DialogTitle>
+            <DialogTitle>What changes when you switch to {selectedTemplate?.name}?</DialogTitle>
             <DialogDescription>
-              The following config keys will be updated for your organisation.
+              60 will adjust how it scores deals, coaches conversations, and flags risks based on the {selectedTemplate?.name} framework.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-2 max-h-72 overflow-y-auto">
-            {diff.length === 0 ? (
-              <p className="text-sm text-gray-500">No config key changes detected.</p>
-            ) : (
-              diff.map((item) => (
-                <div
-                  key={item.key}
-                  className="flex items-start gap-2 text-xs bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2"
-                >
-                  <span className="font-mono text-gray-700 dark:text-gray-300 flex-1 truncate">{item.key}</span>
-                  {item.oldValue !== undefined && (
-                    <span className="text-red-500 line-through truncate max-w-[80px]">
-                      {String(item.oldValue).slice(0, 20)}
-                    </span>
-                  )}
-                  <span className="text-emerald-600 dark:text-emerald-400 truncate max-w-[80px]">
-                    {String(item.newValue ?? '').slice(0, 20)}
-                  </span>
-                </div>
-              ))
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {/* Qualification changes */}
+            {selectedTemplate?.qualification_criteria && (
+              <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl space-y-1.5">
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-emerald-500" />
+                  Qualification Criteria
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {Object.keys(selectedTemplate.qualification_criteria).length} criteria will be used:{' '}
+                  {Object.keys(selectedTemplate.qualification_criteria)
+                    .map((k) => k.replace(/_/g, ' '))
+                    .map((k) => k.charAt(0).toUpperCase() + k.slice(1))
+                    .join(', ')}
+                </p>
+              </div>
+            )}
+
+            {/* Coaching changes */}
+            {selectedTemplate?.coaching_focus && Object.keys(selectedTemplate.coaching_focus).length > 0 && (
+              <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl space-y-1.5">
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
+                  Meeting Coaching
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Post-call feedback will focus on:{' '}
+                  {Object.keys(selectedTemplate.coaching_focus)
+                    .map((k) => k.replace(/_/g, ' '))
+                    .map((k) => k.charAt(0).toUpperCase() + k.slice(1))
+                    .join(', ')}
+                </p>
+              </div>
+            )}
+
+            {/* Stage rules */}
+            {selectedTemplate?.stage_rules && Object.keys(selectedTemplate.stage_rules).length > 0 && (
+              <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-xl space-y-1.5">
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                  <BarChart3 className="w-3.5 h-3.5 text-emerald-500" />
+                  Risk Scoring
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Deal progression rules will update for {Object.keys(selectedTemplate.stage_rules).length} stages
+                </p>
+              </div>
+            )}
+
+            {/* Technical details toggle */}
+            {diff.length > 0 && (
+              <TechnicalDiffToggle diff={diff} />
             )}
           </div>
 
