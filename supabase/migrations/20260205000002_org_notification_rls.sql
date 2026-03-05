@@ -5,7 +5,8 @@
 -- Step 1: Drop existing SELECT policy and recreate with org-wide logic
 DROP POLICY IF EXISTS "notifications_select" ON "public"."notifications";
 
-CREATE POLICY "notifications_select" ON "public"."notifications"
+DO $$ BEGIN
+  CREATE POLICY "notifications_select" ON "public"."notifications"
 FOR SELECT
 USING (
   -- Service role can view all
@@ -27,6 +28,8 @@ USING (
     )
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Step 2: Update other policies to maintain existing logic
 -- (INSERT, UPDATE, DELETE remain service role or owner only)

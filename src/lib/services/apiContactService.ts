@@ -154,7 +154,7 @@ export class ApiContactService {
       if (options?.includeCompany && processedContacts.length > 0) {
         const companyIds = [...new Set(processedContacts
           .filter((c: any) => c.company_id)
-          .map((c: any) => c.company_id))];
+          .map((c: any) => c.company_id))] as string[];
         
         if (companyIds.length > 0) {
           const { data: companies, error: companiesError } = await (supabase

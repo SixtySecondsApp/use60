@@ -50,7 +50,8 @@ COMMENT ON TABLE public.account_watchlist IS 'Accounts monitored by Smart Listen
 ALTER TABLE public.account_watchlist ENABLE ROW LEVEL SECURITY;
 
 -- Users can read/write their own watchlist entries
-CREATE POLICY "account_watchlist_user_select"
+DO $$ BEGIN
+  CREATE POLICY "account_watchlist_user_select"
   ON public.account_watchlist
   FOR SELECT
   USING (
@@ -58,16 +59,22 @@ CREATE POLICY "account_watchlist_user_select"
     OR auth.uid() = user_id
     OR public.can_admin_org(org_id)
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "account_watchlist_user_insert"
+DO $$ BEGIN
+  CREATE POLICY "account_watchlist_user_insert"
   ON public.account_watchlist
   FOR INSERT
   WITH CHECK (
     public.is_service_role()
     OR (auth.uid() = user_id AND public.can_access_org_data(org_id))
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "account_watchlist_user_update"
+DO $$ BEGIN
+  CREATE POLICY "account_watchlist_user_update"
   ON public.account_watchlist
   FOR UPDATE
   USING (
@@ -78,14 +85,19 @@ CREATE POLICY "account_watchlist_user_update"
     public.is_service_role()
     OR auth.uid() = user_id
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "account_watchlist_user_delete"
+DO $$ BEGIN
+  CREATE POLICY "account_watchlist_user_delete"
   ON public.account_watchlist
   FOR DELETE
   USING (
     public.is_service_role()
     OR auth.uid() = user_id
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Auto-update updated_at
 CREATE TRIGGER update_account_watchlist_updated_at
@@ -153,7 +165,8 @@ COMMENT ON TABLE public.account_signals IS 'Intent signals detected by Smart Lis
 ALTER TABLE public.account_signals ENABLE ROW LEVEL SECURITY;
 
 -- Users can read signals for their own watchlist entries; admins can see all org signals
-CREATE POLICY "account_signals_select"
+DO $$ BEGIN
+  CREATE POLICY "account_signals_select"
   ON public.account_signals
   FOR SELECT
   USING (
@@ -164,15 +177,21 @@ CREATE POLICY "account_signals_select"
     )
     OR public.can_admin_org(org_id)
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Only service role (cron) inserts signals
-CREATE POLICY "account_signals_service_insert"
+DO $$ BEGIN
+  CREATE POLICY "account_signals_service_insert"
   ON public.account_signals
   FOR INSERT
   WITH CHECK (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update read/dismissed/actioned state on their own signals
-CREATE POLICY "account_signals_user_update"
+DO $$ BEGIN
+  CREATE POLICY "account_signals_user_update"
   ON public.account_signals
   FOR UPDATE
   USING (
@@ -189,6 +208,8 @@ CREATE POLICY "account_signals_user_update"
       WHERE aw.id = watchlist_id AND aw.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Indexes
 CREATE INDEX idx_account_signals_watchlist_date
@@ -224,10 +245,13 @@ COMMENT ON TABLE public.account_signal_snapshots IS 'Point-in-time enrichment sn
 -- RLS: service-role-only (cron writes/reads snapshots)
 ALTER TABLE public.account_signal_snapshots ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "account_signal_snapshots_service_all"
+DO $$ BEGIN
+  CREATE POLICY "account_signal_snapshots_service_all"
   ON public.account_signal_snapshots
   USING (public.is_service_role())
   WITH CHECK (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Index for efficient snapshot retrieval (latest per watchlist+type)
 CREATE INDEX idx_account_signal_snapshots_lookup

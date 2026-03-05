@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 // Helper function to generate PKCE challenge
@@ -48,8 +48,32 @@ serve(async (req) => {
     } catch (error) {
       // If JSON parsing fails, continue without origin
     }
-    
-    // Dynamically determine redirect URI based on request origin
+
+    // Allowlist of valid origins to prevent open redirect attacks
+    const ALLOWED_ORIGINS = [
+      'http://localhost:5173',
+      'http://localhost:5175',
+      'http://localhost:3000',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:5175',
+      'https://app.use60.com',
+      'https://use60.com',
+      'https://www.use60.com',
+      'https://staging.use60.com',
+      'https://sixty-sales-dashboard.vercel.app',
+    ];
+
+    // Validate the origin against the allowlist
+    if (requestOrigin && !ALLOWED_ORIGINS.includes(requestOrigin)) {
+      // Also allow project-specific Vercel preview deployments
+      const isVercelPreview = /^https:\/\/[a-z0-9-]+-sixty-sales-dashboard\.vercel\.app$/.test(requestOrigin);
+      if (!isVercelPreview) {
+        console.warn(`[google-oauth-initiate] Rejected disallowed origin: ${requestOrigin}`);
+        requestOrigin = undefined; // Fall back to default
+      }
+    }
+
+    // Dynamically determine redirect URI based on validated request origin
     let redirectUri: string;
     if (requestOrigin) {
       redirectUri = `${requestOrigin}/auth/google/callback`;

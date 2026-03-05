@@ -1,0 +1,517 @@
+{
+  "feature": {
+    "id": "autonomy-escalation-engine-v2",
+    "name": "Autonomy Escalation Engine V2",
+    "prd": null,
+    "consultReport": ".sixty/consult/autonomy-escalation-engine-v2.md",
+    "status": "pending",
+    "phase": "V2 Architecture — Critical Path Dependency",
+    "effort": "3-4 weeks",
+    "dependencies": ["AUT-001→008 (complete)", "GRAD-001→006 (complete)", "Command Centre trust scorer (complete)"],
+    "createdAt": "2026-03-03T00:00:00Z",
+    "completedAt": null,
+    "summary": "Unified autonomy engine with contextual intelligence, shadow execution, impact-weighted demotion, explainability layer, trust capital metric, and role-based presets. 60's most defensible moat — every other V2 system depends on this."
+  },
+
+  "stories": [
+
+    {
+      "id": "AE2-001",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Unified trust signal taxonomy and config table",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "phase": "Phase 1 — Foundation",
+      "dependencies": { "stories": [], "files": [], "schema": ["autopilot_signals", "action_trust_scores"] },
+      "blocks": ["AE2-002", "AE2-003", "AE2-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "Create `autonomy_signal_taxonomy` table: signal_type (PK), category (feedback|outcome|system), base_weight NUMERIC, impact_multiplier_enabled BOOLEAN, description TEXT, is_positive BOOLEAN",
+        "Seed all signal types from both systems: approved (+1.0), approved_edited (+0.3), rejected (-1.0), expired (-0.2), undone (-2.0), auto_executed (+0.1), auto_undone (-3.0), rubber_stamp (0.0), context_escalation (-0.5, new), shadow_match (+0.05, new)",
+        "Create `autonomy_signal_taxonomy_overrides` table for org-level weight customization: org_id, signal_type, custom_weight",
+        "RPC `get_signal_taxonomy(org_id)` returns merged taxonomy (base + org overrides)",
+        "Migration is additive — existing autopilot_signals table unchanged"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260303200001_autonomy_signal_taxonomy.sql"
+      ]
+    },
+
+    {
+      "id": "AE2-002",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Unified autonomy resolver entry point",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "phase": "Phase 1 — Foundation",
+      "dependencies": { "stories": ["AE2-001"], "files": ["supabase/functions/_shared/orchestrator/autonomyResolver.ts", "supabase/functions/_shared/commandCentre/trustScorer.ts"], "schema": [] },
+      "blocks": ["AE2-004", "AE2-007", "AE2-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "New `resolveAutonomy()` function that consults both System A (org policy) and System B (user confidence) in a single call",
+        "Resolution precedence: (1) org policy ceiling, (2) user autopilot tier, (3) org preset default — returns the MORE restrictive of org ceiling vs user tier",
+        "Returns AutonomyDecision: { tier, source, orgPolicy, userTier, confidenceScore, factors[], explanation }",
+        "Wire into fleetRouter.ts replacing direct autonomyResolver.ts call",
+        "Wire trust_history factor into confidenceScorer.ts (completes TODO CC11) — query action_trust_scores for user's approval/rejection history",
+        "5-minute cache preserved, invalidation on policy or confidence changes"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/unifiedAutonomyResolver.ts",
+        "supabase/functions/_shared/orchestrator/fleetRouter.ts",
+        "supabase/functions/_shared/commandCentre/confidenceScorer.ts"
+      ]
+    },
+
+    {
+      "id": "AE2-003",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Wire autonomy resolver into chat execution path",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "phase": "Phase 1 — Foundation",
+      "dependencies": { "stories": ["AE2-002"], "files": ["src/lib/copilot/agent/autonomousExecutor.ts"], "schema": [] },
+      "blocks": ["AE2-007"],
+      "parallelWith": ["AE2-004"],
+      "acceptance": [
+        "AutonomousExecutor calls unified resolver before executing each skill tool_use",
+        "If tier is 'approve': return proposed action as structured response instead of executing, with approve/edit/reject buttons",
+        "If tier is 'suggest': return suggestion text only, no action buttons",
+        "If tier is 'disabled': skip the tool call and explain why",
+        "If tier is 'auto': execute as before (no change to current behavior)",
+        "Record signal (approved/rejected/edited) when user responds to approval prompt"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/lib/copilot/agent/autonomousExecutor.ts",
+        "src/lib/copilot/agent/autonomyGate.ts"
+      ]
+    },
+
+    {
+      "id": "AE2-004",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Context risk scoring function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "phase": "Phase 2 — Contextual Autonomy",
+      "dependencies": { "stories": ["AE2-002"], "files": [], "schema": ["deals", "contacts", "contact_warmth_scores"] },
+      "blocks": ["AE2-005", "AE2-006"],
+      "parallelWith": ["AE2-003"],
+      "acceptance": [
+        "New `calculateContextRisk()` function returns 0.0-1.0 risk score from deal/contact context",
+        "5 context signals with configurable weights: deal_value (0.30), contact_seniority (0.25), deal_stage (0.20), relationship_warmth (0.15), action_reversibility (0.10)",
+        "Deal value thresholds: <$25K = low (0.0), $25K-$100K = medium (0.5), >$100K = high (1.0) — configurable per org",
+        "Contact seniority from job_title parsing: IC (0.0), Manager (0.3), Director (0.5), VP (0.7), C-suite (1.0)",
+        "Returns ContextRisk: { score, factors: { signal, value, weight, contribution }[], escalation_recommendation }"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/contextRiskScorer.ts"
+      ]
+    },
+
+    {
+      "id": "AE2-005",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Context-aware tier adjustment in unified resolver",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "phase": "Phase 2 — Contextual Autonomy",
+      "dependencies": { "stories": ["AE2-004"], "files": ["supabase/functions/_shared/orchestrator/unifiedAutonomyResolver.ts"], "schema": [] },
+      "blocks": ["AE2-007"],
+      "parallelWith": ["AE2-006"],
+      "acceptance": [
+        "Unified resolver accepts optional context: { dealId, contactId, dealValue, contactTitle }",
+        "When context risk > 0.7 AND current tier is 'auto': downgrade to 'approve' for this action only (transient, not persisted)",
+        "When context risk > 0.9: downgrade to 'suggest' regardless of tier",
+        "Context escalation recorded as 'context_escalation' signal in autopilot_signals for learning",
+        "AutonomyDecision gains `contextRisk` and `contextAdjusted` fields"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/unifiedAutonomyResolver.ts",
+        "supabase/functions/_shared/orchestrator/contextRiskScorer.ts"
+      ]
+    },
+
+    {
+      "id": "AE2-006",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Context-aware execution tier in Command Centre",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "phase": "Phase 2 — Contextual Autonomy",
+      "dependencies": { "stories": ["AE2-004"], "files": ["supabase/functions/_shared/commandCentre/trustScorer.ts", "supabase/functions/_shared/commandCentre/actionDrafter.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AE2-005"],
+      "acceptance": [
+        "trustScorer.classifyExecutionTier() accepts optional context_risk parameter",
+        "When context_risk > 0.7: raise auto_threshold by 0.10 (harder to auto-execute high-value deals)",
+        "actionDrafter passes deal/contact context to trust scorer when drafting actions",
+        "command_centre_items gains context_risk_score column for audit",
+        "Existing items without context default to context_risk = 0.0 (no behavior change)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/commandCentre/trustScorer.ts",
+        "supabase/functions/_shared/commandCentre/actionDrafter.ts",
+        "supabase/migrations/20260303200002_cc_context_risk.sql"
+      ]
+    },
+
+    {
+      "id": "AE2-007",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Confidence explanation model (Show Your Work)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "phase": "Phase 3 — Explainability",
+      "dependencies": { "stories": ["AE2-002", "AE2-003", "AE2-005"], "files": [], "schema": [] },
+      "blocks": ["AE2-008", "AE2-009"],
+      "parallelWith": [],
+      "acceptance": [
+        "New `generateExplanation()` function builds human-readable reasons for every tier decision",
+        "Explanation template per scenario: 'Auto-sending because: 94% approval rate on follow-ups, $12K deal (low risk), your agent has handled 47 similar actions'",
+        "Escalation template: 'Asking for approval because: deal value $250K (high risk), C-suite contact, your edit rate on similar emails is 35%'",
+        "Demotion template: 'Reduced to suggest because: 2 undos in last 7 days on email sends, 30-day cooldown active'",
+        "Returns ExplanationPayload: { summary (1 line), factors[] (bullet points), recommendation, next_milestone (what it takes to promote) }"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/autonomyExplainer.ts"
+      ]
+    },
+
+    {
+      "id": "AE2-008",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Show Your Work UI component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "phase": "Phase 3 — Explainability",
+      "dependencies": { "stories": ["AE2-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AE2-009"],
+      "acceptance": [
+        "AutonomyExplanation component: collapsible inline card showing confidence breakdown",
+        "Renders explanation factors as a mini progress bar per factor (deal risk, approval history, confidence score)",
+        "Shown in: (1) Command Centre items, (2) Copilot approval prompts, (3) Slack approval messages",
+        "Next milestone callout: 'Approve 3 more follow-ups to unlock auto-send for this action type'",
+        "Compact mode for Slack (plain text with emoji indicators)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/AutonomyExplanation.tsx",
+        "src/components/agent/AutonomyFactorBar.tsx"
+      ]
+    },
+
+    {
+      "id": "AE2-009",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Autonomy audit trail viewer",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "phase": "Phase 3 — Explainability",
+      "dependencies": { "stories": ["AE2-007"], "files": [], "schema": ["autonomy_audit_log", "autopilot_events"] },
+      "blocks": [],
+      "parallelWith": ["AE2-008"],
+      "acceptance": [
+        "AutonomyTimeline component: vertical timeline of all tier changes with explanations",
+        "Each event shows: timestamp, action type, old tier → new tier, trigger reason, explanation factors",
+        "Filter by action type, date range, event type (promotion/demotion/manual/context_escalation)",
+        "Embedded in AutonomySettingsPage as a new tab: 'Audit Trail'",
+        "Sources data from both autonomy_audit_log (System A) and autopilot_events (System B)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/AutonomyTimeline.tsx",
+        "src/lib/hooks/useAutonomyAuditTrail.ts",
+        "src/pages/settings/AutonomySettingsPage.tsx"
+      ]
+    },
+
+    {
+      "id": "AE2-010",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Role-based autonomy preset definitions and migration",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "phase": "Phase 4 — Role Presets",
+      "dependencies": { "stories": ["AE2-001"], "files": [], "schema": ["agent_config_defaults"] },
+      "blocks": ["AE2-011"],
+      "parallelWith": ["AE2-003", "AE2-004"],
+      "acceptance": [
+        "New preset type 'role' in agent_config_defaults alongside existing 'conservative/balanced/autonomous'",
+        "4 role presets: sdr (aggressive — auto for task/enrich/slack, approve for email/crm), ae (balanced — approve for email/crm, suggest for proposals), vp_sales (oversight — suggest for most, approve for tasks/slack), cs (renewal-focused — auto for task/enrich/email-followup, approve for proposals)",
+        "Each preset includes description, recommended_for text, and icon_name",
+        "Existing 3 presets remain as 'style' type — role presets are additive",
+        "RPC get_autonomy_presets(type) returns filtered list"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260303200003_role_based_presets.sql"
+      ]
+    },
+
+    {
+      "id": "AE2-011",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Role-based preset selector UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "phase": "Phase 4 — Role Presets",
+      "dependencies": { "stories": ["AE2-010"], "files": ["src/pages/settings/AutonomySettingsPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AE2-005", "AE2-006"],
+      "acceptance": [
+        "Replace generic preset selector with two-step: (1) Choose your role (SDR/AE/VP Sales/CS), (2) Fine-tune style (Conservative/Balanced/Autonomous)",
+        "Role selection pre-fills action grid with role-appropriate defaults; style adjusts intensity",
+        "Show role description and 'recommended for' text to help users self-identify",
+        "First-time setup: role selector shown prominently; returning users see current role with 'Change' button",
+        "Non-admin users see their personal role selection (if org allows user overrides)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/settings/AutonomySettingsPage.tsx",
+        "src/components/agent/RolePresetSelector.tsx",
+        "src/components/agent/ActionPolicyGrid.tsx"
+      ]
+    },
+
+    {
+      "id": "AE2-012",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Shadow execution recorder",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "phase": "Phase 5 — Shadow Execution",
+      "dependencies": { "stories": ["AE2-002"], "files": [], "schema": [] },
+      "blocks": ["AE2-013"],
+      "parallelWith": ["AE2-008", "AE2-009"],
+      "acceptance": [
+        "Create `autonomy_shadow_executions` table: id, org_id, user_id, action_type, actual_tier, shadow_tier (one level higher), action_snapshot JSONB, user_decision (approved/approved_edited/rejected), edit_distance, would_have_matched BOOLEAN, created_at",
+        "When an action executes at 'approve' tier: also record what would happen at 'auto' tier — save the action snapshot",
+        "When user approves without edit: mark would_have_matched = true (shadow execution would have been correct)",
+        "When user edits or rejects: mark would_have_matched = false",
+        "Runs passively — no additional AI calls, just records the comparison"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260303200004_shadow_executions.sql",
+        "supabase/functions/_shared/orchestrator/shadowRecorder.ts"
+      ]
+    },
+
+    {
+      "id": "AE2-013",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Shadow execution analytics and promotion evidence UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "phase": "Phase 5 — Shadow Execution",
+      "dependencies": { "stories": ["AE2-012"], "files": [], "schema": ["autonomy_shadow_executions"] },
+      "blocks": [],
+      "parallelWith": ["AE2-015"],
+      "acceptance": [
+        "ShadowExecutionInsight component: 'If you'd been on auto for follow-ups last month, 94% would have been sent unchanged'",
+        "Shown in: (1) promotion suggestion Slack DMs as evidence, (2) AutonomySettingsPage as a promotion nudge banner, (3) AutopilotDashboard per-action breakdown",
+        "RPC `get_shadow_execution_stats(user_id, action_type, days)` returns { total, would_have_matched, match_rate, action_type }",
+        "Promotion suggestion only surfaces when shadow match rate > 90% AND total > 10",
+        "Clicking 'See evidence' expands to show the last 5 shadow comparisons"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/agent/ShadowExecutionInsight.tsx",
+        "src/lib/hooks/useShadowExecutionStats.ts",
+        "supabase/migrations/20260303200005_shadow_execution_stats_rpc.sql"
+      ]
+    },
+
+    {
+      "id": "AE2-014",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Impact-weighted demotion scoring",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "phase": "Phase 6 — Negative Signal Amplification",
+      "dependencies": { "stories": ["AE2-001"], "files": ["supabase/functions/_shared/autopilot/demotionEngine.ts"], "schema": [] },
+      "blocks": ["AE2-015"],
+      "parallelWith": ["AE2-005", "AE2-006"],
+      "acceptance": [
+        "Extend demotionEngine severity rules to factor deal value and action reversibility",
+        "Impact multiplier: base_demotion_weight * (1 + deal_value_factor + seniority_factor + reversibility_factor)",
+        "Deal value factor: <$25K = 0.0, $25K-$100K = 0.5, >$100K = 1.0",
+        "Reversibility factor: task_create = 0.0 (easily deleted), email_send = 0.8 (can't unsend), crm_stage_change = 0.3 (revertible)",
+        "High-impact demotion (multiplier > 2.0) triggers EMERGENCY severity regardless of frequency",
+        "Demotion audit log records impact_multiplier and component factors"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/autopilot/demotionEngine.ts",
+        "supabase/functions/_shared/orchestrator/demotionHandler.ts",
+        "supabase/functions/_shared/orchestrator/contextRiskScorer.ts"
+      ]
+    },
+
+    {
+      "id": "AE2-015",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Impact weights config UI and demotion explanation",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "phase": "Phase 6 — Negative Signal Amplification",
+      "dependencies": { "stories": ["AE2-014"], "files": ["src/pages/settings/AutonomySettingsPage.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AE2-013"],
+      "acceptance": [
+        "New 'Safety Rules' section in AutonomySettingsPage (admin only)",
+        "Configurable deal value thresholds (low/medium/high boundaries) per org",
+        "Reversibility factor display: table showing action types and their reversibility rating (read-only, platform-defined)",
+        "When demotion occurs, Slack DM includes impact breakdown: 'Demoted email auto-send because: undo on $180K deal (high impact, multiplier 2.8)'",
+        "Uses existing Slack DM infrastructure from demotionEngine"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/settings/AutonomySettingsPage.tsx",
+        "src/components/agent/SafetyRulesConfig.tsx",
+        "supabase/functions/_shared/autopilot/demotionEngine.ts"
+      ]
+    },
+
+    {
+      "id": "AE2-016",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Trust Capital score calculation",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "phase": "Phase 7 — Trust Capital",
+      "dependencies": { "stories": ["AE2-001"], "files": [], "schema": ["autopilot_signals", "autopilot_confidence"] },
+      "blocks": ["AE2-017"],
+      "parallelWith": ["AE2-008", "AE2-009"],
+      "acceptance": [
+        "New `calculateTrustCapital()` function returns a composite score representing the user's training investment",
+        "Components: total_signals (all time), action_types_trained (distinct), avg_confidence_score, days_active, auto_tier_count (action types at auto), personalization_depth (learned preferences from user_ai_preferences)",
+        "Trust Capital number: weighted sum normalized to 0-1000 scale for easy display",
+        "Switching cost estimate: 'New platforms start at zero. Your agent has X weeks of training.'",
+        "Store as materialized view or RPC for fast reads — no separate table needed"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/trustCapital.ts",
+        "supabase/migrations/20260303200006_trust_capital_rpc.sql"
+      ]
+    },
+
+    {
+      "id": "AE2-017",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Trust Capital dashboard component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "phase": "Phase 7 — Trust Capital",
+      "dependencies": { "stories": ["AE2-016"], "files": ["src/components/platform/autopilot/AutopilotDashboard.tsx"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AE2-013", "AE2-015"],
+      "acceptance": [
+        "TrustCapital card component: shows score (0-1000), circular progress ring, and breakdown tooltip",
+        "Breakdown: 'X signals given across Y action types over Z days. W action types at full auto.'",
+        "Switching cost callout: 'Your agent has learned from 847 decisions. New platforms start at zero.'",
+        "Embedded in AutopilotDashboard (personal view) and TeamAutopilotView (team averages)",
+        "Milestone celebrations: toast when crossing 100, 500, 1000 signals"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/agent/TrustCapitalCard.tsx",
+        "src/components/platform/autopilot/AutopilotDashboard.tsx",
+        "src/lib/hooks/useTrustCapital.ts"
+      ]
+    },
+
+    {
+      "id": "AE2-018",
+      "feature": "autonomy-escalation-engine-v2",
+      "title": "Integration tests for unified resolver and context scoring",
+      "type": "test",
+      "status": "complete",
+      "priority": 5,
+      "phase": "Phase 8 — Testing",
+      "dependencies": { "stories": ["AE2-005", "AE2-014"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["AE2-017"],
+      "acceptance": [
+        "Vitest suite for unified resolver: org ceiling wins over user tier, context risk downgrades auto to approve, cache invalidation on policy change",
+        "Vitest suite for context risk scorer: deal value thresholds, contact seniority parsing, composite risk calculation",
+        "Vitest suite for impact-weighted demotion: high-value deal undo triggers emergency, low-value task undo stays at warn",
+        "Vitest suite for shadow recorder: records comparison on approve-tier actions, correctly marks would_have_matched",
+        "All existing autonomyResolver tests continue passing (backwards compatibility)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/__tests__/unifiedAutonomyResolver.test.ts",
+        "supabase/functions/_shared/orchestrator/__tests__/contextRiskScorer.test.ts",
+        "supabase/functions/_shared/autopilot/__tests__/impactDemotion.test.ts",
+        "supabase/functions/_shared/orchestrator/__tests__/shadowRecorder.test.ts"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 18,
+    "completedStories": 18,
+    "estimatedHours": "12-16 hours (with parallel execution)",
+    "parallelGroups": [
+      { "group": ["AE2-003", "AE2-004", "AE2-010"], "after": "AE2-002 or AE2-001", "reason": "Independent backend paths" },
+      { "group": ["AE2-005", "AE2-006", "AE2-014"], "after": "AE2-004", "reason": "All consume context risk scorer, no file overlap" },
+      { "group": ["AE2-008", "AE2-009", "AE2-016"], "after": "AE2-007", "reason": "Independent frontend components" },
+      { "group": ["AE2-013", "AE2-015", "AE2-017", "AE2-018"], "after": "respective deps", "reason": "Final phase, all independent" }
+    ],
+    "phases": {
+      "phase1_foundation": { "stories": ["AE2-001", "AE2-002", "AE2-003"], "estimate": "2-3 hours", "critical_path": true },
+      "phase2_contextual": { "stories": ["AE2-004", "AE2-005", "AE2-006"], "estimate": "2 hours" },
+      "phase3_explainability": { "stories": ["AE2-007", "AE2-008", "AE2-009"], "estimate": "2-3 hours" },
+      "phase4_role_presets": { "stories": ["AE2-010", "AE2-011"], "estimate": "1.5 hours" },
+      "phase5_shadow": { "stories": ["AE2-012", "AE2-013"], "estimate": "1.5 hours" },
+      "phase6_impact_demotion": { "stories": ["AE2-014", "AE2-015"], "estimate": "1.5 hours" },
+      "phase7_trust_capital": { "stories": ["AE2-016", "AE2-017"], "estimate": "1.5 hours" },
+      "phase8_testing": { "stories": ["AE2-018"], "estimate": "30 min" }
+    },
+    "mvp": {
+      "stories": ["AE2-001", "AE2-002", "AE2-003", "AE2-004", "AE2-005", "AE2-007", "AE2-008"],
+      "estimate": "6-8 hours",
+      "delivers": "Unified resolver with contextual autonomy and explainability — the core engine"
+    }
+  },
+
+  "dependencyGraph": {
+    "AE2-001": { "blocks": ["AE2-002", "AE2-010", "AE2-014", "AE2-016"] },
+    "AE2-002": { "blocks": ["AE2-003", "AE2-004", "AE2-005", "AE2-007", "AE2-012"] },
+    "AE2-003": { "blocks": ["AE2-007"] },
+    "AE2-004": { "blocks": ["AE2-005", "AE2-006", "AE2-014"] },
+    "AE2-005": { "blocks": ["AE2-007", "AE2-018"] },
+    "AE2-007": { "blocks": ["AE2-008", "AE2-009"] },
+    "AE2-010": { "blocks": ["AE2-011"] },
+    "AE2-012": { "blocks": ["AE2-013"] },
+    "AE2-014": { "blocks": ["AE2-015", "AE2-018"] },
+    "AE2-016": { "blocks": ["AE2-017"] }
+  }
+}

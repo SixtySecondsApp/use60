@@ -252,8 +252,9 @@ function PipelineContent() {
     setShowDealForm(true);
   };
 
-  const handleDealClick = (deal: any) => {
-    navigate(`/crm/deals/${deal.id}?returnTo=${encodeURIComponent(window.location.pathname)}`);
+  const handleDealClick = (dealOrId: any) => {
+    const dealId = typeof dealOrId === 'string' ? dealOrId : dealOrId.id;
+    navigate(`/crm/deals/${dealId}?returnTo=${encodeURIComponent(window.location.pathname)}`);
   };
 
   const handleSaveDeal = async (formData: any) => {

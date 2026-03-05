@@ -25,9 +25,12 @@ COMMENT ON COLUMN org_credit_balance.grace_recovery_pending  IS 'True when balan
 ALTER TABLE credit_transactions
   DROP CONSTRAINT IF EXISTS credit_transactions_type_check;
 
-ALTER TABLE credit_transactions
+DO $$ BEGIN
+  ALTER TABLE credit_transactions
   ADD CONSTRAINT credit_transactions_type_check
     CHECK (type IN ('purchase', 'deduction', 'refund', 'adjustment', 'bonus', 'grace_recovery'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 3. Replace deduct_credits_fifo with grace-aware version

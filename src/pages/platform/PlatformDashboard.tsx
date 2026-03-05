@@ -53,6 +53,8 @@ import {
   Mic,
   LifeBuoy,
   Coins,
+  Send,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -200,6 +202,15 @@ const platformSections: Record<string, PlatformSection[]> = {
     },
   ],
   'AI & Intelligence': [
+    {
+      id: 'godseye',
+      title: 'God\'s Eye',
+      description: 'Real-time token flow visualization across all users and LLM endpoints',
+      icon: Eye,
+      href: '/platform/godseye',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
+      badge: 'New',
+    },
     {
       id: 'ai-settings',
       title: 'AI Configuration',
@@ -564,6 +575,24 @@ const platformSections: Record<string, PlatformSection[]> = {
     },
   ],
   'Feature Development': [
+    {
+      id: 'campaigns',
+      title: 'Campaigns',
+      description: 'Email campaign management, sequence builder, and reply classification',
+      icon: Send,
+      href: '/campaigns',
+      color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
+      badge: 'In Dev',
+    },
+    {
+      id: 'proposals',
+      title: 'Proposals',
+      description: 'AI-generated sales proposals with template engine and PDF rendering',
+      icon: FileText,
+      href: '/proposals',
+      color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
+      badge: 'In Dev',
+    },
     {
       id: 'calls',
       title: 'Calls (JustCall)',

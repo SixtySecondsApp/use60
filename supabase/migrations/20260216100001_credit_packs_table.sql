@@ -67,7 +67,8 @@ ALTER TABLE credit_packs ENABLE ROW LEVEL SECURITY;
 
 -- Org members can read their org's packs
 DROP POLICY IF EXISTS "Org members can read their credit_packs" ON credit_packs;
-CREATE POLICY "Org members can read their credit_packs"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read their credit_packs"
   ON credit_packs FOR SELECT
   USING (
     EXISTS (
@@ -76,10 +77,13 @@ CREATE POLICY "Org members can read their credit_packs"
       AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can insert packs (manual top-ups via UI)
 DROP POLICY IF EXISTS "Org admins can insert credit_packs" ON credit_packs;
-CREATE POLICY "Org admins can insert credit_packs"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can insert credit_packs"
   ON credit_packs FOR INSERT
   WITH CHECK (
     EXISTS (
@@ -89,10 +93,13 @@ CREATE POLICY "Org admins can insert credit_packs"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can update packs (e.g. adjust remaining — rare, admin only)
 DROP POLICY IF EXISTS "Org admins can update credit_packs" ON credit_packs;
-CREATE POLICY "Org admins can update credit_packs"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update credit_packs"
   ON credit_packs FOR UPDATE
   USING (
     EXISTS (
@@ -102,10 +109,13 @@ CREATE POLICY "Org admins can update credit_packs"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can manage all packs
 DROP POLICY IF EXISTS "Platform admins can manage all credit_packs" ON credit_packs;
-CREATE POLICY "Platform admins can manage all credit_packs"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can manage all credit_packs"
   ON credit_packs FOR ALL
   USING (
     EXISTS (
@@ -114,6 +124,8 @@ CREATE POLICY "Platform admins can manage all credit_packs"
       AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 4. deduct_credits_fifo — FIFO pack deduction RPC

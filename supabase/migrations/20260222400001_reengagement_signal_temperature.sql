@@ -91,7 +91,8 @@ ALTER TABLE deal_signal_temperature ENABLE ROW LEVEL SECURITY;
 
 -- Users in the same org can view temperature rows
 DROP POLICY IF EXISTS "Users can view org deal_signal_temperature" ON deal_signal_temperature;
-CREATE POLICY "Users can view org deal_signal_temperature"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org deal_signal_temperature"
   ON deal_signal_temperature FOR SELECT
   TO authenticated
   USING (
@@ -101,14 +102,19 @@ CREATE POLICY "Users can view org deal_signal_temperature"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (for edge functions / orchestrator)
 DROP POLICY IF EXISTS "Service role full access to deal_signal_temperature" ON deal_signal_temperature;
-CREATE POLICY "Service role full access to deal_signal_temperature"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to deal_signal_temperature"
   ON deal_signal_temperature FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- ALTER: reengagement_watchlist — add cooldown/attempt columns

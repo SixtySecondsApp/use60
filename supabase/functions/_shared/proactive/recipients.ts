@@ -4,7 +4,7 @@
  * Resolves Slack user mappings and filters recipients based on org settings.
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 export interface Recipient {
   userId: string;

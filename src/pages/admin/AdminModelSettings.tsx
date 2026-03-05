@@ -238,7 +238,7 @@ export default function AdminModelSettings() {
         const modelValue = `${config.provider}/${config.model}`;
         
         // Call admin RPC function to update system config
-        const { error } = await supabase.rpc('admin_set_system_config', {
+        const { error } = await (supabase.rpc as any)('admin_set_system_config', {
           p_key: configKey,
           p_value: modelValue,
           p_description: `System default model for ${FEATURE_LABELS[config.feature_key]}`,

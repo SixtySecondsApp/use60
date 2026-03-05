@@ -19,7 +19,8 @@ ALTER TABLE tasks
 
 -- Add CHECK constraints for new columns
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_source_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_source_check
+DO $$ BEGIN
+  ALTER TABLE tasks ADD CONSTRAINT tasks_source_check
   CHECK (source IN (
     'manual',
     'ai_proactive',
@@ -33,9 +34,12 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_source_check
     'slack_suggestion',
     'voice_recording'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_ai_status_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_ai_status_check
+DO $$ BEGIN
+  ALTER TABLE tasks ADD CONSTRAINT tasks_ai_status_check
   CHECK (ai_status IN (
     'none',
     'queued',
@@ -46,9 +50,12 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_ai_status_check
     'failed',
     'expired'
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_deliverable_type_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_deliverable_type_check
+DO $$ BEGIN
+  ALTER TABLE tasks ADD CONSTRAINT tasks_deliverable_type_check
   CHECK (deliverable_type IN (
     'email_draft',
     'research_brief',
@@ -58,14 +65,22 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_deliverable_type_check
     'action_plan',
     'insight'
   ) OR deliverable_type IS NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_risk_level_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_risk_level_check
+DO $$ BEGIN
+  ALTER TABLE tasks ADD CONSTRAINT tasks_risk_level_check
   CHECK (risk_level IN ('low', 'medium', 'high', 'info'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_confidence_score_check;
-ALTER TABLE tasks ADD CONSTRAINT tasks_confidence_score_check
+DO $$ BEGIN
+  ALTER TABLE tasks ADD CONSTRAINT tasks_confidence_score_check
   CHECK (confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add indexes for efficient querying
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to_ai_status

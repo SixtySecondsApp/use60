@@ -28,10 +28,12 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 import {
   resolveTrustThreshold,
   mapDraftedActionToActionType,
   recordOutcome,
+  classifyExecutionTier,
 } from '../_shared/commandCentre/trustScorer.ts';
 import type { CommandCentreItem, DraftedAction } from '../_shared/commandCentre/types.ts';
 
@@ -53,6 +55,7 @@ interface ReadyItem {
   drafted_action: DraftedAction | null;
   deal_id: string | null;
   contact_id: string | null;
+  context_risk_score: number | null;
 }
 
 type ItemOutcome = 'auto_exec' | 'skipped' | 'rate_limited';
@@ -184,6 +187,12 @@ Deno.serve(async (req: Request) => {
   const preflight = handleCorsPreflightRequest(req);
   if (preflight) return preflight;
 
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return errorResponse('Unauthorized', req, 401);
+  }
+
   try {
     // Service role client — documented above
     const supabase = createClient(
@@ -195,7 +204,7 @@ Deno.serve(async (req: Request) => {
     const { data: items, error: fetchError } = await supabase
       .from('command_centre_items')
       .select(
-        'id, org_id, user_id, item_type, title, confidence_score, priority_score, status, resolution_channel, context, drafted_action, deal_id, contact_id',
+        'id, org_id, user_id, item_type, title, confidence_score, priority_score, status, resolution_channel, context, drafted_action, deal_id, contact_id, context_risk_score',
       )
       .eq('status', 'ready')
       .not('confidence_score', 'is', null)
@@ -287,10 +296,14 @@ Deno.serve(async (req: Request) => {
         // Resolve trust threshold for this (user, action_type) pair
         const { threshold } = await resolveTrustThreshold(supabase, userId, actionType);
 
-        // Check confidence against threshold
-        if (item.confidence_score < threshold) {
+        // AE2-006: Use classifyExecutionTier with context_risk to decide autonomy
+        const contextRisk = item.context_risk_score ?? 0.0;
+        const tier = classifyExecutionTier(item.confidence_score, threshold, contextRisk);
+
+        // Only autonomous tier qualifies for auto-execution
+        if (tier !== 'autonomous') {
           console.log(
-            `[cc-auto-execute] item=${item.id} confidence=${item.confidence_score} below threshold=${threshold} for action=${actionType} — leaving for HITL`,
+            `[cc-auto-execute] item=${item.id} confidence=${item.confidence_score} threshold=${threshold} context_risk=${contextRisk} tier=${tier} for action=${actionType} — leaving for HITL`,
           );
           allResults.push({ id: item.id, action: 'skipped', reason: 'below_threshold' });
           totalSkippedThreshold++;

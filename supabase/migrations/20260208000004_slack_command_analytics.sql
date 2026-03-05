@@ -26,15 +26,21 @@ ON slack_command_analytics (org_id, created_at DESC);
 ALTER TABLE slack_command_analytics ENABLE ROW LEVEL SECURITY;
 
 -- Service role full access (edge functions write analytics)
-CREATE POLICY "Service role full access to command analytics"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to command analytics"
 ON slack_command_analytics FOR ALL
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can read their own analytics
-CREATE POLICY "Users can read own command analytics"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own command analytics"
 ON slack_command_analytics FOR SELECT
 USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Grant permissions
 GRANT SELECT ON slack_command_analytics TO authenticated;

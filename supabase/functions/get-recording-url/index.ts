@@ -15,7 +15,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { S3Client, GetObjectCommand } from 'npm:@aws-sdk/client-s3@3';
 import { getSignedUrl } from 'npm:@aws-sdk/s3-request-presigner@3';
 import {
@@ -29,8 +29,8 @@ import { createMeetingBaaSClient } from '../_shared/meetingbaas.ts';
 // Constants
 // =============================================================================
 
-// URL expiry time: 7 days in seconds
-const URL_EXPIRY_SECONDS = 60 * 60 * 24 * 7;
+// URL expiry time: 4 hours in seconds
+const URL_EXPIRY_SECONDS = 60 * 60 * 4;
 
 // =============================================================================
 // Types

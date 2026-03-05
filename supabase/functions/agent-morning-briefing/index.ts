@@ -21,6 +21,7 @@ import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse
 import { verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
 import { sendSlackDM } from '../_shared/proactive/deliverySlack.ts';
 import { logAICostEvent } from '../_shared/costTracking.ts';
+import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -94,6 +95,28 @@ serve(async (req) => {
             overnight_alerts: briefing.overnightAlerts.length,
           },
         });
+
+        // Write to Command Centre for inbox feed
+        try {
+          await writeToCommandCentre({
+            org_id: persona.org_id,
+            user_id: persona.user_id,
+            source_agent: 'morning-brief',
+            item_type: 'insight',
+            title: `Morning Briefing: ${briefing.deals.length} deal${briefing.deals.length !== 1 ? 's' : ''}, ${briefing.meetings.length} meeting${briefing.meetings.length !== 1 ? 's' : ''} today`,
+            summary: narrativeBriefing.substring(0, 500),
+            context: {
+              deals_count: briefing.deals.length,
+              meetings_count: briefing.meetings.length,
+              tasks_count: briefing.tasks.length,
+              overnight_alerts: briefing.overnightAlerts.length,
+            },
+            urgency: 'normal',
+          });
+        } catch (ccErr) {
+          // CC failure must not break morning briefing delivery
+          console.error('[agent-morning-briefing] CC write failed for user', persona.user_id, String(ccErr));
+        }
 
         // Mark batched notifications as delivered
         if (briefing.batchedNotificationIds.length > 0) {

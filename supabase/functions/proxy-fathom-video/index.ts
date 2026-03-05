@@ -1,21 +1,27 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'X-Frame-Options': 'ALLOWALL', // Allow embedding
-}
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { authenticateRequest } from '../_shared/edgeAuth.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 
 /**
  * Proxy Fathom video content to bypass iframe restrictions
  * This allows Browserless to screenshot the content
  */
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) return preflightResponse;
+  const corsHeaders = {
+    ...getCorsHeaders(req),
+    'X-Frame-Options': 'ALLOWALL', // Allow embedding
+  };
 
   try {
+    // Authenticate request
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    await authenticateRequest(req, supabase, serviceRoleKey);
+
     const url = new URL(req.url)
     const targetUrl = url.searchParams.get('url')
 
@@ -150,10 +156,11 @@ serve(async (req) => {
       }
     })
   } catch (error) {
+    const isAuthError = error.message?.includes('Unauthorized') || error.message?.includes('invalid session');
     return new Response(
       JSON.stringify({ error: error.message }),
       {
-        status: 500,
+        status: isAuthError ? 401 : 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     )

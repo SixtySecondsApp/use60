@@ -1,6 +1,8 @@
 // @ts-nocheck — Deno edge function
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { authenticateRequest } from '../_shared/edgeAuth.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { createConcurrencyLimiter, fetchWithRetry } from '../_shared/rateLimiter.ts'
 
 /**
@@ -16,25 +18,24 @@ import { createConcurrencyLimiter, fetchWithRetry } from '../_shared/rateLimiter
  * }
  */
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
 const BATCH_SIZE = 20
 const CONCURRENCY = 3
 
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) return preflightResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-    const { table_id, column_id, row_ids } = await req.json()
+    // Authenticate request
+    const body = await req.json()
+    await authenticateRequest(req, supabase, serviceRoleKey, body.userId)
+
+    const { table_id, column_id, row_ids } = body
 
     if (!table_id || !column_id) {
       return new Response(
@@ -221,9 +222,11 @@ serve(async (req: Request) => {
     )
   } catch (error: any) {
     console.error('[run-apify-actor] Error:', error)
+    const msg = error.message ?? 'Internal error';
+    const isAuthError = msg.includes('Unauthorized') || msg.includes('invalid session');
     return new Response(
-      JSON.stringify({ error: error.message ?? 'Internal error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      JSON.stringify({ error: msg }),
+      { status: isAuthError ? 401 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   }
 })

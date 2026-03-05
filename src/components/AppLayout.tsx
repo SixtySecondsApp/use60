@@ -66,6 +66,7 @@ import logger from '@/lib/utils/logger';
 import { useEventListener } from '@/lib/communication/EventBus';
 import { useTaskNotifications } from '@/lib/hooks/useTaskNotifications';
 import { SmartSearch } from '@/components/SmartSearch';
+import { CommandPalette } from '@/components/command-palette/CommandPalette';
 import { CreditWidget } from '@/components/credits/CreditWidget';
 import { LowBalanceBanner } from '@/components/credits/LowBalanceBanner';
 import { CreditTopUpProvider } from '@/components/credits/CreditTopUpPrompt';
@@ -89,11 +90,14 @@ import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
 import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
 import { SetupWizardDialog } from '@/components/setup-wizard/SetupWizardDialog';
+import { useSetupWizardAutoTrigger } from '@/lib/hooks/useSetupWizardAutoTrigger';
 import { useTicketsNeedingAttention } from '@/lib/hooks/useTicketsNeedingAttention';
 import { TrialCountdownBadge } from '@/components/TrialCountdownBadge';
 import { TrialUpgradeModal } from '@/components/TrialUpgradeModal';
 import { WelcomeSplash } from '@/components/WelcomeSplash';
 import { ProductTour } from '@/components/ProductTour';
+import { useCommandCentreStatsQuery } from '@/lib/hooks/useCommandCentreItemsQuery';
+import { usePendingConfigQuestions } from '@/lib/services/configQuestionService';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { userData, isImpersonating, stopImpersonating } = useUser();
@@ -116,6 +120,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // The modal is kept for approaching-expiry warnings only (isTrialing).
   // Internal admin orgs never see trial modals.
   const isTrialApproachingExpiry = !isInternalAdminOrg && trialStatus.isTrialing && !trialStatus.isLoading;
+
+  // SETUP-002: Auto-trigger setup wizard for new users with no integrations
+  useSetupWizardAutoTrigger();
+
+  // Show the trial conversion modal when the trial has expired
+  const isTrialExpired = orgSubscription?.status === 'expired';
 
   // Check if trial banner should be showing (same logic as TrialBanner component)
   const isTrialBannerVisible = useMemo(() => {
@@ -222,6 +232,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Support ticket attention count for nav badge (platform admins only)
   const { count: supportAttentionCount } = useTicketsNeedingAttention();
 
+  // Command Centre unread count for nav badge (internal users only)
+  const { data: ccStats } = useCommandCentreStatsQuery();
+  const ccUnreadCount = ccStats?.needs_input ?? 0;
+
+  // Pending config question count for nav badge (internal users only)
+  const { user: authUser } = useAuth();
+  const { data: pendingQuestions = [] } = usePendingConfigQuestions(
+    activeOrgId ?? '',
+    authUser?.id,
+  );
+  const pendingQuestionsCount = pendingQuestions.length;
+
   // Check if user needs to set up their password (magic link users)
   const { needsSetup: needsPasswordSetup, completeSetup: completePasswordSetup } = usePasswordSetupRequired();
 
@@ -262,7 +284,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Auto-collapse sidebar on specific pages for more space
   useEffect(() => {
-    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow'];
+    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow', '/platform/godseye'];
     const shouldCollapse = collapsedPages.includes(location.pathname);
     
     if (shouldCollapse) {
@@ -285,21 +307,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Note: /ops/ pages removed — they use normal page scroll so users can scroll
   // when the mouse is outside the table.
   const isFullHeightPage = useMemo(() => {
-    return location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/');
+    return location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/') || location.pathname.startsWith('/landing-page-builder') || location.pathname === '/platform/godseye';
   }, [location.pathname]);
 
-  // Keyboard shortcut for SmartSearch (⌘K) - Disabled
-  // useEffect(() => {
-  //   const handleKeyDown = (e: KeyboardEvent) => {
-  //     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-  //       e.preventDefault();
-  //       setIsSmartSearchOpen(true);
-  //     }
-  //   };
-
-  //   document.addEventListener('keydown', handleKeyDown);
-  //   return () => document.removeEventListener('keydown', handleKeyDown);
-  // }, []);
+  // Keyboard shortcut for CommandPalette (⌘K / Ctrl+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSmartSearchOpen((v) => !v);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Dynamic navigation based on user type (internal vs external)
   // Uses centralized route config with access levels
@@ -774,17 +795,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         'transition-all duration-300 ease-in-out',
         isImpersonating ? 'top-[44px]' : 'top-0'
       )}>
-        {/* Search Button (cmdK) - Hidden */}
-        {/* <button
+        {/* Search Button (Cmd+K) */}
+        <button
           onClick={() => setIsSmartSearchOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-800/70 transition-colors text-sm text-gray-600 dark:text-gray-400"
+          aria-label="Open search (⌘K)"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-800/70 transition-colors text-sm text-gray-500 dark:text-gray-400"
         >
           <Search className="w-4 h-4" />
           <span className="hidden xl:inline">Search...</span>
-          <kbd className="hidden xl:inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded">
+          <kbd className="hidden xl:inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded">
             <span className="text-[10px]">⌘</span>K
           </kbd>
-        </button> */}
+        </button>
 
         {/* User Profile with Dropdown */}
         <div className="flex items-center gap-3 ml-auto">
@@ -985,6 +1007,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     {!isCollapsed && item.href === '/platform/support-tickets' && supportAttentionCount > 0 && (
                       <span className="inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none ml-auto">
                         {supportAttentionCount > 9 ? '9+' : supportAttentionCount}
+                      </span>
+                    )}
+                    {!isCollapsed && item.href === '/command-centre' && ccUnreadCount > 0 && (
+                      <span className="inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-semibold leading-none ml-auto">
+                        {ccUnreadCount > 99 ? '99+' : ccUnreadCount}
+                      </span>
+                    )}
+                    {!isCollapsed && item.href === '/coaching' && pendingQuestionsCount > 0 && (
+                      <span className="inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-indigo-500 text-white text-[10px] font-semibold leading-none ml-auto">
+                        {pendingQuestionsCount > 9 ? '9+' : pendingQuestionsCount}
                       </span>
                     )}
                   </>
@@ -1269,58 +1301,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <ProductTour userId={userData.id} />
         )}
 
-        {/* SmartSearch - Hidden */}
-        {/* <SmartSearch
+        {/* CommandPalette — Cmd+K global search */}
+        <CommandPalette
           isOpen={isSmartSearchOpen}
           onClose={() => setIsSmartSearchOpen(false)}
-          onOpenCopilot={() => {
-            navigate('/copilot');
-            setIsSmartSearchOpen(false);
-          }}
-          onDraftEmail={(contactId, contactEmail) => {
-            // Navigate to email page with contact information
-            if (contactEmail) {
-              navigate(`/email?to=${encodeURIComponent(contactEmail)}`);
-            } else {
-              navigate('/email');
-            }
-            setIsSmartSearchOpen(false);
-          }}
-          onAddContact={() => {
-            navigate('/crm?tab=contacts');
-            setIsSmartSearchOpen(false);
-          }}
-          onScheduleMeeting={(contactId) => {
-            // Navigate to meetings page, optionally with contact pre-selected
-            if (contactId) {
-              navigate(`/meetings?contact=${contactId}`);
-            } else {
-              navigate('/meetings');
-            }
-            setIsSmartSearchOpen(false);
-          }}
-          onSelectContact={(contactId) => {
-            navigate(`/crm/contacts/${contactId}`);
-            setIsSmartSearchOpen(false);
-          }}
-          onSelectMeeting={(meetingId) => {
-            navigate(`/meetings/${meetingId}`);
-            setIsSmartSearchOpen(false);
-          }}
-          onSelectCompany={(companyId) => {
-            navigate(`/crm/companies/${companyId}`);
-            setIsSmartSearchOpen(false);
-          }}
-          onSelectDeal={(dealId) => {
-            navigate(`/crm/deals/${dealId}`);
-            setIsSmartSearchOpen(false);
-          }}
-          onAskCopilot={(query) => {
-            openCopilot(query, true); // Start a new chat for each search query
-            navigate('/copilot');
-            setIsSmartSearchOpen(false);
-          }}
-        /> */}
+        />
       </main>
     </div>
     </div>

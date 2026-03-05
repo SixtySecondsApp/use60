@@ -1,0 +1,294 @@
+{
+  "name": "Close the Email Loop — HITL Approval + Gmail/O365 Send",
+  "prd": "PRD-01",
+  "version": "1.0",
+  "createdAt": "2026-02-26T00:00:00Z",
+  "description": "Wire two missing steps onto the existing 5-wave meeting_ended pipeline: (1) Slack HITL approval message after draft-followup-email in Wave 3, (2) send-followup-email skill on approval. Gmail send function and HITL infrastructure already exist — this is wiring, not building.",
+  "status_baseline": {
+    "hitl_infrastructure": "built — hitl_pending_approvals table, slack-interactive handler, agent-orchestrator resumeSequence()",
+    "gmail_send": "built — google-gmail edge function exists, called by hitl-send-followup-email",
+    "hitl_send_followup_email": "built — function exists but not wired into Wave 3 approval flow",
+    "draft_followup_email": "running — Wave 3 generates draft, then pipeline stops",
+    "autonomy_system": "built — autopilot_confidence, promotion/demotion engines live",
+    "missing": [
+      "Slack Block Kit approval message after Wave 3 draft (to/subject/body preview + 4 buttons)",
+      "Wave 3 → slack-hitl-notification → orchestrator HITL pause wiring",
+      "Approval → resumeSequence() → hitl-send-followup-email call",
+      "Thread-aware Gmail replies (In-Reply-To / References headers)",
+      "30-second undo window post-send",
+      "Daily send cap per rep",
+      "[Edit in 60] deep link flow",
+      "[Schedule] delayed send flow",
+      "Autonomy signal capture (approve/edit/reject → autopilot_confidence)",
+      "O365 / Microsoft Graph send path"
+    ]
+  },
+  "effort_estimate": "1.5–2 weeks",
+  "ship_sequence_week": "1–2 (parallel with PRD-03)",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Wave 3 → Slack HITL wiring",
+      "description": "Emit Slack approval message after draft-followup-email and pause orchestrator for HITL",
+      "priority": "critical",
+      "duration": "3–4 days",
+      "stories": ["EMAIL-001", "EMAIL-002", "EMAIL-003"]
+    },
+    {
+      "id": "phase-2",
+      "name": "Send quality — threading, undo, caps",
+      "description": "Thread-aware replies, 30s undo window, daily send cap, signature appending",
+      "priority": "high",
+      "duration": "2–3 days",
+      "stories": ["EMAIL-004", "EMAIL-005", "EMAIL-006"]
+    },
+    {
+      "id": "phase-3",
+      "name": "Button flows — Edit, Schedule",
+      "description": "Full button response paths for [Edit in 60] and [Schedule] actions",
+      "priority": "high",
+      "duration": "2–3 days",
+      "stories": ["EMAIL-007", "EMAIL-008"]
+    },
+    {
+      "id": "phase-4",
+      "name": "Autonomy + O365",
+      "description": "Wire approval signals to autopilot_confidence model; add O365 send path",
+      "priority": "medium",
+      "duration": "2–3 days",
+      "stories": ["EMAIL-009", "EMAIL-010"]
+    }
+  ],
+  "stories": [
+    {
+      "id": "EMAIL-001",
+      "title": "Add Slack HITL approval step to meeting_ended Wave 3",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "orchestrator",
+      "status": "pending",
+      "dependencies": [],
+      "blocks": ["EMAIL-002"],
+      "acceptance": [
+        "After draft-followup-email step completes in Wave 3, a new step calls slack-hitl-notification with the full email draft (to, subject, body)",
+        "Slack message renders Block Kit with email preview and four buttons: [Approve] [Edit in 60] [Schedule] [Skip]",
+        "sequence_job is set to requires_approval: true and orchestrator pauses after this step",
+        "hitl_pending_approvals row is created with resource_type='email_draft' and callback_type='edge_function'"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/sequences/meeting_ended.ts (or equivalent sequence config)",
+        "supabase/functions/slack-hitl-notification/index.ts",
+        "supabase/functions/_shared/orchestrator/runner.ts"
+      ],
+      "estimatedMinutes": 30,
+      "notes": "Find where meeting_ended Wave 3 steps are defined (sequence config or runner hardcode). slack-hitl-notification already exists — extend its payload to include full email preview."
+    },
+    {
+      "id": "EMAIL-002",
+      "title": "Wire [Approve] button → resumeSequence() → hitl-send-followup-email",
+      "phase": "phase-1",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["EMAIL-001"],
+      "blocks": [],
+      "acceptance": [
+        "When rep clicks [Approve] in Slack, slack-interactive/handlers/hitl.ts receives the action",
+        "Handler looks up hitl_pending_approvals row, sets status='approved'",
+        "Calls agent-orchestrator resumeSequence() with the approval payload",
+        "Orchestrator runner calls hitl-send-followup-email with draft content from sequence job context",
+        "Slack approval message updates to show 'Sending...' → 'Sent ✓' (or error) feedback"
+      ],
+      "files": [
+        "supabase/functions/slack-interactive/handlers/hitl.ts",
+        "supabase/functions/agent-orchestrator/index.ts",
+        "supabase/functions/hitl-send-followup-email/index.ts"
+      ],
+      "estimatedMinutes": 25,
+      "notes": "resumeSequence() already exists in agent-orchestrator. Verify hitl-send-followup-email accepts sequence context payload (not just raw email params)."
+    },
+    {
+      "id": "EMAIL-003",
+      "title": "Wire [Skip] button → mark job complete, log skip reason",
+      "phase": "phase-1",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["EMAIL-001"],
+      "blocks": [],
+      "acceptance": [
+        "When rep clicks [Skip], slack-interactive handler sets hitl_pending_approvals status='rejected'",
+        "sequence_job is marked complete with outcome='skipped'",
+        "Skip reason stored in sequence_job output (default: 'rep_skipped')",
+        "Slack approval message updates to show 'Skipped' with muted styling"
+      ],
+      "files": [
+        "supabase/functions/slack-interactive/handlers/hitl.ts",
+        "supabase/functions/agent-orchestrator/index.ts"
+      ],
+      "estimatedMinutes": 15,
+      "notes": "Simple path — no send happens. Just state cleanup and Slack message update."
+    },
+    {
+      "id": "EMAIL-004",
+      "title": "Thread-aware Gmail replies (In-Reply-To / References headers)",
+      "phase": "phase-2",
+      "priority": "P0",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["EMAIL-002"],
+      "blocks": [],
+      "acceptance": [
+        "hitl-send-followup-email passes thread_id, in_reply_to, references to google-gmail when available from meeting/email context",
+        "google-gmail/gmail-actions.ts constructs RFC 2822 In-Reply-To and References headers",
+        "Sent email appears as a reply in the existing thread (not a new thread) in both rep and recipient inboxes",
+        "Falls back to new thread gracefully when no prior thread context exists"
+      ],
+      "files": [
+        "supabase/functions/google-gmail/gmail-actions.ts",
+        "supabase/functions/google-gmail/index.ts",
+        "supabase/functions/hitl-send-followup-email/index.ts"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "EMAIL-005",
+      "title": "30-second undo window post-send",
+      "phase": "phase-2",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["EMAIL-002"],
+      "blocks": [],
+      "acceptance": [
+        "hitl-send-followup-email queues the actual send with a 30-second delay (pg_cron delayed job or sleep-with-cancellable pattern)",
+        "Immediately after queueing, updates Slack approval message to show [Undo] button with 30s countdown",
+        "If rep clicks [Undo] within 30s: cancel queued send, update Slack message to 'Cancelled', set outcome='undone'",
+        "If 30s elapses: send executes normally, Slack message updates to 'Sent ✓'"
+      ],
+      "files": [
+        "supabase/functions/hitl-send-followup-email/index.ts",
+        "supabase/functions/slack-interactive/handlers/hitl.ts"
+      ],
+      "estimatedMinutes": 30,
+      "notes": "Consider using a short-lived row in a 'pending_sends' table with a pg_cron job that fires after 30s. Undo = delete the row before cron fires."
+    },
+    {
+      "id": "EMAIL-006",
+      "title": "Daily send cap per rep (configurable, default 50)",
+      "phase": "phase-2",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["EMAIL-002"],
+      "blocks": [],
+      "acceptance": [
+        "Migration adds daily_email_send_cap (int, default 50) to org_settings or user_settings",
+        "hitl-send-followup-email checks count of emails sent today by user_id before sending",
+        "If cap reached: reject with user-facing Slack message 'Daily send limit (50) reached'",
+        "Cap resets at midnight UTC via date comparison on created_at in activity log or credit_ledger"
+      ],
+      "files": [
+        "supabase/migrations/YYYYMMDD_email_send_cap.sql",
+        "supabase/functions/hitl-send-followup-email/index.ts"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "EMAIL-007",
+      "title": "[Edit in 60] deep link — open copilot with draft pre-loaded",
+      "phase": "phase-3",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["EMAIL-001"],
+      "blocks": [],
+      "acceptance": [
+        "When rep clicks [Edit in 60], slack-interactive handler generates a deep link to the app copilot with draft content as URL param or session context",
+        "Link opens copilot with the draft pre-loaded as an editable message",
+        "Slack approval message updates to show 'Editing in 60...' with the app deep link",
+        "After rep edits and re-submits, a new HITL approval message appears in Slack for the updated draft"
+      ],
+      "files": [
+        "supabase/functions/slack-interactive/handlers/hitl.ts"
+      ],
+      "estimatedMinutes": 20,
+      "notes": "Deep link format: app.use60.com/copilot?draft_id={hitl_id} or similar. Frontend copilot must handle draft_id param to pre-populate."
+    },
+    {
+      "id": "EMAIL-008",
+      "title": "[Schedule] button — time picker + delayed send queue",
+      "phase": "phase-3",
+      "priority": "P2",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["EMAIL-001"],
+      "blocks": [],
+      "acceptance": [
+        "When rep clicks [Schedule], Slack responds with a modal time picker (date + time fields)",
+        "On modal submit: queue delayed send at specified time (pg_cron or scheduled job row)",
+        "Slack approval message updates to show scheduled time: 'Scheduled for Fri 2pm'",
+        "At scheduled time: email sends normally via hitl-send-followup-email flow",
+        "Rep can cancel from Slack with [Cancel scheduled send] for up to 5 minutes before send time"
+      ],
+      "files": [
+        "supabase/functions/slack-interactive/handlers/hitl.ts",
+        "supabase/migrations/YYYYMMDD_scheduled_sends.sql"
+      ],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "EMAIL-009",
+      "title": "Capture HITL signals into autopilot_confidence model",
+      "phase": "phase-4",
+      "priority": "P1",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["EMAIL-002"],
+      "blocks": [],
+      "acceptance": [
+        "hitl-send-followup-email logs an autopilot_event on send: action_type='email.send', outcome='approved' or 'edited' or 'rejected' or 'undone'",
+        "Existing promotion/demotion engine reads these events to update autopilot_confidence for email.send",
+        "Emergency demotion fires immediately on any 'undone' outcome (existing spec)",
+        "When confidence reaches auto tier: Slack message shows [Undo] button instead of [Approve]"
+      ],
+      "files": [
+        "supabase/functions/hitl-send-followup-email/index.ts",
+        "supabase/functions/_shared/orchestrator/adapters/emailSend.ts"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "EMAIL-010",
+      "title": "O365 / Microsoft Graph Mail.Send path",
+      "phase": "phase-4",
+      "priority": "P2",
+      "type": "backend",
+      "status": "pending",
+      "dependencies": ["EMAIL-002"],
+      "blocks": [],
+      "acceptance": [
+        "New ms-graph-email edge function (or action in existing ms-graph function) accepts same payload interface as google-gmail",
+        "hitl-send-followup-email detects connected_email_provider ('google' vs 'microsoft') from user_settings and routes accordingly",
+        "Microsoft Graph Mail.Send API called with correct auth (MS OAuth token from user_settings)",
+        "Sent email appears in rep's O365 Sent folder with correct thread context"
+      ],
+      "files": [
+        "supabase/functions/ms-graph-email/index.ts (new)",
+        "supabase/functions/hitl-send-followup-email/index.ts"
+      ],
+      "estimatedMinutes": 30,
+      "notes": "Check if an ms-graph or microsoft-graph function already exists. May be able to add an action rather than a new function."
+    }
+  ],
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 0,
+    "parallelOpportunities": [
+      "EMAIL-003 parallel with EMAIL-002 (both depend on EMAIL-001)",
+      "EMAIL-004, EMAIL-005, EMAIL-006 parallel with each other (all depend on EMAIL-002)",
+      "EMAIL-009 parallel with EMAIL-007 and EMAIL-008",
+      "EMAIL-010 parallel with EMAIL-009"
+    ]
+  }
+}

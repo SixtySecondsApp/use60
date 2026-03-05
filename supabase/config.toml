@@ -402,3 +402,40 @@ entrypoint = "./functions/stripe-webhook/index.ts"
 # Handles auth internally; verify_jwt = false avoids ES256 JWT issue on staging
 [functions.send-support-ticket-email]
 verify_jwt = false
+
+# Explorium B2B data platform — match (free), search, enrich
+# Auth validated internally via userClient.auth.getUser()
+# Staging uses ES256 JWTs which the gateway rejects without this flag
+[functions.explorium-match]
+verify_jwt = false
+
+[functions.explorium-search]
+verify_jwt = false
+
+[functions.explorium-enrich]
+verify_jwt = false
+
+# copilot-dynamic-table — called from browser with user JWT
+# Auth handled internally; CORS preflight needs to work
+[functions.copilot-dynamic-table]
+verify_jwt = false
+
+# Proposal Engine V2 — all called from browser with user JWT
+# Auth handled internally via getAuthContext; CORS preflight needs to work
+[functions.proposal-pipeline-v2]
+verify_jwt = false
+
+[functions.proposal-assemble-context]
+verify_jwt = false
+
+[functions.proposal-compose-v2]
+verify_jwt = false
+
+[functions.proposal-render-gotenberg]
+verify_jwt = false
+
+[functions.proposal-deliver]
+verify_jwt = false
+
+[functions.offering-extract]
+verify_jwt = false

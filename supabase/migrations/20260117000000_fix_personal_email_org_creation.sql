@@ -29,18 +29,24 @@ ALTER TABLE "public"."personal_email_domains" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "public_read_personal_email_domains" ON "public"."personal_email_domains";
 DROP POLICY IF EXISTS "admin_manage_personal_email_domains" ON "public"."personal_email_domains";
 
-CREATE POLICY "public_read_personal_email_domains"
+DO $$ BEGIN
+  CREATE POLICY "public_read_personal_email_domains"
   ON "public"."personal_email_domains"
   FOR SELECT
   USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS policy: Only admins can manage
-CREATE POLICY "admin_manage_personal_email_domains"
+DO $$ BEGIN
+  CREATE POLICY "admin_manage_personal_email_domains"
   ON "public"."personal_email_domains"
   FOR ALL
   USING (auth.jwt() ->> 'role' = 'authenticated' AND EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
   ));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 2. Insert personal email domains into the table

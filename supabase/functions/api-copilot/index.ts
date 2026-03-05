@@ -10,8 +10,8 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { getCorsHeaders, handleCorsPreflightRequest, corsHeaders as staticCorsHeaders } from '../_shared/corsHelper.ts';
 import { resolveModel, recordSuccess, recordFailure } from '../_shared/modelRouter.ts';
 import { 
   createSuccessResponse,
@@ -120,7 +120,7 @@ interface StructuredResponse {
     id: string
     label: string
     type: string
-    icon: string
+    icon?: string
     callback: string
     params?: any
   }>
@@ -327,7 +327,7 @@ serve(async (req) => {
       console.log('[API-COPILOT] ✅ Routing to handleGenerateDealEmail')
       return await handleGenerateDealEmail(client, req, user_id)
     } else if (req.method === 'GET' && endpoint === 'conversations' && resourceId) {
-      return await handleGetConversation(client, resourceId, user_id)
+      return await handleGetConversation(client, resourceId, user_id, req)
     } else {
       console.log('[API-COPILOT] ❌ No route matched:', { 
         endpoint, 
@@ -360,6 +360,7 @@ async function handleChat(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   const requestStartTime = Date.now()
   let analyticsData: any = {
     user_id: userId,
@@ -1610,6 +1611,7 @@ async function handleDraftEmail(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   try {
     const body: DraftEmailRequest = await req.json()
     
@@ -1693,14 +1695,15 @@ async function handleRegenerateEmailTone(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   try {
     const body = await req.json()
     const { currentEmail, newTone, context } = body
-    
+
     if (!currentEmail?.body || !newTone) {
       return createErrorResponse('currentEmail and newTone are required', 400, 'INVALID_REQUEST')
     }
-    
+
     console.log('[REGENERATE-TONE] Starting tone adjustment:', { newTone, hasContext: !!context })
     
     // Fetch user's writing style and profile
@@ -1906,6 +1909,7 @@ async function handleTestSkill(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   try {
     const body = await req.json()
     const skillKey = body?.skill_key ? String(body.skill_key).trim() : ''
@@ -2126,6 +2130,7 @@ async function handleGenerateDealEmail(
   req: Request,
   userId: string
 ): Promise<Response> {
+  const corsHeaders = getCorsHeaders(req);
   console.log('[GENERATE-DEAL-EMAIL] Starting email generation', { userId })
   try {
     const body = await req.json()
@@ -2572,8 +2577,10 @@ Return your response as JSON in this exact format:
 async function handleGetConversation(
   client: any,
   conversationId: string,
-  userId: string
+  userId: string,
+  req?: Request,
 ): Promise<Response> {
+  const corsHeaders = req ? getCorsHeaders(req) : staticCorsHeaders;
   try {
     if (!isValidUUID(conversationId)) {
       return createErrorResponse('Invalid conversation ID', 400, 'INVALID_ID')

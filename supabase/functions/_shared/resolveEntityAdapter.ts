@@ -7,7 +7,7 @@
  * Used by both api-copilot and copilot-autonomous edge functions.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 

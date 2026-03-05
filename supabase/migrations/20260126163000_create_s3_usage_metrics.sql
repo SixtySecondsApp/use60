@@ -31,7 +31,8 @@ CREATE INDEX idx_s3_usage_metrics_type ON s3_usage_metrics(metric_type);
 ALTER TABLE s3_usage_metrics ENABLE ROW LEVEL SECURITY;
 
 -- Admin read policy (org admins can see their org's metrics)
-CREATE POLICY "Admins can read s3_usage_metrics"
+DO $$ BEGIN
+  CREATE POLICY "Admins can read s3_usage_metrics"
   ON s3_usage_metrics FOR SELECT
   USING (
     -- Org admins/owners can see their org's metrics
@@ -42,12 +43,17 @@ CREATE POLICY "Admins can read s3_usage_metrics"
         AND om.role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can insert/update (for update-s3-metrics cron)
-CREATE POLICY "Service role can manage s3_usage_metrics"
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage s3_usage_metrics"
   ON s3_usage_metrics FOR ALL
   USING (auth.jwt()->>'role' = 'service_role')
   WITH CHECK (auth.jwt()->>'role' = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Cost calculation constants
 COMMENT ON TABLE s3_usage_metrics IS 'Daily aggregated S3 usage metrics for cost tracking. Updated by update-s3-metrics cron job.';

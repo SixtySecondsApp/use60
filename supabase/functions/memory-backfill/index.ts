@@ -83,7 +83,7 @@ serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const ragClient = createRAGClient();
+  const ragClient = createRAGClient(org_id);
 
   // ── Step 1: Find active deals for this org ──────────────────────────────
   // deals table uses org_id (UUID FK) for org filtering, not clerk_org_id.

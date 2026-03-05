@@ -3,7 +3,7 @@
  * Handles email send approval actions from Slack
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { buildEmailPreviewMessage, type EmailPreviewData } from '../../_shared/slackBlocks.ts';
 
 interface EmailSendActionContext {

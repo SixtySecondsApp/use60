@@ -60,7 +60,8 @@ ALTER TABLE credit_budget_caps ENABLE ROW LEVEL SECURITY;
 
 -- Org admins/owners can read their org's cap settings
 DROP POLICY IF EXISTS "Org admins can read their credit_budget_caps" ON credit_budget_caps;
-CREATE POLICY "Org admins can read their credit_budget_caps"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can read their credit_budget_caps"
   ON credit_budget_caps FOR SELECT
   USING (
     EXISTS (
@@ -70,10 +71,13 @@ CREATE POLICY "Org admins can read their credit_budget_caps"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins/owners can update their org's cap settings
 DROP POLICY IF EXISTS "Org admins can update their credit_budget_caps" ON credit_budget_caps;
-CREATE POLICY "Org admins can update their credit_budget_caps"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can update their credit_budget_caps"
   ON credit_budget_caps FOR UPDATE
   USING (
     EXISTS (
@@ -83,10 +87,13 @@ CREATE POLICY "Org admins can update their credit_budget_caps"
       AND om.role IN ('admin', 'owner')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Platform admins can manage all cap rows (for support / override)
 DROP POLICY IF EXISTS "Platform admins can manage all credit_budget_caps" ON credit_budget_caps;
-CREATE POLICY "Platform admins can manage all credit_budget_caps"
+DO $$ BEGIN
+  CREATE POLICY "Platform admins can manage all credit_budget_caps"
   ON credit_budget_caps FOR ALL
   USING (
     EXISTS (
@@ -95,6 +102,8 @@ CREATE POLICY "Platform admins can manage all credit_budget_caps"
       AND profiles.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- service_role bypasses RLS automatically (no explicit policy needed).
 

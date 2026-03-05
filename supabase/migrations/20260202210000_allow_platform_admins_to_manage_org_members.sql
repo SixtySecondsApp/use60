@@ -4,7 +4,8 @@
 -- Update INSERT policy to allow platform admins to add members
 DROP POLICY IF EXISTS "organization_memberships_insert" ON "public"."organization_memberships";
 
-CREATE POLICY "organization_memberships_insert" ON "public"."organization_memberships"
+DO $$ BEGIN
+  CREATE POLICY "organization_memberships_insert" ON "public"."organization_memberships"
   FOR INSERT
   WITH CHECK (
     "public"."is_service_role"()
@@ -13,11 +14,14 @@ CREATE POLICY "organization_memberships_insert" ON "public"."organization_member
     OR (("user_id" = "auth"."uid"()) AND ("role" = 'member'::"text"))
     OR ("public"."get_org_role"("auth"."uid"(), "org_id") = ANY (ARRAY['owner'::"text", 'admin'::"text"]))
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update UPDATE policy to allow platform admins
 DROP POLICY IF EXISTS "organization_memberships_update" ON "public"."organization_memberships";
 
-CREATE POLICY "organization_memberships_update" ON "public"."organization_memberships"
+DO $$ BEGIN
+  CREATE POLICY "organization_memberships_update" ON "public"."organization_memberships"
   FOR UPDATE
   USING (
     "public"."is_service_role"()
@@ -29,11 +33,14 @@ CREATE POLICY "organization_memberships_update" ON "public"."organization_member
     OR "app_auth"."is_admin"()
     OR ("public"."get_org_role"("auth"."uid"(), "org_id") = ANY (ARRAY['owner'::"text", 'admin'::"text"]))
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update DELETE policy to allow platform admins
 DROP POLICY IF EXISTS "organization_memberships_delete" ON "public"."organization_memberships";
 
-CREATE POLICY "organization_memberships_delete" ON "public"."organization_memberships"
+DO $$ BEGIN
+  CREATE POLICY "organization_memberships_delete" ON "public"."organization_memberships"
   FOR DELETE
   USING (
     "public"."is_service_role"()
@@ -41,3 +48,5 @@ CREATE POLICY "organization_memberships_delete" ON "public"."organization_member
     OR ("user_id" = "auth"."uid"())
     OR ("public"."get_org_role"("auth"."uid"(), "org_id") = ANY (ARRAY['owner'::"text", 'admin'::"text"]))
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

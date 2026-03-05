@@ -1,0 +1,182 @@
+{
+  "project": {
+    "name": "Pre-Meeting Briefing V2 — 5 Improvements",
+    "description": "Context-aware emails, 30-min delivery, snooze/remind, post-meeting follow-up, feedback collection",
+    "createdAt": "2026-02-25T21:00:00Z"
+  },
+  "features": [
+    { "id": "ctx-email", "name": "Context-Aware Booking Confirmation", "phase": 1 },
+    { "id": "timing", "name": "30-Min-Before Proactive Delivery", "phase": 2 },
+    { "id": "snooze", "name": "Remind Me Before Meeting Button", "phase": 2 },
+    { "id": "post-meet", "name": "Post-Meeting How Did It Go", "phase": 3 },
+    { "id": "feedback", "name": "Briefing Feedback Collection", "phase": 3 }
+  ],
+  "stories": [
+    {
+      "id": "CTX-001",
+      "feature": "ctx-email",
+      "title": "Context loader — emails, leads, CRM for booking confirmation",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [] },
+      "acceptance": [
+        "Query emails table for last 5 email threads between rep and each attendee",
+        "Query leads table by contact_email for lead source/enrichment context",
+        "Query deals + contacts + companies for CRM context (stage, value, source)",
+        "Return structured context object for prompt injection"
+      ],
+      "estimatedMinutes": 25,
+      "files": ["supabase/functions/slack-interactive/handlers/prepBriefing.ts"]
+    },
+    {
+      "id": "CTX-002",
+      "feature": "ctx-email",
+      "title": "Upgrade booking confirmation prompt with full context",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["CTX-001"] },
+      "acceptance": [
+        "draftEmail() receives context object and injects into Claude prompt",
+        "Email references deal source, company context, prior email threads",
+        "Fallback works when no context is found (graceful degradation)"
+      ],
+      "estimatedMinutes": 15,
+      "files": ["supabase/functions/slack-interactive/handlers/prepBriefing.ts"]
+    },
+    {
+      "id": "TIM-001",
+      "feature": "timing",
+      "title": "Add 30-min-before delivery window to slack-meeting-prep",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": [] },
+      "acceptance": [
+        "slack-meeting-prep checks for meetings starting in 25-35 min window",
+        "Sends briefing to rep's Slack DM if not already sent",
+        "Idempotency via prep_briefing_sent flag or similar marker",
+        "Existing 2hr-ahead prep still works unchanged"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/slack-meeting-prep/index.ts"]
+    },
+    {
+      "id": "SNZ-001",
+      "feature": "snooze",
+      "title": "Add Remind Me button to briefing + snooze handler",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": [] },
+      "acceptance": [
+        "Briefing Slack blocks include 'Remind me 10 min before' button",
+        "Button handler stores in slack_snoozed_items with snooze_until = meeting_start - 10min",
+        "Confirms with ephemeral 'Will remind you at X' message"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/briefingComposer.ts",
+        "supabase/functions/slack-interactive/handlers/prepBriefing.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    {
+      "id": "SNZ-002",
+      "feature": "snooze",
+      "title": "Resurface condensed briefing from snoozed items cron",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["SNZ-001"] },
+      "acceptance": [
+        "Cron picks up snoozed prep_briefing items past snooze_until",
+        "Posts condensed version: executive summary + open items + landmines only",
+        "Marks resurfaced_at to prevent duplicate sends"
+      ],
+      "estimatedMinutes": 20,
+      "files": ["supabase/functions/slack-meeting-prep/index.ts"]
+    },
+    {
+      "id": "POST-001",
+      "feature": "post-meet",
+      "title": "Post-meeting check — detect missing recording after 1 hour",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": [] },
+      "acceptance": [
+        "Check meetings/recordings tables for recording matching calendar_event",
+        "If no recording 1 hour after meeting end_time, trigger follow-up",
+        "Send Slack DM: How did it go? with action buttons",
+        "Buttons: Went well / No-show / They cancelled / Technical issue / Forgot to record"
+      ],
+      "estimatedMinutes": 25,
+      "files": ["supabase/functions/slack-meeting-prep/index.ts"]
+    },
+    {
+      "id": "POST-002",
+      "feature": "post-meet",
+      "title": "Post-meeting action handlers — route to next steps",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": { "stories": ["POST-001"] },
+      "acceptance": [
+        "went_well: log activity, suggest follow-up email draft",
+        "no_show: offer reschedule email draft, create task",
+        "cancelled: update CRM status, offer re-engagement",
+        "technical_issue: offer reschedule, log issue",
+        "forgot_to_record: log note, no further action needed"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-interactive/handlers/prepBriefing.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    {
+      "id": "FB-001",
+      "feature": "feedback",
+      "title": "Add thumbs up/down + feedback buttons to briefing blocks",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": { "stories": [] },
+      "acceptance": [
+        "Briefing Slack blocks include thumbs up/down buttons at footer",
+        "Handler logs feedback to prep_briefing_feedback table or analytics",
+        "Thumbs down opens modal asking what to improve"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/briefingComposer.ts",
+        "supabase/functions/slack-interactive/handlers/prepBriefing.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    {
+      "id": "DEPLOY-001",
+      "feature": "all",
+      "title": "Deploy all changed functions + commit",
+      "type": "deploy",
+      "status": "complete",
+      "priority": 9,
+      "dependencies": { "stories": ["CTX-002", "TIM-001", "SNZ-002", "POST-002", "FB-001"] },
+      "acceptance": [
+        "slack-meeting-prep deployed to staging",
+        "slack-interactive deployed to staging",
+        "demo-prep-briefing deployed to staging",
+        "All changes committed and pushed"
+      ],
+      "estimatedMinutes": 10,
+      "files": []
+    }
+  ],
+  "execution": {
+    "totalStories": 9,
+    "completedStories": 9,
+    "lastUpdated": "2026-02-25T23:00:00Z"
+  }
+}

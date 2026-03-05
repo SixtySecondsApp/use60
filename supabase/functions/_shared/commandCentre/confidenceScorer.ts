@@ -15,6 +15,7 @@
  */
 
 import type { CommandCentreItem, DraftedAction } from './types.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -276,15 +277,59 @@ function scoreRecency(enrichmentContext: Record<string, unknown>): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Placeholder. Will be wired to action_trust_scores table in CC11.
- * Returns a conservative default of 0.05 (neutral).
+ * Queries action_trust_scores for the user's approval history on this action type.
+ * Higher approval rate with lower rejection rate → higher trust score.
+ *
+ * AE2-002: Wired to real data (was TODO CC11).
  */
-function scoreTrustHistory(
-  _item: CommandCentreItem,
-  _draftedAction: DraftedAction,
-): number {
-  // TODO CC11: query action_trust_scores table for source_agent + action_type
-  return 0.05;
+async function scoreTrustHistory(
+  item: CommandCentreItem,
+  draftedAction: DraftedAction,
+  supabase?: ReturnType<typeof createClient>,
+): Promise<number> {
+  const MAX = 0.10;
+
+  if (!supabase || !item.user_id) {
+    return 0.05; // Conservative default when no client available
+  }
+
+  try {
+    const { mapDraftedActionToActionType } = await import('./trustScorer.ts');
+    const actionType = mapDraftedActionToActionType(draftedAction.type, item.item_type);
+
+    const { data, error } = await supabase
+      .from('action_trust_scores')
+      .select('approved_without_edit, approved_with_edit, rejected, consecutive_approvals')
+      .eq('user_id', item.user_id)
+      .eq('action_type', actionType)
+      .maybeSingle();
+
+    if (error || !data) {
+      return 0.05; // No history yet
+    }
+
+    const total = (data.approved_without_edit ?? 0) + (data.approved_with_edit ?? 0) + (data.rejected ?? 0);
+    if (total === 0) return 0.05;
+
+    const approvalRate = ((data.approved_without_edit ?? 0) + (data.approved_with_edit ?? 0)) / total;
+    const streakBonus = Math.min(0.02, (data.consecutive_approvals ?? 0) * 0.001);
+
+    const score = Math.min(MAX, Math.round((MAX * approvalRate + streakBonus) * 100) / 100);
+
+    console.log('[cc-confidence] trust_history', {
+      item_id: item.id,
+      action_type: actionType,
+      total,
+      approval_rate: approvalRate,
+      streak: data.consecutive_approvals ?? 0,
+      score,
+    });
+
+    return score;
+  } catch (err) {
+    console.warn('[cc-confidence] trust_history error, using default:', err);
+    return 0.05;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -297,16 +342,17 @@ function scoreTrustHistory(
  * Returns both the aggregate score (0.0-1.0) and the per-factor breakdown
  * for persistence in confidence_factors.
  */
-export function calculateConfidence(
+export async function calculateConfidence(
   item: CommandCentreItem,
   draftedAction: DraftedAction,
   enrichmentContext: Record<string, unknown>,
-): ConfidenceResult {
+  supabase?: ReturnType<typeof createClient>,
+): Promise<ConfidenceResult> {
   const data_completeness = scoreDataCompleteness(item, enrichmentContext);
   const pattern_match = scorePatternMatch(item, draftedAction);
   const template_confidence = scoreTemplateConfidence(draftedAction);
   const recency = scoreRecency(enrichmentContext);
-  const trust_history = scoreTrustHistory(item, draftedAction);
+  const trust_history = await scoreTrustHistory(item, draftedAction, supabase);
 
   const score = Math.min(
     1.0,

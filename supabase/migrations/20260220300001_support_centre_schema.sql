@@ -78,14 +78,18 @@ ALTER TABLE public.support_messages ENABLE ROW LEVEL SECURITY;
 
 -- Users can see their own tickets
 DROP POLICY IF EXISTS "support_tickets_user_select" ON public.support_tickets;
-CREATE POLICY "support_tickets_user_select"
+DO $$ BEGIN
+  CREATE POLICY "support_tickets_user_select"
   ON public.support_tickets
   FOR SELECT
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can see all tickets in their org
 DROP POLICY IF EXISTS "support_tickets_org_admin_select" ON public.support_tickets;
-CREATE POLICY "support_tickets_org_admin_select"
+DO $$ BEGIN
+  CREATE POLICY "support_tickets_org_admin_select"
   ON public.support_tickets
   FOR SELECT
   USING (
@@ -95,25 +99,34 @@ CREATE POLICY "support_tickets_org_admin_select"
       AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert their own tickets
 DROP POLICY IF EXISTS "support_tickets_user_insert" ON public.support_tickets;
-CREATE POLICY "support_tickets_user_insert"
+DO $$ BEGIN
+  CREATE POLICY "support_tickets_user_insert"
   ON public.support_tickets
   FOR INSERT
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own open tickets
 DROP POLICY IF EXISTS "support_tickets_user_update" ON public.support_tickets;
-CREATE POLICY "support_tickets_user_update"
+DO $$ BEGIN
+  CREATE POLICY "support_tickets_user_update"
   ON public.support_tickets
   FOR UPDATE
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can update any ticket in their org
 DROP POLICY IF EXISTS "support_tickets_org_admin_update" ON public.support_tickets;
-CREATE POLICY "support_tickets_org_admin_update"
+DO $$ BEGIN
+  CREATE POLICY "support_tickets_org_admin_update"
   ON public.support_tickets
   FOR UPDATE
   USING (
@@ -123,12 +136,15 @@ CREATE POLICY "support_tickets_org_admin_update"
       AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Support messages policies
 
 -- Users can see messages on their tickets
 DROP POLICY IF EXISTS "support_messages_user_select" ON public.support_messages;
-CREATE POLICY "support_messages_user_select"
+DO $$ BEGIN
+  CREATE POLICY "support_messages_user_select"
   ON public.support_messages
   FOR SELECT
   USING (
@@ -136,10 +152,13 @@ CREATE POLICY "support_messages_user_select"
       SELECT id FROM public.support_tickets WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can see all messages in their org's tickets
 DROP POLICY IF EXISTS "support_messages_org_admin_select" ON public.support_messages;
-CREATE POLICY "support_messages_org_admin_select"
+DO $$ BEGIN
+  CREATE POLICY "support_messages_org_admin_select"
   ON public.support_messages
   FOR SELECT
   USING (
@@ -150,10 +169,13 @@ CREATE POLICY "support_messages_org_admin_select"
       AND om.role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert messages on their tickets
 DROP POLICY IF EXISTS "support_messages_user_insert" ON public.support_messages;
-CREATE POLICY "support_messages_user_insert"
+DO $$ BEGIN
+  CREATE POLICY "support_messages_user_insert"
   ON public.support_messages
   FOR INSERT
   WITH CHECK (
@@ -162,10 +184,13 @@ CREATE POLICY "support_messages_user_insert"
       SELECT id FROM public.support_tickets WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org admins can insert messages on any org ticket (as agent)
 DROP POLICY IF EXISTS "support_messages_org_admin_insert" ON public.support_messages;
-CREATE POLICY "support_messages_org_admin_insert"
+DO $$ BEGIN
+  CREATE POLICY "support_messages_org_admin_insert"
   ON public.support_messages
   FOR INSERT
   WITH CHECK (
@@ -177,3 +202,5 @@ CREATE POLICY "support_messages_org_admin_insert"
       AND om.role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

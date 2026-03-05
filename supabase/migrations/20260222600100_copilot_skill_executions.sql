@@ -24,10 +24,16 @@ CREATE INDEX IF NOT EXISTS idx_skill_executions_created ON copilot_skill_executi
 ALTER TABLE copilot_skill_executions ENABLE ROW LEVEL SECURITY;
 
 -- Users can read/write their own org's executions
-CREATE POLICY "Users can insert own skill executions"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own skill executions"
   ON copilot_skill_executions FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can read own org skill executions"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own org skill executions"
   ON copilot_skill_executions FOR SELECT
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

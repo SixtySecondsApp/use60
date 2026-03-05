@@ -1,0 +1,20 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "services": {
+    "gotenberg": {
+      "build": {
+        "dockerfilePath": "Dockerfile.gotenberg"
+      },
+      "deploy": {
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30,
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "sleepApplication": false
+      },
+      "networking": {
+        "serviceDomains": {}
+      }
+    }
+  }
+}

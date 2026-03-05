@@ -43,30 +43,42 @@ CREATE INDEX IF NOT EXISTS idx_user_time_preferences_user
 ALTER TABLE user_time_preferences ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own preferences
-CREATE POLICY "Users can read own time preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own time preferences"
 ON user_time_preferences FOR SELECT
 TO authenticated
 USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert their own preferences
-CREATE POLICY "Users can insert own time preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own time preferences"
 ON user_time_preferences FOR INSERT
 TO authenticated
 WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own preferences
-CREATE POLICY "Users can update own time preferences"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own time preferences"
 ON user_time_preferences FOR UPDATE
 TO authenticated
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access (cron, orchestrator)
-CREATE POLICY "Service role full access to user_time_preferences"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to user_time_preferences"
 ON user_time_preferences FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- Trigger: keep updated_at current — user_time_preferences
@@ -133,30 +145,42 @@ CREATE INDEX IF NOT EXISTS idx_eod_deliveries_pending
 ALTER TABLE eod_deliveries ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own deliveries
-CREATE POLICY "Users can read own eod_deliveries"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own eod_deliveries"
 ON eod_deliveries FOR SELECT
 TO authenticated
 USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert their own deliveries
-CREATE POLICY "Users can insert own eod_deliveries"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own eod_deliveries"
 ON eod_deliveries FOR INSERT
 TO authenticated
 WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own deliveries
-CREATE POLICY "Users can update own eod_deliveries"
+DO $$ BEGIN
+  CREATE POLICY "Users can update own eod_deliveries"
 ON eod_deliveries FOR UPDATE
 TO authenticated
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access (cron, orchestrator)
-CREATE POLICY "Service role full access to eod_deliveries"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to eod_deliveries"
 ON eod_deliveries FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- Trigger: keep updated_at current — eod_deliveries

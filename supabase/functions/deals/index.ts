@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { rateLimitMiddleware, RATE_LIMIT_CONFIGS } from '../_shared/rateLimiter.ts'
+import { authenticateRequest, getUserOrgId } from '../_shared/edgeAuth.ts';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -10,11 +11,27 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
 
   try {
-    // Create Supabase client
+    // Create Supabase client with service role for admin operations
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
+
+    // Authenticate user via JWT
+    const { userId } = await authenticateRequest(
+      req,
+      supabaseClient,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // Get user's org for scoping queries
+    const orgId = await getUserOrgId(supabaseClient, userId);
+    if (!orgId) {
+      return new Response(JSON.stringify({ error: 'No organization found' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     // Apply rate limiting based on audit recommendations
     const rateLimitResponse = await rateLimitMiddleware(
@@ -23,7 +40,7 @@ serve(async (req) => {
       'deals',
       RATE_LIMIT_CONFIGS.standard
     );
-    
+
     if (rateLimitResponse) {
       return rateLimitResponse; // Rate limit exceeded
     }
@@ -34,18 +51,14 @@ serve(async (req) => {
     
     if (req.method === 'GET') {
       if (!dealId) {
-        // GET /deals - List deals
-        return await handleDealsList(supabaseClient, url)
+        return await handleDealsList(supabaseClient, url, orgId)
       } else {
-        // GET /deals/:id - Single deal
-        return await handleSingleDeal(supabaseClient, dealId, url)
+        return await handleSingleDeal(supabaseClient, dealId, url, orgId)
       }
     } else if (req.method === 'POST') {
-      // POST /deals - Create deal
       const body = await req.json()
-      return await handleCreateDeal(supabaseClient, body)
+      return await handleCreateDeal(supabaseClient, body, orgId)
     } else if (req.method === 'PUT') {
-      // PUT /deals/:id - Update deal
       if (!dealId) {
         return new Response(JSON.stringify({ error: 'Deal ID required' }), {
           status: 400,
@@ -53,16 +66,15 @@ serve(async (req) => {
         })
       }
       const body = await req.json()
-      return await handleUpdateDeal(supabaseClient, dealId, body)
+      return await handleUpdateDeal(supabaseClient, dealId, body, orgId)
     } else if (req.method === 'DELETE') {
-      // DELETE /deals/:id - Delete deal
       if (!dealId) {
         return new Response(JSON.stringify({ error: 'Deal ID required' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-      return await handleDeleteDeal(supabaseClient, dealId)
+      return await handleDeleteDeal(supabaseClient, dealId, orgId)
     }
 
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -78,7 +90,7 @@ serve(async (req) => {
 })
 
 // List deals
-async function handleDealsList(supabaseClient: any, url: URL) {
+async function handleDealsList(supabaseClient: any, url: URL, orgId: string) {
   try {
     const limit = parseInt(url.searchParams.get('limit') || '50')
     const offset = parseInt(url.searchParams.get('offset') || '0')
@@ -111,6 +123,7 @@ async function handleDealsList(supabaseClient: any, url: URL) {
           order_position
         )
       `)
+      .eq('clerk_org_id', orgId)
       .range(offset, offset + limit - 1)
       .order('created_at', { ascending: false })
 
@@ -177,7 +190,7 @@ async function handleDealsList(supabaseClient: any, url: URL) {
 }
 
 // Get single deal
-async function handleSingleDeal(supabaseClient: any, dealId: string, url: URL) {
+async function handleSingleDeal(supabaseClient: any, dealId: string, url: URL, orgId: string) {
   try {
     const includeRelationships = url.searchParams.get('includeRelationships') === 'true'
 
@@ -195,6 +208,7 @@ async function handleSingleDeal(supabaseClient: any, dealId: string, url: URL) {
         ` : ''}
       `)
       .eq('id', dealId)
+      .eq('clerk_org_id', orgId)
       .single()
 
     if (error) {
@@ -238,12 +252,13 @@ async function handleSingleDeal(supabaseClient: any, dealId: string, url: URL) {
 }
 
 // Create deal
-async function handleCreateDeal(supabaseClient: any, body: any) {
+async function handleCreateDeal(supabaseClient: any, body: any, orgId: string) {
   try {
     const { data: deal, error } = await supabaseClient
       .from('deals')
       .insert({
         ...body,
+        clerk_org_id: orgId,
         stage_changed_at: new Date().toISOString()
       })
       .select()
@@ -272,7 +287,7 @@ async function handleCreateDeal(supabaseClient: any, body: any) {
 }
 
 // Update deal
-async function handleUpdateDeal(supabaseClient: any, dealId: string, body: any) {
+async function handleUpdateDeal(supabaseClient: any, dealId: string, body: any, orgId: string) {
   try {
     // Check if stage is being updated to set stage_changed_at
     const updateData = { ...body }
@@ -282,6 +297,7 @@ async function handleUpdateDeal(supabaseClient: any, dealId: string, body: any) 
         .from('deals')
         .select('stage_id')
         .eq('id', dealId)
+        .eq('clerk_org_id', orgId)
         .single()
 
       if (currentDeal && currentDeal.stage_id !== body.stage_id) {
@@ -293,6 +309,7 @@ async function handleUpdateDeal(supabaseClient: any, dealId: string, body: any) 
       .from('deals')
       .update(updateData)
       .eq('id', dealId)
+      .eq('clerk_org_id', orgId)
       .select()
       .single()
 
@@ -318,12 +335,13 @@ async function handleUpdateDeal(supabaseClient: any, dealId: string, body: any) 
 }
 
 // Delete deal
-async function handleDeleteDeal(supabaseClient: any, dealId: string) {
+async function handleDeleteDeal(supabaseClient: any, dealId: string, orgId: string) {
   try {
     const { error } = await supabaseClient
       .from('deals')
       .delete()
       .eq('id', dealId)
+      .eq('clerk_org_id', orgId)
 
     if (error) {
       throw error

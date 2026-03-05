@@ -130,3 +130,87 @@ export function isAgentEnabled(
 ): boolean {
   return config.enabled_agents.includes(agentName);
 }
+
+// =============================================================================
+// Daily Budget Enforcement
+// =============================================================================
+
+export interface DailyBudgetCheck {
+  /** Whether the org is allowed to start a new agent run. */
+  allowed: boolean;
+  /** Total USD spent today by this org's agents. */
+  spentTodayUsd: number;
+  /** The daily budget limit in USD. */
+  limitUsd: number;
+  /** Human-readable reason when not allowed. */
+  reason?: string;
+}
+
+/**
+ * Check whether the org has exceeded its daily agent budget.
+ *
+ * Queries the `credit_transactions` table for today's agent usage
+ * (type='usage') and compares against the org's `budget_limit_daily_usd`.
+ *
+ * Fails CLOSED: if the DB query errors, the run is rejected to prevent
+ * runaway spending.
+ */
+export async function checkDailyBudget(
+  client: SupabaseClient,
+  orgId: string,
+): Promise<DailyBudgetCheck> {
+  const config = await loadAgentTeamConfig(client, orgId);
+  const limitUsd = config.budget_limit_daily_usd;
+
+  // Compute start of today (UTC)
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const todayStartIso = todayStart.toISOString();
+
+  try {
+    const { data: txRows, error } = await client
+      .from('credit_transactions')
+      .select('amount')
+      .eq('org_id', orgId)
+      .eq('type', 'usage')
+      .gte('created_at', todayStartIso);
+
+    if (error) {
+      // Fail CLOSED: reject the request when we cannot verify the budget
+      console.error('[agentConfig] Daily budget check DB error:', error.message);
+      return {
+        allowed: false,
+        spentTodayUsd: 0,
+        limitUsd,
+        reason: `Budget check failed (DB error): ${error.message}. Rejecting to prevent overspend.`,
+      };
+    }
+
+    // credit_transactions.amount is negative for usage; sum the absolute values
+    const spentTodayUsd = (txRows ?? []).reduce(
+      (sum: number, row: { amount: number | null }) => sum + Math.abs(Number(row.amount) || 0),
+      0,
+    );
+
+    if (spentTodayUsd >= limitUsd) {
+      return {
+        allowed: false,
+        spentTodayUsd,
+        limitUsd,
+        reason: `Daily budget exceeded: $${spentTodayUsd.toFixed(2)} spent of $${limitUsd.toFixed(2)} limit.`,
+      };
+    }
+
+    return { allowed: true, spentTodayUsd, limitUsd };
+  } catch (err) {
+    // Fail CLOSED on unexpected errors
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[agentConfig] Daily budget check exception:', msg);
+    return {
+      allowed: false,
+      spentTodayUsd: 0,
+      limitUsd,
+      reason: `Budget check failed (exception): ${msg}. Rejecting to prevent overspend.`,
+    };
+  }
+}

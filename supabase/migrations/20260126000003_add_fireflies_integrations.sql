@@ -27,11 +27,14 @@ CREATE INDEX idx_fireflies_integrations_active
 ALTER TABLE "public"."fireflies_integrations" ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only manage their own integrations
-CREATE POLICY "users_manage_own_fireflies_integration"
+DO $$ BEGIN
+  CREATE POLICY "users_manage_own_fireflies_integration"
   ON fireflies_integrations
   FOR ALL
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Create fireflies_sync_state table for tracking sync status
 CREATE TABLE "public"."fireflies_sync_state" (
@@ -65,11 +68,14 @@ CREATE INDEX idx_fireflies_sync_state_status
 ALTER TABLE "public"."fireflies_sync_state" ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only view/update their own sync state
-CREATE POLICY "users_manage_own_fireflies_sync_state"
+DO $$ BEGIN
+  CREATE POLICY "users_manage_own_fireflies_sync_state"
   ON fireflies_sync_state
   FOR ALL
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update trigger for updated_at
 CREATE OR REPLACE FUNCTION update_fireflies_updated_at()

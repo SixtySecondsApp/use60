@@ -8,7 +8,7 @@
  * Command: supabase functions schedule calculate-deal-health --cron "0 2 * * *"
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 // Types

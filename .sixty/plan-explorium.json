@@ -1,0 +1,245 @@
+{
+  "feature": "explorium-integration",
+  "createdAt": "2026-02-26",
+  "description": "Full Explorium data platform integration — business/prospect search, CRM exclusion (Method 2), multi-type enrichment (firmographics, intent, contact details, lookalikes, events), BYOK + platform key with 2x credit markup, skills, and wizard UI.",
+  "creditMarkup": "2x",
+  "platformKey": "bb4e88f7-3fe3-42bb-bd9f-9d85c63ccab8",
+  "pricing": {
+    "match": 0,
+    "business_search": 2,
+    "prospect_search": 2,
+    "firmographics_profile_funding_tech": 2,
+    "intent_traffic_workforce_webstack": 4,
+    "contact_details_social": 10,
+    "events": "2-4",
+    "custom_enrichment": 10,
+    "byok": 0
+  },
+  "stories": [
+    {
+      "id": "EXPL-001",
+      "title": "Migration: add explorium to source_type CHECK + create explorium_crm_mappings table",
+      "type": "schema",
+      "estimate": "20min",
+      "status": "pending",
+      "dependencies": [],
+      "files": [
+        "supabase/migrations/[timestamp]_add_explorium_source_type.sql"
+      ],
+      "acceptance": [
+        "dynamic_tables.source_type accepts 'explorium'",
+        "explorium_crm_mappings table exists with RLS",
+        "Migration runs cleanly on staging"
+      ]
+    },
+    {
+      "id": "EXPL-002",
+      "title": "Edge function: explorium-match (FREE — business + prospect matching + CRM sync)",
+      "type": "backend",
+      "estimate": "30min",
+      "status": "pending",
+      "dependencies": ["EXPL-001"],
+      "files": [
+        "supabase/functions/explorium-match/index.ts"
+      ],
+      "acceptance": [
+        "match_businesses returns business_ids for known domains",
+        "match_prospects returns prospect_ids for known emails",
+        "sync_crm_org is incremental: loads existing crm_ids from explorium_crm_mappings, diffs against CRM, only matches NEW records not yet cached",
+        "Incremental sync: companies.id + contacts.id already in explorium_crm_mappings are skipped entirely",
+        "No credit deduction on any action",
+        "Auth: api_key header (not Bearer)"
+      ]
+    },
+    {
+      "id": "EXPL-003",
+      "title": "Edge function: explorium-search (business_search, prospect_search, stats)",
+      "type": "backend",
+      "estimate": "45min",
+      "status": "pending",
+      "dependencies": ["EXPL-002"],
+      "parallel_with": ["EXPL-004"],
+      "files": [
+        "supabase/functions/explorium-search/index.ts"
+      ],
+      "acceptance": [
+        "business_search returns NormalizedExploriumBusiness[] with pagination",
+        "prospect_search returns NormalizedExploriumProspect[] with pagination",
+        "stats returns total_count with 0 credits",
+        "BYOK check: skips credit deduction when org has own key",
+        "Platform key fallback to EXPLORIUM_API_KEY env secret",
+        "2 platform credits deducted per search call (2x markup)",
+        "exclude[] array passed through to Explorium API",
+        "getCorsHeaders + checkCreditBalance pattern"
+      ]
+    },
+    {
+      "id": "EXPL-004",
+      "title": "Edge function: explorium-enrich (all enrichment types, cache-first pattern)",
+      "type": "backend",
+      "estimate": "60min",
+      "status": "pending",
+      "dependencies": ["EXPL-001"],
+      "parallel_with": ["EXPL-003"],
+      "files": [
+        "supabase/functions/explorium-enrich/index.ts"
+      ],
+      "acceptance": [
+        "Supports: firmographics, financial, funding, technographics, intent, website_traffic, workforce_trends, webstack, website_changes, social_presence, company_hierarchy, contact_details, individual_social, lookalikes, custom",
+        "Cache-first: reads source_data.explorium_{action} before calling API",
+        "Stores full response in source_data on first call",
+        "Correct credit cost per action type (2, 4, or 10 platform credits)",
+        "Bulk enrich processes up to 50 rows per invocation"
+      ]
+    },
+    {
+      "id": "EXPL-005",
+      "title": "Add Explorium source branch to copilot-dynamic-table (dedup + table creation)",
+      "type": "backend",
+      "estimate": "45min",
+      "status": "pending",
+      "dependencies": ["EXPL-003"],
+      "files": [
+        "supabase/functions/copilot-dynamic-table/index.ts"
+      ],
+      "acceptance": [
+        "source='explorium' branch creates table with EXPLORIUM_BUSINESS_COLUMNS or EXPLORIUM_PROSPECT_COLUMNS",
+        "Loads explorium_crm_mappings to build exclusion set (Method 2)",
+        "Dedupes against existing Explorium source_ids in org tables",
+        "Triggers async CRM re-sync if cache >24h stale",
+        "Returns dedup stats: { total, duplicates, net_new }",
+        "source_type='explorium' set on created dynamic_table"
+      ]
+    },
+    {
+      "id": "EXPL-006",
+      "title": "Frontend service: explloriumSearchService.ts",
+      "type": "frontend",
+      "estimate": "30min",
+      "status": "pending",
+      "dependencies": ["EXPL-003"],
+      "parallel_with": ["EXPL-007", "EXPL-010"],
+      "files": [
+        "src/lib/services/explloriumSearchService.ts"
+      ],
+      "acceptance": [
+        "searchAndCreateTable() calls copilot-dynamic-table with source='explorium'",
+        "searchExplorium() calls explorium-search with _auth_token fallback in body",
+        "getStats() calls explorium-search with action='stats'",
+        "TypeScript interfaces: ExplloriumSearchParams, ExplloriumSearchResult, ExplloriumBusinessFilters, ExplloriumProspectFilters"
+      ]
+    },
+    {
+      "id": "EXPL-007",
+      "title": "Integration settings: ExplloriumConfigModal + useExploriumIntegration hook",
+      "type": "frontend",
+      "estimate": "30min",
+      "status": "pending",
+      "dependencies": ["EXPL-001"],
+      "parallel_with": ["EXPL-006", "EXPL-010"],
+      "files": [
+        "src/components/integrations/ExplloriumConfigModal.tsx",
+        "src/lib/hooks/useExploriumIntegration.ts"
+      ],
+      "acceptance": [
+        "Shows connection status (connected BYOK / using platform key)",
+        "API key input (password type, paste-to-connect)",
+        "Credit cost table shown when using platform key",
+        "upsert to integration_credentials with provider='explorium'",
+        "organization_id column (NOT org_id)",
+        "Wired into Integrations page as Explorium card"
+      ]
+    },
+    {
+      "id": "EXPL-008",
+      "title": "Search wizard: ExplloriumSearchWizard.tsx (3-step: Type → Filters → Preview & Create)",
+      "type": "frontend",
+      "estimate": "60min",
+      "status": "pending",
+      "dependencies": ["EXPL-006"],
+      "files": [
+        "src/components/ops/ExplloriumSearchWizard.tsx"
+      ],
+      "acceptance": [
+        "Step 1: Business search vs Prospect search toggle",
+        "Step 2 (Business): industry, company size, revenue, country, technologies, intent topics, is_public, domain list",
+        "Step 2 (Prospect): job title + include_related toggle, seniority, department, country, company size, has_email toggle",
+        "Step 3: calls getStats() for pre-flight count, shows estimated credits, shows CRM exclusions count, Create Table button",
+        "SheetContent with !top-16 !h-[calc(100vh-4rem)]"
+      ]
+    },
+    {
+      "id": "EXPL-009",
+      "title": "Wire Explorium into CreateTableModal, OpsPage, and source badge components",
+      "type": "frontend",
+      "estimate": "30min",
+      "status": "pending",
+      "dependencies": ["EXPL-008"],
+      "files": [
+        "src/components/ops/CreateTableModal.tsx",
+        "src/pages/OpsPage.tsx",
+        "src/components/copilot/responses/OpsTableListResponse.tsx"
+      ],
+      "acceptance": [
+        "CreateTableModal shows Explorium tab",
+        "OpsPage dispatches to ExplloriumSearchWizard",
+        "SOURCE_LABELS includes explorium: 'Explorium'",
+        "SourceBadge: explorium = teal (bg-teal-500/20, text-teal-400)"
+      ]
+    },
+    {
+      "id": "EXPL-010",
+      "title": "Skills: explorium-company-search, explorium-people-search, explorium-enrich, explorium-intent-signals + sequence",
+      "type": "skills",
+      "estimate": "45min",
+      "status": "pending",
+      "dependencies": ["EXPL-005"],
+      "parallel_with": ["EXPL-006", "EXPL-007"],
+      "files": [
+        "skills/atomic/explorium-company-search/SKILL.md",
+        "skills/atomic/explorium-people-search/SKILL.md",
+        "skills/atomic/explorium-enrich/SKILL.md",
+        "skills/atomic/explorium-intent-signals/SKILL.md",
+        "skills/sequences/seq-explorium-icp-discovery/SKILL.md"
+      ],
+      "acceptance": [
+        "All 4 atomic skills have triggers, keywords, inputs/outputs, credit costs documented",
+        "Sequence chains: company search → prospect search at those companies → enrich contact details → push to campaign",
+        "npm run validate-skills passes",
+        "npm run sync-skills updates organization_skills"
+      ]
+    },
+    {
+      "id": "EXPL-011",
+      "title": "Staging deploy + smoke tests",
+      "type": "infra",
+      "estimate": "20min",
+      "status": "pending",
+      "dependencies": ["EXPL-001","EXPL-002","EXPL-003","EXPL-004","EXPL-005","EXPL-006","EXPL-007","EXPL-008","EXPL-009","EXPL-010"],
+      "commands": [
+        "npx supabase secrets set EXPLORIUM_API_KEY=bb4e88f7-3fe3-42bb-bd9f-9d85c63ccab8 --project-ref caerqjzvuerejfrdtygb",
+        "npx supabase db push --project-ref caerqjzvuerejfrdtygb",
+        "npx supabase functions deploy explorium-match --project-ref caerqjzvuerejfrdtygb --no-verify-jwt",
+        "npx supabase functions deploy explorium-search --project-ref caerqjzvuerejfrdtygb --no-verify-jwt",
+        "npx supabase functions deploy explorium-enrich --project-ref caerqjzvuerejfrdtygb --no-verify-jwt"
+      ],
+      "acceptance": [
+        "stats call returns count with 0 credits consumed",
+        "business_search returns normalized results",
+        "CRM sync writes to explorium_crm_mappings",
+        "Enrich writes to source_data and cell, second call uses cache",
+        "BYOK: org with own key shows 0 credits deducted",
+        "Platform key: 2 credits deducted per search"
+      ]
+    }
+  ],
+  "totalEstimate": {
+    "optimistic": "4.5 hours",
+    "realistic": "6 hours",
+    "pessimistic": "8 hours"
+  },
+  "parallelOpportunities": [
+    { "group": ["EXPL-003", "EXPL-004"], "reason": "Independent edge functions, no file overlap", "timeSaved": "45min" },
+    { "group": ["EXPL-006", "EXPL-007", "EXPL-010"], "reason": "Frontend service, config modal, and skills are fully independent", "timeSaved": "60min" }
+  ]
+}

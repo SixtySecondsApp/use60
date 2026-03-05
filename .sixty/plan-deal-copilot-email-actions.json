@@ -1,0 +1,313 @@
+{
+  "project": {
+    "name": "60 Sales Dashboard",
+    "template": "template-react-supabase",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth"
+    },
+    "createdAt": "2026-02-28T12:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "email-actions",
+      "name": "Interactive Email Actions in Deal Copilot Chat",
+      "status": "complete",
+      "prd": null,
+      "description": "Transform passive email drafts into actionable emails with inline editing, send now, schedule, and one-click task creation.",
+      "createdAt": "2026-02-28T12:00:00Z"
+    }
+  ],
+
+  "aiDevHubProjectId": "7232c546-6ff8-49c0-959f-eb56dacc4626",
+
+  "stories": [
+    {
+      "id": "EMAIL-ACT-001",
+      "feature": "email-actions",
+      "title": "Add inline edit mode to EmailResponse",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/components/copilot/responses/EmailResponse.tsx"],
+        "schema": []
+      },
+      "blocks": ["EMAIL-ACT-002", "EMAIL-ACT-003", "EMAIL-ACT-006"],
+      "parallelWith": ["EMAIL-ACT-004", "EMAIL-ACT-007"],
+
+      "acceptance": [
+        "Edit button (Lucide Pencil) appears in quick-actions row next to Copy and Gmail buttons",
+        "Clicking Edit toggles subject to <input> and body to <textarea> with min-h-[200px]",
+        "Done button (Lucide Check) saves edits to emailSubject/emailBody state; Cancel (Lucide X) reverts to snapshot",
+        "Snapshot saved via useRef on edit entry for reliable revert"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/copilot/responses/EmailResponse.tsx"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "51730c39-7524-464f-8aa3-d7814ff01022",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EMAIL-ACT-002",
+      "feature": "email-actions",
+      "title": "Add Send Now button with email-send-as-rep integration",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": ["EMAIL-ACT-001"],
+        "files": [
+          "src/components/copilot/responses/EmailResponse.tsx",
+          "src/components/assistant/AssistantShell.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["EMAIL-ACT-003"],
+      "parallelWith": [],
+
+      "acceptance": [
+        "Send Now primary button (Lucide Send, violet bg) appears below email preview",
+        "Calls supabase.functions.invoke('email-send-as-rep', { body: { to, subject, body } }) on click",
+        "Success: toast + transition to sent state (Lucide CheckCircle, disabled button)",
+        "Error: toast.error with error message",
+        "Auto-creates follow-up task (3 business days) on success using getNextBusinessDay helper"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/copilot/responses/EmailResponse.tsx",
+        "src/components/assistant/AssistantShell.tsx"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "0b5702ed-3b14-4cfe-bd9c-b970f251854f",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EMAIL-ACT-003",
+      "feature": "email-actions",
+      "title": "Add schedule quick-pick buttons with scheduled_emails insert",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+
+      "dependencies": {
+        "stories": ["EMAIL-ACT-001", "EMAIL-ACT-002", "EMAIL-ACT-004"],
+        "files": ["src/components/copilot/responses/EmailResponse.tsx"],
+        "schema": ["scheduled_emails"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "2-3 suggested time chips rendered under Schedule label (Lucide Clock): next business day 9am, +2 days 10am, AI sendTime if present",
+        "Clicking a chip inserts row into scheduled_emails table with correct scheduled_for timestamp",
+        "Confirmation state shows 'Scheduled for Tue 9am' with cancel link",
+        "Cancel link deletes the scheduled_emails row and reverts UI"
+      ],
+
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/copilot/responses/EmailResponse.tsx"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "ed94f013-cadd-49c9-98f7-ce38a79b8f02",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EMAIL-ACT-004",
+      "feature": "email-actions",
+      "title": "Create scheduled_emails table migration with pg_cron job",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["EMAIL-ACT-003", "EMAIL-ACT-005"],
+      "parallelWith": ["EMAIL-ACT-001", "EMAIL-ACT-007"],
+
+      "acceptance": [
+        "scheduled_emails table created with: id, user_id, to_email, cc_email, bcc_email, subject, body, scheduled_for, status (pending/sent/failed/cancelled), error_message, sent_at, contact_id, deal_id, thread_id, reply_to_message_id, created_at",
+        "RLS: users CRUD own rows, service_role full access",
+        "pg_cron job process_scheduled_emails runs every minute, calls email-send-as-rep via net.http_post"
+      ],
+
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/migrations/20260228_create_scheduled_emails.sql"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "8dfa3e55-3919-4c4c-bcca-fc9ede66e10c",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EMAIL-ACT-005",
+      "feature": "email-actions",
+      "title": "Fix send-scheduled-emails edge function to use email-send-as-rep",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+
+      "dependencies": {
+        "stories": ["EMAIL-ACT-004"],
+        "files": ["supabase/functions/send-scheduled-emails/index.ts"],
+        "schema": ["scheduled_emails"]
+      },
+      "blocks": [],
+      "parallelWith": ["EMAIL-ACT-006"],
+
+      "acceptance": [
+        "Replaced legacy user_integrations + manual Gmail OAuth with supabase.functions.invoke('email-send-as-rep')",
+        "Pinned @supabase/supabase-js@2.43.4",
+        "Replaced legacy corsHeaders with getCorsHeaders(req) from _shared/corsHelper.ts",
+        "Function reads from scheduled_emails table and delegates send to email-send-as-rep"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/send-scheduled-emails/index.ts"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "e6b938a1-4d22-485f-aa37-ed29d814863d",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EMAIL-ACT-006",
+      "feature": "email-actions",
+      "title": "Add one-click Create Follow-Up Task button",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+
+      "dependencies": {
+        "stories": ["EMAIL-ACT-001"],
+        "files": ["src/components/copilot/responses/EmailResponse.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["EMAIL-ACT-005"],
+
+      "acceptance": [
+        "Create follow-up task secondary button (Lucide ListTodo) appears below schedule section",
+        "Inserts to tasks table: title, description, task_type='follow_up', status='pending', priority='medium', due_date=+3 business days, assigned_to=current user",
+        "taskCreated state transitions button to confirmation display (Lucide CheckCircle)",
+        "getNextBusinessDay() extracted as inline helper (shared with Send Now auto-task)"
+      ],
+
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/copilot/responses/EmailResponse.tsx"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "8721bfc9-b49f-4686-9f21-14afb19a35ea",
+
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "EMAIL-ACT-007",
+      "feature": "email-actions",
+      "title": "Clean up emojis and wire suggestion action types",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/copilot/responses/EmailResponse.tsx",
+          "src/components/copilot/types.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["EMAIL-ACT-001", "EMAIL-ACT-004"],
+
+      "acceptance": [
+        "Replace ⚠ emoji in context warnings with Lucide AlertTriangle icon",
+        "EmailSuggestion.action type extended with 'create_task' | 'schedule_send' | 'send_now'",
+        "handleSuggestionClick wired to call new handlers for the new action types"
+      ],
+
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/copilot/responses/EmailResponse.tsx",
+        "src/components/copilot/types.ts"
+      ],
+
+      "designRef": null,
+      "aiDevHubTaskId": "89e6187f-e4b9-4000-b991-39ef5c705333",
+
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 7,
+    "currentFeature": "email-actions",
+    "lastUpdated": "2026-02-28T17:40:00Z",
+    "parallelGroups": [
+      {
+        "name": "Group 1: Foundation (no dependencies)",
+        "stories": ["EMAIL-ACT-001", "EMAIL-ACT-004", "EMAIL-ACT-007"],
+        "note": "Inline edit, DB migration, and type cleanup can all run in parallel"
+      },
+      {
+        "name": "Group 2: Send + Backend (depends on Group 1)",
+        "stories": ["EMAIL-ACT-002", "EMAIL-ACT-005"],
+        "note": "Send Now depends on edit mode; edge function fix depends on migration"
+      },
+      {
+        "name": "Group 3: Schedule + Tasks (depends on Groups 1+2)",
+        "stories": ["EMAIL-ACT-003", "EMAIL-ACT-006"],
+        "note": "Schedule depends on migration + edit; tasks depend on edit mode"
+      }
+    ],
+    "estimatedTotalMinutes": 120,
+    "criticalPath": ["EMAIL-ACT-001", "EMAIL-ACT-002", "EMAIL-ACT-003"]
+  }
+}

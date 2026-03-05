@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <title>Flow Stages - Pipeline Progression</title>
+  <defs>
+    <style>
+      /* --- Stage columns --- */
+      .fpl-stage {
+        fill: rgba(255,255,255,0.04);
+        stroke: rgba(255,255,255,0.08);
+        stroke-width: 0.8;
+        rx: 4; ry: 4;
+      }
+
+      /* --- Stage fills (bottom-up reveal) --- */
+      .fpl-fill {
+        rx: 4; ry: 4;
+        opacity: 0;
+      }
+      .fpl-f1 { fill: url(#fpl-g1); animation: fpl-reveal 6s ease-in-out infinite 0.3s; }
+      .fpl-f2 { fill: url(#fpl-g2); animation: fpl-reveal 6s ease-in-out infinite 0.9s; }
+      .fpl-f3 { fill: url(#fpl-g3); animation: fpl-reveal 6s ease-in-out infinite 1.5s; }
+      .fpl-f4 { fill: url(#fpl-g4); animation: fpl-reveal 6s ease-in-out infinite 2.1s; }
+
+      /* --- Traveling dot --- */
+      .fpl-dot {
+        fill: white;
+        filter: url(#fpl-dot-glow);
+        animation: fpl-move 6s ease-in-out infinite;
+      }
+
+      /* --- Arrow connectors --- */
+      .fpl-arrow {
+        fill: none;
+        stroke: rgba(255,255,255,0.15);
+        stroke-width: 1;
+        stroke-linecap: round;
+      }
+      .fpl-arrowhead {
+        fill: rgba(255,255,255,0.15);
+      }
+
+      /* --- Labels --- */
+      .fpl-label {
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 6.5px;
+        fill: rgba(255,255,255,0.3);
+        text-anchor: middle;
+      }
+
+      @keyframes fpl-reveal {
+        0%, 5% { opacity: 0; }
+        15%, 82% { opacity: 0.75; }
+        92%, 100% { opacity: 0; }
+      }
+      @keyframes fpl-move {
+        0%, 3% { cx: 20; cy: 55; opacity: 0; }
+        8% { opacity: 1; }
+        10%, 18% { cx: 20; cy: 55; }
+        26%, 34% { cx: 44; cy: 55; }
+        42%, 50% { cx: 68; cy: 55; }
+        58%, 80% { cx: 92; cy: 55; }
+        88% { opacity: 1; }
+        92%, 100% { cx: 92; cy: 55; opacity: 0; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .fpl-f1, .fpl-f2, .fpl-f3, .fpl-f4,
+        .fpl-dot {
+          animation: none !important;
+        }
+        .fpl-fill { opacity: 0.75; }
+        .fpl-dot { opacity: 1; }
+      }
+    </style>
+
+    <!-- Stage fill gradients (bottom-up color) -->
+    <linearGradient id="fpl-g1" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#03AD9C" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#03AD9C" stop-opacity="0.2"/>
+    </linearGradient>
+    <linearGradient id="fpl-g2" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#2A5EDB" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#2A5EDB" stop-opacity="0.2"/>
+    </linearGradient>
+    <linearGradient id="fpl-g3" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#6D28D9" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#6D28D9" stop-opacity="0.2"/>
+    </linearGradient>
+    <linearGradient id="fpl-g4" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#8129D7" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#8129D7" stop-opacity="0.2"/>
+    </linearGradient>
+
+    <filter id="fpl-dot-glow" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Stage backgrounds -->
+  <rect class="fpl-stage" x="10" y="28" width="20" height="54"/>
+  <rect class="fpl-stage" x="34" y="28" width="20" height="54"/>
+  <rect class="fpl-stage" x="58" y="28" width="20" height="54"/>
+  <rect class="fpl-stage" x="82" y="28" width="20" height="54"/>
+
+  <!-- Stage fills -->
+  <rect class="fpl-fill fpl-f1" x="10" y="28" width="20" height="54"/>
+  <rect class="fpl-fill fpl-f2" x="34" y="28" width="20" height="54"/>
+  <rect class="fpl-fill fpl-f3" x="58" y="28" width="20" height="54"/>
+  <rect class="fpl-fill fpl-f4" x="82" y="28" width="20" height="54"/>
+
+  <!-- Arrow connectors -->
+  <line class="fpl-arrow" x1="31" y1="55" x2="33" y2="55"/>
+  <polygon class="fpl-arrowhead" points="33,53 33,57 36,55"/>
+  <line class="fpl-arrow" x1="55" y1="55" x2="57" y2="55"/>
+  <polygon class="fpl-arrowhead" points="57,53 57,57 60,55"/>
+  <line class="fpl-arrow" x1="79" y1="55" x2="81" y2="55"/>
+  <polygon class="fpl-arrowhead" points="81,53 81,57 84,55"/>
+
+  <!-- Traveling dot -->
+  <circle class="fpl-dot" cx="20" cy="55" r="3.5"/>
+
+  <!-- Stage labels -->
+  <text class="fpl-label" x="20" y="94">Lead</text>
+  <text class="fpl-label" x="44" y="94">Qual</text>
+  <text class="fpl-label" x="68" y="94">Prop</text>
+  <text class="fpl-label" x="92" y="94">Close</text>
+</svg>

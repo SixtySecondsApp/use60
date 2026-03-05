@@ -10,7 +10,7 @@
  * Plan limit: $0.69/hour = ~145 hours for $100 budget
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

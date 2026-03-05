@@ -2,12 +2,14 @@
 name: Post-Meeting Follow-Up Pack Builder
 description: |
   Build a complete follow-up pack after a meeting: buyer-facing email, internal Slack update,
-  and 3 actionable tasks. Use when a user asks "build a follow-up pack for the meeting",
-  "create post-meeting deliverables", "what do I need to send after the call", or needs
-  a full set of post-meeting communications and tasks ready to go.
+  and 3 actionable tasks with meeting outcome confidence scoring and cross-artifact consistency
+  checking. Use when a user asks "build a follow-up pack for the meeting", "create post-meeting
+  deliverables", "what do I need to send after the call", or needs a full set of post-meeting
+  communications and tasks ready to go. Enriches packs with post-meeting web intelligence and
+  RAG-powered historical context from previous transcripts.
 metadata:
   author: sixty-ai
-  version: "2"
+  version: "3"
   category: writing
   skill_type: atomic
   is_active: true
@@ -50,6 +52,7 @@ metadata:
     - crm
     - email
     - messaging
+    - web_search
   requires_context:
     - meeting_data
     - meeting_digest
@@ -83,6 +86,15 @@ metadata:
     - name: tasks
       type: array
       description: "3 actionable task previews: internal follow-up, customer follow-up, deal hygiene"
+    - name: outcome_confidence
+      type: object
+      description: "Meeting outcome confidence assessment: { level, signals, hedging_detected }"
+    - name: rag_context_used
+      type: array
+      description: "Previous commitments and running themes from transcript RAG search"
+    - name: consistency_check
+      type: object
+      description: "Cross-artifact consistency verification: decisions, dates, names match across all 3 artifacts"
   priority: critical
 ---
 
@@ -106,29 +118,52 @@ Consult `references/pack-templates.md` for complete follow-up pack templates by 
 
 ### Why Bundling Matters
 
-Most reps do one of the three artifacts (usually the email). Few do all three. The data shows that the complete bundle is dramatically more effective:
+Complete 3-artifact packs close 38% more deals than partial follow-up (Gong.io, 25K+ deals). The 1-hour window is critical — every hour of delay reduces completion probability by 15%. See `references/pack-templates.md` for the full data and momentum preservation framework.
 
-- **Reps who send all 3 artifacts within 1 hour of the meeting close 38% more deals** (Gong.io, analysis of 25K+ deal outcomes, 2023).
-- **The buyer email alone advances the deal 42% of the time. Add the internal Slack update and it jumps to 58%.** The Slack update enables team coordination — your SE prepares the POC, your manager approves the discount, your CSM schedules the onboarding review. Deals are team sports.
-- **Tasks are the hidden multiplier**: Reps who create follow-up tasks within 1 hour of a meeting are **2.4x less likely** to let the deal stall in the next 14 days (HubSpot pipeline velocity data).
-- **The 1-hour window**: Every hour of delay after the meeting reduces the probability of completing all 3 artifacts by 15%. After 4 hours, only 23% of reps complete the full pack. After 24 hours, it drops to 8%.
-
-### Why 3 Artifacts, Specifically?
-
-Each artifact serves a different audience and purpose. Skipping any one of them creates a gap:
-
-| Artifact | Audience | Purpose | Risk if Skipped |
-|----------|----------|---------|-----------------|
-| Buyer Email | External — prospect/customer | Lock in decisions, advance deal, build trust | Buyer forgets commitments, momentum dies |
-| Slack Update | Internal — your team | Enable coordination, flag risks, request help | Team is blind, risks go unaddressed |
-| Task List | You (the rep) | Ensure execution, prevent things from slipping | Follow-through fails, promises are broken |
-
-Without the email, the buyer drifts. Without the Slack, your team cannot help. Without the tasks, you forget. The pack is the minimum viable follow-up.
+| Artifact | Audience | Purpose |
+|----------|----------|---------|
+| Buyer Email | External — prospect/customer | Lock in decisions, advance deal |
+| Slack Update | Internal — your team | Enable coordination, flag risks |
+| Task List | You (the rep) | Ensure execution, prevent drift |
 
 ## Required Capabilities
 - **CRM**: To fetch deal and contact context, create tasks
 - **Email**: To draft and send the buyer-facing email
 - **Messaging**: To post the internal Slack update
+- **Web Search**: To enrich packs with post-meeting company intelligence
+
+## 5-Layer Intelligence Model
+
+Each follow-up pack is built through five layers of progressively richer context. Layers 1 and 5 are the existing core. Layers 2-4 are enrichment layers that elevate pack quality.
+
+### Layer 1: Meeting and Deal Context (Core)
+The existing data gathering step. Fetch meeting details, contact, deal, and recent activities via `execute_action`. This is the foundation — every pack starts here.
+
+### Layer 2: Post-Meeting Enrichment (Web Search)
+After gathering meeting data, run a quick web search for the company:
+- **Company news since last meeting**: Funding rounds, leadership changes, product launches, earnings. Reference anything relevant in the buyer email to show you are paying attention beyond the meeting itself.
+- **Recent competitive moves**: If a competitor was mentioned in the meeting, check for their recent news. Use in the Slack update to give the team current competitive context.
+- Graceful degradation: If web search returns nothing relevant or fails, proceed without it. Do not delay the pack for enrichment.
+
+### Layer 3: Historical Context (RAG Transcript Search)
+Search meeting transcripts via `createRAGClient()` for:
+- **Previous commitments**: Did the buyer or your team commit to things in earlier meetings? Check if those commitments were fulfilled. If not, reference them diplomatically in the email or flag in Slack.
+- **Running themes**: What topics recur across meetings? Persistent concerns, evolving priorities, shifting stakeholders. Use these to show continuity in the buyer email.
+- **Deal evolution**: How has the deal changed over time — stage progression, value changes, timeline shifts. Inform the Slack update and task priorities.
+- If RAG returns no results (first meeting or no transcripts), note "first interaction — no historical context available" and proceed.
+
+### Layer 4: Outcome Confidence Assessment
+Evaluate meeting outcome confidence before drafting artifacts. See the "Meeting Outcome Confidence Assessment" section below for detailed methodology. This assessment informs:
+- **Buyer email tone**: High confidence = assumptive CTA. Low confidence = softer, value-add CTA.
+- **Slack signal**: Confidence level directly influences green/yellow/red signal selection.
+- **Task urgency**: Low confidence outcomes may need an additional "re-confirmation" task.
+
+### Layer 5: Pack Strategy (Enhanced)
+The existing pack methodology — now informed by Layers 2-4. When drafting each artifact:
+- Weave in web enrichment naturally (do not force it)
+- Reference historical context where it strengthens personalization
+- Calibrate tone and urgency based on outcome confidence
+- Consult `references/pack-templates.md` for meeting-type-specific templates
 
 ## Inputs
 - `meeting_data`: output from `execute_action("get_meetings", {...})` (should include `meetings[0].summary` and optionally `meetings[0].transcript_text`)
@@ -235,44 +270,13 @@ Flag for immediate manager attention if any of these are true:
 The three tasks form a triangle of follow-through: internal preparation, external execution, and CRM hygiene.
 
 ### Task 1: Internal Follow-Up
-**Purpose**: Something your team needs to prepare or do before the next buyer interaction.
-
-**Examples**:
-- "Prepare SOC 2 compliance brief for Acme security review — due Monday EOD"
-- "Build custom ROI model using Acme's 15hr/week manual process data — due Wednesday"
-- "Brief SE on OAuth PKCE requirements discussed in today's call — due tomorrow AM"
-
-**Design rules**:
-- Must reference a specific meeting deliverable or buyer need
-- Owner should be the person best equipped to deliver (not always the rep)
-- Deadline should be at least 24 hours before the next buyer interaction
+Something your team needs to prepare before the next buyer interaction. Must reference a specific meeting deliverable. Owner = person best equipped (not always the rep). Deadline = at least 24 hours before next buyer interaction.
 
 ### Task 2: Customer-Facing Follow-Up
-**Purpose**: The next action that involves the buyer directly.
-
-**Examples**:
-- "Send enterprise pricing to Sarah Chen with volume tier highlighted — due tomorrow EOD"
-- "Schedule technical deep-dive with Acme engineering team — target Thursday 2pm"
-- "Follow up with James if API credentials not received by Friday — due Friday 3pm"
-
-**Design rules**:
-- Must be the single most important external action post-meeting
-- Include the specific buyer name and contact method
-- Deadline should match the commitment made in the meeting
+The single most important external action post-meeting. Include specific buyer name and contact method. Deadline matches the commitment made in the meeting.
 
 ### Task 3: Deal Hygiene
-**Purpose**: CRM and internal process maintenance that keeps the deal record accurate.
-
-**Examples**:
-- "Update Acme deal stage from Discovery to Technical Review in CRM"
-- "Add James Rodriguez (VP Engineering) as new contact on Acme deal"
-- "Update deal close date from March 15 to April 1 based on revised timeline"
-- "Log meeting notes and attach transcript to Acme deal record"
-
-**Design rules**:
-- Must update the CRM to reflect what happened in the meeting
-- Should be completable in under 5 minutes
-- Priority is always "medium" unless deal stage change is required (then "high")
+CRM update to reflect what happened. Completable in under 5 minutes. Priority "medium" unless deal stage change required (then "high").
 
 ### Task Prioritization and Deadline Setting
 
@@ -321,27 +325,56 @@ Evaluate each pack on a 1-5 momentum scale:
 
 Include this score in the output so the rep can assess their follow-up quality.
 
-## Pack Quality Standards
+## Meeting Outcome Confidence Assessment
 
-### Completeness
-All 3 artifacts must be present. A pack with only 2 artifacts is incomplete and should be flagged.
+Assess how firm the meeting outcomes actually are before building the pack. Not all "decisions" are equal — a verbal nod from a junior contact is not the same as a signed-off commitment from the VP.
 
-### Consistency
-Information must be consistent across all 3 artifacts:
-- The decisions in the buyer email must match the decisions in the Slack update
-- The deadlines in the buyer email must match the task due dates
-- The risks in the Slack update should inform the task priorities
+### Confidence Levels
 
-### Actionability
-- Buyer email: rep can send within 2 minutes of review
-- Slack update: rep can post within 1 minute of review
-- Tasks: rep can create all 3 within 3 minutes
+| Level | Criteria | Pack Implication |
+|-------|----------|-----------------|
+| **High** | Decisions stated clearly by authorized stakeholders, specific dates committed, no hedging language | Assumptive CTA in email, green signal likely, standard task deadlines |
+| **Medium** | Directional agreement but with qualifiers, dates tentative, or decision-maker not present | Confirmatory CTA ("Does this align?"), yellow signal possible, add a re-confirmation task |
+| **Low** | Hedging language throughout, no firm commitments, decisions deferred to absent stakeholders | Value-add CTA, yellow/red signal, prioritize a "get alignment" task over execution tasks |
 
-### Accuracy
-- Quotes are sourced from the meeting digest, not fabricated
-- Dates and deadlines match what was actually discussed
-- Contact names and titles are correct
-- Deal information (stage, value) is current
+### Hedging Language Patterns
+Detect these in meeting transcripts and digests — they indicate tentative rather than firm commitments:
+- **Tentative verbs**: "we'll try to", "hopefully", "we should be able to", "I think we can"
+- **Deferral phrases**: "let me check with", "I need to run this by", "pending approval from", "once [person] signs off"
+- **Conditional language**: "if the budget allows", "assuming no changes", "as long as", "provided that"
+- **Time hedging**: "sometime next week", "in the coming weeks", "when we get a chance"
+
+### Stakeholder Authority Check
+- Was the decision-maker (budget authority, technical authority, legal authority) present in the meeting?
+- If decisions were made by someone without authority, flag the confidence as Medium at best.
+- Check RAG history: has this contact made commitments before that were later overridden by someone more senior?
+
+### Output
+Include in `data.outcome_confidence`:
+- `level`: "high" | "medium" | "low"
+- `signals`: string[] — specific phrases or observations that informed the assessment
+- `hedging_detected`: boolean — true if hedging language patterns were found
+- `authority_present`: boolean — true if the meeting included the relevant decision-maker
+
+## Cross-Artifact Consistency Checker
+
+Before finalizing the pack, run this automated consistency check. Every pack must pass.
+
+### Verification Matrix
+
+| Check | How to Verify | Failure Action |
+|-------|--------------|----------------|
+| **Decisions match** | Buyer email decisions = Slack update decisions | Reconcile — use the most specific version |
+| **Dates match** | Email next-step dates = task due dates | Task due dates should be on or before email dates |
+| **Names match** | Contact name spelled the same across all 3 artifacts | Standardize to CRM spelling |
+| **Deal info matches** | Stage, value, close date consistent in Slack and tasks | Use CRM as source of truth |
+| **Risks reflected** | Slack risks are reflected in task priorities | If Slack flags a risk, at least one task should address it |
+| **CTA aligns with tasks** | The buyer email CTA should map to one of the 3 tasks | If CTA asks buyer to do X, a customer-facing task should track it |
+
+Include the check result in `data.consistency_check`:
+- `passed`: boolean
+- `checks_run`: number (always 6)
+- `failures`: array of { check: string, detail: string } (empty if all passed)
 
 ## Output Contract
 
@@ -394,6 +427,28 @@ Object:
 - `rationale`: string (why this score)
 - `improvements`: string[] | null (what would raise the score)
 
+### `data.outcome_confidence`
+Object:
+- `level`: "high" | "medium" | "low"
+- `signals`: string[] (specific phrases or observations — e.g., "Sarah said 'let me check with our VP' — deferral")
+- `hedging_detected`: boolean
+- `authority_present`: boolean (true if decision-maker was in the meeting)
+
+### `data.rag_context_used`
+Array of objects:
+- `type`: "previous_commitment" | "running_theme" | "deal_evolution"
+- `source_meeting`: string (meeting date or ID)
+- `content`: string (what was found)
+- `used_in`: "buyer_email" | "slack_update" | "tasks" | "confidence_assessment"
+
+If no RAG results, return empty array with a note in `pack_summary`.
+
+### `data.consistency_check`
+Object:
+- `passed`: boolean
+- `checks_run`: number (always 6)
+- `failures`: array of `{ check: string, detail: string }`
+
 ### `data.pack_summary`
 String: Human-readable summary. Example: "Follow-up pack for Acme Corp technical review meeting. Buyer email (147 words) to Sarah Chen with pricing recap and Thursday review confirmation. Slack update posted to #deal-acme-corp flagging SOC 2 timeline risk. 3 tasks created: SOC 2 brief prep (High, Monday EOD), send pricing to Sarah (High, tomorrow), update deal stage to Technical Review (Medium, today). Momentum score: 4/5."
 
@@ -445,126 +500,24 @@ Before returning the pack, validate:
 
 ## Error Handling
 
-### No meeting data available
-If both `meeting_data` and `meeting_digest` are null or empty, return an error: "No meeting content available. Please provide a meeting summary or meeting ID to build a follow-up pack."
-
-### Partial meeting data
-If `meeting_digest` is available but `meeting_data` is not (or vice versa), build the pack with what is available. Flag: "Pack built with partial data — some fields may need manual completion."
-
-### No contact email
-If the buyer's email is not available, set `buyer_email.to: null` and flag: "Recipient email not found — please add before sending." Still generate the full email body.
-
-### No deal linked
-If no deal is associated with the meeting, omit deal-specific language from the email and Slack update. Set task 3 (deal hygiene) to: "Create new deal record for [Company] based on meeting discussion." This is not an error — many meetings are pre-deal.
-
-### Meeting had no clear decisions
-If the meeting digest shows no firm decisions, replace the "Decisions" section with "Alignment Points" — things both sides seemed to agree on directionally, even if not formally decided. Flag in Slack: "No firm decisions made — consider scheduling a decision-focused follow-up."
-
-### Meeting had no clear next steps
-If no next steps were discussed, generate suggested next steps based on the deal stage and meeting content. Flag: "No explicit next steps were discussed. Suggested next steps are based on deal stage best practices. Verify before including in buyer email."
-
-### Multiple meetings on same day
-If the meeting ID is ambiguous or the rep had multiple meetings today, return the options and ask for clarification: "Found [N] meetings today. Which one should I build the follow-up pack for?"
-
-### Insufficient context for 3 tasks
-If the meeting was too brief or light on content to generate 3 distinct tasks, generate what is possible and fill remaining slots with deal-stage-appropriate defaults. Flag: "Meeting content was limited — [N] tasks are suggested based on deal stage best practices."
-
-### Sensitive information detected
-If the meeting data contains competitor pricing, legal discussions, or HR-related content, flag: "Sensitive content detected. Review buyer email carefully to ensure no confidential information is shared externally."
+| Scenario | Action |
+|----------|--------|
+| **No meeting data** | Return error: "No meeting content available. Please provide a meeting summary or meeting ID." |
+| **Partial data** | Build with what is available. Flag: "Pack built with partial data — some fields may need manual completion." |
+| **No contact email** | Set `buyer_email.to: null`, flag it, still generate the full email body. |
+| **No deal linked** | Omit deal-specific language. Task 3 becomes "Create new deal record for [Company]." Not an error — many meetings are pre-deal. |
+| **No clear decisions** | Replace "Decisions" with "Alignment Points." Flag in Slack: "No firm decisions — consider a decision-focused follow-up." |
+| **No clear next steps** | Generate suggested next steps from deal stage. Flag: "Suggested next steps based on best practices — verify before sending." |
+| **Multiple meetings** | Ask for clarification: "Found [N] meetings today. Which one?" |
+| **Insufficient context** | Fill remaining task slots with deal-stage defaults. Flag: "Meeting content limited — [N] tasks are best-practice suggestions." |
+| **Sensitive info detected** | Flag: "Sensitive content detected. Review buyer email before sending externally." |
 
 ## Examples
 
-### Good Follow-Up Pack
-```
-BUYER EMAIL (152 words):
-Subject: Acme x Sixty — POC Setup + Next Steps
+See `references/artifact-examples.md` for 5 annotated excellent packs, 3 annotated poor packs with "what went wrong" analysis, before/after comparisons, industry-specific tone adjustments, and meeting outcome variations.
 
-Hi Sarah,
+### Quick Reference: Good vs Bad
 
-Thanks for the thorough walkthrough of your migration requirements today.
-Hearing directly from James about the SOC 2 deadline and your team's
-experience with [Competitor]'s API docs was really helpful context.
+**Good pack signals**: Buyer's own words quoted, all next steps have owners + dates, single specific CTA, Slack has signal icon + risks + @mentions, tasks start with verbs and have deadlines, momentum score 4-5.
 
-What we heard:
-- 15+ hours/week spent on manual data reconciliation across 3 engineering teams
-- SOC 2 compliance by Q3 is a hard requirement for any new vendor
-- API documentation quality is a key evaluation criterion
-- VP Engineering sign-off needed by end of month
-
-Next steps:
-1. [Sixty] SOC 2 compliance brief + POC access — Monday EOD
-2. [Acme] API credentials and test data — Friday EOD
-3. [Both] Technical review — Thursday Feb 13, 2pm EST
-
-Could you share those API credentials by Friday so we can configure the
-POC environment for Thursday's review?
-
-Best,
-[Rep]
-
----
-
-SLACK UPDATE (89 words):
-*Acme Corp — Discovery Call Update*
-*Signal*: :green_circle: Advancing
-
-*TL;DR*: Strong meeting. SOC 2 compliance and API quality are key criteria.
-Moving to technical POC.
-
-*Key Intel*:
-- VP Engineering (James Rodriguez) is the budget approver
-- Evaluated [Competitor], unhappy with API docs — opening for us
-
-*Risks*:
-- :warning: SOC 2 deadline is Q3 — tight for full deployment
-
-*Asks*:
-- @David (SE): Prepare SOC 2 brief by Monday EOD
-- @Lisa (CSM): Review onboarding timeline for Q3 delivery
-
-*Next*: Technical review Thursday 2pm
-
----
-
-TASKS:
-1. [Internal] "Prepare SOC 2 compliance brief for Acme security review"
-   Due: Monday EOD | Priority: High | Owner: David (SE)
-   Checklist: [ ] Pull latest SOC 2 report, [ ] Highlight data sync controls,
-   [ ] Include timeline for full compliance
-
-2. [Customer] "Send POC environment access to Sarah Chen"
-   Due: Tuesday EOD | Priority: High | Owner: [Rep]
-   Checklist: [ ] Configure test environment, [ ] Create demo credentials,
-   [ ] Include setup guide doc
-
-3. [Deal Hygiene] "Update Acme deal: stage to Technical Review, add James Rodriguez"
-   Due: Today EOD | Priority: Medium | Owner: [Rep]
-   Checklist: [ ] Move stage from Discovery to Technical Review,
-   [ ] Add James Rodriguez as contact, [ ] Update close date to April 1
-
-Momentum Score: 4/5
-- Next meeting confirmed (Thursday 2pm)
-- Team aligned with specific asks
-- Deducted 1 point: VP sign-off timeline unclear
-```
-
-### Bad Follow-Up Pack (what to avoid)
-```
-BUYER EMAIL:
-Subject: Follow-up
-
-Hi,
-
-Thanks for the meeting today. Here's a recap of our discussion.
-We talked about your needs and how our platform can help.
-Let me know if you have any questions.
-
-SLACK UPDATE:
-Had a good meeting with Acme. Going well. Will follow up.
-
-TASKS:
-1. "Follow up with Acme" — due: next week
-2. "Update CRM" — due: soon
-3. "Prepare materials" — due: TBD
-```
-**Why this is bad**: Email has zero personalization, no buyer quotes, no decisions, no next steps, and a dead-end CTA. Slack update has no signal, no risks, no asks, and no specifics. Tasks have no deadlines, no owners, no context, and are not actionable. This pack adds no value and will not prevent deal stall.
+**Bad pack signals**: Generic email ("thanks for the meeting, let me know if you have questions"), Slack with no structure ("good meeting, will follow up"), tasks without deadlines or owners ("follow up with Acme — due: soon").

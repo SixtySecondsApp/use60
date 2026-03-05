@@ -1,7 +1,7 @@
 /// <reference types="https://esm.sh/@supabase/functions-js/edge-runtime.d.ts" />
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 // @ts-ignore: Deno/LSP type resolution issue
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 // Define the expected structure of an activity row (as received in JSON)

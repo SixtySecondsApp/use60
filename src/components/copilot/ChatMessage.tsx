@@ -25,6 +25,7 @@ import { useUser } from '@/lib/hooks/useUser';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatMessageProps {
   message: CopilotMessage;
@@ -108,7 +109,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, to
       <div className={cn('max-w-3xl', isUser ? '' : 'w-full')}>
         {isUser ? (
           <div className="bg-blue-50 dark:bg-blue-500/10 backdrop-blur-sm border border-blue-200 dark:border-blue-500/20 rounded-xl px-4 py-3 inline-block">
-            <p className="text-sm text-gray-900 dark:text-gray-100">{message.content}</p>
+            <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : (
           <div className="w-full relative group/assistant">
@@ -257,14 +258,73 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, to
                 >
                   <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:underline">
                     <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
                       components={{
-                        a: ({ node, ...props }) => (
+                        h1: ({ children }) => (
+                          <h1 className="text-base font-bold mt-4 mb-2 first:mt-0">{children}</h1>
+                        ),
+                        h2: ({ children }) => (
+                          <h2 className="text-sm font-bold mt-3 mb-1.5 first:mt-0">{children}</h2>
+                        ),
+                        h3: ({ children }) => (
+                          <h3 className="text-sm font-semibold mt-2.5 mb-1 first:mt-0">{children}</h3>
+                        ),
+                        p: ({ children }) => (
+                          <p className="mb-2 last:mb-0 text-sm leading-relaxed">{children}</p>
+                        ),
+                        ul: ({ children }) => (
+                          <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>
+                        ),
+                        li: ({ children }) => (
+                          <li className="text-sm pl-0.5">{children}</li>
+                        ),
+                        strong: ({ children }) => (
+                          <strong className="font-semibold">{children}</strong>
+                        ),
+                        a: ({ node: _node, ...props }) => (
                           <a
                             {...props}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="underline underline-offset-2"
                           />
+                        ),
+                        hr: () => (
+                          <hr className="my-3 border-gray-200 dark:border-gray-700" />
+                        ),
+                        table: ({ children }) => (
+                          <div className="overflow-x-auto my-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <table className="min-w-full text-sm">{children}</table>
+                          </div>
+                        ),
+                        thead: ({ children }) => (
+                          <thead className="bg-gray-50 dark:bg-gray-800/50">{children}</thead>
+                        ),
+                        th: ({ children }) => (
+                          <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">{children}</th>
+                        ),
+                        td: ({ children }) => (
+                          <td className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800 last:[&:is(tr>td)]:border-b-0">{children}</td>
+                        ),
+                        tr: ({ children }) => (
+                          <tr className="last:border-b-0">{children}</tr>
+                        ),
+                        blockquote: ({ children }) => (
+                          <blockquote className="border-l-2 border-blue-400 dark:border-blue-500 pl-3 my-2 text-sm text-gray-600 dark:text-gray-400 italic">{children}</blockquote>
+                        ),
+                        code: ({ children, className }) => {
+                          const isInline = !className;
+                          return isInline ? (
+                            <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs font-mono">{children}</code>
+                          ) : (
+                            <code className={cn("block p-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 text-xs font-mono overflow-x-auto my-2", className)}>{children}</code>
+                          );
+                        },
+                        pre: ({ children }) => (
+                          <pre className="my-2">{children}</pre>
                         ),
                       }}
                     >

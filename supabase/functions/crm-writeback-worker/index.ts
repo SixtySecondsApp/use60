@@ -14,8 +14,9 @@
  * Trigger: pg_cron (recommended: every 30 seconds) or manual invocation
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders } from '../_shared/corsHelper.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 
 // Environment
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -610,6 +611,15 @@ async function handleWorker(req: Request): Promise<Response> {
     return new Response(null, {
       status: 204,
       headers: corsHeaders,
+    });
+  }
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 

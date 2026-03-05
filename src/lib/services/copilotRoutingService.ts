@@ -71,6 +71,47 @@ const INDIVIDUAL_CONFIDENCE_THRESHOLD = 0.5;
 const SEMANTIC_SIMILARITY_THRESHOLD = 0.6;
 const MAX_CANDIDATES = 5;
 
+// =============================================================================
+// Static Priority Routing Map
+//
+// Proposal trigger phrases are pinned to generate-proposal-v2 ahead of the
+// dynamic DB-driven matching. This ensures the V2 pipeline is always preferred
+// over deprecated proposal/proposal-generator/copilot-proposal skills even if
+// those skills have not been removed from the database yet.
+// =============================================================================
+
+const STATIC_SKILL_OVERRIDES: Array<{ pattern: string; skillKey: string; confidence: number }> = [
+  { pattern: 'write a proposal', skillKey: 'generate-proposal-v2', confidence: 0.92 },
+  { pattern: 'generate proposal', skillKey: 'generate-proposal-v2', confidence: 0.92 },
+  { pattern: 'create proposal', skillKey: 'generate-proposal-v2', confidence: 0.90 },
+  { pattern: 'draft a proposal', skillKey: 'generate-proposal-v2', confidence: 0.90 },
+  { pattern: 'proposal for', skillKey: 'generate-proposal-v2', confidence: 0.85 },
+  { pattern: 'make a proposal', skillKey: 'generate-proposal-v2', confidence: 0.88 },
+  { pattern: 'build a proposal', skillKey: 'generate-proposal-v2', confidence: 0.88 },
+];
+
+/**
+ * Check static skill overrides before dynamic DB-driven routing.
+ * Returns a SkillMatch if the message matches a pinned phrase, otherwise null.
+ */
+function checkStaticOverride(message: string): SkillMatch | null {
+  const msgLower = message.toLowerCase();
+  for (const override of STATIC_SKILL_OVERRIDES) {
+    if (msgLower.includes(override.pattern)) {
+      return {
+        skillId: override.skillKey,
+        skillKey: override.skillKey,
+        name: override.skillKey,
+        category: 'sales-ai',
+        confidence: override.confidence,
+        matchedTrigger: override.pattern,
+        isSequence: false,
+      };
+    }
+  }
+  return null;
+}
+
 // Data provider preference for hybrid Apollo + AI Ark routing
 export type DataProviderPreference = 'always_apollo' | 'always_ai_ark' | 'hybrid' | 'auto';
 
@@ -363,6 +404,19 @@ export async function routeToSkill(
       candidates: [],
       isSequenceMatch: false,
       reason: 'No organization ID provided for skill routing',
+    };
+  }
+
+  // Step 0: Check static overrides — pinned skill phrases take priority over DB routing.
+  // This guarantees generate-proposal-v2 wins for all proposal trigger phrases regardless
+  // of what the database contains.
+  const staticMatch = checkStaticOverride(message);
+  if (staticMatch) {
+    return {
+      selectedSkill: staticMatch,
+      candidates: [staticMatch],
+      isSequenceMatch: false,
+      reason: `Static override: "${staticMatch.skillKey}" matched phrase "${staticMatch.matchedTrigger}" with confidence ${(staticMatch.confidence * 100).toFixed(0)}%`,
     };
   }
 

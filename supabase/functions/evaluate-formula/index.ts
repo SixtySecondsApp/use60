@@ -1,6 +1,6 @@
 // @ts-nocheck — Deno edge function
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 
 /**
  * evaluate-formula — Evaluate formula columns for a dynamic table.
@@ -201,6 +201,38 @@ function evaluateExpression(expr: string, cellValues: Map<string, string>): stri
       .map((a) => stripQuotes(evalSimple(a.trim(), cellValues)))
       .filter((v) => v !== '\x00N/A\x00' && v !== 'N/A')
     return parts.length > 0 ? parts.join('') : ''
+  }
+
+  // Handle JSON_GET(@column, "key.path") — resolve @refs from original expression
+  // to avoid comma-splitting issues with inline JSON
+  if (expr.trim().toUpperCase().startsWith('JSON_GET(') && expr.trim().endsWith(')')) {
+    const inner = expr.trim().slice(9, -1)
+    const args = splitArgs(inner)
+    if (args.length !== 2) return 'ERR'
+    // Resolve @column_key reference to raw cell value
+    const colRef = args[0].trim()
+    let jsonStr: string
+    if (colRef.startsWith('@')) {
+      const key = colRef.slice(1)
+      jsonStr = cellValues.get(key) ?? ''
+    } else {
+      jsonStr = stripQuotes(colRef).replace(/\x00N\/A\x00/g, '')
+    }
+    const keyPath = stripQuotes(args[1].trim())
+    if (!jsonStr || !keyPath) return ''
+    try {
+      const obj = JSON.parse(jsonStr)
+      const parts = keyPath.split('.')
+      let current: unknown = obj
+      for (const part of parts) {
+        if (current == null || typeof current !== 'object') return ''
+        current = (current as Record<string, unknown>)[part]
+      }
+      if (current == null) return ''
+      return typeof current === 'object' ? JSON.stringify(current) : String(current)
+    } catch {
+      return ''
+    }
   }
 
   // Handle IF()

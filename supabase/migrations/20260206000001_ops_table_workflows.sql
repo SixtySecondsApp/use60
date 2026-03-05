@@ -21,14 +21,26 @@ CREATE INDEX idx_ops_workflows_org ON ops_table_workflows(org_id);
 CREATE INDEX idx_ops_workflows_table ON ops_table_workflows(table_id);
 ALTER TABLE ops_table_workflows ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view workflows in their org" ON ops_table_workflows FOR SELECT
+DO $$ BEGIN
+  CREATE POLICY "Users can view workflows in their org" ON ops_table_workflows FOR SELECT
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can create workflows in their org" ON ops_table_workflows FOR INSERT
+DO $$ BEGIN
+  CREATE POLICY "Users can create workflows in their org" ON ops_table_workflows FOR INSERT
   WITH CHECK (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update workflows in their org" ON ops_table_workflows FOR UPDATE
+DO $$ BEGIN
+  CREATE POLICY "Users can update workflows in their org" ON ops_table_workflows FOR UPDATE
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can delete workflows in their org" ON ops_table_workflows FOR DELETE
+DO $$ BEGIN
+  CREATE POLICY "Users can delete workflows in their org" ON ops_table_workflows FOR DELETE
   USING (org_id IN (SELECT org_id FROM user_organizations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

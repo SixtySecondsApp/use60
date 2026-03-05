@@ -84,7 +84,8 @@ ALTER TABLE contact_engagement_patterns ENABLE ROW LEVEL SECURITY;
 
 -- Users in the same org can view engagement patterns
 DROP POLICY IF EXISTS "Users can view org contact_engagement_patterns" ON contact_engagement_patterns;
-CREATE POLICY "Users can view org contact_engagement_patterns"
+DO $$ BEGIN
+  CREATE POLICY "Users can view org contact_engagement_patterns"
   ON contact_engagement_patterns FOR SELECT
   TO authenticated
   USING (
@@ -94,14 +95,19 @@ CREATE POLICY "Users can view org contact_engagement_patterns"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role has full access (for edge functions / orchestrator)
 DROP POLICY IF EXISTS "Service role full access to contact_engagement_patterns" ON contact_engagement_patterns;
-CREATE POLICY "Service role full access to contact_engagement_patterns"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to contact_engagement_patterns"
   ON contact_engagement_patterns FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- RPC: calculate_contact_engagement_patterns

@@ -1,7 +1,7 @@
 // supabase/functions/_shared/enqueueWriteback.ts
 // Helper to enqueue CRM write-back operations for async processing
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 export type CrmSource = 'hubspot' | 'attio';
 export type EntityType = 'contact' | 'company' | 'deal' | 'activity';

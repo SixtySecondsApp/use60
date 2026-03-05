@@ -116,6 +116,17 @@ export default function BillingSettingsPage() {
   const currentBillingCycle: ModalBillingCycle =
     subscription?.billing_cycle === 'yearly' ? 'annual' : 'monthly';
 
+  // Bundled credits from plan features
+  const bundledCredits = currentPlan?.features?.bundled_credits;
+  const bundledDisplay =
+    typeof bundledCredits === 'number' && bundledCredits > 0
+      ? `${bundledCredits}/mo`
+      : '0';
+
+  // Cancelled / cancel-at-period-end state
+  const isCancelled = subscription?.status === 'canceled';
+  const isCancelPending = subscription?.cancel_at_period_end && !isCancelled;
+
   // Format next billing date
   const nextBillingDate = subscription?.current_period_end
     ? new Date(subscription.current_period_end).toLocaleDateString('en-GB', {
@@ -265,7 +276,7 @@ export default function BillingSettingsPage() {
                 </div>
 
                 {/* Stats grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
                   {/* Monthly cost */}
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
@@ -287,22 +298,65 @@ export default function BillingSettingsPage() {
                     </p>
                   </div>
 
+                  {/* Credits included */}
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      Credits Included
+                    </p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {bundledDisplay}
+                    </p>
+                  </div>
+
                   {/* Next billing date */}
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      Next Billing
+                      {isCancelPending ? 'Ends On' : 'Next Billing'}
                     </p>
                     <p className={cn(
                       'text-lg font-semibold',
-                      nextBillingDate
-                        ? 'text-gray-900 dark:text-white'
-                        : 'text-gray-400 dark:text-gray-500'
+                      isCancelPending
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : nextBillingDate
+                          ? 'text-gray-900 dark:text-white'
+                          : 'text-gray-400 dark:text-gray-500'
                     )}>
                       {nextBillingDate ?? '—'}
                     </p>
                   </div>
                 </div>
+
+                {/* Cancelled / cancel-pending banner */}
+                {isCancelled && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 p-3">
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <AlertCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <span>Your subscription has ended. Re-subscribe to regain access.</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handlePlanAction(currentPlanSlug)}
+                        disabled={createCheckoutSession.isPending}
+                        className="bg-[#37bd7e] hover:bg-[#2da76c] text-white flex-shrink-0"
+                      >
+                        Re-subscribe
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {isCancelPending && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-700 dark:text-amber-400">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      <span>
+                        Subscription ends on {nextBillingDate}. You&apos;ll keep access until then.
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Trial progress */}
                 {trial?.isTrialing && (

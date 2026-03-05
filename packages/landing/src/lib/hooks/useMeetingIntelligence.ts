@@ -431,7 +431,7 @@ export function useMeetingIntelligence(): UseMeetingIntelligenceReturn {
     };
   }, [user, fetchIndexStatus]);
 
-  // Search function with team filter support
+  // Search function — calls meeting-analytics (Railway pgvector + GPT-4o-mini)
   const search = useCallback(async (query: string, filters?: SearchFilters) => {
     if (!user) {
       setSearchError('Not authenticated');
@@ -447,23 +447,53 @@ export function useMeetingIntelligence(): UseMeetingIntelligenceReturn {
       setIsSearching(true);
       setSearchError(null);
 
-      const targetUserId = getTargetUserId();
+      const startTime = Date.now();
 
-      const response = await supabase.functions.invoke('meeting-intelligence-search', {
-        body: {
-          query: query.trim(),
-          filters: {
-            ...filters,
-            owner_user_id: targetUserId,
-          },
-        },
+      // Build meeting-analytics URL
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+      const askUrl = `${supabaseUrl}/functions/v1/meeting-analytics/api/search/ask`;
+
+      // Get auth headers
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (anonKey) headers['apikey'] = anonKey;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+      const resp = await fetch(askUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ question: query.trim(), maxMeetings: 20 }),
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Search failed');
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => '');
+        throw new Error(`Search failed (${resp.status}): ${errText}`);
       }
 
-      setResults(response.data as SearchResult);
+      const json = await resp.json();
+      const askData = json.data || json;
+
+      // Map meeting-analytics response to SearchResult format
+      const result: SearchResult = {
+        answer: askData.answer || '',
+        sources: (askData.sources || []).map((s: any) => ({
+          meeting_id: s.transcriptId,
+          title: s.transcriptTitle || 'Untitled',
+          date: s.date || '',
+          company_name: null,
+          owner_name: null,
+          relevance_snippet: s.text || '',
+        })),
+        query_metadata: {
+          semantic_query: query.trim(),
+          filters_applied: filters || {},
+          meetings_searched: askData.meetingsAnalyzed || 0,
+          response_time_ms: Date.now() - startTime,
+        },
+      };
+
+      setResults(result);
       saveRecentQuery(query.trim());
 
     } catch (error) {

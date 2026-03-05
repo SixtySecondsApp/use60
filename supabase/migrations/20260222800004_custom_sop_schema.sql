@@ -92,7 +92,8 @@ ALTER TABLE sop_steps ENABLE ROW LEVEL SECURITY;
 
 -- custom_sops policies
 DROP POLICY IF EXISTS "custom_sops_select" ON custom_sops;
-CREATE POLICY "custom_sops_select"
+DO $$ BEGIN
+  CREATE POLICY "custom_sops_select"
   ON custom_sops FOR SELECT
   USING (
     is_platform_default = true
@@ -101,9 +102,12 @@ CREATE POLICY "custom_sops_select"
       WHERE user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "custom_sops_insert" ON custom_sops;
-CREATE POLICY "custom_sops_insert"
+DO $$ BEGIN
+  CREATE POLICY "custom_sops_insert"
   ON custom_sops FOR INSERT
   WITH CHECK (
     org_id IN (
@@ -112,9 +116,12 @@ CREATE POLICY "custom_sops_insert"
         AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "custom_sops_update" ON custom_sops;
-CREATE POLICY "custom_sops_update"
+DO $$ BEGIN
+  CREATE POLICY "custom_sops_update"
   ON custom_sops FOR UPDATE
   USING (
     is_platform_default = false
@@ -124,9 +131,12 @@ CREATE POLICY "custom_sops_update"
         AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "custom_sops_delete" ON custom_sops;
-CREATE POLICY "custom_sops_delete"
+DO $$ BEGIN
+  CREATE POLICY "custom_sops_delete"
   ON custom_sops FOR DELETE
   USING (
     is_platform_default = false
@@ -136,10 +146,13 @@ CREATE POLICY "custom_sops_delete"
         AND role IN ('owner', 'admin')
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- sop_steps policies (inherit access from custom_sops)
 DROP POLICY IF EXISTS "sop_steps_select" ON sop_steps;
-CREATE POLICY "sop_steps_select"
+DO $$ BEGIN
+  CREATE POLICY "sop_steps_select"
   ON sop_steps FOR SELECT
   USING (
     sop_id IN (
@@ -151,9 +164,12 @@ CREATE POLICY "sop_steps_select"
         )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "sop_steps_insert" ON sop_steps;
-CREATE POLICY "sop_steps_insert"
+DO $$ BEGIN
+  CREATE POLICY "sop_steps_insert"
   ON sop_steps FOR INSERT
   WITH CHECK (
     sop_id IN (
@@ -165,9 +181,12 @@ CREATE POLICY "sop_steps_insert"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "sop_steps_update" ON sop_steps;
-CREATE POLICY "sop_steps_update"
+DO $$ BEGIN
+  CREATE POLICY "sop_steps_update"
   ON sop_steps FOR UPDATE
   USING (
     sop_id IN (
@@ -180,9 +199,12 @@ CREATE POLICY "sop_steps_update"
         )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "sop_steps_delete" ON sop_steps;
-CREATE POLICY "sop_steps_delete"
+DO $$ BEGIN
+  CREATE POLICY "sop_steps_delete"
   ON sop_steps FOR DELETE
   USING (
     sop_id IN (
@@ -195,3 +217,5 @@ CREATE POLICY "sop_steps_delete"
         )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

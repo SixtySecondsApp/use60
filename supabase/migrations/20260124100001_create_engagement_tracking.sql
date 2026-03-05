@@ -74,12 +74,16 @@ DROP POLICY IF EXISTS "Admins can read org engagement events" ON copilot_engagem
 DROP POLICY IF EXISTS "Service role can insert engagement events" ON copilot_engagement_events;
 
 -- Users can only see their own engagement events
-CREATE POLICY "Users can read own engagement events"
+DO $$ BEGIN
+  CREATE POLICY "Users can read own engagement events"
   ON copilot_engagement_events FOR SELECT
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Admins can see all events in their org
-CREATE POLICY "Admins can read org engagement events"
+DO $$ BEGIN
+  CREATE POLICY "Admins can read org engagement events"
   ON copilot_engagement_events FOR SELECT
   USING (
     EXISTS (
@@ -90,11 +94,16 @@ CREATE POLICY "Admins can read org engagement events"
         AND p.is_admin = true
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can insert (for backend tracking)
-CREATE POLICY "Service role can insert engagement events"
+DO $$ BEGIN
+  CREATE POLICY "Service role can insert engagement events"
   ON copilot_engagement_events FOR INSERT
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comment
 COMMENT ON TABLE copilot_engagement_events IS 

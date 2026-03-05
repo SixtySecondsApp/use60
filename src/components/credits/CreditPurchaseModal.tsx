@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CreditCard, Loader2, Zap, TrendingUp, Layers, Info, CheckCircle } from 'lucide-react';
+import { CreditCard, Loader2, Star, ChevronDown, ChevronUp, Zap, TrendingUp, Layers, Info, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -12,10 +12,9 @@ import { Button } from '@/components/ui/button';
 import { purchasePack } from '@/lib/services/creditService';
 import { CREDIT_PACKS, getCostPerCredit, getPackPrice } from '@/lib/config/creditPacks';
 import type { PackType } from '@/lib/config/creditPacks';
-import { useOrgId } from '@/lib/contexts/OrgContext';
-import { useUser } from '@/lib/hooks/useUser';
+import { useOrgId, useOrg } from '@/lib/contexts/OrgContext';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
-import { isUserAdmin } from '@/lib/utils/adminUtils';
+import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { cn } from '@/lib/utils';
 
 interface CreditPurchaseModalProps {
@@ -23,6 +22,8 @@ interface CreditPurchaseModalProps {
   onOpenChange: (open: boolean) => void;
   /** Pre-select a specific pack when opening */
   defaultPack?: PackType;
+  showPopularBadge?: boolean;
+  initialPack?: PackType;
 }
 
 const PACK_ICONS: Record<string, React.ReactNode> = {
@@ -31,10 +32,20 @@ const PACK_ICONS: Record<string, React.ReactNode> = {
   scale: <Layers className="h-6 w-6" />,
 };
 
-export default function CreditPurchaseModal({ open, onOpenChange, defaultPack }: CreditPurchaseModalProps) {
+const COMPARE_ROWS = [
+  { label: 'Copilot chat (per message)', feature: 'copilot_chat' },
+  { label: 'Meeting summary', feature: 'meeting_summary' },
+  { label: 'Apollo search', feature: 'apollo_search' },
+  { label: 'Content generation', feature: 'content_generation' },
+];
+
+export default function CreditPurchaseModal({ open, onOpenChange, defaultPack, showPopularBadge = true, initialPack }: CreditPurchaseModalProps) {
   const orgId = useOrgId();
-  const { userData } = useUser();
-  const { currencyCode } = useOrgMoney();
+  const { permissions } = useOrg();
+  const { isPlatformAdmin } = useUserPermissions();
+  const isAdmin = permissions.canManageSettings || permissions.canManageTeam || isPlatformAdmin;
+  const { currencyCode, symbol } = useOrgMoney();
+  const [selectedPack, setSelectedPack] = useState<PackType>('growth');
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   // Use defaultPack when provided, otherwise fall back to growth
@@ -48,7 +59,11 @@ export default function CreditPurchaseModal({ open, onOpenChange, defaultPack }:
     if (!open) setIsRedirecting(false);
   }, [open]);
 
-  if (!isUserAdmin(userData)) {
+  useEffect(() => {
+    if (open && initialPack) setSelectedPack(initialPack);
+  }, [open, initialPack]);
+
+  if (!isAdmin) {
     return null;
   }
 

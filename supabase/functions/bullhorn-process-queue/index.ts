@@ -17,8 +17,9 @@
  * - bulk_sync: Bulk sync operation
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.8'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
+import { verifyCronSecret } from '../_shared/edgeAuth.ts'
 import { BullhornClient, BullhornError } from '../_shared/bullhorn.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
@@ -55,6 +56,15 @@ Deno.serve(async (req: Request) => {
   const corsPreflightResponse = handleCorsPreflightRequest(req);
   if (corsPreflightResponse) return corsPreflightResponse;
   const corsHeaders = getCorsHeaders(req);
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
   const startTime = Date.now()
   const results: ProcessResult[] = []

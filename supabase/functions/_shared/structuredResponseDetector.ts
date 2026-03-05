@@ -13,6 +13,7 @@
  */
 
 import { isValidUUID } from './api-utils.ts'
+import { resolveModel } from './modelRouter.ts'
 
 // ---------------------------------------------------------------------------
 // Environment variables (read once at module load)
@@ -1770,12 +1771,56 @@ export async function structureEmailDraftResponse(
     }
 
     // If user references "last meeting", fetch it with transcript/summary
+    // IMPORTANT: When in deal context, scope meetings to the deal's contact/company
+    // to avoid fetching unrelated meetings (e.g., Owen King when the deal is Nicer Group)
     let lastMeeting: any = null
-    if (hasLastMeetingReference) {
-      console.log('[EMAIL-DRAFT] Fetching last meeting with transcript for user:', userId)
 
-      // First try: Look for meetings with transcript/summary (no date filter - get most recent)
-      const { data: meetings, error: meetingError } = await client
+    // Extract deal context for meeting scoping
+    const dealContextBlock = userMessage.match(/\[DEAL_CONTEXT\]([\s\S]*?)\[\/DEAL_CONTEXT\]/)
+    let dealContactId: string | null = null
+    let dealCompanyId: string | null = null
+    let dealCompanyName: string | null = null
+    let dealContactEmail: string | null = null
+
+    if (dealContextBlock) {
+      const ctx = dealContextBlock[1]
+      const emailMatch = ctx.match(/Email:\s*([\w.+-]+@[\w.-]+\.\w+)/i)
+      if (emailMatch) dealContactEmail = emailMatch[1]
+      const companyMatch = ctx.match(/Company:\s*([^\n]+)/i)
+      if (companyMatch) dealCompanyName = companyMatch[1].trim()
+
+      // Look up contact ID from email to scope meeting query
+      if (dealContactEmail) {
+        const { data: contactRow } = await client
+          .from('contacts')
+          .select('id, company_id')
+          .eq('email', dealContactEmail)
+          .eq('owner_id', userId)
+          .maybeSingle()
+        if (contactRow) {
+          dealContactId = contactRow.id
+          dealCompanyId = contactRow.company_id
+        }
+      }
+      // If no contact found, try company name lookup
+      if (!dealCompanyId && dealCompanyName) {
+        const { data: companyRow } = await client
+          .from('companies')
+          .select('id')
+          .ilike('name', `%${dealCompanyName}%`)
+          .limit(1)
+        if (companyRow?.[0]) {
+          dealCompanyId = companyRow[0].id
+        }
+      }
+      console.log('[EMAIL-DRAFT] Deal context scoping:', { dealContactId, dealCompanyId, dealCompanyName, dealContactEmail })
+    }
+
+    if (hasLastMeetingReference) {
+      console.log('[EMAIL-DRAFT] Fetching last meeting for user:', userId, 'dealContactId:', dealContactId, 'dealCompanyId:', dealCompanyId)
+
+      // Build meeting query — scope by deal contact/company when available
+      let meetingsQuery = client
         .from('meetings')
         .select(`
           id, title, summary, transcript_text, meeting_start,
@@ -1783,6 +1828,17 @@ export async function structureEmailDraftResponse(
           meeting_attendees(name, email, is_external)
         `)
         .eq('owner_user_id', userId)
+
+      // If we have deal context, scope meetings to the deal's contact/company
+      if (dealContactId || dealCompanyId) {
+        const meetingFilters: string[] = []
+        if (dealContactId) meetingFilters.push(`primary_contact_id.eq.${dealContactId}`)
+        if (dealCompanyId) meetingFilters.push(`company_id.eq.${dealCompanyId}`)
+        meetingsQuery = meetingsQuery.or(meetingFilters.join(','))
+        console.log('[EMAIL-DRAFT] Scoping meetings to deal contact/company:', meetingFilters)
+      }
+
+      const { data: meetings, error: meetingError } = await meetingsQuery
         .or('transcript_text.not.is.null,summary.not.is.null')
         .order('meeting_start', { ascending: false })
         .limit(5)
@@ -1793,8 +1849,9 @@ export async function structureEmailDraftResponse(
         // Pick the first meeting that actually has content
         lastMeeting = meetings.find((m: any) => m.transcript_text || m.summary) || meetings[0]
         console.log('[EMAIL-DRAFT] Found last meeting:', lastMeeting.title, '- Has summary:', !!lastMeeting.summary, '- Has transcript:', !!lastMeeting.transcript_text, '- Date:', lastMeeting.meeting_start)
-      } else {
-        // Fallback: Get ANY recent meeting even without transcript/summary
+      } else if (!dealContactId && !dealCompanyId) {
+        // Only fall back to ANY recent meeting if NOT in deal context
+        // (In deal context, an unscoped fallback would return wrong meetings)
         console.log('[EMAIL-DRAFT] No meetings with content, trying any recent meeting...')
         const { data: anyMeetings } = await client
           .from('meetings')
@@ -1806,11 +1863,13 @@ export async function structureEmailDraftResponse(
           .eq('owner_user_id', userId)
           .order('meeting_start', { ascending: false })
           .limit(1)
-        
+
         if (anyMeetings && anyMeetings.length > 0) {
           lastMeeting = anyMeetings[0]
           console.log('[EMAIL-DRAFT] Using most recent meeting (no content):', lastMeeting.title)
         }
+      } else {
+        console.log('[EMAIL-DRAFT] In deal context but no meetings found for this deal — skipping meeting-based email')
       }
       
       // Process attendees if we found a meeting
@@ -2030,7 +2089,13 @@ export async function structureEmailDraftResponse(
     console.log('[EMAIL-DRAFT] User name for signature:', userName)
 
     // Generate email based on meeting context if available
-    if ((isFollowUp || hasLastMeetingReference) && lastMeeting && (lastMeeting.summary || lastMeeting.transcript_text)) {
+    // GUARD: If we're in deal context, only use the meeting if it was scoped to the deal.
+    // An unscoped meeting (fetched by owner_user_id only) may be about a completely different
+    // deal/contact (e.g., Owen King staging meeting when the deal is Nicer Group).
+    // If dealContextBlock exists but we couldn't find a contactId/companyId to scope by,
+    // the meeting query was NOT scoped and may return wrong data — skip it.
+    const meetingIsDealScoped = !dealContextBlock || !!(dealContactId || dealCompanyId)
+    if ((isFollowUp || hasLastMeetingReference) && lastMeeting && (lastMeeting.summary || lastMeeting.transcript_text) && meetingIsDealScoped) {
       // USE AI to generate a proper email based on meeting content and user's writing style
       console.log('[EMAIL-DRAFT] Generating AI email from meeting transcript/summary')
       
@@ -2065,7 +2130,16 @@ export async function structureEmailDraftResponse(
         if (meta?.signoff_style) {
           styleParts.push(`Sign-off style: Use "${meta.signoff_style}" style sign-offs`)
         }
-        
+        if (meta?.signoffs && Array.isArray(meta.signoffs) && meta.signoffs.length > 0) {
+          styleParts.push(`Preferred sign-offs (USE ONE OF THESE EXACTLY): ${meta.signoffs.join(' / ')}`)
+        }
+        if (meta?.greetings_signoffs?.signoffs && Array.isArray(meta.greetings_signoffs.signoffs) && meta.greetings_signoffs.signoffs.length > 0) {
+          styleParts.push(`Preferred sign-offs (USE ONE OF THESE EXACTLY): ${meta.greetings_signoffs.signoffs.join(' / ')}`)
+        }
+        if (meta?.wordsToAvoid && Array.isArray(meta.wordsToAvoid) && meta.wordsToAvoid.length > 0) {
+          styleParts.push(`Words/phrases to NEVER use: ${meta.wordsToAvoid.join(', ')}`)
+        }
+
         if (writingStyle.examples && Array.isArray(writingStyle.examples) && writingStyle.examples.length > 0) {
           const snippets = (writingStyle.examples as string[]).slice(0, 2).map((ex: string) => 
             ex.length > 200 ? ex.substring(0, 200) + '...' : ex
@@ -2138,7 +2212,8 @@ INSTRUCTIONS:
 4. Sound natural and human - NOT like a template
 5. Include specific details from the conversation to show you were paying attention
 6. Propose a clear next step
-7. Sign off with the sender's actual name: "${userName}"
+7. Sign off using the user's preferred sign-off style (see writing style above) followed by "${userName}". Never use placeholders like "[Your Name]".
+8. Never use em dashes (\u2014) anywhere in the email. Use commas, periods, or rewrite the sentence instead.
 
 Return ONLY a JSON object in this exact format (no markdown, no code blocks):
 {"subject": "Your subject line here", "body": "Full email body here"}
@@ -2146,8 +2221,59 @@ Return ONLY a JSON object in this exact format (no markdown, no code blocks):
 The body MUST include proper greeting and sign off with "${userName}" (not "[Your Name]" or placeholders).`
 
       try {
-        // Use Gemini for email generation
-        if (GEMINI_API_KEY) {
+        // Resolve model via model router (respects user's intelligence tier setting)
+        let useProvider = 'google'
+        let useModelId = 'gemini-2.0-flash'
+        const orgId = context?.orgId || ''
+
+        try {
+          if (orgId) {
+            const resolution = await resolveModel(client, {
+              feature: 'copilot',
+              userId,
+              orgId,
+            })
+            useProvider = resolution.provider
+            useModelId = resolution.modelId
+            console.log(`[EMAIL-DRAFT] Model router resolved: ${useProvider}/${useModelId} (fallback: ${resolution.wasFallback})`)
+          } else {
+            console.log('[EMAIL-DRAFT] No orgId — defaulting to Gemini')
+          }
+        } catch (routerErr) {
+          console.warn('[EMAIL-DRAFT] Model router failed, falling back to Gemini:', routerErr instanceof Error ? routerErr.message : routerErr)
+        }
+
+        let aiResponseText = ''
+
+        // Anthropic provider (Claude)
+        if (useProvider === 'anthropic' && ANTHROPIC_API_KEY) {
+          console.log(`[EMAIL-DRAFT] Calling Claude (${useModelId}) to generate personalized email...`)
+          const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model: useModelId,
+              max_tokens: 1000,
+              temperature: 0.6,
+              messages: [{ role: 'user', content: prompt }],
+            }),
+          })
+
+          if (claudeResponse.ok) {
+            const claudeData = await claudeResponse.json()
+            aiResponseText = claudeData.content?.[0]?.text || ''
+            console.log('[EMAIL-DRAFT] Claude response received, length:', aiResponseText.length)
+          } else {
+            console.error('[EMAIL-DRAFT] Claude API error:', claudeResponse.status, '— falling back to Gemini')
+          }
+        }
+
+        // Gemini fallback (or primary when provider is google / no Anthropic key)
+        if (!aiResponseText && GEMINI_API_KEY) {
           console.log('[EMAIL-DRAFT] Calling Gemini to generate personalized email...')
           const geminiResponse = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -2167,35 +2293,37 @@ The body MUST include proper greeting and sign off with "${userName}" (not "[You
 
           if (geminiResponse.ok) {
             const geminiData = await geminiResponse.json()
-            const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ''
-            console.log('[EMAIL-DRAFT] Gemini response received, length:', responseText.length)
-            
-            try {
-              const emailJson = JSON.parse(responseText)
-              if (emailJson.subject && emailJson.body) {
-                subject = emailJson.subject
-                body = emailJson.body
-                console.log('[EMAIL-DRAFT] ✅ AI-generated email parsed successfully')
-              }
-            } catch (parseError) {
-              console.error('[EMAIL-DRAFT] Failed to parse Gemini response:', parseError)
-              // Try to extract JSON from response
-              const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-              if (jsonMatch) {
-                try {
-                  const emailJson = JSON.parse(jsonMatch[0])
-                  if (emailJson.subject && emailJson.body) {
-                    subject = emailJson.subject
-                    body = emailJson.body
-                    console.log('[EMAIL-DRAFT] ✅ AI-generated email extracted from response')
-                  }
-                } catch (e) {
-                  console.error('[EMAIL-DRAFT] Could not extract JSON from response')
-                }
-              }
-            }
+            aiResponseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ''
+            console.log('[EMAIL-DRAFT] Gemini response received, length:', aiResponseText.length)
           } else {
             console.error('[EMAIL-DRAFT] Gemini API error:', geminiResponse.status)
+          }
+        }
+
+        // Parse AI response (works for both Claude and Gemini)
+        if (aiResponseText) {
+          try {
+            const emailJson = JSON.parse(aiResponseText)
+            if (emailJson.subject && emailJson.body) {
+              subject = emailJson.subject
+              body = emailJson.body
+              console.log('[EMAIL-DRAFT] AI-generated email parsed successfully')
+            }
+          } catch (parseError) {
+            console.error('[EMAIL-DRAFT] Failed to parse AI response:', parseError)
+            const jsonMatch = aiResponseText.match(/\{[\s\S]*\}/)
+            if (jsonMatch) {
+              try {
+                const emailJson = JSON.parse(jsonMatch[0])
+                if (emailJson.subject && emailJson.body) {
+                  subject = emailJson.subject
+                  body = emailJson.body
+                  console.log('[EMAIL-DRAFT] AI-generated email extracted from response')
+                }
+              } catch (e) {
+                console.error('[EMAIL-DRAFT] Could not extract JSON from response')
+              }
+            }
           }
         }
       } catch (aiError) {
@@ -2226,28 +2354,235 @@ Best regards`
       }
 
       console.log('[EMAIL-DRAFT] Generated email from meeting context:', { meetingTitle, keyPointsCount: keyPoints.length, hasActionItems: uncompletedActions.length > 0, usedAI: !body.includes('Best regards') || body.length > 500 })
-    } else if (isFollowUp && isMeetingRelated) {
-      // No meeting found - try harder to find ANY recent meeting
-      console.log('[EMAIL-DRAFT] No meeting with content found, trying broader search...')
-      
-      const { data: anyMeetings } = await client
-        .from('meetings')
-        .select('id, title, summary, transcript_text, meeting_start')
-        .eq('owner_user_id', userId)
-        .order('meeting_start', { ascending: false })
-        .limit(5)
-      
-      console.log('[EMAIL-DRAFT] Broader search found meetings:', anyMeetings?.length || 0)
-      if (anyMeetings) {
-        anyMeetings.forEach((m: any) => {
-          console.log('[EMAIL-DRAFT] - Meeting:', m.title, 'has_summary:', !!m.summary, 'has_transcript:', !!m.transcript_text)
-        })
+    } else {
+      // No meeting transcript/summary available for AI email generation.
+      // Strategy: Extract from agent response FIRST (the specialist agent already
+      // wrote a contextually correct email using the full deal context), then fall
+      // back to AI generation from deal context if extraction fails.
+
+      // Extract recipient info from DEAL_CONTEXT regardless of path
+      // Context block uses "Contact Name:" and "Contact Email:" format
+      const contactEmailInContext = userMessage.match(/Contact\s*Email:\s*([\w.+-]+@[\w.-]+\.\w+)/i)
+      if (contactEmailInContext && !contactEmail) {
+        contactEmail = contactEmailInContext[1]
+      }
+      if (!contactEmail) {
+        const emailInContext = userMessage.match(/(?:Email|To):\s*([\w.+-]+@[\w.-]+\.\w+)/i)
+        if (emailInContext) contactEmail = emailInContext[1]
+      }
+      if (!contactEmail) {
+        const genericEmail = userMessage.match(/[\w.+-]+@[\w.-]+\.\w+/)
+        if (genericEmail) contactEmail = genericEmail[0]
+      }
+      const contactNameInContext = userMessage.match(/Contact\s*Name:\s*([^\n]+)/i)
+      const contactFallbackInContext = !contactNameInContext ? userMessage.match(/Contact:\s*([^(,\n]+)/i) : null
+      if (!recipientName) {
+        if (contactNameInContext) recipientName = contactNameInContext[1].trim()
+        else if (contactFallbackInContext) recipientName = contactFallbackInContext[1].trim()
+      }
+      // If we have a contact name but no email, try to look it up
+      if (!contactEmail && recipientName) {
+        try {
+          const nameParts = recipientName.split(/\s+/)
+          const firstName = nameParts[0] || ''
+          let contactLookup = client.from('contacts').select('email').ilike('first_name', firstName).eq('owner_id', userId)
+          if (nameParts.length > 1) contactLookup = contactLookup.ilike('last_name', nameParts.slice(1).join(' '))
+          const { data: contactRows } = await contactLookup.limit(1)
+          if (contactRows?.[0]?.email) contactEmail = contactRows[0].email
+        } catch (_e) { /* non-critical */ }
+      }
+      // Also try Primary Contact ID if available
+      if (!contactEmail) {
+        const contactIdMatch = userMessage.match(/Primary Contact ID:\s*([a-f0-9-]+)/i)
+        if (contactIdMatch) {
+          try {
+            const { data: contactById } = await client.from('contacts').select('email').eq('id', contactIdMatch[1]).maybeSingle()
+            if (contactById?.email) contactEmail = contactById.email
+          } catch (_e) { /* non-critical */ }
+        }
       }
 
-      // Fallback if no meeting found but user mentioned meeting
-      subject = `Following up on our recent conversation`
-      keyPoints = ['Recap key discussion points', 'Outline next steps', 'Clear call to action']
-      body = `Hi ${recipientName || '[Name]'},
+      // PRIORITY 1: Extract email from agent/AI response text (the specialist
+      // agent already wrote the email correctly using the full deal context)
+      if (aiContent && aiContent.length > 100) {
+        console.log('[EMAIL-DRAFT] Attempting to extract email from agent response...')
+        const subjectMatch = aiContent.match(/\*?\*?Subject:?\*?\*?\s*(.+?)(?:\n|$)/i)
+        // Match from greeting through sign-off (stop at section breaks or triple newlines)
+        const greetingMatch = aiContent.match(/((?:Hi|Hey|Hello|Dear)\s+[\s\S]*?)(?:\n---|\n##|\n\*\*(?:Key |Next |Action|Strategy|Context|Analysis|Note)[A-Z]|\n\n\n|$)/i)
+
+        if (subjectMatch && greetingMatch) {
+          subject = subjectMatch[1]
+            .replace(/\*+/g, '').replace(/^["']|["']$/g, '')
+            .replace(/\[[^\]]*\]/g, '')  // Remove all [...] placeholders
+            .replace(/\s*[x×]\s*/gi, ' ').replace(/\s{2,}/g, ' ').trim()
+          body = greetingMatch[1]
+            .replace(/\*\*([^*]+)\*\*/g, '$1')  // Remove bold
+            .replace(/\*([^*]+)\*/g, '$1')       // Remove italic
+            .replace(/\u2014/g, ',')              // Em dashes to commas
+            .replace(/\u2013/g, '-')              // En dashes to hyphens
+            .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '')  // Strip emojis
+            .replace(/\[[^\]]*\]/g, '')           // Remove all [...] placeholders
+            .replace(/\s*\|\s*$/gm, '')           // Remove trailing " | "
+            .replace(/\s{2,}/g, ' ')              // Collapse spaces
+            .trim()
+          keyPoints = ['Extracted from agent response']
+          console.log('[EMAIL-DRAFT] Extracted from agent response:', { subjectLen: subject.length, bodyLen: body.length })
+        }
+      }
+
+      // PRIORITY 2: If extraction failed and we have DEAL_CONTEXT, generate via AI
+      // Strip meeting summaries to avoid the AI writing about unrelated meetings
+      const dealContextMatch = userMessage.match(/\[DEAL_CONTEXT\]([\s\S]*?)\[\/DEAL_CONTEXT\]/)
+      if (!body && dealContextMatch) {
+        console.log('[EMAIL-DRAFT] Agent extraction failed, generating from DEAL_CONTEXT via AI...')
+        // Strip meeting summaries and dossier sections that may contain unrelated meeting data
+        let dealContext = dealContextMatch[1].trim()
+          .replace(/Meeting Summaries[\s\S]*?(?=\n[A-Z]|\n---|\[\/|$)/i, '')
+          .replace(/\[DEAL_HISTORY\][\s\S]*?\[\/DEAL_HISTORY\]/i, '')
+          .trim()
+
+        // Build style instruction
+        let styleInstruction = 'Write in a professional but warm and personable tone.'
+        if (writingStyle) {
+          const styleParts: string[] = []
+          styleParts.push(`\n## USER'S PERSONAL WRITING STYLE - MATCH THIS EXACTLY`)
+          styleParts.push(`Style: ${writingStyle.name}`)
+          styleParts.push(`Tone: ${writingStyle.tone_description}`)
+          const meta = writingStyle.style_metadata as any
+          if (meta?.tone_characteristics) styleParts.push(`Characteristics: ${meta.tone_characteristics}`)
+          if (meta?.vocabulary_profile) styleParts.push(`Vocabulary: ${meta.vocabulary_profile}`)
+          if (meta?.signoffs?.length > 0) styleParts.push(`Preferred sign-offs (USE ONE OF THESE EXACTLY): ${meta.signoffs.join(' / ')}`)
+          if (meta?.greetings_signoffs?.signoffs?.length > 0) styleParts.push(`Preferred sign-offs (USE ONE): ${meta.greetings_signoffs.signoffs.join(' / ')}`)
+          if (meta?.wordsToAvoid?.length > 0) styleParts.push(`Words/phrases to NEVER use: ${meta.wordsToAvoid.join(', ')}`)
+          if (writingStyle.examples?.length > 0) {
+            const snippets = (writingStyle.examples as string[]).slice(0, 2).map((ex: string) => ex.length > 200 ? ex.substring(0, 200) + '...' : ex)
+            styleParts.push(`\nEXAMPLES OF HOW THIS USER WRITES:\n${snippets.map((s: string) => `"${s}"`).join('\n')}`)
+          }
+          styleParts.push(`\n**CRITICAL: The email MUST sound like this user wrote it.**`)
+          styleInstruction = styleParts.join('\n')
+        }
+
+        // Extract deal name and contact for explicit focus
+        const dealNameMatch = dealContext.match(/Deal:\s*(.+?)(?:\n|$)/i)
+        const dealName = dealNameMatch ? dealNameMatch[1].trim() : 'this deal'
+
+        const dealPrompt = `You are writing a follow-up email for the deal "${dealName}" to ${recipientName || 'the contact'}.
+
+DEAL CONTEXT (use ONLY this for the email content):
+${dealContext}
+
+SENDER NAME: ${userName}
+
+${styleInstruction}
+
+CRITICAL: Write about "${dealName}" and ${recipientName || 'the contact'} ONLY. Ignore any meeting notes about other people or topics.
+
+INSTRUCTIONS:
+1. Reference SPECIFIC details about ${dealName} from the context
+2. Be concise (2-3 paragraphs max)
+3. Sound natural and human
+4. Propose a clear next step
+5. Sign off: preferred sign-off on one line, then "${userName}" on the next line
+6. Never use em dashes, emojis, or placeholder brackets
+
+Return ONLY a JSON object: {"subject": "...", "body": "..."}`
+
+        try {
+          let useProvider = 'google'
+          let useModelId = 'gemini-2.0-flash'
+          const orgId = context?.orgId || ''
+
+          try {
+            if (orgId) {
+              const resolution = await resolveModel(client, { feature: 'copilot', userId, orgId })
+              useProvider = resolution.provider
+              useModelId = resolution.modelId
+              console.log(`[EMAIL-DRAFT] Deal context AI: ${useProvider}/${useModelId}`)
+            }
+          } catch (routerErr) {
+            console.warn('[EMAIL-DRAFT] Model router failed, using Gemini:', routerErr instanceof Error ? routerErr.message : routerErr)
+          }
+
+          let aiResponseText = ''
+
+          if (useProvider === 'anthropic' && ANTHROPIC_API_KEY) {
+            const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+              body: JSON.stringify({ model: useModelId, max_tokens: 1000, temperature: 0.6, messages: [{ role: 'user', content: dealPrompt }] }),
+            })
+            if (claudeResponse.ok) {
+              const claudeData = await claudeResponse.json()
+              aiResponseText = claudeData.content?.[0]?.text || ''
+            } else {
+              console.error('[EMAIL-DRAFT] Claude API error:', claudeResponse.status)
+            }
+          }
+
+          if (!aiResponseText && GEMINI_API_KEY) {
+            const geminiResponse = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: dealPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 1000, responseMimeType: 'application/json' } }),
+              }
+            )
+            if (geminiResponse.ok) {
+              const geminiData = await geminiResponse.json()
+              aiResponseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ''
+            }
+          }
+
+          if (aiResponseText) {
+            try {
+              const emailJson = JSON.parse(aiResponseText)
+              if (emailJson.subject && emailJson.body) {
+                subject = emailJson.subject
+                body = emailJson.body
+                keyPoints = ['AI-generated from deal context']
+                console.log('[EMAIL-DRAFT] AI-generated from deal context:', { subjectLen: subject.length, bodyLen: body.length })
+              }
+            } catch (parseError) {
+              const jsonMatch = aiResponseText.match(/\{[\s\S]*\}/)
+              if (jsonMatch) {
+                try {
+                  const emailJson = JSON.parse(jsonMatch[0])
+                  if (emailJson.subject && emailJson.body) { subject = emailJson.subject; body = emailJson.body; keyPoints = ['AI-generated from deal context'] }
+                } catch (_e) { /* fall through */ }
+              }
+            }
+          }
+        } catch (aiError) {
+          console.error('[EMAIL-DRAFT] AI email generation from deal context failed:', aiError)
+        }
+      }
+    }
+
+    if (!body || body.includes('[Add key') || body.includes('[Add discussion') || body.includes('[Add context') || body.includes('[Add proposal') || body.includes('[State your') || body.includes('[Value prop')) {
+      // Still no body extracted - fall back to templates
+      if (isFollowUp && isMeetingRelated) {
+        // No meeting found - try harder to find ANY recent meeting
+        console.log('[EMAIL-DRAFT] No meeting with content found, trying broader search...')
+
+        const { data: anyMeetings } = await client
+          .from('meetings')
+          .select('id, title, summary, transcript_text, meeting_start')
+          .eq('owner_user_id', userId)
+          .order('meeting_start', { ascending: false })
+          .limit(5)
+
+        console.log('[EMAIL-DRAFT] Broader search found meetings:', anyMeetings?.length || 0)
+        if (anyMeetings) {
+          anyMeetings.forEach((m: any) => {
+            console.log('[EMAIL-DRAFT] - Meeting:', m.title, 'has_summary:', !!m.summary, 'has_transcript:', !!m.transcript_text)
+          })
+        }
+
+        // Fallback if no meeting found but user mentioned meeting
+        subject = `Following up on our recent conversation`
+        keyPoints = ['Recap key discussion points', 'Outline next steps', 'Clear call to action']
+        body = `Hi ${recipientName || '[Name]'},
 
 Following up on our recent conversation. Here are the key points and next steps:
 
@@ -2256,10 +2591,10 @@ Following up on our recent conversation. Here are the key points and next steps:
 What questions do you have?
 
 Best regards`
-    } else if (isFollowUp && isProposalRelated) {
-      subject = `Following up on our proposal`
-      keyPoints = ['Reference the proposal', 'Highlight key benefits', 'Clear call to action']
-      body = `Hi ${recipientName || '[Name]'},
+      } else if (isFollowUp && isProposalRelated) {
+        subject = `Following up on our proposal`
+        keyPoints = ['Reference the proposal', 'Highlight key benefits', 'Clear call to action']
+        body = `Hi ${recipientName || '[Name]'},
 
 Following up on the proposal. Key highlights:
 
@@ -2268,10 +2603,10 @@ Following up on the proposal. Key highlights:
 Happy to walk through any section in detail. When works for a quick call?
 
 Best regards`
-    } else if (isFollowUp) {
-      subject = `Following up`
-      keyPoints = ['Reference last interaction', 'State purpose clearly', 'Include call to action']
-      body = `Hi ${recipientName || '[Name]'},
+      } else if (isFollowUp) {
+        subject = `Following up`
+        keyPoints = ['Reference last interaction', 'State purpose clearly', 'Include call to action']
+        body = `Hi ${recipientName || '[Name]'},
 
 Following up on our last conversation.
 
@@ -2280,10 +2615,10 @@ Following up on our last conversation.
 When works for a quick call this week?
 
 Best regards`
-    } else {
-      subject = 'Reaching out'
-      keyPoints = ['Introduce yourself/purpose', 'Provide value proposition', 'Clear call to action']
-      body = `Hi ${recipientName || '[Name]'},
+      } else {
+        subject = 'Reaching out'
+        keyPoints = ['Introduce yourself/purpose', 'Provide value proposition', 'Clear call to action']
+        body = `Hi ${recipientName || '[Name]'},
 
 [State your purpose for reaching out]
 
@@ -2292,6 +2627,17 @@ Best regards`
 Open to a 15-minute call this week?
 
 Best regards`
+      }
+    }
+
+    // Ensure greeting includes contact first name (e.g., "Hi," → "Hi James,")
+    if (recipientName && body) {
+      const firstName = recipientName.split(/\s+/)[0] || ''
+      if (firstName) {
+        body = body
+          .replace(/^(Hi|Hey|Hello|Dear),?\s*$/m, `$1 ${firstName},`)
+          .replace(/^(Hi|Hey|Hello|Dear),\s*\n/m, `$1 ${firstName},\n`)
+      }
     }
 
     // Calculate best send time (business hours, avoid Monday morning and Friday afternoon)
@@ -5926,6 +6272,17 @@ export async function detectAndStructureResponse(
   const originalMessage = userMessage
 
   // ---------------------------------------------------------------------------
+  // System seed prompt bypass — skip ALL intent-based detection when the
+  // message is a system-injected preamble (e.g. landing page builder).
+  // These contain instruction keywords ("follow", "with", "task", "email to")
+  // that collide with user-intent patterns and trigger false positives.
+  // ---------------------------------------------------------------------------
+  if (messageLower.includes('[instructions') || messageLower.includes('[end instructions]')) {
+    console.log('[STRUCTURED] Skipping detection — system seed prompt detected')
+    return null
+  }
+
+  // ---------------------------------------------------------------------------
   // Sequence-aware structured responses
   // ---------------------------------------------------------------------------
   if (toolExecutions && toolExecutions.length > 0) {
@@ -7074,11 +7431,19 @@ export async function detectAndStructureResponse(
     (messageLower.includes('followup') && messageLower.includes('email')) ||
     messageLower.includes('email to') ||
     messageLower.includes('compose email') ||
-    (messageLower.includes('send') && messageLower.includes('email'))
+    (messageLower.includes('send') && messageLower.includes('email')) ||
+    (messageLower.includes('follow up') && !messageLower.includes('task')) ||
+    (messageLower.includes('follow-up') && !messageLower.includes('task')) ||
+    (messageLower.includes('followup') && !messageLower.includes('task')) ||
+    (messageLower.includes('reach out') && messageLower.includes('to')) ||
+    messageLower.includes('get in touch')
+
+  console.log('[EMAIL-DRAFT] Detection check:', { isEmailDraftRequest, messageLen: messageLower.length, hasDraft: messageLower.includes('draft'), hasEmail: messageLower.includes('email'), hasFollowUp: messageLower.includes('follow up') })
 
   if (isEmailDraftRequest) {
-    console.log('[EMAIL-DRAFT] Detected email draft request:', userMessage)
+    console.log('[EMAIL-DRAFT] Detected email draft request, calling structureEmailDraftResponse...')
     const structured = await structureEmailDraftResponse(client, userId, userMessage, aiContent, context)
+    console.log('[EMAIL-DRAFT] structureEmailDraftResponse returned:', structured ? `type=${structured.type}` : 'null')
     if (structured) {
       return structured
     }
@@ -7113,7 +7478,7 @@ export async function detectAndStructureResponse(
       taskCreationKeywords.some(keyword => messageLower.includes(keyword)) ||
       (messageLower.includes('task') && (messageLower.includes('create') || messageLower.includes('add') || messageLower.includes('for') || messageLower.includes('to'))) ||
       (messageLower.includes('remind') && (messageLower.includes('to') || messageLower.includes('me') || messageLower.includes('about'))) ||
-      (messageLower.includes('follow') && (messageLower.includes('up') || messageLower.includes('with'))) ||
+      (/follow[\s-]?up/.test(messageLower) || /follow\s+with/.test(messageLower)) ||
       (messageLower.includes('reminder') && (messageLower.includes('for') || messageLower.includes('about')))
     )
 
@@ -7355,17 +7720,41 @@ export async function detectAndStructureResponse(
   // ---------------------------------------------------------------------------
   // Pipeline queries
   // ---------------------------------------------------------------------------
-  const isPipelineQuery =
+
+  // Skip intent-based detection when a skill was engaged —
+  // keyword collisions (e.g. "pipeline" in landing-page-builder prompts) cause
+  // false positives that inject the pipeline UI over the skill's output.
+  const hasEngagedSkill = toolsUsed?.includes('get_skill') ||
+    toolExecutions?.some((e: any) =>
+      (e?.toolName === 'get_skill') ||
+      (e?.toolName === 'execute_action' &&
+        (e?.args?.action === 'run_skill' || e?.args?.action === 'run_sequence') &&
+        e?.success)
+    )
+
+  // When user is viewing a specific deal (dealIds in context), singular "deal"
+  // references like "this deal" or "the deal" refer to THAT deal, not the pipeline.
+  // Only route to pipeline overview for explicitly multi-deal / pipeline queries.
+  const hasSpecificDealContext = context?.dealIds && context.dealIds.length > 0
+  const isSingleDealReference = hasSpecificDealContext && (
+    messageLower.includes('this deal') ||
+    messageLower.includes('the deal') ||
+    messageLower.includes('my deal') ||
+    (messageLower.includes('deal') && !messageLower.includes('deals') && !messageLower.includes('pipeline'))
+  )
+
+  const isPipelineQuery = !isSingleDealReference && (
     messageLower.includes('pipeline') ||
-    messageLower.includes('deal') ||
     messageLower.includes('deals') ||
+    (!hasSpecificDealContext && messageLower.includes('deal')) ||
     (messageLower.includes('what should i prioritize') && (messageLower.includes('pipeline') || messageLower.includes('deal'))) ||
     messageLower.includes('needs attention') ||
     messageLower.includes('at risk') ||
     messageLower.includes('pipeline health') ||
     (messageLower.includes('show me my') && (messageLower.includes('deal') || messageLower.includes('pipeline')))
+  )
 
-  if (isPipelineQuery && !isPipelineFocusTaskRequest) {
+  if (isPipelineQuery && !isPipelineFocusTaskRequest && !hasEngagedSkill) {
     const structured = await structurePipelineResponse(client, userId, aiContent, userMessage)
     return structured
   }
@@ -7601,6 +7990,13 @@ export async function detectAndStructureResponse(
       maxMatches = matches
       detectedCategory = category
     }
+  }
+
+  // When viewing a specific deal, don't let the fallback classifier
+  // route singular "deal" mentions to pipeline — let the AI response through
+  if (detectedCategory === 'deals' && isSingleDealReference) {
+    detectedCategory = null
+    maxMatches = 0
   }
 
   if (detectedCategory && maxMatches > 0) {

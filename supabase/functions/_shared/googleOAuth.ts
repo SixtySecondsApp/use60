@@ -1,7 +1,7 @@
 // supabase/functions/_shared/googleOAuth.ts
 // Shared Google OAuth token refresh and management utilities
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 export interface GoogleIntegration {
   access_token: string;
@@ -114,7 +114,7 @@ export async function getGoogleIntegration(
     .select('access_token, refresh_token, expires_at')
     .eq('user_id', userId)
     .eq('is_active', true)
-    .single();
+    .maybeSingle();
 
   if (integrationError || !integration) {
     throw new Error('Google integration not found. Please connect your Google account first.');

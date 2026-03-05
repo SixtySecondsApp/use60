@@ -11,7 +11,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { parse as parseYaml } from 'https://esm.sh/yaml@2.3.4';
 import { crypto } from 'https://deno.land/std@0.208.0/crypto/mod.ts';
 import { encodeHex } from 'https://deno.land/std@0.208.0/encoding/hex.ts';

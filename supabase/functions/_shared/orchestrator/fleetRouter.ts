@@ -7,7 +7,7 @@
  * Stories: FLT-005, FLT-006, FLT-011
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type { SequenceStep, EventType } from './types.ts';
 import { getSequenceForEvent } from './eventSequences.ts';
 import {
@@ -16,8 +16,12 @@ import {
   type AutonomyPolicy,
   type PolicyResolution,
 } from './autonomyResolver.ts';
+import {
+  resolveAutonomyForSkill,
+  type AutonomyDecision,
+} from './unifiedAutonomyResolver.ts';
 
-export type { AutonomyPolicy, PolicyResolution };
+export type { AutonomyPolicy, PolicyResolution, AutonomyDecision };
 
 // =============================================================================
 // Cache (5-minute TTL, matches PRD-01 pattern)
@@ -323,6 +327,8 @@ export function invalidateRouteCache(): void {
 /**
  * Check the autonomy policy for a skill before the fleet runner executes it.
  *
+ * AE2-002: Now uses the unified resolver that consults both org policy and user autopilot.
+ *
  * Returns the resolved policy so the runner can decide:
  * - 'auto'     → proceed with execution
  * - 'approve'  → pause and create a HITL approval request
@@ -334,14 +340,16 @@ export async function checkAutonomyPolicy(
   orgId: string,
   userId: string | null,
   skillName: string,
-): Promise<PolicyResolution> {
-  const actionType = getActionTypeForSkill(skillName);
-  if (!actionType) {
-    // Skill has no policy mapping — default to auto (internal/read-only skills)
-    return { policy: 'auto', source: 'default' };
-  }
+): Promise<PolicyResolution & { decision?: AutonomyDecision }> {
+  const decision = await resolveAutonomyForSkill(supabase, orgId, userId, skillName);
 
-  return resolveAutonomyPolicy(supabase, orgId, userId, actionType);
+  // Return backwards-compatible PolicyResolution shape plus the full decision
+  return {
+    policy: decision.tier,
+    source: decision.orgPolicy.source,
+    preset: decision.orgPolicy.preset,
+    decision,
+  };
 }
 
 // =============================================================================

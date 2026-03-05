@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileSpreadsheet, Table2, Search, Wand2, LayoutTemplate, Cable, Building2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, Table2, Search, Wand2, LayoutTemplate, Cable, Building2, Database, Sparkles } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { StandardTablesGallery } from './StandardTablesGallery';
+import PipelineTemplatesGallery from './PipelineTemplatesGallery';
 
 interface CreateTableModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface CreateTableModalProps {
   onSelectAttio: () => void;
   onSelectApollo: () => void;
   onSelectAiArk: () => void;
+  onSelectExplorium: () => void;
   onSelectOpsTable: () => void;
   onSelectBlank: () => void;
   onSelectWorkflow?: () => void;
@@ -56,6 +58,14 @@ const SOURCE_OPTIONS = [
     icon: Building2,
     color: 'text-emerald-400',
     bgColor: 'bg-emerald-500/10',
+  },
+  {
+    id: 'explorium',
+    title: 'Explorium',
+    description: 'Search 80M+ companies and prospects with intent signals',
+    icon: Database,
+    color: 'text-teal-400',
+    bgColor: 'bg-teal-500/10',
   },
   {
     id: 'hubspot',
@@ -107,6 +117,7 @@ export function CreateTableModal({
   onSelectAttio,
   onSelectApollo,
   onSelectAiArk,
+  onSelectExplorium,
   onSelectOpsTable,
   onSelectBlank,
   onSelectWorkflow,
@@ -126,6 +137,9 @@ export function CreateTableModal({
         break;
       case 'ai_ark':
         onSelectAiArk();
+        break;
+      case 'explorium':
+        onSelectExplorium();
         break;
       case 'hubspot':
         onSelectHubSpot();
@@ -173,6 +187,13 @@ export function CreateTableModal({
                   <LayoutTemplate className="h-3.5 w-3.5" />
                   Templates
                 </TabsTrigger>
+                <TabsTrigger
+                  value="pipelines"
+                  className="gap-1.5 px-3 py-1 text-xs data-[state=active]:!bg-white dark:data-[state=active]:!bg-gray-700 data-[state=active]:!text-gray-900 dark:data-[state=active]:!text-white"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  AI Pipelines
+                </TabsTrigger>
               </TabsList>
             </div>
             <DialogDescription className="sr-only">
@@ -186,6 +207,10 @@ export function CreateTableModal({
               onTableClick={handleTableClick}
               existingTables={existingTables}
             />
+          </TabsContent>
+
+          <TabsContent value="pipelines" className="m-0 p-5">
+            <PipelineTemplatesGallery onPipelineCreated={handleTableClick} />
           </TabsContent>
 
           <TabsContent value="sources" className="m-0 p-5">

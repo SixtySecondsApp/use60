@@ -17,8 +17,11 @@
 
 -- Add UNIQUE constraint on company_domain
 -- NULL values are allowed (new orgs start with NULL domain)
-ALTER TABLE organizations
+DO $$ BEGIN
+  ALTER TABLE organizations
 ADD CONSTRAINT unique_company_domain UNIQUE (company_domain);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add case-insensitive unique index for additional safety
 -- This prevents duplicates even with different casing (e.g., "Acme.com" vs "acme.com")

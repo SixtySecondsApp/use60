@@ -10,6 +10,7 @@
 import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../types.ts';
 import { getServiceClient } from './contextEnrichment.ts';
 import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
+import { logAgentAction } from '../../memory/dailyLog.ts';
 
 // =============================================================================
 // Types
@@ -400,6 +401,24 @@ export const researchTriggerEventsAdapter: SkillAdapter = {
         `[research-trigger-events] Complete: processed ${processedItems.length} deals, ` +
         `found ${totalSignals} total signals`
       );
+
+      const triggeredItem = processedItems.find((item) => item.signals.length > 0);
+      logAgentAction({
+        supabaseClient: getServiceClient() as any,
+        orgId,
+        userId: state.event.user_id ?? null,
+        agentType: 'reengagement',
+        actionType: 'reengagement_triggered',
+        actionDetail: {
+          contact_id: triggeredItem?.deal_id ?? null,
+          trigger_reason: triggeredItem?.signals[0]?.type ?? null,
+          trigger_title: triggeredItem?.signals[0]?.title ?? null,
+          deals_processed: processedItems.length,
+          signals_found: totalSignals,
+        },
+        outcome: 'success',
+        chainId: state.event.parent_job_id ?? null,
+      });
 
       return {
         success: true,

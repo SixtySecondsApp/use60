@@ -27,7 +27,8 @@ COMMENT ON TABLE public.mapping_templates IS 'Reusable field mapping templates f
 -- RLS: org members can read own + system templates, service role full access
 ALTER TABLE public.mapping_templates ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "mapping_templates_select"
+DO $$ BEGIN
+  CREATE POLICY "mapping_templates_select"
   ON public.mapping_templates
   FOR SELECT
   USING (
@@ -35,16 +36,22 @@ CREATE POLICY "mapping_templates_select"
     OR (org_id IS NULL AND is_system = true)
     OR public.can_access_org_data(org_id)
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "mapping_templates_insert"
+DO $$ BEGIN
+  CREATE POLICY "mapping_templates_insert"
   ON public.mapping_templates
   FOR INSERT
   WITH CHECK (
     public.is_service_role()
     OR public.can_access_org_data(org_id)
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "mapping_templates_update"
+DO $$ BEGIN
+  CREATE POLICY "mapping_templates_update"
   ON public.mapping_templates
   FOR UPDATE
   USING (
@@ -55,14 +62,19 @@ CREATE POLICY "mapping_templates_update"
     public.is_service_role()
     OR (public.can_access_org_data(org_id) AND is_system = false)
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "mapping_templates_delete"
+DO $$ BEGIN
+  CREATE POLICY "mapping_templates_delete"
   ON public.mapping_templates
   FOR DELETE
   USING (
     public.is_service_role()
     OR (public.can_access_org_data(org_id) AND is_system = false)
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Indexes
 CREATE INDEX idx_mapping_templates_org_id ON public.mapping_templates(org_id) WHERE org_id IS NOT NULL;
@@ -97,15 +109,21 @@ COMMENT ON TABLE public.mapped_records IS 'Processed/mapped records from Apify r
 -- RLS: org members can read, service role full access
 ALTER TABLE public.mapped_records ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "mapped_records_select"
+DO $$ BEGIN
+  CREATE POLICY "mapped_records_select"
   ON public.mapped_records
   FOR SELECT
   USING (public.is_service_role() OR public.can_access_org_data(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "mapped_records_service_write"
+DO $$ BEGIN
+  CREATE POLICY "mapped_records_service_write"
   ON public.mapped_records
   USING (public.is_service_role())
   WITH CHECK (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Indexes
 CREATE INDEX idx_mapped_records_org_id ON public.mapped_records(org_id);

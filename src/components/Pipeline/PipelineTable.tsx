@@ -5,9 +5,11 @@
  */
 
 import React from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Square, CheckSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import type { PipelineDeal } from './hooks/usePipelineData';
+import type { PipelineColumn } from './hooks/usePipelineColumns';
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 interface PipelineTableProps {
   deals: PipelineDeal[];
@@ -15,24 +17,17 @@ interface PipelineTableProps {
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
   onSort?: (column: string) => void;
+  /** Multi-select support (PIPE-ADV-002) */
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
+  /** Column visibility (PIPE-ADV-004) */
+  visibleColumns?: PipelineColumn[];
 }
 
 // =============================================================================
 // Helper Functions
 // =============================================================================
 
-/**
- * Format currency
- */
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return '$0';
-
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 /**
  * Deterministic avatar gradient from a name string
@@ -354,13 +349,32 @@ function CompanyCell({ company, dealName }: { company: string | null; dealName: 
 // Main Component
 // =============================================================================
 
+// Default columns for when visibleColumns is not provided
+const DEFAULT_COLUMN_IDS = ['company', 'value', 'stage', 'health', 'rel_health', 'risk', 'probability', 'days', 'close_date', 'owner'];
+
 export function PipelineTable({
   deals,
   onDealClick,
   sortBy,
   sortDir,
   onSort,
+  selectedIds,
+  onSelectionChange,
+  visibleColumns,
 }: PipelineTableProps) {
+  const { formatMoney: fmtMoney } = useOrgMoney();
+  const formatCurrency = (value: number | null) => fmtMoney(value ?? 0);
+
+  const isMultiSelect = !!onSelectionChange;
+  const selection = selectedIds || new Set<string>();
+
+  // Determine which column IDs are visible
+  const visibleIds = visibleColumns
+    ? visibleColumns.map((c) => c.id)
+    : DEFAULT_COLUMN_IDS;
+
+  const isVisible = (id: string) => visibleIds.includes(id);
+
   if (deals.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500 dark:text-gray-400">
@@ -377,6 +391,29 @@ export function PipelineTable({
     return null;
   };
 
+  const handleCheckbox = (e: React.MouseEvent, dealId: string) => {
+    e.stopPropagation();
+    if (!onSelectionChange) return;
+    const next = new Set(selection);
+    if (next.has(dealId)) {
+      next.delete(dealId);
+    } else {
+      next.add(dealId);
+    }
+    onSelectionChange(next);
+  };
+
+  const handleSelectAll = () => {
+    if (!onSelectionChange) return;
+    if (selection.size === deals.length) {
+      onSelectionChange(new Set());
+    } else {
+      onSelectionChange(new Set(deals.map((d) => d.id)));
+    }
+  };
+
+  const allSelected = deals.length > 0 && selection.size === deals.length;
+
   return (
     <div className="rounded-2xl overflow-hidden bg-white/80 dark:bg-white/[0.03] backdrop-blur-xl border border-gray-200/80 dark:border-white/[0.06]">
       <div className="overflow-x-auto">
@@ -386,26 +423,47 @@ export function PipelineTable({
         >
           <thead className="bg-gray-50/80 dark:bg-white/[0.02] backdrop-blur-xl">
             <tr>
-              <SortableHeader label="Company" column="company" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-              <SortableHeader label="Value" column="value" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
-                Stage
-              </th>
-              <SortableHeader label="Health" column="health_score" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
-                Rel. Health
-              </th>
-              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
-                Risk
-              </th>
-              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
-                Probability
-              </th>
-              <SortableHeader label="Days" column="days_in_stage" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-              <SortableHeader label="Close Date" column="close_date" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-              <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
-                Owner
-              </th>
+              {/* Checkbox column for multi-select */}
+              {isMultiSelect && (
+                <th className="pl-4 pr-2 py-3 w-10">
+                  <button onClick={handleSelectAll} className="flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                    {allSelected
+                      ? <CheckSquare className="w-4 h-4 text-blue-500" />
+                      : <Square className="w-4 h-4" />
+                    }
+                  </button>
+                </th>
+              )}
+              {isVisible('company') && <SortableHeader label="Company" column="company" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />}
+              {isVisible('value') && <SortableHeader label="Value" column="value" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />}
+              {isVisible('stage') && (
+                <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                  Stage
+                </th>
+              )}
+              {isVisible('health') && <SortableHeader label="Health" column="health_score" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />}
+              {isVisible('rel_health') && (
+                <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                  Rel. Health
+                </th>
+              )}
+              {isVisible('risk') && (
+                <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                  Risk
+                </th>
+              )}
+              {isVisible('probability') && (
+                <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                  Probability
+                </th>
+              )}
+              {isVisible('days') && <SortableHeader label="Days" column="days_in_stage" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />}
+              {isVisible('close_date') && <SortableHeader label="Close Date" column="close_date" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />}
+              {isVisible('owner') && (
+                <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                  Owner
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -413,67 +471,105 @@ export function PipelineTable({
               const ownerName = getOwnerName(deal);
               const riskColors = getRiskColors(deal.risk_level);
               const isLast = index === deals.length - 1;
+              const isSelected = selection.has(deal.id);
 
               return (
                 <tr
                   key={deal.id}
                   onClick={() => onDealClick(deal.id)}
-                  className={`hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors cursor-pointer ${
-                    !isLast ? 'border-b border-gray-100 dark:border-white/[0.06]' : ''
-                  }`}
+                  className={`transition-colors cursor-pointer ${
+                    isSelected
+                      ? 'bg-blue-50/50 dark:bg-blue-500/[0.06]'
+                      : 'hover:bg-gray-50/50 dark:hover:bg-white/[0.02]'
+                  } ${!isLast ? 'border-b border-gray-100 dark:border-white/[0.06]' : ''}`}
                 >
+                  {/* Checkbox cell */}
+                  {isMultiSelect && (
+                    <td className="pl-4 pr-2 py-3 whitespace-nowrap w-10">
+                      <button
+                        onClick={(e) => handleCheckbox(e, deal.id)}
+                        className="flex items-center justify-center text-gray-300 dark:text-gray-600 hover:text-blue-500 transition-colors"
+                      >
+                        {isSelected
+                          ? <CheckSquare className="w-4 h-4 text-blue-500" />
+                          : <Square className="w-4 h-4" />
+                        }
+                      </button>
+                    </td>
+                  )}
+
                   {/* Company + Deal Name */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <CompanyCell company={deal.company} dealName={deal.name} />
-                  </td>
+                  {isVisible('company') && (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <CompanyCell company={deal.company} dealName={deal.name} />
+                    </td>
+                  )}
 
                   {/* Value */}
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
-                    {formatCurrency(deal.value)}
-                  </td>
+                  {isVisible('value') && (
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
+                      {formatCurrency(deal.value)}
+                    </td>
+                  )}
 
                   {/* Stage */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <StagePill name={deal.stage_name} color={deal.stage_color} />
-                  </td>
+                  {isVisible('stage') && (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <StagePill name={deal.stage_name} color={deal.stage_color} />
+                    </td>
+                  )}
 
                   {/* Health Score */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <HealthPill status={deal.health_status} score={deal.health_score} />
-                  </td>
+                  {isVisible('health') && (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <HealthPill status={deal.health_status} score={deal.health_score} />
+                    </td>
+                  )}
 
                   {/* Relationship Health */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <HealthPill status={deal.relationship_health_status} score={deal.relationship_health_score} />
-                  </td>
+                  {isVisible('rel_health') && (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <HealthPill status={deal.relationship_health_status} score={deal.relationship_health_score} />
+                    </td>
+                  )}
 
                   {/* Risk */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`flex items-center gap-1.5 text-xs font-semibold ${riskColors.text}`}>
-                      <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${riskColors.dot} ${riskColors.glow}`} />
-                      {getRiskLabel(deal.risk_level)}
-                    </span>
-                  </td>
+                  {isVisible('risk') && (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`flex items-center gap-1.5 text-xs font-semibold ${riskColors.text}`}>
+                        <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${riskColors.dot} ${riskColors.glow}`} />
+                        {getRiskLabel(deal.risk_level)}
+                      </span>
+                    </td>
+                  )}
 
                   {/* Probability */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <ProbabilityBar probability={deal.probability} />
-                  </td>
+                  {isVisible('probability') && (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <ProbabilityBar probability={deal.probability} />
+                    </td>
+                  )}
 
                   {/* Days in Stage */}
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400 tabular-nums">
-                    {deal.days_in_current_stage || 0}d
-                  </td>
+                  {isVisible('days') && (
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400 tabular-nums">
+                      {deal.days_in_current_stage || 0}d
+                    </td>
+                  )}
 
                   {/* Close Date */}
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400">
-                    {deal.close_date ? format(new Date(deal.close_date), 'MMM d, yyyy') : '--'}
-                  </td>
+                  {isVisible('close_date') && (
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400">
+                      {deal.close_date ? format(new Date(deal.close_date), 'MMM d, yyyy') : '--'}
+                    </td>
+                  )}
 
                   {/* Owner */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <OwnerAvatar name={ownerName} />
-                  </td>
+                  {isVisible('owner') && (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <OwnerAvatar name={ownerName} />
+                    </td>
+                  )}
                 </tr>
               );
             })}

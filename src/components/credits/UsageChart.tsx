@@ -11,7 +11,7 @@
  *   4. Daily projected cost = avg daily calls × cost/call at tier
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useOrgId } from '@/lib/contexts/OrgContext';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -72,7 +72,7 @@ function useDailyUsageWithCalls(days: number = 30) {
 
       const { data, error } = await supabase
         .from('ai_cost_events')
-        .select('created_at, estimated_cost')
+        .select('created_at, estimated_cost, feature_key')
         .eq('org_id', orgId!)
         .gte('created_at', sinceIso)
         .or('metadata->>source.neq.onboarding,metadata.is.null')
@@ -82,6 +82,23 @@ function useDailyUsageWithCalls(days: number = 30) {
         console.error('[UsageChart] Error fetching daily usage:', error);
         return [];
       }
+
+      // Filter out onboarding enrichment events (automated enrichment within
+      // the first 10 minutes of the org's earliest event — these are system-
+      // triggered during onboarding and shouldn't count as user-initiated usage)
+      const ONBOARDING_FEATURE_KEYS = new Set([
+        'deep_enrich_organization',
+        'enrich_organization',
+        'research_fact_profile',
+      ]);
+      const rows = data ?? [];
+      const firstEventTime = rows.length > 0 ? new Date(rows[0].created_at).getTime() : 0;
+      const onboardingCutoff = firstEventTime + 10 * 60 * 1000; // 10 minutes
+
+      const filtered = rows.filter((row) => {
+        if (!ONBOARDING_FEATURE_KEYS.has((row as any).feature_key)) return true;
+        return new Date(row.created_at).getTime() > onboardingCutoff;
+      });
 
       // Aggregate by day: both cost and call count
       const dayMap = new Map<string, { cost: number; calls: number }>();
@@ -94,7 +111,7 @@ function useDailyUsageWithCalls(days: number = 30) {
         dayMap.set(key, { cost: 0, calls: 0 });
       }
 
-      for (const row of data ?? []) {
+      for (const row of filtered) {
         const key = row.created_at.slice(0, 10);
         const existing = dayMap.get(key) ?? { cost: 0, calls: 0 };
         existing.cost += row.estimated_cost || 0;
@@ -139,6 +156,64 @@ function useModelPricing() {
     staleTime: 300_000,
   });
 }
+
+// ─── Feature breakdown hook ──────────────────────────────────────────────
+
+interface FeatureUsageRow {
+  feature_key: string;
+  total_cost: number;
+  call_count: number;
+}
+
+function useFeatureBreakdown(days: number = 30) {
+  const orgId = useOrgId();
+
+  return useQuery<FeatureUsageRow[]>({
+    queryKey: ['credits', 'feature-breakdown', orgId, days],
+    queryFn: async () => {
+      const sinceIso = getUtcStartOfDayDaysAgo(days);
+
+      const { data, error } = await supabase
+        .from('ai_cost_events')
+        .select('feature_key, estimated_cost')
+        .eq('org_id', orgId!)
+        .gte('created_at', sinceIso);
+
+      if (error || !data) return [];
+
+      // Group by feature_key
+      const map = new Map<string, { cost: number; calls: number }>();
+      for (const row of data) {
+        const key = row.feature_key || 'unknown';
+        const existing = map.get(key) ?? { cost: 0, calls: 0 };
+        existing.cost += row.estimated_cost || 0;
+        existing.calls += 1;
+        map.set(key, existing);
+      }
+
+      return Array.from(map.entries())
+        .map(([feature_key, val]) => ({
+          feature_key,
+          total_cost: Math.round(val.cost * 10000) / 10000,
+          call_count: val.calls,
+        }))
+        .sort((a, b) => b.total_cost - a.total_cost);
+    },
+    enabled: !!orgId,
+    staleTime: 60_000,
+  });
+}
+
+function formatFeatureLabel(key: string): string {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const FEATURE_BAR_COLORS = [
+  '#37bd7e', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#64748b',
+];
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -243,8 +318,10 @@ function renderLegend(props: any) {
 // ─── Component ──────────────────────────────────────────────────────────
 
 export function UsageChart({ days = 30 }: { days?: number }) {
+  const [tab, setTab] = useState<'trend' | 'byFeature'>('trend');
   const { data: dailyData, isLoading: usageLoading } = useDailyUsageWithCalls(days);
   const { data: pricing } = useModelPricing();
+  const { data: featureData, isLoading: featureLoading } = useFeatureBreakdown(days);
 
   const todayStr = getUtcDateKey(new Date());
 
@@ -338,8 +415,84 @@ export function UsageChart({ days = 30 }: { days?: number }) {
     );
   }
 
+  // ── Feature breakdown view ──────────────────────────────────────────
+  const maxFeatureCost = featureData?.[0]?.total_cost ?? 1;
+
   return (
     <div>
+      {/* Tab toggle */}
+      <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-full p-1 w-fit mb-4">
+        <button
+          onClick={() => setTab('trend')}
+          className={cn(
+            'px-3 py-1 text-xs font-medium rounded-full transition-all',
+            tab === 'trend'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          )}
+        >
+          Trend
+        </button>
+        <button
+          onClick={() => setTab('byFeature')}
+          className={cn(
+            'px-3 py-1 text-xs font-medium rounded-full transition-all',
+            tab === 'byFeature'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          )}
+        >
+          By Feature
+        </button>
+      </div>
+
+      {/* By Feature view */}
+      {tab === 'byFeature' && (
+        <div>
+          <p className="text-xs text-gray-400 mb-3">
+            Cost breakdown by feature — last {days} days
+          </p>
+          {featureLoading ? (
+            <div className="flex items-center justify-center h-48">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+            </div>
+          ) : !featureData || featureData.length === 0 ? (
+            <div className="flex items-center justify-center h-48 text-sm text-gray-500 dark:text-gray-400">
+              No usage data
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {featureData.slice(0, 10).map((row, i) => (
+                <div key={row.feature_key} className="flex items-center gap-3">
+                  <div className="w-32 truncate text-xs text-gray-600 dark:text-gray-400" title={row.feature_key}>
+                    {formatFeatureLabel(row.feature_key)}
+                  </div>
+                  <div className="flex-1 relative h-5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.max(2, (row.total_cost / maxFeatureCost) * 100)}%`,
+                        backgroundColor: FEATURE_BAR_COLORS[i % FEATURE_BAR_COLORS.length],
+                      }}
+                    />
+                  </div>
+                  <div className="text-right w-20">
+                    <span className="text-xs font-semibold text-gray-900 dark:text-white tabular-nums">
+                      ${row.total_cost.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] text-gray-400 ml-1">
+                      ({row.call_count})
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Trend view */}
+      {tab === 'trend' && (<div>
       {/* Header stats */}
       <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
         <div>
@@ -482,6 +635,7 @@ export function UsageChart({ days = 30 }: { days?: number }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      </div>)}
     </div>
   );
 }

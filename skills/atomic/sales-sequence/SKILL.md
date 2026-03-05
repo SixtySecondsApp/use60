@@ -2,6 +2,7 @@
 name: Sales Outreach Sequence
 description: |
   Generate high-converting cold outreach email sequences that sound human and get replies.
+  Integrates RAG win/loss context from past deals and CRM history for data-grounded personalization.
   Use when someone wants to write cold emails, outreach sequences, sales emails, follow-up
   sequences, prospecting emails, event invitations, or any B2B outreach.
   Also triggers on "write an email to", "outreach to", "cold email", "email sequence",
@@ -9,7 +10,7 @@ description: |
   Do NOT use for marketing newsletters, transactional emails, or internal communications.
 metadata:
   author: sixty-ai
-  version: "1"
+  version: "2"
   category: sales-ai
   skill_type: atomic
   is_active: true
@@ -109,6 +110,15 @@ metadata:
     - name: strategy_notes
       type: string
       description: "Why this approach works and what to watch"
+    - name: personalization_signals
+      type: array
+      description: "Specific data points from RAG/CRM/web used to personalize the sequence"
+    - name: confidence_level
+      type: string
+      description: "high/medium/low — based on data richness across layers"
+    - name: historical_context
+      type: object
+      description: "Similar prospect outcomes, winning message patterns, and competitive signals from RAG"
   requires_capabilities:
     - web_search
   priority: high
@@ -166,9 +176,11 @@ You write emails that sound like this instead:
 
 Short. Specific. Human. Curious. Easy to reply to.
 
-## How This Works
+## 5-Layer Intelligence Model
 
-### Step 1: Gather Context
+Every sequence is built on layered intelligence. Execute layers in order — each feeds the next.
+
+### Layer 1: Gather Context
 
 Before writing anything, get these answers. Extract from conversation history first — only ask what's missing:
 
@@ -183,7 +195,50 @@ Before writing anything, get these answers. Extract from conversation history fi
 6. **How many emails in the sequence?** Default: 3 emails. Max: 5.
 7. **Do you want A/B variants?** Default: yes, for Email 1.
 
-### Step 2: Choose the Right Approach
+### Layer 2: Enrichment (Web Search)
+
+Use `web_search` capability to gather fresh intelligence:
+
+- **Company news:** Recent funding, product launches, leadership changes, earnings, partnerships
+- **Industry trends:** Market shifts relevant to the prospect's vertical
+- **Competitor landscape:** Who they compete with, recent wins/losses in their market
+- **Contact enrichment:** LinkedIn activity, published content, speaking engagements, job changes
+
+Integrate findings as personalization signals — never dump raw research into emails. Each finding should sharpen one element: the opener, the hook, the CTA, or the social proof.
+
+### Layer 3: Historical Context (RAG)
+
+Search meeting transcripts and CRM history for grounded intelligence. Reference `references/win-loss-patterns.md` for full patterns.
+
+**Search for:**
+- Past outreach to this company (any contact) — avoid repeating angles that got no reply
+- Win/loss patterns for similar prospects (same industry, size, persona)
+- What messaging resonated vs. fell flat for this persona type
+- Competitor mentions — what the prospect's peers say about alternatives
+
+**Apply results:**
+- Won deal with similar company? Lead with that social proof.
+- Lost deal in same industry? Avoid the messaging that failed. Pre-handle the objection that killed it.
+- Previous outreach with no reply? New angle, acknowledge time elapsed.
+- No RAG results? Flag as "first interaction" — lean harder on Layer 2 enrichment.
+
+### Layer 4: Intelligence Signals
+
+Analyze patterns across historical data to make strategic decisions:
+
+| Signal | How It Shapes the Sequence |
+|--------|--------------------------|
+| Similar prospect win rate | High win rate (>40%) = confident tone, direct CTA. Low (<20%) = softer approach, value-first. |
+| Optimal send times | Mirror timing patterns from won deals with this segment. See `references/win-loss-patterns.md`. |
+| Subject line performance | Use historically-winning structures for this persona. A/B test against a new hypothesis. |
+| CRM activity signals | Recent website visits, email opens, content downloads = warmer prospect, faster sequence. No activity = true cold, patience-first approach. |
+| Competitive displacement | Prospect uses a competitor? Lead with the gap, not an attack. |
+
+### Layer 5: Sequence Strategy & Execution
+
+With Layers 1-4 complete, choose the right framework and write the sequence.
+
+#### Choose the Right Approach
 
 Before reading `references/frameworks.md`, select the right strategy based on context:
 
@@ -200,17 +255,17 @@ Before reading `references/frameworks.md`, select the right strategy based on co
 
 Read `references/frameworks.md` for full templates once you've selected the approach.
 
-### Step 3: Write the Sequence
+#### Write the Sequence
 
-For each email in the sequence, follow these **non-negotiable rules**. Consult `references/email-rules.md` for the data behind each rule.
+For each email, follow these **non-negotiable rules**. Consult `references/email-rules.md` for the data behind each rule.
 
-#### The 10 Rules of Outreach That Gets Replies
+##### The 10 Rules of Outreach That Gets Replies
 
 **1. Under 75 words for Email 1. Under 100 for follow-ups.**
 75-100 words hit a 51% response rate. Your platform's current emails are 80+ words of dense paragraphs. Break them.
 
 **2. 3rd-to-5th grade reading level.**
-This gets 67% more replies than college-level writing. Use short words. Short sentences. No jargon. "Elevate your outreach effectiveness" → "send emails people reply to."
+This gets 67% more replies than college-level writing. Use short words. Short sentences. No jargon. "Elevate your outreach effectiveness" -> "send emails people reply to."
 
 **3. One email, one idea, one ask.**
 Emails with a single CTA get 371% more clicks. Never combine "here's what we do" + "here's a case study" + "are you free Tuesday?"
@@ -238,11 +293,13 @@ If answering requires thought, research, or drafting, they won't. Ask questions 
 
 #### Sequence Timing
 
-- **Email 1** → Day 0
-- **Email 2** → Day 3 (60% reply lift from adding this)
-- **Email 3** → Day 10 (captures 93% of total replies)
-- **Email 4** (optional) → Day 17 (breakup email, diminishing returns)
-- **Email 5** (optional) → Day 30+ (only if new trigger event)
+- **Email 1** -> Day 0
+- **Email 2** -> Day 3 (60% reply lift from adding this)
+- **Email 3** -> Day 10 (captures 93% of total replies)
+- **Email 4** (optional) -> Day 17 (breakup email, diminishing returns)
+- **Email 5** (optional) -> Day 30+ (only if new trigger event)
+
+Override defaults when Layer 4 intelligence suggests different timing for this prospect segment. See `references/win-loss-patterns.md` timing tables.
 
 #### Tone Calibration
 
@@ -266,7 +323,7 @@ Reference brand voice from Organization Context for tone calibration. Use produc
 - "Hey — saw your post. Quick thought."
 - Works best for younger prospects and tech companies
 
-### Step 4: Generate A/B Variants
+### Generate A/B Variants
 
 For Email 1, create two variants that test ONE variable:
 
@@ -279,7 +336,19 @@ For Email 1, create two variants that test ONE variable:
 
 Label clearly: **Variant A** and **Variant B** with a note explaining what's being tested and why.
 
-### Step 5: Quality Check
+## Confidence Level
+
+Rate each sequence based on data richness across the 5 layers:
+
+| Level | Criteria | What It Means |
+|-------|---------|--------------|
+| **High** | Layer 1 complete + Layer 2 enrichment found + Layer 3 RAG returned relevant results + Layer 4 signals available | Sequence is grounded in real data. Personalization is specific and verified. High expected reply rate. |
+| **Medium** | Layer 1 complete + Layer 2 partial + Layer 3 no results OR Layer 4 limited | Sequence uses web research but lacks historical grounding. Good but not optimized. |
+| **Low** | Layer 1 only + Layers 2-4 unavailable or empty | Sequence relies on user-provided context alone. Generic personalization. Flag and suggest enrichment before sending. |
+
+Always include confidence level in the output. If low, explain what data would improve it and offer to gather it.
+
+## Quality Check
 
 Before presenting the final output, run every email through this checklist mentally. Consult `references/anti-patterns.md` if any email feels off.
 
@@ -293,8 +362,12 @@ Before presenting the final output, run every email through this checklist menta
 - [ ] Can be replied to in under 10 seconds?
 - [ ] Subject line under 5 words?
 - [ ] Follow-ups change the angle?
+- [ ] Every data claim traceable to a source? (Layer 2 web, Layer 3 RAG, Layer 4 CRM)
+- [ ] Personalization signals >= 3 per email?
+- [ ] No fabricated social proof or unverified claims?
+- [ ] Historical patterns applied where RAG data was available?
 
-### Step 6: Present the Output
+### Present the Output
 
 Format the final sequence clearly:
 
@@ -326,9 +399,24 @@ Format the final sequence clearly:
 ```
 
 After the sequence, include:
+- **Confidence:** high/medium/low with justification
+- **Personalization signals used:** List each data point and its source (web/RAG/CRM/user-provided)
+- **Historical context:** Similar prospect outcomes, winning patterns applied, competitive signals
 - **Why this works:** 2-3 sentences explaining the psychological principles used
 - **What to watch:** Which metrics to track (open rate, reply rate, positive reply %)
 - **Iteration tip:** What to test next based on results
+
+## Graceful Degradation
+
+| Failure Mode | Behavior | Output Note |
+|-------------|----------|-------------|
+| RAG returns no transcripts | Proceed with Layers 1-2 only. Confidence: medium or low. | "No historical data available. Sequence based on web research and user context." |
+| Web search fails or returns nothing | Proceed with Layers 1, 3-4. Use CRM data for personalization. | "Web enrichment unavailable. Personalization from CRM and historical data." |
+| No CRM activity signals | Skip Layer 4 activity analysis. Use default timing. | "No CRM activity data. Using standard timing for this prospect segment." |
+| No personalization data provided | Write best email possible with available context. Offer to research. | "Limited personalization. Want me to research their LinkedIn/company news?" |
+| Fact/product profile not available | Use offer_description input. Suggest creating a profile. | "No product profile loaded. Consider creating one for richer sequences." |
+| Conflicting signals (RAG says X, web says Y) | Surface both signals. Let user decide which to prioritize. | "Found conflicting data: [details]. Wrote sequence using [choice] — want me to try the other angle?" |
+| Previous outreach to this company failed | Acknowledge in strategy. Use completely different angle. | "Prior outreach to [company] on [date] got no reply. This sequence uses a different approach." |
 
 ## The Human Feel
 
@@ -337,7 +425,7 @@ The biggest risk with AI-generated emails is they sound AI-generated. To avoid t
 - **Vary sentence length dramatically.** A long sentence followed by a two-word fragment. Then a question. Then a short statement. This is how humans write.
 - **Use contractions.** "You're" not "you are." "Don't" not "do not." "It's" not "it is."
 - **Include occasional imperfection.** Starting a sentence with "And" or "But." An aside in parentheses.
-- **No em dashes (—).** Em dashes are the single biggest AI tell in emails. Real people don't type them. Use a hyphen (-), a full stop, or just restructure the sentence. Never use — or – in any email.
+- **No em dashes.** Em dashes are the single biggest AI tell in emails. Real people don't type them. Use a hyphen (-), a full stop, or just restructure the sentence. Never use — or – in any email.
 - **No oxford commas.** Drop the comma before "and" in lists. "Sales, marketing and ops" not "sales, marketing, and ops." Oxford commas read as formal and edited, not conversational.
 - **Don't swap punctuation for colons or dashes.** If a sentence needs a colon or em dash to work, rewrite it as two short sentences instead. Keep punctuation simple: full stops, commas, question marks.
 - **Be specific, not general.** "Your team of 12 SDRs" not "teams like yours." "Your Series B in October" not "companies at your stage."

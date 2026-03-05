@@ -172,7 +172,7 @@ export function PricingSection() {
       features.push({
         name: label,
         values: corePlans.reduce((acc, p) => {
-          acc[p.slug] = p.features?.[key] ?? false;
+          acc[p.slug] = !!(p.features?.[key] ?? false);
           return acc;
         }, {} as Record<string, boolean>),
       });

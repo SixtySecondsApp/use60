@@ -1,0 +1,874 @@
+{
+  "project": {
+    "name": "RAG-Enhanced Pre-Meeting Prep",
+    "prdId": "PRD-PMP-002",
+    "description": "Upgrade proactive-meeting-prep to query Intelligence RAG API for historical context, add demo screen for on-demand briefing generation",
+    "createdAt": "2026-02-25T00:00:00Z"
+  },
+  "features": [
+    {
+      "id": "rag-prep",
+      "name": "RAG Integration + Upgraded Briefing",
+      "status": "complete",
+      "phase": 1,
+      "prd": "PRD-PMP-002 § 3-5"
+    },
+    {
+      "id": "demo-screen",
+      "name": "Demo Briefing Screen",
+      "status": "complete",
+      "phase": 2,
+      "prd": "PRD-PMP-002 § 6"
+    },
+    {
+      "id": "polish",
+      "name": "Attendee Comparison + Polish",
+      "status": "complete",
+      "phase": 3,
+      "prd": "PRD-PMP-002 § 9.3"
+    },
+    {
+      "id": "visual",
+      "name": "Visual Enhancements — Company Logo + Attendee Photos",
+      "status": "complete",
+      "phase": 4,
+      "prd": "plan: Feature 1"
+    },
+    {
+      "id": "ask-question",
+      "name": "Ask a Question — Slack Modal + AI Answer",
+      "status": "complete",
+      "phase": 4,
+      "prd": "plan: Feature 2"
+    },
+    {
+      "id": "email-fix",
+      "name": "Booking Confirmation — Draft Mode + Encoding Fix + Sonnet",
+      "status": "complete",
+      "phase": 4,
+      "prd": "plan: Feature 3"
+    }
+  ],
+  "stories": [
+    {
+      "id": "RAG-001",
+      "feature": "rag-prep",
+      "title": "Create RAG query definitions and parallel execution module",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/memory/ragClient.ts",
+          "supabase/functions/_shared/memory/types.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "RAG-002",
+        "RAG-003",
+        "RAG-004"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "ragQueries.ts defines 8 PrepRAGQuery entries (conversation_summary, commitments, objections_concerns, prospect_priorities, competitor_mentions, commercial_signals, stakeholder_dynamics, last_meeting_detail)",
+        "getHistoricalContext() fires all queries via RAGClient.queryBatch() in parallel scoped to deal/contact filters",
+        "Returns HistoricalContext with hasHistory flag, meetingCount, sections map, and queryCredits",
+        "Failed/empty RAG queries are logged but don't block — function continues with partial results"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/ragQueries.ts",
+        "supabase/functions/_shared/meeting-prep/types.ts"
+      ]
+    },
+    {
+      "id": "RAG-002",
+      "feature": "rag-prep",
+      "title": "Create history detector — first vs return meeting classification",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "RAG-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+        ],
+        "schema": [
+          "calendar_events"
+        ]
+      },
+      "blocks": [
+        "RAG-004"
+      ],
+      "parallelWith": [
+        "RAG-003"
+      ],
+      "acceptance": [
+        "historyDetector.ts exports detectMeetingHistory() that queries calendar_events for prior meetings with same company/contacts",
+        "Returns MeetingHistory with isReturnMeeting flag, priorMeetingCount, priorMeetingIds, and attendeeHistory (who attended which meetings)",
+        "Uses company_id first, falls back to email domain matching for attendees without CRM records",
+        "Only counts external meetings (is_internal = false or null)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/historyDetector.ts"
+      ]
+    },
+    {
+      "id": "RAG-003",
+      "feature": "rag-prep",
+      "title": "Create briefing composer with first-meeting and return-meeting prompts",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "RAG-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "RAG-004"
+      ],
+      "parallelWith": [
+        "RAG-002"
+      ],
+      "acceptance": [
+        "briefingComposer.ts exports composeReturnMeetingBriefing() and composeFirstMeetingBriefing()",
+        "Return meeting prompt includes: STORY SO FAR, WHO'S IN THE ROOM, OPEN ITEMS, LANDMINES, SUGGESTED AGENDA, WHAT MATTERS TO THEM, COMPETITIVE CONTEXT",
+        "First meeting prompt includes: WHO YOU'RE MEETING, COMPANY SNAPSHOT, SUGGESTED DISCOVERY QUESTIONS, DEAL CONTEXT",
+        "Both return Slack Block Kit blocks and markdown text",
+        "Uses Claude Haiku via existing AI call pattern in preMeeting.ts"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/briefingComposer.ts"
+      ]
+    },
+    {
+      "id": "RAG-004",
+      "feature": "rag-prep",
+      "title": "Integrate RAG pipeline into preMeeting generateBriefingAdapter",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "RAG-001",
+          "RAG-002",
+          "RAG-003"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "RAG-005"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "generateBriefingAdapter calls detectMeetingHistory() to classify first vs return meeting",
+        "For return meetings: fires getHistoricalContext() with deal_id/contact filters before composing",
+        "Passes RAG results into composeReturnMeetingBriefing() to generate enhanced briefing",
+        "Falls back to composeFirstMeetingBriefing() if RAG returns no results or circuit breaker trips",
+        "Credit cost tracked via existing logAICostEvent() for RAG queries"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ]
+    },
+    {
+      "id": "RAG-005",
+      "feature": "rag-prep",
+      "title": "Update Slack Block Kit format for upgraded briefing delivery",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 4,
+      "dependencies": {
+        "stories": [
+          "RAG-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/slackBlocks.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New Slack block builder for return meeting format: story-so-far header, attendee tree, open items with status icons, landmines, suggested agenda, priorities, competitive context",
+        "New block builder for first meeting format: attendee profiles, company snapshot, discovery questions, deal context",
+        "Both respect Slack 50-block limit with section truncation",
+        "Action buttons preserved: View deal, Open in HubSpot, Dismiss"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slackBlocks.ts",
+        "supabase/functions/_shared/meeting-prep/briefingComposer.ts"
+      ]
+    },
+    {
+      "id": "DEMO-001",
+      "feature": "demo-screen",
+      "title": "Create demo-prep-briefing edge function with SSE streaming",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 5,
+      "dependencies": {
+        "stories": [
+          "RAG-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/meeting-prep/ragQueries.ts"
+        ],
+        "schema": [
+          "calendar_events"
+        ]
+      },
+      "blocks": [
+        "DEMO-003"
+      ],
+      "parallelWith": [
+        "DEMO-002"
+      ],
+      "acceptance": [
+        "Edge function at demo-prep-briefing handles POST with meeting_id, delivery mode (slack | preview)",
+        "Returns SSE stream with step-by-step progress events (load_context, enrich, history_check, rag_queries, company_news, compose, deliver)",
+        "Final SSE event includes complete briefing (slack_blocks + markdown) and generation metadata",
+        "Uses shared generatePrepBriefing() logic with onStep callback for progress",
+        "Auth via JWT — user must be authenticated"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/demo-prep-briefing/index.ts",
+        "supabase/functions/_shared/meeting-prep/demoHandler.ts"
+      ]
+    },
+    {
+      "id": "DEMO-002",
+      "feature": "demo-screen",
+      "title": "Create recent-meetings API endpoint for demo dropdown",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 5,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "calendar_events"
+        ]
+      },
+      "blocks": [
+        "DEMO-003"
+      ],
+      "parallelWith": [
+        "DEMO-001"
+      ],
+      "acceptance": [
+        "Edge function at demo-recent-meetings returns last 10 external meetings for the authenticated user",
+        "Filters: is_internal != true, has transcript (meeting_type != 'internal'), ordered by scheduled_at desc",
+        "Response includes: id, title, scheduled_at, duration_minutes, company_name, attendee_count, attendee_names, deal_id",
+        "Auth via JWT — scoped to user's org"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/demo-recent-meetings/index.ts"
+      ]
+    },
+    {
+      "id": "DEMO-003",
+      "feature": "demo-screen",
+      "title": "Build demo briefing page with meeting selector and live progress",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 6,
+      "dependencies": {
+        "stories": [
+          "DEMO-001",
+          "DEMO-002"
+        ],
+        "files": [
+          "src/lib/routes/routeConfig.ts",
+          "src/routes/lazyPages.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "DEMO-004"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "New page at /platform/demo/prep-briefing with route registered in routeConfig.ts",
+        "Meeting dropdown loads last 10 external meetings with date, attendee names, company, duration",
+        "Delivery toggle: Send to Slack DM vs Preview here",
+        "Generate Briefing button triggers SSE stream from demo-prep-briefing edge function",
+        "Real-time step progress indicator shows each phase with duration and detail text"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/platform/DemoPrepBriefing.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/routes/lazyPages.tsx"
+      ]
+    },
+    {
+      "id": "DEMO-004",
+      "feature": "demo-screen",
+      "title": "Render briefing preview with actions and metadata",
+      "type": "frontend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 7,
+      "dependencies": {
+        "stories": [
+          "DEMO-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Generated briefing renders in-browser mirroring Slack Block Kit format (sections, headers, emoji indicators)",
+        "Send to Slack button delivers the briefing to user's Slack DM via existing Slack delivery",
+        "Copy as Markdown button copies plain markdown version to clipboard",
+        "Generation metadata section shows: total time, credits consumed, RAG queries run/returned, prior meetings found, attendees enriched, model used"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/platform/DemoPrepBriefing.tsx"
+      ]
+    },
+    {
+      "id": "POL-001",
+      "feature": "polish",
+      "title": "Implement attendee comparison logic — new, returning, absent detection",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 8,
+      "dependencies": {
+        "stories": [
+          "RAG-002",
+          "RAG-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/meeting-prep/historyDetector.ts"
+        ],
+        "schema": [
+          "calendar_events"
+        ]
+      },
+      "blocks": [
+        "POL-002"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "compareAttendees() returns classification per attendee: 'new' (first time), 'returning' (been before), 'returning_after_absence' (skipped recent meetings)",
+        "Flags notably absent regular attendees — attended 2+ prior meetings but not today",
+        "Comparison uses all prior meeting attendees for the deal, not just the last meeting",
+        "Output feeds WHO'S IN THE ROOM section with appropriate flags"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/historyDetector.ts",
+        "supabase/functions/_shared/meeting-prep/briefingComposer.ts"
+      ]
+    },
+    {
+      "id": "POL-002",
+      "feature": "polish",
+      "title": "Handle mixed meetings — new + returning attendee profiles in same briefing",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 9,
+      "dependencies": {
+        "stories": [
+          "POL-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "POL-003"
+      ],
+      "acceptance": [
+        "When a return meeting has new attendees, briefing includes full profile for new attendees alongside history for returning ones",
+        "New stakeholders flagged prominently: role inference from title, why their presence matters",
+        "Returning-after-absence attendees show last known concern and meeting they last attended",
+        "Prompt template handles variable attendee sections cleanly"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/briefingComposer.ts"
+      ]
+    },
+    {
+      "id": "POL-003",
+      "feature": "polish",
+      "title": "Edge cases — no deal_id, internal-only context, large attendee lists",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 9,
+      "dependencies": {
+        "stories": [
+          "RAG-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "POL-002"
+      ],
+      "acceptance": [
+        "Meetings with no deal_id: RAG queries fall back to company name / contact_id filters instead of deal_id",
+        "Meetings with 10+ attendees: limit enrichment to first 8 external attendees, summarise the rest",
+        "RAG timeout: individual query timeout at 15s, overall RAG phase timeout at 25s",
+        "All edge cases return valid briefing (degraded but never error)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/ragQueries.ts",
+        "supabase/functions/_shared/orchestrator/adapters/preMeeting.ts"
+      ]
+    },
+    {
+      "id": "POL-004",
+      "feature": "polish",
+      "title": "Deploy to staging and manual quality review",
+      "type": "deploy",
+      "status": "complete",
+      "completedAt": "2026-02-25T12:00:00Z",
+      "priority": 10,
+      "dependencies": {
+        "stories": [
+          "POL-002",
+          "POL-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "proactive-meeting-prep deployed to staging with --no-verify-jwt",
+        "demo-prep-briefing and demo-recent-meetings deployed to staging with --no-verify-jwt",
+        "5 return-meeting briefings manually triggered via demo screen and quality reviewed",
+        "5 first-meeting briefings manually triggered and quality reviewed",
+        "Generation time benchmarks: <15s return, <8s first"
+      ],
+      "estimatedMinutes": 30,
+      "files": []
+    },
+    {
+      "id": "VIS-001",
+      "feature": "visual",
+      "title": "Add profile_image_url field to AttendeeResearch and extract from Apify data",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/meeting-prep/attendeeResearcher.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "VIS-002"
+      ],
+      "parallelWith": [
+        "ASK-002",
+        "FIX-001",
+        "FIX-002"
+      ],
+      "acceptance": [
+        "AttendeeResearch interface gains `profile_image_url?: string | null` field",
+        "After Apify mapping, extract `apifyProfile.profileImage ?? apifyProfile.imgUrl ?? null` and set on result",
+        "Field passes through to ResearchResults.attendees unchanged"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/attendeeResearcher.ts"
+      ],
+      "completedAt": "2026-02-25T18:56:43.441Z"
+    },
+    {
+      "id": "VIS-002",
+      "feature": "visual",
+      "title": "Company logo accessory + per-attendee image blocks + Ask Question button in briefingComposer",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+      "dependencies": {
+        "stories": [
+          "VIS-001"
+        ],
+        "files": [
+          "supabase/functions/_shared/meeting-prep/briefingComposer.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "DEPLOY-001"
+      ],
+      "parallelWith": [
+        "FIX-003"
+      ],
+      "acceptance": [
+        "Company section in buildFirstMeetingSlackBlocks gets `accessory: { type: 'image', image_url: logo.dev URL, alt_text: companyName }` when researchCo.domain is present",
+        "Attendee section split into one section block per attendee (instead of combined text block)",
+        "Each attendee block gets `accessory: { type: 'image', image_url, alt_text: name }` when profile_image_url is set; accessory omitted if null",
+        "Actions block gains second button: text='Ask a Question', action_id='prep_briefing::ask_question', value=meetingId",
+        "Logo.dev URL pattern: `https://img.logo.dev/{domain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ&size=64&format=png`"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/meeting-prep/briefingComposer.ts"
+      ],
+      "completedAt": "2026-02-25T18:56:43.441Z"
+    },
+    {
+      "id": "ASK-002",
+      "feature": "ask-question",
+      "title": "Add ask_question case to handlePrepBriefingAction — opens Slack modal via views.open",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/slack-interactive/handlers/prepBriefing.ts",
+          "supabase/functions/slack-interactive/index.ts"
+        ],
+        "schema": [
+          "slack_org_settings"
+        ]
+      },
+      "blocks": [
+        "ASK-003"
+      ],
+      "parallelWith": [
+        "VIS-001",
+        "FIX-001",
+        "FIX-002"
+      ],
+      "acceptance": [
+        "handlePrepBriefingAction signature extended: optional params `triggerId?: string`, `slackContext?: { channelId: string; messageTs: string; teamId: string }`",
+        "index.ts call site passes `payload.trigger_id`, `payload.channel?.id`, `payload.message?.ts`, `payload.team?.id`",
+        "ask_question case: loads botToken from slack_org_settings for teamId, calls Slack views.open with trigger_id",
+        "Modal: callback_id='prep_briefing_ask_modal', private_metadata=JSON.stringify({meetingId,channelId,messageTs}), single plain_text_input block (multiline), Submit='Ask', Close='Cancel'",
+        "Returns { success: true, responseText: '' } immediately (Slack 200 ack)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-interactive/handlers/prepBriefing.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "completedAt": "2026-02-25T18:56:43.441Z"
+    },
+    {
+      "id": "ASK-003",
+      "feature": "ask-question",
+      "title": "handlePrepBriefingAskSubmission — Exa search + Claude synthesis + post to thread",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+      "dependencies": {
+        "stories": [
+          "ASK-002"
+        ],
+        "files": [],
+        "schema": [
+          "calendar_events",
+          "slack_user_mappings"
+        ]
+      },
+      "blocks": [
+        "DEPLOY-001"
+      ],
+      "parallelWith": [
+        "VIS-002",
+        "FIX-003"
+      ],
+      "acceptance": [
+        "handlePrepBriefingAskSubmission() in handlers/prepBriefing.ts: parse private_metadata, extract question from view.state.values",
+        "Resolve Slack user → rep via slack_user_mappings, load meeting from calendar_events",
+        "Parallel: Exa search (`{companyName} {question}`, 5 results) + RAG query if deal_id on meeting",
+        "Claude Sonnet (claude-sonnet-4-6) synthesises concise answer from Exa + RAG results",
+        "chat.postMessage to channelId with thread_ts=messageTs: header=question, section=answer, context=sources",
+        "view_submission case added to index.ts: `if (payload.view?.callback_id === 'prep_briefing_ask_modal')` → fire-and-forget handlePrepBriefingAskSubmission, return empty 200 immediately"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/slack-interactive/handlers/prepBriefing.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "completedAt": "2026-02-25T18:56:43.441Z"
+    },
+    {
+      "id": "FIX-001",
+      "feature": "email-fix",
+      "title": "Fix btoa() Latin1 crash and add draft mode to email-send-as-rep",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/email-send-as-rep/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "FIX-003"
+      ],
+      "parallelWith": [
+        "VIS-001",
+        "ASK-002",
+        "FIX-002"
+      ],
+      "acceptance": [
+        "toBase64Url() helper uses TextEncoder + Array.from + btoa for UTF-8 safe base64url encoding (handles curly quotes, em-dashes)",
+        "btoa(rawMessage) replaced with toBase64Url(rawMessage)",
+        "SendEmailRequest interface gains `draft?: boolean` field",
+        "When draft=true: POST to `https://gmail.googleapis.com/gmail/v1/users/me/drafts`, body wrapped as `{ message: { raw: encodedMessage } }`",
+        "When draft=false (default): existing send flow unchanged"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/email-send-as-rep/index.ts"
+      ],
+      "completedAt": "2026-02-25T18:56:43.441Z"
+    },
+    {
+      "id": "FIX-002",
+      "feature": "email-fix",
+      "title": "Fix btoa() Latin1 crash in google-gmail/gmail-actions.ts (replyToEmail + forwardEmail)",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/google-gmail/gmail-actions.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "DEPLOY-001"
+      ],
+      "parallelWith": [
+        "VIS-001",
+        "ASK-002",
+        "FIX-001"
+      ],
+      "acceptance": [
+        "toBase64Url() helper added to gmail-actions.ts with identical UTF-8 safe implementation",
+        "btoa(emailMessage) replaced with toBase64Url(emailMessage) in both replyToEmail() (line ~153) and forwardEmail() (line ~417)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/google-gmail/gmail-actions.ts"
+      ],
+      "completedAt": "2026-02-25T18:56:43.441Z"
+    },
+    {
+      "id": "FIX-003",
+      "feature": "email-fix",
+      "title": "Update prepBriefing.ts — Sonnet model, ASCII-only prompt, draft flag, success message",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+      "dependencies": {
+        "stories": [
+          "FIX-001"
+        ],
+        "files": [
+          "supabase/functions/slack-interactive/handlers/prepBriefing.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "DEPLOY-001"
+      ],
+      "parallelWith": [
+        "VIS-002",
+        "ASK-003"
+      ],
+      "acceptance": [
+        "draftEmail() model changed from claude-haiku-4-5-20251001 to claude-sonnet-4-6",
+        "Prompt requirements include: 'Use plain ASCII punctuation only: straight quotes, hyphens (not em-dashes), no smart quotes or Unicode characters.'",
+        "sendEmail() call passes draft: true",
+        "Success message changed to: 'Email draft created for {name} — open Gmail drafts to review and send'",
+        "Function/call site comment updated from sendEmail to createDraft"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/slack-interactive/handlers/prepBriefing.ts"
+      ],
+      "completedAt": "2026-02-25T18:56:43.441Z"
+    },
+    {
+      "id": "DEPLOY-001",
+      "feature": "visual",
+      "title": "Deploy three functions to staging and verify all four features",
+      "type": "deploy",
+      "status": "complete",
+      "priority": 13,
+      "dependencies": {
+        "stories": [
+          "VIS-002",
+          "ASK-003",
+          "FIX-002",
+          "FIX-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "demo-prep-briefing deployed to staging with --no-verify-jwt",
+        "slack-interactive deployed to staging with --no-verify-jwt",
+        "email-send-as-rep deployed to staging with --no-verify-jwt",
+        "Trigger briefing for meeting 4455db50-9d89-4832-95be-9ff26f75bac6 — company logo appears as image accessory",
+        "Attendee section shows profile image if Apify returned one, renders cleanly without if not",
+        "Click 'Ask a Question' → modal opens → submit question → answer posted in thread",
+        "Click 'Send Booking Confirmation' → no error → Gmail drafts folder contains the email"
+      ],
+      "estimatedMinutes": 20,
+      "files": [],
+      "completedAt": "2026-02-25T18:56:43.441Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 21,
+    "completedStories": 21,
+    "currentFeature": null,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": [
+          "RAG-001"
+        ],
+        "description": "Foundation: RAG query definitions and types"
+      },
+      {
+        "group": 2,
+        "stories": [
+          "RAG-002",
+          "RAG-003"
+        ],
+        "description": "History detector and briefing composer (parallel)"
+      },
+      {
+        "group": 3,
+        "stories": [
+          "RAG-004"
+        ],
+        "description": "Integration into preMeeting adapter"
+      },
+      {
+        "group": 4,
+        "stories": [
+          "RAG-005",
+          "DEMO-002"
+        ],
+        "description": "Slack blocks upgrade + recent meetings endpoint (parallel)"
+      },
+      {
+        "group": 5,
+        "stories": [
+          "DEMO-001"
+        ],
+        "description": "Demo edge function with SSE"
+      },
+      {
+        "group": 6,
+        "stories": [
+          "DEMO-003"
+        ],
+        "description": "Demo UI page"
+      },
+      {
+        "group": 7,
+        "stories": [
+          "DEMO-004"
+        ],
+        "description": "Briefing preview + actions"
+      },
+      {
+        "group": 8,
+        "stories": [
+          "POL-001"
+        ],
+        "description": "Attendee comparison logic"
+      },
+      {
+        "group": 9,
+        "stories": [
+          "POL-002",
+          "POL-003"
+        ],
+        "description": "Mixed meetings + edge cases (parallel)"
+      },
+      {
+        "group": 10,
+        "stories": [
+          "POL-004"
+        ],
+        "description": "Staging deploy + quality review"
+      },
+      {
+        "group": 11,
+        "stories": [
+          "VIS-001",
+          "ASK-002",
+          "FIX-001",
+          "FIX-002"
+        ],
+        "description": "Phase 4 foundations — all independent, run in parallel"
+      },
+      {
+        "group": 12,
+        "stories": [
+          "VIS-002",
+          "ASK-003",
+          "FIX-003"
+        ],
+        "description": "Phase 4 completions — after group 11 (VIS-002 after VIS-001, ASK-003 after ASK-002, FIX-003 after FIX-001)"
+      },
+      {
+        "group": 13,
+        "stories": [
+          "DEPLOY-001"
+        ],
+        "description": "Deploy 3 functions to staging + end-to-end verification"
+      }
+    ],
+    "estimatedTotalMinutes": 450,
+    "lastUpdated": "2026-02-25T18:56:43.441Z"
+  }
+}

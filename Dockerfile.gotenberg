@@ -1,0 +1,19 @@
+# Gotenberg PDF service — Railway deployment
+# GOT-001: Gotenberg Docker container
+
+FROM gotenberg/gotenberg:8
+
+# Expose Gotenberg's default port
+EXPOSE 3000
+
+# Use Chromium only (disable LibreOffice and other unused modules)
+# Configure A4 paper and a 500ms waitDelay for font loading
+CMD ["gotenberg", \
+  "--chromium-disable-javascript=false", \
+  "--libreoffice-disable-routes=true", \
+  "--uno-listener-restart-threshold=0", \
+  "--chromium-wait-delay=500ms", \
+  "--api-port=3000"]
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1

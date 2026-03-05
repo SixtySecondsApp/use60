@@ -45,7 +45,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { ActionCentreItem } from '@/pages/platform/ActionCentre';
+import type { ActionCentreItem } from '@/components/action-centre/types';
 
 // ============================================================================
 // Types

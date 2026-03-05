@@ -92,7 +92,7 @@ interface CopilotContextValue {
   isOpen: boolean;
   openCopilot: (initialQuery?: string, startNewChat?: boolean) => void;
   closeCopilot: () => void;
-  sendMessage: (message: string, options?: { silent?: boolean }) => Promise<void>;
+  sendMessage: (message: string, options?: { silent?: boolean; apiContent?: string }) => Promise<void>;
   cancelRequest: () => void;
   messages: CopilotMessage[];
   isLoading: boolean;
@@ -1278,7 +1278,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   }, []);
 
   const sendMessage = useCallback(
-    async (message: string, options?: { silent?: boolean; entities?: Array<{ id: string; type: string; name: string }>; skillCommand?: string }) => {
+    async (message: string, options?: { silent?: boolean; entities?: Array<{ id: string; type: string; name: string }>; skillCommand?: string; apiContent?: string }) => {
       const isModeLoading = autonomousModeEnabled
         ? autonomousCopilot.isThinking || autonomousCopilot.isStreaming
         : agentModeEnabled
@@ -1294,7 +1294,9 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       // =============================================================================
       // @ Mention Entity Context Injection & /Skill Command Handling
       // =============================================================================
-      let enrichedMessage = message;
+      // If apiContent is provided, use it as the enriched message sent to the API.
+      // The original `message` is still shown in the UI as the user bubble.
+      let enrichedMessage = options?.apiContent || message;
       let entityContextBlock = '';
 
       // Resolve entity context if entities are provided
@@ -1368,7 +1370,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
             const userMsg: AutonomousChatMessage = {
               id: `msg-${Date.now()}-user`,
               role: 'user',
-              content: enrichedMessage, // use enrichedMessage to preserve @mention entity context
+              content: message, // display original message, not enriched content
               timestamp: new Date(),
             };
             const assistantMsg: AutonomousChatMessage = {
@@ -1396,7 +1398,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
             const userMsg: AutonomousChatMessage = {
               id: `msg-${Date.now()}-user`,
               role: 'user',
-              content: enrichedMessage, // use enrichedMessage to preserve @mention entity context
+              content: message, // display original message, not enriched content
               timestamp: new Date(),
             };
             const assistantMsg: AutonomousChatMessage = {
@@ -1443,7 +1445,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
           logger.warn('[CopilotContext] route-message failed, falling through:', routeErr);
         }
 
-        await autonomousCopilot.sendMessage(enrichedMessage, { ...options, routingContext: autonomousRoutingContext });
+        await autonomousCopilot.sendMessage(message, { ...options, apiContent: enrichedMessage, routingContext: autonomousRoutingContext });
 
         // Auto-generate title from first user message
         // Use autonomousCopilot.conversationId when in autonomous mode — state.conversationId may be stale

@@ -28,9 +28,12 @@ WHERE attempted_at < NOW() - INTERVAL '30 days';
 ALTER TABLE invite_attempts ENABLE ROW LEVEL SECURITY;
 
 -- Admins can view their own attempts
-CREATE POLICY "Admins can view own attempts"
+DO $$ BEGIN
+  CREATE POLICY "Admins can view own attempts"
 ON invite_attempts FOR SELECT
 USING (auth.uid() = admin_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Function to check rate limit
 CREATE OR REPLACE FUNCTION check_invite_rate_limit(

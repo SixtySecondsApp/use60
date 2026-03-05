@@ -103,7 +103,8 @@ ALTER TABLE public.ops_table_webhooks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ops_webhook_logs ENABLE ROW LEVEL SECURITY;
 
 -- Webhook config: org-scoped via table
-CREATE POLICY "org_members_crud_webhooks"
+DO $$ BEGIN
+  CREATE POLICY "org_members_crud_webhooks"
   ON public.ops_table_webhooks
   FOR ALL
   USING (
@@ -114,9 +115,12 @@ CREATE POLICY "org_members_crud_webhooks"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Webhook logs: read by org members via webhook → table
-CREATE POLICY "org_members_read_webhook_logs"
+DO $$ BEGIN
+  CREATE POLICY "org_members_read_webhook_logs"
   ON public.ops_webhook_logs
   FOR SELECT
   USING (
@@ -128,12 +132,17 @@ CREATE POLICY "org_members_read_webhook_logs"
         AND om.user_id = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Allow service role to insert logs (called from edge function)
-CREATE POLICY "service_insert_webhook_logs"
+DO $$ BEGIN
+  CREATE POLICY "service_insert_webhook_logs"
   ON public.ops_webhook_logs
   FOR INSERT
   WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- 6. Extend dynamic_table_rows source_type CHECK to include 'webhook'
@@ -160,9 +169,12 @@ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE public.dynamic_table_rows
+DO $$ BEGIN
+  ALTER TABLE public.dynamic_table_rows
   ADD CONSTRAINT dynamic_table_rows_source_type_check
   CHECK (source_type IN ('manual', 'hubspot', 'attio', 'app', 'webhook'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON CONSTRAINT dynamic_table_rows_source_type_check ON public.dynamic_table_rows IS
   'manual = user-created, hubspot/attio/app = CRM sync, webhook = inbound webhook call';
@@ -191,9 +203,12 @@ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE public.ops_rules
+DO $$ BEGIN
+  ALTER TABLE public.ops_rules
   ADD CONSTRAINT ops_rules_action_type_check
   CHECK (action_type IN ('update_cell', 'run_enrichment', 'push_to_hubspot', 'add_tag', 'notify', 'webhook'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON CONSTRAINT ops_rules_action_type_check ON public.ops_rules IS
   'Supported rule action types. webhook = fire outbound HTTP request.';

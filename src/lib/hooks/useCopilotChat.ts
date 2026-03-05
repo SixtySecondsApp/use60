@@ -17,6 +17,7 @@ import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 import { CopilotSessionService } from '@/lib/services/copilotSessionService';
 import type { CopilotMessage as PersistedMessage, CopilotMessageMetadata } from '@/lib/types/copilot';
 import { toast } from 'sonner';
+import { getTemporalContext } from '@/lib/utils/temporalContext';
 
 // =============================================================================
 // Types
@@ -75,6 +76,8 @@ export interface UseCopilotChatOptions {
   persistSession?: boolean;
   /** Number of historical messages to load (default: 50) */
   historyLimit?: number;
+  /** If set, use a per-deal session instead of the main session */
+  dealId?: string;
 }
 
 export interface RoutingContext {
@@ -89,6 +92,9 @@ export interface SendMessageOptions {
   silent?: boolean;
   /** Routing result from route-message edge function, passed as context to the AI */
   routingContext?: RoutingContext;
+  /** When set, the UI displays the original `message` but the API receives this content instead.
+   *  Used by landing page builder to inject context without exposing it in chat. */
+  apiContent?: string;
 }
 
 export interface UseCopilotChatReturn {
@@ -150,6 +156,10 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
   const sessionServiceRef = useRef<CopilotSessionService | null>(null);
   // Ref mirror of conversationId — always up-to-date regardless of closure capture timing
   const conversationIdRef = useRef<string | null>(null);
+  // When true, the loadSession effect won't overwrite messages.
+  // Set by clearMessages() so that callers like the landing page builder
+  // can prevent session restoration from re-injecting old messages.
+  const skipSessionRestoreRef = useRef(false);
 
   // Keep ref in sync with state so SSE handlers never use a stale conversationId
   // useLayoutEffect ensures immediate sync before any paint/effect
@@ -192,9 +202,11 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
       setActiveAgents([]);
 
       // Persist user message to database (non-blocking)
-      // Use ref to avoid stale closure — conversationId state may lag behind actual session load
+      // Skip persistence for silent messages — the caller handles their own persistence
+      // (e.g. deal copilot sends an enriched [DEAL_CONTEXT] message silently but
+      // persists only the clean user text separately)
       const currentConvId = conversationIdRef.current;
-      if (persistSession && currentConvId && sessionServiceRef.current) {
+      if (!silent && persistSession && currentConvId && sessionServiceRef.current) {
         const userMsgPayload = {
           conversation_id: currentConvId,
           role: 'user' as const,
@@ -222,6 +234,10 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
           }
         });
       }
+
+      // Track the actual API content so SSE handlers can detect builder context
+      const apiMessage = sendOpts?.apiContent || message;
+      const isBuilderContext = apiMessage.includes('[INSTRUCTIONS');
 
       // Create placeholder assistant message
       const assistantMessageId = generateId();
@@ -259,11 +275,13 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify({
-              message,
+              message: sendOpts?.apiContent || message,
               organizationId: options.organizationId,
               context: {
                 ...options.initialContext,
                 user_id: options.userId,
+                temporalContext: getTemporalContext(),
+                orgId: options.organizationId,
               },
               stream: true,
               ...(sendOpts?.routingContext ? { routingContext: sendOpts.routingContext } : {}),
@@ -406,7 +424,16 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                     break;
 
                   case 'structured_response':
+                    // Skip structured responses in builder context — the landing page
+                    // builder injects [INSTRUCTIONS ...] preambles and the structured
+                    // response detector sometimes misclassifies the AI output as an
+                    // ops table, hiding the actual text content.
+                    if (isBuilderContext) {
+                      console.log('[useCopilotChat] Suppressing structured_response in builder context');
+                      break;
+                    }
                     // Attach structured response data to the assistant message
+                    console.log('[useCopilotChat] Received structured_response SSE:', (data as any)?.type, 'for message:', assistantMessageId);
                     receivedStructuredResponse = data;
                     setMessages((prev) =>
                       prev.map((m) =>
@@ -460,6 +487,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
                     break;
 
                   case 'done':
+                    console.log('[useCopilotChat] done event received, had structured_response:', !!receivedStructuredResponse);
                     setMessages((prev) =>
                       prev.map((m) =>
                         m.id === assistantMessageId
@@ -630,6 +658,9 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
     setCurrentTool(null);
     setActiveAgents([]);
     currentMessageIdRef.current = null;
+    // Prevent the loadSession effect from re-injecting old messages after a clear.
+    // This stays true until the next sendMessage call resets it.
+    skipSessionRestoreRef.current = true;
   }, []);
 
   /**
@@ -698,6 +729,12 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
         });
 
         if (cancelled) return;
+
+        // Re-check after async gap: clearMessages() may have run during loadMessages await
+        if (skipSessionRestoreRef.current) {
+          setIsLoadingSession(false);
+          return;
+        }
 
         if (persistedMessages.length > 0) {
           const chatMessages: ChatMessage[] = persistedMessages.map((m) => ({

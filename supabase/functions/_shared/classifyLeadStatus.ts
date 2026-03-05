@@ -1,7 +1,7 @@
 // supabase/functions/_shared/classifyLeadStatus.ts
 // Shared utility for classifying leads as net_new, uncontacted, contacted_no_deal, or existing_with_deal
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 export type LeadClassification = 'net_new' | 'uncontacted' | 'contacted_no_deal' | 'existing_with_deal';
 

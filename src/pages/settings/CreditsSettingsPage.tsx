@@ -20,7 +20,7 @@ import { useSearchParams } from 'react-router-dom';
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useCreditBalance, creditKeys } from '@/lib/hooks/useCreditBalance';
 import { grantCredits } from '@/lib/services/creditService';
-import { useOrgId } from '@/lib/contexts/OrgContext';
+import { useOrgId, useOrg } from '@/lib/contexts/OrgContext';
 import CreditPurchaseModal from '@/components/credits/CreditPurchaseModal';
 import { UsageChart } from '@/components/credits/UsageChart';
 import { CreditEstimator } from '@/components/credits/CreditEstimator';
@@ -58,9 +58,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { isUserAdmin } from '@/lib/utils/adminUtils';
-import { useUser } from '@/lib/hooks/useUser';
+import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { CREDIT_PACKS, STANDARD_PACKS, getPackPrice } from '@/lib/config/creditPacks';
+import type { PackType } from '@/lib/config/creditPacks';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 // ============================================================================
@@ -103,9 +103,11 @@ export default function CreditsSettingsPage() {
   const { data: balance, isLoading: balanceLoading } = useCreditBalance();
   const { currencyCode } = useOrgMoney();
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
-  const [purchasePack, setPurchasePack] = useState<import('@/lib/config/creditPacks').PackType | undefined>(undefined);
-  const { userData } = useUser();
-  const isAdmin = userData ? isUserAdmin(userData) : false;
+  const [purchasePack, setPurchasePack] = useState<PackType | undefined>(undefined);
+  const [purchaseInitialPack, setPurchaseInitialPack] = useState<PackType | undefined>();
+  const { permissions } = useOrg();
+  const { isPlatformAdmin } = useUserPermissions();
+  const isAdmin = permissions.canManageSettings || permissions.canManageTeam || isPlatformAdmin;
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -344,7 +346,7 @@ export default function CreditsSettingsPage() {
                       <button
                         key={packType}
                         type="button"
-                        onClick={() => { setPurchasePack(packType); setPurchaseModalOpen(true); }}
+                        onClick={() => { setPurchasePack(packType); setPurchaseInitialPack(packType); setPurchaseModalOpen(true); }}
                         className={cn(
                           'relative flex flex-col items-center gap-1.5 rounded-xl border-2 p-5 text-center transition-all',
                           'hover:border-[#37bd7e] hover:bg-[#37bd7e]/5',
@@ -570,8 +572,9 @@ export default function CreditsSettingsPage() {
       {/* Purchase modal */}
       <CreditPurchaseModal
         open={purchaseModalOpen}
-        onOpenChange={setPurchaseModalOpen}
+        onOpenChange={(open) => { setPurchaseModalOpen(open); if (!open) { setPurchaseInitialPack(undefined); setPurchasePack(undefined); } }}
         defaultPack={purchasePack}
+        initialPack={purchaseInitialPack}
       />
 
       {/* Post-migration onboarding modal (shown once per user) */}

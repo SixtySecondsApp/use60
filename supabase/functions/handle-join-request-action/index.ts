@@ -12,9 +12,10 @@
  */
 
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { crypto } from 'https://deno.land/std@0.190.0/crypto/mod.ts';
 import { sendEmail } from '../_shared/ses.ts';
+import { authenticateRequest } from '../_shared/edgeAuth.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -115,17 +116,6 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Debug: Check if auth header is present
-    const authHeader = req.headers.get('authorization');
-    console.log('[handle-join-request-action] Auth header present:', !!authHeader);
-    console.log('[handle-join-request-action] Auth header preview:', authHeader?.substring(0, 30) + '...');
-
-    if (!authHeader) {
-      console.error('[handle-join-request-action] ❌ MISSING AUTH HEADER!');
-      console.error('[handle-join-request-action] This request will fail permission checks.');
-      console.error('[handle-join-request-action] Headers:', Object.fromEntries(req.headers.entries()));
-    }
-
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: {
         autoRefreshToken: false,
@@ -133,10 +123,19 @@ serve(async (req: Request): Promise<Response> => {
       },
     });
 
-    const requestBody: HandleJoinRequestRequest = await req.json();
-    const { action, request_id, admin_user_id, rejection_reason } = requestBody;
+    // Authenticate via JWT — use verified identity, not body
+    const { userId: authenticatedUserId } = await authenticateRequest(
+      req,
+      supabaseAdmin,
+      SUPABASE_SERVICE_ROLE_KEY
+    );
 
-    if (!action || !request_id || !admin_user_id) {
+    const requestBody: HandleJoinRequestRequest = await req.json();
+    const { action, request_id, rejection_reason } = requestBody;
+    // Use authenticated user ID instead of body-supplied admin_user_id
+    const admin_user_id = authenticatedUserId;
+
+    if (!action || !request_id) {
       return new Response(
         JSON.stringify({
           success: false,

@@ -26,6 +26,7 @@ export function SetupWizardSidebarIndicator({ isCollapsed = false }: SetupWizard
           title={`Setup: ${completedCount}/${totalSteps} complete`}
           className={cn(
             'group transition-all rounded-xl',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2',
             isCollapsed
               ? 'w-9 h-9 mx-auto flex items-center justify-center relative mb-1'
               : 'w-full px-3 py-2.5 flex flex-col gap-1.5 mb-2',

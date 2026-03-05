@@ -291,14 +291,18 @@ CREATE INDEX idx_crm_deal_index_close_date ON crm_deal_index(org_id, close_date)
 ALTER TABLE crm_contact_index ENABLE ROW LEVEL SECURITY;
 
 -- Service role full access (edge functions use service role)
-CREATE POLICY "Service role full access to crm_contact_index"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to crm_contact_index"
 ON crm_contact_index FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Authenticated users can read contacts from their org
-CREATE POLICY "Org members can read crm_contact_index"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read crm_contact_index"
 ON crm_contact_index FOR SELECT
 TO authenticated
 USING (
@@ -309,19 +313,25 @@ USING (
       AND user_id = auth.uid()
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- crm_company_index RLS
 ALTER TABLE crm_company_index ENABLE ROW LEVEL SECURITY;
 
 -- Service role full access
-CREATE POLICY "Service role full access to crm_company_index"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to crm_company_index"
 ON crm_company_index FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Authenticated users can read companies from their org
-CREATE POLICY "Org members can read crm_company_index"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read crm_company_index"
 ON crm_company_index FOR SELECT
 TO authenticated
 USING (
@@ -332,19 +342,25 @@ USING (
       AND user_id = auth.uid()
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- crm_deal_index RLS
 ALTER TABLE crm_deal_index ENABLE ROW LEVEL SECURITY;
 
 -- Service role full access
-CREATE POLICY "Service role full access to crm_deal_index"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to crm_deal_index"
 ON crm_deal_index FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Authenticated users can read deals from their org
-CREATE POLICY "Org members can read crm_deal_index"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read crm_deal_index"
 ON crm_deal_index FOR SELECT
 TO authenticated
 USING (
@@ -355,6 +371,8 @@ USING (
       AND user_id = auth.uid()
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Step 6: Triggers for updated_at

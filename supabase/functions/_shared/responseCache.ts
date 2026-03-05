@@ -31,34 +31,52 @@ class EdgeFunctionCache {
   public readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
   private readonly MAX_CACHE_SIZE = 1000; // Prevent memory leaks
 
-  generateCacheKey(req: Request, customKey?: string): string {
+  async generateCacheKey(req: Request, customKey?: string): Promise<string> {
     if (customKey) return customKey;
-    
+
     const url = new URL(req.url);
     const method = req.method;
     const pathname = url.pathname;
     const searchParams = url.searchParams.toString();
-    
+
     // Include user ID in cache key for user-specific data
+    // Uses SHA-256 to prevent cross-user cache collisions
     const authHeader = req.headers.get('Authorization');
-    const userHash = authHeader ? this.hashString(authHeader) : 'anonymous';
-    
+    const userHash = authHeader ? await this.hashStringSHA256(authHeader) : 'anonymous';
+
     return `${method}:${pathname}:${searchParams}:${userHash}`;
   }
 
-  private hashString(str: string): string {
+  /**
+   * SHA-256 hash using Web Crypto API, truncated to 16 hex chars (64 bits).
+   * Provides collision resistance far beyond the old 32-bit hash.
+   */
+  private async hashStringSHA256(str: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = new Uint8Array(hashBuffer);
+    const hashHex = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+    // Truncate to 16 hex chars (64 bits) — sufficient for cache keys
+    return hashHex.substring(0, 16);
+  }
+
+  /**
+   * Synchronous weak hash for ETags only (not security-sensitive).
+   */
+  private hashStringSync(str: string): string {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
+      hash = hash & hash;
     }
     return hash.toString(36);
   }
 
   generateETag(data: any): string {
     const content = JSON.stringify(data);
-    return this.hashString(content);
+    return this.hashStringSync(content);
   }
 
   get(key: string, options: CacheOptions = {}): CacheEntry | null {
@@ -165,7 +183,7 @@ export async function cacheMiddleware(
     return await handler();
   }
 
-  const cacheKey = cache.generateCacheKey(req, options.cacheKey);
+  const cacheKey = await cache.generateCacheKey(req, options.cacheKey);
   
   // Check for cached response
   const cachedEntry = cache.get(cacheKey, options);

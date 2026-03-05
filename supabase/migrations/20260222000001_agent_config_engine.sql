@@ -25,17 +25,23 @@ CREATE TABLE IF NOT EXISTS agent_config_defaults (
 ALTER TABLE agent_config_defaults ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access (for seeding, orchestrator, admin tooling)
-CREATE POLICY "Service role full access to agent_config_defaults"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_config_defaults"
 ON agent_config_defaults FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Authenticated users may read defaults (they need them for resolution)
-CREATE POLICY "Authenticated users can read agent_config_defaults"
+DO $$ BEGIN
+  CREATE POLICY "Authenticated users can read agent_config_defaults"
 ON agent_config_defaults FOR SELECT
 TO authenticated
 USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Trigger: keep updated_at current
 CREATE OR REPLACE FUNCTION update_agent_config_defaults_updated_at()
@@ -84,7 +90,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_config_org_overrides_org_id
 ALTER TABLE agent_config_org_overrides ENABLE ROW LEVEL SECURITY;
 
 -- Org admins and owners manage org overrides
-CREATE POLICY "Org admins can manage agent_config_org_overrides"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can manage agent_config_org_overrides"
 ON agent_config_org_overrides FOR ALL
 TO authenticated
 USING (
@@ -93,9 +100,12 @@ USING (
 WITH CHECK (
   get_org_role(auth.uid(), agent_config_org_overrides.org_id) IN ('owner', 'admin')
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Org members can read overrides for their org
-CREATE POLICY "Org members can read agent_config_org_overrides"
+DO $$ BEGIN
+  CREATE POLICY "Org members can read agent_config_org_overrides"
 ON agent_config_org_overrides FOR SELECT
 TO authenticated
 USING (
@@ -106,13 +116,18 @@ USING (
       AND om.user_id = auth.uid()
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access
-CREATE POLICY "Service role full access to agent_config_org_overrides"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_config_org_overrides"
 ON agent_config_org_overrides FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Trigger: keep updated_at current
 CREATE OR REPLACE FUNCTION update_agent_config_org_overrides_updated_at()
@@ -162,18 +177,24 @@ CREATE INDEX IF NOT EXISTS idx_agent_config_user_overrides_org_user
 ALTER TABLE agent_config_user_overrides ENABLE ROW LEVEL SECURITY;
 
 -- Users can only manage their own overrides
-CREATE POLICY "Users can manage their own agent_config_user_overrides"
+DO $$ BEGIN
+  CREATE POLICY "Users can manage their own agent_config_user_overrides"
 ON agent_config_user_overrides FOR ALL
 TO authenticated
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access
-CREATE POLICY "Service role full access to agent_config_user_overrides"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_config_user_overrides"
 ON agent_config_user_overrides FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Trigger: keep updated_at current
 CREATE OR REPLACE FUNCTION update_agent_config_user_overrides_updated_at()
@@ -219,7 +240,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_config_user_overridable_org_id
 ALTER TABLE agent_config_user_overridable ENABLE ROW LEVEL SECURITY;
 
 -- Org admins manage the overridable allowlist
-CREATE POLICY "Org admins can manage agent_config_user_overridable"
+DO $$ BEGIN
+  CREATE POLICY "Org admins can manage agent_config_user_overridable"
 ON agent_config_user_overridable FOR ALL
 TO authenticated
 USING (
@@ -228,19 +250,27 @@ USING (
 WITH CHECK (
   get_org_role(auth.uid(), agent_config_user_overridable.org_id) IN ('owner', 'admin')
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- All authenticated users may read (so UIs know what they're allowed to change)
-CREATE POLICY "Authenticated users can read agent_config_user_overridable"
+DO $$ BEGIN
+  CREATE POLICY "Authenticated users can read agent_config_user_overridable"
 ON agent_config_user_overridable FOR SELECT
 TO authenticated
 USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role full access
-CREATE POLICY "Service role full access to agent_config_user_overridable"
+DO $$ BEGIN
+  CREATE POLICY "Service role full access to agent_config_user_overridable"
 ON agent_config_user_overridable FOR ALL
 TO service_role
 USING (true)
 WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON agent_config_user_overridable TO authenticated;
 GRANT ALL ON agent_config_user_overridable TO service_role;

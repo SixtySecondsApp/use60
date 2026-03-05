@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders } from '../_shared/corsHelper.ts';
 import { logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts';
+import { ModelResolver } from '../_shared/ai/modelResolver.ts';
 
 // =============================================================================
 // Types
@@ -425,6 +426,11 @@ async function analyzeMeeting(
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
+  // Resolve model via routing layer
+  const resolver = new ModelResolver(supabase);
+  const resolved = await resolver.resolve(orgId, 'meeting_summary').catch(() => null);
+  const resolvedModelId = resolved?.provider === 'anthropic' ? resolved.modelId : null;
+
   const prompt = buildCoachingPrompt(transcript, context);
 
   try {
@@ -437,7 +443,7 @@ async function analyzeMeeting(
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: resolvedModelId ?? 'claude-haiku-4-5-20251001',
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -743,6 +749,11 @@ async function generateAIDigest(supabase: any, orgId: string, userId: string, we
     return { summary: 'AI digest unavailable — API key not configured', blocks: [] };
   }
 
+  // Resolve model via routing layer
+  const resolver = new ModelResolver(supabase);
+  const resolved = await resolver.resolve(orgId, 'task_execution').catch(() => null);
+  const digestModelId = resolved?.provider === 'anthropic' ? resolved.modelId : 'claude-haiku-4-5-20251001';
+
   // Fetch org learning insights
   const { data: orgInsights } = await supabase.rpc('get_active_org_insights', { p_org_id: orgId, p_limit: 5 });
 
@@ -784,7 +795,7 @@ Generate a JSON response with:
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: digestModelId,
         max_tokens: 2048,
         messages: [{ role: 'user', content: prompt }],
       }),

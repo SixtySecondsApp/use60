@@ -12,7 +12,7 @@
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { corsHeaders, handleCorsPreflightWithResponse } from '../_shared/corsHelper.ts';
 import { postToChannel, postEphemeralToChannel } from '../_shared/slackAuth.ts';
 

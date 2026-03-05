@@ -1,4 +1,4 @@
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { executeAgentSkillWithContract, type SkillResult } from './agentSkillExecutor.ts';
 import { executeAction, type ExecuteActionName } from './copilot_adapters/executeAction.ts';
 

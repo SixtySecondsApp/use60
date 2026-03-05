@@ -12,7 +12,8 @@ DROP POLICY IF EXISTS "organization_invitations_select" ON "public"."organizatio
 -- 2. Super admins (platform admins)
 -- 3. Organization owners and admins
 -- 4. Users viewing their own pending invitations (using JWT email, not auth.users join)
-CREATE POLICY "organization_invitations_select" ON "public"."organization_invitations"
+DO $$ BEGIN
+  CREATE POLICY "organization_invitations_select" ON "public"."organization_invitations"
   FOR SELECT
   USING (
     "public"."is_service_role"()
@@ -25,3 +26,5 @@ CREATE POLICY "organization_invitations_select" ON "public"."organization_invita
       AND "lower"(("email")::"text") = "lower"(("auth"."jwt"() ->> 'email')::text)
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

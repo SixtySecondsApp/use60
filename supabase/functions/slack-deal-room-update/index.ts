@@ -2,7 +2,7 @@
 // Posts updates to deal room channels for various deal events
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
   buildDealStageChangeMessage,
@@ -11,12 +11,14 @@ import {
   buildDealWonMessage,
   buildDealLostMessage,
   buildMeetingDebriefMessage,
+  buildProposalBriefingMessage,
   type DealStageChangeData,
   type DealActivityData,
   type WinProbabilityChangeData,
   type DealWonData,
   type DealLostData,
   type MeetingDebriefData,
+  type ProposalBriefingData,
 } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
 
@@ -24,7 +26,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://use60.com';
 
-type UpdateType = 'stage_change' | 'activity' | 'win_probability' | 'deal_won' | 'deal_lost' | 'meeting_summary';
+type UpdateType = 'stage_change' | 'activity' | 'win_probability' | 'deal_won' | 'deal_lost' | 'meeting_summary' | 'proposal_briefing';
 
 interface UpdateRequest {
   dealId: string;
@@ -316,6 +318,8 @@ function buildUpdateMessage(
       return buildDealLostMessage(data as DealLostData);
     case 'meeting_summary':
       return buildMeetingDebriefMessage(data as MeetingDebriefData);
+    case 'proposal_briefing':
+      return buildProposalBriefingMessage(data as unknown as ProposalBriefingData);
     default:
       return {
         blocks: [

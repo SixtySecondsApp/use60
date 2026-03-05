@@ -5,7 +5,8 @@
 DROP POLICY IF EXISTS "profiles_update" ON "public"."profiles";
 
 -- Create new policy with explicit WITH CHECK clause
-CREATE POLICY "profiles_update" ON "public"."profiles"
+DO $$ BEGIN
+  CREATE POLICY "profiles_update" ON "public"."profiles"
   FOR UPDATE
   USING (
     "public"."is_service_role"()
@@ -17,3 +18,5 @@ CREATE POLICY "profiles_update" ON "public"."profiles"
     OR ("id" = ( SELECT "auth"."uid"() AS "uid"))
     OR "public"."is_admin_optimized"()
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

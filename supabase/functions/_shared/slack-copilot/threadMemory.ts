@@ -8,6 +8,25 @@ import type { ThreadState, ThreadMessage } from './types.ts';
 
 const MAX_THREAD_HISTORY = 10;
 
+// ---------------------------------------------------------------------------
+// Multi-turn context types (CC-008)
+// ---------------------------------------------------------------------------
+
+export interface ConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+  intent?: string;
+  entities?: Record<string, string>; // { deal_id: '...', contact_id: '...' }
+  timestamp: string;
+}
+
+export interface ActiveEntities {
+  active_deal_id?: string;
+  active_contact_id?: string;
+  active_company_id?: string;
+  active_meeting_id?: string;
+}
+
 /**
  * Get or create a thread state for a Slack DM conversation
  */
@@ -483,4 +502,226 @@ export async function extractThreadContext(
   } finally {
     await logger.flush();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Active entity tracking (CC-008)
+// ---------------------------------------------------------------------------
+
+/**
+ * Update active entity IDs on the thread row.
+ * If any new entity ID differs from the current active entity (context switch),
+ * also clears `loaded_context` to force fresh data loading.
+ */
+export async function updateActiveEntities(
+  threadId: string,
+  entities: ActiveEntities,
+  supabase: SupabaseClient
+): Promise<void> {
+  // Read current active entities to detect a context switch
+  const { data: current } = await supabase
+    .from('slack_copilot_threads')
+    .select('active_deal_id, active_contact_id, active_company_id, active_meeting_id')
+    .eq('id', threadId)
+    .maybeSingle();
+
+  const switched = detectContextSwitch(
+    {
+      active_deal_id: current?.active_deal_id ?? undefined,
+      active_contact_id: current?.active_contact_id ?? undefined,
+      active_company_id: current?.active_company_id ?? undefined,
+      active_meeting_id: current?.active_meeting_id ?? undefined,
+    },
+    entities
+  );
+
+  const updatePayload: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (entities.active_deal_id !== undefined) updatePayload.active_deal_id = entities.active_deal_id;
+  if (entities.active_contact_id !== undefined) updatePayload.active_contact_id = entities.active_contact_id;
+  if (entities.active_company_id !== undefined) updatePayload.active_company_id = entities.active_company_id;
+  if (entities.active_meeting_id !== undefined) updatePayload.active_meeting_id = entities.active_meeting_id;
+
+  // Clear loaded_context on context switch so orchestrator fetches fresh data
+  if (switched) {
+    updatePayload.loaded_context = null;
+  }
+
+  await supabase
+    .from('slack_copilot_threads')
+    .update(updatePayload)
+    .eq('id', threadId);
+}
+
+/**
+ * Get the current active entity IDs from the thread row.
+ */
+export async function getActiveEntities(
+  threadId: string,
+  supabase: SupabaseClient
+): Promise<ActiveEntities> {
+  const { data } = await supabase
+    .from('slack_copilot_threads')
+    .select('active_deal_id, active_contact_id, active_company_id, active_meeting_id')
+    .eq('id', threadId)
+    .maybeSingle();
+
+  return {
+    active_deal_id: data?.active_deal_id ?? undefined,
+    active_contact_id: data?.active_contact_id ?? undefined,
+    active_company_id: data?.active_company_id ?? undefined,
+    active_meeting_id: data?.active_meeting_id ?? undefined,
+  };
+}
+
+/**
+ * Returns true if any incoming entity ID differs from the current active entity.
+ * Used by the orchestrator to decide whether to clear cached context.
+ */
+export function detectContextSwitch(
+  currentEntities: ActiveEntities,
+  newEntities: ActiveEntities
+): boolean {
+  if (newEntities.active_deal_id !== undefined && newEntities.active_deal_id !== currentEntities.active_deal_id) {
+    return true;
+  }
+  if (newEntities.active_contact_id !== undefined && newEntities.active_contact_id !== currentEntities.active_contact_id) {
+    return true;
+  }
+  if (newEntities.active_company_id !== undefined && newEntities.active_company_id !== currentEntities.active_company_id) {
+    return true;
+  }
+  if (newEntities.active_meeting_id !== undefined && newEntities.active_meeting_id !== currentEntities.active_meeting_id) {
+    return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Turn persistence (CC-008)
+// ---------------------------------------------------------------------------
+
+const MAX_TURNS = 20;
+
+/**
+ * Append a conversation turn to the `turns` JSONB array on the thread row.
+ * Trims to the last MAX_TURNS turns if the array exceeds that length.
+ */
+export async function appendTurn(
+  threadId: string,
+  turn: ConversationTurn,
+  supabase: SupabaseClient
+): Promise<void> {
+  const { data: thread } = await supabase
+    .from('slack_copilot_threads')
+    .select('turns')
+    .eq('id', threadId)
+    .maybeSingle();
+
+  const existing: ConversationTurn[] = Array.isArray(thread?.turns) ? (thread.turns as ConversationTurn[]) : [];
+  const updated = [...existing, turn];
+
+  // Trim oldest turns to cap at MAX_TURNS
+  const trimmed = updated.length > MAX_TURNS ? updated.slice(updated.length - MAX_TURNS) : updated;
+
+  await supabase
+    .from('slack_copilot_threads')
+    .update({ turns: trimmed, updated_at: new Date().toISOString() })
+    .eq('id', threadId);
+}
+
+// ---------------------------------------------------------------------------
+// Intent and credits tracking (CC-008)
+// ---------------------------------------------------------------------------
+
+/**
+ * Append an intent to `intents_used` and increment `credits_consumed`.
+ */
+export async function trackIntentAndCredits(
+  threadId: string,
+  intent: string,
+  credits: number,
+  supabase: SupabaseClient
+): Promise<void> {
+  const { data: thread } = await supabase
+    .from('slack_copilot_threads')
+    .select('intents_used, credits_consumed')
+    .eq('id', threadId)
+    .maybeSingle();
+
+  const intentsUsed: string[] = Array.isArray(thread?.intents_used) ? (thread.intents_used as string[]) : [];
+  const creditsConsumed: number = typeof thread?.credits_consumed === 'number' ? thread.credits_consumed : 0;
+
+  await supabase
+    .from('slack_copilot_threads')
+    .update({
+      intents_used: [...intentsUsed, intent],
+      credits_consumed: creditsConsumed + credits,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', threadId);
+}
+
+/**
+ * Append an action string to the `actions_taken` array on the thread row.
+ */
+export async function trackAction(
+  threadId: string,
+  action: string,
+  supabase: SupabaseClient
+): Promise<void> {
+  const { data: thread } = await supabase
+    .from('slack_copilot_threads')
+    .select('actions_taken')
+    .eq('id', threadId)
+    .maybeSingle();
+
+  const actionsTaken: string[] = Array.isArray(thread?.actions_taken) ? (thread.actions_taken as string[]) : [];
+
+  await supabase
+    .from('slack_copilot_threads')
+    .update({
+      actions_taken: [...actionsTaken, action],
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', threadId);
+}
+
+// ---------------------------------------------------------------------------
+// Cross-channel context bridge (CC-008)
+// ---------------------------------------------------------------------------
+
+/**
+ * Upsert a cross-channel context row for a specific entity that was discussed
+ * in a Slack Copilot thread. Keyed by (user_id, channel, channel_ref, entity_type, entity_id).
+ */
+export async function bridgeCrossChannelContext(
+  userId: string,
+  orgId: string,
+  entityType: 'deal' | 'contact' | 'company',
+  entityId: string,
+  entityName: string,
+  threadTs: string,
+  supabase: SupabaseClient
+): Promise<void> {
+  await supabase
+    .from('conversation_context')
+    .upsert(
+      {
+        user_id: userId,
+        org_id: orgId,
+        channel: 'slack_copilot',
+        channel_ref: threadTs,
+        entity_type: entityType,
+        entity_id: entityId,
+        context_summary: `User asking about ${entityName} in Slack`,
+        last_updated: new Date().toISOString(),
+      },
+      {
+        onConflict: 'user_id,channel,channel_ref,entity_type,entity_id',
+        ignoreDuplicates: false,
+      }
+    );
 }

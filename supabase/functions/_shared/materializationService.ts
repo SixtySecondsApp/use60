@@ -5,7 +5,7 @@
  * Called when copilot needs full context beyond the lightweight CRM index.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { HubSpotClient } from './hubspot.ts';
 import { AttioClient, fromAttioValues, type AttioRecord } from './attio.ts';
 import { syncToStandardTable, type CrmSource } from './standardTableSync.ts';

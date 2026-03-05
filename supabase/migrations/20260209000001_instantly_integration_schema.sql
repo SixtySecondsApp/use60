@@ -17,10 +17,13 @@ COMMENT ON TABLE public.instantly_org_credentials IS 'Org-scoped Instantly.ai AP
 -- RLS: service-role-only (no user access)
 ALTER TABLE public.instantly_org_credentials ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "instantly_org_credentials_service_all"
+DO $$ BEGIN
+  CREATE POLICY "instantly_org_credentials_service_all"
   ON public.instantly_org_credentials
   USING (public.is_service_role())
   WITH CHECK (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Auto-update updated_at
 CREATE TRIGGER update_instantly_org_credentials_updated_at
@@ -50,15 +53,21 @@ COMMENT ON TABLE public.instantly_org_integrations IS 'Org-scoped Instantly.ai i
 -- RLS: org members can read, admins can write
 ALTER TABLE public.instantly_org_integrations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "instantly_org_integrations_select"
+DO $$ BEGIN
+  CREATE POLICY "instantly_org_integrations_select"
   ON public.instantly_org_integrations
   FOR SELECT
   USING (public.is_service_role() OR public.can_access_org_data(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "instantly_org_integrations_admin_all"
+DO $$ BEGIN
+  CREATE POLICY "instantly_org_integrations_admin_all"
   ON public.instantly_org_integrations
   USING (public.is_service_role() OR public.can_admin_org(org_id))
   WITH CHECK (public.is_service_role() OR public.can_admin_org(org_id));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Auto-update updated_at
 CREATE TRIGGER update_instantly_org_integrations_updated_at
@@ -97,7 +106,8 @@ COMMENT ON COLUMN public.instantly_campaign_links.field_mapping IS 'Maps Ops col
 -- RLS
 ALTER TABLE public.instantly_campaign_links ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "instantly_campaign_links_select"
+DO $$ BEGIN
+  CREATE POLICY "instantly_campaign_links_select"
   ON public.instantly_campaign_links
   FOR SELECT
   USING (
@@ -110,12 +120,17 @@ CREATE POLICY "instantly_campaign_links_select"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "instantly_campaign_links_service_all"
+DO $$ BEGIN
+  CREATE POLICY "instantly_campaign_links_service_all"
   ON public.instantly_campaign_links
   FOR ALL
   USING (public.is_service_role())
   WITH CHECK (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Auto-update
 CREATE TRIGGER update_instantly_campaign_links_updated_at
@@ -158,7 +173,8 @@ COMMENT ON TABLE public.instantly_sync_history IS 'Tracks Instantly sync operati
 -- RLS
 ALTER TABLE public.instantly_sync_history ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "instantly_sync_history_select"
+DO $$ BEGIN
+  CREATE POLICY "instantly_sync_history_select"
   ON public.instantly_sync_history
   FOR SELECT
   USING (
@@ -171,12 +187,17 @@ CREATE POLICY "instantly_sync_history_select"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "instantly_sync_history_service_all"
+DO $$ BEGIN
+  CREATE POLICY "instantly_sync_history_service_all"
   ON public.instantly_sync_history
   FOR ALL
   USING (public.is_service_role())
   WITH CHECK (public.is_service_role());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Indexes
 CREATE INDEX idx_instantly_sync_history_table_id

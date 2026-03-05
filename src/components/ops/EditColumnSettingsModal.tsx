@@ -37,6 +37,27 @@ function evaluateFormulaPreview(expression: string, sampleValues: Record<string,
       const val = sampleValues[key];
       return val !== undefined && val !== '' ? `"${val}"` : '""';
     });
+    // JSON_GET
+    expr = expr.replace(/JSON_GET\s*\(([^)]*)\)/gi, (_, argsStr: string) => {
+      const args = splitArgs(argsStr);
+      if (args.length !== 2) return '""';
+      const jsonStr = stripQuotes(args[0].trim());
+      const keyPath = stripQuotes(args[1].trim());
+      if (!jsonStr || !keyPath) return '""';
+      try {
+        const obj = JSON.parse(jsonStr);
+        const parts = keyPath.split('.');
+        let current: unknown = obj;
+        for (const part of parts) {
+          if (current == null || typeof current !== 'object') return '""';
+          current = (current as Record<string, unknown>)[part];
+        }
+        if (current == null) return '""';
+        return `"${typeof current === 'object' ? JSON.stringify(current) : String(current)}"`;
+      } catch {
+        return '""';
+      }
+    });
     // CONCAT
     expr = expr.replace(/CONCAT\s*\(([^)]*)\)/gi, (_, argsStr: string) => {
       const args = splitArgs(argsStr);

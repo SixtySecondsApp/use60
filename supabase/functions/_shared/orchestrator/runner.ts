@@ -14,7 +14,7 @@
  * - resumeSequence() - Resume after HITL approval
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type {
   OrchestratorEvent,
   SequenceState,
@@ -37,12 +37,14 @@ import { resolveRoute, getSequenceSteps, getHandoffRoutes, evaluateHandoffCondit
 import { enqueueDeadLetter } from './deadLetter.ts';
 import { isCircuitAllowed, recordSuccess, recordFailure, loadPersistedState, getStateToPersist } from './circuitBreaker.ts';
 import { maybeEvaluateConfigQuestion } from '../config/questionTriggerHook.ts';
+import { logAgentAction } from '../memory/dailyLog.ts';
 
 // Steps that should only run for sales calls (Discovery, Demo, Close)
 const SALES_ONLY_STEPS = new Set([
   'detect-intents',
   'suggest-next-actions',
   'draft-followup-email',
+  'email-draft-approval',
 ]);
 
 // Chain depth constant from types (not exported, so defined here too)
@@ -400,6 +402,19 @@ async function executeStepsParallel(
       // Mark step as running in DB
       await rpcUpdateStep(supabase, jobId, state.steps_completed.length + 1, step.skill, null, 'running');
 
+      // LOG-003: step start
+      await logAgentAction({
+        supabaseClient: supabase as any,
+        orgId: state.event.org_id,
+        userId: state.event.user_id ?? null,
+        agentType: state.event.type,
+        actionType: step.skill,
+        actionDetail: { wave: waveNum },
+        outcome: 'pending',
+        chainId: jobId,
+        waveNumber: waveNum,
+      });
+
       execPromises.push({
         step,
         promise: executeStepWithRetry(supabase, state, step),
@@ -474,11 +489,42 @@ async function executeStepsParallel(
 
         await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, result.output, 'completed');
 
+        // LOG-003: step success
+        await logAgentAction({
+          supabaseClient: supabase as any,
+          orgId: state.event.org_id,
+          userId: state.event.user_id ?? null,
+          agentType: state.event.type,
+          actionType: step.skill,
+          actionDetail: {},
+          decisionReasoning: (result.output as any)?.reasoning ?? null,
+          outcome: 'success',
+          executionMs: result.duration_ms ?? null,
+          creditCost: (result.output as any)?.credit_cost ?? null,
+          chainId: jobId,
+          waveNumber: waveNum,
+        });
+
         // Fire question trigger evaluation after successful step (fire-and-forget)
         maybeEvaluateConfigQuestion(supabase, state.event.org_id, state.event.user_id, step.skill);
 
       } else {
         recordFailure(step.skill);
+
+        // LOG-003: step failure
+        await logAgentAction({
+          supabaseClient: supabase as any,
+          orgId: state.event.org_id,
+          userId: state.event.user_id ?? null,
+          agentType: state.event.type,
+          actionType: step.skill,
+          actionDetail: {},
+          outcome: 'failed',
+          errorMessage: result.error ?? null,
+          executionMs: result.duration_ms ?? null,
+          chainId: jobId,
+          waveNumber: waveNum,
+        });
 
         if (step.criticality === 'critical') {
           state.error = `Critical step ${step.skill} failed: ${result.error}`;
@@ -556,9 +602,6 @@ async function executeStepsParallel(
     queued_followups: state.queued_followups.length,
   });
 
-  // Enqueue to notification triage (if enabled for org)
-  await maybeEnqueueToTriage(supabase, jobId, state);
-
   return { job_id: jobId, status: 'completed' };
 }
 
@@ -573,7 +616,8 @@ async function executeStepsSequential(
   startTime: number,
 ): Promise<{ job_id: string; status: string; error?: string }> {
 
-  for (const step of steps) {
+  for (let seqStepIdx = 0; seqStepIdx < steps.length; seqStepIdx++) {
+    const step = steps[seqStepIdx];
     if (state.steps_completed.includes(step.skill)) continue;
 
     const elapsed = Date.now() - startTime;
@@ -604,6 +648,19 @@ async function executeStepsSequential(
     state.updated_at = new Date().toISOString();
 
     await rpcUpdateStep(supabase, jobId, state.steps_completed.length + 1, step.skill, null, 'running');
+
+    // LOG-003: step start
+    await logAgentAction({
+      supabaseClient: supabase as any,
+      orgId: state.event.org_id,
+      userId: state.event.user_id ?? null,
+      agentType: state.event.type,
+      actionType: step.skill,
+      actionDetail: { step_index: seqStepIdx },
+      outcome: 'pending',
+      chainId: jobId,
+      waveNumber: seqStepIdx,
+    });
 
     const result = await executeStepWithRetry(supabase, state, step);
 
@@ -636,10 +693,41 @@ async function executeStepsSequential(
 
       await rpcUpdateStep(supabase, jobId, state.steps_completed.length, step.skill, result.output, 'completed');
 
+      // LOG-003: step success
+      await logAgentAction({
+        supabaseClient: supabase as any,
+        orgId: state.event.org_id,
+        userId: state.event.user_id ?? null,
+        agentType: state.event.type,
+        actionType: step.skill,
+        actionDetail: {},
+        decisionReasoning: (result.output as any)?.reasoning ?? null,
+        outcome: 'success',
+        executionMs: result.duration_ms ?? null,
+        creditCost: (result.output as any)?.credit_cost ?? null,
+        chainId: jobId,
+        waveNumber: seqStepIdx,
+      });
+
       // Fire question trigger evaluation after successful step (fire-and-forget)
       maybeEvaluateConfigQuestion(supabase, state.event.org_id, state.event.user_id, step.skill);
 
     } else {
+      // LOG-003: step failure
+      await logAgentAction({
+        supabaseClient: supabase as any,
+        orgId: state.event.org_id,
+        userId: state.event.user_id ?? null,
+        agentType: state.event.type,
+        actionType: step.skill,
+        actionDetail: {},
+        outcome: 'failed',
+        errorMessage: result.error ?? null,
+        executionMs: result.duration_ms ?? null,
+        chainId: jobId,
+        waveNumber: seqStepIdx,
+      });
+
       if (step.criticality === 'critical') {
         state.error = `Critical step ${step.skill} failed: ${result.error}`;
         await persistState(supabase, jobId, state);
@@ -700,9 +788,6 @@ async function executeStepsSequential(
     outputs: state.outputs,
     queued_followups: state.queued_followups.length,
   });
-
-  // Enqueue to notification triage (if enabled for org)
-  await maybeEnqueueToTriage(supabase, jobId, state);
 
   return { job_id: jobId, status: 'completed' };
 }
@@ -1015,85 +1100,4 @@ async function rpcCompleteJob(
       updated_at: new Date().toISOString(),
     }).eq('id', jobId);
   }
-}
-
-/**
- * Enqueue completed sequence output to notification_queue for triage.
- * Only fires if org has triage_enabled = true in proactive_agent_config.
- * Falls through silently if triage is disabled (backward compatible).
- */
-async function maybeEnqueueToTriage(
-  supabase: SupabaseClient,
-  jobId: string,
-  state: SequenceState,
-): Promise<void> {
-  try {
-    // Check if triage is enabled for this org
-    const { data: config } = await supabase
-      .from('proactive_agent_config')
-      .select('triage_enabled')
-      .eq('org_id', state.event.org_id)
-      .maybeSingle();
-
-    if (!config?.triage_enabled) {
-      return; // Triage disabled — existing Slack adapters handle delivery
-    }
-
-    // Build a summary from step outputs for the notification
-    const lastOutput = state.outputs[state.steps_completed[state.steps_completed.length - 1]];
-    const summary = typeof lastOutput === 'object' && lastOutput !== null
-      ? (lastOutput as Record<string, unknown>).summary ||
-        (lastOutput as Record<string, unknown>).message ||
-        `${state.event.type} sequence completed`
-      : `${state.event.type} sequence completed`;
-
-    // Determine entity context from event payload
-    const entityType = state.event.payload?.entity_type as string || null;
-    const entityId = state.event.payload?.entity_id as string ||
-      state.event.payload?.meeting_id as string ||
-      state.event.payload?.deal_id as string || null;
-
-    // Determine priority from event type
-    const priorityMap: Record<string, string> = {
-      pre_meeting_90min: 'high',
-      deal_risk_scan: 'high',
-      meeting_ended: 'medium',
-      stale_deal_revival: 'medium',
-      campaign_daily_check: 'low',
-      coaching_weekly: 'low',
-      email_received: 'medium',
-    };
-
-    await supabase.from('notification_queue').insert({
-      user_id: state.event.user_id,
-      org_id: state.event.org_id,
-      title: `${formatSequenceType(state.event.type)} completed`,
-      message: String(summary),
-      type: 'info',
-      category: 'system',
-      notification_type: state.event.type,
-      priority: priorityMap[state.event.type] || 'medium',
-      triage_status: 'pending',
-      entity_type: entityType,
-      entity_id: entityId,
-      source_job_id: jobId,
-      metadata: {
-        job_id: jobId,
-        steps_completed: state.steps_completed,
-        outputs: state.outputs,
-      },
-    });
-
-    console.log(`[orchestrator] Enqueued to triage: ${state.event.type} for user ${state.event.user_id}`);
-  } catch (err) {
-    // Non-fatal: if triage enqueue fails, the existing Slack adapters already delivered
-    console.warn('[orchestrator] Triage enqueue failed (non-fatal):', err);
-  }
-}
-
-/** Format sequence type for human-readable titles */
-function formatSequenceType(type: string): string {
-  return type
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
 }

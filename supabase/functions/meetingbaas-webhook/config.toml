@@ -1,0 +1,3 @@
+# MeetingBaaS sends webhooks without a Supabase JWT.
+# The function validates requests via webhook token parameter.
+verify_jwt = false

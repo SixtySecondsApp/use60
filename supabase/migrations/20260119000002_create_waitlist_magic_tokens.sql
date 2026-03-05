@@ -23,14 +23,20 @@ CREATE INDEX idx_waitlist_magic_tokens_used ON public.waitlist_magic_tokens(used
 -- Allow service role to insert/update tokens
 ALTER TABLE public.waitlist_magic_tokens ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Service role can manage tokens" ON public.waitlist_magic_tokens
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage tokens" ON public.waitlist_magic_tokens
   AS PERMISSIVE FOR ALL
   USING (auth.role() = 'service_role')
   WITH CHECK (auth.role() = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Allow public to read unexpired tokens for validation
-CREATE POLICY "Anyone can read unexpired tokens" ON public.waitlist_magic_tokens
+DO $$ BEGIN
+  CREATE POLICY "Anyone can read unexpired tokens" ON public.waitlist_magic_tokens
   AS PERMISSIVE FOR SELECT
   USING (expires_at > now() AND used_at IS NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON TABLE public.waitlist_magic_tokens IS 'Stores custom magic tokens for waitlist signup flow. Tokens expire after 24 hours and can only be used once.';

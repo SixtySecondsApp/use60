@@ -25,7 +25,8 @@ const BENEFITS = [
 ];
 
 /** Extract domain from a URL string (e.g. "https://stripe.com/pricing" → "stripe.com"). */
-function extractDomain(url: string): string {
+function extractDomain(url: string | undefined): string {
+  if (!url) return '';
   try {
     const withProtocol = url.includes('://') ? url : `https://${url}`;
     return new URL(withProtocol).hostname.replace(/^www\./, '');

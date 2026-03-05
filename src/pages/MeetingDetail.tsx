@@ -16,6 +16,7 @@ import { useActivitiesActions } from '@/lib/hooks/useActivitiesActions';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import { toast } from 'sonner';
 import { ProposalWizard } from '@/components/proposals/ProposalWizard';
+import { ProposalQuickGenerate } from '@/components/proposals/ProposalQuickGenerate';
 import { TalkTimeChart } from '@/components/meetings/analytics/TalkTimeChart';
 import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsights';
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard';
@@ -24,6 +25,9 @@ import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetin
 import { useActivationTracking } from '@/lib/hooks/useActivationTracking';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 import { useCreditGatedAction } from '@/lib/hooks/useCreditGatedAction';
+import { InternalMeetingTypeBadge } from '@/components/meetings/InternalMeetingTypeBadge';
+import { PrepBriefCard } from '@/components/meetings/PrepBriefCard';
+import { useMeetingPrepBrief } from '@/lib/hooks/useMeetingPrepBrief';
 
 // Processing status type for real-time UI updates
 type ProcessingStatus = 'pending' | 'processing' | 'complete' | 'failed';
@@ -236,6 +240,9 @@ export function MeetingDetail() {
   const [voiceRecordingData, setVoiceRecordingData] = useState<VoiceRecordingData | null>(null);
   const [voiceCurrentTime, setVoiceCurrentTime] = useState(0);
   const [speakerAvatarMap, setSpeakerAvatarMap] = useState<Map<string, string>>(new Map());
+
+  // IMP-UI-002: Meeting prep brief (internal meetings)
+  const { data: prepBrief } = useMeetingPrepBrief(id ?? null);
 
   // Activation tracking for North Star metric
   const { trackFirstSummaryViewed } = useActivationTracking();
@@ -751,8 +758,8 @@ export function MeetingDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-w-0">
           {/* Left column: video + tabs */}
           <div className="lg:col-span-8 space-y-3 sm:space-y-4 min-w-0">
-            {/* Video player area — h-[320px] matches actual player */}
-            <Skeleton className="w-full h-[320px] rounded-2xl bg-gray-200/60 dark:bg-gray-700/40" />
+            {/* Video player area */}
+            <Skeleton className="w-full aspect-video rounded-2xl bg-gray-200/60 dark:bg-gray-700/40" />
 
             {/* Tab bar */}
             <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 sm:p-6 space-y-4">
@@ -858,9 +865,12 @@ export function MeetingDetail() {
         </div>
 
         <div className="flex flex-wrap gap-2 sm:flex-nowrap sm:flex-shrink-0">
-          {meeting.meeting_type && (
-            <Badge 
-              variant="outline" 
+          {/* IMP-UI-001: Internal meeting type badge */}
+          {prepBrief ? (
+            <InternalMeetingTypeBadge meetingType={prepBrief.meeting_type} isInternal />
+          ) : meeting.meeting_type && (
+            <Badge
+              variant="outline"
               className="capitalize bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-blue-200 dark:border-blue-500/20"
             >
               {meeting.meeting_type.replace('_', ' ')}
@@ -898,7 +908,7 @@ export function MeetingDetail() {
             </div>
           ) : meeting.source_type === '60_notetaker' && meeting.video_url ? (
             /* 60 Notetaker Video Player */
-            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }}>
+            <div className="glassmorphism-card overflow-hidden aspect-video">
               <video
                 controls
                 preload="metadata"
@@ -928,7 +938,7 @@ export function MeetingDetail() {
             </div>
           ) : (meeting.fathom_recording_id || meeting.share_url) ? (
             /* Fathom Video Player */
-            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }} data-player-container>
+            <div className="glassmorphism-card overflow-hidden aspect-video" data-player-container>
               <FathomPlayerV2
                 ref={playerRef}
                 shareUrl={meeting.share_url}
@@ -1081,6 +1091,13 @@ export function MeetingDetail() {
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('outbound')}>Add Outbound</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('proposal')}>Add Proposal</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('sale')}>Add Sale</Button>
+                    <ProposalQuickGenerate
+                      meetingId={meeting.id}
+                      contactId={meeting.primary_contact_id}
+                      hasRecording={!!meeting.fathom_recording_id}
+                      hasNotes={!!meeting.transcript_text}
+                      onCustomise={() => setShowProposalWizard(true)}
+                    />
                   </div>
 
                   {/* AI Structured Summary (classification, outcomes, objections, etc.) */}
@@ -1344,6 +1361,11 @@ export function MeetingDetail() {
 
         {/* Right Column - Sidebar */}
         <div className="lg:col-span-4 space-y-3 sm:space-y-4 min-w-0">
+          {/* IMP-UI-002: Prep brief card for internal meetings */}
+          {prepBrief && (
+            <PrepBriefCard brief={prepBrief} />
+          )}
+
           {/* Quick Actions */}
           {meeting && (
             <QuickActionsCard
@@ -1485,6 +1507,7 @@ export function MeetingDetail() {
           companyName={companyName || meeting.company?.name}
         />
       )}
+      {/* ProposalProgressOverlay is managed by ProposalQuickGenerate internally */}
       {/* Share Meeting Modal */}
       {meeting && (
         <ShareMeetingModal

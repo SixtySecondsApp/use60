@@ -22,7 +22,7 @@
  * }
  */
 
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.43.4'
 import { buildContentPrompt } from './prompts.ts'
 import { checkCreditBalance, logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts'
 

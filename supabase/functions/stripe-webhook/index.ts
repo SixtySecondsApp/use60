@@ -50,6 +50,26 @@ async function getOrgPlanFeatures(
   };
 }
 
+/**
+ * Look up the bundled_credits value from the org's current subscription plan.
+ * Returns 0 if no plan, no subscription, or plan has no bundled credits.
+ */
+async function getOrgBundledCredits(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<number> {
+  const { data } = await supabase
+    .from('organization_subscriptions')
+    .select('subscription_plans!inner(features)')
+    .eq('org_id', orgId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  const features = (data as any)?.subscription_plans?.features;
+  const credits = features?.bundled_credits;
+  return typeof credits === 'number' && credits > 0 ? credits : 0;
+}
+
 interface WebhookResult {
   success: boolean;
   event_id: string;
@@ -731,7 +751,7 @@ async function handleInvoicePaid(
     subscription_id: existingSub.id,
   });
 
-  // Handle Pro subscription credit refresh on renewal
+  // Handle subscription credit refresh on renewal (use-or-lose: expire old, grant fresh)
   const billingReason = (invoice as any).billing_reason;
   if (billingReason === 'subscription_cycle') {
     // This is a renewal invoice, not the first payment
@@ -747,7 +767,6 @@ async function handleInvoicePaid(
         .eq('stripe_subscription_id', renewalSubscriptionId)
         .maybeSingle();
 
-      const planSlug = (sub as any)?.subscription_plans?.slug;
       const bundledCredits = (sub as any)?.subscription_plans?.features?.bundled_credits;
 
       if (sub && bundledCredits > 0) {

@@ -436,7 +436,8 @@ export async function logAICostEvent(
   outputTokens: number,
   feature?: string,
   metadata?: Record<string, unknown>,
-  logContext?: CreditLogContext
+  logContext?: CreditLogContext,
+  sourceAgent?: string
 ): Promise<{ blocked?: boolean; reason?: string }> {
   try {
     // If no orgId provided, try to get it from user
@@ -447,7 +448,7 @@ export async function logAICostEvent(
         .eq('user_id', userId)
         .order('created_at', { ascending: true })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       orgId = membership?.org_id || null;
     }
@@ -499,6 +500,7 @@ export async function logAICostEvent(
         provider_cost_usd: providerCostUsd,
         credits_charged: creditCost,
         metadata: metadata || null,
+        source_agent: sourceAgent || null,
       })
       .select('id')
       .single();
@@ -569,7 +571,8 @@ export async function logFlatRateCostEvent(
   creditAmount: number,
   feature?: string,
   metadata?: Record<string, unknown>,
-  logContext?: CreditLogContext
+  logContext?: CreditLogContext,
+  sourceAgent?: string
 ): Promise<void> {
   try {
     // Log to ai_cost_events for usage analytics (estimated_cost = credit units)
@@ -587,6 +590,7 @@ export async function logFlatRateCostEvent(
         provider_cost_usd: null,
         credits_charged: creditAmount,
         metadata: metadata || null,
+        source_agent: sourceAgent || null,
       })
       .select('id')
       .single();

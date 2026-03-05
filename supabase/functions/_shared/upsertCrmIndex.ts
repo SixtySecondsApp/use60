@@ -2,7 +2,7 @@
 // Shared utility for upserting CRM webhook data into the CRM index tables
 // Called by hubspot-webhook and attio-webhook handlers for fast indexing
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
 export type CrmSource = 'hubspot' | 'attio';
 export type EntityType = 'contact' | 'company' | 'deal';

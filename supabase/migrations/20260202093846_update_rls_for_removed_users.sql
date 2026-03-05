@@ -7,7 +7,8 @@
 
 -- Drop and recreate policies for deals table
 DROP POLICY IF EXISTS "Users can view their organization's deals" ON public.deals;
-CREATE POLICY "Users can view their organization's deals"
+DO $$ BEGIN
+  CREATE POLICY "Users can view their organization's deals"
 ON public.deals
 FOR SELECT
 USING (
@@ -19,9 +20,12 @@ USING (
       AND organization_memberships.member_status IN ('active', 'removed')
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can update their organization's deals" ON public.deals;
-CREATE POLICY "Users can update their organization's deals"
+DO $$ BEGIN
+  CREATE POLICY "Users can update their organization's deals"
 ON public.deals
 FOR UPDATE
 USING (
@@ -41,9 +45,12 @@ WITH CHECK (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can delete their organization's deals" ON public.deals;
-CREATE POLICY "Users can delete their organization's deals"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete their organization's deals"
 ON public.deals
 FOR DELETE
 USING (
@@ -55,10 +62,13 @@ USING (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update policies for contacts table
 DROP POLICY IF EXISTS "Users can view their organization's contacts" ON public.contacts;
-CREATE POLICY "Users can view their organization's contacts"
+DO $$ BEGIN
+  CREATE POLICY "Users can view their organization's contacts"
 ON public.contacts
 FOR SELECT
 USING (
@@ -69,9 +79,12 @@ USING (
       AND organization_memberships.member_status IN ('active', 'removed')
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can update their organization's contacts" ON public.contacts;
-CREATE POLICY "Users can update their organization's contacts"
+DO $$ BEGIN
+  CREATE POLICY "Users can update their organization's contacts"
 ON public.contacts
 FOR UPDATE
 USING (
@@ -90,9 +103,12 @@ WITH CHECK (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can delete their organization's contacts" ON public.contacts;
-CREATE POLICY "Users can delete their organization's contacts"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete their organization's contacts"
 ON public.contacts
 FOR DELETE
 USING (
@@ -103,10 +119,13 @@ USING (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update policies for activities table
 DROP POLICY IF EXISTS "Users can view their organization's activities" ON public.activities;
-CREATE POLICY "Users can view their organization's activities"
+DO $$ BEGIN
+  CREATE POLICY "Users can view their organization's activities"
 ON public.activities
 FOR SELECT
 USING (
@@ -117,9 +136,12 @@ USING (
       AND organization_memberships.member_status IN ('active', 'removed')
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can update their organization's activities" ON public.activities;
-CREATE POLICY "Users can update their organization's activities"
+DO $$ BEGIN
+  CREATE POLICY "Users can update their organization's activities"
 ON public.activities
 FOR UPDATE
 USING (
@@ -138,9 +160,12 @@ WITH CHECK (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can delete their organization's activities" ON public.activities;
-CREATE POLICY "Users can delete their organization's activities"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete their organization's activities"
 ON public.activities
 FOR DELETE
 USING (
@@ -151,10 +176,13 @@ USING (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update policies for meetings table
 DROP POLICY IF EXISTS "Users can view their organization's meetings" ON public.meetings;
-CREATE POLICY "Users can view their organization's meetings"
+DO $$ BEGIN
+  CREATE POLICY "Users can view their organization's meetings"
 ON public.meetings
 FOR SELECT
 USING (
@@ -165,9 +193,12 @@ USING (
       AND organization_memberships.member_status IN ('active', 'removed')
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can update their organization's meetings" ON public.meetings;
-CREATE POLICY "Users can update their organization's meetings"
+DO $$ BEGIN
+  CREATE POLICY "Users can update their organization's meetings"
 ON public.meetings
 FOR UPDATE
 USING (
@@ -186,9 +217,12 @@ WITH CHECK (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can delete their organization's meetings" ON public.meetings;
-CREATE POLICY "Users can delete their organization's meetings"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete their organization's meetings"
 ON public.meetings
 FOR DELETE
 USING (
@@ -199,10 +233,13 @@ USING (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Update policies for tasks table
 DROP POLICY IF EXISTS "Users can view their organization's tasks" ON public.tasks;
-CREATE POLICY "Users can view their organization's tasks"
+DO $$ BEGIN
+  CREATE POLICY "Users can view their organization's tasks"
 ON public.tasks
 FOR SELECT
 USING (
@@ -213,9 +250,12 @@ USING (
       AND organization_memberships.member_status IN ('active', 'removed')
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can update their organization's tasks" ON public.tasks;
-CREATE POLICY "Users can update their organization's tasks"
+DO $$ BEGIN
+  CREATE POLICY "Users can update their organization's tasks"
 ON public.tasks
 FOR UPDATE
 USING (
@@ -234,9 +274,12 @@ WITH CHECK (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP POLICY IF EXISTS "Users can delete their organization's tasks" ON public.tasks;
-CREATE POLICY "Users can delete their organization's tasks"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete their organization's tasks"
 ON public.tasks
 FOR DELETE
 USING (
@@ -247,6 +290,8 @@ USING (
       AND organization_memberships.member_status = 'active'
   )
 );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add comments
 COMMENT ON POLICY "Users can view their organization's deals" ON public.deals IS 'Allows active and removed members to view deals';

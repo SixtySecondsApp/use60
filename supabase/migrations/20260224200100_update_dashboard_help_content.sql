@@ -4,7 +4,7 @@
 UPDATE docs_articles
 SET
   title = 'Dashboard Overview',
-  content = E'## What is the Dashboard?
+  content = $$## What is the Dashboard?
 
 Your command center for all sales activity. The dashboard surfaces KPI metrics, team performance, and trend analysis — all filterable by date range.
 
@@ -93,6 +93,6 @@ The checklist dismisses automatically once all steps are complete.
 :::note
 Dashboard data refreshes every 60 seconds. Pull-to-refresh or press **R** to force an immediate reload.
 :::
-',
+$$,
   updated_at = NOW()
 WHERE slug = 'customer-dashboard';

@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { AdapterRegistry } from './registry.ts';
 import type { ActionResult, AdapterContext, ExecuteActionName, InvokeSkillParams, CreateTaskParams } from './types.ts';
 
@@ -322,6 +322,7 @@ export async function executeAction(
         meeting_id: (params.meeting_id ?? params.meetingId) ? String(params.meeting_id ?? params.meetingId) : undefined,
         contactEmail: params.contactEmail ? String(params.contactEmail) : undefined,
         contactId: params.contactId ? String(params.contactId) : undefined,
+        deal_id: params.deal_id ? String(params.deal_id) : undefined,
         limit: params.limit ? Number(params.limit) : undefined,
       }));
 
@@ -330,6 +331,7 @@ export async function executeAction(
         contact_email: params.contact_email ? String(params.contact_email) : undefined,
         contact_id: params.contact_id ? String(params.contact_id) : undefined,
         contact_name: params.contact_name ? String(params.contact_name) : undefined,
+        deal_id: params.deal_id ? String(params.deal_id) : undefined,
         query: params.query ? String(params.query) : undefined,
         limit: params.limit ? Number(params.limit) : undefined,
       }));
@@ -408,6 +410,71 @@ export async function executeAction(
       // Build context from params (support both skill_context and context for backwards compatibility)
       const skillContext = (params.skill_context || params.context || {}) as Record<string, unknown>;
       const dryRun = params.dry_run === true || params.is_simulation === true;
+
+      // AUT-004 / TRG-003: Proposal V2 pipeline — invoke directly rather than via AI skill executor.
+      // Skills that declare `pipeline.entry_function` in frontmatter trigger a real edge function pipeline.
+      // Currently handled explicitly for generate-proposal-v2 to keep this path auditable.
+      if (skillKey === 'generate-proposal-v2' && !dryRun) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+        if (!supabaseUrl || !serviceKey) {
+          return { success: false, data: null, error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for pipeline invocation' };
+        }
+
+        const pipelineBody: Record<string, unknown> = {
+          proposal_id: skillContext.proposal_id ?? undefined,
+          deal_id: skillContext.deal_id ?? undefined,
+          meeting_id: skillContext.meeting_id ?? undefined,
+          contact_id: skillContext.contact_id ?? undefined,
+          trigger_type: skillContext.trigger_type ?? 'copilot',
+          user_id: userId,
+          org_id: orgId,
+        };
+
+        try {
+          const pipelineResp = await fetch(`${supabaseUrl}/functions/v1/proposal-pipeline-v2`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${serviceKey}`,
+            },
+            body: JSON.stringify(pipelineBody),
+          });
+
+          const pipelineData = pipelineResp.ok
+            ? await pipelineResp.json().catch(() => ({}))
+            : { error: await pipelineResp.text().catch(() => `HTTP ${pipelineResp.status}`) };
+
+          if (!pipelineResp.ok) {
+            return {
+              success: false,
+              data: pipelineData,
+              error: `proposal-pipeline-v2 failed: ${pipelineData.error || pipelineResp.status}`,
+              source: 'run_skill',
+            };
+          }
+
+          return {
+            success: true,
+            data: {
+              proposal_id: pipelineData.proposal_id,
+              generation_status: pipelineData.generation_status,
+              pdf_url: pipelineData.pdf_url,
+              pipeline_version: 'v2',
+              skill_key: skillKey,
+            },
+            source: 'run_skill',
+          };
+        } catch (pipelineErr) {
+          return {
+            success: false,
+            data: null,
+            error: `Failed to invoke proposal-pipeline-v2: ${pipelineErr instanceof Error ? pipelineErr.message : String(pipelineErr)}`,
+            source: 'run_skill',
+          };
+        }
+      }
 
       // Prefer org-enabled compiled skill docs; fallback to prompt runtime if not enabled (handled internally)
       const { executeAgentSkillWithContract } = await import('../agentSkillExecutor.ts');
@@ -2158,12 +2225,25 @@ export async function executeAction(
         return { success: false, data: null, error: 'query is required for search_meeting_context' };
       }
 
-      // Build enriched question from optional name/company context
+      // Build enriched question from optional name/company/deal context
       const contextPrefix = [
         params.contactName ? `Contact: ${String(params.contactName)}` : '',
         params.companyName ? `Company: ${String(params.companyName)}` : '',
       ].filter(Boolean).join(', ');
       const enrichedQuery = contextPrefix ? `${contextPrefix}. ${query}` : query;
+
+      // When deal_id is provided, pre-fetch meeting IDs for this deal to scope RAG search
+      let dealMeetingIds: string[] | undefined;
+      if (params.deal_id) {
+        const { data: dealMeetings } = await client
+          .from('meetings')
+          .select('id')
+          .eq('deal_id', String(params.deal_id))
+          .limit(50);
+        if (dealMeetings && dealMeetings.length > 0) {
+          dealMeetingIds = dealMeetings.map((m: { id: string }) => m.id);
+        }
+      }
 
       const meetingAnalyticsBaseUrl =
         Deno.env.get('MEETING_ANALYTICS_BASE_URL') ||
@@ -2171,6 +2251,16 @@ export async function executeAction(
       const authToken = options?.userAuthToken || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
       try {
+        const askBody: Record<string, unknown> = {
+          question: enrichedQuery,
+          maxMeetings: params.maxResults ? Number(params.maxResults) : 5,
+          includeDemo: false,
+        };
+        // Pass meeting IDs to scope RAG to only this deal's transcripts
+        if (dealMeetingIds) {
+          askBody.meetingIds = dealMeetingIds;
+        }
+
         const resp = await fetch(`${meetingAnalyticsBaseUrl}/api/search/ask`, {
           method: 'POST',
           headers: {
@@ -2178,11 +2268,7 @@ export async function executeAction(
             'Authorization': `Bearer ${authToken}`,
             'apikey': Deno.env.get('SUPABASE_ANON_KEY') || '',
           },
-          body: JSON.stringify({
-            question: enrichedQuery,
-            maxMeetings: params.maxResults ? Number(params.maxResults) : 5,
-            includeDemo: false,
-          }),
+          body: JSON.stringify(askBody),
         });
 
         if (!resp.ok) {

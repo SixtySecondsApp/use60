@@ -99,7 +99,8 @@ ALTER TABLE public.dynamic_table_rows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dynamic_table_cells ENABLE ROW LEVEL SECURITY;
 
 -- Rows: Inherit access from parent table
-CREATE POLICY "Users can view rows of accessible tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can view rows of accessible tables"
   ON public.dynamic_table_rows
   FOR SELECT
   USING (
@@ -111,8 +112,11 @@ CREATE POLICY "Users can view rows of accessible tables"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can manage rows of own tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can manage rows of own tables"
   ON public.dynamic_table_rows
   FOR ALL
   USING (
@@ -121,9 +125,12 @@ CREATE POLICY "Users can manage rows of own tables"
       WHERE created_by = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Cells: Inherit access from parent row → parent table
-CREATE POLICY "Users can view cells of accessible tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can view cells of accessible tables"
   ON public.dynamic_table_cells
   FOR SELECT
   USING (
@@ -136,8 +143,11 @@ CREATE POLICY "Users can view cells of accessible tables"
       )
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can manage cells of own tables"
+DO $$ BEGIN
+  CREATE POLICY "Users can manage cells of own tables"
   ON public.dynamic_table_cells
   FOR ALL
   USING (
@@ -147,6 +157,8 @@ CREATE POLICY "Users can manage cells of own tables"
       WHERE t.created_by = auth.uid()
     )
   );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role policies
 DO $$

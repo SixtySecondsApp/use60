@@ -53,6 +53,7 @@ import { TaskDeliverableResponse } from './responses/TaskDeliverableResponse';
 import type { TaskDeliverableResponseData } from './responses/TaskDeliverableResponse';
 import MeetingContextResponse from './responses/MeetingContextResponse';
 import MeetingIntelligenceResponse from './responses/MeetingIntelligenceResponse';
+import { ApprovalGate as LandingPageGate } from '@/components/landing-builder/ApprovalGate';
 import { MeetingCountResponse } from './responses/MeetingCountResponse';
 import { MeetingBriefingResponse } from './responses/MeetingBriefingResponse';
 import { MeetingListResponse } from './responses/MeetingListResponse';
@@ -65,6 +66,7 @@ import { OpsTableListResponse } from './responses/OpsTableListResponse';
 import type { OpsTableListResponseData } from './responses/OpsTableListResponse';
 import { OpsEnrichmentStatusResponse } from './responses/OpsEnrichmentStatusResponse';
 import type { OpsEnrichmentStatusResponseData } from './responses/OpsEnrichmentStatusResponse';
+import { ProposalPanel } from './responses/ProposalPanel';
 import type {
   CopilotResponse as CopilotResponseType,
   PipelineResponse as PipelineResponseType,
@@ -109,6 +111,7 @@ import type {
   DealSlippageGuardrailsResponse as DealSlippageGuardrailsResponseType,
   DailyBriefResponse as DailyBriefResponseType,
   PipelineOutreachResponse as PipelineOutreachResponseType,
+  ProposalPanelResponse as ProposalPanelResponseType,
   MeetingCountResponseData,
   MeetingBriefingResponseData,
   MeetingListResponseData,
@@ -314,6 +317,12 @@ export const CopilotResponse: React.FC<CopilotResponseProps> = ({ response, onAc
 
     case 'meeting_intelligence':
       return <MeetingIntelligenceResponse data={response as any} onActionClick={onActionClick} />;
+
+    case 'landing_page_gate':
+      return <LandingPageGate data={(response as any).data} onActionClick={onActionClick} />;
+
+    case 'proposal_panel':
+      return <ProposalPanel data={response as ProposalPanelResponseType} onActionClick={onActionClick} />;
 
     default:
       // Fallback to text response if type is unknown

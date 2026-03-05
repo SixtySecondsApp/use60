@@ -1,12 +1,15 @@
 /**
- * RAGClient — server-to-server wrapper for meeting-intelligence-search.
+ * RAGClient — server-to-server wrapper for meeting-analytics /api/search/ask.
  *
- * Wraps the existing edge function for use inside other edge functions that
- * need to pull deal memory / meeting context into their prompts. Callers are
- * responsible for credit tracking; this module does not touch costTracking.ts.
+ * Wraps the meeting-analytics edge function's "Ask Anything" RAG endpoint
+ * (vector search + GPT-4o-mini) for use inside other edge functions that
+ * need to pull deal memory / meeting context into their prompts.
+ *
+ * Callers are responsible for credit tracking; this module does not touch
+ * costTracking.ts.
  *
  * Features:
- *   - In-memory result cache (cache key: question + filters)
+ *   - In-memory result cache (cache key: question + orgId)
  *   - Circuit breaker: 3 consecutive failures → 60 s cooldown, then half-open retry
  *   - Token budget helpers for prompt assembly
  */
@@ -15,16 +18,40 @@ import type { RAGResult, RAGFilters } from './types.ts';
 
 // ---- Internal types --------------------------------------------------------
 
-interface SearchRequestFilters {
-  contact_id?: string;
-  date_from?: string;
-  date_to?: string;
-  owner_user_id?: string | null;
+/** Body sent to meeting-analytics /api/search/ask */
+interface AskRequestBody {
+  question: string;
+  maxMeetings?: number;
+  includeDemo?: boolean;
 }
 
-interface SearchRequestBody {
-  query: string;
-  filters?: SearchRequestFilters;
+/** Raw response shape from meeting-analytics /api/search/ask */
+interface AskApiResponse {
+  success?: boolean;
+  data?: AskResponseData;
+  // When not wrapped in { success, data }:
+  answer?: string;
+  sources?: AskSource[];
+  segmentsSearched?: number;
+  meetingsAnalyzed?: number;
+  totalMeetings?: number;
+}
+
+interface AskResponseData {
+  answer: string;
+  sources: AskSource[];
+  segmentsSearched: number;
+  meetingsAnalyzed: number;
+  totalMeetings: number;
+}
+
+interface AskSource {
+  transcriptId: string;
+  transcriptTitle: string;
+  text: string;
+  similarity: number;
+  date?: string | null;
+  sentiment?: string | null;
 }
 
 // ---- Constants -------------------------------------------------------------
@@ -37,13 +64,15 @@ const CIRCUIT_COOLDOWN_MS = 60_000; // 60 seconds
 export class RAGClient {
   private baseUrl: string;
   private serviceRoleKey: string;
+  private orgId: string;
   private cache: Map<string, RAGResult>;
   private failureCount: number;
   private circuitOpenUntil: number; // epoch ms — 0 means closed
 
-  constructor(baseUrl: string, serviceRoleKey: string) {
+  constructor(baseUrl: string, serviceRoleKey: string, orgId: string) {
     this.baseUrl = baseUrl.replace(/\/$/, ''); // strip trailing slash
     this.serviceRoleKey = serviceRoleKey;
+    this.orgId = orgId;
     this.cache = new Map();
     this.failureCount = 0;
     this.circuitOpenUntil = 0;
@@ -52,13 +81,15 @@ export class RAGClient {
   // ---- Public API ----------------------------------------------------------
 
   /**
-   * Query the meeting-intelligence-search edge function.
+   * Query the meeting-analytics /api/search/ask endpoint (vector search + GPT-4o-mini).
    *
    * Respects circuit breaker and caches successful responses for the lifetime
    * of this instance (i.e. for the duration of a single edge function invocation).
    *
    * @param params.question   Natural-language question to answer from meetings.
-   * @param params.filters    Optional scope filters (contact, date range, owner).
+   * @param params.filters    Optional scope filters — note: meeting-analytics ask
+   *                          endpoint doesn't support contact_id/owner_user_id filters
+   *                          directly; the orgId scopes all queries.
    * @param params.maxTokens  Soft token budget — not enforced here; callers should
    *                          use truncateToTokenBudget() after receiving results.
    */
@@ -77,38 +108,20 @@ export class RAGClient {
     }
 
     // 2. Cache lookup
-    const cacheKey = JSON.stringify({ question: params.question, filters: params.filters });
+    const cacheKey = JSON.stringify({ question: params.question, orgId: this.orgId });
     const cached = this.cache.get(cacheKey);
     if (cached) {
       return cached;
     }
 
-    // 3. Map RAGFilters → SearchRequestFilters
-    //    deal_id has no direct equivalent in the search API — skip it.
-    //    meeting_id is also not a supported filter — skip it.
-    const mappedFilters: SearchRequestFilters = {};
-
-    if (params.filters?.contact_id !== undefined) {
-      mappedFilters.contact_id = params.filters.contact_id;
-    }
-    if (params.filters?.date_from !== undefined) {
-      mappedFilters.date_from = params.filters.date_from;
-    }
-    if (params.filters?.date_to !== undefined) {
-      mappedFilters.date_to = params.filters.date_to;
-    }
-    // owner_user_id: null is meaningful ("all team") so we must preserve it
-    if ('owner_user_id' in (params.filters ?? {})) {
-      mappedFilters.owner_user_id = params.filters!.owner_user_id;
-    }
-
-    const body: SearchRequestBody = {
-      query: params.question,
-      filters: Object.keys(mappedFilters).length > 0 ? mappedFilters : undefined,
+    // 3. Build request body for meeting-analytics /api/search/ask
+    const body: AskRequestBody = {
+      question: params.question,
+      maxMeetings: 20,
     };
 
     // 4. Call the edge function server-to-server
-    const url = `${this.baseUrl}/functions/v1/meeting-intelligence-search`;
+    const url = `${this.baseUrl}/functions/v1/meeting-analytics/api/search/ask`;
 
     try {
       const response = await fetch(url, {
@@ -117,6 +130,7 @@ export class RAGClient {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.serviceRoleKey}`,
           'apikey': this.serviceRoleKey,
+          'X-Org-Id': this.orgId,
         },
         body: JSON.stringify(body),
       });
@@ -124,19 +138,52 @@ export class RAGClient {
       if (!response.ok) {
         const errorText = await response.text().catch(() => '(unreadable body)');
         throw new Error(
-          `meeting-intelligence-search returned ${response.status}: ${errorText}`,
+          `meeting-analytics ask returned ${response.status}: ${errorText}`,
         );
       }
 
-      const data = await response.json() as RAGResult;
+      const raw = await response.json() as AskApiResponse;
 
-      // 5. Cache and reset failure count
-      this.cache.set(cacheKey, data);
+      // Unwrap { success, data } wrapper if present
+      const askData: AskResponseData = raw.success === true && raw.data
+        ? raw.data
+        : {
+            answer: raw.answer ?? '',
+            sources: raw.sources ?? [],
+            segmentsSearched: raw.segmentsSearched ?? 0,
+            meetingsAnalyzed: raw.meetingsAnalyzed ?? 0,
+            totalMeetings: raw.totalMeetings ?? 0,
+          };
+
+      // 5. Map to RAGResult format expected by callers
+      const result: RAGResult = {
+        answer: askData.answer,
+        sources: askData.sources.map((s) => ({
+          source_type: 'meeting' as const,
+          source_id: s.transcriptId,
+          title: s.transcriptTitle,
+          date: s.date ?? '',
+          company_name: null,
+          owner_name: null,
+          relevance_snippet: s.text,
+          sentiment_score: null,
+          speaker_name: null,
+        })),
+        query_metadata: {
+          semantic_query: params.question,
+          filters_applied: { org_id: this.orgId },
+          meetings_searched: askData.meetingsAnalyzed,
+          response_time_ms: 0, // Not provided by the ask endpoint
+        },
+      };
+
+      // 6. Cache and reset failure count
+      this.cache.set(cacheKey, result);
       this.onSuccess();
 
-      return data;
+      return result;
     } catch (err) {
-      // 6. Record failure, potentially open circuit
+      // 7. Record failure, potentially open circuit
       this.onFailure(err instanceof Error ? err.message : String(err));
       return this.emptyResult();
     }
@@ -231,7 +278,7 @@ export class RAGClient {
   private onFailure(message: string): void {
     this.failureCount += 1;
     console.error(
-      `[RAGClient] meeting-intelligence-search error (failure ${this.failureCount}/${CIRCUIT_FAILURE_THRESHOLD}): ${message}`,
+      `[RAGClient] meeting-analytics ask error (failure ${this.failureCount}/${CIRCUIT_FAILURE_THRESHOLD}): ${message}`,
     );
 
     if (this.failureCount >= CIRCUIT_FAILURE_THRESHOLD) {
@@ -247,9 +294,10 @@ export class RAGClient {
 
 /**
  * Create a RAGClient from Deno environment variables.
+ * Requires orgId to scope queries to the correct organization.
  * Throws if required env vars are absent (fail fast at function startup).
  */
-export function createRAGClient(): RAGClient {
+export function createRAGClient(orgId: string): RAGClient {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -259,5 +307,5 @@ export function createRAGClient(): RAGClient {
     );
   }
 
-  return new RAGClient(supabaseUrl, serviceRoleKey);
+  return new RAGClient(supabaseUrl, serviceRoleKey, orgId);
 }

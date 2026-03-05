@@ -1,0 +1,1981 @@
+{
+  "feature": "feature-audit",
+  "name": "Full Feature Audit \u2014 Release Readiness",
+  "description": "Deep code review + staging API testing of all 86 features. Checking security, bugs, scalability, and identifying improvements to produce a release-readiness roadmap.",
+  "createdAt": "2026-03-01T12:00:00Z",
+  "aiDevHubProjectId": "6b8619f9-39a6-408e-98da-28897befd5ca",
+  "consultReport": ".claude/plans/mutable-greeting-tulip.md",
+  "auditChecklist": {
+    "security": [
+      "RLS policies",
+      "Auth pattern",
+      "Input validation",
+      "No select(*)",
+      "No VITE_ secrets"
+    ],
+    "reliability": [
+      "Error handling",
+      "Toast feedback",
+      "Graceful degradation",
+      "Rate limiting"
+    ],
+    "infrastructure": [
+      "CORS getCorsHeaders()",
+      "Pinned @supabase/supabase-js@2.43.4",
+      "Credit tracking"
+    ],
+    "scalability": [
+      "Batch operations",
+      "No N+1 queries",
+      "Pagination"
+    ],
+    "ux": [
+      "Loading states",
+      "Empty states",
+      "Error states"
+    ],
+    "codeQuality": [
+      "TypeScript types",
+      "maybeSingle() vs single()",
+      "Consistent patterns"
+    ]
+  },
+  "severityLevels": {
+    "P0": "Security vulnerability, data leak, auth bypass \u2014 must fix before release",
+    "P1": "Broken functionality, missing error handling, data integrity risk",
+    "P2": "Performance issue, inconsistent patterns, missing validation",
+    "P3": "Code quality, naming, minor UX improvements",
+    "P4": "Feature improvement suggestions, nice-to-haves"
+  },
+  "stories": [
+    {
+      "id": "AUDIT-001",
+      "title": "Audit: AI Pre-Meeting Briefing",
+      "feature": "before-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "before",
+      "featureId": "pre-meeting-briefing",
+      "edgeFunctions": [
+        "proactive-meeting-prep",
+        "demo-prep-briefing",
+        "slack-meeting-prep"
+      ],
+      "sharedModules": [
+        "_shared/meeting-prep/attendeeResearcher.ts",
+        "_shared/meeting-prep/briefingComposer.ts",
+        "_shared/meeting-prep/historyDetector.ts"
+      ],
+      "frontendFiles": [
+        "src/components/meetings/MeetingDetail.tsx",
+        "src/components/copilot/responses/MeetingPrepResponse.tsx",
+        "src/components/copilot/responses/MeetingBriefingResponse.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useUnifiedMeetings.ts"
+      ],
+      "acceptance": [
+        "Auth pattern verified",
+        "RLS policies checked",
+        "CORS uses getCorsHeaders",
+        "Staging API responds",
+        "No select(*)"
+      ]
+    },
+    {
+      "id": "AUDIT-002",
+      "title": "Audit: AI Company Research",
+      "feature": "before-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "before",
+      "featureId": "company-research",
+      "edgeFunctions": [
+        "demo-prep-briefing"
+      ],
+      "sharedModules": [
+        "_shared/exaSearch.ts",
+        "_shared/geminiSearch.ts"
+      ],
+      "frontendFiles": [
+        "src/components/copilot/responses/CompanyResearchResponse.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Auth pattern verified",
+        "API key not exposed in frontend",
+        "Rate limiting present",
+        "Staging API responds"
+      ]
+    },
+    {
+      "id": "AUDIT-003",
+      "title": "Audit: Shareable Fact Profiles",
+      "feature": "before-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "before",
+      "featureId": "fact-profiles",
+      "edgeFunctions": [],
+      "frontendFiles": [
+        "src/components/copilot/responses/FactProfileResponse.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Feature exists and renders",
+        "Data persists correctly",
+        "Sharing works cross-org"
+      ]
+    },
+    {
+      "id": "AUDIT-004",
+      "title": "Audit: Product Profile Builder",
+      "feature": "before-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "before",
+      "featureId": "product-profiles",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Feature exists and renders",
+        "CRUD operations work",
+        "RLS policies present"
+      ]
+    },
+    {
+      "id": "AUDIT-005",
+      "title": "Audit: ICP Builder & Scoring",
+      "feature": "before-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "before",
+      "featureId": "icp-builder",
+      "edgeFunctions": [],
+      "frontendFiles": [
+        "src/components/prospecting/ICPProfileForm.tsx",
+        "src/components/prospecting/ICPProfileGrid.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useICPProfiles.ts",
+        "src/lib/hooks/useICPProfilesCRUD.ts"
+      ],
+      "acceptance": [
+        "CRUD operations verified",
+        "Scoring logic correct",
+        "RLS policies present"
+      ]
+    },
+    {
+      "id": "AUDIT-006",
+      "title": "Audit: Meeting Prep Command Centre",
+      "feature": "before-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "before",
+      "featureId": "meeting-prep-command",
+      "edgeFunctions": [
+        "proactive-meeting-prep"
+      ],
+      "frontendFiles": [
+        "src/components/copilot/responses/NextMeetingCommandCenterResponse.tsx",
+        "src/components/meetings/MeetingWorkflowChecklist.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Cron trigger works",
+        "Slack notification fires",
+        "Auth verified",
+        "CORS correct"
+      ]
+    },
+    {
+      "id": "AUDIT-007",
+      "title": "Audit: AI Calendar Scheduling",
+      "feature": "before-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "before",
+      "featureId": "calendar-scheduling",
+      "edgeFunctions": [
+        "meetingbaas-connect-calendar"
+      ],
+      "frontendFiles": [
+        "src/components/copilot/responses/CalendarResponse.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useMeetingBaaSCalendar.ts"
+      ],
+      "acceptance": [
+        "Calendar sync works",
+        "Auth pattern correct",
+        "Webhook handling secure"
+      ]
+    },
+    {
+      "id": "AUDIT-008",
+      "title": "Audit: Smart Listening & Account Signals",
+      "feature": "before-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 3,
+      "cat": "before",
+      "featureId": "smart-listening",
+      "edgeFunctions": [],
+      "frontendFiles": [
+        "src/components/ops/AccountSignalTimeline.tsx",
+        "src/components/ops/WatchlistPanel.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Feature exists",
+        "Signal data populates",
+        "No stale data issues"
+      ]
+    },
+    {
+      "id": "AUDIT-009",
+      "title": "Audit: 60 Notetaker (Auto-Record)",
+      "feature": "during-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "during",
+      "featureId": "notetaker",
+      "edgeFunctions": [
+        "meetingbaas-webhook",
+        "deploy-recording-bot",
+        "stop-recording-bot",
+        "meetingbaas-enable-bot-scheduling"
+      ],
+      "frontendFiles": [
+        "src/pages/RecordingsPage.tsx",
+        "src/pages/RecordingDetail.tsx",
+        "src/components/recordings/JoinMeetingModal.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useNotetakerIntegration.ts",
+        "src/lib/hooks/useRecordingSetupStatus.ts"
+      ],
+      "acceptance": [
+        "Webhook auth verified",
+        "Bot deploy/stop works",
+        "Calendar auto-join works",
+        "Recording data stored securely"
+      ]
+    },
+    {
+      "id": "AUDIT-010",
+      "title": "Audit: Voice Recorder & Notes",
+      "feature": "during-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "during",
+      "featureId": "voice-recorder",
+      "edgeFunctions": [
+        "voice-upload",
+        "upload-recording-to-s3",
+        "get-recording-url"
+      ],
+      "frontendFiles": [
+        "src/components/meetings/VoiceMeetingPlayer.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useVoiceRecordings.ts"
+      ],
+      "acceptance": [
+        "Upload auth verified",
+        "S3 signed URLs expire",
+        "No public bucket access",
+        "Playback works"
+      ]
+    },
+    {
+      "id": "AUDIT-011",
+      "title": "Audit: Multi-Notetaker Aggregation (Fathom)",
+      "feature": "during-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "during",
+      "featureId": "fathom-integration",
+      "edgeFunctions": [
+        "fathom-sync",
+        "fathom-webhook",
+        "fathom-oauth-callback",
+        "fathom-transcript-retry"
+      ],
+      "frontendFiles": [
+        "src/components/integrations/FathomConfigModal.tsx",
+        "src/components/FathomPlayerV2.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "OAuth flow secure",
+        "Webhook validates signature",
+        "Transcript sync works",
+        "Retry logic correct"
+      ]
+    },
+    {
+      "id": "AUDIT-012",
+      "title": "Audit: Call Recording & Transcription",
+      "feature": "during-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "during",
+      "featureId": "call-recording",
+      "edgeFunctions": [
+        "process-recording",
+        "poll-gladia-jobs",
+        "process-gladia-webhook",
+        "backfill-notetaker-transcripts"
+      ],
+      "sharedModules": [
+        "_shared/recordingCompleteSync.ts",
+        "_shared/fathomTranscript.ts"
+      ],
+      "frontendFiles": [],
+      "hooks": [
+        "src/lib/hooks/useRecordings.ts"
+      ],
+      "acceptance": [
+        "Recording processing pipeline complete",
+        "Gladia webhook auth",
+        "Transcript storage RLS",
+        "No data leaks between orgs"
+      ]
+    },
+    {
+      "id": "AUDIT-013",
+      "title": "Audit: AI Post-Meeting Debrief",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "after",
+      "featureId": "post-meeting-debrief",
+      "edgeFunctions": [
+        "meeting-process-structured-summary",
+        "condense-meeting-summary",
+        "slack-post-meeting"
+      ],
+      "frontendFiles": [
+        "src/components/meetings/StructuredMeetingSummary.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Summary generation works",
+        "Slack posting authenticated",
+        "AI cost tracked",
+        "Credit deduction correct"
+      ]
+    },
+    {
+      "id": "AUDIT-014",
+      "title": "Audit: HITL Follow-Up Email (Send as Rep)",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "after",
+      "featureId": "hitl-email",
+      "edgeFunctions": [
+        "generate-follow-up",
+        "hitl-send-followup-email",
+        "email-send-as-rep",
+        "send-scheduled-emails"
+      ],
+      "sharedModules": [
+        "_shared/follow-up/composer.ts",
+        "_shared/follow-up/ragQueries.ts"
+      ],
+      "frontendFiles": [
+        "src/components/copilot/responses/EmailResponse.tsx",
+        "src/components/copilot/EmailActionModal.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Email send requires HITL approval",
+        "No send without user consent",
+        "Email-send-as-rep auth verified",
+        "send-scheduled-emails has auth",
+        "CORS correct"
+      ]
+    },
+    {
+      "id": "AUDIT-015",
+      "title": "Audit: Smart Action Item Extraction",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "after",
+      "featureId": "action-items",
+      "edgeFunctions": [
+        "extract-action-items",
+        "extract-call-action-items",
+        "create-task-from-action-item"
+      ],
+      "frontendFiles": [
+        "src/components/meetings/ActionItemsList.tsx",
+        "src/components/copilot/ActionItemCard.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useMeetingActionItems.ts"
+      ],
+      "acceptance": [
+        "Extraction works on real transcripts",
+        "Task creation flows to correct user",
+        "RLS on action items"
+      ]
+    },
+    {
+      "id": "AUDIT-016",
+      "title": "Audit: Ask AI About Any Meeting",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "after",
+      "featureId": "meeting-ask-ai",
+      "edgeFunctions": [
+        "ask-meeting-ai"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Auth verified",
+        "User can only query own meetings",
+        "Credit tracking",
+        "Input sanitized"
+      ]
+    },
+    {
+      "id": "AUDIT-017",
+      "title": "Audit: AI Coaching & Talk Analytics",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 3,
+      "cat": "after",
+      "featureId": "coaching-insights",
+      "edgeFunctions": [
+        "meeting-generate-scorecard"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Scorecard generation works",
+        "Auth verified",
+        "Credit tracking"
+      ]
+    },
+    {
+      "id": "AUDIT-018",
+      "title": "Audit: AI Proposal Generator",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "after",
+      "featureId": "proposal-gen",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Feature exists",
+        "Generation works",
+        "Output formatted correctly"
+      ]
+    },
+    {
+      "id": "AUDIT-019",
+      "title": "Audit: Buyer Intent Detection",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "after",
+      "featureId": "intent-detection",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Detection logic correct",
+        "Signals surface in UI",
+        "Auth verified"
+      ]
+    },
+    {
+      "id": "AUDIT-020",
+      "title": "Audit: Autonomous CRM Updates",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "after",
+      "featureId": "crm-writeback",
+      "edgeFunctions": [
+        "sync-recording-to-crm"
+      ],
+      "sharedModules": [
+        "_shared/copilot_adapters/hubspotAdapters.ts",
+        "_shared/copilot_adapters/attioAdapters.ts"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "CRM write requires approval gate",
+        "No silent data mutation",
+        "Auth on CRM adapters",
+        "Error handling for failed writes"
+      ]
+    },
+    {
+      "id": "AUDIT-021",
+      "title": "Audit: Meeting Sharing & Content Library",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 3,
+      "cat": "after",
+      "featureId": "meeting-share",
+      "edgeFunctions": [
+        "send-recording-notification"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Sharing respects org boundaries",
+        "No cross-org data leak",
+        "Signed URLs expire"
+      ]
+    },
+    {
+      "id": "AUDIT-022",
+      "title": "Audit: Workflow Notifications",
+      "feature": "after-the-call",
+      "type": "audit",
+      "status": "complete",
+      "priority": 3,
+      "cat": "after",
+      "featureId": "workflow-notifications",
+      "edgeFunctions": [
+        "meeting-workflow-notifications"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Notification auth verified",
+        "No spam / rate limited"
+      ]
+    },
+    {
+      "id": "AUDIT-023",
+      "title": "Audit: Visual Pipeline (Kanban + Table)",
+      "feature": "pipeline-deals",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "pipeline",
+      "featureId": "pipeline-kanban",
+      "edgeFunctions": [
+        "deals",
+        "stages",
+        "pipeline-tables",
+        "create-deal-stages"
+      ],
+      "frontendFiles": [
+        "src/components/Pipeline/PipelineView.tsx",
+        "src/components/Pipeline/PipelineKanban.tsx",
+        "src/components/Pipeline/PipelineTable.tsx",
+        "src/components/Pipeline/DealCard.tsx",
+        "src/components/Pipeline/DealForm.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useDeals.ts",
+        "src/lib/hooks/Pipeline/usePipelineData.ts",
+        "src/lib/hooks/Pipeline/usePipelineFilters.ts"
+      ],
+      "acceptance": [
+        "CRUD operations work",
+        "Drag-and-drop updates stage",
+        "RLS on deals table",
+        "Deals scoped to org",
+        "Column ownership correct (owner_id)"
+      ]
+    },
+    {
+      "id": "AUDIT-024",
+      "title": "Audit: AI Deal Health Scoring",
+      "feature": "pipeline-deals",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "pipeline",
+      "featureId": "deal-health",
+      "edgeFunctions": [
+        "calculate-deal-health",
+        "agent-deal-temperature"
+      ],
+      "frontendFiles": [
+        "src/components/Pipeline/DealHealthSignals.tsx",
+        "src/components/DealHealthBadge.tsx",
+        "src/components/DealHealthDashboard.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useDealHealth.ts"
+      ],
+      "acceptance": [
+        "Health calculation works",
+        "Score updates after meetings",
+        "Auth verified",
+        "Credit tracking"
+      ]
+    },
+    {
+      "id": "AUDIT-025",
+      "title": "Audit: Proactive Deal Risk Scanner",
+      "feature": "pipeline-deals",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "pipeline",
+      "featureId": "deal-risk-scanner",
+      "edgeFunctions": [
+        "deal-analyze-risk-signals",
+        "agent-deal-risk-batch",
+        "proactive-pipeline-analysis",
+        "slack-deal-risk-alert"
+      ],
+      "frontendFiles": [
+        "src/components/Pipeline/DealRiskFactors.tsx",
+        "src/components/deals/DealRiskPanel.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useDealRiskSignals.ts"
+      ],
+      "acceptance": [
+        "Risk signals generate correctly",
+        "Batch analysis doesn't timeout",
+        "Slack alerts fire",
+        "Auth on all endpoints"
+      ]
+    },
+    {
+      "id": "AUDIT-026",
+      "title": "Audit: Stale Deal Revival",
+      "feature": "pipeline-deals",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "pipeline",
+      "featureId": "stale-deal-revival",
+      "edgeFunctions": [
+        "slack-stale-deals"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Stale detection logic correct",
+        "Slack digest fires on schedule",
+        "Re-engagement email drafts work"
+      ]
+    },
+    {
+      "id": "AUDIT-027",
+      "title": "Audit: Deal Intelligence Panel",
+      "feature": "pipeline-deals",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "pipeline",
+      "featureId": "deal-intelligence",
+      "edgeFunctions": [
+        "update-deal-dossier",
+        "heal-deal-links",
+        "deal-activities"
+      ],
+      "frontendFiles": [
+        "src/components/Pipeline/DealIntelligenceSheet.tsx",
+        "src/components/copilot/responses/DealIntelligenceResponse.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/Pipeline/useDealCopilotChat.ts"
+      ],
+      "acceptance": [
+        "Dossier loads correctly",
+        "Deal links heal properly",
+        "Activity log complete",
+        "RLS on deal_dossiers"
+      ]
+    },
+    {
+      "id": "AUDIT-028",
+      "title": "Audit: Configurable Sales Methodology",
+      "feature": "pipeline-deals",
+      "type": "audit",
+      "status": "complete",
+      "priority": 3,
+      "cat": "pipeline",
+      "featureId": "sales-methodology",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [
+        "src/lib/hooks/useDealStages.ts"
+      ],
+      "acceptance": [
+        "Methodology config persists",
+        "Stage definitions customizable",
+        "RLS on config"
+      ]
+    },
+    {
+      "id": "AUDIT-029",
+      "title": "Audit: Slack Deal Rooms",
+      "feature": "pipeline-deals",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "pipeline",
+      "featureId": "deal-rooms",
+      "edgeFunctions": [
+        "slack-deal-room",
+        "slack-deal-momentum"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Room creation works",
+        "Momentum updates post correctly",
+        "Auth on Slack API calls"
+      ]
+    },
+    {
+      "id": "AUDIT-030",
+      "title": "Audit: Sales Dashboard & KPIs",
+      "feature": "pipeline-deals",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "pipeline",
+      "featureId": "dashboard-kpi",
+      "edgeFunctions": [
+        "agent-pipeline-snapshot",
+        "agent-pipeline-patterns",
+        "materialize-crm-deals"
+      ],
+      "frontendFiles": [
+        "src/components/copilot/responses/PipelineResponse.tsx",
+        "src/components/copilot/responses/ForecastResponse.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Dashboard loads with real data",
+        "KPIs calculate correctly",
+        "Materialized view refreshes"
+      ]
+    },
+    {
+      "id": "AUDIT-031",
+      "title": "Audit: Multi-Source Prospecting Hub",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "outreach",
+      "featureId": "multi-source-prospecting",
+      "edgeFunctions": [
+        "prospecting-search",
+        "prospecting-refine",
+        "apollo-search",
+        "ai-ark-search",
+        "ai-ark-semantic",
+        "ai-ark-similarity"
+      ],
+      "frontendFiles": [
+        "src/pages/ProspectingHub.tsx",
+        "src/components/prospecting/AiArkSearchWizard.tsx",
+        "src/components/prospecting/ApolloSearchWizard.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useProspectingSearch.ts"
+      ],
+      "acceptance": [
+        "Apollo search works",
+        "AI Ark search works",
+        "Credit costs correct",
+        "Auth on all endpoints",
+        "No API keys in frontend"
+      ]
+    },
+    {
+      "id": "AUDIT-032",
+      "title": "Audit: Ops Tables (AI Spreadsheet)",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "outreach",
+      "featureId": "ops-tables",
+      "edgeFunctions": [
+        "copilot-dynamic-table",
+        "enrich-dynamic-table",
+        "provision-standard-ops-tables",
+        "ops-table-inbound-webhook"
+      ],
+      "frontendFiles": [
+        "src/pages/OpsPage.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/components/ops/OpsTable.tsx",
+        "src/components/ops/OpsTableCell.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Table CRUD works",
+        "Cell editing works",
+        "Enrichment runs correctly",
+        "Webhook auth verified",
+        "RLS on dynamic tables",
+        "No select(*)"
+      ]
+    },
+    {
+      "id": "AUDIT-033",
+      "title": "Audit: Natural Language Data Queries",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "outreach",
+      "featureId": "ai-query-bar",
+      "edgeFunctions": [
+        "ops-table-ai-query"
+      ],
+      "frontendFiles": [
+        "src/components/ops/AiQueryBar.tsx",
+        "src/components/ops/AiQueryPreviewModal.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Query parsing works",
+        "Preview before execution",
+        "Destructive actions gated",
+        "Credit tracking",
+        "Input sanitized"
+      ]
+    },
+    {
+      "id": "AUDIT-034",
+      "title": "Audit: AI Deduplication",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "outreach",
+      "featureId": "ai-dedup",
+      "edgeFunctions": [],
+      "frontendFiles": [
+        "src/components/ops/AiDeduplicatePreviewModal.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Dedup logic accurate",
+        "Preview before merge",
+        "No data loss on merge"
+      ]
+    },
+    {
+      "id": "AUDIT-035",
+      "title": "Audit: AI Email Sequence Generator",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "outreach",
+      "featureId": "email-sequences",
+      "edgeFunctions": [
+        "generate-email-sequence",
+        "api-sequence-execute",
+        "send-scheduled-emails"
+      ],
+      "sharedModules": [
+        "_shared/emailPromptRules.ts"
+      ],
+      "frontendFiles": [
+        "src/pages/platform/AgentSequencesPage.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useSequenceExecution.ts"
+      ],
+      "acceptance": [
+        "Sequence generates correctly",
+        "HITL approval flow works",
+        "Scheduled send auth verified",
+        "Credit tracking",
+        "No email without consent"
+      ]
+    },
+    {
+      "id": "AUDIT-036",
+      "title": "Audit: AI Campaign Monitoring",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "outreach",
+      "featureId": "campaign-monitoring",
+      "edgeFunctions": [
+        "monitor-campaigns",
+        "slack-campaign-alerts",
+        "sync-instantly-engagement"
+      ],
+      "frontendFiles": [
+        "src/components/ops/InstantlyAnalyticsPanel.tsx",
+        "src/components/ops/CampaignApprovalBanner.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Campaign polling works",
+        "Reply classification accurate",
+        "Slack alerts deduped",
+        "Auth on Instantly API"
+      ]
+    },
+    {
+      "id": "AUDIT-037",
+      "title": "Audit: Waterfall Enrichment",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "outreach",
+      "featureId": "enrich-cascade",
+      "edgeFunctions": [
+        "enrich-cascade",
+        "auto-re-enrich",
+        "enrich-company",
+        "deep-enrich-organization",
+        "apify-linkedin-enrich"
+      ],
+      "frontendFiles": [],
+      "hooks": [
+        "src/lib/hooks/useEnrichment.ts"
+      ],
+      "acceptance": [
+        "Cascade order correct",
+        "Credit costs per provider correct",
+        "No duplicate enrichment charges",
+        "Auth verified"
+      ]
+    },
+    {
+      "id": "AUDIT-038",
+      "title": "Audit: Web Scraping Marketplace (Apify)",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "outreach",
+      "featureId": "apify-scraping",
+      "edgeFunctions": [
+        "apify-run-start",
+        "apify-actor-introspect",
+        "apify-auto-map",
+        "apify-connect",
+        "apify-run-webhook"
+      ],
+      "frontendFiles": [
+        "src/pages/ApifyOpsPage.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useApifyIntegration.ts"
+      ],
+      "acceptance": [
+        "Actor search works",
+        "Run triggers correctly",
+        "Webhook auth verified",
+        "Results map to ops table",
+        "No VITE_APIFY_TOKEN exposure"
+      ]
+    },
+    {
+      "id": "AUDIT-039",
+      "title": "Audit: Leads Inbox",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "outreach",
+      "featureId": "lead-inbox",
+      "edgeFunctions": [
+        "import-leads-generic",
+        "process-lead-prep",
+        "reprocess-lead-prep",
+        "facebook-leads-webhook",
+        "savvycal-leads-webhook"
+      ],
+      "frontendFiles": [
+        "src/pages/leads/LeadsInbox.tsx",
+        "src/components/leads/LeadTable.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useLeads.ts"
+      ],
+      "acceptance": [
+        "Lead import works",
+        "Webhook auth verified",
+        "Lead prep runs",
+        "RLS on leads",
+        "Pagination works"
+      ]
+    },
+    {
+      "id": "AUDIT-040",
+      "title": "Audit: Multi-CRM Push",
+      "feature": "outreach-prospecting",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "outreach",
+      "featureId": "crm-push",
+      "edgeFunctions": [
+        "push-to-hubspot",
+        "push-to-attio",
+        "push-to-instantly",
+        "instantly-push",
+        "push-cell-to-hubspot",
+        "push-cell-to-attio"
+      ],
+      "frontendFiles": [
+        "src/components/ops/HubSpotPushModal.tsx",
+        "src/components/ops/AttioPushModal.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Push to HubSpot works",
+        "Push to Attio works",
+        "Push to Instantly works",
+        "Auth on all CRM endpoints",
+        "Field mapping correct",
+        "Error handling for failed pushes"
+      ]
+    },
+    {
+      "id": "AUDIT-041",
+      "title": "Audit: AI Copilot (Conversational Agent)",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "platform",
+      "featureId": "copilot",
+      "edgeFunctions": [
+        "api-copilot",
+        "copilot-autonomous",
+        "conversational-copilot"
+      ],
+      "sharedModules": [
+        "_shared/structuredResponseDetector.ts",
+        "_shared/agentDefinitions.ts",
+        "_shared/agentRunner.ts",
+        "_shared/salesCopilotPersona.ts",
+        "_shared/modelRouter.ts"
+      ],
+      "frontendFiles": [
+        "src/components/Copilot.tsx",
+        "src/components/copilot/CopilotLayout.tsx",
+        "src/components/copilot/CopilotResponse.tsx",
+        "src/components/copilot/RichCopilotInput.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useCopilotChat.ts"
+      ],
+      "acceptance": [
+        "Chat works end-to-end",
+        "Streaming works",
+        "Tool calls execute",
+        "Auth verified on both endpoints",
+        "Credit tracking per model",
+        "Input sanitized",
+        "No prompt injection",
+        "JWT fallback issue addressed"
+      ]
+    },
+    {
+      "id": "AUDIT-042",
+      "title": "Audit: Slack Sales Assistant",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "platform",
+      "featureId": "slack-copilot",
+      "edgeFunctions": [
+        "slack-copilot",
+        "slack-copilot-actions"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Slack event handling works",
+        "User mapping correct",
+        "Actions fire correctly",
+        "No cross-org data exposure"
+      ]
+    },
+    {
+      "id": "AUDIT-043",
+      "title": "Audit: 6-Agent Specialist Fleet",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "platform",
+      "featureId": "agent-fleet",
+      "edgeFunctions": [],
+      "sharedModules": [
+        "_shared/agentDefinitions.ts",
+        "_shared/agentRunner.ts",
+        "_shared/agentSpecialist.ts",
+        "_shared/agentClassifier.ts"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "All 6 agents defined",
+        "Classification routes correctly",
+        "Agent handoff works",
+        "Cost tracked per agent"
+      ]
+    },
+    {
+      "id": "AUDIT-044",
+      "title": "Audit: Autonomy Escalation Engine",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "platform",
+      "featureId": "autonomy-system",
+      "edgeFunctions": [],
+      "sharedModules": [
+        "_shared/copilot_adapters/executeAction.ts",
+        "_shared/copilot_adapters/registry.ts"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Escalation gates work",
+        "HITL approval required for actions",
+        "No silent mutations",
+        "Trust level persists"
+      ]
+    },
+    {
+      "id": "AUDIT-045",
+      "title": "Audit: Command Centre (Action Hub)",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "platform",
+      "featureId": "command-centre",
+      "edgeFunctions": [
+        "api-action-centre"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Actions list correctly",
+        "Execution works",
+        "Auth verified"
+      ]
+    },
+    {
+      "id": "AUDIT-046",
+      "title": "Audit: Email Action Centre",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "platform",
+      "featureId": "email-action-centre",
+      "edgeFunctions": [
+        "email-send-as-rep",
+        "analyze-email"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Email send auth correct",
+        "HITL gate present",
+        "No VITE_AWS keys used for send",
+        "Reply tracking works"
+      ]
+    },
+    {
+      "id": "AUDIT-047",
+      "title": "Audit: Agent Marketplace + Custom SOPs + Playbooks",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 3,
+      "cat": "platform",
+      "featureId": "agent-marketplace",
+      "edgeFunctions": [
+        "api-skill-execute",
+        "api-skill-builder"
+      ],
+      "sharedModules": [
+        "_shared/skillsRuntime.ts",
+        "_shared/skillsToolHandlers.ts",
+        "_shared/promptLoader.ts"
+      ],
+      "frontendFiles": [
+        "src/components/copilot/lab/SkillBuilderWizard.tsx"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "Skill execute works",
+        "Custom skill creation works",
+        "No code injection via custom skills",
+        "Auth on skill endpoints"
+      ]
+    },
+    {
+      "id": "AUDIT-048",
+      "title": "Audit: AI Daily Briefing",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "platform",
+      "featureId": "morning-brief",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Briefing generates correctly",
+        "Cron schedule works",
+        "Slack delivery works"
+      ]
+    },
+    {
+      "id": "AUDIT-049",
+      "title": "Audit: Semantic Meeting Search + Memory",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "platform",
+      "featureId": "semantic-search",
+      "edgeFunctions": [
+        "api-copilot-memory"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Vector search works",
+        "Memory read/write authenticated",
+        "No cross-org search results"
+      ]
+    },
+    {
+      "id": "AUDIT-050",
+      "title": "Audit: Competitive Intelligence + Writing Style",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 3,
+      "cat": "platform",
+      "featureId": "competitive-intel",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Intel generates from meeting data",
+        "Writing style learning works",
+        "Auth verified"
+      ]
+    },
+    {
+      "id": "AUDIT-051",
+      "title": "Audit: Visual Workflow Builder",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 3,
+      "cat": "platform",
+      "featureId": "workflows",
+      "edgeFunctions": [
+        "ops-table-workflow-engine",
+        "ops-workflow-orchestrator",
+        "evaluate-ops-rule"
+      ],
+      "frontendFiles": [
+        "src/components/ops/WorkflowBuilder.tsx",
+        "src/components/ops/RuleBuilder.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useWorkflowOrchestrator.ts"
+      ],
+      "acceptance": [
+        "Workflow creation works",
+        "Rule evaluation correct",
+        "No code injection via NL workflows",
+        "Auth verified"
+      ]
+    },
+    {
+      "id": "AUDIT-052",
+      "title": "Audit: Configurable AI Models + Email Signal Intelligence",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "platform",
+      "featureId": "ai-settings",
+      "edgeFunctions": [],
+      "sharedModules": [
+        "_shared/modelRouter.ts"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Model selection persists",
+        "Cost tier correct per model",
+        "Signal detection works"
+      ]
+    },
+    {
+      "id": "AUDIT-053",
+      "title": "Audit: 14 Native Integrations",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "platform",
+      "featureId": "integration-hub",
+      "edgeFunctions": [
+        "hubspot-admin",
+        "import-from-hubspot",
+        "import-from-attio",
+        "sync-hubspot-ops-table",
+        "sync-attio-ops-table"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "All integrations connectable",
+        "OAuth flows secure",
+        "Credential storage encrypted",
+        "RLS on integration_credentials",
+        "No cross-org credential access"
+      ]
+    },
+    {
+      "id": "AUDIT-054",
+      "title": "Audit: Global Smart Search + Quick Add",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 3,
+      "cat": "platform",
+      "featureId": "smart-search",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Search returns relevant results",
+        "Results scoped to org",
+        "Quick add creates correct entity"
+      ]
+    },
+    {
+      "id": "AUDIT-055",
+      "title": "Audit: Credit System & Billing",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "platform",
+      "featureId": "credits-billing",
+      "edgeFunctions": [
+        "get-credit-balance",
+        "create-credit-checkout",
+        "credit-auto-topup",
+        "stripe-webhook",
+        "reconcile-billing",
+        "create-checkout-session",
+        "create-portal-session",
+        "grant-welcome-credits"
+      ],
+      "sharedModules": [
+        "_shared/costTracking.ts",
+        "_shared/creditPacks.ts"
+      ],
+      "frontendFiles": [
+        "src/components/credits/CreditWidget.tsx",
+        "src/components/credits/CreditGate.tsx",
+        "src/components/credits/CreditPurchaseModal.tsx"
+      ],
+      "hooks": [
+        "src/lib/hooks/useCreditBalance.ts",
+        "src/lib/hooks/useRequireCredits.ts",
+        "src/lib/hooks/useSubscription.ts"
+      ],
+      "acceptance": [
+        "Balance calculates correctly",
+        "Pack purchase creates Stripe session",
+        "Auto-topup triggers correctly",
+        "Stripe webhook validates signature (manual HMAC)",
+        "Reconcile cron works",
+        "Credit deduction waterfall correct",
+        "No double-charging",
+        "RLS on credit tables"
+      ]
+    },
+    {
+      "id": "AUDIT-056",
+      "title": "Audit: Team & Org Management + Onboarding",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "platform",
+      "featureId": "team-management",
+      "edgeFunctions": [
+        "start-free-trial"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Org creation works",
+        "Team invite works",
+        "Role-based access correct",
+        "Onboarding wizard completes",
+        "Welcome credits granted"
+      ]
+    },
+    {
+      "id": "AUDIT-057",
+      "title": "Audit: Public Roadmap & Voting",
+      "feature": "platform-intelligence",
+      "type": "audit",
+      "status": "complete",
+      "priority": 4,
+      "cat": "platform",
+      "featureId": "roadmap-votes",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Feature exists",
+        "Voting works",
+        "Public access doesn't leak private data"
+      ]
+    },
+    {
+      "id": "AUDIT-058",
+      "title": "Audit: Fleet Orchestrator + Multi-Model Router",
+      "feature": "backend-infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "backend",
+      "featureId": "fleet-orchestrator",
+      "edgeFunctions": [],
+      "sharedModules": [
+        "_shared/agentRunner.ts",
+        "_shared/modelRouter.ts"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Model routing logic correct",
+        "Cost tracking per model",
+        "Fallback on model failure",
+        "No hardcoded API keys"
+      ]
+    },
+    {
+      "id": "AUDIT-059",
+      "title": "Audit: Multi-Engine Transcription",
+      "feature": "backend-infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "backend",
+      "featureId": "transcription-pipeline",
+      "edgeFunctions": [
+        "poll-gladia-jobs",
+        "process-gladia-webhook"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Gladia polling works",
+        "Webhook validates",
+        "Transcript storage correct",
+        "Retry logic handles failures"
+      ]
+    },
+    {
+      "id": "AUDIT-060",
+      "title": "Audit: Webhook Event Mesh",
+      "feature": "backend-infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "backend",
+      "featureId": "webhook-mesh",
+      "edgeFunctions": [
+        "meetingbaas-webhook",
+        "fathom-webhook",
+        "apify-run-webhook",
+        "facebook-leads-webhook",
+        "savvycal-leads-webhook",
+        "stripe-webhook",
+        "ops-table-inbound-webhook"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "All webhooks validate signatures",
+        "No unauthenticated webhook processing",
+        "Idempotent handling",
+        "Error responses don't leak info"
+      ]
+    },
+    {
+      "id": "AUDIT-061",
+      "title": "Audit: Scheduled Jobs (Cron)",
+      "feature": "backend-infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "backend",
+      "featureId": "cron-system",
+      "edgeFunctions": [
+        "proactive-meeting-prep",
+        "proactive-pipeline-analysis",
+        "monitor-campaigns",
+        "reconcile-billing",
+        "check-credit-alerts",
+        "purge-credit-logs"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "All crons have auth (cron secret or service_role)",
+        "No public cron endpoints",
+        "Timeouts handled",
+        "Error alerts configured"
+      ]
+    },
+    {
+      "id": "AUDIT-062",
+      "title": "Audit: Vector Embeddings & RAG",
+      "feature": "backend-infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "backend",
+      "featureId": "vector-search",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "Embedding generation works",
+        "Vector search returns relevant results",
+        "Results scoped to org",
+        "RLS on vector tables"
+      ]
+    },
+    {
+      "id": "AUDIT-063",
+      "title": "Audit: Row-Level Security (Multi-Tenant)",
+      "feature": "backend-infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "backend",
+      "featureId": "rls-security",
+      "edgeFunctions": [],
+      "sharedModules": [
+        "_shared/edgeAuth.ts",
+        "_shared/security.ts"
+      ],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "All tables have RLS enabled",
+        "No deprecated auth.role() patterns",
+        "No SECURITY DEFINER view bypasses",
+        "JWT fallback fixed",
+        "edgeAuth.ts hardened"
+      ]
+    },
+    {
+      "id": "AUDIT-064",
+      "title": "Audit: Frontend Security (VITE_ keys, CORS, service role)",
+      "feature": "backend-infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "priority": 1,
+      "cat": "backend",
+      "featureId": "frontend-security",
+      "edgeFunctions": [],
+      "frontendFiles": [
+        "src/lib/services/emailService.ts",
+        "src/lib/services/companyEnrichmentService.ts",
+        "src/lib/services/linkedinEnrichmentService.ts",
+        "src/lib/supabase/clientV2.ts"
+      ],
+      "hooks": [],
+      "acceptance": [
+        "No VITE_AWS keys in frontend",
+        "No VITE_PERPLEXITY/APOLLO/APIFY keys",
+        "Service role key not exposed",
+        "CORS uses getCorsHeaders everywhere",
+        "createErrorResponse uses proper CORS"
+      ]
+    },
+    {
+      "id": "AUDIT-065",
+      "title": "Audit: Public REST API",
+      "feature": "backend-infrastructure",
+      "type": "audit",
+      "status": "complete",
+      "priority": 2,
+      "cat": "backend",
+      "featureId": "api-v1",
+      "edgeFunctions": [],
+      "frontendFiles": [],
+      "hooks": [],
+      "acceptance": [
+        "API endpoints documented",
+        "Auth required",
+        "Rate limited",
+        "Input validated"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 65,
+    "completedStories": 0,
+    "currentPhase": "pending",
+    "phases": [
+      {
+        "id": "phase-1",
+        "name": "Before the Call",
+        "stories": [
+          "AUDIT-001",
+          "AUDIT-002",
+          "AUDIT-003",
+          "AUDIT-004",
+          "AUDIT-005",
+          "AUDIT-006",
+          "AUDIT-007",
+          "AUDIT-008"
+        ]
+      },
+      {
+        "id": "phase-2",
+        "name": "During the Call",
+        "stories": [
+          "AUDIT-009",
+          "AUDIT-010",
+          "AUDIT-011",
+          "AUDIT-012"
+        ]
+      },
+      {
+        "id": "phase-3",
+        "name": "After the Call",
+        "stories": [
+          "AUDIT-013",
+          "AUDIT-014",
+          "AUDIT-015",
+          "AUDIT-016",
+          "AUDIT-017",
+          "AUDIT-018",
+          "AUDIT-019",
+          "AUDIT-020",
+          "AUDIT-021",
+          "AUDIT-022"
+        ]
+      },
+      {
+        "id": "phase-4",
+        "name": "Pipeline & Deals",
+        "stories": [
+          "AUDIT-023",
+          "AUDIT-024",
+          "AUDIT-025",
+          "AUDIT-026",
+          "AUDIT-027",
+          "AUDIT-028",
+          "AUDIT-029",
+          "AUDIT-030"
+        ]
+      },
+      {
+        "id": "phase-5",
+        "name": "Outreach & Prospecting",
+        "stories": [
+          "AUDIT-031",
+          "AUDIT-032",
+          "AUDIT-033",
+          "AUDIT-034",
+          "AUDIT-035",
+          "AUDIT-036",
+          "AUDIT-037",
+          "AUDIT-038",
+          "AUDIT-039",
+          "AUDIT-040"
+        ]
+      },
+      {
+        "id": "phase-6",
+        "name": "Platform & Intelligence",
+        "stories": [
+          "AUDIT-041",
+          "AUDIT-042",
+          "AUDIT-043",
+          "AUDIT-044",
+          "AUDIT-045",
+          "AUDIT-046",
+          "AUDIT-047",
+          "AUDIT-048",
+          "AUDIT-049",
+          "AUDIT-050",
+          "AUDIT-051",
+          "AUDIT-052",
+          "AUDIT-053",
+          "AUDIT-054",
+          "AUDIT-055",
+          "AUDIT-056",
+          "AUDIT-057"
+        ]
+      },
+      {
+        "id": "phase-7",
+        "name": "Backend Infrastructure",
+        "stories": [
+          "AUDIT-058",
+          "AUDIT-059",
+          "AUDIT-060",
+          "AUDIT-061",
+          "AUDIT-062",
+          "AUDIT-063",
+          "AUDIT-064",
+          "AUDIT-065"
+        ]
+      }
+    ],
+    "parallelGroups": [
+      [
+        "AUDIT-001",
+        "AUDIT-002",
+        "AUDIT-003"
+      ],
+      [
+        "AUDIT-004",
+        "AUDIT-005",
+        "AUDIT-006"
+      ],
+      [
+        "AUDIT-007",
+        "AUDIT-008"
+      ],
+      [
+        "AUDIT-009",
+        "AUDIT-010"
+      ],
+      [
+        "AUDIT-011",
+        "AUDIT-012"
+      ],
+      [
+        "AUDIT-013",
+        "AUDIT-014",
+        "AUDIT-015"
+      ],
+      [
+        "AUDIT-016",
+        "AUDIT-017",
+        "AUDIT-018"
+      ],
+      [
+        "AUDIT-019",
+        "AUDIT-020",
+        "AUDIT-021"
+      ],
+      [
+        "AUDIT-023",
+        "AUDIT-024",
+        "AUDIT-025"
+      ],
+      [
+        "AUDIT-026",
+        "AUDIT-027",
+        "AUDIT-028"
+      ],
+      [
+        "AUDIT-029",
+        "AUDIT-030"
+      ],
+      [
+        "AUDIT-031",
+        "AUDIT-032",
+        "AUDIT-033"
+      ],
+      [
+        "AUDIT-034",
+        "AUDIT-035",
+        "AUDIT-036"
+      ],
+      [
+        "AUDIT-037",
+        "AUDIT-038",
+        "AUDIT-039"
+      ],
+      [
+        "AUDIT-041",
+        "AUDIT-042",
+        "AUDIT-043"
+      ],
+      [
+        "AUDIT-044",
+        "AUDIT-045",
+        "AUDIT-046"
+      ],
+      [
+        "AUDIT-047",
+        "AUDIT-048",
+        "AUDIT-049"
+      ],
+      [
+        "AUDIT-050",
+        "AUDIT-051",
+        "AUDIT-052"
+      ],
+      [
+        "AUDIT-053",
+        "AUDIT-054",
+        "AUDIT-055"
+      ],
+      [
+        "AUDIT-056",
+        "AUDIT-057"
+      ],
+      [
+        "AUDIT-058",
+        "AUDIT-059",
+        "AUDIT-060"
+      ],
+      [
+        "AUDIT-061",
+        "AUDIT-062",
+        "AUDIT-063"
+      ],
+      [
+        "AUDIT-064",
+        "AUDIT-065"
+      ]
+    ],
+    "lastUpdated": "2026-03-01T12:00:00Z"
+  },
+  "knownCriticalIssues": [
+    {
+      "id": "PRE-001",
+      "severity": "P0",
+      "title": "JWT fallback accepts unverified tokens",
+      "file": "_shared/edgeAuth.ts:212-219",
+      "auditStory": "AUDIT-063"
+    },
+    {
+      "id": "PRE-002",
+      "severity": "P0",
+      "title": "AWS SES credentials in frontend bundle",
+      "file": "src/lib/services/emailService.ts",
+      "auditStory": "AUDIT-064"
+    },
+    {
+      "id": "PRE-003",
+      "severity": "P1",
+      "title": "send-scheduled-emails has no incoming auth",
+      "file": "supabase/functions/send-scheduled-emails/index.ts",
+      "auditStory": "AUDIT-014"
+    },
+    {
+      "id": "PRE-004",
+      "severity": "P1",
+      "title": "3 VITE_ API keys exposed (Perplexity, Apollo, Apify)",
+      "file": "companyEnrichmentService.ts, linkedinEnrichmentService.ts",
+      "auditStory": "AUDIT-064"
+    },
+    {
+      "id": "PRE-005",
+      "severity": "P2",
+      "title": "auth.role()='service_role' deprecated in 15+ RLS policies",
+      "file": "Multiple migrations",
+      "auditStory": "AUDIT-063"
+    },
+    {
+      "id": "PRE-006",
+      "severity": "P2",
+      "title": "createErrorResponse uses Access-Control-Allow-Origin: *",
+      "file": "_shared/security.ts:492,509",
+      "auditStory": "AUDIT-064"
+    },
+    {
+      "id": "PRE-007",
+      "severity": "P2",
+      "title": "~78 functions still using legacy corsHeaders",
+      "file": "Various edge functions",
+      "auditStory": "AUDIT-064"
+    },
+    {
+      "id": "PRE-008",
+      "severity": "P2",
+      "title": "Unpinned @supabase/supabase-js@2 in some functions",
+      "file": "Various edge functions",
+      "auditStory": "AUDIT-058"
+    },
+    {
+      "id": "PRE-009",
+      "severity": "P3",
+      "title": "In-memory rate limiter per-isolate only",
+      "file": "_shared/security.ts:239",
+      "auditStory": "AUDIT-063"
+    },
+    {
+      "id": "PRE-010",
+      "severity": "P3",
+      "title": "copilot-autonomous parses body before auth",
+      "file": "copilot-autonomous/index.ts",
+      "auditStory": "AUDIT-041"
+    }
+  ],
+  "deliverables": {
+    "auditReport": "docs/audit/feature-audit-report.md",
+    "summaryDashboard": "docs/audit/audit-summary.md",
+    "devHubProject": "6b8619f9-39a6-408e-98da-28897befd5ca"
+  },
+  "status": "complete",
+  "completedAt": "2026-03-01T23:00:00Z"
+}

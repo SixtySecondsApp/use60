@@ -88,62 +88,89 @@ ALTER TABLE fireflies_sync_state ENABLE ROW LEVEL SECURITY;
 -- ============================================================================
 
 -- Users can view their own integration
-CREATE POLICY "Users can view their own Fireflies integration"
+DO $$ BEGIN
+  CREATE POLICY "Users can view their own Fireflies integration"
   ON fireflies_integrations
   FOR SELECT
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert their own integration
-CREATE POLICY "Users can insert their own Fireflies integration"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert their own Fireflies integration"
   ON fireflies_integrations
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own integration
-CREATE POLICY "Users can update their own Fireflies integration"
+DO $$ BEGIN
+  CREATE POLICY "Users can update their own Fireflies integration"
   ON fireflies_integrations
   FOR UPDATE
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can delete their own integration
-CREATE POLICY "Users can delete their own Fireflies integration"
+DO $$ BEGIN
+  CREATE POLICY "Users can delete their own Fireflies integration"
   ON fireflies_integrations
   FOR DELETE
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can manage all integrations (for Edge Functions)
-CREATE POLICY "Service role can manage all Fireflies integrations"
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage all Fireflies integrations"
   ON fireflies_integrations
   FOR ALL
   USING (auth.jwt()->>'role' = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 5. Create RLS Policies for fireflies_sync_state
 -- ============================================================================
 
 -- Users can view their own sync state
-CREATE POLICY "Users can view their own Fireflies sync state"
+DO $$ BEGIN
+  CREATE POLICY "Users can view their own Fireflies sync state"
   ON fireflies_sync_state
   FOR SELECT
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can insert their own sync state
-CREATE POLICY "Users can insert their own Fireflies sync state"
+DO $$ BEGIN
+  CREATE POLICY "Users can insert their own Fireflies sync state"
   ON fireflies_sync_state
   FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Users can update their own sync state
-CREATE POLICY "Users can update their own Fireflies sync state"
+DO $$ BEGIN
+  CREATE POLICY "Users can update their own Fireflies sync state"
   ON fireflies_sync_state
   FOR UPDATE
   USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service role can manage all sync states (for Edge Functions)
-CREATE POLICY "Service role can manage all Fireflies sync states"
+DO $$ BEGIN
+  CREATE POLICY "Service role can manage all Fireflies sync states"
   ON fireflies_sync_state
   FOR ALL
   USING (auth.jwt()->>'role' = 'service_role');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 6. Add table comments

@@ -2,7 +2,7 @@
 // Creates private Slack deal room channels when deals meet criteria
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { buildDealRoomWelcomeMessage, type DealRoomData } from '../_shared/slackBlocks.ts';
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';

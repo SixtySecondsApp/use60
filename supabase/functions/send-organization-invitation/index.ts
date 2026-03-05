@@ -9,6 +9,7 @@ import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { sendEmail } from '../_shared/ses.ts';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
+import { verifyCronSecret } from '../_shared/edgeAuth.ts';
 
 interface SendInvitationRequest {
   to_email: string;
@@ -120,6 +121,15 @@ serve(async (req) => {
   // Handle CORS preflight
   const preflightResponse = handleCorsPreflightRequest(req);
   if (preflightResponse) return preflightResponse;
+
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+    });
+  }
 
   try {
     const {

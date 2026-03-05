@@ -14,11 +14,20 @@ CREATE INDEX idx_chat_sessions_user ON ops_table_chat_sessions(user_id);
 CREATE INDEX idx_chat_sessions_expires ON ops_table_chat_sessions(expires_at);
 ALTER TABLE ops_table_chat_sessions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own chat sessions" ON ops_table_chat_sessions FOR SELECT
+DO $$ BEGIN
+  CREATE POLICY "Users can view own chat sessions" ON ops_table_chat_sessions FOR SELECT
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can create own chat sessions" ON ops_table_chat_sessions FOR INSERT
+DO $$ BEGIN
+  CREATE POLICY "Users can create own chat sessions" ON ops_table_chat_sessions FOR INSERT
   WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own chat sessions" ON ops_table_chat_sessions FOR UPDATE
+DO $$ BEGIN
+  CREATE POLICY "Users can update own chat sessions" ON ops_table_chat_sessions FOR UPDATE
   USING (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

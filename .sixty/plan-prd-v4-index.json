@@ -1,0 +1,89 @@
+{
+  "name": "60 — Next Priority PRDs v4 Execution Index",
+  "prd_source": ".sixty/PRD suggestions/PRD_syggestions_2602.md",
+  "createdAt": "2026-02-26T00:00:00Z",
+  "totalStories": 42,
+  "estimatedWeeks": 7,
+  "ship_sequence": {
+    "week_1_2": {
+      "parallel_tracks": [
+        {
+          "prd": "PRD-01",
+          "name": "Close the Email Loop",
+          "plan": ".sixty/plan-email-loop.json",
+          "progress": ".sixty/progress-email-loop.md",
+          "stories": 10,
+          "effort": "1.5–2 weeks",
+          "inflection_point": "The moment send-followup-email goes live and Slack approval lands, every recorded meeting produces a ready-to-send follow-up within minutes"
+        },
+        {
+          "prd": "PRD-03",
+          "name": "Agent Daily Logs",
+          "plan": ".sixty/plan-agent-daily-logs.json",
+          "progress": ".sixty/progress-agent-daily-logs.md",
+          "stories": 6,
+          "effort": "1 week",
+          "note": "Ships in parallel with PRD-01 — no dependencies between them"
+        }
+      ]
+    },
+    "week_3_5": {
+      "parallel_tracks": [
+        {
+          "prd": "PRD-02",
+          "name": "Relationship Graph Intelligence",
+          "plan": ".sixty/plan-relationship-graph.json",
+          "progress": ".sixty/progress-relationship-graph.md",
+          "stories": 11,
+          "effort": "3 weeks"
+        },
+        {
+          "prd": "PRD-04",
+          "name": "Control Room",
+          "plan": ".sixty/plan-control-room.json",
+          "progress": ".sixty/progress-control-room.md",
+          "stories": 7,
+          "effort": "2 weeks",
+          "note": "Works without PRD-03 daily logs but noticeably richer with them"
+        }
+      ]
+    },
+    "week_5_7": {
+      "parallel_tracks": [
+        {
+          "prd": "PRD-05",
+          "name": "Calendar + Proposal Send",
+          "plan": ".sixty/plan-calendar-proposal.json",
+          "progress": ".sixty/progress-calendar-proposal.md",
+          "stories": 8,
+          "effort": "2–3 weeks",
+          "dependencies": ["PRD-01 email send must be live for CAL-003 and PROP-003"]
+        }
+      ]
+    }
+  },
+  "key_infrastructure_already_built": [
+    "agent-orchestrator with HITL pause/resume",
+    "hitl_pending_approvals table",
+    "slack-interactive handler with hitl.ts",
+    "hitl-send-followup-email function",
+    "google-gmail edge function",
+    "autopilot_confidence + promotion/demotion engines",
+    "find-available-slots function",
+    "generate-proposal function",
+    "proposalGenerator.ts + calendar.ts orchestrator adapters",
+    "agent-relationship-graph function",
+    "_shared/memory/ 10-file module",
+    "deal_health_history + health-recalculate",
+    "command_centre_items table",
+    "credit_ledger",
+    "sequence_jobs table"
+  ],
+  "story_summary": {
+    "EMAIL": { "count": 10, "prefix": "EMAIL-", "plan": "plan-email-loop.json" },
+    "REL": { "count": 11, "prefix": "REL-", "plan": "plan-relationship-graph.json" },
+    "LOG": { "count": 6, "prefix": "LOG-", "plan": "plan-agent-daily-logs.json" },
+    "CTRL": { "count": 7, "prefix": "CTRL-", "plan": "plan-control-room.json" },
+    "CAL+PROP": { "count": 8, "prefix": "CAL-/PROP-", "plan": "plan-calendar-proposal.json" }
+  }
+}
