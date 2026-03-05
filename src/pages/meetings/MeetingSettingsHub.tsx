@@ -1,3 +1,1 @@
-export default function MeetingSettingsHub() {
-  return <div>Meeting Settings</div>;
-}
+export default function MeetingSettingsHub() { return null; }

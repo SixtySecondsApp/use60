@@ -1,3 +1,2 @@
-export function NotetakerConnectionStep() {
-  return <div>Notetaker Connection Step</div>;
-}
+export function NotetakerConnectionStep() { return null; }
+export default NotetakerConnectionStep;
