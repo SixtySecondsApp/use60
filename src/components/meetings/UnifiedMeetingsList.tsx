@@ -252,6 +252,21 @@ const ListSkeleton: React.FC<{ view: 'list' | 'grid' }> = ({ view }) => (
 )
 
 // ============================================================================
+// Viewport-aware initial count
+// ============================================================================
+
+function calcInitialCount(): number {
+  if (typeof window === 'undefined') return 12
+  const CARD_HEIGHT = 370
+  const GRID_GAP = 16
+  const PAGE_OVERHEAD = 395
+  const cols = window.innerWidth >= 1280 ? 3 : window.innerWidth >= 768 ? 2 : 1
+  const usableHeight = window.innerHeight - PAGE_OVERHEAD
+  const rowsVisible = Math.ceil(usableHeight / (CARD_HEIGHT + GRID_GAP))
+  return Math.max(Math.ceil(rowsVisible * cols) + cols, 6)
+}
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -266,7 +281,7 @@ const UnifiedMeetingsList: React.FC = () => {
 
   // Infinite scroll
   const ITEMS_PER_BATCH = 12
-  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH)
+  const [visibleCount, setVisibleCount] = useState(() => calcInitialCount())
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
 
   // Filter state
@@ -831,9 +846,10 @@ const UnifiedMeetingsList: React.FC = () => {
                     return (
                     <motion.tr
                       key={`${item.sourceTable}-${item.id}`}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2, delay: index < ITEMS_PER_BATCH ? index * 0.02 : 0 }}
+                      initial={{ opacity: 0, y: 8 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, margin: "-30px" }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
                       className={cn(
                         "border-gray-200/50 dark:border-gray-700/30 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer group",
                         isDemoRow && "border-l-2 border-l-violet-500"
@@ -927,9 +943,10 @@ const UnifiedMeetingsList: React.FC = () => {
               return (
               <motion.div
                 key={`${item.sourceTable}-${item.id}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: index < ITEMS_PER_BATCH ? index * 0.02 : 0 }}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-40px" }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
                 whileHover={{ y: -2 }}
                 className={cn(
                   "bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-3 sm:p-5 border transition-all duration-300 cursor-pointer group w-full",
