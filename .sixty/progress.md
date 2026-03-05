@@ -9,7 +9,57 @@
 | Tier 3 — Differentiators | 5 | 36 | Pending |
 | **Total** | **22** | **157** | **0 complete** |
 
-## Active Feature: Edge Function Consolidation (EFC)
+## Active Feature: Sandbox Funnel + Campaign Links (4 features)
+
+**Goal**: Complete funnel from sandbox demo to signed-up user, plus /t/ personalised links pipeline
+
+| Feature | ID | Stories | Status |
+|---------|-----|---------|--------|
+| Sandbox Funnel (tour, copilot, CTAs, email capture, analytics) | FNL | 8 | Pending |
+| Campaign Links (/t/ pipeline, batch enrichment, manager UI) | CMP | 5 | Pending |
+| Lead Intelligence (scoring, Slack alerts, analytics) | LDI | 5 | Pending |
+| Signup Data Seeding (demo context -> real account) | SEED | 3 | Pending |
+| **Total** | | **22** | |
+
+### Parallel Groups
+
+**Group A (no dependencies — start together):**
+- FNL-001 (progress bar) + FNL-003 (interactive copilot) + FNL-005 (contextual CTAs) + FNL-008 (view analytics)
+- CMP-001 (apply migration)
+- LDI-001 (weighted scoring) + LDI-003 (feature interest tracking)
+- SEED-001 (signup URL params)
+
+**Group B (after Group A):**
+- FNL-002 (wire tour nudge) — needs FNL-001
+- FNL-004 (personalized copilot responses) — needs FNL-003
+- FNL-006 (email capture modal)
+- CMP-002 (enrichment fn) + CMP-003 (manager UI) + CMP-004 (campaign landing) — all need CMP-001
+
+**Group C (after Group B):**
+- FNL-007 (social proof bar) — needs FNL-006
+- CMP-005 (batch CSV upload) — needs CMP-002
+- LDI-002 (Slack Block Kit alerts) — needs LDI-001
+- SEED-002 (onboarding seeding) — needs SEED-001
+
+**Group D (after Group C):**
+- LDI-004 (campaign analytics dashboard) — needs LDI-001
+- LDI-005 (auto-create lead) — needs LDI-002
+- SEED-003 (welcome banner) — needs SEED-002
+
+### What Already Exists (infrastructure built in sandbox-v2/v3)
+- `/t/:code` route in App.tsx
+- CampaignLanding.tsx — resolves codes, renders SandboxExperience
+- campaign_links + campaign_visitors migration (not yet applied)
+- campaign-enrich edge function (scaffolded)
+- sandbox-lead-alert edge function (scaffolded)
+- SandboxTour.tsx — 5-step tour component (not wired in)
+- useSandboxTracking — basic engagement scoring + flush
+- SandboxDataProvider — has suggestedNextView, visitedViews
+- SandboxCopilot — auto-plays scripted convo, input non-interactive
+
+---
+
+## Previous: Edge Function Consolidation (EFC)
 
 **Goal**: Reduce edge function count from ~500 → ~420 (save ~80 functions)
 **Stories**: 20 (EFC-001 through EFC-020)

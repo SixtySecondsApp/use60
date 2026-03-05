@@ -92,6 +92,7 @@ import {
   Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage,
   CampaignsPage,
+  AbmCampaignsPage,
   OutreachAnalyticsPage,
   WinLossPage,
   FollowUpDraftsPage,
@@ -409,6 +410,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Platform Admin - Email Templates */}
                 <Route path="/platform/email-templates" element={<PlatformAdminRouteGuard><AppLayout><EmailTemplates /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - Customer Management */}
+                <Route path="/platform/abm-campaigns" element={<PlatformAdminRouteGuard><AppLayout><Suspense fallback={null}><AbmCampaignsPage /></Suspense></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/customers" element={<PlatformAdminRouteGuard><AppLayout><SaasAdminDashboard /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/plans" element={<Navigate to="/platform/pricing" replace />} />
                 <Route path="/platform/pricing" element={<PlatformAdminRouteGuard><AppLayout><PricingControl /></AppLayout></PlatformAdminRouteGuard>} />

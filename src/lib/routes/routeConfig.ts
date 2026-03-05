@@ -640,6 +640,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     order: 3.7,
   },
   {
+    path: '/platform/abm-campaigns',
+    access: 'platformAdmin',
+    label: 'ABM Campaigns',
+    icon: Crosshair,
+    showInNav: true,
+    navSection: 'platform',
+    order: 3.65,
+    badge: 'New',
+  },
+  {
     path: '/platform/engagement',
     access: 'platformAdmin',
     label: 'Engagement',

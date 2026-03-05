@@ -86,6 +86,7 @@ function App() {
         <Route path="/hero-v9" element={<HeroV9Preview />} />
         <Route path="/hero-v10" element={<HeroV10Preview />} />
         <Route path="/hero-v11" element={<HeroV11Preview />} />
+        {/* Campaign analytics dashboard */}
         {/* Campaign personalized demo links */}
         <Route path="/t/:code" element={<Suspense fallback={<div className="min-h-screen bg-zinc-950" />}><CampaignLanding /></Suspense>} />
         <Route path="/demo" element={<DemoExperience />} />

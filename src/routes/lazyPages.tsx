@@ -161,6 +161,7 @@ export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const LandingPageBuilderPage = lazyWithRetry(() => import('@/pages/LandingPageBuilderPage'));
 export const CampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/CampaignsPage'));
+export const AbmCampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/AbmCampaignsPage'));
 export const OutreachAnalyticsPage = lazyWithRetry(() => import('@/pages/OutreachAnalyticsPage'));
 export const WinLossPage = lazyWithRetry(() => import('@/pages/WinLossPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));

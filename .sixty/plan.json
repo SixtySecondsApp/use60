@@ -17,56 +17,56 @@
     },
     {
       "id": "followup-email-v2",
-      "name": "Follow-Up Email v2 \u2014 Quality + Demo Polish",
+      "name": "Follow-Up Email v2 — Quality + Demo Polish",
       "status": "complete",
       "consultReport": ".sixty/consult/followup-email-v2.md",
       "createdAt": "2026-02-25"
     },
     {
       "id": "skill-gold-standard",
-      "name": "Skill Gold Standard Upgrade \u2014 Top 10 Sales Skills",
+      "name": "Skill Gold Standard Upgrade — Top 10 Sales Skills",
       "status": "complete",
       "consultReport": ".sixty/consult/skill-gold-standard-upgrade.md",
       "createdAt": "2026-02-26"
     },
     {
       "id": "landing-page-builder-ui",
-      "name": "Landing Page Builder \u2014 Dedicated UI Screen",
+      "name": "Landing Page Builder — Dedicated UI Screen",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-02-27"
     },
     {
       "id": "landing-builder-v2",
-      "name": "Landing Builder v2 \u2014 Agent Teams + Gemini SVGs",
+      "name": "Landing Builder v2 — Agent Teams + Gemini SVGs",
       "status": "complete",
       "consultReport": ".sixty/consult/landing-builder-v2.md",
       "createdAt": "2026-02-28"
     },
     {
       "id": "landing-builder-progressive",
-      "name": "Landing Builder \u2014 Progressive Assembly + Chat Editor",
+      "name": "Landing Builder — Progressive Assembly + Chat Editor",
       "status": "complete",
       "prd": "docs/landing-page-builder/landing-page-builder-improvements.md",
       "createdAt": "2026-03-01"
     },
     {
       "id": "landing-builder-ux-redesign",
-      "name": "Landing Builder \u2014 UX Redesign (Preview Fix + Layout Overhaul)",
+      "name": "Landing Builder — UX Redesign (Preview Fix + Layout Overhaul)",
       "status": "complete",
       "consultReport": ".sixty/consult/landing-builder-ux-redesign.md",
       "createdAt": "2026-03-01"
     },
     {
       "id": "landing-builder-react-components",
-      "name": "Landing Builder \u2014 React Component Upgrade + Design Improvements",
+      "name": "Landing Builder — React Component Upgrade + Design Improvements",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-01"
     },
     {
       "id": "cc-notification-bridge",
-      "name": "Command Centre \u2014 Notification Bridge + Agent Type Fix",
+      "name": "Command Centre — Notification Bridge + Agent Type Fix",
       "status": "complete",
       "createdAt": "2026-03-03"
     },
@@ -79,7 +79,7 @@
     },
     {
       "id": "relationship-graph",
-      "name": "Relationship Graph \u2014 AI Command Surface for Pipeline & Network",
+      "name": "Relationship Graph — AI Command Surface for Pipeline & Network",
       "status": "complete",
       "prd": "docs/pipeline/relationship_graph_brief.md",
       "consultReport": null,
@@ -88,37 +88,65 @@
     },
     {
       "id": "warmth-backfill",
-      "name": "Warmth Backfill \u2014 Populate Graph from Historical Data",
+      "name": "Warmth Backfill — Populate Graph from Historical Data",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-03"
     },
     {
       "id": "memory-wiring",
-      "name": "Memory Layer Wiring \u2014 Connect Existing Infrastructure to Agents",
+      "name": "Memory Layer Wiring — Connect Existing Infrastructure to Agents",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-03"
     },
     {
       "id": "edge-fn-consolidation",
-      "name": "Edge Function Consolidation \u2014 500 \u2192 ~420 Functions",
+      "name": "Edge Function Consolidation — 500 → ~420 Functions",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-04"
     },
     {
       "id": "sandbox-v2",
-      "name": "Sandbox v2 \u2014 Pixel-Perfect App Replica for Landing Page Demo",
+      "name": "Sandbox v2 — Pixel-Perfect App Replica for Landing Page Demo",
       "status": "complete",
       "consultReport": null,
       "createdAt": "2026-03-05"
     },
     {
       "id": "sandbox-v3",
-      "name": "Sandbox v3 \u2014 Focused, Pixel-Perfect, Deeply Personalized",
+      "name": "Sandbox v3 — Focused, Pixel-Perfect, Deeply Personalized",
       "status": "complete",
       "consultReport": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "sandbox-funnel",
+      "name": "Sandbox Funnel — Guided Tour, Interactive Copilot, Contextual CTAs",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "campaign-links",
+      "name": "Campaign Links — /t/ Personalised Links Pipeline + Batch Enrichment",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "lead-intelligence",
+      "name": "Lead Intelligence — Engagement Scoring, Slack Alerts, Analytics",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "signup-seeding",
+      "name": "Signup Data Seeding — Demo Context Flows into Real Account",
+      "status": "complete",
+      "prd": null,
       "createdAt": "2026-03-05"
     }
   ],
@@ -170,7 +198,7 @@
         "When guidance provided, re-composes email with same RAG context plus user instructions appended to prompt",
         "Frontend shows text input modal when Regenerate button is clicked",
         "Regenerated email replaces previous result with a 'Regenerated' badge",
-        "No re-query of RAG \u2014 uses cached context from first generation (saves credits and time)"
+        "No re-query of RAG — uses cached context from first generation (saves credits and time)"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": 18,
@@ -237,7 +265,7 @@
       "acceptance": [
         "Edit button on email preview switches to editable textarea for body and input for subject",
         "Preview button returns to styled read-only view with edited content",
-        "Edited content persists in state \u2014 Copy button copies edited version",
+        "Edited content persists in state — Copy button copies edited version",
         "Cancel button reverts to original generated content",
         "Edit state does not re-trigger generation"
       ],
@@ -370,7 +398,7 @@
         "SSE result event includes warnings array listing what degraded: missing writing style, no sentiment, RAG partial results, placeholder attendee",
         "Each warning has a severity (info/warn) and human-readable message",
         "Frontend renders warnings as amber badges below the context breakdown",
-        "Warnings are informational only \u2014 generation still completes",
+        "Warnings are informational only — generation still completes",
         "No warnings shown when all data sources returned successfully"
       ],
       "estimatedMinutes": 10,
@@ -402,7 +430,7 @@
       "priority": 1,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: deal + company enrichment + contact intel + interaction history (RAG) + pricing strategy",
-        "references/proposal-templates.md added with templates by deal stage (discovery, evaluation, negotiation, renewal) \u2014 annotated good vs bad examples",
+        "references/proposal-templates.md added with templates by deal stage (discovery, evaluation, negotiation, renewal) — annotated good vs bad examples",
         "references/pricing-strategy.md added with 3-tier anchoring framework, discount guidelines, competitive pricing context",
         "Instructions include RAG queries: 'pricing discussions with {company}', 'objections about cost from {contact}', 'ROI mentioned in meetings'",
         "Output contract expanded: pricing_rationale, competitive_positioning, roi_metrics, personalization_signals fields added"
@@ -436,7 +464,7 @@
       "priority": 2,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: contact + deal context + meeting RAG (commitments, decisions, concerns) + activity signals + email strategy",
-        "references/followup-templates.md added with templates by type: post-discovery, post-demo, post-proposal, post-negotiation, re-engagement \u2014 with annotated examples",
+        "references/followup-templates.md added with templates by type: post-discovery, post-demo, post-proposal, post-negotiation, re-engagement — with annotated examples",
         "references/personalization-guide.md added with value-add strategies by deal stage, multi-threading guidance (when to switch contacts), send timing research",
         "Instructions include RAG queries: 'commitments made to {contact}', 'concerns raised by {company}', 'next steps discussed'",
         "Output contract expanded: rag_context_used, personalization_signals (min 3), multi_thread_suggestion, confidence_level fields added"
@@ -504,7 +532,7 @@
       "priority": 4,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: objection classification + contact/deal context + RAG (how this objection was handled before) + competitive context + response strategy",
-        "references/objection-playbooks.md added with detailed playbooks for all 7 categories (Price, Timing, Competition, Status Quo, Authority, Need, Trust) \u2014 each with 3-5 response templates, bridge questions, proof points",
+        "references/objection-playbooks.md added with detailed playbooks for all 7 categories (Price, Timing, Competition, Status Quo, Authority, Need, Trust) — each with 3-5 response templates, bridge questions, proof points",
         "references/response-patterns.md added with ACE framework deep dive, multi-turn handling (objection to your response), fake objection detection, when to concede vs push back",
         "Instructions include RAG queries: 'objections from {contact}', 'how {objection_type} was resolved', 'proof points used for {industry}'",
         "Output contract expanded: objection_category, confidence_this_is_real_concern, historical_success_rate, escalation_recommendation fields"
@@ -538,7 +566,7 @@
       "priority": 5,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: contact + deal health/ghost risk + RAG (last real conversation context) + activity decay signals + re-engagement strategy",
-        "references/chase-templates.md added with templates by silence duration (7-day, 14-day, 21-day, 30+ day) \u2014 each with 3 tone variants and annotated examples of great vs mediocre re-engagement emails",
+        "references/chase-templates.md added with templates by silence duration (7-day, 14-day, 21-day, 30+ day) — each with 3 tone variants and annotated examples of great vs mediocre re-engagement emails",
         "references/reengagement-playbook.md added with multi-channel escalation, pattern detection, value-add library by deal stage",
         "Instructions include RAG queries: 'last substantive conversation with {contact}', 'commitments {contact} made', 'topics {contact} engaged with'",
         "Output contract expanded: silence_analysis, channel_recommendation, multi_thread_option, rag_context_used, confidence_level, escalation_path"
@@ -640,7 +668,7 @@
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: lead data + company web research (funding, tech stack, hiring) + contact enrichment (AI Ark/Apollo) + CRM relationship history + qualification strategy",
         "references/scoring-frameworks.md enhanced with web-research-informed scoring (tech stack match, funding stage, hiring signals), behavioral data integration guidance",
-        "references/icp-templates.md enhanced with vertical-specific ICP examples (SaaS, healthcare, fintech, agency), enrichment chaining workflow (lead \u2192 AI Ark \u2192 Apollo \u2192 score)",
+        "references/icp-templates.md enhanced with vertical-specific ICP examples (SaaS, healthcare, fintech, agency), enrichment chaining workflow (lead → AI Ark → Apollo → score)",
         "Instructions include web search queries: '{company} funding', '{company} tech stack', '{company} hiring' and enrichment tool calls for contact depth",
         "Output contract expanded: enrichment_data_used, web_research_signals, tech_stack_match, funding_stage_fit, behavioral_score fields"
       ],
@@ -707,7 +735,7 @@
       "priority": 10,
       "acceptance": [
         "SKILL.md enhanced with meeting outcome confidence scoring (how certain are we about each decision/commitment extracted)",
-        "references/pack-templates.md enhanced with templates by meeting type (discovery, demo, negotiation, renewal) \u2014 currently generic",
+        "references/pack-templates.md enhanced with templates by meeting type (discovery, demo, negotiation, renewal) — currently generic",
         "references/artifact-examples.md enhanced with cross-pack consistency checking (does this follow-up align with last meeting's follow-up?)",
         "Instructions include RAG queries: 'previous follow-up packs for {company}', 'commitments tracking for {deal}' to ensure consistency across touchpoints",
         "Output contract expanded: decision_confidence_scores, consistency_check (vs previous pack), stripped_down_option (when meeting lacked clear decisions)"
@@ -815,7 +843,7 @@
         "useLandingBuilderState hook derives phase state from CopilotMessage[] via useMemo",
         "Phase detection heuristics identify phase completions from assistant message content and structured responses",
         "Hook returns { phases, currentPhase, deliverables, isExpressMode, skippedPhases }",
-        "TypeScript strict compliance \u2014 no any types"
+        "TypeScript strict compliance — no any types"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1022,7 +1050,7 @@
         "CopilotResponse.tsx adds 'landing_page_gate' case routing to ApprovalGate component",
         "types.ts in copilot/ adds LandingPageGateData to CopilotResponseType union",
         "LandingPageBuilder passes LandingBuilderEmpty as emptyComponent to AssistantShell",
-        "Full flow verified: navigate to /landing-page-builder \u2192 empty state \u2192 send message \u2192 chat loads"
+        "Full flow verified: navigate to /landing-page-builder → empty state → send message → chat loads"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1230,7 +1258,7 @@
         "After DiscoveryWizard (5Q), Strategist asks 2-3 targeted follow-ups based on gaps in the brief",
         "Uses gemini_research tool to analyze competitor websites and market positioning",
         "Writes enriched brief + strategy + section_list to workspace",
-        "Agent badge shows '\ud83c\udfaf Strategist' on its messages in the chat"
+        "Agent badge shows '🎯 Strategist' on its messages in the chat"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": null,
@@ -1265,7 +1293,7 @@
         "Reads strategy + section_list from workspace (NOT full accumulated context)",
         "Produces A/B copy per section in exact markdown format for CopyPicker parsing",
         "Writes selected copy back to workspace.copy after CopyPicker confirmation",
-        "Agent badge shows '\u270d\ufe0f Copywriter' on its messages"
+        "Agent badge shows '✍️ Copywriter' on its messages"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1299,7 +1327,7 @@
         "Gemini SVG generation calls generate-svg edge function with rich prompts (isometric, detailed, brand-colored)",
         "Generates 2-3 SVGs per section using workspace.strategy.section_list",
         "Nano Banana hero generation uses parseVisualsForImage with workspace brand colors",
-        "All visual assets written to workspace.visuals; agent badge shows '\ud83c\udfa8 Visual Artist'"
+        "All visual assets written to workspace.visuals; agent badge shows '🎨 Visual Artist'"
       ],
       "estimatedMinutes": 30,
       "actualMinutes": null,
@@ -1335,7 +1363,7 @@
         "Reads ALL workspace fields (brief, strategy, copy, visuals) to compose the final component",
         "Embeds approved SVGs directly, uses exact hex colors, exact copy text, approved typography",
         "Code renders in LandingCodePreview iframe (existing component)",
-        "Agent badge shows '\u2699\ufe0f Builder' on its messages"
+        "Agent badge shows '⚙️ Builder' on its messages"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1369,7 +1397,7 @@
         "Badge derived from message metadata (agentRole field) set by each agent",
         "PhaseTimeline shows active agent name next to current phase",
         "Visuals phase shows parallel progress: palette done, SVGs 2/3, hero generating",
-        "Badges are small, non-intrusive \u2014 role name in muted text above the message"
+        "Badges are small, non-intrusive — role name in muted text above the message"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1401,7 +1429,7 @@
       "status": "complete",
       "priority": 10,
       "acceptance": [
-        "DiscoveryWizard reduced from 7 to 5 questions (remove tone and sections \u2014 strategist infers these)",
+        "DiscoveryWizard reduced from 7 to 5 questions (remove tone and sections — strategist infers these)",
         "After wizard submit, Strategist agent asks 2-3 targeted follow-ups in the chat",
         "Follow-ups are based on gaps: missing competitors, unclear audience, vague outcome",
         "User responds in chat, Strategist incorporates answers into enriched brief",
@@ -1508,7 +1536,7 @@
       "status": "complete",
       "priority": 13,
       "acceptance": [
-        "Full flow: DiscoveryWizard \u2192 Strategist follow-ups \u2192 Strategy approval \u2192 Copywriter \u2192 CopyPicker \u2192 Visual Artist (parallel) \u2192 Builder",
+        "Full flow: DiscoveryWizard → Strategist follow-ups → Strategy approval → Copywriter → CopyPicker → Visual Artist (parallel) → Builder",
         "Agent badges appear correctly on each phase's messages",
         "Workspace persists across page refreshes (session resumes)",
         "Gemini SVGs render in SvgPreview with animation",
@@ -1718,7 +1746,7 @@
       "acceptance": [
         "ProgressivePreview wraps LandingCodePreview iframe with section overlays",
         "Asset status badges render per section (spinner for generating, checkmark for complete)",
-        "Shimmer \u2192 image/SVG crossfade at 300ms ease-out on asset completion",
+        "Shimmer → image/SVG crossfade at 300ms ease-out on asset completion",
         "Section highlight pulse (800ms green ring) on completion",
         "Scroll-to-section when highlightSectionId prop changes",
         "Device width toggles (mobile/tablet/desktop) work correctly"
@@ -1898,7 +1926,7 @@
         "Agent reads workspace (strategy + copy + brand config) and produces structured sections",
         "Each section has copy slotted, layout_variant selected, brand colours applied",
         "All sections have image_status: idle and svg_status: idle",
-        "No code generation in agent \u2014 sectionRenderer handles code output",
+        "No code generation in agent — sectionRenderer handles code output",
         "Agent output is parseable as valid JSON array"
       ],
       "estimatedMinutes": 20,
@@ -2032,7 +2060,7 @@
       "acceptance": [
         "exportPolishAgent takes LandingSection[] + BrandConfig + workspace context, returns polished React+Tailwind code",
         "Uses Sonnet to generate production code with custom animations, refined spacing, responsive breakpoints",
-        "Export result cached in workspace.polished_code \u2014 instant on re-export until sections change",
+        "Export result cached in workspace.polished_code — instant on re-export until sections change",
         "Any section edit invalidates the cache (next export triggers fresh AI pass)",
         "Copy Code: clipboard contains polished component, toast confirms",
         "Download HTML: standalone file with CDN dependencies downloads correctly",
@@ -2069,7 +2097,7 @@
         "On workspace load with sections data: skip Strategy/Copy, render sections into preview immediately",
         "Sections with generating status reset to idle on load (interrupted generation)",
         "Chat shows resume prompt: Welcome back, N sections, M need images, continue or edit?",
-        "User says continue \u2192 asset queue restarts for idle/failed sections",
+        "User says continue → asset queue restarts for idle/failed sections",
         "User can jump straight to editing without regenerating"
       ],
       "estimatedMinutes": 15,
@@ -2094,7 +2122,7 @@
     {
       "id": "LB-UX-001",
       "feature": "landing-builder-ux-redesign",
-      "title": "Fix preview render bug \u2014 detect raw HTML vs React JSX",
+      "title": "Fix preview render bug — detect raw HTML vs React JSX",
       "type": "bugfix",
       "status": "complete",
       "priority": 1,
@@ -2128,7 +2156,7 @@
     {
       "id": "LB-UX-002",
       "feature": "landing-builder-ux-redesign",
-      "title": "Wire right panel \u2014 section list + properties editor in assembly mode",
+      "title": "Wire right panel — section list + properties editor in assembly mode",
       "type": "frontend",
       "status": "complete",
       "priority": 2,
@@ -2167,7 +2195,7 @@
     {
       "id": "LB-UX-003",
       "feature": "landing-builder-ux-redesign",
-      "title": "Build FloatingChatBar \u2014 centered bottom, collapsible history",
+      "title": "Build FloatingChatBar — centered bottom, collapsible history",
       "type": "frontend",
       "status": "complete",
       "priority": 2,
@@ -2205,7 +2233,7 @@
     {
       "id": "LB-UX-004",
       "feature": "landing-builder-ux-redesign",
-      "title": "Assemble hero layout \u2014 preview fills space, right panel, chat overlay",
+      "title": "Assemble hero layout — preview fills space, right panel, chat overlay",
       "type": "frontend",
       "status": "complete",
       "priority": 3,
@@ -2239,7 +2267,7 @@
     {
       "id": "LB-UX-005",
       "feature": "landing-builder-ux-redesign",
-      "title": "Polish \u2014 transitions, section click wiring, progress indicator",
+      "title": "Polish — transitions, section click wiring, progress indicator",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
@@ -2264,7 +2292,7 @@
       },
       "blocks": [],
       "parallelWith": [],
-      "notes": "Final pass: smooth animations, wire section click \u2192 editor panel selection, clean progress badges.",
+      "notes": "Final pass: smooth animations, wire section click → editor panel selection, clean progress badges.",
       "startedAt": "2026-03-01T17:33:26.961Z",
       "completedAt": "2026-03-01T17:33:26.961Z",
       "actualMinutes": 8
@@ -2862,7 +2890,7 @@
     {
       "id": "RC-016",
       "feature": "landing-builder-react-components",
-      "title": "Add coexistence header to sectionRenderer.ts \u2014 keep as HTML export fallback",
+      "title": "Add coexistence header to sectionRenderer.ts — keep as HTML export fallback",
       "type": "docs",
       "status": "complete",
       "priority": 5,
@@ -2899,9 +2927,9 @@
       "status": "complete",
       "priority": 5,
       "acceptance": [
-        "assignAssetStrategy() sets hero\u2192image, features\u2192icon, social-proof\u2192none, pricing\u2192none, stats\u2192none, comparison\u2192none",
+        "assignAssetStrategy() sets hero→image, features→icon, social-proof→none, pricing→none, stats→none, comparison→none",
         "Assigns icon_name from Lucide icon set per section type",
-        "Assigns divider type between key section transitions (hero\u2192problem=wave, etc.)",
+        "Assigns divider type between key section transitions (hero→problem=wave, etc.)",
         "Called during parseWorkspaceToSections()"
       ],
       "estimatedMinutes": 18,
@@ -3057,7 +3085,7 @@
     {
       "id": "RC-023",
       "feature": "landing-builder-react-components",
-      "title": "Update editor panels \u2014 new section icons, asset strategy selector, divider picker",
+      "title": "Update editor panels — new section icons, asset strategy selector, divider picker",
       "type": "frontend",
       "status": "complete",
       "priority": 7,
@@ -3592,7 +3620,7 @@
     {
       "id": "RG-005",
       "feature": "relationship-graph",
-      "title": "Add 'graph' view mode to Pipeline \u2014 view switcher, URL param, route integration",
+      "title": "Add 'graph' view mode to Pipeline — view switcher, URL param, route integration",
       "type": "frontend",
       "status": "complete",
       "priority": 5,
@@ -3630,7 +3658,7 @@
     {
       "id": "RG-006",
       "feature": "relationship-graph",
-      "title": "SVG graph shell \u2014 D3 zoom/pan, container, background gradients, orbit rings",
+      "title": "SVG graph shell — D3 zoom/pan, container, background gradients, orbit rings",
       "type": "frontend",
       "status": "complete",
       "priority": 6,
@@ -3668,7 +3696,7 @@
     {
       "id": "RG-007",
       "feature": "relationship-graph",
-      "title": "Contact node rendering \u2014 data hook, radial positioning, tier colours, badges",
+      "title": "Contact node rendering — data hook, radial positioning, tier colours, badges",
       "type": "frontend",
       "status": "complete",
       "priority": 7,
@@ -3782,7 +3810,7 @@
     {
       "id": "RG-010",
       "feature": "relationship-graph",
-      "title": "Company clustering toggle \u2014 group by company mode",
+      "title": "Company clustering toggle — group by company mode",
       "type": "frontend",
       "status": "complete",
       "priority": 10,
@@ -3818,7 +3846,7 @@
     {
       "id": "RG-011",
       "feature": "relationship-graph",
-      "title": "Detail panel \u2014 overview tab with warmth breakdown, stats, and header",
+      "title": "Detail panel — overview tab with warmth breakdown, stats, and header",
       "type": "frontend",
       "status": "complete",
       "priority": 11,
@@ -3858,7 +3886,7 @@
     {
       "id": "RG-012",
       "feature": "relationship-graph",
-      "title": "Detail panel \u2014 deal card, AI next step, related contacts, signals tags",
+      "title": "Detail panel — deal card, AI next step, related contacts, signals tags",
       "type": "frontend",
       "status": "complete",
       "priority": 12,
@@ -3894,7 +3922,7 @@
     {
       "id": "RG-013",
       "feature": "relationship-graph",
-      "title": "Detail panel \u2014 timeline tab with chronological interaction history",
+      "title": "Detail panel — timeline tab with chronological interaction history",
       "type": "frontend",
       "status": "complete",
       "priority": 13,
@@ -3933,7 +3961,7 @@
     {
       "id": "RG-014",
       "feature": "relationship-graph",
-      "title": "Detail panel \u2014 agents tab with 5 action cards and rich previews",
+      "title": "Detail panel — agents tab with 5 action cards and rich previews",
       "type": "frontend",
       "status": "complete",
       "priority": 14,
@@ -4042,7 +4070,7 @@
     {
       "id": "WB-002",
       "feature": "warmth-backfill",
-      "title": "Build warmth-backfill edge function \u2014 extract signals from activities, meetings, deals",
+      "title": "Build warmth-backfill edge function — extract signals from activities, meetings, deals",
       "type": "backend",
       "status": "complete",
       "priority": 2,
@@ -4120,7 +4148,7 @@
     {
       "id": "WB-004",
       "feature": "warmth-backfill",
-      "title": "Add backfill banner to RelationshipGraph \u2014 empty state detection and populate button",
+      "title": "Add backfill banner to RelationshipGraph — empty state detection and populate button",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
@@ -4153,7 +4181,7 @@
     {
       "id": "MW-001",
       "feature": "memory-wiring",
-      "title": "Build extract-deal-memory-events edge function \u2014 parse transcripts into deal_memory_events",
+      "title": "Build extract-deal-memory-events edge function — parse transcripts into deal_memory_events",
       "type": "backend",
       "status": "complete",
       "priority": 1,
@@ -4204,7 +4232,7 @@
         "generate-follow-up calls getDealContext() from _shared/memory/reader.ts when deal_id is available",
         "Injects commitments, recent events, and snapshot narrative into the follow-up prompt",
         "Follow-up emails reference past commitments and deal history when available",
-        "Graceful fallback \u2014 works identically to today if no memory data exists"
+        "Graceful fallback — works identically to today if no memory data exists"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -4241,7 +4269,7 @@
         "briefingComposer calls getDealContext() when deal_id is present on the calendar event",
         "Meeting prep includes open commitments, recent objections, and stakeholder narrative",
         "AI-generated talking points reference deal memory when available",
-        "Graceful fallback \u2014 works identically to today if no memory data exists"
+        "Graceful fallback — works identically to today if no memory data exists"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -4501,7 +4529,7 @@
         "oauth-token-refresh/index.ts created with provider parameter routing",
         "Provider configs for google, hubspot, fathom, attio, bullhorn",
         "Each config specifies: token endpoint URL, client ID env var, credentials table/columns",
-        "Shared logic: fetch integrations \u2192 check expiry \u2192 POST token endpoint \u2192 update credentials"
+        "Shared logic: fetch integrations → check expiry → POST token endpoint → update credentials"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": null,
@@ -4573,7 +4601,7 @@
       "acceptance": [
         "oauth-initiate/index.ts created with provider parameter routing",
         "Provider configs for google, hubspot, fathom, attio, bullhorn",
-        "Shared logic: validate session \u2192 generate state \u2192 store state \u2192 build auth URL \u2192 return",
+        "Shared logic: validate session → generate state → store state → build auth URL → return",
         "Frontend OAuth trigger code updated to call unified endpoint"
       ],
       "estimatedMinutes": 25,
@@ -4646,7 +4674,7 @@
       "priority": 10,
       "acceptance": [
         "poll-scheduler/index.ts created with poll_configs array",
-        "Each config maps: poll type \u2192 table, status column, timeout threshold, fallback action",
+        "Each config maps: poll type → table, status column, timeout threshold, fallback action",
         "Covers: stuck-bots, transcription-queue, gladia-jobs, s3-upload-queue, voice-transcribe, slack-snooze",
         "Poll type selected via query param or request body"
       ],
@@ -5025,7 +5053,7 @@
         "_shared/oauthCallback.ts created with validateState() and exchangeToken() helpers",
         "All OAuth callback functions refactored to use shared helpers",
         "Provider-specific post-processing remains in individual callback functions",
-        "No behavior changes \u2014 all OAuth flows work identically"
+        "No behavior changes — all OAuth flows work identically"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -5469,7 +5497,7 @@
     {
       "id": "SBX2-012",
       "feature": "sandbox-v2",
-      "title": "Final polish \u2014 responsive, entrance animation, CTA placement",
+      "title": "Final polish — responsive, entrance animation, CTA placement",
       "type": "frontend",
       "status": "complete",
       "priority": 5,
@@ -5508,9 +5536,9 @@
       "acceptance": [
         "Sidebar shows only: Dashboard, Pipeline, Meetings, Email, Copilot",
         "All locked/greyed-out items removed entirely (not hidden, deleted from nav)",
-        "Group dividers removed \u2014 single clean nav list",
+        "Group dividers removed — single clean nav list",
         "Mobile bottom tabs updated to match (5 tabs max)",
-        "No SignupModal trigger from nav \u2014 only from CTA button"
+        "No SignupModal trigger from nav — only from CTA button"
       ],
       "estimatedMinutes": 15,
       "files": [
@@ -5673,7 +5701,7 @@
     {
       "id": "SBX3-006",
       "feature": "sandbox-v3",
-      "title": "Deep personalization \u2014 logos, research signals, industry context",
+      "title": "Deep personalization — logos, research signals, industry context",
       "type": "frontend",
       "status": "complete",
       "priority": 3,
@@ -5709,7 +5737,7 @@
     {
       "id": "SBX3-007",
       "feature": "sandbox-v3",
-      "title": "Guided narrative flow \u2014 progressive reveal, not free-roam",
+      "title": "Guided narrative flow — progressive reveal, not free-roam",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
@@ -5746,7 +5774,7 @@
     {
       "id": "SBX3-008",
       "feature": "sandbox-v3",
-      "title": "Live AI moments \u2014 typing email, assembling meeting brief",
+      "title": "Live AI moments — typing email, assembling meeting brief",
       "type": "frontend",
       "status": "complete",
       "priority": 5,
@@ -5774,12 +5802,720 @@
       "actualMinutes": 15,
       "startedAt": "2026-03-05T01:00:00Z",
       "completedAt": "2026-03-05T01:15:00Z"
+    },
+    {
+      "id": "FNL-001",
+      "feature": "sandbox-funnel",
+      "title": "Add progress indicator bar to sandbox topbar",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Progress bar shows '3/5 features explored' in SandboxTopbar, using visitedViews from SandboxDataProvider",
+        "Progress updates live as user navigates to new views",
+        "At 5/5 the bar turns green with completion checkmark animation",
+        "Bar is subtle (height 3px) below topbar, not intrusive"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/SandboxTopbar.tsx",
+        "packages/landing/src/sandbox/data/SandboxDataProvider.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FNL-002"
+      ],
+      "parallelWith": [
+        "FNL-003"
+      ],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "FNL-002",
+      "feature": "sandbox-funnel",
+      "title": "Wire guided tour with suggestedNextView nudge",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "SandboxTour auto-starts on first sandbox load (localStorage check for dismissal)",
+        "'Next: Pipeline' nudge chip appears in topbar when suggestedNextView is non-null",
+        "Clicking the nudge navigates to that view and advances the tour",
+        "Tour dismisses permanently when user clicks X or completes all 5 steps",
+        "Nudge disappears at 5/5 completion"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/SandboxTour.tsx",
+        "packages/landing/src/sandbox/SandboxTopbar.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "FNL-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "FNL-003",
+      "feature": "sandbox-funnel",
+      "title": "Make Copilot input interactive with fuzzy-matched mock responses",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Input field accepts typed text and submits on Enter or Send click",
+        "5 pre-mapped prompt patterns fuzzy-matched: meeting prep, follow-up email, deal health, find leads, help",
+        "Each match returns a realistic typed-out response using existing addMessageTyped flow",
+        "Unmatched input returns a friendly 'Sign up to unlock full copilot' message with CTA",
+        "Suggested prompts below input update after each response (remove used ones)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxCopilot.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FNL-004"
+      ],
+      "parallelWith": [
+        "FNL-001"
+      ],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "FNL-004",
+      "feature": "sandbox-funnel",
+      "title": "Copilot mock responses use personalized visitor data",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Deal health response shows visitorDeal value, stage, and health_score from SandboxDataProvider",
+        "Follow-up email response renders the actual emailDraft content from sandbox data",
+        "Meeting prep response uses meetings[0] prep data (talking points, risk signals)",
+        "Lead search response references visitor company industry and competitors",
+        "All responses include tool call indicators matching real copilot UX"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxCopilot.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "FNL-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "FNL-005",
+      "feature": "sandbox-funnel",
+      "title": "Replace generic CTAs with view-specific personalized CTAs",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Dashboard CTA: 'Get these numbers for {company}' instead of generic",
+        "Pipeline CTA: 'Track your {company} deal for real'",
+        "Email CTA: 'Send this email to {contact_name} for real'",
+        "Copilot CTA: 'Ask 60 anything about your pipeline'",
+        "All CTAs pull from SandboxDataProvider context (companyName, contactName, dealValue)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxDashboard.tsx",
+        "packages/landing/src/sandbox/views/SandboxPipeline.tsx",
+        "packages/landing/src/sandbox/views/SandboxEmailDraft.tsx",
+        "packages/landing/src/sandbox/views/SandboxCopilot.tsx",
+        "packages/landing/src/sandbox/views/SandboxMeetings.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FNL-001",
+        "FNL-003"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "FNL-006",
+      "feature": "sandbox-funnel",
+      "title": "Mid-funnel email capture modal triggered by engagement score",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "EmailCaptureModal appears when engagement score > 40 AND 3+ views visited AND 60+ seconds elapsed",
+        "Copy: 'Save your demo - enter your email to pick up where you left off'",
+        "Email stored via campaign_visitors.signup_email upsert (existing tracking session)",
+        "Modal only shows once per session (localStorage flag)",
+        "Dismiss button closes without blocking - this is NOT a gate"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/components/EmailCaptureModal.tsx",
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/hooks/useSandboxTracking.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FNL-007"
+      ],
+      "parallelWith": [
+        "FNL-005"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "FNL-007",
+      "feature": "sandbox-funnel",
+      "title": "Social proof sticky bar after 90 seconds",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "Sticky bar slides up from bottom after 90s in sandbox",
+        "Shows: 'Teams using 60 save 15h/week on sales admin' with subtle gradient border",
+        "Bar has close button, once dismissed stays hidden for session",
+        "Bar does not overlap with main CTA button",
+        "Bar only shows if email capture modal has been dismissed or not triggered"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "packages/landing/src/sandbox/components/SocialProofBar.tsx",
+        "packages/landing/src/sandbox/SandboxApp.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "FNL-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 15
+    },
+    {
+      "id": "FNL-008",
+      "feature": "sandbox-funnel",
+      "title": "View-level analytics events in useSandboxTracking",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "trackViewChange emits sandbox_view_enter event with view name, timeInPreviousView, viewsVisitedSoFar, engagementScore",
+        "CTA click tracked as sandbox_cta_click with view, engagementScore, timeInSandbox",
+        "Events dispatched via window.dispatchEvent for pageViewTracker to pick up",
+        "Events also included in the campaign_visitors flush payload as event_log JSONB array",
+        "No external analytics SDK dependency - uses existing CustomEvent pattern"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/hooks/useSandboxTracking.ts",
+        "packages/landing/src/sandbox/data/SandboxDataProvider.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FNL-001",
+        "FNL-003",
+        "FNL-005"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "CMP-001",
+      "feature": "campaign-links",
+      "title": "Apply campaign_links migration and verify /t/ code resolution",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Migration 20260305000001_campaign_links.sql applied to staging (campaign_links + campaign_visitors tables)",
+        "RLS policies verified: public SELECT on active links, authenticated INSERT/UPDATE",
+        "CampaignLanding.tsx resolves code via REST API and renders SandboxExperience with pre-enriched data",
+        "Invalid codes redirect to homepage gracefully",
+        "view_count incremented on each code resolution"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260305000001_campaign_links.sql",
+        "packages/landing/src/pages/CampaignLanding.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "CMP-002",
+        "CMP-003",
+        "CMP-004"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "CMP-002",
+      "feature": "campaign-links",
+      "title": "Campaign enrichment edge function - batch prospect processing",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "POST /campaign-enrich accepts { campaign_name, campaign_source, prospects[] }",
+        "Generates unique 6-char base62 codes for each prospect",
+        "Calls sandbox-personalize for each prospect's domain to pre-generate research_data",
+        "Stores enriched campaign_links rows with research_data + ai_content JSONB",
+        "Returns array of { code, url, visitor_company } for the created links"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/campaign-enrich/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "CMP-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_links"
+        ]
+      },
+      "blocks": [
+        "CMP-005"
+      ],
+      "parallelWith": [
+        "CMP-003"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "CMP-003",
+      "feature": "campaign-links",
+      "title": "Campaign Manager UI - create campaigns and generate links",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "CampaignManager.tsx in sandbox/ provides form: campaign name, source, prospect list (CSV paste or manual)",
+        "Submit calls campaign-enrich edge function with auth token",
+        "Results displayed as copyable link table: prospect name, company, short URL",
+        "Bulk copy all links button for pasting into outreach tools",
+        "Campaign list view showing existing campaigns with link counts"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "packages/landing/src/sandbox/CampaignManager.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "CMP-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_links"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CMP-002"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 30
+    },
+    {
+      "id": "CMP-004",
+      "feature": "campaign-links",
+      "title": "CampaignLanding - instant load from pre-enriched data + tracking init",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Code resolution loads research_data directly from campaign_links (no re-enrichment needed)",
+        "Visitor info (name, title, company) passed to SandboxExperience for personalized greeting",
+        "useSandboxTracking initialized with campaignLinkId for visitor attribution",
+        "Loading state shows branded spinner with 'Preparing your demo...'",
+        "Fallback to live enrichment if research_data is null (edge case for old links)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/pages/CampaignLanding.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "CMP-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_links"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CMP-002",
+        "CMP-003"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "CMP-005",
+      "feature": "campaign-links",
+      "title": "Batch CSV upload with domain extraction for 10K+ prospect lists",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "CampaignManager accepts CSV file upload (columns: email, first_name, last_name, company, title)",
+        "Frontend parses CSV, extracts domains from email addresses",
+        "Deduplicates by domain, shows preview with prospect count",
+        "Submits in batches of 50 to campaign-enrich to avoid timeout",
+        "Progress bar shows enrichment progress (X/Y prospects enriched)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/CampaignManager.tsx",
+        "supabase/functions/campaign-enrich/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "CMP-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "LDI-001",
+      "feature": "lead-intelligence",
+      "title": "Weighted engagement scoring model in useSandboxTracking",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Scoring weights match strategy: page_visit=1, scroll_50+=2, demo_step=5, url_input=10, panel_view=3, signup_start=15, signup_complete=25, return_visit=10",
+        "Score persisted in localStorage for multi-session return visit detection",
+        "Engagement tier computed: Low (1-10), Medium (11-30), High (31-50), Hot (51+)",
+        "Tier exposed via getEngagementTier() from the hook",
+        "Backward-compatible with existing getEngagementScore() API"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/hooks/useSandboxTracking.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LDI-002",
+        "LDI-004"
+      ],
+      "parallelWith": [
+        "LDI-003"
+      ],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "LDI-002",
+      "feature": "lead-intelligence",
+      "title": "Rich Slack Block Kit alerts in sandbox-lead-alert",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Slack message uses Block Kit layout: header with lead name + company, score badge, source tag",
+        "Fields: Score (with tier color), Source (campaign_source), Time on site, Demo panels viewed, Top interests (from views_navigated)",
+        "Action buttons: View in 60 (deep link), Send follow-up (copilot link), Assign to rep",
+        "Alert fires when engagement_score crosses 40 (High) threshold, not just 60",
+        "Includes campaign_name context if from /t/ link"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/sandbox-lead-alert/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "LDI-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_visitors"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "LDI-003",
+      "feature": "lead-intelligence",
+      "title": "Feature interest tracking - which panels drive conversion",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Each sandbox view tracks time_spent per panel (not just visited/not visited)",
+        "Top 2 most-viewed panels included in tracking flush payload as feature_interests array",
+        "campaign_visitors table gets feature_interests TEXT[] column (migration update)",
+        "Interest data flows through to Slack alert (LDI-002 consumes it)",
+        "Feature mapping: dashboard='KPI Dashboard', pipeline='Deal Pipeline', meetings='Meeting Prep', email='Email Drafts', copilot='AI Copilot'"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/hooks/useSandboxTracking.ts",
+        "supabase/migrations/20260305000001_campaign_links.sql"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LDI-001"
+      ],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "LDI-004",
+      "feature": "lead-intelligence",
+      "title": "Campaign analytics dashboard view",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "New route /campaigns in landing app showing campaign performance",
+        "Per-campaign table: name, links created, total visitors, avg engagement score, conversions",
+        "Funnel visualization: Link clicks -> Demo viewed -> 3+ panels -> Email captured -> Signed up",
+        "Engagement tier distribution chart (Low/Medium/High/Hot counts)",
+        "Filter by campaign_source and date range"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "packages/landing/src/sandbox/CampaignManager.tsx",
+        "packages/landing/src/App.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LDI-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_visitors"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 30
+    },
+    {
+      "id": "LDI-005",
+      "feature": "lead-intelligence",
+      "title": "Auto-create lead in 60 app from high-scoring campaign visitor",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "When visitor score hits Hot tier (51+) AND has signup_email, create contact + deal in 60 app",
+        "Contact: email, first_name, last_name, company from campaign_link data",
+        "Deal: company name, source='campaign', stage='Lead', value estimated from company size",
+        "Deduplication by email - skip if contact already exists",
+        "Log creation in activities table with source='sandbox_campaign'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/sandbox-lead-alert/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "LDI-002"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_visitors",
+          "campaign_links"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "SEED-001",
+      "feature": "signup-seeding",
+      "title": "Capture demo context in signup URL parameters",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Signup CTA in sandbox appends query params: ?demo_company={domain}&demo_name={name}&demo_email={email}&campaign_code={code}",
+        "Parameters URL-encoded and passed through to app.use60.com/signup",
+        "If visitor provided email via EmailCaptureModal, pre-fill the signup email field",
+        "Campaign code included for attribution tracking",
+        "Works for both organic sandbox visitors and /t/ campaign visitors"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "packages/landing/src/sandbox/hooks/useSandboxSignup.ts",
+        "packages/landing/src/sandbox/SandboxApp.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SEED-002"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 15
+    },
+    {
+      "id": "SEED-002",
+      "feature": "signup-seeding",
+      "title": "Onboarding detects demo params and seeds initial data",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "App signup page reads demo_company, demo_name, demo_email from URL params",
+        "After account creation, if demo params present: create a deal for demo_company, create a contact for demo_name",
+        "Research data from campaign_link (if campaign_code provided) copied to the new deal's context",
+        "User lands on dashboard with pre-populated data instead of empty state",
+        "Skips standard empty-state onboarding tutorial if demo data was seeded"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/onboarding/OnboardingFlow.tsx",
+        "src/lib/hooks/useOnboardingSeeding.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "SEED-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_links"
+        ]
+      },
+      "blocks": [
+        "SEED-003"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "SEED-003",
+      "feature": "signup-seeding",
+      "title": "Welcome experience with seeded data acknowledgment",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Dashboard shows 'Welcome, {name}! We set up {company} for you.' banner on first login after seeding",
+        "Banner highlights: 1 deal created, 1 contact added, AI insights ready",
+        "Banner dismisses after click and never shows again (user_preferences flag)",
+        "If no seeding occurred, standard onboarding flow is unchanged",
+        "Attribution logged: source='campaign', campaign_code tracked in user_settings"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/AppLayout.tsx",
+        "src/pages/dashboard/Dashboard.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SEED-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 20
     }
   ],
   "execution": {
-    "totalStories": 157,
-    "completedStories": 140,
-    "currentFeature": "sandbox-v3",
-    "lastUpdated": "2026-03-05T00:00:00Z"
+    "totalStories": 178,
+    "completedStories": 178,
+    "currentFeature": "sandbox-funnel",
+    "lastUpdated": "2026-03-05T16:00:00Z"
   }
 }
