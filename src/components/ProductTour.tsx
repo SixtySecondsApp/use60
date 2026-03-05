@@ -1,3 +1,3 @@
-export function ProductTour({ userId }: { userId?: string }) {
+export function ProductTour({ userId }: { userId: string }) {
   return null;
 }
