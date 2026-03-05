@@ -12,6 +12,6 @@ export function usePendingConfigQuestions(_orgId: string, _userId?: string) {
   return useQuery<ConfigQuestion[]>({
     queryKey: ['config-questions', 'pending', _orgId, _userId],
     queryFn: async () => [],
-    enabled: false,
+    staleTime: Infinity,
   });
 }
