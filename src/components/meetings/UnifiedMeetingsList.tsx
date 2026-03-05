@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'
@@ -16,12 +16,14 @@ import { JoinMeetingModal } from '@/components/recordings/JoinMeetingModal'
 import { useUnifiedMeetings } from '@/lib/hooks/useUnifiedMeetings'
 import { useOrg } from '@/lib/contexts/OrgContext'
 import { useAuth } from '@/lib/contexts/AuthContext'
+import { HelpPanel } from '@/components/docs/HelpPanel'
 import {
   SourceBadge,
   SentimentBadge,
   CoachRatingBadge,
   TalkTimeBadge,
   VideoThumbnail,
+  CallGridThumbnail,
   statusConfig,
   platformConfig,
 } from './shared/RecordingBadges'
@@ -47,8 +49,6 @@ import {
   Calendar,
   ExternalLink,
   Play,
-  ChevronLeft,
-  ChevronRight,
   Loader2,
   FileText,
   Sparkles,
@@ -106,32 +106,31 @@ const StatCard: React.FC<{
   trend?: 'up' | 'down' | 'neutral'
 }> = ({ title, value, sub, icon, trend }) => (
   <motion.div
-    initial={{ opacity: 0, y: 20 }}
+    initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.3 }}
-    whileHover={{ y: -2 }}
-    className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-4 sm:p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10 hover:border-gray-300/50 dark:hover:border-gray-600/40 transition-all duration-300 group w-full flex flex-col"
+    transition={{ duration: 0.25 }}
+    className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl px-4 py-3 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10 hover:border-gray-300/50 dark:hover:border-gray-600/40 transition-all duration-300 group w-full flex items-center gap-3"
   >
-    <div className="flex items-start justify-between gap-3 mb-3">
-      {icon && (
-        <div className="p-2 sm:p-2.5 rounded-xl bg-gray-100/80 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/30 text-gray-500 dark:text-gray-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:border-emerald-200 dark:group-hover:border-emerald-500/30 transition-all duration-300 flex-shrink-0">
-          <div className="w-5 h-5 flex items-center justify-center">{icon}</div>
-        </div>
-      )}
-    </div>
-    <div className="flex flex-col gap-2 flex-1">
-      <div className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider leading-snug">{title}</div>
-      <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-50 leading-tight">{value}</div>
-      {sub && (
-        <div className={cn(
-          "text-xs font-medium",
-          trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' :
-          trend === 'down' ? 'text-red-600 dark:text-red-400' :
-          'text-gray-500 dark:text-gray-400'
-        )}>
-          {sub}
-        </div>
-      )}
+    {icon && (
+      <div className="p-2 rounded-lg bg-gray-100/80 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/30 text-gray-500 dark:text-gray-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:border-emerald-200 dark:group-hover:border-emerald-500/30 transition-all duration-300 flex-shrink-0">
+        <div className="w-4 h-4 flex items-center justify-center [&>svg]:h-4 [&>svg]:w-4">{icon}</div>
+      </div>
+    )}
+    <div className="flex flex-col min-w-0">
+      <div className="text-gray-500 dark:text-gray-400 text-[11px] font-medium uppercase tracking-wider leading-snug">{title}</div>
+      <div className="flex items-baseline gap-1.5">
+        <div className="text-lg font-bold text-gray-900 dark:text-gray-50 leading-tight">{value}</div>
+        {sub && (
+          <div className={cn(
+            "text-[10px] font-medium",
+            trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' :
+            trend === 'down' ? 'text-red-600 dark:text-red-400' :
+            'text-gray-500 dark:text-gray-400'
+          )}>
+            {sub}
+          </div>
+        )}
+      </div>
     </div>
   </motion.div>
 )
@@ -141,15 +140,11 @@ const StatCard: React.FC<{
 // ============================================================================
 
 const StatCardSkeleton: React.FC = () => (
-  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-4 sm:p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10 flex flex-col">
-    {/* Icon row — matches real StatCard's icon container */}
-    <div className="flex items-start justify-between gap-3 mb-3">
-      <Skeleton className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
-    </div>
-    {/* Title + value */}
-    <div className="flex flex-col gap-2 flex-1">
-      <Skeleton className="h-3 w-20 bg-gray-200/60 dark:bg-gray-700/40" />
-      <Skeleton className="h-8 sm:h-9 w-16 bg-gray-200/60 dark:bg-gray-700/40" />
+  <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-xl px-4 py-3 border border-gray-200/50 dark:border-gray-700/30 shadow-sm dark:shadow-lg dark:shadow-black/10 flex items-center gap-3">
+    <Skeleton className="h-8 w-8 rounded-lg bg-gray-200/60 dark:bg-gray-700/40 flex-shrink-0" />
+    <div className="flex flex-col gap-1 flex-1">
+      <Skeleton className="h-3 w-16 bg-gray-200/60 dark:bg-gray-700/40" />
+      <Skeleton className="h-5 w-12 bg-gray-200/60 dark:bg-gray-700/40" />
     </div>
   </div>
 )
@@ -214,7 +209,7 @@ const ListSkeleton: React.FC<{ view: 'list' | 'grid' }> = ({ view }) => (
     </div>
 
     {/* Stats grid */}
-    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 w-full overflow-hidden">
+    <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5 w-full overflow-hidden">
       {[...Array(5)].map((_, i) => <StatCardSkeleton key={i} />)}
     </div>
 
@@ -260,8 +255,6 @@ const ListSkeleton: React.FC<{ view: 'list' | 'grid' }> = ({ view }) => (
 // Main Component
 // ============================================================================
 
-const ITEMS_PER_PAGE = 30
-
 const UnifiedMeetingsList: React.FC = () => {
   const navigate = useNavigate()
   const { activeOrgId } = useOrg()
@@ -270,12 +263,16 @@ const UnifiedMeetingsList: React.FC = () => {
   // View state
   const [view, setView] = useState<'list' | 'grid'>('grid')
   const [scope, setScope] = useState<'me' | 'team'>('me')
-  const [currentPage, setCurrentPage] = useState(1)
+
+  // Infinite scroll
+  const ITEMS_PER_BATCH = 30
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_BATCH)
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
 
   // Filter state
   const [sortField, setSortField] = useState<'title' | 'meeting_start' | 'duration_minutes' | 'sentiment_score' | 'coach_rating'>('meeting_start')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const dateFilter = useDateRangeFilter('month')
+  const dateFilter = useDateRangeFilter('all')
   const [selectedRepId, setSelectedRepId] = useState<string | null | undefined>(undefined)
   const [durationBucket, setDurationBucket] = useState<'all' | 'short' | 'medium' | 'long'>('all')
   const [sentimentCategory, setSentimentCategory] = useState<'all' | 'positive' | 'neutral' | 'challenging'>('all')
@@ -294,10 +291,8 @@ const UnifiedMeetingsList: React.FC = () => {
 
   // Unified data hook
   const {
-    items,
-    allFilteredItems,
+    items: allItems,
     totalCount,
-    totalPages,
     stats,
     isLoading,
     error,
@@ -312,27 +307,28 @@ const UnifiedMeetingsList: React.FC = () => {
     isConnected,
     triggerSync,
     refetch,
-  } = useUnifiedMeetings(
-    {
-      scope,
-      sourceFilter,
-      statusFilter,
-      platformFilter,
-      sortField,
-      sortDirection,
-      dateRange: dateFilter.dateRange,
-      selectedRepId,
-      durationBucket,
-      sentimentCategory,
-      coachingCategory,
-    },
-    currentPage
-  )
+  } = useUnifiedMeetings({
+    scope,
+    sourceFilter,
+    statusFilter,
+    platformFilter,
+    sortField,
+    sortDirection,
+    dateRange: dateFilter.dateRange,
+    selectedRepId,
+    durationBucket,
+    sentimentCategory,
+    coachingCategory,
+  })
+
+  // Infinite scroll: slice allItems to visibleCount
+  const items = useMemo(() => allItems.slice(0, visibleCount), [allItems, visibleCount])
+  const hasMore = visibleCount < allItems.length
 
   // Active filter count
   const activeFilterCount = useMemo(() => {
     let count = 0
-    if (dateFilter.datePreset !== 'month') count++
+    if (dateFilter.datePreset !== 'all') count++
     if (selectedRepId) count++
     if (durationBucket !== 'all') count++
     if (sentimentCategory !== 'all') count++
@@ -344,10 +340,26 @@ const UnifiedMeetingsList: React.FC = () => {
     return count
   }, [dateFilter.datePreset, selectedRepId, durationBucket, sentimentCategory, coachingCategory, searchQuery, sourceFilter, statusFilter, platformFilter])
 
-  // Reset to page 1 on filter/scope changes
+  // Reset visible count on filter/scope changes
   useEffect(() => {
-    setCurrentPage(1)
+    setVisibleCount(ITEMS_PER_BATCH)
   }, [scope, activeOrgId, sortField, sortDirection, dateFilter.dateRange, selectedRepId, durationBucket, sentimentCategory, coachingCategory, sourceFilter, statusFilter, platformFilter])
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const el = loadMoreRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoading) {
+          setVisibleCount((prev) => prev + ITEMS_PER_BATCH)
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, isLoading])
 
   // Join meeting handler — limits 1 bot per meeting URL
   const handleJoinMeeting = async (meetingUrl: string, meetingTitle?: string) => {
@@ -441,6 +453,7 @@ const UnifiedMeetingsList: React.FC = () => {
           videoUrl={signedUrls?.[item.id]?.video_url}
           thumbnailUrl={signedUrls?.[item.id]?.thumbnail_url || item.thumbnailUrl}
           title={item.title}
+          attendeeNames={item.attendeeNames}
           className={className}
         />
       )
@@ -479,17 +492,18 @@ const UnifiedMeetingsList: React.FC = () => {
     return (
       <div className={cn("relative bg-gray-100/80 dark:bg-gray-800/40 rounded-lg overflow-hidden border border-gray-200/30 dark:border-gray-700/20", className)}>
         {item.thumbnailUrl && !item.thumbnailUrl.includes('dummyimage.com') ? (
-          <img
-            src={item.thumbnailUrl}
-            alt={item.title}
-            className="w-full h-full object-cover"
-            loading="lazy"
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
-          />
+          <>
+            <CallGridThumbnail title={item.title} companyName={item.companyName} attendeeNames={item.attendeeNames} className="absolute inset-0" />
+            <img
+              src={item.thumbnailUrl}
+              alt={item.title}
+              className="w-full h-full object-cover relative"
+              loading="lazy"
+              onError={(e) => { e.currentTarget.style.display = 'none' }}
+            />
+          </>
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Video className="h-6 w-6 text-gray-400" />
-          </div>
+          <CallGridThumbnail title={item.title} companyName={item.companyName} attendeeNames={item.attendeeNames} className="w-full h-full" />
         )}
         {item.thumbnailStatus === 'processing' && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm">
@@ -619,11 +633,14 @@ const UnifiedMeetingsList: React.FC = () => {
             <Video className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-3xl font-bold">
-              <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-100 dark:to-white bg-clip-text text-transparent">
-                Meetings
-              </span>
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-bold">
+                <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-100 dark:to-white bg-clip-text text-transparent">
+                  Meetings
+                </span>
+              </h1>
+              <HelpPanel docSlug="meetings-overview" tooltip="Meetings help" />
+            </div>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -720,7 +737,7 @@ const UnifiedMeetingsList: React.FC = () => {
       </motion.div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 w-full overflow-hidden">
+      <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5 w-full overflow-hidden">
         <StatCard
           title="This Month"
           value={stats.meetingsThisMonth.toString()}
@@ -1038,81 +1055,39 @@ const UnifiedMeetingsList: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Pagination */}
-      {totalCount > ITEMS_PER_PAGE && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl p-3 sm:p-4 border border-gray-200/50 dark:border-gray-700/30 w-full"
-        >
-          <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} of {totalCount.toLocaleString()}
-          </div>
-          <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center sm:justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="gap-1 text-xs sm:text-sm px-2 sm:px-3"
-            >
-              <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Previous</span>
-              <span className="sm:hidden">Prev</span>
-            </Button>
-            <div className="flex items-center gap-0.5 sm:gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum: number
-                if (totalPages <= 5) {
-                  pageNum = i + 1
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i
-                } else {
-                  pageNum = currentPage - 2 + i
-                }
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={currentPage === pageNum ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={cn(
-                      'w-7 h-7 sm:w-9 sm:h-9 text-xs sm:text-sm p-0',
-                      currentPage === pageNum && 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                    )}
-                  >
-                    {pageNum}
-                  </Button>
-                )
-              })}
-              {totalPages > 5 && currentPage < totalPages - 2 && (
-                <>
-                  <span className="text-gray-400 px-1 text-xs">...</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(totalPages)}
-                    className="w-7 h-7 sm:w-9 sm:h-9 text-xs sm:text-sm p-0"
-                  >
-                    {totalPages}
-                  </Button>
-                </>
-              )}
+      {/* Infinite scroll — skeleton placeholders shown while next batch loads */}
+      {hasMore && (
+        <>
+          {view === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 w-full">
+              {Array.from({ length: Math.min(allItems.length - items.length, 6) }).map((_, i) => (
+                <MeetingCardSkeleton key={`skel-${i}`} />
+              ))}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="gap-1 text-xs sm:text-sm px-2 sm:px-3"
-            >
-              <span>Next</span>
-              <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
-            </Button>
+          ) : (
+            <div className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-gray-700/30 overflow-hidden shadow-sm w-full">
+              <div className="w-full overflow-x-auto">
+                <Table>
+                  <TableBody>
+                    {Array.from({ length: Math.min(allItems.length - items.length, 6) }).map((_, i) => (
+                      <MeetingRowSkeleton key={`skel-${i}`} />
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+          <div ref={loadMoreRef} className="flex items-center justify-center py-4">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Showing {items.length} of {totalCount.toLocaleString()}
+            </span>
           </div>
-        </motion.div>
+        </>
+      )}
+      {!hasMore && items.length > 0 && totalCount > ITEMS_PER_BATCH && (
+        <div className="text-center py-4 text-xs text-gray-400 dark:text-gray-500">
+          Showing all {totalCount.toLocaleString()} meetings
+        </div>
       )}
 
       {/* Error State */}
