@@ -30,7 +30,9 @@ const PROMPT_1_SYSTEM = `You are an expert sales analyst. Analyse the meeting tr
   "tone_notes": "string — recommended tone for follow-up (formal/casual/urgent)"
 }
 
-Mark qualified=true if they showed genuine interest AND have a real use case. Mark false for tyre-kickers, wrong fit, or no budget signal.`
+Mark qualified=true if they showed genuine interest AND have a real use case. Mark false for tyre-kickers, wrong fit, or no budget signal.
+
+Today's date is {{today_date}}. Calculate months_ago and all time references accurately based on the meeting date and today's date.`
 
 const PROMPT_1_USER = `Meeting with {{first_name}} {{last_name}} from {{company}} on {{meeting_date}}.
 Rep: {{rep_name}}
@@ -48,14 +50,18 @@ const PROMPT_2_SYSTEM = `You are a copywriter generating email merge variables f
   "use60_intro": "string — one sentence explaining what 60 does for them specifically",
   "pain_reframe": "string — reframe their pain as an opportunity",
   "capability_match": "string — specific 60 capability that maps to their need"
-}`
+}
+
+Today's date is {{today_date}}. Generate accurate time references — e.g. if the meeting was in December and it's now March, say "back in December", not "back in the spring".`
 
 const PROMPT_2_USER = `Analysis for {{first_name}} {{last_name}} ({{company}}):
 {{transcript_analysis}}`
 
 const PROMPT_3_SYSTEM = `You are a sales rep writing a short, warm re-engagement email. Use the provided merge variables to compose the email. Keep it under 150 words. No subject line — just the body. Write in first person, casual-professional tone. Don't be salesy. Reference something specific from the original meeting. End with a soft CTA (e.g. "Would it make sense to grab 15 minutes?").
 
-Output the email body as plain text — no JSON, no markdown, no formatting.`
+Output the email body as plain text — no JSON, no markdown, no formatting.
+
+Today's date is {{today_date}}. Ensure any time references in the email are accurate relative to when the meeting actually occurred.`
 
 const PROMPT_3_USER = `Write a re-engagement email to {{first_name}} at {{company}}.
 

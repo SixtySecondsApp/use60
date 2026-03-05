@@ -111,6 +111,9 @@ serve(async (req: Request) => {
       if (key) cellValues[key] = cell.value ?? ''
     }
 
+    // Built-in: current date for prompt context
+    cellValues['today_date'] = new Date().toISOString().split('T')[0]
+
     // 3. Resolve {{column_key}} mustache vars in prompts
     const resolveVars = (template: string) =>
       template.replace(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g, (_, key) => cellValues[key] ?? '')
