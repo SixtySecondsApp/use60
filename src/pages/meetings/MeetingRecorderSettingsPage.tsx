@@ -1,3 +1,1 @@
-export default function MeetingRecorderSettingsPage() {
-  return <div>Meeting Recorder Settings</div>;
-}
+export default function MeetingRecorderSettingsPage() { return null; }
