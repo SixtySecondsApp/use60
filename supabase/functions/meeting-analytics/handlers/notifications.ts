@@ -15,7 +15,7 @@ export async function handleGetNotificationSettings(req: Request, orgId: string)
             schedule_type as "scheduleType", schedule_time as "scheduleTime",
             schedule_day as "scheduleDay", enabled,
             created_at as "createdAt", updated_at as "updatedAt"
-     FROM notification_settings WHERE org_id IS NULL OR org_id = $1 ORDER BY created_at DESC`,
+     FROM notification_settings WHERE org_id = $1 ORDER BY created_at DESC`,
     [orgId]
   );
 
@@ -143,7 +143,7 @@ export async function handleUpdateNotificationSetting(id: string, req: Request, 
   const db = getRailwayDb();
   const rows = await db.unsafe(
     `UPDATE notification_settings SET ${updates.join(', ')}
-     WHERE id = $${paramIndex} AND (org_id IS NULL OR org_id = $${paramIndex + 1})
+     WHERE id = $${paramIndex} AND org_id = $${paramIndex + 1}
      RETURNING id, setting_type as "settingType", channel, config,
                schedule_type as "scheduleType", schedule_time as "scheduleTime",
                schedule_day as "scheduleDay", enabled,
@@ -167,7 +167,7 @@ export async function handleUpdateNotificationSetting(id: string, req: Request, 
 export async function handleDeleteNotificationSetting(id: string, req: Request, orgId: string): Promise<Response> {
   const db = getRailwayDb();
   const rows = await db.unsafe(
-    `DELETE FROM notification_settings WHERE id = $1 AND (org_id IS NULL OR org_id = $2) RETURNING id`,
+    `DELETE FROM notification_settings WHERE id = $1 AND org_id = $2 RETURNING id`,
     [id, orgId]
   );
 

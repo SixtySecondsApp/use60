@@ -8,30 +8,8 @@
 import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { sendEmail } from '../_shared/ses.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { verifyCronSecret } from '../_shared/edgeAuth.ts';
-
-// Determine CORS origin - allow localhost for development and known production domains
-const getAllowedOrigin = (req: Request): string => {
-  const origin = req.headers.get('origin');
-  if (
-    origin?.includes('localhost') ||
-    origin?.includes('127.0.0.1') ||
-    origin?.includes('192.168.')
-  ) {
-    return origin || '*';
-  }
-  if (origin?.includes('use60.com')) {
-    return origin || '*';
-  }
-  return '*';
-};
-
-const corsHeaders = (req?: Request) => ({
-  'Access-Control-Allow-Origin': req ? getAllowedOrigin(req) : '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Max-Age': '86400',
-});
 
 interface SendInvitationRequest {
   to_email: string;
@@ -141,18 +119,15 @@ function generateEmailTemplate(
 
 serve(async (req) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: corsHeaders(req),
-    });
-  }
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) return preflightResponse;
 
   // Auth: require cron secret
   const cronSecret = Deno.env.get('CRON_SECRET');
   if (!verifyCronSecret(req, cronSecret)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     });
   }
 
@@ -174,7 +149,7 @@ serve(async (req) => {
         }),
         {
           status: 400,
-          headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+          headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
         }
       );
     }
@@ -239,8 +214,8 @@ ${invitation_url}`;
       subject: emailSubject,
       html: emailHtml,
       text: emailText,
-      from: 'invites@use60.com',
-      fromName: '60',
+      from: 'app@use60.com',
+      fromName: '60 Team',
     });
 
     if (!result.success) {
@@ -252,7 +227,7 @@ ${invitation_url}`;
         }),
         {
           status: 500,
-          headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+          headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
         }
       );
     }
@@ -265,7 +240,7 @@ ${invitation_url}`;
       }),
       {
         status: 200,
-        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       }
     );
   } catch (error) {
@@ -277,7 +252,7 @@ ${invitation_url}`;
       }),
       {
         status: 500,
-        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       }
     );
   }

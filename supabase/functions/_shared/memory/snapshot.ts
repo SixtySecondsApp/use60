@@ -10,6 +10,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../costTracking.ts';
 import type {
   DealMemoryEvent,
   DealMemorySnapshot,
@@ -231,6 +232,29 @@ Return valid JSON only, no markdown fences.`;
 
     const claudeData = await claudeRes.json();
     const rawText: string = claudeData?.content?.[0]?.text ?? '';
+
+    // Log AI cost event (fire-and-forget)
+    if (claudeData.usage) {
+      supabase
+        .from('organization_memberships')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .limit(1)
+        .maybeSingle()
+        .then(({ data: member }: { data: { user_id: string } | null }) => {
+          if (member?.user_id) {
+            logAICostEvent(
+              supabase, member.user_id, orgId,
+              'anthropic', CLAUDE_MODEL,
+              claudeData.usage.input_tokens || 0, claudeData.usage.output_tokens || 0,
+              'memory_snapshot',
+              undefined,
+              { source: 'agent_automated', agentType: 'memory-snapshot', generatedBy },
+            ).catch((e: unknown) => console.warn('[snapshot] cost log error:', e));
+          }
+        })
+        .catch((e: unknown) => console.warn('[snapshot] cost log member lookup error:', e));
+    }
 
     parsed = JSON.parse(rawText);
   } catch (claudeErr) {

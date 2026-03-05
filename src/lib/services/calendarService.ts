@@ -102,12 +102,16 @@ class CalendarService {
       let updated = 0;
 
       // Get or create calendar record
-      const { data: calendar } = await supabase
+      const { data: calendar, error: calFetchError } = await supabase
         .from('calendar_calendars')
         .select('id')
         .eq('user_id', userData.user.id)
         .eq('external_id', calendarId)
-        .single();
+        .maybeSingle();
+
+      if (calFetchError) {
+        logger.error('Error fetching calendar record:', calFetchError);
+      }
 
       let calendarDbId = calendar?.id;
 
@@ -120,7 +124,7 @@ class CalendarService {
           .maybeSingle();
 
         // Create calendar record
-        const { data: newCalendar } = await supabase
+        const { data: newCalendar, error: calCreateError } = await supabase
           .from('calendar_calendars')
           .insert({
             user_id: userData.user.id,
@@ -135,7 +139,16 @@ class CalendarService {
           .select('id')
           .single();
 
+        if (calCreateError) {
+          logger.error('Error creating calendar record:', calCreateError);
+          throw new Error(`Failed to create calendar record: ${calCreateError.message}`);
+        }
+
         calendarDbId = newCalendar?.id;
+      }
+
+      if (!calendarDbId) {
+        throw new Error('Could not get or create calendar record');
       }
 
       // Get user's org_id once for all events
@@ -230,8 +243,18 @@ class CalendarService {
         }
 
         if (error) {
+          logger.error(`Calendar event ${existingEvent ? 'update' : 'insert'} failed:`, {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            eventId: event.id,
+          });
         } else {
-          created++;
+          if (existingEvent) {
+            updated++;
+          } else {
+            created++;
+          }
         }
       }
 

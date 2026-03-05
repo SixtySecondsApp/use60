@@ -310,35 +310,35 @@ export function InsightsTab({ timeRange, period, dateRange }: InsightsTabProps) 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-800/30 text-left">
-                <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Meeting</th>
-                <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Score</th>
-                <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Grade</th>
-                <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Sentiment</th>
-                <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center">Questions</th>
-                <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center">Agreements</th>
-                <th className="pb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center">Actions</th>
+              <tr className="border-b border-gray-200/60 dark:border-gray-700/40 bg-gray-50/50 dark:bg-gray-800/30 text-left">
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Meeting</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Score</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Grade</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Sentiment</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center">Questions</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center">Agreements</th>
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-100/60 dark:divide-gray-800/40">
               {data.slice(0, 10).map((item) => (
                 <tr
                   key={item.id}
-                  className="border-b border-gray-100 dark:border-gray-800/50 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors text-sm"
+                  className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors text-sm align-middle"
                 >
-                  <td className="py-3 pr-4 font-medium max-w-[200px] truncate text-gray-900 dark:text-gray-100">{item.title}</td>
-                  <td className="py-3 pr-4 text-gray-700 dark:text-gray-300 font-medium">{item.score}</td>
-                  <td className="py-3 pr-4">
+                  <td className="px-4 py-3.5 font-medium max-w-[200px] truncate text-gray-900 dark:text-gray-100">{item.title}</td>
+                  <td className="px-4 py-3.5 text-gray-700 dark:text-gray-300 font-medium">{item.score}</td>
+                  <td className="px-4 py-3.5">
                     <Badge variant="outline" className={gradeBadgeClass(item.grade)}>{item.grade}</Badge>
                   </td>
-                  <td className="py-3 pr-4">
+                  <td className="px-4 py-3.5">
                     <Badge variant="outline" className={sentimentBadgeClass(item.sentiment)}>
                       {item.sentiment}
                     </Badge>
                   </td>
-                  <td className="py-3 pr-4 text-center text-gray-600 dark:text-gray-300">{item.metrics.questionsAsked}</td>
-                  <td className="py-3 pr-4 text-center text-gray-600 dark:text-gray-300">{item.metrics.agreements}</td>
-                  <td className="py-3 text-center text-gray-600 dark:text-gray-300">{item.metrics.totalActionItems}</td>
+                  <td className="px-4 py-3.5 text-center text-gray-600 dark:text-gray-300">{item.metrics.questionsAsked}</td>
+                  <td className="px-4 py-3.5 text-center text-gray-600 dark:text-gray-300">{item.metrics.agreements}</td>
+                  <td className="px-4 py-3.5 text-center text-gray-600 dark:text-gray-300">{item.metrics.totalActionItems}</td>
                 </tr>
               ))}
             </tbody>

@@ -139,17 +139,18 @@ export function SlackChannelSelector({
             <span className="truncate">{placeholder}</span>
           )}
           {value && !disabled ? (
-            <button
-              type="button"
+            <span
+              role="button"
+              tabIndex={0}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
                 onChange(null, null);
               }}
-              className="ml-auto shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground hover:bg-accent"
+              className="ml-auto shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </span>
           ) : (
             <ChevronsUpDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
           )}

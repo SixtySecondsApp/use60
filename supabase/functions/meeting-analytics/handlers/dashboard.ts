@@ -3,20 +3,38 @@
  */
 
 import { getRailwayDb } from '../db.ts';
-import { jsonResponse, successResponse, errorResponse } from '../helpers.ts';
+import { jsonResponse, successResponse, errorResponse, buildOrgFilter } from '../helpers.ts';
+import { SHARED_DEMO_ORG_ID } from '../constants.ts';
 
 export async function handleGetDashboardMetrics(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
-  const includeDemo = url.searchParams.get('includeDemo') !== 'false';
+  const includeDemo = url.searchParams.get('includeDemo') === 'true';
   const demoOnly = url.searchParams.get('demoOnly') === 'true';
+  const startDate = url.searchParams.get('startDate');
+  const endDate = url.searchParams.get('endDate');
 
   const demoCondition = demoOnly
     ? 'AND t.is_demo = true'
     : includeDemo
       ? ''
       : 'AND (t.is_demo = false OR t.is_demo IS NULL)';
-  const orgCondition = 'AND t.org_id = $1';
-  const countOrgCond = 'AND org_id = $1';
+  const orgCondition = `AND ${buildOrgFilter(1)}`;
+  const countOrgCond = `AND (org_id = $1 OR org_id = '${SHARED_DEMO_ORG_ID}')`;
+
+  // Build date filter fragments for transcripts (with t. alias) and counts (without alias)
+  let txDateCond = '';
+  let countDateCond = '';
+  const txParams: unknown[] = [orgId];
+  if (startDate) {
+    txParams.push(startDate);
+    txDateCond += ` AND t.created_at >= $${txParams.length}`;
+    countDateCond += ` AND created_at >= $${txParams.length}`;
+  }
+  if (endDate) {
+    txParams.push(endDate);
+    txDateCond += ` AND t.created_at <= $${txParams.length}`;
+    countDateCond += ` AND created_at <= $${txParams.length}`;
+  }
 
   const db = getRailwayDb();
 
@@ -25,18 +43,19 @@ export async function handleGetDashboardMetrics(req: Request, orgId: string): Pr
   const transcriptDemoCond = demoCondition;
   const countDemoCond = demoCondition.replace(/t\./g, '');
 
+  // Weekly queries use their own param arrays (no date filter — always relative)
   const [transcripts, actionResult, weeklyResult, weeklyTranscripts] = await Promise.all([
     db.unsafe(
-      `SELECT t.id, t.title, t.full_text, t.created_at FROM transcripts t WHERE 1=1 ${orgCondition} ${transcriptDemoCond} ORDER BY t.created_at DESC LIMIT 100`,
-      [orgId]
+      `SELECT t.id, t.title, t.full_text, t.created_at FROM transcripts t WHERE 1=1 ${orgCondition} ${transcriptDemoCond}${txDateCond} ORDER BY t.created_at DESC LIMIT 100`,
+      txParams
     ),
     db.unsafe(
       `SELECT
         COUNT(*)::text as total,
         COUNT(*) FILTER (WHERE ai.status = 'completed')::text as completed,
         COUNT(*) FILTER (WHERE ai.status = 'pending')::text as pending
-       FROM action_items ai JOIN transcripts t ON ai.transcript_id = t.id WHERE 1=1 ${orgCondition} ${transcriptDemoCond}`,
-      [orgId]
+       FROM action_items ai JOIN transcripts t ON ai.transcript_id = t.id WHERE 1=1 ${orgCondition} ${transcriptDemoCond}${txDateCond}`,
+      txParams
     ),
     db.unsafe(
       `SELECT
@@ -103,18 +122,17 @@ export async function handleGetDashboardMetrics(req: Request, orgId: string): Pr
     const decisions = keyMoments.filter((k: Record<string, unknown>) => k.moment_type === 'decision').length;
     const milestones = keyMoments.filter((k: Record<string, unknown>) => k.moment_type === 'milestone').length;
 
-    let score = 30;
+    let score = 35;
     score += Math.min(questionsAsked * 5, 15);
     score += Math.min(agreements * 5, 15);
     score += Math.min(assignedActions * 3, 10);
     score += Math.min(actionItems.length * 2, 10);
     if (sentiment?.sentiment === 'positive') score += 10;
-    if (sentiment?.sentiment === 'negative') score -= 15;
-    score -= Math.min((actionItems.length - assignedActions) * 2, 10);
-    if (questionsAsked >= 2 && agreements >= 2) score += 10;
+    if (sentiment?.sentiment === 'negative') score -= 10;
+    if (questionsAsked >= 1 && agreements >= 1) score += 10;
     score = Math.max(0, Math.min(100, Math.round(score)));
 
-    const grade = score >= 90 ? 'A' : score >= 80 ? 'B+' : score >= 70 ? 'B' : score >= 60 ? 'C+' : score >= 50 ? 'C' : score >= 40 ? 'D+' : score >= 30 ? 'D' : 'F';
+    const grade = score >= 85 ? 'A' : score >= 75 ? 'B+' : score >= 65 ? 'B' : score >= 55 ? 'C+' : score >= 45 ? 'C' : score >= 35 ? 'D+' : score >= 25 ? 'D' : 'F';
 
     let conversionScore = 50;
     if (sentiment?.positive_score != null) conversionScore += (parseFloat(String(sentiment.positive_score)) - 0.5) * 30;
@@ -293,14 +311,28 @@ export async function getDashboardMetricsData(req: Request, orgId: string): Prom
 
 export async function handleGetSalesPerformance(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
-  const includeDemo = url.searchParams.get('includeDemo') !== 'false';
+  const includeDemo = url.searchParams.get('includeDemo') === 'true';
   const demoOnly = url.searchParams.get('demoOnly') === 'true';
+  const startDate = url.searchParams.get('startDate');
+  const endDate = url.searchParams.get('endDate');
 
   const demoCondition = demoOnly ? 'AND t.is_demo = TRUE' : includeDemo ? '' : 'AND (t.is_demo = FALSE OR t.is_demo IS NULL)';
+
+  const params: unknown[] = [orgId];
+  let dateCondition = '';
+  if (startDate) {
+    params.push(startDate);
+    dateCondition += ` AND t.created_at >= $${params.length}`;
+  }
+  if (endDate) {
+    params.push(endDate);
+    dateCondition += ` AND t.created_at <= $${params.length}`;
+  }
+
   const db = getRailwayDb();
   const transcripts = await db.unsafe(
-    `SELECT t.id, t.title, t.created_at FROM transcripts t WHERE t.org_id = $1 ${demoCondition} ORDER BY t.created_at DESC LIMIT 100`,
-    [orgId]
+    `SELECT t.id, t.title, t.created_at FROM transcripts t WHERE ${buildOrgFilter(1)} ${demoCondition}${dateCondition} ORDER BY t.created_at DESC LIMIT 100`,
+    params
   );
 
   const list = transcripts;
@@ -326,18 +358,17 @@ export async function handleGetSalesPerformance(req: Request, orgId: string): Pr
     const assignedActions = actionItems.filter((a: Record<string, unknown>) => a.assignee);
     const briefSummary = summaries.find((s: Record<string, unknown>) => s.summary_type === 'brief');
 
-    let score = 30;
+    let score = 35;
     score += Math.min(questionsAsked.length * 5, 15);
     score += Math.min(agreementsList.length * 5, 15);
     score += Math.min(assignedActions.length * 3, 10);
     score += Math.min(actionItems.length * 2, 10);
     if (sentiment?.sentiment === 'positive') score += 10;
-    if (sentiment?.sentiment === 'negative') score -= 15;
-    score -= Math.min((actionItems.length - assignedActions.length) * 2, 10);
-    if (questionsAsked.length >= 2 && agreementsList.length >= 2) score += 10;
+    if (sentiment?.sentiment === 'negative') score -= 10;
+    if (questionsAsked.length >= 1 && agreementsList.length >= 1) score += 10;
     score = Math.max(0, Math.min(100, Math.round(score)));
 
-    const grade = score >= 90 ? 'A' : score >= 80 ? 'B+' : score >= 70 ? 'B' : score >= 60 ? 'C+' : score >= 50 ? 'C' : score >= 40 ? 'D+' : score >= 30 ? 'D' : 'F';
+    const grade = score >= 85 ? 'A' : score >= 75 ? 'B+' : score >= 65 ? 'B' : score >= 55 ? 'C+' : score >= 45 ? 'C' : score >= 35 ? 'D+' : score >= 25 ? 'D' : 'F';
 
     const strengths: string[] = [];
     const improvements: string[] = [];

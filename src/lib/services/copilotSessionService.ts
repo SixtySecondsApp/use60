@@ -110,7 +110,7 @@ export class CopilotSessionService {
   }
 
   // ===========================================================================
-  // Main Session Management
+  // Conversation Management
   // ===========================================================================
 
   /**
@@ -230,6 +230,7 @@ export class CopilotSessionService {
         content: input.content,
         metadata: input.metadata || null,
         is_compacted: false,
+        created_at: new Date().toISOString(),
       })
       .select('id, conversation_id, role, content, metadata, is_compacted, created_at')
       .single();

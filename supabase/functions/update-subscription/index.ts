@@ -135,7 +135,9 @@ serve(async (req) => {
       );
     }
 
-    if (!["active", "trialing"].includes(currentSub.status)) {
+    // Allow upgrades from grace_period and expired so users can recover their account.
+    // Canceled subscriptions with no Stripe sub are handled by the checkout flow instead.
+    if (!["active", "trialing", "grace_period", "expired", "past_due"].includes(currentSub.status)) {
       return new Response(
         JSON.stringify({ error: `Cannot change plan for a subscription with status: ${currentSub.status}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }

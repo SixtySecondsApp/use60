@@ -13,6 +13,7 @@ import {
 import { getAuthContext, requireOrgRole } from '../_shared/edgeAuth.ts';
 import { loadProactiveContext, type ProactiveContext } from '../_shared/proactive/orgContext.ts';
 import { extractEventsFromMeeting } from '../_shared/memory/writer.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 import { createRAGClient } from '../_shared/memory/ragClient.ts';
 import { writeMultipleItems } from '../_shared/commandCentre/writeAdapter.ts';
 
@@ -58,7 +59,10 @@ function extractJsonObject(text: string): string | null {
 /**
  * Call Anthropic API for meeting analysis
  */
-async function analyzeMeeting(meeting: MeetingData): Promise<{
+async function analyzeMeeting(
+  meeting: MeetingData,
+  costCtx?: { supabase: any; userId: string; orgId: string | null },
+): Promise<{
   summary: string;
   sentiment: 'positive' | 'neutral' | 'challenging';
   sentimentScore: number;
@@ -152,6 +156,17 @@ Return your analysis as JSON with this exact structure:
   }
 
   const result = await response.json();
+  // Log AI cost event (fire-and-forget)
+  if (costCtx?.supabase && result.usage) {
+    logAICostEvent(
+      costCtx.supabase, costCtx.userId, costCtx.orgId,
+      'anthropic', 'claude-haiku-4-5-20251001',
+      result.usage.input_tokens || 0, result.usage.output_tokens || 0,
+      'meeting_debrief',
+      undefined,
+      { source: 'agent_automated', agentType: 'slack-post-meeting' },
+    ).catch((e: unknown) => console.warn('[slack-post-meeting] cost log error:', e));
+  }
   const content = result.content[0]?.text;
 
   try {
@@ -803,17 +818,24 @@ serve(async (req) => {
 
     // Analyze meeting with AI
     console.log('Analyzing meeting:', meetingId || meeting?.id);
-    const analysis = await analyzeMeeting({
-      id: meeting.id,
-      title: meeting.title || 'Untitled Meeting',
-      transcript: meeting.transcript_text || undefined,
-      summary: meeting.summary || undefined,
-      duration_minutes: meeting.duration_minutes || 30,
-      attendees,
-      owner_user_id: meeting.owner_user_id || auth.userId || 'unknown',
-      company_id: meeting.company_id || null,
-      deal,
-    });
+    const analysis = await analyzeMeeting(
+      {
+        id: meeting.id,
+        title: meeting.title || 'Untitled Meeting',
+        transcript: meeting.transcript_text || undefined,
+        summary: meeting.summary || undefined,
+        duration_minutes: meeting.duration_minutes || 30,
+        attendees,
+        owner_user_id: meeting.owner_user_id || auth.userId || 'unknown',
+        company_id: meeting.company_id || null,
+        deal,
+      },
+      {
+        supabase,
+        userId: meeting.owner_user_id || auth.userId || 'unknown',
+        orgId: effectiveOrgId,
+      },
+    );
 
     // Fire-and-forget deal memory extraction — runs in background, does not block Slack delivery
     const dealId = (deal as { id?: string } | undefined)?.id;

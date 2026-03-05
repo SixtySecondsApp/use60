@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Send, ThumbsUp, ThumbsDown, ExternalLink, Loader2, Bot, Ticket, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +18,7 @@ interface SupportAIChatProps {
 
 export function SupportAIChat({ initialQuery, onEscalate }: SupportAIChatProps) {
   const [inputValue, setInputValue] = useState('');
-  const [initialQuerySent, setInitialQuerySent] = useState(false);
+  const lastSentQueryRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -28,11 +30,11 @@ export function SupportAIChat({ initialQuery, onEscalate }: SupportAIChatProps) 
 
   // Send initial query from search hero
   useEffect(() => {
-    if (initialQuery && !initialQuerySent) {
-      setInitialQuerySent(true);
+    if (initialQuery && initialQuery !== lastSentQueryRef.current) {
+      lastSentQueryRef.current = initialQuery;
       sendMessage(initialQuery);
     }
-  }, [initialQuery, initialQuerySent, sendMessage]);
+  }, [initialQuery, sendMessage]);
 
   // Scroll to bottom only when a new message is added (not on tab switch or re-render)
   const prevMessageCount = useRef(messages.length);
@@ -108,16 +110,36 @@ export function SupportAIChat({ initialQuery, onEscalate }: SupportAIChatProps) 
                     : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-sm'
                 )}
               >
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                {message.role === 'assistant' ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                      ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                      li: ({ children }) => <li>{children}</li>,
+                      a: ({ href, children }) => (
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">
+                          {children}
+                        </a>
+                      ),
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                ) : (
+                  <p className="whitespace-pre-wrap">{message.content}</p>
+                )}
               </div>
 
               {/* Source articles */}
               {message.role === 'assistant' && message.sourceArticles && message.sourceArticles.length > 0 && (
                 <div className="space-y-1.5">
                   <p className="text-xs text-gray-500 dark:text-gray-400 font-medium px-1">Sources</p>
-                  {message.sourceArticles.map((article) => (
+                  {message.sourceArticles.map((article, index) => (
                     <a
-                      key={article.id}
+                      key={`${article.slug}-${index}`}
                       href={`/docs?article=${article.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"

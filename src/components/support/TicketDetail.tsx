@@ -13,6 +13,7 @@ interface TicketDetailProps {
   ticket: SupportTicket;
   open: boolean;
   onClose: () => void;
+  isAdmin?: boolean;
 }
 
 const STATUS_CONFIG: Record<TicketStatus, { label: string; icon: React.ElementType; color: string }> = {
@@ -87,12 +88,12 @@ function StatusTimeline({ currentStatus }: { currentStatus: TicketStatus }) {
   );
 }
 
-export function TicketDetail({ ticket, open, onClose }: TicketDetailProps) {
+export function TicketDetail({ ticket, open, onClose, isAdmin = false }: TicketDetailProps) {
   const [replyText, setReplyText] = useState('');
   const statusConfig = STATUS_CONFIG[ticket.status];
   const StatusIcon = statusConfig.icon;
 
-  const { mutateAsync: sendMessage, isPending: isSending } = useSendSupportMessage(ticket);
+  const { mutateAsync: sendMessage, isPending: isSending } = useSendSupportMessage(ticket, isAdmin ? 'agent' : 'user');
   const { mutateAsync: updateStatus } = useUpdateTicketStatus();
 
   const handleSendReply = async (e: React.FormEvent) => {

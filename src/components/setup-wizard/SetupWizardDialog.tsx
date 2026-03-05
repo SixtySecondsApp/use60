@@ -8,7 +8,6 @@ import { NotetakerSetupStep } from './steps/NotetakerSetupStep';
 import { CrmSetupStep } from './steps/CrmSetupStep';
 import { FollowUpSetupStep } from './steps/FollowUpSetupStep';
 import { TestSetupStep } from './steps/TestSetupStep';
-import { SetupWizardComplete } from './SetupWizardComplete';
 
 const stepComponents = {
   calendar: CalendarSetupStep,
@@ -19,7 +18,7 @@ const stepComponents = {
 };
 
 export function SetupWizardDialog() {
-  const { isOpen, closeWizard, showWelcome, currentStep, allCompleted } = useSetupWizardStore();
+  const { isOpen, closeWizard, showWelcome, currentStep } = useSetupWizardStore();
 
   const StepComponent = stepComponents[currentStep];
 
@@ -27,17 +26,7 @@ export function SetupWizardDialog() {
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeWizard(); }}>
       <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden border-gray-200 dark:border-gray-700/50 [&>button]:hidden">
         <AnimatePresence mode="wait">
-          {allCompleted ? (
-            <motion.div
-              key="complete"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-            >
-              <SetupWizardComplete />
-            </motion.div>
-          ) : showWelcome ? (
+          {showWelcome ? (
             <motion.div
               key="welcome"
               initial={{ opacity: 0, y: 10 }}

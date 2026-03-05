@@ -72,6 +72,7 @@ export function useTeamAggregates(period: TimePeriod = 30, dateRange?: DateRange
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
     refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
   });
 }
 
@@ -148,6 +149,7 @@ export function useTeamComparison(period: TimePeriod = 30, dateRange?: DateRange
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
   });
 }
 

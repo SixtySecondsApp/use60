@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts'
+import { logAICostEvent } from '../_shared/costTracking.ts'
 import { perplexityAdapter } from '../_shared/providers/perplexityAdapter.ts'
 import { exaAdapter } from '../_shared/providers/exaAdapter.ts'
 import {
@@ -836,7 +837,29 @@ serve(async (req) => {
     }
 
     // ------------------------------------------------------------------
-    // 10. Update agent_run with results
+    // 10. Log AI cost event (fire-and-forget)
+    // ------------------------------------------------------------------
+    if (executionResult.token_cost && executionResult.token_cost > 0) {
+      const { data: member } = await serviceClient
+        .from('organization_memberships')
+        .select('user_id')
+        .eq('org_id', typedColumn.organization_id)
+        .limit(1)
+        .maybeSingle()
+      if (member?.user_id) {
+        logAICostEvent(
+          serviceClient, member.user_id, typedColumn.organization_id,
+          'anthropic', 'claude-haiku-4.5-20251001',
+          Math.round(executionResult.token_cost * 0.67), Math.round(executionResult.token_cost * 0.33),
+          'research_router',
+          undefined,
+          { source: 'agent_automated', agentType: 'research-router', depthLevel: typedRun.depth_level_used },
+        ).catch((e: unknown) => console.warn('[research-router] cost log error:', e))
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // 11. Update agent_run with results
     // ------------------------------------------------------------------
     const updatePayload: Record<string, unknown> = {
       status: 'complete',

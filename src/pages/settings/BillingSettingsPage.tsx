@@ -18,6 +18,7 @@ import {
   useCurrentSubscription,
   useCreateCheckoutSession,
 } from '@/lib/hooks/useSubscription';
+import { useSubscriptionGate } from '@/lib/hooks/useSubscriptionGate';
 import { PLAN_DETAILS, ANNUAL_SAVINGS } from '@/lib/config/planDetails';
 import { CreditBalanceSection } from '@/components/billing/CreditBalanceSection';
 import { TransactionHistorySection } from '@/components/billing/TransactionHistorySection';
@@ -93,6 +94,7 @@ export default function BillingSettingsPage() {
   const { symbol } = useOrgMoney();
   const { subscription, trial, isLoading, error } = useCurrentSubscription();
   const createCheckoutSession = useCreateCheckoutSession();
+  const subscriptionGate = useSubscriptionGate(organizationId);
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
@@ -102,9 +104,14 @@ export default function BillingSettingsPage() {
     cycle: ModalBillingCycle;
   } | null>(null);
 
+  // Internal admin orgs bypass subscription entirely
+  const isInternalAdmin = subscriptionGate.status === 'internal_admin';
+
   const currentPlan = subscription?.plan;
-  const currentPlanSlug = (currentPlan?.slug ?? 'basic') as PlanSlug;
-  const isBasicUser = currentPlanSlug === 'basic' || currentPlan?.is_free_tier;
+  const hasSubscription = !!subscription || isInternalAdmin;
+  const currentPlanSlug = currentPlan?.slug as PlanSlug | null ?? null;
+  const hasNoPlan = !hasSubscription;
+  const isBasicUser = hasSubscription && (currentPlanSlug === 'basic' || currentPlan?.is_free_tier);
   const hasStripeSubscription = !!subscription?.stripe_subscription_id;
   const currentBillingCycle: ModalBillingCycle =
     subscription?.billing_cycle === 'yearly' ? 'annual' : 'monthly';
@@ -130,13 +137,15 @@ export default function BillingSettingsPage() {
     : null;
 
   // Billing cycle label
-  const billingCycleLabel =
+  const billingCycleLabel = !hasSubscription ? '—' :
     subscription?.billing_cycle === 'yearly' ? 'Annual' : 'Monthly';
 
   // Monthly cost display
-  const monthlyCostDisplay = currentPlan?.price_monthly != null
-    ? `${symbol}${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
-    : `${symbol}29/mo`;
+  const monthlyCostDisplay = isInternalAdmin
+    ? 'Free'
+    : currentPlan?.price_monthly != null
+      ? `${symbol}${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
+      : hasSubscription ? `${symbol}29/mo` : '—';
 
   // Trial progress
   const daysRemaining = trial?.daysRemaining ?? 0;
@@ -236,17 +245,19 @@ export default function BillingSettingsPage() {
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-xl font-bold text-gray-900 dark:text-white">
-                      {currentPlan?.name ?? 'Basic Plan'}
+                      {isInternalAdmin ? 'Internal Admin' : hasSubscription ? (currentPlan?.name ?? 'Basic Plan') : 'No Plan Selected'}
                     </span>
-                    {subscription?.status ? (
+                    {isInternalAdmin ? (
+                      <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
+                        No Subscription Required
+                      </span>
+                    ) : subscription?.status ? (
                       <StatusBadge status={subscription.status} />
-                    ) : (
-                      <StatusBadge status="active" />
-                    )}
+                    ) : null}
                   </div>
 
-                  {/* Upgrade CTA for Basic users */}
-                  {isBasicUser && (
+                  {/* Upgrade CTA for Basic users or no-plan users (hidden for internal admins) */}
+                  {!isInternalAdmin && (isBasicUser || hasNoPlan) && (
                     <Button
                       size="sm"
                       onClick={() => handlePlanAction('pro')}
@@ -258,7 +269,7 @@ export default function BillingSettingsPage() {
                       ) : (
                         <Sparkles className="w-3.5 h-3.5 mr-1.5" />
                       )}
-                      Upgrade to Pro
+                      {hasNoPlan ? 'Choose a Plan' : 'Upgrade to Pro'}
                       <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                     </Button>
                   )}
@@ -462,9 +473,9 @@ export default function BillingSettingsPage() {
             {(['basic', 'pro'] as const).map((slug) => {
               const plan = PLAN_DETAILS[slug];
               const savings = ANNUAL_SAVINGS[slug];
-              const isCurrentPlan = currentPlanSlug === slug;
-              const isUpgrade = slug === 'pro' && isBasicUser;
-              const isDowngrade = slug === 'basic' && !isBasicUser;
+              const isCurrentPlan = currentPlanSlug !== null && currentPlanSlug === slug;
+              const isUpgrade = slug === 'pro' && (hasNoPlan || isBasicUser);
+              const isDowngrade = slug === 'basic' && !isBasicUser && !hasNoPlan;
               // Cycle switch: on the current plan card but selected a different cycle
               const isCycleSwitch = isCurrentPlan && billingCycle !== currentBillingCycle;
 
@@ -564,7 +575,15 @@ export default function BillingSettingsPage() {
                   </ul>
 
                   {/* CTA button */}
-                  {isCurrentPlan && !isCycleSwitch ? (
+                  {isInternalAdmin ? (
+                    <Button
+                      variant="outline"
+                      disabled
+                      className="w-full opacity-60 cursor-default"
+                    >
+                      No Subscription Required
+                    </Button>
+                  ) : isCurrentPlan && !isCycleSwitch ? (
                     <Button
                       variant="outline"
                       disabled
@@ -636,7 +655,7 @@ export default function BillingSettingsPage() {
           isOpen={!!planChangeTarget}
           onClose={() => setPlanChangeTarget(null)}
           orgId={organizationId}
-          currentPlanSlug={currentPlanSlug}
+          currentPlanSlug={(currentPlanSlug ?? 'basic') as PlanSlug}
           currentBillingCycle={currentBillingCycle}
           currentPeriodEnd={subscription?.current_period_end ?? null}
           targetPlanSlug={planChangeTarget.slug}

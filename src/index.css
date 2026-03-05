@@ -1,5 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* driver.js — base styles then glassmorphic theme overrides */
+@import 'driver.js/dist/driver.css';
+@import './styles/tour.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

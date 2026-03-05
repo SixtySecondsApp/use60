@@ -61,30 +61,60 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
     }));
 
     try {
-      // Get integration status
+      // Get integration status — this is the source of truth for connection
       const integration = await googleApi.getStatus();
-      const serviceStatus = await googleApi.getServiceStatus();
-      const health = await googleApi.getHealth();
 
-      // Consider near-expiry tokens as connected to avoid false error UI; backend will refresh when needed
-      const computedStatus: 'connected' | 'disconnected' | 'error' = integration
-        ? (health.isConnected ? 'connected' : 'error')
-        : 'disconnected';
+      if (!integration) {
+        set(state => ({
+          google: {
+            ...state.google,
+            isConnected: false,
+            integration: null,
+            email: null,
+            services: { gmail: false, calendar: false, drive: false },
+            lastSync: null,
+            status: 'disconnected',
+            isLoading: false,
+            error: null
+          }
+        }));
+        return;
+      }
+
+      // These can fail independently — don't let failures block connection status
+      let serviceStatus = { gmail: true, calendar: true, drive: true };
+      try {
+        serviceStatus = await googleApi.getServiceStatus();
+      } catch (e) {
+        console.warn('[integrationStore] Failed to get service status, using defaults:', e);
+      }
+
+      let health = { isConnected: integration.is_active, hasValidTokens: false, expiresAt: null, email: null, lastSync: null };
+      try {
+        health = await googleApi.getHealth();
+      } catch (e) {
+        console.warn('[integrationStore] Failed to get health, using is_active as fallback:', e);
+      }
+
+      // Connection = integration record exists and is_active. Token health is secondary.
+      const isConnected = !!integration && integration.is_active;
+      const computedStatus: 'connected' | 'disconnected' | 'error' = isConnected ? 'connected' : 'error';
 
       set(state => ({
         google: {
           ...state.google,
-          isConnected: !!integration && health.isConnected,
+          isConnected,
           integration,
           email: integration?.email || null,
           services: serviceStatus,
           lastSync: integration ? new Date(integration.updated_at) : null,
           status: computedStatus,
           isLoading: false,
-          error: computedStatus === 'error' ? (state.google.error || null) : null
+          error: null
         }
       }));
     } catch (error: any) {
+      console.error('[integrationStore] checkGoogleConnection failed:', error);
       set(state => ({
         google: {
           ...state.google,

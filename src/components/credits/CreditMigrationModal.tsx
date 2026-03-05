@@ -8,7 +8,7 @@
  * Offers a quick one-click path to enable Auto Top-Up.
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, RefreshCw, Package, TrendingUp, X } from 'lucide-react';
 import {
@@ -20,6 +20,11 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useCreditBalance } from '@/lib/hooks/useCreditBalance';
+import { useOrgStore } from '@/lib/stores/orgStore';
+
+// Credit system launch date — orgs created on or after this date never had old dollar-based credits,
+// so we skip the migration modal entirely for them.
+const CREDIT_SYSTEM_LAUNCH = new Date('2026-02-01T00:00:00Z');
 
 const DISMISSED_KEY = 'credit_migration_modal_dismissed';
 
@@ -47,18 +52,35 @@ interface CreditMigrationModalProps {
 export function CreditMigrationModal({ forceShow }: CreditMigrationModalProps) {
   const navigate = useNavigate();
   const { data: balance } = useCreditBalance();
-  const [open, setOpen] = useState<boolean>(!hasDismissed() || !!forceShow);
+  const getActiveOrg = useOrgStore((s) => s.getActiveOrg);
+  const activeOrg = getActiveOrg();
+
+  // New orgs (created after the credit system launch) never had dollar-based credits,
+  // so the migration modal is irrelevant for them.
+  const isNewOrg = activeOrg?.created_at
+    ? new Date(activeOrg.created_at) >= CREDIT_SYSTEM_LAUNCH
+    : false;
+
+  const [manuallyDismissed, setManuallyDismissed] = useState(false);
+
+  const open = useMemo(() => {
+    if (manuallyDismissed) return false;
+    if (forceShow) return true;
+    if (hasDismissed()) return false;
+    if (!activeOrg) return false; // Not loaded yet — don't flash the modal
+    return !isNewOrg;
+  }, [manuallyDismissed, forceShow, activeOrg, isNewOrg]);
 
   if (!open) return null;
 
   const handleDismiss = () => {
     setDismissed();
-    setOpen(false);
+    setManuallyDismissed(true);
   };
 
   const handleEnableAutoTopUp = () => {
     setDismissed();
-    setOpen(false);
+    setManuallyDismissed(true);
     navigate('/settings/credits?tab=auto-topup');
   };
 
@@ -73,7 +95,7 @@ export function CreditMigrationModal({ forceShow }: CreditMigrationModalProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-indigo-500" />
-            We've upgraded your credits
+            We&apos;ve upgraded your credits
           </DialogTitle>
           <DialogDescription>
             Your account has been migrated to the new credit pack system.

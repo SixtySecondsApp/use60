@@ -22,6 +22,7 @@ import { captureException, addBreadcrumb } from '../_shared/sentryEdge.ts';
 import { hmacSha256Hex, timingSafeEqual } from '../_shared/use60Signing.ts';
 import { triggerPreMeetingIfSoon } from '../_shared/orchestrator/triggerPreMeeting.ts';
 import { formatUtterancesToTranscriptText } from '../_shared/transcriptFormatter.ts';
+import { runFullMeetingAnalysisPipeline } from '../_shared/meetingAnalysisPipeline.ts';
 
 // =============================================================================
 // Types
@@ -881,6 +882,40 @@ async function handleTranscriptReady(
       // Don't fail the webhook - processing can be retried
     } else {
       console.log('[MeetingBaaS Webhook] Process recording triggered for:', deployment.recording_id);
+
+      // Fire the full analysis pipeline after process-recording completes.
+      // Look up the meeting linked to this bot so we have the meeting ID, org, and owner.
+      // Fire-and-forget — the webhook must respond quickly to MeetingBaaS.
+      try {
+        const { data: meetingRow } = await supabase
+          .from('meetings')
+          .select('id, org_id, owner_user_id, transcript_text')
+          .eq('bot_id', bot_id)
+          .eq('source_type', '60_notetaker')
+          .maybeSingle()
+
+        if (meetingRow?.id && meetingRow?.org_id && meetingRow?.owner_user_id) {
+          if (meetingRow.transcript_text) {
+            // Transcript already written (e.g. re-delivery or fast processing) — fire pipeline now
+            console.log(`[MeetingBaaS Webhook] Transcript present — firing analysis pipeline for meeting ${meetingRow.id}`)
+            runFullMeetingAnalysisPipeline(
+              supabase,
+              meetingRow.id,
+              meetingRow.org_id,
+              meetingRow.owner_user_id
+            ).catch(err => console.error('[MeetingBaaS Webhook] Pipeline error (fire-and-forget):', err))
+          } else {
+            // Transcript not yet written by process-recording — skip pipeline here.
+            // process-recording will trigger the pipeline after writing transcript_text.
+            console.log(`[MeetingBaaS Webhook] Transcript not yet available for meeting ${meetingRow.id} — pipeline will be triggered by process-recording`)
+          }
+        } else {
+          console.log(`[MeetingBaaS Webhook] Meeting row not found for bot_id ${bot_id} — pipeline skipped`)
+        }
+      } catch (lookupErr) {
+        // Non-fatal — pipeline can be triggered manually via reprocess button
+        console.warn('[MeetingBaaS Webhook] Meeting lookup for pipeline failed (non-fatal):', lookupErr)
+      }
     }
   } catch (error) {
     console.error('[MeetingBaaS Webhook] Failed to trigger process-recording:', error);

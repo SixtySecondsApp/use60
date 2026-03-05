@@ -8,6 +8,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent, extractAnthropicUsage } from '../_shared/costTracking.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
@@ -35,6 +36,8 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+let _lastTokenUsage = { inputTokens: 0, outputTokens: 0 };
 
 async function analyzeActionItemWithAI(
   request: ActionItemAnalysisRequest
@@ -117,6 +120,7 @@ IMPORTANT:
     }
 
     const data = await response.json();
+    _lastTokenUsage = extractAnthropicUsage(data);
     const aiResponse = data.content[0].text;
     // Parse JSON from AI response
     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
@@ -240,7 +244,9 @@ serve(async (req) => {
         meeting_id,
         meetings (
           title,
-          summary
+          summary,
+          owner_user_id,
+          org_id
         )
       `)
       .eq('id', action_item_id)
@@ -266,6 +272,19 @@ serve(async (req) => {
 
     // Analyze with AI
     const analysis = await analyzeActionItemWithAI(analysisRequest);
+
+    // Log AI cost event (fire-and-forget, gracefully skipped if no user context)
+    const ownerUserId = (actionItem.meetings as any)?.owner_user_id;
+    const ownerOrgId = (actionItem.meetings as any)?.org_id;
+    if (ownerUserId && _lastTokenUsage.inputTokens > 0) {
+      logAICostEvent(
+        supabase, ownerUserId, ownerOrgId,
+        'anthropic', 'claude-haiku-4-20250514',
+        _lastTokenUsage.inputTokens, _lastTokenUsage.outputTokens,
+        'analyze_action_item',
+      ).catch((e: unknown) => console.warn('[analyze-action-item] cost log error:', e));
+    }
+
     // Save analysis results to database
     const { data: saveResult, error: saveError } = await supabase.rpc(
       'apply_ai_analysis_to_task',

@@ -146,7 +146,7 @@ export function useMaGenerateReport() {
 export function useMaSendReport() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { type: 'daily' | 'weekly'; settingId?: string }) => maService.sendReport(params),
+    mutationFn: (params: { type: 'daily' | 'weekly'; settingId?: string; channels?: 'slack' | 'email' }) => maService.sendReport(params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meeting-analytics', 'report-history'] });
     },
@@ -199,6 +199,18 @@ export function useMaDeleteNotificationSetting() {
 export function useMaTestSlackWebhook() {
   return useMutation({
     mutationFn: (webhookUrl: string) => maService.testSlackWebhook(webhookUrl),
+  });
+}
+
+export function useMaTestEmail() {
+  return useMutation({
+    mutationFn: (emailAddress: string) => maService.testEmailDelivery(emailAddress),
+  });
+}
+
+export function useMaPreviewReportHtml() {
+  return useMutation({
+    mutationFn: (type: 'daily' | 'weekly') => maService.previewReportHtml(type),
   });
 }
 

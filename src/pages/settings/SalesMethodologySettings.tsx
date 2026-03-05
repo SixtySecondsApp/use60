@@ -99,7 +99,7 @@ export default function SalesMethodologySettings() {
   return (
     <SettingsPageWrapper
       title="Sales Methodology"
-      description="Configure the sales framework your AI agent uses to qualify deals and coach reps"
+      description="Choose the sales framework that guides how 60 analyzes your deals and coaches your conversations"
     >
       <Tabs defaultValue="methodology" className="space-y-6">
         <TabsList className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200 dark:border-gray-800/60">

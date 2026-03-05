@@ -25,13 +25,18 @@ export function TableOfContents({ content }: TableOfContentsProps) {
 
   const headings = useMemo(() => {
     const items: TocItem[] = [];
+    const seenSlugs = new Map<string, number>();
     const lines = content.split('\n');
     for (const line of lines) {
       const match = line.match(/^(#{2,3})\s+(.+)/);
       if (match) {
         const level = match[1].length;
         const text = match[2].trim();
-        items.push({ id: slugify(text), text, level });
+        const baseSlug = slugify(text);
+        const count = seenSlugs.get(baseSlug) ?? 0;
+        const id = count === 0 ? baseSlug : `${baseSlug}-${count}`;
+        seenSlugs.set(baseSlug, count + 1);
+        items.push({ id, text, level });
       }
     }
     return items;
@@ -93,7 +98,7 @@ export function TableOfContents({ content }: TableOfContentsProps) {
                 }
               `}
             >
-              {heading.text}
+              <span className="block truncate">{heading.text}</span>
             </a>
           </li>
         ))}

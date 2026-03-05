@@ -20,6 +20,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts';
 import { verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
 import { sendSlackDM } from '../_shared/proactive/deliverySlack.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -74,7 +75,7 @@ serve(async (req) => {
 
         // Generate natural language briefing via Haiku
         const narrativeBriefing = ANTHROPIC_API_KEY
-          ? await generateNarrativeBriefing(briefing, persona)
+          ? await generateNarrativeBriefing(briefing, persona, supabase)
           : formatFallbackBriefing(briefing, persona);
 
         // Deliver via Slack DM
@@ -252,6 +253,7 @@ async function assembleBriefing(
 async function generateNarrativeBriefing(
   data: BriefingData,
   persona: Record<string, any>,
+  supabase?: any,
 ): Promise<string> {
   const toneInstructions: Record<string, string> = {
     concise: 'Be brief and bullet-pointed. No fluff.',
@@ -296,6 +298,17 @@ Write a 2-3 paragraph briefing. Start with the most urgent item. End with one ac
     }
 
     const result = await response.json();
+    // Log AI cost event (fire-and-forget)
+    if (supabase && persona.user_id && result.usage) {
+      logAICostEvent(
+        supabase, persona.user_id, persona.org_id ?? null,
+        'anthropic', 'claude-haiku-4-5-20251001',
+        result.usage.input_tokens || 0, result.usage.output_tokens || 0,
+        'agent_morning_briefing',
+        undefined,
+        { source: 'agent_automated', agentType: 'morning_briefing' },
+      ).catch((e: unknown) => console.warn('[agent-morning-briefing] cost log error:', e));
+    }
     return result.content?.[0]?.text || formatFallbackBriefing(data, persona);
   } catch (err) {
     console.error('[agent-morning-briefing] Haiku call failed:', err);

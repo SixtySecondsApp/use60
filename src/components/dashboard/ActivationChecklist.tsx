@@ -21,6 +21,7 @@ import {
   Sparkles,
   ArrowRight,
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -28,7 +29,7 @@ import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
 import { useSetupWizardStore, SETUP_STEPS } from '@/lib/stores/setupWizardStore';
 
 const DISMISSED_KEY = 'activation_checklist_dismissed';
-const SHOW_DAYS = 7;
+const SHOW_DAYS = 14;
 
 interface ChecklistItem {
   key: string;
@@ -179,12 +180,13 @@ export function ActivationChecklist() {
         </div>
       </CardHeader>
 
-      {!collapsed && (
-        <CardContent className="pt-0">
-          <ul className="space-y-1">
-            {CHECKLIST_ITEMS.map((item) => {
-              const done = completedKeys.has(item.key);
-              const Icon = item.icon;
+      <AnimatePresence>
+        {!collapsed && (
+          <CardContent className="pt-0">
+            <ul className="space-y-1">
+              {CHECKLIST_ITEMS.map((item) => {
+                const done = completedKeys.has(item.key);
+                const Icon = item.icon;
 
               return (
                 <li
@@ -243,6 +245,7 @@ export function ActivationChecklist() {
           </ul>
         </CardContent>
       )}
+      </AnimatePresence>
     </Card>
   );
 }

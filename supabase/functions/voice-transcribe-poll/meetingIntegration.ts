@@ -4,6 +4,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
+import { logAICostEvent } from "../_shared/costTracking.ts"
 
 interface VoiceRecording {
   id: string
@@ -290,6 +291,17 @@ Return ONLY the JSON, no other text.`
     }
 
     const data = await response.json()
+    // Log AI cost event (fire-and-forget)
+    if (data.usage && recording.user_id) {
+      logAICostEvent(
+        supabase, recording.user_id, recording.org_id ?? null,
+        'anthropic', model,
+        data.usage.input_tokens || 0, data.usage.output_tokens || 0,
+        'voice_meeting_intelligence',
+        undefined,
+        { source: 'agent_automated', agentType: 'voice-transcribe-poll' },
+      ).catch((e: unknown) => console.warn('[voice-transcribe-poll] cost log error:', e))
+    }
     const content = data.content[0]?.text || ''
 
     // Parse JSON response

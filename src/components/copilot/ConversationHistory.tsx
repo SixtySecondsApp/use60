@@ -3,10 +3,20 @@
  * Displays a list of past CoPilot conversations
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { MessageSquare, Trash2, Plus, Loader2, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { useConversationHistory, useDeleteConversation, ConversationSummary } from '@/lib/hooks/useConversationHistory';
 import { toast } from 'sonner';
@@ -29,11 +39,19 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
 }) => {
   const { data: conversations, isLoading, error } = useConversationHistory(20);
   const deleteConversation = useDeleteConversation();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const handleDelete = async (e: React.MouseEvent, conversationId: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, conversationId: string) => {
     e.stopPropagation();
+    setConfirmDeleteId(conversationId);
+  };
 
-    if (!confirm('Delete this conversation?')) return;
+  const handleConfirmDelete = async () => {
+    if (!confirmDeleteId) return;
+    const conversationId = confirmDeleteId;
+    setConfirmDeleteId(null);
+    setDeletingId(conversationId);
 
     try {
       await deleteConversation.mutateAsync(conversationId);
@@ -46,6 +64,8 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
     } catch (error) {
       console.error('Error deleting conversation:', error);
       toast.error('Failed to delete conversation');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -123,8 +143,8 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
                 conversation={conv}
                 isActive={conv.id === currentConversationId}
                 onClick={() => onSelectConversation(conv.id)}
-                onDelete={(e) => handleDelete(e, conv.id)}
-                isDeleting={deleteConversation.isPending}
+                onDelete={(e) => handleDeleteClick(e, conv.id)}
+                isDeleting={deletingId === conv.id}
                 formatTime={formatTime}
                 compact={compact}
               />
@@ -148,6 +168,27 @@ export const ConversationHistory: React.FC<ConversationHistoryProps> = ({
           + New conversation
         </button>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!confirmDeleteId} onOpenChange={(open) => { if (!open) setConfirmDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this conversation and all its messages. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
@@ -193,14 +234,14 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
             : 'hover:bg-gray-50 dark:hover:bg-gray-800/50',
           isActive && (compact
             ? 'bg-violet-500/10 border-l-2 border-violet-500'
-            : 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500'
+            : 'bg-violet-50 dark:bg-violet-900/20 border-l-2 border-violet-500'
           )
         )}
       >
         <MessageSquare className={cn(
           'mt-0.5 flex-shrink-0',
           compact ? 'w-3.5 h-3.5' : 'w-4 h-4',
-          isActive ? (compact ? 'text-violet-400' : 'text-blue-500') : 'text-gray-400 dark:text-slate-500'
+          isActive ? 'text-violet-400' : 'text-gray-400 dark:text-slate-500'
         )} />
 
         <div className="flex-1 min-w-0">
@@ -208,7 +249,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
             'font-medium truncate',
             compact ? 'text-xs' : 'text-sm',
             isActive
-              ? (compact ? 'text-violet-300' : 'text-blue-700 dark:text-blue-400')
+              ? (compact ? 'text-violet-300' : 'text-violet-700 dark:text-violet-400')
               : (compact ? 'text-slate-300' : 'text-gray-700 dark:text-gray-300')
           )}>
             {conversation.title || 'New Conversation'}
@@ -243,11 +284,16 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
           className={cn(
             'rounded opacity-0 group-hover:opacity-100 transition-opacity',
             compact ? 'p-1' : 'p-1.5',
-            'hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500'
+            'hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500',
+            isDeleting && 'opacity-50 cursor-not-allowed'
           )}
           title="Delete conversation"
         >
-          <Trash2 className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+          {isDeleting ? (
+            <Loader2 className={cn('animate-spin', compact ? 'w-3 h-3' : 'w-3.5 h-3.5')} />
+          ) : (
+            <Trash2 className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+          )}
         </button>
       </div>
     </li>

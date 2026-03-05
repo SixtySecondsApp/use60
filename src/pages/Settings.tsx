@@ -349,7 +349,7 @@ export default function Settings() {
   return (
     <div className="min-h-screen">
       <div className="p-4 sm:p-6 lg:p-8">
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div data-tour="settings-hub" className="max-w-4xl mx-auto space-y-8">
           {/* Page Header */}
           <div className="flex items-start justify-between gap-4">
             <div>

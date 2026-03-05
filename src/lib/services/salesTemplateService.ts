@@ -494,6 +494,51 @@ export class SalesTemplateService {
   }
 
   /**
+   * Update a writing style
+   */
+  static async updateWritingStyle(styleId: string, updates: Partial<Omit<UserWritingStyle, 'id' | 'user_id' | 'created_at' | 'updated_at'>>): Promise<UserWritingStyle> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase
+        .from('user_writing_styles')
+        .update(updates)
+        .eq('id', styleId)
+        .eq('user_id', user.id)
+        .select('id, user_id, name, tone_description, examples, is_default')
+        .single();
+
+      if (error) throw error;
+      return data as UserWritingStyle;
+    } catch (error) {
+      logger.error('Error updating writing style:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a writing style
+   */
+  static async deleteWritingStyle(styleId: string): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { error } = await supabase
+        .from('user_writing_styles')
+        .delete()
+        .eq('id', styleId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+    } catch (error) {
+      logger.error('Error deleting writing style:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Extract "Smart Context" using Gemini
    * Analyzes meeting notes, LinkedIn profile, and deal info to find pain points
    */

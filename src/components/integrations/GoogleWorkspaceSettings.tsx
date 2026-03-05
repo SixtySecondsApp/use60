@@ -9,10 +9,11 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useGoogleIntegration } from '@/lib/stores/integrationStore';
-import { GoogleServiceStatus, googleApi, GoogleTestConnectionResult } from '@/lib/api/googleIntegration';
+import { GoogleServiceStatus, googleApi } from '@/lib/api/googleIntegration';
+import type { GoogleTestConnectionResult } from '@/lib/api/googleIntegration';
 import {
   Mail, Calendar, FolderOpen, ListTodo, RefreshCw, Loader2,
-  CheckCircle, XCircle, TestTube2, Sparkles, Tag, ChevronDown, ChevronUp,
+  CheckCircle, XCircle, TestTube2,
   AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -26,9 +27,9 @@ export function GoogleWorkspaceSettings() {
     services,
     isLoading,
     disconnect,
-    toggleService,
     isConnected,
     connect,
+    checkConnection,
   } = useGoogleIntegration();
 
   const [localServices, setLocalServices] = useState<GoogleServiceStatus>(services);
@@ -36,7 +37,13 @@ export function GoogleWorkspaceSettings() {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<GoogleTestConnectionResult | null>(null);
-  const [showCategorizationSettings, setShowCategorizationSettings] = useState(false);
+
+
+  // Fetch connection status on mount
+  useEffect(() => {
+    checkConnection();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync local state with store
   useEffect(() => {
@@ -58,12 +65,20 @@ export function GoogleWorkspaceSettings() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // Collect all changes upfront to avoid mid-loop state mutation issues
       const serviceKeys: (keyof GoogleServiceStatus)[] = ['gmail', 'calendar', 'drive'];
+      const changes: { key: keyof GoogleServiceStatus; enabled: boolean }[] = [];
       for (const key of serviceKeys) {
         if (localServices[key] !== services[key]) {
-          await toggleService(key);
+          changes.push({ key, enabled: localServices[key] });
         }
       }
+      // Write each change directly via the API with the desired value
+      for (const { key, enabled } of changes) {
+        await googleApi.toggleService(key, enabled);
+      }
+      // Re-fetch from DB to ensure store is in sync
+      await checkConnection();
       toast.success('Settings saved successfully');
     } catch (error: any) {
       toast.error(error.message || 'Failed to save settings');
@@ -267,75 +282,6 @@ export function GoogleWorkspaceSettings() {
         )}
       </div>
 
-      {/* Email Categorization */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Email Categorization</h3>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Sparkles className="w-5 h-5 text-purple-500" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  Smart Categorization
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Auto-categorize emails: To Respond, FYI, Marketing
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowCategorizationSettings(!showCategorizationSettings)}
-              className="text-xs"
-            >
-              {showCategorizationSettings ? (
-                <ChevronUp className="w-4 h-4" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
-              )}
-            </Button>
-          </div>
-
-          {showCategorizationSettings && (
-            <div className="pt-3 border-t border-gray-100 dark:border-gray-700/50 space-y-3">
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Emails are categorized every 15 minutes. Categories feed into the Slack Sales Assistant for follow-up reminders.
-              </p>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex items-center gap-2 p-2 rounded bg-green-50 dark:bg-green-900/20">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-xs text-green-700 dark:text-green-300">To Respond</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-blue-50 dark:bg-blue-900/20">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span className="text-xs text-blue-700 dark:text-blue-300">FYI</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-orange-50 dark:bg-orange-900/20">
-                  <div className="w-2 h-2 rounded-full bg-orange-500" />
-                  <span className="text-xs text-orange-700 dark:text-orange-300">Marketing</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-purple-50 dark:bg-purple-900/20">
-                  <div className="w-2 h-2 rounded-full bg-purple-500" />
-                  <span className="text-xs text-purple-700 dark:text-purple-300">Automated</span>
-                </div>
-              </div>
-
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => navigate('/admin/email-categorization')}
-                className="w-full text-xs"
-              >
-                <Tag className="w-4 h-4 mr-2" />
-                Configure Categories
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Connection Info */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900 dark:text-white">Connection Info</h3>
@@ -346,15 +292,13 @@ export function GoogleWorkspaceSettings() {
               {integration && new Date(integration.created_at).toLocaleDateString()}
             </span>
           </div>
-          {integration?.expires_at && (
-            <div className="flex justify-between">
-              <span className="flex items-center gap-1">
-                <RefreshCw className="w-3 h-3" />
-                Token expires:
-              </span>
-              <span>{new Date(integration.expires_at).toLocaleDateString()}</span>
-            </div>
-          )}
+          <div className="flex justify-between">
+            <span className="flex items-center gap-1">
+              <RefreshCw className="w-3 h-3" />
+              Token:
+            </span>
+            <span>Auto-refreshes</span>
+          </div>
         </div>
       </div>
 
@@ -405,7 +349,7 @@ export function GoogleWorkspaceSettings() {
                     className={`flex items-center gap-1.5 p-2 rounded ${
                       result.ok
                         ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-                        : 'bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400'
+                        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
                     }`}
                   >
                     {result.ok ? (

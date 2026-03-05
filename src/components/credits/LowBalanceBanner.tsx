@@ -14,6 +14,9 @@ import { useOrgId } from '@/lib/contexts/OrgContext';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
 import { useUser } from '@/lib/hooks/useUser';
 import { cn } from '@/lib/utils';
+import { useCreditTopUp } from '@/components/credits/CreditTopUpPrompt';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/clientV2';
 
 export function LowBalanceBanner() {
   const orgId = useOrgId();
@@ -22,15 +25,32 @@ export function LowBalanceBanner() {
   const isAdmin = userData ? isUserAdmin(userData) : false;
   const navigate = useNavigate();
   const location = useLocation();
+  const { openTopUp } = useCreditTopUp();
   const [dismissed, setDismissed] = useState(false);
   const welcomeKey = orgId ? `sixty_welcome_credits_${orgId}` : null;
   const [showWelcome, setShowWelcome] = useState(() =>
     welcomeKey ? localStorage.getItem(welcomeKey) === 'pending' : false
   );
 
+  // Check if the org has ANY cost events — used to suppress red banner for brand-new users
+  const { data: costEventCount, isLoading: costEventsLoading } = useQuery({
+    queryKey: ['credits', 'has-cost-events', orgId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('ai_cost_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId!)
+        .limit(1);
+      if (error) return 1; // Fail open: assume events exist so we don't hide real warnings
+      return count ?? 0;
+    },
+    enabled: !!orgId,
+    staleTime: 60_000,
+  });
+
   // Don't render on full-height pages (copilot, ops) — banner steals viewport space
   const isFullHeightPage = location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/');
-  if (!orgId || isLoading || !data || dismissed || isFullHeightPage) return null;
+  if (!orgId || isLoading || costEventsLoading || !data || dismissed || isFullHeightPage) return null;
 
   const { balance, projectedDaysRemaining, autoTopUp } = data;
 
@@ -42,12 +62,18 @@ export function LowBalanceBanner() {
   const isRedLow = balance > 0 && hasUsageData && projectedDaysRemaining < 7;
   const isAmberLow = balance > 0 && hasUsageData && projectedDaysRemaining >= 7 && projectedDaysRemaining < 14;
 
-  // Welcome credits banner — shown once after onboarding
-  if (showWelcome && data && data.balance > 0) {
+  // Welcome credits banner — shown once after onboarding.
+  // Only show if balance > 0; if the credit grant failed, clear the flag and fall through to normal logic.
+  if (showWelcome && balance <= 0) {
+    if (welcomeKey) localStorage.removeItem(welcomeKey);
+    setShowWelcome(false);
+  }
+
+  if (showWelcome && balance > 0) {
     return (
       <div className="flex items-center gap-3 px-4 py-2 text-sm bg-emerald-50 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200">
         <Sparkles className="w-4 h-4 flex-shrink-0" />
-        <span className="flex-1">10 Free AI credits have been added!</span>
+        <span className="flex-1">Free AI credits have been added to your account!</span>
         <button
           onClick={() => {
             if (welcomeKey) localStorage.removeItem(welcomeKey);
@@ -61,6 +87,12 @@ export function LowBalanceBanner() {
       </div>
     );
   }
+
+  // Suppress the red "depleted" banner for brand-new users.
+  // Two conditions: (1) no cost events at all, or (2) welcome credits were recently granted
+  // (onboarding fires research-fact-profile which creates cost events, so we can't rely on count alone)
+  if (isZero && !costEventsLoading && (costEventCount ?? 0) === 0) return null;
+  if (isZero && showWelcome) return null; // Still in onboarding welcome phase
 
   if (!isZero && !isRedLow && !isAmberLow) return null;
 
@@ -103,7 +135,7 @@ export function LowBalanceBanner() {
       </span>
       {isAdmin && !autoTopUpEnabled && (
         <button
-          onClick={() => navigate('/settings/credits?action=topup')}
+          onClick={() => openTopUp({ currentBalance: balance })}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors flex-shrink-0',
             isZero || isRedLow

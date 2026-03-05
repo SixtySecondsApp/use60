@@ -842,7 +842,7 @@ export default function Integrations() {
     const status = getIntegrationStatus(integrationId);
 
     if (status === 'active' || status === 'syncing') {
-      // Meeting recorders navigate to dedicated settings pages when connected
+      // Integrations with dedicated settings pages navigate there when connected
       if (integrationId === 'fathom') {
         navigate('/settings/integrations/fathom');
         return;
@@ -853,6 +853,14 @@ export default function Integrations() {
       }
       if (integrationId === '60-notetaker') {
         navigate('/meetings/recordings/settings');
+        return;
+      }
+      if (integrationId === 'slack') {
+        navigate('/settings/integrations/slack');
+        return;
+      }
+      if (integrationId === 'justcall') {
+        navigate('/settings/integrations/justcall');
         return;
       }
       // Other integrations use config modals
@@ -1012,14 +1020,17 @@ export default function Integrations() {
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Integrations</h1>
               <HelpPanel docSlug="integrations-overview" tooltip="Integrations help" />
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Connect your favorite tools to supercharge your sales workflow.
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Connect your favorite tools to supercharge your sales workflow.
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto">
+      <div data-tour="integrations-grid" className="max-w-7xl mx-auto">
         {/* Connected Integrations */}
         <div className="mb-12">
           <div className="mb-4">

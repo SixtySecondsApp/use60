@@ -152,7 +152,7 @@ function MiniSparkline({ data }: { data: Array<{ count: number }> }) {
 }
 
 export function TeamComparisonMatrix({ period, dateRange, onRepClick, className }: TeamComparisonMatrixProps) {
-  const { data, isLoading, error } = useTeamComparison(period, dateRange);
+  const { data, isLoading, isPlaceholderData, error } = useTeamComparison(period, dateRange);
   const [sortField, setSortField] = useState<SortField>('meetings');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
@@ -221,7 +221,8 @@ export function TeamComparisonMatrix({ period, dateRange, onRepClick, className 
     }
   };
 
-  if (isLoading) {
+  // Only show skeleton on initial load (no data at all)
+  if (isLoading && !data) {
     return <TeamComparisonMatrixSkeleton />;
   }
 
@@ -264,7 +265,8 @@ export function TeamComparisonMatrix({ period, dateRange, onRepClick, className 
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.3 }}
       className={cn(
-        'bg-white dark:bg-gray-900/40 rounded-2xl border border-gray-200 dark:border-gray-700/30 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-lg dark:shadow-black/10 overflow-hidden flex flex-col',
+        'bg-white dark:bg-gray-900/40 rounded-2xl border border-gray-200 dark:border-gray-700/30 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] dark:shadow-lg dark:shadow-black/10 overflow-hidden flex flex-col transition-opacity duration-200',
+        isPlaceholderData && 'opacity-60',
         className
       )}
     >

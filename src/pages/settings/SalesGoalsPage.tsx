@@ -130,6 +130,8 @@ function GoalCard({ metric, currentValue, isHighlighted, cardRef, onSave }: Goal
     try {
       await onSave(metric.dbField, num);
       toast.success(`${metric.label} goal saved`);
+    } catch {
+      // Error toast already shown by parent handleSave
     } finally {
       setSaving(false);
     }
@@ -269,26 +271,50 @@ export default function SalesGoalsPage() {
         .from('targets')
         .update({ [dbField]: value })
         .eq('id', targets.id);
-      if (error) throw new Error(error.message);
+      if (error) {
+        toast.error(`Failed to save: ${error.message}`);
+        throw new Error(error.message);
+      }
     } else {
-      // Create new target for current month
+      // Upsert — safe if no current-month record exists yet
       const { error } = await supabase
         .from('targets')
-        .insert({
-          user_id: userId,
-          revenue_target: 0,
-          outbound_target: 0,
-          meetings_target: 0,
-          proposal_target: 0,
-          start_date: startOfMonth,
-          end_date: endDate,
-          [dbField]: value,
-        });
-      if (error) throw new Error(error.message);
+        .upsert(
+          {
+            user_id: userId,
+            revenue_target: 0,
+            outbound_target: 0,
+            meetings_target: 0,
+            proposal_target: 0,
+            start_date: startOfMonth,
+            end_date: endDate,
+            [dbField]: value,
+          },
+          { onConflict: 'user_id,start_date' }
+        );
+      if (error) {
+        // Fallback: try plain insert if upsert fails
+        const { error: insertError } = await supabase
+          .from('targets')
+          .insert({
+            user_id: userId,
+            revenue_target: 0,
+            outbound_target: 0,
+            meetings_target: 0,
+            proposal_target: 0,
+            start_date: startOfMonth,
+            end_date: endDate,
+            [dbField]: value,
+          });
+        if (insertError) {
+          toast.error(`Failed to save: ${insertError.message}`);
+          throw new Error(insertError.message);
+        }
+      }
     }
 
-    await refetch();
     queryClient.invalidateQueries({ queryKey: ['targets', userId] });
+    await refetch();
   };
 
   return (

@@ -166,7 +166,7 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
   {
     path: '/meeting-analytics',
     access: 'any',
-    label: 'Intelligence',
+    label: 'Insights',
     icon: Sparkles,
     showInNav: true,
     navSection: 'main',

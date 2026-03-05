@@ -62,12 +62,6 @@ const CHIP_ATTR = 'data-entity-id';
 const CHIP_TYPE_ATTR = 'data-entity-type';
 const CHIP_NAME_ATTR = 'data-entity-name';
 
-const ENTITY_ICONS: Record<EntityType, string> = {
-  contact: '\u{1F464}', // placeholder — rendered via Lucide in actual chips
-  company: '\u{1F3E2}',
-  deal: '\u{1F4BC}',
-};
-
 const ENTITY_COLORS: Record<EntityType, string> = {
   contact: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
   company: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',

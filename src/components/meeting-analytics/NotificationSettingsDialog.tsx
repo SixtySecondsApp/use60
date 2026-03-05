@@ -23,6 +23,7 @@ import {
   useMaDeleteNotificationSetting,
   useMaUpdateNotificationSetting,
   useMaTestSlackWebhook,
+  useMaTestEmail,
 } from '@/lib/hooks/useMeetingAnalytics';
 import type { MaNotificationSetting, MaSettingType, MaScheduleType } from '@/lib/types/meetingAnalytics';
 
@@ -39,6 +40,7 @@ export function NotificationSettingsDialog({ open, onOpenChange }: Props) {
   const deleteMutation = useMaDeleteNotificationSetting();
   const updateMutation = useMaUpdateNotificationSetting();
   const testSlackMutation = useMaTestSlackWebhook();
+  const testEmailMutation = useMaTestEmail();
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -92,13 +94,22 @@ export function NotificationSettingsDialog({ open, onOpenChange }: Props) {
     }
   };
 
-  const handleTestSlack = async (webhookUrl: string) => {
+  const handleTest = async (setting: MaNotificationSetting) => {
     try {
-      const result = await testSlackMutation.mutateAsync(webhookUrl);
-      if (result.success) {
-        toast.success('Test message sent to Slack');
-      } else {
-        toast.error(`Test failed: ${result.error}`);
+      if (setting.settingType === 'slack') {
+        const result = await testSlackMutation.mutateAsync(setting.channel);
+        if (result.success) {
+          toast.success('Test message sent to Slack');
+        } else {
+          toast.error(`Test failed: ${result.error}`);
+        }
+      } else if (setting.settingType === 'email') {
+        const result = await testEmailMutation.mutateAsync(setting.channel);
+        if (result.success) {
+          toast.success('Test email sent');
+        } else {
+          toast.error(`Test failed: ${result.error}`);
+        }
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Test failed');
@@ -107,7 +118,7 @@ export function NotificationSettingsDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30">
+      <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto overflow-x-hidden bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30">
         <DialogHeader className="pb-2">
           <DialogTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <div className="p-1.5 bg-violet-600/10 dark:bg-violet-500/20 rounded-lg border border-violet-600/20">
@@ -146,7 +157,7 @@ export function NotificationSettingsDialog({ open, onOpenChange }: Props) {
                         {setting.enabled ? 'Active' : 'Disabled'}
                       </span>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{setting.channel}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 break-all mt-0.5">{setting.channel}</div>
                     <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                       {setting.scheduleType === 'weekly'
                         ? `Weekly on ${DAYS_OF_WEEK[setting.scheduleDay ?? 1]} at ${setting.scheduleTime ?? '09:00'}`
@@ -154,17 +165,15 @@ export function NotificationSettingsDialog({ open, onOpenChange }: Props) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    {setting.settingType === 'slack' && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-xs h-7 px-2 rounded-lg hover:bg-gray-100/80 dark:hover:bg-gray-700/50"
-                        onClick={() => handleTestSlack(setting.channel)}
-                        disabled={testSlackMutation.isPending}
-                      >
-                        Test
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs h-7 px-2 rounded-lg hover:bg-gray-100/80 dark:hover:bg-gray-700/50"
+                      onClick={() => handleTest(setting)}
+                      disabled={testSlackMutation.isPending || testEmailMutation.isPending}
+                    >
+                      Test
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -207,7 +216,7 @@ export function NotificationSettingsDialog({ open, onOpenChange }: Props) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="slack">Slack</SelectItem>
+                      <SelectItem value="slack">Slack Webhook</SelectItem>
                       <SelectItem value="email">Email</SelectItem>
                     </SelectContent>
                   </Select>

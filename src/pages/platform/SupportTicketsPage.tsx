@@ -512,7 +512,7 @@ export default function SupportTicketsPage() {
       </div>
 
       {openTicket && (
-        <TicketDetail ticket={openTicket} open={!!openTicket} onClose={handleCloseTicket} />
+        <TicketDetail ticket={openTicket} open={!!openTicket} onClose={handleCloseTicket} isAdmin />
       )}
     </div>
   );

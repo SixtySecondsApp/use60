@@ -1,291 +1,166 @@
 {
-  "project": "Command Centre Wiring",
-  "runSlug": "cc-wiring",
-  "branchName": "feat/cc-wiring",
-  "description": "Wire the Command Centre data pipeline end-to-end: connect proactive agents to write items, schedule enrichment + prioritisation crons, mount frontend realtime/deep-links/keyboard hooks, fix snooze, and clean up 200KB+ of dead code.",
+  "project": "Go-Live Polish — Insights, Integrations & Reports Fixes",
+  "runSlug": "golive-polish",
+  "branchName": "feature/support-docs-fixes",
+  "description": "Batch of 5 in-progress tickets (10 stories) covering Insights rename, sync error, Slack branding, help panel, and 6 Reports subtask bugs blocking go-live sign-off.",
   "aiDevHubProjectId": null,
-  "createdAt": "2026-03-02T12:00:00.000Z",
-  "auditRef": "docs/audits/COMMAND_CENTRE_AUDIT.md",
-  "planRef": "docs/audits/COMMAND_CENTRE_WIRING_PLAN.md",
+  "createdAt": "2026-03-04T14:00:00.000Z",
   "userStories": [
     {
-      "id": "CC-001",
-      "title": "Wire morning briefing agent to Command Centre",
-      "description": "Add writeToCommandCentre() call to agent-morning-briefing so each user's daily briefing creates a CC item with source_agent='morning-brief', item_type='insight'.",
+      "id": "US-001",
+      "title": "Rename Intelligence to Insights in Navigation and Page Heading",
+      "description": "As a user, I want the nav item and page heading to say 'Insights' instead of 'Intelligence' / 'Meeting Analytics' so the branding is consistent.",
       "acceptanceCriteria": [
-        "Import writeToCommandCentre from _shared/commandCentre/writeAdapter.ts",
-        "Call writeToCommandCentre after the insert_agent_activity RPC (~line 95) with org_id from persona.org_id, user_id from persona.user_id",
-        "Set item_type='insight', source_agent='morning-brief', urgency='normal'",
-        "Title includes deal/meeting counts from briefing data",
-        "Summary contains first 500 chars of narrativeBriefing",
-        "Wrapped in try-catch so CC failure never breaks briefing delivery",
-        "Deploy to staging and verify item appears in command_centre_items table"
+        "Navigation sidebar label changed from 'Intelligence' to 'Insights' in routeConfig.ts",
+        "Page heading changed from 'Meeting Analytics' to 'Insights' in MeetingAnalyticsPage.tsx",
+        "data-tour attribute updated if it references 'intelligence'",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 1,
-      "phase": "data-population",
-      "files": [
-        "supabase/functions/agent-morning-briefing/index.ts"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-002", "CC-003", "CC-004"],
       "passes": true,
-      "notes": "Pattern: follow agent-crm-heartbeat/index.ts:196 which already writes to CC. persona loop gives per-user items."
+      "notes": "TSK-0503 | Nav/heading already Insights, updated data-tour attribute",
+      "aiDevHubTaskId": null
     },
     {
-      "id": "CC-002",
-      "title": "Wire pipeline analysis agent to Command Centre",
-      "description": "Replace or supplement the existing createActionCentreItems() call in proactive-pipeline-analysis with writeMultipleItems() targeting command_centre_items. Map severity→urgency, use existing summary.insights array.",
+      "id": "US-002",
+      "title": "Fix Sync Button Error Message",
+      "description": "As a user clicking the Sync button, I want a helpful error message instead of the confusing 'Sync your meetings/calls first to enable AI search'.",
       "acceptanceCriteria": [
-        "Import writeMultipleItems from _shared/commandCentre/writeAdapter.ts",
-        "At ~line 559, replace or supplement createActionCentreItems() with writeMultipleItems()",
-        "Map each insight to CC item: source_agent='pipeline-analysis', item_type from insight.actionType",
-        "Add mapSeverityToUrgency helper: critical→critical, high→high, medium→normal, low→low",
-        "Include deal_id and contact_id from insight data where available",
-        "Wrapped in try-catch so CC failure never breaks pipeline analysis",
-        "Deploy to staging, run pipeline analysis manually, verify items appear in command_centre_items"
-      ],
-      "priority": 1,
-      "phase": "data-population",
-      "files": [
-        "supabase/functions/proactive-pipeline-analysis/index.ts"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-001", "CC-003", "CC-004"],
-      "passes": true,
-      "notes": "Existing summary.insights array (lines 351-495) has all the data. Consider keeping old Action Centre call temporarily for backwards compat."
-    },
-    {
-      "id": "CC-003",
-      "title": "Wire meeting prep agent to Command Centre",
-      "description": "Add writeToCommandCentre() call to proactive-meeting-prep after log_copilot_engagement RPC, creating a 'meeting_prep' item with urgency='high' and due_date set to meeting start time.",
-      "acceptanceCriteria": [
-        "Import writeToCommandCentre from _shared/commandCentre/writeAdapter.ts",
-        "Call writeToCommandCentre after log_copilot_engagement RPC (~line 596)",
-        "Set item_type='meeting_prep', source_agent='meeting-prep', urgency='high'",
-        "Set due_date to meeting.start_time (prep needed before meeting)",
-        "Title: 'Prep: {meeting.title}', summary from prepResult.brief (first 500 chars)",
-        "org_id from orgId || prepResult.organizationId, user_id from userId",
-        "Wrapped in try-catch so CC failure never breaks meeting prep delivery"
-      ],
-      "priority": 1,
-      "phase": "data-population",
-      "files": [
-        "supabase/functions/proactive-meeting-prep/index.ts"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-001", "CC-002", "CC-004"],
-      "passes": true,
-      "notes": "deal_id not directly available at insertion point — enrichment pipeline will resolve from meeting context."
-    },
-    {
-      "id": "CC-004",
-      "title": "Wire post-meeting agent to Command Centre",
-      "description": "Add writeMultipleItems() call to slack-post-meeting after action items are extracted from the debrief, creating 'follow_up' items with urgency='high'.",
-      "acceptanceCriteria": [
-        "Read full slack-post-meeting/index.ts to find exact action item extraction point",
-        "Import writeMultipleItems from _shared/commandCentre/writeAdapter.ts",
-        "Map each extracted action item to a CC item: source_agent='post-meeting', item_type='follow_up'",
-        "Set urgency='high', include deal_id from meeting.deal.id where available",
-        "Include meeting context (meeting_id, meeting_title) in the context JSONB field",
-        "Wrapped in try-catch so CC failure never breaks post-meeting flow",
-        "Deploy to staging and verify items appear after a test meeting ends"
-      ],
-      "priority": 1,
-      "phase": "data-population",
-      "files": [
-        "supabase/functions/slack-post-meeting/index.ts"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-001", "CC-002", "CC-003"],
-      "passes": true,
-      "notes": "Need to read full file first to locate extraction point. Use writeMultipleItems for batch efficiency."
-    },
-    {
-      "id": "CC-005",
-      "title": "Create cron schedule for cc-enrich (every 15 min)",
-      "description": "Create a new Supabase migration that schedules cc-enrich via pg_cron every 15 minutes. This is the CRITICAL missing piece — without it, items stay at enrichment_status='pending' forever and never get drafted actions.",
-      "acceptanceCriteria": [
-        "New migration file in supabase/migrations/ following naming convention",
-        "pg_cron schedule: */15 * * * * calling cc-enrich edge function via net.http_post",
-        "Pass CRON_SECRET or service_role_key in Authorization header (follow cc-auto-execute pattern from 20260222700005)",
-        "Body includes { source: 'cron' } to distinguish from manual invocations",
-        "Apply migration to staging environment (ref: caerqjzvuerejfrdtygb)",
-        "Verify in Supabase dashboard that cron job appears and fires",
-        "Check cc-enrich logs show processing within 15 minutes of deployment"
-      ],
-      "priority": 1,
-      "phase": "enrichment-pipeline",
-      "files": [
-        "supabase/migrations/YYYYMMDD_schedule_cc_enrich_cron.sql"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-006"],
-      "passes": true,
-      "notes": "Follow exact pattern from 20260222700005_schedule_cc_auto_execute_cron.sql. Fleet-health already expects 15-min cadence. cc-enrich handles batch (20 items/run), rate limits, and semaphore internally."
-    },
-    {
-      "id": "CC-006",
-      "title": "Create cron schedule for cc-prioritise (every 10 min)",
-      "description": "Create a new migration scheduling cc-prioritise via pg_cron every 10 minutes, offset by 3 minutes from the enrichment cycle to avoid overlap.",
-      "acceptanceCriteria": [
-        "New migration file in supabase/migrations/ following naming convention",
-        "pg_cron schedule: 3,13,23,33,43,53 * * * * (offset from enrichment cycle)",
-        "Pass service_role_key in Authorization header",
-        "Body includes { batch: true, source: 'cron' } for batch mode",
-        "Apply migration to staging",
-        "Verify items get priority_score and urgency values after cron fires",
-        "Verify DEDUP-003 merge group recheck triggers on items with multiple agents"
-      ],
-      "priority": 1,
-      "phase": "enrichment-pipeline",
-      "files": [
-        "supabase/migrations/YYYYMMDD_schedule_cc_prioritise_cron.sql"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-005"],
-      "passes": true,
-      "notes": "Runs in batch mode to score all open/enriching/ready items. Also triggers DEDUP-003 auto-approve if merged confidence >= 0.7."
-    },
-    {
-      "id": "CC-007",
-      "title": "End-to-end enrichment pipeline verification",
-      "description": "Verify the full item lifecycle on staging: insert test item → cc-enrich picks it up → actionDrafter generates drafted_action → cc-prioritise scores it → status becomes 'ready'. Debug and fix any issues found.",
-      "acceptanceCriteria": [
-        "Insert test CC item via SQL with source_agent='manual-test', item_type='follow_up'",
-        "Within 15 min: enrichment_status changes from 'pending' to 'enriched'",
-        "drafted_action field is populated (not null) with type, payload, display_text",
-        "confidence_score is set (0.0-1.0 range)",
-        "Within 25 min: priority_score and urgency are set by cc-prioritise",
-        "status progresses to 'ready'",
-        "Item appears in the Command Centre UI under the 'Needs You' filter",
-        "If AI enrichment fails: check ANTHROPIC_API_KEY / model config, verify actionDrafter fallback path"
+        "Error message changed to 'No conversations to index. Please ensure integrations are configured correctly'",
+        "Message only shows when there are genuinely no meetings/calls to index",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 2,
-      "phase": "enrichment-pipeline",
-      "files": [],
-      "dependencies": ["CC-005", "CC-006"],
-      "parallelWith": [],
       "passes": true,
-      "notes": "This is a verification story, not a code change. May require debugging cc-enrich logs, checking API keys, or fixing actionDrafter. Critical gate before frontend work matters."
+      "notes": "TSK-0504 | Already fixed in useMeetingIntelligence.ts line 657-658",
+      "aiDevHubTaskId": null
     },
     {
-      "id": "CC-008",
-      "title": "Mount realtime hook in Command Centre page",
-      "description": "Add useCommandCentreRealtime() call to CommandCentre.tsx so items added by agents appear in the feed without manual refresh.",
+      "id": "US-003",
+      "title": "Fix Slack App Display Name",
+      "description": "As a user connecting Slack, I want to see 'Use60' as the app name, not 'use60 (staging)'.",
       "acceptanceCriteria": [
-        "Import useCommandCentreRealtime from @/lib/hooks/useCommandCentreItemsQuery",
-        "Call useCommandCentreRealtime() at the top of the CommandCentre component (before state declarations)",
-        "Verify: insert a CC item via SQL while the page is open → item appears without pressing Refresh",
-        "Verify: approve an item in another tab → status updates in the current tab",
-        "Realtime publication already enabled in migration 20260225000005 (no DB changes needed)"
+        "Slack OAuth app name displays as 'Use60' during connection flow",
+        "Review Slack app permissions are correctly scoped",
+        "If Slack API dashboard config change, document what was changed",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 2,
-      "phase": "frontend-polish",
-      "files": [
-        "src/pages/platform/CommandCentre.tsx"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-009", "CC-010", "CC-011"],
       "passes": true,
-      "notes": "1-line addition. useRealtimeHub is working-hours aware (full during 8AM-6PM, minimal off-hours). Table-side realtime already configured."
+      "notes": "TSK-0507 | NOT a code fix — app name is set in Slack API dashboard (api.slack.com/apps). Rename from 'use60 (staging)' to 'Use60' there.",
+      "aiDevHubTaskId": null
     },
     {
-      "id": "CC-009",
-      "title": "Wire deep links for bookmarkable Command Centre URLs",
-      "description": "Connect the existing useCommandCentreDeepLinks hook to CommandCentre.tsx so URLs like /command-centre?item={id}&filter=needs-you work.",
+      "id": "US-004",
+      "title": "Fix Help Panel on Integrations Page",
+      "description": "As a user clicking the '?' help icon next to Integrations, I want the help panel to show actual documentation instead of 'Documentation not available yet.'",
       "acceptanceCriteria": [
-        "Import useCommandCentreDeepLinks from @/lib/hooks/useCommandCentreDeepLinks",
-        "Call the hook with { items: allItems, onSelectItem: setDetailItem, onSelectFilter: setActiveFilter }",
-        "When user opens detail panel: URL updates to include ?item={id}",
-        "When user changes filter: URL updates to include ?filter={name}",
-        "When user closes detail panel: ?item param is removed from URL",
-        "Loading /command-centre?item={id} directly opens the detail panel for that item",
-        "Loading /command-centre?filter=deals applies the Deals filter on mount"
+        "Help panel loads and displays documentation content for the Integrations page",
+        "If no docs_articles record exists, create seed content or show useful fallback",
+        "Evaluate whether HelpPanel should appear on other pages",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "TSK-0506 | Fallback already updated to 'coming soon' with docs.use60.com link. Slug is integrations-overview — needs docs_articles seed.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-005",
+      "title": "Fix Reports History Showing Pre-User Dates",
+      "description": "As a user viewing Reports, I should only see reports generated after my account was created, not phantom historical reports.",
+      "acceptanceCriteria": [
+        "Report history query filters by user's created_at or org membership date",
+        "No reports appear dated before the user's account creation",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 3,
-      "phase": "frontend-polish",
-      "files": [
-        "src/pages/platform/CommandCentre.tsx"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-008", "CC-010", "CC-011"],
       "passes": true,
-      "notes": "Hook is fully implemented — just needs 3 wiring points: init, panel open/close, filter change."
+      "notes": "TSK-0505 subtask 1 | Files: ReportsTab.tsx, useMaReportHistory",
+      "aiDevHubTaskId": null
     },
     {
-      "id": "CC-010",
-      "title": "Wire keyboard navigation for Command Centre",
-      "description": "Connect the existing useCommandCentreKeyboard hook to CommandCentre.tsx for j/k/Enter/a/d/Esc navigation.",
+      "id": "US-006",
+      "title": "Fix Send to All Channels Email Notifications",
+      "description": "As a user clicking 'Send to All Channels' after adding an email in Notification Settings, I want the email to actually be delivered.",
       "acceptanceCriteria": [
-        "Import useCommandCentreKeyboard from @/lib/hooks/useCommandCentreKeyboard",
-        "Call the hook with { items: filteredItems, selectedItem: detailItem, onSelectItem, onApprove, onDismiss, isPanelOpen }",
-        "j/k keys move highlight through items in the feed",
-        "Enter toggles the detail panel for the highlighted item",
-        "a key approves the highlighted item (only if status is open/ready)",
-        "d key dismisses the highlighted item",
-        "Escape closes the detail panel",
-        "Keyboard shortcuts are disabled when focus is in an input/textarea/contenteditable"
+        "Email notification is sent to configured email address",
+        "Success toast only shows after API call succeeds",
+        "If email sending fails, show error toast instead of success",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 3,
-      "phase": "frontend-polish",
-      "files": [
-        "src/pages/platform/CommandCentre.tsx",
-        "src/components/commandCentre/CCItemCard.tsx"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-008", "CC-009", "CC-011"],
       "passes": true,
-      "notes": "May need to add isHighlighted prop to CCItemCard for visual highlight state."
+      "notes": "TSK-0505 subtask 2 | Files: ReportsTab.tsx, useMaSendReport",
+      "aiDevHubTaskId": null
     },
     {
-      "id": "CC-011",
-      "title": "Fix snooze to hide items from Command Centre feed",
-      "description": "Add a due_date filter to commandCentreItemsService.getItems() so snoozed items (with due_date pushed into the future) don't appear in the feed until their snooze expires.",
+      "id": "US-007",
+      "title": "Fix Generate Preview Button UX",
+      "description": "As a user on the Reports tab, the 'Generate Preview' button should clearly communicate what it does.",
       "acceptanceCriteria": [
-        "In getItems() query (commandCentreItemsService.ts ~line 104-153), add filter: or('due_date.is.null,due_date.lte.now()')",
-        "Snooze an item → it immediately disappears from the feed",
-        "After snooze time expires → item reappears in the feed",
-        "Items with no due_date continue to appear normally",
-        "Items with a past due_date continue to appear normally"
-      ],
-      "priority": 2,
-      "phase": "frontend-polish",
-      "files": [
-        "src/lib/services/commandCentreItemsService.ts"
-      ],
-      "dependencies": [],
-      "parallelWith": ["CC-008", "CC-009", "CC-010"],
-      "passes": true,
-      "notes": "Single-line query addition. Alternative: add a snoozed_until column (cleaner but needs migration). Start with the filter approach."
-    },
-    {
-      "id": "CC-012",
-      "title": "Delete orphaned command-centre components and demo pages",
-      "description": "Remove 21 orphaned component files from src/components/command-centre/, the unused useCommandCentreTasks hook, and 3 demo pages (200KB+ of hardcoded mock data). Update commandCentreStore.ts to remove dependency on deleted types.",
-      "acceptanceCriteria": [
-        "Delete entire src/components/command-centre/ directory (21 files, all verified orphaned)",
-        "Delete src/lib/hooks/useCommandCentreTasks.ts (unused, queries wrong table)",
-        "Update src/lib/stores/commandCentreStore.ts to remove import from deleted types.ts (inline the types or import from commandCentreItemsService)",
-        "Delete src/pages/platform/CommandCentreDemo.tsx (45KB hardcoded mock data)",
-        "Delete src/pages/platform/CommandCentreV2Demo.tsx (85KB hardcoded mock data)",
-        "Delete src/pages/platform/CommandCentreWowDemo.tsx (70KB hardcoded mock data)",
-        "Remove any route config entries for deleted demo pages",
-        "Build passes with no import errors (npm run build)"
+        "Button label or tooltip clarifies the action",
+        "Button behavior matches user expectation — generates preview before sending",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 4,
-      "phase": "cleanup",
-      "files": [
-        "src/components/command-centre/",
-        "src/lib/hooks/useCommandCentreTasks.ts",
-        "src/lib/stores/commandCentreStore.ts",
-        "src/pages/platform/CommandCentreDemo.tsx",
-        "src/pages/platform/CommandCentreV2Demo.tsx",
-        "src/pages/platform/CommandCentreWowDemo.tsx"
-      ],
-      "dependencies": ["CC-008", "CC-009", "CC-010", "CC-011"],
-      "parallelWith": [],
       "passes": true,
-      "notes": "Do last — no functional impact but large diff. Run build after deletion to catch any hidden imports. ~200KB+ removed."
+      "notes": "TSK-0505 subtask 3 | Files: ReportsTab.tsx",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-008",
+      "title": "Fix Total Meetings Count Showing 0",
+      "description": "As a user with meetings, the Reports section should show the correct meeting count instead of 0.",
+      "acceptanceCriteria": [
+        "Total meetings metric reflects actual meeting count for the user",
+        "Query uses correct column meetings.owner_user_id (NOT user_id)",
+        "Count matches what the user sees in other parts of the app",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "TSK-0505 subtask 4 | Files: ReportsTab.tsx, useMaReportHistory",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-009",
+      "title": "Fix Generic AI Tips When No Transcripts Exist",
+      "description": "As a user with no meeting transcripts, the Reports section should not show AI-generated coaching tips that have no data basis.",
+      "acceptanceCriteria": [
+        "If user has zero transcripts, AI tips section is hidden or shows fallback message",
+        "Tips only appear when there is actual transcript data to derive them from",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "TSK-0505 subtask 5 | Files: ReportsTab.tsx",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-010",
+      "title": "Fix Notification Settings Slack Webhook URL Overflow",
+      "description": "As a user adding a Slack webhook URL in Notification Settings, the popup should not break layout with a wide scrollbar.",
+      "acceptanceCriteria": [
+        "Webhook URL input truncates or wraps long URLs within popup width",
+        "No horizontal scrollbar appears in notification settings popup",
+        "URL still fully accessible via tooltip or expandable field",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "TSK-0505 subtask 6 | Files: ReportsTab.tsx (notification settings modal)",
+      "aiDevHubTaskId": null
     }
   ]
 }

@@ -17,6 +17,7 @@ export function SetupWizardSidebarIndicator({ isCollapsed = false }: SetupWizard
     <AnimatePresence>
       {shouldShowIndicator && (
         <motion.button
+          data-tour="setup-wizard"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}

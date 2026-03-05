@@ -11,20 +11,11 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNotifications } from '@/lib/hooks/useNotifications';
 import { cn } from '@/lib/utils';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import type { Notification, NotificationCategory } from '@/lib/services/notificationService';
 
 interface NotificationCenterProps {
   onClose?: () => void;
+  onDeleteAll?: () => void;
 }
 
 type TabId = 'all' | 'ai' | 'tasks' | 'content' | 'team';
@@ -156,11 +147,10 @@ const GROUP_LABELS: Record<TabId, string> = {
   team: 'Team & Collaboration',
 };
 
-export function NotificationCenter({ onClose }: NotificationCenterProps) {
+export function NotificationCenter({ onClose, onDeleteAll }: NotificationCenterProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabId>('all');
   const [expandedGroup, setExpandedGroup] = useState<TabId | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const {
     notifications,
@@ -291,7 +281,7 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
             )}
             {notifications.length > 0 && (
               <button
-                onClick={() => setShowDeleteConfirm(true)}
+                onClick={() => onDeleteAll?.()}
                 className="p-2 rounded-lg transition-all duration-200 hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
                 title="Delete all notifications"
                 aria-label="Delete all notifications"
@@ -359,7 +349,7 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
       </div>
 
       {/* Notifications List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-custom">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-6 h-6 text-gray-500 dark:text-gray-400 animate-spin" />
@@ -492,26 +482,6 @@ export function NotificationCenter({ onClose }: NotificationCenterProps) {
         )}
       </div>
 
-      {/* Delete all confirmation dialog */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete all notifications?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete all your notifications. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => clearAll()}
-              className="bg-red-600 hover:bg-red-700 focus-visible:ring-red-500"
-            >
-              Delete All
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
