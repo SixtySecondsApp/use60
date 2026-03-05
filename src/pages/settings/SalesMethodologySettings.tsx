@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronRight, Eye, Loader2, Lock, Target, MessageSquare, BarChart3 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, Loader2, Lock, Target, MessageSquare, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +36,6 @@ import { StageMappingEditor } from '@/components/agent/StageMappingEditor';
 import { QualificationCriteriaEditor } from '@/components/agent/QualificationCriteriaEditor';
 import { CustomMethodologyWizard } from '@/components/agent/CustomMethodologyWizard';
 import { InAppQuestionCard } from '@/components/learning/InAppQuestionCard';
-import { ConfigCompletenessWidget } from '@/components/learning/ConfigCompletenessWidget';
 
 function TechnicalDiffToggle({ diff }: { diff: Array<{ key: string; oldValue: unknown; newValue: unknown }> }) {
   const [open, setOpen] = useState(false);
@@ -247,8 +246,8 @@ export default function SalesMethodologySettings() {
             </div>
           )}
 
-          {/* Refine Your Setup — inline methodology questions */}
-          {orgId && (
+          {/* Refine Your Setup — inline methodology questions (only when there are questions) */}
+          {orgId && methodologyQuestions.length > 0 && (
             <Card className="bg-white/80 dark:bg-gray-900/40 backdrop-blur-xl border-gray-200 dark:border-gray-800/60">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -258,32 +257,14 @@ export default function SalesMethodologySettings() {
                   Answer these questions to help 60 understand your sales process better.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <ConfigCompletenessWidget
-                  orgId={orgId}
-                  userId={user?.id}
-                  showCategories={false}
-                  showCTA={false}
-                />
-
-                {methodologyQuestions.length > 0 ? (
-                  <div className="space-y-3">
-                    {methodologyQuestions.slice(0, 3).map((q) => (
-                      <InAppQuestionCard key={q.id} question={q} />
-                    ))}
-                    {methodologyQuestions.length > 3 && (
-                      <p className="text-xs text-gray-400 text-center">
-                        +{methodologyQuestions.length - 3} more questions
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 py-3 px-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-xl">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                      Fully configured — 60 has everything it needs for methodology coaching.
-                    </p>
-                  </div>
+              <CardContent className="space-y-3">
+                {methodologyQuestions.slice(0, 3).map((q) => (
+                  <InAppQuestionCard key={q.id} question={q} />
+                ))}
+                {methodologyQuestions.length > 3 && (
+                  <p className="text-xs text-gray-400 text-center">
+                    +{methodologyQuestions.length - 3} more questions
+                  </p>
                 )}
               </CardContent>
             </Card>
