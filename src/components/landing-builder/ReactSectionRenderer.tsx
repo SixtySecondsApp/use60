@@ -9,6 +9,7 @@ import React, { useMemo, useCallback, useEffect, useRef } from 'react';
 import Frame, { FrameContextConsumer } from 'react-frame-component';
 import { getSectionComponent } from './sections';
 import { SectionDivider } from './sections/shared';
+import { InlineEditController } from './sections/shared/InlineEditController';
 import { fontUrl, generateBaseStyles, generateScrollScript } from './brandStyles';
 import type { LandingSection, BrandConfig } from './types';
 
@@ -16,6 +17,9 @@ interface ReactSectionRendererProps {
   sections: LandingSection[];
   brandConfig: BrandConfig;
   onSectionClick?: (sectionId: string) => void;
+  showDividers?: boolean;
+  onSectionUpdate?: (sectionId: string, updates: Partial<LandingSection>) => void;
+  onRegenerateAsset?: (sectionId: string, assetType: 'image' | 'svg') => void;
   className?: string;
 }
 
@@ -23,6 +27,9 @@ export function ReactSectionRenderer({
   sections,
   brandConfig,
   onSectionClick,
+  showDividers = true,
+  onSectionUpdate,
+  onRegenerateAsset,
   className = '',
 }: ReactSectionRendererProps) {
   const sorted = useMemo(
@@ -57,6 +64,14 @@ export function ReactSectionRenderer({
         {({ document: frameDoc }: { document: Document | null }) => (
           <>
             <ScrollRevealInjector document={frameDoc} />
+            {onSectionUpdate && (
+              <InlineEditController
+                frameDocument={frameDoc}
+                sections={sorted}
+                onSectionUpdate={onSectionUpdate}
+                onRegenerateAsset={onRegenerateAsset}
+              />
+            )}
             {sorted.map((section, index) => {
               const Component = getSectionComponent(section.type, section.layout_variant);
               const nextSection = sorted[index + 1];
@@ -76,15 +91,16 @@ export function ReactSectionRenderer({
                     onSectionClick={onSectionClick ? () => onSectionClick(section.id) : undefined}
                   />
                   {/* Shape divider at the bottom of this section, bridging into the next */}
-                  {hasOutgoingDivider && nextSection && (
+                  {showDividers && hasOutgoingDivider && nextSection && (
                     <div
+                      data-divider-for={nextSection.id}
                       style={{
                         position: 'absolute',
                         bottom: 0,
                         left: 0,
                         right: 0,
                         transform: 'translateY(50%)',
-                        pointerEvents: 'none',
+                        pointerEvents: 'auto',
                         zIndex: 2,
                       }}
                     >

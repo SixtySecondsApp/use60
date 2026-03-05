@@ -120,7 +120,7 @@ interface StructuredResponse {
     id: string
     label: string
     type: string
-    icon: string
+    icon?: string
     callback: string
     params?: any
   }>
@@ -327,7 +327,7 @@ serve(async (req) => {
       console.log('[API-COPILOT] ✅ Routing to handleGenerateDealEmail')
       return await handleGenerateDealEmail(client, req, user_id)
     } else if (req.method === 'GET' && endpoint === 'conversations' && resourceId) {
-      return await handleGetConversation(client, resourceId, user_id)
+      return await handleGetConversation(client, resourceId, user_id, req)
     } else {
       console.log('[API-COPILOT] ❌ No route matched:', { 
         endpoint, 
@@ -2615,9 +2615,10 @@ Return your response as JSON in this exact format:
 async function handleGetConversation(
   client: any,
   conversationId: string,
-  userId: string
+  userId: string,
+  req?: Request,
 ): Promise<Response> {
-  const corsHeaders = staticCorsHeaders;
+  const corsHeaders = req ? getCorsHeaders(req) : staticCorsHeaders;
   try {
     if (!isValidUUID(conversationId)) {
       return createErrorResponse('Invalid conversation ID', 400, 'INVALID_ID')

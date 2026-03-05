@@ -13,7 +13,9 @@ metadata:
   version: "3"
   category: sales-ai
   skill_type: atomic
-  is_active: true
+  is_active: false
+  deprecated_by: generate-proposal-v2
+  deprecation_reason: "Superseded by generate-proposal-v2 which uses the V2 pipeline (proposal-compose-v2, Gotenberg PDF, structured sections)"
   command_centre:
     enabled: true
     label: "/proposal"

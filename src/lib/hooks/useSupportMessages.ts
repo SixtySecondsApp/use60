@@ -33,7 +33,7 @@ export function useSupportMessages(ticketId: string) {
   });
 }
 
-export function useSendSupportMessage(ticket: SupportTicket) {
+export function useSendSupportMessage(ticket: SupportTicket, senderType: SenderType = 'user') {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -44,7 +44,7 @@ export function useSendSupportMessage(ticket: SupportTicket) {
       const { error } = await supabase.from('support_messages').insert({
         ticket_id: ticket.id,
         sender_id: user.id,
-        sender_type: 'user' as SenderType,
+        sender_type: senderType,
         content: content.trim(),
         attachments: [],
       });

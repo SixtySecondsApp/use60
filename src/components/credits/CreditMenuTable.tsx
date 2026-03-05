@@ -14,7 +14,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getCreditMenu, getBudgetCap, setBudgetCap } from '@/lib/services/creditService';
-import type { IntelligenceTier } from '@/lib/config/creditPacks';
+import type { IntelligenceTier, PackType } from '@/lib/config/creditPacks';
 import { CREDIT_PACKS, STANDARD_PACKS, getCostPerCredit, getPackPrice } from '@/lib/config/creditPacks';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
@@ -275,6 +275,7 @@ const PACK_ICONS: Record<string, React.ElementType> = {
 
 function PackComparisonCards() {
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
+  const [purchasePack, setPurchasePack] = useState<PackType | undefined>(undefined);
   const { currencyCode, symbol: orgSymbol } = useOrgMoney();
 
   return (
@@ -335,7 +336,7 @@ function PackComparisonCards() {
                   <Button
                     size="sm"
                     variant={pack.popular ? 'default' : 'outline'}
-                    onClick={() => setPurchaseModalOpen(true)}
+                    onClick={() => { setPurchasePack(packType); setPurchaseModalOpen(true); }}
                     className={cn(
                       'w-full',
                       pack.popular && 'bg-indigo-600 hover:bg-indigo-700 text-white border-0'
@@ -353,6 +354,7 @@ function PackComparisonCards() {
       <CreditPurchaseModal
         open={purchaseModalOpen}
         onOpenChange={setPurchaseModalOpen}
+        defaultPack={purchasePack}
       />
     </>
   );
@@ -374,6 +376,12 @@ export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
     low: 'Low',
     medium: 'Medium',
     high: 'High',
+  };
+
+  const TIER_TOOLTIPS: Record<IntelligenceTier, string> = {
+    low: 'Low — fastest & most affordable models',
+    medium: 'Medium — balanced quality and speed',
+    high: 'High — maximum intelligence, highest cost',
   };
 
   return (
@@ -470,8 +478,9 @@ export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
                           {(['low', 'medium', 'high'] as IntelligenceTier[]).map((tier) => (
                             <TableHead
                               key={tier}
+                              title={TIER_TOOLTIPS[tier]}
                               className={cn(
-                                'text-center w-[14%]',
+                                'text-center w-[14%] cursor-help',
                                 currentTier === tier &&
                                   'text-indigo-600 dark:text-indigo-400 font-semibold'
                               )}

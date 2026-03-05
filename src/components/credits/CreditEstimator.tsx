@@ -4,10 +4,15 @@
  * Shows users what they can do with X credits.
  * Uses pack-based credit costs from creditPacks config.
  * Quick-pick: Starter (100 credits), Growth (250 credits), Scale (500 credits), My Balance.
+ *
+ * Extended for ROUTE-007: model-aware cost preview.
+ * Pass `modelTierHint` to pre-select a quality tier (economy/standard/premium).
+ * Pass `featureLabel` + `featureKey` to show a single-feature cost preview.
  */
 
 import { useState, useMemo } from 'react';
-import { Calculator, MessageSquare, Users, FileText, Mic } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Calculator, MessageSquare, Users, FileText, Mic, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCreditBalance } from '@/lib/hooks/useCreditBalance';
 import {
@@ -16,7 +21,86 @@ import {
   STANDARD_PACKS,
   type PackType,
   type IntelligenceTier,
+  type TieredCost,
 } from '@/lib/config/creditPacks';
+import { getCreditMenu } from '@/lib/services/creditService';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@/components/ui/tooltip';
+
+// ─── Model-aware cost preview (ROUTE-007) ────────────────────────────────────
+
+type QualityTier = 'economy' | 'standard' | 'premium';
+
+const QUALITY_TO_INTELLIGENCE: Record<QualityTier, IntelligenceTier> = {
+  economy: 'low',
+  standard: 'medium',
+  premium: 'high',
+};
+
+const QUALITY_LABELS: Record<QualityTier, string> = {
+  economy: 'Economy',
+  standard: 'Standard',
+  premium: 'Premium',
+};
+
+interface ModelAwareCostPreviewProps {
+  featureKey: keyof typeof ACTION_CREDIT_COSTS;
+  featureLabel: string;
+  /** Org's configured quality tier for this feature */
+  qualityTier: QualityTier;
+  /** Optional callback to navigate to model preferences */
+  onChangeTier?: () => void;
+}
+
+/**
+ * Inline cost preview that reflects the org's quality tier for a specific feature.
+ * Shown before expensive operations (ROUTE-007).
+ */
+export function ModelAwareCostPreview({
+  featureKey,
+  featureLabel,
+  qualityTier,
+  onChangeTier,
+}: ModelAwareCostPreviewProps) {
+  const intelligenceTier = QUALITY_TO_INTELLIGENCE[qualityTier];
+  const costPerAction = ACTION_CREDIT_COSTS[featureKey][intelligenceTier];
+
+  const tierColors: Record<QualityTier, string> = {
+    economy: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20',
+    standard: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20',
+    premium: 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20',
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+      <Info className="w-3.5 h-3.5 flex-shrink-0" />
+      <span>
+        This will use{' '}
+        <span className="font-medium text-gray-700 dark:text-gray-200">
+          ~{costPerAction} credits
+        </span>{' '}
+        ({featureLabel}) at{' '}
+        <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium', tierColors[qualityTier])}>
+          {QUALITY_LABELS[qualityTier]}
+        </span>{' '}
+        tier.
+      </span>
+      {onChangeTier && (
+        <button
+          type="button"
+          onClick={onChangeTier}
+          className="text-[#37bd7e] hover:underline whitespace-nowrap"
+        >
+          Change tier
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ─── Categories ──────────────────────────────────────────────────────────
 
@@ -71,6 +155,12 @@ const TIER_LABELS: Record<IntelligenceTier, string> = {
   high: 'High',
 };
 
+const TIER_TOOLTIPS: Record<IntelligenceTier, string> = {
+  low: 'Fastest responses, lowest cost. Uses efficient models like Haiku.',
+  medium: 'Balanced speed and quality. Uses capable models like Sonnet.',
+  high: 'Maximum intelligence, highest cost. Uses frontier models like Opus.',
+};
+
 // ─── Component ────────────────────────────────────────────────────────────
 
 export function CreditEstimator() {
@@ -80,14 +170,38 @@ export function CreditEstimator() {
 
   const currentBalance = Math.round((balance?.balance ?? 0) * 10) / 10;
 
-  // Calculate actions per category at selected tier
+  // Fetch action costs from DB; fall back to hardcoded values on failure
+  const { data: creditMenu, isLoading: menuLoading } = useQuery({
+    queryKey: ['credit-menu'],
+    queryFn: () => getCreditMenu(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Build a costs map from DB data, keyed by action_id → TieredCost
+  const dbCosts = useMemo<Record<string, TieredCost>>(() => {
+    if (!creditMenu) return {};
+    const map: Record<string, TieredCost> = {};
+    for (const items of Object.values(creditMenu)) {
+      for (const item of items) {
+        map[item.action_id] = {
+          low: item.cost_low,
+          medium: item.cost_medium,
+          high: item.cost_high,
+        };
+      }
+    }
+    return map;
+  }, [creditMenu]);
+
+  // Calculate actions per category at selected tier, preferring DB costs
   const estimates = useMemo(() => {
     return CATEGORIES.map((cat) => {
-      const costPerAction = ACTION_CREDIT_COSTS[cat.key][tier];
+      const costs = dbCosts[cat.key] ?? ACTION_CREDIT_COSTS[cat.key];
+      const costPerAction = costs[tier];
       const actions = costPerAction > 0 ? creditAmount / costPerAction : 0;
       return { category: cat, costPerAction, actions };
     });
-  }, [creditAmount, tier]);
+  }, [creditAmount, tier, dbCosts]);
 
   return (
     <div className="space-y-4 px-1 py-2">
@@ -96,22 +210,30 @@ export function CreditEstimator() {
         <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
           Intelligence tier:
         </span>
-        <div className="flex gap-1">
-          {(['low', 'medium', 'high'] as IntelligenceTier[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTier(t)}
-              className={cn(
-                'px-2.5 py-1 text-xs rounded-md border transition-colors',
-                tier === t
-                  ? cn('border-current font-medium', TIER_COLORS[t], TIER_BG[t])
-                  : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
-              )}
-            >
-              {TIER_LABELS[t]}
-            </button>
-          ))}
-        </div>
+        <TooltipProvider>
+          <div className="flex gap-1">
+            {(['low', 'medium', 'high'] as IntelligenceTier[]).map((t) => (
+              <Tooltip key={t}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setTier(t)}
+                    className={cn(
+                      'px-2.5 py-1 text-xs rounded-md border transition-colors',
+                      tier === t
+                        ? cn('border-current font-medium', TIER_COLORS[t], TIER_BG[t])
+                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'
+                    )}
+                  >
+                    {TIER_LABELS[t]}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[220px] whitespace-normal text-center">
+                  {TIER_TOOLTIPS[t]}
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </TooltipProvider>
       </div>
 
       {/* Credit amount selector */}
@@ -163,7 +285,7 @@ export function CreditEstimator() {
       </div>
 
       {/* Estimate cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className={cn('grid grid-cols-2 sm:grid-cols-4 gap-3', menuLoading && Object.keys(dbCosts).length === 0 && 'opacity-60 pointer-events-none')}>
         {estimates.map(({ category, costPerAction, actions }) => {
           const Icon = category.icon ?? Calculator;
 

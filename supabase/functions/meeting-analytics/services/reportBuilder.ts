@@ -79,24 +79,31 @@ function generateHighlights(
   }
 
   const recommendations: string[] = [];
-  if ((summary.avgPerformanceScore as number) < 60) {
-    recommendations.push('Consider scheduling coaching sessions - average performance is below 60%');
-  }
-  if ((summary.avgTalkTimeBalance as number) < 50) {
-    recommendations.push('Focus on active listening - less than 50% of calls are balanced');
-  }
-  if ((summary.pendingActionItems as number) > 10) {
-    recommendations.push(`Clear the backlog: ${summary.pendingActionItems} action items are still pending`);
-  }
-  if ((trends.meetingsTrend as number) < -20) {
-    recommendations.push('Meeting volume is down significantly - review pipeline generation');
-  }
-  if ((trends.scoreTrend as number) < -10) {
-    recommendations.push('Performance scores are trending down - investigate root causes');
-  }
-  const blockersCount = pipelineHealth.reduce((s, p) => s + ((p.blockerCount as number) || 0), 0);
-  if (blockersCount > 0) {
-    recommendations.push(`Address ${blockersCount} blocker${blockersCount > 1 ? 's' : ''} in the pipeline`);
+  const totalMeetings = (summary.totalMeetings as number) ?? 0;
+
+  // Only generate recommendations when there's actual meeting data to base them on
+  if (totalMeetings > 0) {
+    const avgScore = (summary.avgPerformanceScore as number) ?? 0;
+    const avgBalance = (summary.avgTalkTimeBalance as number) ?? 0;
+    if (avgScore > 0 && avgScore < 60) {
+      recommendations.push('Consider scheduling coaching sessions - average performance is below 60%');
+    }
+    if (avgBalance > 0 && avgBalance < 50) {
+      recommendations.push('Focus on active listening - less than 50% of calls are balanced');
+    }
+    if ((summary.pendingActionItems as number) > 10) {
+      recommendations.push(`Clear the backlog: ${summary.pendingActionItems} action items are still pending`);
+    }
+    if ((trends.meetingsTrend as number) < -20) {
+      recommendations.push('Meeting volume is down significantly - review pipeline generation');
+    }
+    if ((trends.scoreTrend as number) < -10) {
+      recommendations.push('Performance scores are trending down - investigate root causes');
+    }
+    const blockersCount = pipelineHealth.reduce((s, p) => s + ((p.blockerCount as number) || 0), 0);
+    if (blockersCount > 0) {
+      recommendations.push(`Address ${blockersCount} blocker${blockersCount > 1 ? 's' : ''} in the pipeline`);
+    }
   }
 
   return {
@@ -110,14 +117,24 @@ function generateHighlights(
   };
 }
 
+// ---------- Helpers ----------
+
+/** Ensure includeDemo / demoOnly params are on the request URL so the dashboard handler reads them. */
+function applyDemoParams(req: Request, options: { includeDemo?: boolean; demoOnly?: boolean }): Request {
+  const url = new URL(req.url);
+  if (options.includeDemo !== undefined) url.searchParams.set('includeDemo', String(options.includeDemo));
+  if (options.demoOnly !== undefined) url.searchParams.set('demoOnly', String(options.demoOnly));
+  return new Request(url.toString(), req);
+}
+
 // ---------- Public API ----------
 
 export async function buildDailyReport(
   req: Request,
   orgId: string,
-  _options: { includeDemo?: boolean; demoOnly?: boolean } = {}
+  options: { includeDemo?: boolean; demoOnly?: boolean } = {}
 ): Promise<Report> {
-  const metrics = await getDashboardMetricsData(req, orgId);
+  const metrics = await getDashboardMetricsData(applyDemoParams(req, options), orgId);
   const highlights = generateHighlights(metrics, 'daily');
 
   const now = new Date();
@@ -139,9 +156,9 @@ export async function buildDailyReport(
 export async function buildWeeklyReport(
   req: Request,
   orgId: string,
-  _options: { includeDemo?: boolean; demoOnly?: boolean } = {}
+  options: { includeDemo?: boolean; demoOnly?: boolean } = {}
 ): Promise<Report> {
-  const metrics = await getDashboardMetricsData(req, orgId);
+  const metrics = await getDashboardMetricsData(applyDemoParams(req, options), orgId);
   const highlights = generateHighlights(metrics, 'weekly');
 
   const startDate = getLastWeekStart();
@@ -293,60 +310,98 @@ export function formatForEmail(report: Report): { subject: string; html: string 
     : `Weekly Meeting Intelligence Report - ${dateStr}`;
 
   const trendArrow = (v: number) => v > 0 ? '&#9650;' : v < 0 ? '&#9660;' : '&#8596;';
-  const trendColor = (v: number) => v > 0 ? '#22c55e' : v < 0 ? '#ef4444' : '#6b7280';
+  const trendColor = (v: number) => v > 0 ? '#03AD9C' : v < 0 ? '#ef4444' : '#9ca3af';
   const mt = (trends.meetingsTrend as number) ?? 0;
   const st = (trends.scoreTrend as number) ?? 0;
 
+  // All inline styles for email client + iframe compatibility
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${subject}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background: #f3f4f6; }
-    .container { max-width: 600px; margin: 0 auto; background: white; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 24px; text-align: center; }
-    .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
-    .header p { margin: 8px 0 0; opacity: 0.9; font-size: 14px; }
-    .content { padding: 24px; }
-    .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: #f9fafb; border-radius: 8px; padding: 16px; text-align: center; }
-    .stat-value { font-size: 28px; font-weight: 700; color: #667eea; }
-    .stat-label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
-    .section { margin-bottom: 24px; }
-    .section h2 { font-size: 16px; color: #374151; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; }
-    .highlight { background: #f0fdf4; border-left: 4px solid #22c55e; padding: 12px; margin-bottom: 12px; border-radius: 0 8px 8px 0; }
-    .highlight.hot { background: #fef3c7; border-color: #f59e0b; }
-    .highlight strong { color: #374151; }
-    .alert-list { list-style: none; padding: 0; margin: 0; }
-    .alert-list li { padding: 8px 0; border-bottom: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 8px; }
-    .alert-list li:last-child { border-bottom: none; }
-    .recommendation { background: #eff6ff; padding: 8px 12px; margin-bottom: 8px; border-radius: 6px; font-size: 14px; }
-    .trend { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; }
-    .footer { background: #f9fafb; padding: 16px 24px; text-align: center; font-size: 12px; color: #6b7280; }
-  </style>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>${isDaily ? 'Daily' : 'Weekly'} Meeting Intelligence Report</h1>
-      <p>${dateStr}</p>
-    </div>
-    <div class="content">
-      <div class="stats-grid">
-        <div class="stat-card"><div class="stat-value">${summary.totalMeetings ?? 0}</div><div class="stat-label">Meetings</div></div>
-        <div class="stat-card"><div class="stat-value">${summary.avgPerformanceScore ?? 0}</div><div class="stat-label">Avg Score</div></div>
-        <div class="stat-card"><div class="stat-value">${summary.avgConversionScore ?? 0}%</div><div class="stat-label">Pipeline Health</div></div>
-        <div class="stat-card"><div class="stat-value">${summary.completedActionItems ?? 0}/${summary.totalActionItems ?? 0}</div><div class="stat-label">Actions Done</div></div>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; margin: 0; padding: 0; background: #0f172a; color: #e2e8f0;">
+  <div style="padding: 24px 16px; background: #0f172a;">
+    <div style="max-width: 600px; margin: 0 auto; background: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155;">
+      <!-- Header -->
+      <div style="background: linear-gradient(135deg, #059669 0%, #0d9488 100%); padding: 28px 24px; text-align: center;">
+        <img src="https://app.use60.com/favicon_0_128x128.png" alt="60" width="40" height="40" style="display: inline-block; margin-bottom: 10px; border-radius: 10px;" />
+        <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.7); margin-bottom: 6px;">60 Meeting Intelligence</div>
+        <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.3px;">${isDaily ? 'Daily' : 'Weekly'} Report</h1>
+        <p style="margin: 6px 0 0; font-size: 13px; color: rgba(255,255,255,0.8);">${dateStr}</p>
       </div>
-      ${highlights.topPerformer ? `<div class="highlight"><strong>Top Performer:</strong> ${highlights.topPerformer.title}<br>Score: ${highlights.topPerformer.score}/100 (${highlights.topPerformer.grade})</div>` : ''}
-      ${highlights.hottestDeal ? `<div class="highlight hot"><strong>Hottest Deal:</strong> ${highlights.hottestDeal.title}<br>Conversion Probability: ${highlights.hottestDeal.conversionScore}%</div>` : ''}
-      ${highlights.needsAttention.length > 0 ? `<div class="section"><h2>Needs Attention</h2><ul class="alert-list">${highlights.needsAttention.map(item => `<li><span style="color:#f59e0b">&#9888;</span><span>${item}</span></li>`).join('')}</ul></div>` : ''}
-      ${highlights.recommendations.length > 0 ? `<div class="section"><h2>Recommendations</h2>${highlights.recommendations.map(item => `<div class="recommendation">&#128161; ${item}</div>`).join('')}</div>` : ''}
-      ${!isDaily ? `<div class="section"><h2>Week-over-Week Trends</h2><p><span class="trend" style="color:${trendColor(mt)}">${trendArrow(mt)} Meetings: ${mt > 0 ? '+' : ''}${mt}%</span>&nbsp;&nbsp;|&nbsp;&nbsp;<span class="trend" style="color:${trendColor(st)}">${trendArrow(st)} Scores: ${st > 0 ? '+' : ''}${st}%</span></p></div>` : ''}
+      <!-- Stats -->
+      <div style="padding: 20px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: separate; border-spacing: 8px;">
+          <tr>
+            <td style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 16px 12px; text-align: center; width: 50%;">
+              <div style="font-size: 26px; font-weight: 700; color: #34d399;">${summary.totalMeetings ?? 0}</div>
+              <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; font-weight: 500;">Meetings</div>
+            </td>
+            <td style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 16px 12px; text-align: center; width: 50%;">
+              <div style="font-size: 26px; font-weight: 700; color: #34d399;">${summary.avgPerformanceScore ?? 0}</div>
+              <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; font-weight: 500;">Avg Score</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 16px 12px; text-align: center; width: 50%;">
+              <div style="font-size: 26px; font-weight: 700; color: #34d399;">${summary.avgConversionScore ?? 0}%</div>
+              <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; font-weight: 500;">Pipeline Health</div>
+            </td>
+            <td style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 16px 12px; text-align: center; width: 50%;">
+              <div style="font-size: 26px; font-weight: 700; color: #34d399;">${summary.completedActionItems ?? 0}/${summary.totalActionItems ?? 0}</div>
+              <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; font-weight: 500;">Actions Done</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <!-- Highlights -->
+      <div style="padding: 0 20px 20px;">
+        ${highlights.topPerformer ? `<div style="background: #0f172a; border: 1px solid #334155; border-left: 3px solid #059669; padding: 14px 16px; margin-bottom: 10px; border-radius: 0 10px 10px 0;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #34d399; margin-bottom: 4px;">Top Performer</div>
+          <div style="font-size: 15px; font-weight: 600; color: #f1f5f9;">${highlights.topPerformer.title}</div>
+          <div style="font-size: 13px; color: #94a3b8; margin-top: 2px;">Score: ${highlights.topPerformer.score}/100 (${highlights.topPerformer.grade})</div>
+        </div>` : ''}
+        ${highlights.hottestDeal ? `<div style="background: #0f172a; border: 1px solid #334155; border-left: 3px solid #f59e0b; padding: 14px 16px; margin-bottom: 10px; border-radius: 0 10px 10px 0;">
+          <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #fbbf24; margin-bottom: 4px;">Hottest Deal</div>
+          <div style="font-size: 15px; font-weight: 600; color: #f1f5f9;">${highlights.hottestDeal.title}</div>
+          <div style="font-size: 13px; color: #94a3b8; margin-top: 2px;">Conversion Probability: ${highlights.hottestDeal.conversionScore}%</div>
+        </div>` : ''}
+        ${highlights.needsAttention.length > 0 ? `<div style="margin-top: 16px;">
+          <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid #334155;">Needs Attention</div>
+          ${highlights.needsAttention.map(item => `<div style="padding: 10px 14px; margin-bottom: 6px; background: #0f172a; border: 1px solid #334155; border-radius: 10px; font-size: 13px; color: #cbd5e1;">
+            <span style="color: #f59e0b; margin-right: 8px;">&#9888;</span>${item}
+          </div>`).join('')}
+        </div>` : ''}
+        ${highlights.recommendations.length > 0 ? `<div style="margin-top: 16px;">
+          <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid #334155;">Recommendations</div>
+          ${highlights.recommendations.map(item => `<div style="padding: 10px 14px; margin-bottom: 6px; background: rgba(5,150,105,0.06); border: 1px solid rgba(5,150,105,0.15); border-radius: 10px; font-size: 13px; color: #cbd5e1;">
+            <span style="color: #34d399; margin-right: 8px;">&#9670;</span>${item}
+          </div>`).join('')}
+        </div>` : ''}
+        ${!isDaily ? `<div style="margin-top: 16px;">
+          <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid #334155;">Week-over-Week Trends</div>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: separate; border-spacing: 8px;">
+            <tr>
+              <td style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 14px; text-align: center; width: 50%;">
+                <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Meetings</div>
+                <div style="font-size: 18px; font-weight: 700; color: ${trendColor(mt)};">${trendArrow(mt)} ${mt > 0 ? '+' : ''}${mt}%</div>
+              </td>
+              <td style="background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 14px; text-align: center; width: 50%;">
+                <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Scores</div>
+                <div style="font-size: 18px; font-weight: 700; color: ${trendColor(st)};">${trendArrow(st)} ${st > 0 ? '+' : ''}${st}%</div>
+              </td>
+            </tr>
+          </table>
+        </div>` : ''}
+      </div>
+      <!-- Footer -->
+      <div style="border-top: 1px solid #334155; padding: 14px 24px; text-align: center; font-size: 11px; color: #64748b;">
+        Generated at ${new Date(generatedAt).toLocaleTimeString()} &middot; <a href="https://app.use60.com" style="color: #34d399; text-decoration: none;">60 Meeting Intelligence</a>
+      </div>
     </div>
-    <div class="footer">Generated at ${new Date(generatedAt).toLocaleTimeString()} | Meeting Intelligence Dashboard</div>
   </div>
 </body>
 </html>`.trim();

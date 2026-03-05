@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, RefreshCw, LogOut, Clock, Calendar, Mail, UserX } from 'lucide-react';
+import { AlertCircle, RefreshCw, LogOut, Clock, Calendar, Mail, UserX, CreditCard } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useOrganizationContext } from '@/lib/hooks/useOrganizationContext';
@@ -11,6 +11,7 @@ import {
   type OrganizationReactivationRequest
 } from '@/lib/services/organizationReactivationService';
 import { removeOrganizationMember } from '@/lib/services/organizationAdminService';
+import { useCreateCheckoutSession } from '@/lib/hooks/useSubscription';
 import { toast } from 'sonner';
 import { logger } from '@/lib/utils/logger';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -27,6 +28,9 @@ export default function InactiveOrganizationScreen() {
   const [isOverdue, setIsOverdue] = useState(false);
   const [isLeavingOrg, setIsLeavingOrg] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const createCheckoutSession = useCreateCheckoutSession();
+
+  const isTrialExpired = activeOrg?.deactivation_reason === 'trial_expired_no_subscription';
 
   const calculateDaysRemaining = useCallback(() => {
     if (!activeOrg?.deletion_scheduled_at) {
@@ -180,6 +184,26 @@ export default function InactiveOrganizationScreen() {
     }
   };
 
+  const handleUpgradeSubscription = async () => {
+    if (!activeOrg?.id) {
+      toast.error('Organization information not available', {
+        description: 'Please try refreshing the page.'
+      });
+      return;
+    }
+
+    try {
+      await createCheckoutSession.mutateAsync({
+        org_id: activeOrg.id,
+        plan_slug: 'basic',
+        billing_cycle: 'monthly',
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to start checkout';
+      toast.error(message);
+    }
+  };
+
   const handleSignOut = async () => {
     setIsSigningOut(true);
     try {
@@ -215,10 +239,12 @@ export default function InactiveOrganizationScreen() {
 
           <div>
             <CardTitle className="text-2xl">
-              Organization Inactive
+              {isTrialExpired ? 'Trial Expired' : 'Organization Inactive'}
             </CardTitle>
             <CardDescription className="mt-2">
-              {activeOrg?.name || 'This organization'} has been deactivated and is currently unavailable.
+              {isTrialExpired
+                ? `Your free trial for ${activeOrg?.name || 'this organization'} has ended.`
+                : `${activeOrg?.name || 'This organization'} has been deactivated and is currently unavailable.`}
             </CardDescription>
           </div>
         </CardHeader>
@@ -229,25 +255,22 @@ export default function InactiveOrganizationScreen() {
             <div>
               <h3 className="font-semibold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
                 <AlertCircle className="h-4 w-4" />
-                Organization Deactivated
+                {isTrialExpired ? 'Trial Expired' : 'Organization Deactivated'}
               </h3>
               <p className="text-sm text-red-800 dark:text-red-200">
-                {activeOrg?.name || 'This organization'} has been deactivated. All members have lost access to this organization.
+                {isTrialExpired
+                  ? 'Your trial has ended and the grace period has expired. Subscribe to restore your account.'
+                  : `${activeOrg?.name || 'This organization'} has been deactivated. All members have lost access to this organization.`}
               </p>
             </div>
 
-            {/* Deactivation Details */}
-            {activeOrg?.deactivated_at && (
+            {/* Deactivation Details — admin deactivations only */}
+            {!isTrialExpired && activeOrg?.deactivated_at && (
               <div className="text-xs text-red-700 dark:text-red-300 space-y-1">
                 <p>
                   <span className="font-medium">Deactivated:</span>{' '}
                   {new Date(activeOrg.deactivated_at).toLocaleDateString()}
                 </p>
-                {activeOrg.deactivation_reason && (
-                  <p>
-                    <span className="font-medium">Reason:</span> {activeOrg.deactivation_reason}
-                  </p>
-                )}
               </div>
             )}
 
@@ -271,113 +294,130 @@ export default function InactiveOrganizationScreen() {
             {isOverdue && (
               <div className="bg-red-100 dark:bg-red-800/30 rounded p-3 border border-red-300 dark:border-red-700/50">
                 <p className="text-xs font-medium text-red-900 dark:text-red-100">
-                  ⚠️ Deletion is overdue. This organization data may be permanently deleted soon.
+                  Deletion is overdue. This organization data may be permanently deleted soon.
                 </p>
               </div>
             )}
           </div>
 
-          {/* TODO: BILLING - Show billing-specific messages */}
-          {/* Example:
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-            <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-2">Billing Issue</h3>
-            <p className="text-sm text-amber-800 dark:text-amber-200">
-              Your subscription has been cancelled or payment has failed.
-            </p>
-            <a href="/settings/billing" className="text-amber-600 dark:text-amber-400 hover:underline font-medium text-sm mt-2 block">
-              Update payment method to reactivate
-            </a>
-          </div>
-          */}
-
-          {/* Request Status */}
-          {isCheckingStatus ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-              <span className="ml-2 text-gray-600 dark:text-gray-400">Checking request status...</span>
-            </div>
-          ) : existingRequest ? (
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-              <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Reactivation Request Pending
-              </h3>
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                Your request to reactivate this organization is being reviewed by an administrator.
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
-                Submitted: {new Date(existingRequest.requested_at).toLocaleString()}
-              </p>
-            </div>
-          ) : isOwner ? (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-4">
+          {/* Billing-specific upgrade CTA for trial-expired accounts */}
+          {isTrialExpired && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 space-y-4">
               <div>
-                <h3 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
-                  <Mail className="h-4 w-4" />
-                  Check Your Email
+                <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-1 flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Restore Access
                 </h3>
-                <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
-                  A confirmation email has been sent with a direct link to reactivate this organization within the 30-day window.
-                </p>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                  Can't find the email? Check your spam folder or use the button below to submit a reactivation request for admin review.
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  Subscribe to a plan to instantly restore access to your organization and all your data.
                 </p>
               </div>
 
               <Button
-                onClick={handleRequestReactivation}
-                disabled={isRequesting}
-                className="w-full justify-between"
-                size="lg"
-              >
-                <span>Submit Reactivation Request</span>
-                {isRequesting && <RefreshCw className="w-4 h-4 animate-spin" />}
-              </Button>
-            </div>
-          ) : (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-4">
-              <div>
-                <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-                  Organization Deactivated
-                </h3>
-                <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
-                  This organization has been deactivated. You can request reactivation, and an administrator will review your request.
-                </p>
-              </div>
-
-              <div className="bg-blue-100 dark:bg-blue-800/20 rounded p-3 text-sm text-blue-900 dark:text-blue-100">
-                <p className="font-medium mb-1">What happens next?</p>
-                <ul className="space-y-1 text-xs list-disc list-inside">
-                  <li>The organization owner has 30 days to reactivate</li>
-                  <li>After 30 days, all data will be permanently deleted</li>
-                  <li>You can request reactivation to notify the owner</li>
-                </ul>
-              </div>
-
-              <Button
-                onClick={handleRequestReactivation}
-                disabled={isRequesting}
-                className="w-full justify-between"
-                size="lg"
-              >
-                <span>Request Reactivation</span>
-                {isRequesting && <RefreshCw className="w-4 h-4 animate-spin" />}
-              </Button>
-
-              <Button
-                onClick={handleLeaveOrganization}
-                disabled={isLeavingOrg}
-                variant="outline"
-                className="w-full justify-between"
+                onClick={handleUpgradeSubscription}
+                disabled={createCheckoutSession.isPending}
+                className="w-full justify-between bg-amber-600 hover:bg-amber-700 text-white"
                 size="lg"
               >
                 <span className="flex items-center gap-2">
-                  <UserX className="w-4 h-4" />
-                  Leave Organization
+                  <CreditCard className="w-4 h-4" />
+                  Subscribe to Restore Access
                 </span>
-                {isLeavingOrg && <RefreshCw className="w-4 h-4 animate-spin" />}
+                {createCheckoutSession.isPending && <RefreshCw className="w-4 h-4 animate-spin" />}
               </Button>
             </div>
+          )}
+
+          {/* Request Status — shown only for admin-deactivated accounts */}
+          {!isTrialExpired && (
+            isCheckingStatus ? (
+              <div className="flex items-center justify-center py-8">
+                <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+                <span className="ml-2 text-gray-600 dark:text-gray-400">Checking request status...</span>
+              </div>
+            ) : existingRequest ? (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Reactivation Request Pending
+                </h3>
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  Your request to reactivate this organization is being reviewed by an administrator.
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+                  Submitted: {new Date(existingRequest.requested_at).toLocaleString()}
+                </p>
+              </div>
+            ) : isOwner ? (
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-4">
+                <div>
+                  <h3 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Check Your Email
+                  </h3>
+                  <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                    A confirmation email has been sent with a direct link to reactivate this organization within the 30-day window.
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                    Can't find the email? Check your spam folder or use the button below to submit a reactivation request for admin review.
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleRequestReactivation}
+                  disabled={isRequesting}
+                  className="w-full justify-between"
+                  size="lg"
+                >
+                  <span>Submit Reactivation Request</span>
+                  {isRequesting && <RefreshCw className="w-4 h-4 animate-spin" />}
+                </Button>
+              </div>
+            ) : (
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-4">
+                <div>
+                  <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+                    Organization Deactivated
+                  </h3>
+                  <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                    This organization has been deactivated. You can request reactivation, and an administrator will review your request.
+                  </p>
+                </div>
+
+                <div className="bg-blue-100 dark:bg-blue-800/20 rounded p-3 text-sm text-blue-900 dark:text-blue-100">
+                  <p className="font-medium mb-1">What happens next?</p>
+                  <ul className="space-y-1 text-xs list-disc list-inside">
+                    <li>The organization owner has 30 days to reactivate</li>
+                    <li>After 30 days, all data will be permanently deleted</li>
+                    <li>You can request reactivation to notify the owner</li>
+                  </ul>
+                </div>
+
+                <Button
+                  onClick={handleRequestReactivation}
+                  disabled={isRequesting}
+                  className="w-full justify-between"
+                  size="lg"
+                >
+                  <span>Request Reactivation</span>
+                  {isRequesting && <RefreshCw className="w-4 h-4 animate-spin" />}
+                </Button>
+
+                <Button
+                  onClick={handleLeaveOrganization}
+                  disabled={isLeavingOrg}
+                  variant="outline"
+                  className="w-full justify-between"
+                  size="lg"
+                >
+                  <span className="flex items-center gap-2">
+                    <UserX className="w-4 h-4" />
+                    Leave Organization
+                  </span>
+                  {isLeavingOrg && <RefreshCw className="w-4 h-4 animate-spin" />}
+                </Button>
+              </div>
+            )
           )}
 
           {/* Alternative Actions */}

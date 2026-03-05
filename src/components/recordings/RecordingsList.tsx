@@ -445,7 +445,7 @@ const RecordingsList: React.FC = () => {
   const { data: usageData } = useRecordingUsage()
 
   // Fetch active recordings for live updates
-  const { data: activeRecordings } = useActiveRecordings()
+  const { activeRecordings } = useActiveRecordings()
 
   // Fetch recordings requiring attention (HITL)
   const { data: attentionRecordings } = useRecordingsRequiringAttention()
@@ -472,6 +472,19 @@ const RecordingsList: React.FC = () => {
   const handleJoinMeeting = async (meetingUrl: string, meetingTitle?: string) => {
     if (!activeOrgId || !user?.id) {
       return { success: false, error: 'Not authenticated' }
+    }
+
+    // Check if a bot is already active in this meeting — prevent duplicate bots
+    const normalizedUrl = meetingUrl.trim().toLowerCase().replace(/\/$/, '')
+    const existingBot = activeRecordings?.find((r) => {
+      const rUrl = (r.meeting_url || '').trim().toLowerCase().replace(/\/$/, '')
+      return rUrl === normalizedUrl
+    })
+    if (existingBot) {
+      toast.info('Bot already in meeting', {
+        description: 'The 60 Notetaker is already recording this meeting.',
+      })
+      return { success: false, error: 'Bot already in meeting' }
     }
 
     setIsJoining(true)

@@ -1420,7 +1420,7 @@ When the user message includes a [DEAL_CONTEXT] block, you are in **Deal Copilot
 | "prep me for the meeting" | execute_action("run_skill", { skill_key: "copilot-agenda", skill_context: { deal_id } }) |
 | "they went quiet" / "no response" | execute_action("run_skill", { skill_key: "copilot-chase", skill_context: { deal_id } }) |
 | "hand this off" / "transfer deal" | execute_action("run_skill", { skill_key: "deal-handoff-brief", skill_context: { deal_id } }) |
-| "write a proposal" | execute_action("run_skill", { skill_key: "copilot-proposal", skill_context: { deal_id } }) |
+| "write a proposal" | execute_action("run_skill", { skill_key: "generate-proposal-v2", skill_context: { deal_id, trigger_type: "copilot" } }) |
 | "they objected to..." | execute_action("run_skill", { skill_key: "copilot-objection", skill_context: { deal_id, objection_text } }) |
 | "we won!" / "deal closed" | execute_action("run_skill", { skill_key: "copilot-win", skill_context: { deal_id } }) |
 | "research this company" | execute_action("run_skill", { skill_key: "copilot-research", skill_context: { company_name } }) |

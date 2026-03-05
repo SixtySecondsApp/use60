@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["ES2020", "DOM"],
+    "moduleResolution": "node",
+    "strict": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "noImplicitAny": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "https://esm.sh/@supabase/supabase-js@2.43.4": ["../../node_modules/@supabase/supabase-js"],
+      "https://esm.sh/@supabase/supabase-js@2": ["../../node_modules/@supabase/supabase-js"],
+      "https://esm.sh/stripe@14.14.0?target=deno": ["./esm-shims/stripe"],
+      "https://esm.sh/@anthropic-ai/sdk@0.27.0": ["../../node_modules/@anthropic-ai/sdk"],
+      "https://esm.sh/@anthropic-ai/sdk@0.32.1": ["../../node_modules/@anthropic-ai/sdk"],
+      "https://esm.sh/docx@8.5.0": ["../../node_modules/docx"],
+      "https://esm.sh/jszip@3.10.1": ["../../node_modules/jszip"],
+      "https://esm.sh/mammoth@1.6.0": ["../../node_modules/mammoth"],
+      "https://esm.sh/pdf-lib@1.17.1": ["../../node_modules/pdf-lib"],
+      "https://esm.sh/yaml@2.3.4": ["../../node_modules/yaml"]
+    }
+  },
+  "include": [
+    "**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/__tests__/**"
+  ]
+}

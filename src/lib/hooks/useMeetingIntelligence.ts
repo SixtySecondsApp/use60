@@ -435,8 +435,27 @@ export function useMeetingIntelligence(): UseMeetingIntelligenceReturn {
         callsFailed = failedCount || 0;
       }
 
+      // Also check Railway-indexed transcripts (covers demo/seeded data)
+      let railwayIndexed = 0;
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const token = session?.session?.access_token;
+        if (token) {
+          const baseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+          const res = await fetch(`${baseUrl}/functions/v1/meeting-analytics/api/index/status`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            railwayIndexed = json?.data?.railway_indexed || 0;
+          }
+        }
+      } catch {
+        // Non-fatal — Railway status is supplementary
+      }
+
       setIndexStatus({
-        indexed: (Number(statusData?.indexed_count) || 0) + callsIndexed || storeData?.total_files || 0,
+        indexed: Math.max((Number(statusData?.indexed_count) || 0) + callsIndexed, railwayIndexed) || storeData?.total_files || 0,
         total: (Number(statusData?.total_meetings) || 0) + totalCalls,
         pending: (Number(statusData?.pending_count) || 0) + callsPending,
         failed: (Number(statusData?.failed_count) || 0) + callsFailed,
@@ -670,7 +689,7 @@ export function useMeetingIntelligence(): UseMeetingIntelligenceReturn {
 
       if (!meetings || meetings.length === 0) {
         toast.info('No conversations to index', {
-          description: 'Sync your meetings/calls first to enable AI search.',
+          description: 'No conversations to index. Please ensure integrations are configured correctly.',
         });
 
         await untypedSupabase

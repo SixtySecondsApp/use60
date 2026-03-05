@@ -19,6 +19,7 @@ import {
   errorResponse,
   jsonResponse,
 } from '../_shared/corsHelper.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 
 // =============================================================================
 // Config
@@ -183,7 +184,7 @@ async function analyseOrg(
   // Generate AI insights for each pattern
   for (const pattern of allPatterns) {
     if (ANTHROPIC_API_KEY && !pattern.description) {
-      const insight = await generateInsight(pattern);
+      const insight = await generateInsight(pattern, supabase, orgId);
       if (insight) pattern.description = insight;
     }
   }
@@ -435,7 +436,7 @@ function detectEngagementCorrelation(
 // AI: Generate human-readable insight for a pattern
 // =============================================================================
 
-async function generateInsight(pattern: DetectedPattern): Promise<string | null> {
+async function generateInsight(pattern: DetectedPattern, supabase?: any, orgId?: string): Promise<string | null> {
   if (!ANTHROPIC_API_KEY) return null;
 
   try {
@@ -467,6 +468,25 @@ Return ONLY the insight text, no other formatting.`,
 
     if (!resp.ok) return null;
     const data = await resp.json();
+    // Log AI cost event (fire-and-forget)
+    if (supabase && orgId && data.usage) {
+      const { data: member } = await supabase
+        .from('organization_memberships')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .limit(1)
+        .maybeSingle();
+      if (member?.user_id) {
+        logAICostEvent(
+          supabase, member.user_id, orgId,
+          'anthropic', 'claude-haiku-4-5-20251001',
+          data.usage.input_tokens || 0, data.usage.output_tokens || 0,
+          'pipeline_patterns',
+          undefined,
+          { source: 'agent_automated', agentType: 'pipeline-patterns' },
+        ).catch((e: unknown) => console.warn('[agent-pipeline-patterns] cost log error:', e));
+      }
+    }
     return data?.content?.[0]?.text?.trim() || null;
   } catch {
     return null;

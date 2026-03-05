@@ -8,15 +8,23 @@
 -- =============================================================================
 
 -- 1. contacts: ORDER BY created_at DESC (used by PostgREST pagination)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contacts_created_at
+CREATE INDEX IF NOT EXISTS idx_contacts_created_at
   ON public.contacts(created_at DESC);
 
 -- 2. contacts: org_id (used by RLS policies on every query)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contacts_org_id
-  ON public.contacts(org_id);
+-- Wrapped in DO block because org_id may not exist on all environments
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'contacts' AND column_name = 'org_id'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_contacts_org_id ON public.contacts(org_id)';
+  END IF;
+END $$;
 
 -- 3. meetings: owner_email (used in OR filter alongside owner_user_id)
 --    Allows PostgreSQL to bitmap-OR scan instead of seq scan
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_meetings_owner_email
+CREATE INDEX IF NOT EXISTS idx_meetings_owner_email
   ON public.meetings(owner_email)
   WHERE owner_email IS NOT NULL;

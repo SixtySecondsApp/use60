@@ -164,21 +164,91 @@ export const TalkTimeBadge: React.FC<{ repPct: number | null | undefined; judgem
 // Video Thumbnail Component
 // ============================================================================
 
-const PlaceholderThumbnail: React.FC<{ title?: string; className?: string }> = ({ title, className }) => {
-  const initial = (title || 'M')[0].toUpperCase()
+/**
+ * Call-grid placeholder thumbnail matching the demo video-call style.
+ * Shows 2x2 (or fewer) participant tiles with initials on a dark background.
+ * Pass attendeeNames for real participant data; falls back to title parsing.
+ */
+export const CallGridThumbnail: React.FC<{
+  title?: string
+  companyName?: string | null
+  attendeeNames?: string[]
+  className?: string
+}> = ({ title, companyName, attendeeNames, className }) => {
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/)
+    return parts.map(p => p[0]).join('').slice(0, 2).toUpperCase()
+  }
+
+  const truncName = (name: string) => name.length > 14 ? name.slice(0, 12) + '…' : name
+
+  // Filter out bots, recorders, and notetakers from attendee list
+  const botPatterns = /^(60 notetaker|notetaker|recorder|fathom|fireflies|otter|grain|gong|chorus|avoma|meetgeek|read\.ai|screen|display|bot)\b/i
+  const filteredNames = attendeeNames?.filter(n => n && !botPatterns.test(n.trim())) || []
+
+  // Build participant list from attendee names
+  const tiles: { initials: string; name: string }[] = []
+
+  if (filteredNames.length > 0) {
+    // Use real attendee names
+    for (const name of filteredNames.slice(0, 4)) {
+      tiles.push({ initials: getInitials(name), name: truncName(name) })
+    }
+  } else {
+    // Fallback: extract from company name and title
+    if (companyName) {
+      tiles.push({ initials: getInitials(companyName), name: truncName(companyName) })
+    }
+    // Try extracting capitalized name-like words from title
+    const skipWords = new Set(['meeting', 'call', 'with', 'and', 'the', 'demo', 'review', 'follow', 'up', 'intro', 'check', 'in', 'for', 'on', 'at', 'of', 'to', 'session', 'weekly', 'monthly', 'quarterly', 'update', 'sync'])
+    const titleWords = (title || '').replace(/[-–—|/\\()]/g, ' ').split(/\s+/).filter(w => w.length > 1)
+    const nameWords = titleWords.filter(w => /^[A-Z]/.test(w) && !skipWords.has(w.toLowerCase()))
+    for (const w of nameWords.slice(0, 3 - tiles.length)) {
+      const initials = w.slice(0, 2).toUpperCase()
+      if (!tiles.some(t => t.initials === initials)) {
+        tiles.push({ initials, name: truncName(w) })
+      }
+    }
+    // Ensure at least 2 tiles
+    if (tiles.length === 0) tiles.push({ initials: 'P1', name: 'Participant' })
+    if (tiles.length === 1) tiles.push({ initials: 'P2', name: 'Participant' })
+  }
+
+  const capped = tiles.slice(0, 4)
+  const gridClass = capped.length <= 1 ? 'grid-cols-1 grid-rows-1' : capped.length === 2 ? 'grid-cols-2 grid-rows-1' : 'grid-cols-2 grid-rows-2'
+
   return (
-    <div className={cn("bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center", className)}>
-      <span className="text-white text-xl font-bold">{initial}</span>
+    <div className={cn("rounded-lg overflow-hidden bg-[#0f172a] relative", className)}>
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.08] to-blue-500/[0.05]" />
+      <div className={cn("grid gap-[3px] p-[3px] h-full relative", gridClass)}>
+        {capped.map((p, i) => (
+          <div key={i} className="rounded-md flex flex-col items-center justify-center bg-[#1e293b]">
+            <div className="rounded-full flex items-center justify-center mb-0.5 bg-slate-700 w-5 h-5 sm:w-7 sm:h-7">
+              <span className="font-semibold leading-none text-slate-300 text-[7px] sm:text-[9px]">{p.initials}</span>
+            </div>
+            <span className="text-[6px] sm:text-[7px] leading-none truncate max-w-[90%] text-slate-500">{p.name}</span>
+          </div>
+        ))}
+      </div>
+      <div className="absolute bottom-0.5 left-1 flex items-center gap-0.5">
+        <div className="w-1 h-1 rounded-full bg-red-500 animate-pulse" />
+        <span className="text-[5px] text-red-400/70 font-medium">REC</span>
+      </div>
     </div>
   )
+}
+
+const PlaceholderThumbnail: React.FC<{ title?: string; attendeeNames?: string[]; className?: string }> = ({ title, attendeeNames, className }) => {
+  return <CallGridThumbnail title={title} attendeeNames={attendeeNames} className={className} />
 }
 
 export const VideoThumbnail: React.FC<{
   videoUrl?: string | null
   thumbnailUrl?: string | null
   title?: string
+  attendeeNames?: string[]
   className?: string
-}> = ({ videoUrl, thumbnailUrl, title, className }) => {
+}> = ({ videoUrl, thumbnailUrl, title, attendeeNames, className }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isVisible, setIsVisible] = useState(false)
@@ -247,10 +317,10 @@ export const VideoThumbnail: React.FC<{
             <Play className="h-5 w-5 text-white/90 drop-shadow-lg" />
           </div>
         )}
-        {!frameReady && <PlaceholderThumbnail title={title} className="absolute inset-0" />}
+        {!frameReady && <PlaceholderThumbnail title={title} attendeeNames={attendeeNames} className="absolute inset-0" />}
       </div>
     )
   }
 
-  return <PlaceholderThumbnail title={title} className={className} />
+  return <PlaceholderThumbnail title={title} attendeeNames={attendeeNames} className={className} />
 }

@@ -24,14 +24,50 @@ async function getOrgPlanSlug(
   supabase: SupabaseClient,
   orgId: string
 ): Promise<string | null> {
+  const features = await getOrgPlanFeatures(supabase, orgId);
+  return features?.slug ?? null;
+}
+
+interface PlanFeatures {
+  slug: string;
+  bundled_credits: number;
+}
+
+async function getOrgPlanFeatures(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<PlanFeatures | null> {
   const { data } = await supabase
     .from('organization_subscriptions')
-    .select('plan_id, subscription_plans!inner(slug)')
+    .select('plan_id, subscription_plans!inner(slug, features)')
     .eq('org_id', orgId)
     .maybeSingle();
-  // Handle the nested join result
   const plans = (data as any)?.subscription_plans;
-  return plans?.slug ?? null;
+  if (!plans) return null;
+  return {
+    slug: plans.slug,
+    bundled_credits: plans.features?.bundled_credits ?? 0,
+  };
+}
+
+/**
+ * Look up the bundled_credits value from the org's current subscription plan.
+ * Returns 0 if no plan, no subscription, or plan has no bundled credits.
+ */
+async function getOrgBundledCredits(
+  supabase: SupabaseClient,
+  orgId: string
+): Promise<number> {
+  const { data } = await supabase
+    .from('organization_subscriptions')
+    .select('subscription_plans!inner(features)')
+    .eq('org_id', orgId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  const features = (data as any)?.subscription_plans?.features;
+  const credits = features?.bundled_credits;
+  return typeof credits === 'number' && credits > 0 ? credits : 0;
 }
 
 interface WebhookResult {
@@ -442,13 +478,15 @@ async function handleSubscriptionCreated(
 
   await syncSubscriptionToDatabase(supabase, orgId, subscription);
 
-  // Grant subscription credits for Pro plan
-  const planSlug = metadata.plan_slug || await getOrgPlanSlug(supabase, orgId);
-  if (planSlug === 'pro') {
+  // Grant subscription credits based on plan's bundled_credits
+  const planFeatures = await getOrgPlanFeatures(supabase, orgId);
+  const planSlug = metadata.plan_slug || planFeatures?.slug;
+  const bundledCredits = planFeatures?.bundled_credits ?? 0;
+  if (bundledCredits > 0) {
     const periodEnd = getPeriodDates(subscription).periodEnd.toISOString();
     const { data: newBalance, error: creditError } = await supabase.rpc('grant_subscription_credits', {
       p_org_id: orgId,
-      p_amount: 250,
+      p_amount: bundledCredits,
       p_period_end: periodEnd,
     });
     if (creditError) {
@@ -456,7 +494,7 @@ async function handleSubscriptionCreated(
     } else if (newBalance === -1) {
       console.error(`[Webhook] grant_subscription_credits returned -1: org_credit_balance row not found for org ${orgId}`);
     } else {
-      console.log(`[Webhook] Granted 250 subscription credits to org ${orgId}, new balance: ${newBalance}`);
+      console.log(`[Webhook] Granted ${bundledCredits} subscription credits (${planSlug} plan) to org ${orgId}, new balance: ${newBalance}`);
     }
   }
 }
@@ -522,11 +560,12 @@ async function handleSubscriptionUpdated(
 
   await syncSubscriptionToDatabase(supabase, orgId, subscription);
 
-  // Check if plan changed (upgrade/downgrade)
+  // Check if plan changed (upgrade/downgrade) — grant credits based on plan's bundled_credits
   const updatedMetadata = extractMetadata(subscription);
-  const newPlanSlug = updatedMetadata.plan_slug || await getOrgPlanSlug(supabase, orgId);
-  // If upgrading to Pro, grant subscription credits
-  if (newPlanSlug === 'pro') {
+  const planFeatures = await getOrgPlanFeatures(supabase, orgId);
+  const newPlanSlug = updatedMetadata.plan_slug || planFeatures?.slug;
+  const bundledCredits = planFeatures?.bundled_credits ?? 0;
+  if (bundledCredits > 0) {
     const periodEnd = getPeriodDates(subscription).periodEnd.toISOString();
     // Check if credits already exist (avoid double-grant)
     const { data: balance } = await supabase
@@ -538,7 +577,7 @@ async function handleSubscriptionUpdated(
     if (!balance || balance.subscription_credits_balance === 0) {
       const { data: newBalance, error: grantError } = await supabase.rpc('grant_subscription_credits', {
         p_org_id: orgId,
-        p_amount: 250,
+        p_amount: bundledCredits,
         p_period_end: periodEnd,
       });
       if (grantError) {
@@ -546,7 +585,7 @@ async function handleSubscriptionUpdated(
       } else if (newBalance === -1) {
         console.error(`[Webhook] grant_subscription_credits returned -1: org_credit_balance row not found for org ${orgId}`);
       } else {
-        console.log(`[Webhook] Granted 250 credits on upgrade to Pro for org ${orgId}, new balance: ${newBalance}`);
+        console.log(`[Webhook] Granted ${bundledCredits} credits on plan change to ${newPlanSlug} for org ${orgId}, new balance: ${newBalance}`);
       }
     }
   }
@@ -712,7 +751,7 @@ async function handleInvoicePaid(
     subscription_id: existingSub.id,
   });
 
-  // Handle Pro subscription credit refresh on renewal
+  // Handle subscription credit refresh on renewal (use-or-lose: expire old, grant fresh)
   const billingReason = (invoice as any).billing_reason;
   if (billingReason === 'subscription_cycle') {
     // This is a renewal invoice, not the first payment
@@ -728,10 +767,9 @@ async function handleInvoicePaid(
         .eq('stripe_subscription_id', renewalSubscriptionId)
         .maybeSingle();
 
-      const planSlug = (sub as any)?.subscription_plans?.slug;
       const bundledCredits = (sub as any)?.subscription_plans?.features?.bundled_credits;
 
-      if (sub && planSlug === 'pro' && bundledCredits > 0) {
+      if (sub && bundledCredits > 0) {
         // Expire old subscription credits first
         await supabase.rpc('expire_subscription_credits', { p_org_id: sub.org_id });
 
@@ -894,12 +932,12 @@ async function handleChargeRefunded(
     return;
   }
 
-  const { error: deductError } = await supabase.rpc('deduct_credits_fifo', {
+  const { error: deductError } = await supabase.rpc('deduct_credits_ordered', {
     p_org_id: orgId,
     p_amount: refundAmount,
-    p_description: 'Refund — credit purchase reversed',
-    p_feature_key: null,
-    p_cost_event_id: null,
+    p_action_id: 'refund_credit_purchase_reversed',
+    p_tier: 'medium',
+    p_refs: {},
   });
 
   if (deductError) {

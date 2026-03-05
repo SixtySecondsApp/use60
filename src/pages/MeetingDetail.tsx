@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic, CheckCircle2, CircleDot } from 'lucide-react';
 import FathomPlayerV2, { FathomPlayerV2Handle } from '@/components/FathomPlayerV2';
 import { VoiceMeetingPlayer } from '@/components/meetings/VoiceMeetingPlayer';
 import { AskAIChat } from '@/components/meetings/AskAIChat';
@@ -16,6 +16,7 @@ import { useActivitiesActions } from '@/lib/hooks/useActivitiesActions';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import { toast } from 'sonner';
 import { ProposalWizard } from '@/components/proposals/ProposalWizard';
+import { ProposalQuickGenerate } from '@/components/proposals/ProposalQuickGenerate';
 import { TalkTimeChart } from '@/components/meetings/analytics/TalkTimeChart';
 import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsights';
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard';
@@ -23,6 +24,10 @@ import { ShareMeetingModal } from '@/components/meetings/ShareMeetingModal';
 import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary';
 import { useActivationTracking } from '@/lib/hooks/useActivationTracking';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
+import { useCreditGatedAction } from '@/lib/hooks/useCreditGatedAction';
+import { InternalMeetingTypeBadge } from '@/components/meetings/InternalMeetingTypeBadge';
+import { PrepBriefCard } from '@/components/meetings/PrepBriefCard';
+import { useMeetingPrepBrief } from '@/lib/hooks/useMeetingPrepBrief';
 
 // Processing status type for real-time UI updates
 type ProcessingStatus = 'pending' | 'processing' | 'complete' | 'failed';
@@ -231,9 +236,13 @@ export function MeetingDetail() {
   const [thumbnailEnsured, setThumbnailEnsured] = useState(false);
   const [summaryViewTracked, setSummaryViewTracked] = useState(false);
   const [hasStructuredSummary, setHasStructuredSummary] = useState(false);
+  const [hasScorecard, setHasScorecard] = useState(false);
   const [voiceRecordingData, setVoiceRecordingData] = useState<VoiceRecordingData | null>(null);
   const [voiceCurrentTime, setVoiceCurrentTime] = useState(0);
   const [speakerAvatarMap, setSpeakerAvatarMap] = useState<Map<string, string>>(new Map());
+
+  // IMP-UI-002: Meeting prep brief (internal meetings)
+  const { data: prepBrief } = useMeetingPrepBrief(id ?? null);
 
   // Activation tracking for North Star metric
   const { trackFirstSummaryViewed } = useActivationTracking();
@@ -243,6 +252,7 @@ export function MeetingDetail() {
 
   const [showProposalWizard, setShowProposalWizard] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
+  const { execute: executeMeetingSummaryGated } = useCreditGatedAction('meeting_summary', 5);
   const [showShareModal, setShowShareModal] = useState(false);
 
   const handleQuickAdd = async (type: 'meeting' | 'outbound' | 'proposal' | 'sale') => {
@@ -390,6 +400,26 @@ export function MeetingDetail() {
 
         if (actionItemsError) throw actionItemsError;
         setActionItems(actionItemsData || []);
+
+        // Check analysis completion status (non-blocking — failures are ignored)
+        try {
+          const [summaryCheck, scorecardCheck] = await Promise.all([
+            (supabase as any)
+              .from('meeting_structured_summaries')
+              .select('id')
+              .eq('meeting_id', id)
+              .maybeSingle(),
+            (supabase as any)
+              .from('meeting_scorecards')
+              .select('id')
+              .eq('meeting_id', id)
+              .maybeSingle(),
+          ]);
+          if (summaryCheck.data) setHasStructuredSummary(true);
+          if (scorecardCheck.data) setHasScorecard(true);
+        } catch {
+          // Non-fatal — status indicators are best-effort
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load meeting');
       } finally {
@@ -591,10 +621,11 @@ export function MeetingDetail() {
   }, []);
 
 
-  // Reprocess meeting with AI analysis
+  // Reprocess meeting with AI analysis (credit-gated)
   const handleReprocessMeeting = useCallback(async () => {
     if (!meeting?.id) return;
 
+    await executeMeetingSummaryGated(async () => {
     try {
       setIsReprocessing(true);
 
@@ -630,6 +661,26 @@ export function MeetingDetail() {
             .order('timestamp_seconds', { ascending: true });
           setActionItems(items || []);
         }
+
+        // Refresh analysis completion status
+        try {
+          const [summaryCheck, scorecardCheck] = await Promise.all([
+            (supabase as any)
+              .from('meeting_structured_summaries')
+              .select('id')
+              .eq('meeting_id', meeting.id)
+              .maybeSingle(),
+            (supabase as any)
+              .from('meeting_scorecards')
+              .select('id')
+              .eq('meeting_id', meeting.id)
+              .maybeSingle(),
+          ]);
+          if (summaryCheck.data) setHasStructuredSummary(true);
+          if (scorecardCheck.data) setHasScorecard(true);
+        } catch {
+          // Non-fatal
+        }
       } else {
         throw new Error(data?.error || 'Reprocessing failed');
       }
@@ -639,7 +690,8 @@ export function MeetingDetail() {
     } finally {
       setIsReprocessing(false);
     }
-  }, [meeting?.id]);
+    });
+  }, [meeting?.id, executeMeetingSummaryGated]);
 
   // Attach click handlers to Fathom timestamp links in summary
   useEffect(() => {
@@ -706,8 +758,8 @@ export function MeetingDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 min-w-0">
           {/* Left column: video + tabs */}
           <div className="lg:col-span-8 space-y-3 sm:space-y-4 min-w-0">
-            {/* Video player area — h-[320px] matches actual player */}
-            <Skeleton className="w-full h-[320px] rounded-2xl bg-gray-200/60 dark:bg-gray-700/40" />
+            {/* Video player area */}
+            <Skeleton className="w-full aspect-video rounded-2xl bg-gray-200/60 dark:bg-gray-700/40" />
 
             {/* Tab bar */}
             <div className="rounded-2xl border border-gray-200/50 dark:border-gray-700/30 bg-white/80 dark:bg-gray-900/40 p-4 sm:p-6 space-y-4">
@@ -813,9 +865,12 @@ export function MeetingDetail() {
         </div>
 
         <div className="flex flex-wrap gap-2 sm:flex-nowrap sm:flex-shrink-0">
-          {meeting.meeting_type && (
-            <Badge 
-              variant="outline" 
+          {/* IMP-UI-001: Internal meeting type badge */}
+          {prepBrief ? (
+            <InternalMeetingTypeBadge meetingType={prepBrief.meeting_type} isInternal />
+          ) : meeting.meeting_type && (
+            <Badge
+              variant="outline"
               className="capitalize bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-blue-200 dark:border-blue-500/20"
             >
               {meeting.meeting_type.replace('_', ' ')}
@@ -853,7 +908,7 @@ export function MeetingDetail() {
             </div>
           ) : meeting.source_type === '60_notetaker' && meeting.video_url ? (
             /* 60 Notetaker Video Player */
-            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }}>
+            <div className="glassmorphism-card overflow-hidden aspect-video">
               <video
                 controls
                 preload="metadata"
@@ -883,7 +938,7 @@ export function MeetingDetail() {
             </div>
           ) : (meeting.fathom_recording_id || meeting.share_url) ? (
             /* Fathom Video Player */
-            <div className="glassmorphism-card overflow-hidden" style={{ height: '320px' }} data-player-container>
+            <div className="glassmorphism-card overflow-hidden aspect-video" data-player-container>
               <FathomPlayerV2
                 ref={playerRef}
                 shareUrl={meeting.share_url}
@@ -914,50 +969,83 @@ export function MeetingDetail() {
               </div>
             )}
 
-            {/* Missing AI Analysis Alert */}
-            {meeting.transcript_text && (
-              meeting.sentiment_score === null ||
-              meeting.talk_time_rep_pct === null ||
-              meeting.talk_time_customer_pct === null
-            ) && (
-              <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
-                <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <AlertDescription className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="font-medium text-amber-900 dark:text-amber-100">
-                      AI Analysis Incomplete
-                    </p>
-                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                      This meeting has a transcript but is missing {
-                        [
-                          meeting.sentiment_score === null && 'sentiment analysis',
-                          meeting.talk_time_rep_pct === null && 'talk time data',
-                          meeting.talk_time_customer_pct === null && meeting.talk_time_rep_pct !== null && 'coaching insights'
-                        ].filter(Boolean).join(' and ')
-                      }. Click to reprocess with AI.
-                    </p>
+            {/* Analysis Status Section */}
+            {meeting.transcript_text && (() => {
+              const basicDone = meeting.sentiment_score !== null && meeting.talk_time_rep_pct !== null;
+              const allDone = basicDone && hasStructuredSummary && hasScorecard;
+
+              if (allDone) {
+                return (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Full analysis complete</span>
                   </div>
-                  <Button
-                    onClick={handleReprocessMeeting}
-                    disabled={isReprocessing}
-                    size="sm"
-                    className="ml-4 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600"
-                  >
-                    {isReprocessing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Reprocess
-                      </>
-                    )}
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
+                );
+              }
+
+              // Show incomplete alert with per-step status
+              const missingBasic = [
+                meeting.sentiment_score === null && 'sentiment',
+                meeting.talk_time_rep_pct === null && 'talk time',
+              ].filter(Boolean);
+
+              return (
+                <div className="space-y-2">
+                  <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                    <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <AlertDescription className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="font-medium text-amber-900 dark:text-amber-100">
+                          {basicDone ? 'Deep analysis pending' : 'AI Analysis Incomplete'}
+                        </p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                          {basicDone
+                            ? 'Basic analysis is done. Structured summary and scorecard are still processing or can be triggered below.'
+                            : `Missing ${missingBasic.join(' and ')}. Click to run full AI analysis.`}
+                        </p>
+                        {/* Per-step status indicators */}
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          {[
+                            { label: 'Basic Analysis', done: basicDone },
+                            { label: 'Structured Summary', done: hasStructuredSummary },
+                            { label: 'Scorecard', done: hasScorecard },
+                          ].map(({ label, done }) => (
+                            <span key={label} className="flex items-center gap-1 text-xs">
+                              {done
+                                ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                : <CircleDot className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />}
+                              <span className={done
+                                ? 'text-emerald-700 dark:text-emerald-300'
+                                : 'text-amber-700 dark:text-amber-300'}>
+                                {label}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleReprocessMeeting}
+                        disabled={isReprocessing}
+                        size="sm"
+                        className="ml-4 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 shrink-0"
+                      >
+                        {isReprocessing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            {basicDone ? 'Run Deep Analysis' : 'Reprocess'}
+                          </>
+                        )}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              );
+            })()}
 
             {/* Enhanced Talk Time Analytics */}
             {meeting.talk_time_rep_pct !== null && meeting.talk_time_customer_pct !== null && (
@@ -1003,6 +1091,13 @@ export function MeetingDetail() {
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('outbound')}>Add Outbound</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('proposal')}>Add Proposal</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('sale')}>Add Sale</Button>
+                    <ProposalQuickGenerate
+                      meetingId={meeting.id}
+                      contactId={meeting.primary_contact_id}
+                      hasRecording={!!meeting.fathom_recording_id}
+                      hasNotes={!!meeting.transcript_text}
+                      onCustomise={() => setShowProposalWizard(true)}
+                    />
                   </div>
 
                   {/* AI Structured Summary (classification, outcomes, objections, etc.) */}
@@ -1266,6 +1361,11 @@ export function MeetingDetail() {
 
         {/* Right Column - Sidebar */}
         <div className="lg:col-span-4 space-y-3 sm:space-y-4 min-w-0">
+          {/* IMP-UI-002: Prep brief card for internal meetings */}
+          {prepBrief && (
+            <PrepBriefCard brief={prepBrief} />
+          )}
+
           {/* Quick Actions */}
           {meeting && (
             <QuickActionsCard
@@ -1407,6 +1507,7 @@ export function MeetingDetail() {
           companyName={companyName || meeting.company?.name}
         />
       )}
+      {/* ProposalProgressOverlay is managed by ProposalQuickGenerate internally */}
       {/* Share Meeting Modal */}
       {meeting && (
         <ShareMeetingModal

@@ -17,7 +17,7 @@ const tableOfContents: TOCItem[] = [
   { id: 'data-collection', title: 'Data Collection', icon: Shield },
   { id: 'how-collected', title: 'How Data Is Collected', icon: Globe },
   { id: 'data-usage', title: 'How We Use Your Data', icon: Lock },
-  { id: 'google-workspace', title: 'Google Workspace Data', icon: Globe },
+  { id: 'google-api', title: 'Google API Data', icon: Globe },
   { id: 'disclosures', title: 'Data Disclosures', icon: Users },
   { id: 'international-transfers', title: 'International Transfers', icon: Globe },
   { id: 'data-security', title: 'Data Security', icon: Lock },
@@ -133,7 +133,7 @@ export function PrivacyPolicyPage() {
                     Your privacy and data security is important to us. This policy explains how we collect, use, and protect your personal information.
                   </p>
                   <p className="text-sm text-gray-500 mt-4">
-                    Last Updated: <time dateTime="2026-03-02">2 March 2026</time>
+                    Last Updated: <time dateTime="2026-03-04">4 March 2026</time>
                   </p>
                 </motion.div>
               </div>
@@ -312,55 +312,49 @@ export function PrivacyPolicyPage() {
                   </Subsection>
                 </Section>
 
-                {/* Google Workspace Integration */}
-                <Section id="google-workspace" title="Google Workspace Integration">
-                  <Subsection title="What Google Data We Access">
-                    <DataTypeGrid>
-                      <DataTypeCard
-                        title="Calendar Events"
-                        description="Event titles, times, and attendees — used for meeting scheduling, preparation, and sync"
-                      />
-                      <DataTypeCard
-                        title="Gmail Messages"
-                        description="Read-only access to message subject, sender, and body — used for deal context and communication history"
-                      />
-                      <DataTypeCard
-                        title="Google Drive Files"
-                        description="Read-only access to files shared with you — used for document reference in deal context"
-                      />
-                      <DataTypeCard
-                        title="Google Docs"
-                        description="Read-only access to documents — used for referencing content relevant to deals and meetings"
-                      />
-                    </DataTypeGrid>
-                  </Subsection>
+                {/* Google API Services */}
+                <Section id="google-api" title="Google API Services — User Data Policy">
+                  <p>
+                    60 integrates with Google Workspace services including Gmail, Google Calendar, Google Drive, Google Docs, and Google Tasks. When you connect your Google account, we access data from these services to provide 60's features.
+                  </p>
 
                   <Subsection title="How We Use Google Data">
                     <ul>
-                      <li><strong>Calendar:</strong> Meeting scheduling, pre-meeting preparation briefs, and calendar sync to keep your pipeline up to date</li>
-                      <li><strong>Email:</strong> Building deal context, tracking follow-ups, and maintaining communication history for active deals</li>
-                      <li><strong>Drive and Docs:</strong> Referencing documents and files associated with deals, contacts, and meetings</li>
-                    </ul>
-                    <p>
-                      We access only the minimum data required to provide these features. We do not read, store, or process Google data for advertising purposes.
-                    </p>
-                  </Subsection>
-
-                  <Subsection title="Google Data Storage and Retention">
-                    <ul>
-                      <li>Google OAuth tokens are encrypted at rest and used solely to access data on your behalf</li>
-                      <li>Email content is processed to extract AI-generated insights — only the resulting summary is stored, not the raw email body</li>
-                      <li>Calendar data is synced and refreshed regularly to reflect your current schedule</li>
-                      <li>You can disconnect Google at any time from your account settings, which immediately revokes our access to your Google data</li>
+                      <li><strong>Gmail:</strong> We sync emails from your CRM contacts to display communication history on deals and contacts. AI generates summaries of email threads — only summaries are stored, not raw email bodies. We send emails and create drafts on your behalf when you explicitly request it. We apply triage labels and manage read/starred/archived states within 60.</li>
+                      <li><strong>Google Calendar:</strong> We sync your calendar events to display meetings alongside deal context, power meeting prep briefs, and check availability for scheduling. We create, update, and delete events when you use scheduling features.</li>
+                      <li><strong>Google Drive & Docs:</strong> We create and share documents (proposals, meeting notes) in your Drive when you request it.</li>
+                      <li><strong>Google Tasks:</strong> We provide bidirectional sync between 60's task system and Google Tasks.</li>
                     </ul>
                   </Subsection>
 
-                  <Subsection title="Google API Services Compliance">
+                  <Subsection title="Limited Use Disclosure">
                     <InfoBox variant="info">
-                      60's use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements.
+                      <strong>Google API Services User Data Policy Compliance</strong>
+                      <p className="mt-2">
+                        60's use and transfer to any other app of information received from Google APIs will adhere to the{' '}
+                        <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
+                          Google API Services User Data Policy
+                        </a>
+                        , including the Limited Use requirements.
+                      </p>
                     </InfoBox>
-                    <p className="mt-4">
-                      Our use of Google user data is limited to providing and improving features directly requested by you. We do not use Google data to serve advertisements, share data with third parties for their own purposes, or allow humans to read your data except where you have given explicit permission or it is required for security or legal compliance.
+                    <p className="mt-4">Specifically, we commit to the following:</p>
+                    <ul>
+                      <li>Google user data is only used to provide and improve user-facing features within 60 that are prominent in the application's user interface.</li>
+                      <li>We do not transfer Google user data to third parties, except: (a) as necessary to provide or improve user-facing features visible in 60; (b) to comply with applicable laws; (c) for security purposes such as investigating abuse; or (d) as part of a merger, acquisition, or asset sale with explicit user consent.</li>
+                      <li>We do not use Google user data for serving advertisements, including retargeting, personalised, or interest-based advertising.</li>
+                      <li>We do not use Google user data to determine creditworthiness or for lending purposes.</li>
+                      <li>Human employees do not read Google user data unless: (a) we have your affirmative agreement to view specific data; (b) it is necessary for security purposes; (c) it is necessary to comply with applicable law; or (d) the data is aggregated and anonymised for internal operations.</li>
+                    </ul>
+                  </Subsection>
+
+                  <Subsection title="Revoking Access">
+                    <p>
+                      You can disconnect your Google account at any time from Settings &rarr; Integrations within 60. You can also revoke access from your{' '}
+                      <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
+                        Google Account permissions page
+                      </a>
+                      . When access is revoked, we stop all syncing and delete cached Google data.
                     </p>
                   </Subsection>
                 </Section>

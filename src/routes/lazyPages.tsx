@@ -43,9 +43,6 @@ export const NotetakerVideoQuality = lazyWithRetry(() => import('@/pages/platfor
 export const NotetakerRecordingLimit = lazyWithRetry(() => import('@/pages/platform/NotetakerRecordingLimit'));
 export const ActionCentre = lazyWithRetry(() => import('@/pages/platform/ActionCentre'));
 export const CommandCentre = lazyWithRetry(() => import('@/pages/platform/CommandCentre'));
-export const CommandCentreDemo = lazyWithRetry(() => import('@/pages/platform/CommandCentreDemo'));
-export const CommandCentreV2Demo = lazyWithRetry(() => import('@/pages/platform/CommandCentreV2Demo'));
-export const CommandCentreWowDemo = lazyWithRetry(() => import('@/pages/platform/CommandCentreWowDemo'));
 export const CommitmentDetectionDemo = lazyWithRetry(() => import('@/pages/platform/CommitmentDetectionDemo'));
 export const AgentTeamSettings = lazyWithRetry(() => import('@/pages/platform/AgentTeamSettings'));
 export const MultiAgentDemoPage = lazyWithRetry(() => import('@/pages/platform/MultiAgentDemoPage'));
@@ -58,6 +55,7 @@ export const AgentAbilitiesPage = lazyWithRetry(() => import('@/pages/platform/A
 export const OrchestratorDashboard = lazyWithRetry(() => import('@/pages/platform/OrchestratorDashboard'));
 export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
+export const GodsEyeAdmin = lazyWithRetry(() => import('@/pages/platform/GodsEyeAdmin'));
 export const CreditMenuAdmin = lazyWithRetry(() => import('@/pages/platform/CreditMenuAdmin'));
 export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo/EnrichmentComparison'));
 export const ResearchComparisonDemo = lazyWithRetry(() => import('@/pages/demo/ResearchComparison'));
@@ -67,6 +65,7 @@ export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentR
 export const CampaignWorkflowDemo = lazyWithRetry(() => import('@/pages/demo/CampaignWorkflowDemo'));
 export const OpsWebhookDemo = lazyWithRetry(() => import('@/pages/demo/OpsWebhookDemo'));
 export const VisualAssetsDemo = lazyWithRetry(() => import('@/pages/demo/VisualAssetsDemo'));
+export const GoogleIntegrationDemo = lazyWithRetry(() => import('@/pages/demo/GoogleIntegrationDemo'));
 // Admin Configuration
 export const ControlRoom = lazyWithRetry(() => import('@/pages/admin/ControlRoom'));
 export const Users = lazyWithRetry(() => import('@/pages/admin/Users'));
@@ -128,6 +127,7 @@ export const Onboarding = lazyWithRetry(() => import('@/pages/onboarding'));
 // ============================================================
 // CRM and ElegantCRM removed — replaced by Ops
 export const PipelinePage = lazyWithRetry(() => import('@/pages/PipelinePage').then(module => ({ default: module.PipelinePage })));
+export const ForecastPage = lazyWithRetry(() => import('@/pages/ForecastPage'));
 export const FormDisplay = lazyWithRetry(() => import('@/pages/FormDisplay'));
 export const CompaniesTable = lazyWithRetry(() => import('@/pages/companies/CompaniesTable'));
 export const CompanyProfile = lazyWithRetry(() => import('@/pages/companies/CompanyProfile'));
@@ -144,6 +144,8 @@ export const HealthMonitoring = lazyWithRetry(() => import('@/pages/HealthMonito
 // FEATURE PAGES (Meetings, Calls, Tasks, etc.)
 // ============================================================
 export const MeetingsPage = lazyWithRetry(() => import('@/pages/MeetingsPage'));
+export const MeetingLibraryPage = lazyWithRetry(() => import('@/pages/MeetingLibraryPage'));
+export const ProposalsList = lazyWithRetry(() => import('@/pages/ProposalsList'));
 // MeetingIntelligence and MeetingSentimentAnalytics removed — V1 Intelligence deleted
 export const Calls = lazyWithRetry(() => import('@/pages/Calls'));
 export const CallDetail = lazyWithRetry(() => import('@/pages/CallDetail'));
@@ -158,6 +160,9 @@ export const FreepikFlow = lazyWithRetry(() => import('@/components/workflows/Fr
 export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m => ({ default: m.Copilot })));
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const LandingPageBuilderPage = lazyWithRetry(() => import('@/pages/LandingPageBuilderPage'));
+export const CampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/CampaignsPage'));
+export const OutreachAnalyticsPage = lazyWithRetry(() => import('@/pages/OutreachAnalyticsPage'));
+export const WinLossPage = lazyWithRetry(() => import('@/pages/WinLossPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
 export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));
@@ -199,6 +204,13 @@ export const LogoSettings = lazyWithRetry(() => import('@/pages/settings/LogoSet
 export const SlackSettings = lazyWithRetry(() => import('@/pages/settings/SlackSettings'));
 export const ProactiveAgentSettings = lazyWithRetry(() => import('@/pages/settings/ProactiveAgentSettings'));
 export const AutonomySettingsPage = lazyWithRetry(() => import('@/pages/settings/AutonomySettingsPage'));
+export const AutonomyDashboardPage = lazyWithRetry(() => import('@/pages/AutonomyDashboardPage'));
+export const SearchResultsPage = lazyWithRetry(() => import('@/pages/SearchResultsPage'));
+export const CompetitiveIntelPage = lazyWithRetry(() => import('@/pages/CompetitiveIntelPage'));
+export const FollowUpDraftsPage = lazyWithRetry(() => import('@/pages/FollowUpDraftsPage'));
+export const CoachingDashboardPage = lazyWithRetry(() => import('@/pages/CoachingDashboardPage'));
+export const CoachingRepDetailPage = lazyWithRetry(() => import('@/pages/CoachingRepDetailPage'));
+export const TeachSixtySection = lazyWithRetry(() => import('@/pages/settings/TeachSixtySection'));
 export const SalesMethodologySettings = lazyWithRetry(() => import('@/pages/settings/SalesMethodologySettings'));
 export const CRMFieldMappingSettings = lazyWithRetry(() => import('@/pages/settings/CRMFieldMappingSettings'));
 export const CustomSOPBuilderPage = lazyWithRetry(() => import('@/pages/settings/CustomSOPBuilderPage'));
@@ -212,6 +224,7 @@ export const InstantlySettings = lazyWithRetry(() => import('@/pages/settings/In
 export const SmartListeningSettings = lazyWithRetry(() => import('@/pages/settings/SmartListeningSettings'));
 export const CreditPurchaseSuccess = lazyWithRetry(() => import('@/pages/settings/CreditPurchaseSuccess'));
 export const CreditsSettingsPage = lazyWithRetry(() => import('@/pages/settings/CreditsSettingsPage'));
+export const ModelPreferencesPage = lazyWithRetry(() => import('@/pages/settings/ModelPreferencesPage'));
 export const BillingSettingsPage = lazyWithRetry(() => import('@/pages/settings/BillingSettingsPage'));
 export const SalesGoalsPage = lazyWithRetry(() => import('@/pages/settings/SalesGoalsPage'));
 // Integration settings pages (dedicated settings for each integration)

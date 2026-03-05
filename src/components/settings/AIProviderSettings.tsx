@@ -1,21 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Save, CheckCircle, AlertCircle, Sparkles, Key } from 'lucide-react';
+import { Save, CheckCircle, AlertCircle, Sparkles, Key, RotateCcw } from 'lucide-react';
 import { AIProviderService } from '../../lib/services/aiProvider';
 import { supabase } from '../../lib/supabase/clientV2';
 
 interface APIKeyConfig {
   provider: string;
-  key: string;
+  // newKey is what the user is typing when replacing a saved key
+  newKey: string;
+  // hasSavedKey indicates a key is already stored server-side
+  hasSavedKey: boolean;
+  // lastFour is the masked suffix shown after saving
+  lastFour: string;
+  // isReplacing indicates the user clicked "Replace" to enter a new key
+  isReplacing: boolean;
   isValid?: boolean;
-  isVisible?: boolean;
 }
 
 export default function AIProviderSettings() {
   const [apiKeys, setApiKeys] = useState<APIKeyConfig[]>([
-    { provider: 'openai', key: '', isVisible: false },
-    { provider: 'anthropic', key: '', isVisible: false },
-    { provider: 'openrouter', key: '', isVisible: false },
-    { provider: 'gemini', key: '', isVisible: false },
+    { provider: 'openai', newKey: '', hasSavedKey: false, lastFour: '', isReplacing: false },
+    { provider: 'anthropic', newKey: '', hasSavedKey: false, lastFour: '', isReplacing: false },
+    { provider: 'openrouter', newKey: '', hasSavedKey: false, lastFour: '', isReplacing: false },
+    { provider: 'gemini', newKey: '', hasSavedKey: false, lastFour: '', isReplacing: false },
   ]);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
@@ -32,39 +38,51 @@ export default function AIProviderSettings() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      
+
       setUserId(user.id);
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('user_settings')
         .select('ai_provider_keys')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (data?.ai_provider_keys) {
         const existingKeys = data.ai_provider_keys as Record<string, string>;
-        setApiKeys(keys => keys.map(key => ({
-          ...key,
-          key: existingKeys[key.provider] || '',
-          isValid: existingKeys[key.provider] ? true : undefined
-        })));
+        setApiKeys(keys => keys.map(key => {
+          const savedKey = existingKeys[key.provider] || '';
+          return {
+            ...key,
+            hasSavedKey: !!savedKey,
+            lastFour: savedKey ? savedKey.slice(-4) : '',
+            isValid: savedKey ? true : undefined,
+          };
+        }));
       }
     } catch (error) {
     }
   };
 
-  const handleKeyChange = (provider: string, value: string) => {
-    setApiKeys(keys => keys.map(key => 
-      key.provider === provider 
-        ? { ...key, key: value, isValid: undefined }
+  const handleNewKeyChange = (provider: string, value: string) => {
+    setApiKeys(keys => keys.map(key =>
+      key.provider === provider
+        ? { ...key, newKey: value, isValid: undefined }
         : key
     ));
   };
 
-  const toggleVisibility = (provider: string) => {
-    setApiKeys(keys => keys.map(key => 
-      key.provider === provider 
-        ? { ...key, isVisible: !key.isVisible }
+  const startReplacing = (provider: string) => {
+    setApiKeys(keys => keys.map(key =>
+      key.provider === provider
+        ? { ...key, isReplacing: true, newKey: '', isValid: undefined }
+        : key
+    ));
+  };
+
+  const cancelReplacing = (provider: string) => {
+    setApiKeys(keys => keys.map(key =>
+      key.provider === provider
+        ? { ...key, isReplacing: false, newKey: '' }
         : key
     ));
   };
@@ -73,31 +91,31 @@ export default function AIProviderSettings() {
     setTesting(provider);
     try {
       const keyConfig = apiKeys.find(k => k.provider === provider);
-      if (!keyConfig?.key) {
-        setApiKeys(keys => keys.map(key => 
-          key.provider === provider 
+      const keyToTest = keyConfig?.newKey;
+      if (!keyToTest) {
+        setApiKeys(keys => keys.map(key =>
+          key.provider === provider
             ? { ...key, isValid: false }
             : key
         ));
         return;
       }
 
-      const isValid = await aiProviderService.testApiKey(provider, keyConfig.key);
-      
-      setApiKeys(keys => keys.map(key => 
-        key.provider === provider 
+      const isValid = await aiProviderService.testApiKey(provider, keyToTest);
+
+      setApiKeys(keys => keys.map(key =>
+        key.provider === provider
           ? { ...key, isValid }
           : key
       ));
-      
-      // Log result for debugging
+
       if (!isValid) {
-        console.warn(`[AI Settings] API key validation failed for ${provider}. Check browser console for details.`);
+        console.warn(`[AI Settings] API key validation failed for ${provider}.`);
       }
     } catch (error: any) {
       console.error(`[AI Settings] Error testing ${provider} API key:`, error);
-      setApiKeys(keys => keys.map(key => 
-        key.provider === provider 
+      setApiKeys(keys => keys.map(key =>
+        key.provider === provider
           ? { ...key, isValid: false }
           : key
       ));
@@ -108,19 +126,33 @@ export default function AIProviderSettings() {
 
   const saveAllKeys = async () => {
     if (!userId) return;
-    
+
     setLoading(true);
     setSaveStatus('saving');
-    
+
     try {
-      // Save each key that has a value
       for (const keyConfig of apiKeys) {
-        if (keyConfig.key) {
-          await aiProviderService.saveApiKey(userId, keyConfig.provider, keyConfig.key);
+        // Only save if the user entered a new key (either fresh or replacement)
+        if (keyConfig.newKey) {
+          await aiProviderService.saveApiKey(userId, keyConfig.provider, keyConfig.newKey);
         }
       }
-      
+
       setSaveStatus('saved');
+      // After saving, update state: move newKey → lastFour, clear isReplacing
+      setApiKeys(keys => keys.map(key => {
+        if (key.newKey) {
+          return {
+            ...key,
+            hasSavedKey: true,
+            lastFour: key.newKey.slice(-4),
+            newKey: '',
+            isReplacing: false,
+            isValid: undefined,
+          };
+        }
+        return key;
+      }));
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (error) {
       setSaveStatus('error');
@@ -160,6 +192,8 @@ export default function AIProviderSettings() {
     }
   };
 
+  const hasUnsavedKeys = apiKeys.some(k => k.newKey);
+
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl p-6 space-y-6 border border-gray-200 dark:border-gray-800 shadow-sm">
       <div className="flex items-center gap-3 mb-6">
@@ -196,42 +230,63 @@ export default function AIProviderSettings() {
               )}
             </div>
 
-            <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <input
-                  type={keyConfig.isVisible ? 'text' : 'password'}
-                  value={keyConfig.key}
-                  onChange={(e) => handleKeyChange(keyConfig.provider, e.target.value)}
-                  placeholder={`Enter ${getProviderLabel(keyConfig.provider)} API key`}
-                  className="w-full px-3 py-2 pr-10 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+            {keyConfig.hasSavedKey && !keyConfig.isReplacing ? (
+              // Saved state — show masked key, no eye icon
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg">
+                  <Key className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
+                  <span className="text-gray-500 dark:text-gray-400 font-mono text-sm">
+                    sk-...{keyConfig.lastFour}
+                  </span>
+                  <CheckCircle className="w-4 h-4 text-green-500 dark:text-green-400 ml-auto shrink-0" />
+                </div>
                 <button
-                  onClick={() => toggleVisibility(keyConfig.provider)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
+                  onClick={() => startReplacing(keyConfig.provider)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors text-sm"
                 >
-                  {keyConfig.isVisible ? (
-                    <EyeOff className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                  ) : (
-                    <Eye className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                  )}
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Replace
                 </button>
               </div>
+            ) : (
+              // Input state — new key entry or replacement
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <input
+                    type="password"
+                    value={keyConfig.newKey}
+                    onChange={(e) => handleNewKeyChange(keyConfig.provider, e.target.value)}
+                    placeholder={keyConfig.isReplacing ? 'Enter new API key' : `Enter ${getProviderLabel(keyConfig.provider)} API key`}
+                    className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    autoFocus={keyConfig.isReplacing}
+                  />
+                </div>
 
-              <button
-                onClick={() => testApiKey(keyConfig.provider)}
-                disabled={!keyConfig.key || testing === keyConfig.provider}
-                className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-700/50 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 dark:text-white rounded-lg transition-colors text-sm"
-              >
-                {testing === keyConfig.provider ? (
-                  <span className="flex items-center gap-1">
-                    <div className="w-3 h-3 border-2 border-gray-400 dark:border-white/30 border-t-gray-700 dark:border-t-white rounded-full animate-spin" />
-                    Testing
-                  </span>
-                ) : (
-                  'Test'
+                <button
+                  onClick={() => testApiKey(keyConfig.provider)}
+                  disabled={!keyConfig.newKey || testing === keyConfig.provider}
+                  className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:bg-gray-100 dark:disabled:bg-gray-700/50 disabled:text-gray-400 disabled:cursor-not-allowed text-gray-700 dark:text-white rounded-lg transition-colors text-sm"
+                >
+                  {testing === keyConfig.provider ? (
+                    <span className="flex items-center gap-1">
+                      <div className="w-3 h-3 border-2 border-gray-400 dark:border-white/30 border-t-gray-700 dark:border-t-white rounded-full animate-spin" />
+                      Testing
+                    </span>
+                  ) : (
+                    'Test'
+                  )}
+                </button>
+
+                {keyConfig.isReplacing && (
+                  <button
+                    onClick={() => cancelReplacing(keyConfig.provider)}
+                    className="px-3 py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg transition-colors text-sm"
+                  >
+                    Cancel
+                  </button>
                 )}
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -244,7 +299,7 @@ export default function AIProviderSettings() {
 
         <button
           onClick={saveAllKeys}
-          disabled={loading || apiKeys.every(k => !k.key)}
+          disabled={loading || !hasUnsavedKeys}
           className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 dark:disabled:bg-purple-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
         >
           {saveStatus === 'saving' ? (

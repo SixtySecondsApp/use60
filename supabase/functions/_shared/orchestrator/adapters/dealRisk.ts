@@ -11,7 +11,7 @@ import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../t
 import { getServiceClient } from './contextEnrichment.ts';
 import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
 import { logAgentAction } from '../../memory/dailyLog.ts';
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.43.4';
 
 // =============================================================================
 // Adapter 1: Scan Active Deals (Wave 1)

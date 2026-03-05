@@ -5,6 +5,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   getProposalTemplates,
   updateProposalTemplate,
@@ -15,10 +29,16 @@ import {
   type ProposalModelSettings
 } from '@/lib/services/proposalService';
 import { AIProviderService } from '@/lib/services/aiProvider';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useActiveOrgId } from '@/lib/stores/orgStore';
+import { useAuth } from '@/lib/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate } from 'lucide-react';
+import { Save, Plus, Upload, FileText, Palette, Target, FileCode, Sparkles, Info, Copy, Check, LayoutTemplate, Package, Pencil, Trash2, Loader2, X, Bot, TrendingUp, ShieldCheck, Shield, Zap, Lock, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import TemplateManager from '@/components/proposals/TemplateManager';
+import OfferingUploader from '@/components/proposals/OfferingUploader';
+import OfferingReviewPanel from '@/components/proposals/OfferingReviewPanel';
 
 // Template type descriptions and guidance
 const TEMPLATE_GUIDANCE = {
@@ -300,7 +320,750 @@ This Statement of Work outlines the scope, deliverables, and terms for [Project 
   },
 };
 
+// =============================================================================
+// Offering Profiles Tab — OFR-006
+// =============================================================================
+
+interface OfferingProfile {
+  id: string;
+  name: string;
+  description: string | null;
+  source_document_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  proposal_assets?: { file_name: string | null } | null;
+}
+
+function OfferingProfilesTab({ orgId }: { orgId: string }) {
+  const queryClient = useQueryClient();
+
+  // State for upload flow
+  const [showUploader, setShowUploader] = useState(false);
+  const [pendingProfileId, setPendingProfileId] = useState<string | null>(null);
+
+  // State for review sheet
+  const [reviewProfileId, setReviewProfileId] = useState<string | null>(null);
+
+  // State for delete confirmation
+  const [deleteProfileId, setDeleteProfileId] = useState<string | null>(null);
+
+  // ----- Query -----
+  const { data: profiles = [], isLoading } = useQuery<OfferingProfile[]>({
+    queryKey: ['offering-profiles', orgId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('org_offering_profiles')
+        .select('id, name, description, source_document_id, is_active, created_at, proposal_assets(file_name)')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as OfferingProfile[];
+    },
+    enabled: !!orgId,
+  });
+
+  // ----- Toggle active -----
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase
+        .from('org_offering_profiles')
+        .update({ is_active })
+        .eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to update: ${err.message}`);
+    },
+  });
+
+  // ----- Delete -----
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('org_offering_profiles')
+        .delete()
+        .eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success('Offering profile deleted');
+      setDeleteProfileId(null);
+      queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+    },
+    onError: (err: Error) => {
+      toast.error(`Delete failed: ${err.message}`);
+      setDeleteProfileId(null);
+    },
+  });
+
+  const handleAnalysisComplete = (profileId: string) => {
+    setPendingProfileId(profileId);
+    setShowUploader(false);
+    // Open review panel immediately
+    setReviewProfileId(profileId);
+    queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+  };
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Upload sales collateral (PDFs, decks, brochures) and 60 will extract your products,
+            services, case studies, and pricing to use when writing proposals.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => { setShowUploader(true); setPendingProfileId(null); }}
+          className="shrink-0 gap-1.5"
+        >
+          <Upload className="h-4 w-4" />
+          Upload Collateral
+        </Button>
+      </div>
+
+      {/* Uploader inline section */}
+      {showUploader && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Upload Sales Collateral</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowUploader(false)} className="h-7 w-7 p-0">
+                <span className="sr-only">Close</span>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <CardDescription>
+              Supported: PDF, DOCX, PPTX — max 25MB. 60 will automatically extract your offering data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <OfferingUploader
+              orgId={orgId}
+              onAnalysisComplete={handleAnalysisComplete}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Profile list */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2].map((n) => (
+            <Skeleton key={n} className="h-16 w-full rounded-lg" />
+          ))}
+        </div>
+      ) : profiles.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Package className="w-10 h-10 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              No offering profiles yet. Upload your sales collateral to get started.
+            </p>
+            <Button size="sm" onClick={() => setShowUploader(true)} className="gap-1.5">
+              <Upload className="h-4 w-4" />
+              Upload Collateral
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {profiles.map((profile) => {
+            const sourceFileName = profile.proposal_assets?.file_name ?? null;
+            return (
+              <Card key={profile.id} className="overflow-hidden">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    {/* Active toggle */}
+                    <Switch
+                      checked={profile.is_active}
+                      onCheckedChange={(checked) =>
+                        toggleMutation.mutate({ id: profile.id, is_active: checked })
+                      }
+                      disabled={toggleMutation.isPending}
+                      aria-label={`Toggle ${profile.name} active`}
+                    />
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {profile.name}
+                        </span>
+                        {profile.is_active ? (
+                          <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border-0">
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs text-gray-400 border-0">
+                            Inactive
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
+                        {sourceFileName ? sourceFileName : 'No source document'} &middot; {formatDate(profile.created_at)}
+                      </p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setReviewProfileId(profile.id)}
+                        className="h-8 w-8 p-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                        title="Edit profile"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteProfileId(profile.id)}
+                        className="h-8 w-8 p-0 text-gray-400 hover:text-red-500"
+                        title="Delete profile"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Review Sheet */}
+      <Sheet open={!!reviewProfileId} onOpenChange={(open) => { if (!open) setReviewProfileId(null); }}>
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto !top-16 !h-[calc(100vh-4rem)]">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Review Offering Profile</SheetTitle>
+          </SheetHeader>
+          {reviewProfileId && (
+            <OfferingReviewPanel
+              profileId={reviewProfileId}
+              orgId={orgId}
+              onApprove={() => {
+                setReviewProfileId(null);
+                queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+              }}
+              onReject={() => {
+                setReviewProfileId(null);
+                queryClient.invalidateQueries({ queryKey: ['offering-profiles', orgId] });
+              }}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteProfileId} onOpenChange={(open) => { if (!open) setDeleteProfileId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete offering profile?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the profile and its extracted data. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteProfileId && deleteMutation.mutate(deleteProfileId)}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Deleting...</>
+              ) : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// =============================================================================
+// Proposal Autopilot Section — AUT-003
+// =============================================================================
+
+const PROPOSAL_ACTION_TYPES = ['proposal.generate', 'proposal.send'] as const;
+
+const PROPOSAL_ACTION_DISPLAY: Record<string, string> = {
+  'proposal.generate': 'Generate Proposal',
+  'proposal.send': 'Send Proposal',
+};
+
+type AutonomyTier = 'disabled' | 'suggest' | 'approve' | 'auto';
+
+const TIER_ORDER: AutonomyTier[] = ['disabled', 'suggest', 'approve', 'auto'];
+
+const TIER_META: Record<AutonomyTier, {
+  label: string;
+  description: string;
+  badgeClass: string;
+  dotClass: string;
+}> = {
+  disabled: {
+    label: 'Disabled',
+    description: 'Manual trigger only',
+    badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+    dotClass: 'bg-gray-400 dark:bg-gray-600',
+  },
+  suggest: {
+    label: 'Suggest',
+    description: '60 will suggest generating a proposal after meetings',
+    badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
+    dotClass: 'bg-blue-500',
+  },
+  approve: {
+    label: 'Approve',
+    description: '60 drafts proposals automatically, asks for your approval',
+    badgeClass: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400',
+    dotClass: 'bg-amber-500',
+  },
+  auto: {
+    label: 'Auto',
+    description: '60 generates and sends proposals automatically',
+    badgeClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400',
+    dotClass: 'bg-emerald-500',
+  },
+};
+
+// Thresholds for tier progression (approximate platform defaults)
+const TIER_THRESHOLDS: Record<string, { minSignals: number; minScore: number }> = {
+  'suggest': { minSignals: 0, minScore: 0 },
+  'approve': { minSignals: 10, minScore: 0.6 },
+  'auto': { minSignals: 25, minScore: 0.85 },
+};
+
+interface ProposalConfidenceRow {
+  action_type: string;
+  score: number;
+  total_signals: number;
+  total_approved: number;
+  total_rejected: number;
+  current_tier: AutonomyTier;
+  promotion_eligible: boolean;
+  clean_approval_rate: number | null;
+  days_active: number;
+}
+
+function TierStepper({ currentTier }: { currentTier: AutonomyTier }) {
+  const currentIndex = TIER_ORDER.indexOf(currentTier);
+
+  return (
+    <div className="flex items-center gap-0">
+      {TIER_ORDER.map((tier, i) => {
+        const isActive = i <= currentIndex;
+        const isCurrent = tier === currentTier;
+        const meta = TIER_META[tier];
+
+        return (
+          <div key={tier} className="flex items-center">
+            {i > 0 && (
+              <div
+                className={`h-0.5 w-6 sm:w-10 ${
+                  i <= currentIndex
+                    ? 'bg-emerald-400 dark:bg-emerald-500'
+                    : 'bg-gray-200 dark:bg-gray-700'
+                }`}
+              />
+            )}
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={`h-3 w-3 rounded-full border-2 transition-all ${
+                  isCurrent
+                    ? `${meta.dotClass} border-transparent ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-900 ring-current`
+                    : isActive
+                    ? `${meta.dotClass} border-transparent`
+                    : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600'
+                }`}
+              />
+              <span
+                className={`text-[10px] font-medium leading-none ${
+                  isCurrent
+                    ? 'text-gray-900 dark:text-gray-100'
+                    : isActive
+                    ? 'text-gray-600 dark:text-gray-400'
+                    : 'text-gray-400 dark:text-gray-600'
+                }`}
+              >
+                {meta.label}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ConfidenceBar({ score, nextTierThreshold }: { score: number; nextTierThreshold: number | null }) {
+  const percentage = nextTierThreshold
+    ? Math.min(100, Math.round((score / nextTierThreshold) * 100))
+    : 100;
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          Confidence: {(score * 100).toFixed(0)}%
+        </span>
+        {nextTierThreshold && (
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            Next tier: {(nextTierThreshold * 100).toFixed(0)}%
+          </span>
+        )}
+      </div>
+      <div className="h-2 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            percentage >= 100
+              ? 'bg-emerald-500'
+              : percentage >= 60
+              ? 'bg-blue-500'
+              : percentage >= 30
+              ? 'bg-amber-500'
+              : 'bg-gray-400'
+          }`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Signal counts per type, used for history breakdown
+interface SignalHistoryRow {
+  action_type: string;
+  signal: string;
+  count: number;
+}
+
+function ProposalAutopilotSection({ orgId, userId }: { orgId: string; userId: string }) {
+  const queryClient = useQueryClient();
+
+  const { data: proposalAutopilot, isLoading, error } = useQuery<ProposalConfidenceRow[]>({
+    queryKey: ['autopilot-proposal', orgId, userId],
+    queryFn: async () => {
+      const { data, error: fetchError } = await supabase
+        .from('autopilot_confidence')
+        .select(
+          'action_type, score, total_signals, total_approved, total_rejected, ' +
+          'current_tier, promotion_eligible, clean_approval_rate, days_active'
+        )
+        .eq('user_id', userId)
+        .in('action_type', [...PROPOSAL_ACTION_TYPES])
+        .order('action_type');
+      if (fetchError) throw fetchError;
+      return (data ?? []) as ProposalConfidenceRow[];
+    },
+    enabled: !!orgId && !!userId,
+  });
+
+  // AUT-003: Signal history — counts of each signal type per action
+  const { data: signalHistory } = useQuery<SignalHistoryRow[]>({
+    queryKey: ['autopilot-signals-summary', userId],
+    queryFn: async () => {
+      const { data, error: fetchError } = await supabase
+        .from('autopilot_signals')
+        .select('action_type, signal, created_at')
+        .eq('user_id', userId)
+        .in('action_type', [...PROPOSAL_ACTION_TYPES]);
+      if (fetchError) throw fetchError;
+      // Group and count client-side (avoids needing a DB view or RPC)
+      const counts: Record<string, Record<string, number>> = {};
+      for (const row of data ?? []) {
+        const at = row.action_type as string;
+        const sig = ((row as Record<string, unknown>).signal ?? 'unknown') as string;
+        if (!counts[at]) counts[at] = {};
+        counts[at][sig] = (counts[at][sig] ?? 0) + 1;
+      }
+      const result: SignalHistoryRow[] = [];
+      for (const [actionType, signals] of Object.entries(counts)) {
+        for (const [signal, count] of Object.entries(signals)) {
+          result.push({ action_type: actionType, signal, count });
+        }
+      }
+      return result;
+    },
+    enabled: !!userId,
+  });
+
+  // AUT-003: Tier override mutation — writes a lower max tier to autopilot_confidence
+  const overrideMutation = useMutation({
+    mutationFn: async ({ actionType, maxTier }: { actionType: string; maxTier: AutonomyTier }) => {
+      const { error: upsertError } = await supabase
+        .from('autopilot_confidence')
+        .upsert(
+          {
+            user_id: userId,
+            org_id: orgId,
+            action_type: actionType,
+            current_tier: maxTier,
+            // never_promote prevents the system from auto-promoting past the chosen cap
+            never_promote: maxTier !== 'auto',
+          },
+          { onConflict: 'user_id,action_type' },
+        );
+      if (upsertError) throw upsertError;
+    },
+    onSuccess: () => {
+      toast.success('Autonomy tier updated');
+      queryClient.invalidateQueries({ queryKey: ['autopilot-proposal', orgId, userId] });
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to update tier: ${err.message}`);
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-40 w-full rounded-lg" />
+        <Skeleton className="h-40 w-full rounded-lg" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center">
+          <p className="text-sm text-red-500">Failed to load autopilot data.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Build display data for each proposal action type.
+  // If a row doesn't exist yet, show it as disabled with no signals.
+  const actionRows = PROPOSAL_ACTION_TYPES.map((actionType) => {
+    const row = proposalAutopilot?.find((r) => r.action_type === actionType);
+    const signals = signalHistory?.filter((s) => s.action_type === actionType) ?? [];
+    const getCount = (sig: string) => signals.find((s) => s.signal === sig)?.count ?? 0;
+    return {
+      action_type: actionType,
+      displayName: PROPOSAL_ACTION_DISPLAY[actionType],
+      tier: (row?.current_tier ?? 'disabled') as AutonomyTier,
+      score: row?.score ?? 0,
+      totalSignals: row?.total_signals ?? 0,
+      totalApproved: row?.total_approved ?? 0,
+      totalRejected: row?.total_rejected ?? 0,
+      promotionEligible: row?.promotion_eligible ?? false,
+      cleanApprovalRate: row?.clean_approval_rate ?? null,
+      daysActive: row?.days_active ?? 0,
+      // Signal history breakdown
+      approvedCount: getCount('approved'),
+      editedCount: getCount('approved_edited'),
+      rejectedCount: getCount('rejected'),
+    };
+  });
+
+  const getNextTierThreshold = (currentTier: AutonomyTier): number | null => {
+    const idx = TIER_ORDER.indexOf(currentTier);
+    if (idx >= TIER_ORDER.length - 1) return null; // already at 'auto'
+    const nextTier = TIER_ORDER[idx + 1];
+    return TIER_THRESHOLDS[nextTier]?.minScore ?? null;
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Promotion criteria info */}
+      <Card className="bg-blue-50/50 dark:bg-blue-500/5 border-blue-200 dark:border-blue-500/20">
+        <CardContent className="py-4">
+          <div className="flex items-start gap-3">
+            <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">How autonomy tiers work</p>
+              <p className="text-gray-600 dark:text-gray-400">
+                60 starts in <strong>Suggest</strong> mode. Reach <strong>Approve</strong> after 10+ signals with a 60%+ confidence score.
+                Reach <strong>Auto</strong> (fully autonomous) after 25+ signals with an 85%+ score.
+                You can cap the maximum tier at any time — 60 will never promote beyond your chosen limit.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          60's autopilot system learns from your feedback to progressively automate proposal actions.
+          As you approve or edit proposals, trust builds and the system can act with more autonomy.
+        </p>
+      </div>
+
+      {actionRows.map((row) => {
+        const tierMeta = TIER_META[row.tier];
+        const nextThreshold = getNextTierThreshold(row.tier);
+
+        return (
+          <Card key={row.action_type}>
+            <CardContent className="p-5">
+              <div className="flex flex-col gap-4">
+                {/* Header: action name + tier badge */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-800">
+                      {row.action_type === 'proposal.generate' ? (
+                        <FileText className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                      ) : (
+                        <ShieldCheck className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {row.displayName}
+                      </span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {tierMeta.description}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge className={`${tierMeta.badgeClass} text-xs font-semibold border-0`}>
+                    {tierMeta.label}
+                  </Badge>
+                </div>
+
+                {/* Tier progression stepper */}
+                <div className="flex justify-center py-1">
+                  <TierStepper currentTier={row.tier} />
+                </div>
+
+                {/* Confidence progress bar */}
+                <ConfidenceBar score={row.score} nextTierThreshold={nextThreshold} />
+
+                {/* Signal history summary — approved / edited / rejected */}
+                {row.totalSignals > 0 && (
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div className="flex flex-col items-center gap-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 p-2 border border-emerald-200 dark:border-emerald-500/20">
+                      <ThumbsUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{row.approvedCount}</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-500">Approved</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 p-2 border border-amber-200 dark:border-amber-500/20">
+                      <Pencil className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">{row.editedCount}</span>
+                      <span className="text-[10px] text-amber-600 dark:text-amber-500">Edited</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 rounded-lg bg-red-50 dark:bg-red-500/10 p-2 border border-red-200 dark:border-red-500/20">
+                      <ThumbsDown className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                      <span className="text-sm font-semibold text-red-700 dark:text-red-300">{row.rejectedCount}</span>
+                      <span className="text-[10px] text-red-600 dark:text-red-500">Rejected</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stats row */}
+                <div className="flex items-center gap-4 flex-wrap text-xs text-gray-500 dark:text-gray-400">
+                  <span className="flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" />
+                    {row.totalSignals} total signals
+                  </span>
+                  {row.cleanApprovalRate != null && row.totalSignals > 0 && (
+                    <span>
+                      Clean rate: {(row.cleanApprovalRate * 100).toFixed(0)}%
+                    </span>
+                  )}
+                  {row.daysActive > 0 && (
+                    <span>
+                      {row.daysActive} day{row.daysActive !== 1 ? 's' : ''} active
+                    </span>
+                  )}
+                  {row.promotionEligible && (
+                    <Badge variant="outline" className="text-xs text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+                      Eligible for promotion
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Manual tier override */}
+                <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <Lock className="h-3 w-3" />
+                    <span>Cap maximum tier</span>
+                  </div>
+                  <Select
+                    value={row.tier}
+                    onValueChange={(value) =>
+                      overrideMutation.mutate({
+                        actionType: row.action_type,
+                        maxTier: value as AutonomyTier,
+                      })
+                    }
+                    disabled={overrideMutation.isPending}
+                  >
+                    <SelectTrigger className="h-7 w-36 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="disabled" className="text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <X className="h-3 w-3 text-gray-400" />
+                          Disabled
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="suggest" className="text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <Shield className="h-3 w-3 text-blue-500" />
+                          Suggest
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="approve" className="text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <ShieldCheck className="h-3 w-3 text-amber-500" />
+                          Approve
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="auto" className="text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <Zap className="h-3 w-3 text-emerald-500" />
+                          Auto
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+
+      {/* Empty state when no signals exist at all */}
+      {actionRows.every((r) => r.totalSignals === 0) && (
+        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-500/5 dark:to-indigo-500/5 border-blue-200 dark:border-blue-500/20">
+          <CardContent className="py-5">
+            <div className="flex items-start gap-3">
+              <Bot className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">No signals yet</p>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Start using 60 to generate proposals after meetings. As you approve, edit, or reject
+                  proposals, the system tracks your preferences and builds trust to automate more over time.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function ProposalSettings() {
+  const orgId = useActiveOrgId();
+  const { userId } = useAuth();
   const [templates, setTemplates] = useState<ProposalTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -750,7 +1513,15 @@ export default function ProposalSettings() {
 
       <Tabs defaultValue="design_system" className="space-y-6">
         <TabsList className="bg-white border border-transparent shadow-sm dark:bg-gray-900/50 dark:backdrop-blur-xl dark:border-gray-800/50">
+          <TabsTrigger value="autopilot" className="flex items-center gap-1">
+            <Bot className="w-3 h-3" />
+            Autopilot
+          </TabsTrigger>
           <TabsTrigger value="models">AI Models</TabsTrigger>
+          <TabsTrigger value="offering_profiles" className="flex items-center gap-1">
+            <Package className="w-3 h-3" />
+            Offerings
+          </TabsTrigger>
           <TabsTrigger value="structured_templates" className="flex items-center gap-1">
             <LayoutTemplate className="w-3 h-3" />
             Templates
@@ -772,6 +1543,16 @@ export default function ProposalSettings() {
             SOW
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="autopilot">
+          {orgId && userId ? (
+            <ProposalAutopilotSection orgId={orgId} userId={userId} />
+          ) : (
+            <div className="py-8 text-center text-sm text-gray-400">
+              {!orgId ? 'No active organisation selected.' : 'Please sign in to view autopilot status.'}
+            </div>
+          )}
+        </TabsContent>
 
         <TabsContent value="models" className="space-y-4">
           <Card>
@@ -894,6 +1675,16 @@ export default function ProposalSettings() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="offering_profiles">
+          {orgId ? (
+            <OfferingProfilesTab orgId={orgId} />
+          ) : (
+            <div className="py-8 text-center text-sm text-gray-400">
+              No active organisation selected.
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="structured_templates">

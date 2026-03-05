@@ -16,6 +16,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { logAICostEvent } from '../_shared/costTracking.ts'
 
 // Model constants for two-phase generation
 const OPUS_MODEL = 'claude-opus-4-5-20251101'
@@ -791,8 +792,13 @@ serve(async (req) => {
 
     // Phase 1: Generate ProcessStructure with Opus
     let processStructure: ProcessStructure | null = null
+    let opusInputTokens = 0
+    let opusOutputTokens = 0
     try {
-      processStructure = await generateProcessStructure(processType, processName, processDescription.long, title)
+      const phase1Result = await generateProcessStructure(processType, processName, processDescription.long, title)
+      processStructure = phase1Result.structure
+      opusInputTokens = phase1Result.inputTokens
+      opusOutputTokens = phase1Result.outputTokens
       console.log(`[Phase 1] Structure generated: ${processStructure?.nodes?.length || 0} nodes, ${processStructure?.connections?.length || 0} connections`)
     } catch (structureError) {
       console.error('[Phase 1] Failed to generate structure:', structureError)
@@ -837,6 +843,18 @@ serve(async (req) => {
     }
 
     console.log(`[Phase 2] Rendered: horizontal=${!!horizontalCode}, vertical=${!!verticalCode}, status=${generationStatus}`)
+
+    // Log AI cost events (fire-and-forget): Opus (Phase 1) + Haiku (Phase 2)
+    if (opusInputTokens > 0 || opusOutputTokens > 0) {
+      logAICostEvent(
+        supabaseService, user.id, orgId,
+        'anthropic', OPUS_MODEL,
+        opusInputTokens, opusOutputTokens,
+        'generate_process_map',
+        undefined,
+        { source: 'user_initiated', phase: 'structure' },
+      ).catch((e: unknown) => console.warn('[generate-process-map] cost log error (opus):', e))
+    }
 
     // Store in database with structure and both views
     const { data: processMap, error: insertError } = await supabaseService
@@ -1015,7 +1033,7 @@ async function generateProcessStructure(
   processName: string,
   description: string,
   title: string
-): Promise<ProcessStructure> {
+): Promise<{ structure: ProcessStructure; inputTokens: number; outputTokens: number }> {
   const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!anthropicApiKey) {
     throw new Error('AI service not configured')
@@ -1080,7 +1098,11 @@ Generate the complete process structure JSON following the schema exactly.`
     throw new Error('Invalid structure: missing required fields')
   }
 
-  return structure
+  return {
+    structure,
+    inputTokens: responseData.usage?.input_tokens || 0,
+    outputTokens: responseData.usage?.output_tokens || 0,
+  }
 }
 
 // ============================================================================

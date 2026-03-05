@@ -293,7 +293,18 @@ export async function createCheckoutSession(
 
   if (response.error) {
     console.error('Checkout session error:', response.error);
-    throw new Error(response.error.message || 'Failed to create checkout session');
+    // Extract the actual error message from the edge function response body
+    let errorDetail = 'Failed to create checkout session';
+    try {
+      // FunctionsHttpError has a context property with the Response object
+      const errorBody = response.data ?? await (response.error as any).context?.json?.();
+      if (errorBody?.error) {
+        errorDetail = errorBody.error;
+      }
+    } catch {
+      // Fallback to generic message if body parsing fails
+    }
+    throw new Error(errorDetail);
   }
 
   return response.data as CreateCheckoutSessionResponse;

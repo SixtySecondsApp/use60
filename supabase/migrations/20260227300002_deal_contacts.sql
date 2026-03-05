@@ -115,7 +115,8 @@ ALTER TABLE public.deal_contacts ENABLE ROW LEVEL SECURITY;
 
 -- Org members can read deal_contacts for deals in their org
 DO $$ BEGIN
-  CREATE POLICY "deal_contacts_org_member_select"
+  DROP POLICY IF EXISTS "deal_contacts_org_member_select" ON public.deal_contacts;
+CREATE POLICY "deal_contacts_org_member_select"
   ON public.deal_contacts FOR SELECT
   TO authenticated
   USING (
@@ -132,7 +133,8 @@ END $$;
 
 -- Service role: full access for edge function inference writes
 DO $$ BEGIN
-  CREATE POLICY "deal_contacts_service_all"
+  DROP POLICY IF EXISTS "deal_contacts_service_all" ON public.deal_contacts;
+CREATE POLICY "deal_contacts_service_all"
   ON public.deal_contacts FOR ALL
   TO service_role
   USING (true)

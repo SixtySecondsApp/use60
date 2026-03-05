@@ -7,7 +7,7 @@ import { successResponse, errorResponse } from '../helpers.ts';
 
 export async function handleGetInsights(transcriptId: string, req: Request, orgId: string): Promise<Response> {
   const db = getRailwayDb();
-  const transcriptRows = await db.unsafe(`SELECT id FROM transcripts WHERE id = $1 AND org_id = $2`, [transcriptId, orgId]);
+  const transcriptRows = await db.unsafe(`SELECT id FROM transcripts WHERE id = $1 AND (org_id = $2 OR org_id = '00000000-0000-0000-0000-000000000060')`, [transcriptId, orgId]);
   if (transcriptRows.length === 0) {
     return errorResponse('Transcript not found', 404, req);
   }
@@ -56,7 +56,7 @@ export async function handleGetInsightSubResource(
   orgId: string
 ): Promise<Response> {
   const db = getRailwayDb();
-  const transcriptRows = await db.unsafe(`SELECT id FROM transcripts WHERE id = $1 AND org_id = $2`, [transcriptId, orgId]);
+  const transcriptRows = await db.unsafe(`SELECT id FROM transcripts WHERE id = $1 AND (org_id = $2 OR org_id = '00000000-0000-0000-0000-000000000060')`, [transcriptId, orgId]);
   if (transcriptRows.length === 0) {
     return errorResponse('Transcript not found', 404, req);
   }

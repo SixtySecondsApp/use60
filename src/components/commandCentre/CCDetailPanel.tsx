@@ -16,9 +16,6 @@
 
 import { useRef, useState } from 'react';
 import {
-  AlertTriangle,
-  ArrowUp,
-  Bell,
   Briefcase,
   Calendar,
   Check,
@@ -38,9 +35,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useCommandCentreItemMutations } from '@/lib/hooks/useCommandCentreItemsQuery';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
+import { URGENCY_CONFIG } from './constants';
 import { CCEmailPanel } from './panels/CCEmailPanel';
 import { CCCrmDiffPanel } from './panels/CCCrmDiffPanel';
 import { CCDealHealthPanel } from './panels/CCDealHealthPanel';
@@ -58,29 +57,6 @@ export interface CCDetailPanelProps {
 // ============================================================================
 // Urgency badge
 // ============================================================================
-
-const URGENCY_CONFIG = {
-  critical: {
-    label: 'Critical',
-    badgeClass: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400',
-    icon: AlertTriangle,
-  },
-  high: {
-    label: 'High',
-    badgeClass: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400',
-    icon: ArrowUp,
-  },
-  normal: {
-    label: 'Normal',
-    badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
-    icon: Bell,
-  },
-  low: {
-    label: 'Low',
-    badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-    icon: ChevronDown,
-  },
-} as const;
 
 function UrgencyBadge({ urgency }: { urgency: CCItem['urgency'] }) {
   const config = URGENCY_CONFIG[urgency] ?? URGENCY_CONFIG.normal;
@@ -132,7 +108,7 @@ function CollapsibleSection({
     <div className="border border-slate-200 dark:border-gray-700/60 rounded-lg overflow-hidden">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-gray-800/60 hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors text-left"
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-gray-800/60 hover:bg-slate-100 dark:hover:bg-gray-800 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-gray-200">
           {Icon && <Icon className="h-3.5 w-3.5 text-slate-400 dark:text-gray-500" />}
@@ -328,11 +304,11 @@ function DraftedActionSection({
                   )}
                 </label>
                 {isEditable ? (
-                  <textarea
+                  <Textarea
                     value={editedValues[field] ?? ''}
                     onChange={(e) => handleFieldChange(field, e.target.value)}
                     rows={field.toLowerCase().includes('body') || field.toLowerCase().includes('message') ? 4 : 2}
-                    className="w-full text-sm text-slate-800 dark:text-gray-100 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-400"
+                    className="resize-none text-sm"
                   />
                 ) : (
                   <p className="text-sm text-slate-600 dark:text-gray-300 bg-slate-50 dark:bg-gray-800/40 rounded-md px-3 py-2 break-words">
@@ -651,6 +627,7 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
                 variant="ghost"
                 className="h-8 w-8 p-0 flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-gray-200"
                 onClick={onClose}
+                aria-label="Close detail panel"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -668,7 +645,8 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
               {canApprove && (
                 <Button
                   size="sm"
-                  className="h-8 px-4 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                  variant="success"
+                  className="h-8 px-4 text-xs"
                   onClick={handleApprove}
                   disabled={isPending}
                 >

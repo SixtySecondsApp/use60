@@ -3,7 +3,7 @@
  */
 
 import { getRailwayDb } from '../db.ts';
-import { jsonResponse, successResponse, errorResponse } from '../helpers.ts';
+import { jsonResponse, successResponse, errorResponse, buildOrgFilter } from '../helpers.ts';
 
 export async function handleGetTranscripts(req: Request, orgId: string): Promise<Response> {
   const url = new URL(req.url);
@@ -11,7 +11,7 @@ export async function handleGetTranscripts(req: Request, orgId: string): Promise
   const offset = parseInt(url.searchParams.get('offset') || '0');
   const orderBy = url.searchParams.get('orderBy') || 'created_at';
   const order = (url.searchParams.get('order') || 'DESC') as 'ASC' | 'DESC';
-  const includeDemo = url.searchParams.get('includeDemo') !== 'false';
+  const includeDemo = url.searchParams.get('includeDemo') === 'true';
   const demoOnly = url.searchParams.get('demoOnly') === 'true';
 
   const db = getRailwayDb();
@@ -19,7 +19,7 @@ export async function handleGetTranscripts(req: Request, orgId: string): Promise
   const safeOrderBy = validCols.includes(orderBy) ? orderBy : 'created_at';
   const safeOrder = order === 'ASC' ? 'ASC' : 'DESC';
 
-  let whereClause = 'WHERE t.org_id = $1';
+  let whereClause = `WHERE ${buildOrgFilter(1)}`;
   const params: unknown[] = [orgId];
   if (demoOnly) {
     whereClause += ' AND t.is_demo = TRUE';
@@ -72,7 +72,7 @@ export async function handleGetTranscript(id: string, req: Request, orgId: strin
       (SELECT COUNT(*) FROM qa_pairs WHERE transcript_id = t.id)::int as qa_pair_count,
       EXISTS(SELECT 1 FROM summaries WHERE transcript_id = t.id) as has_summary,
       EXISTS(SELECT 1 FROM sentiment_analysis WHERE transcript_id = t.id) as has_sentiment
-     FROM transcripts t WHERE t.id = $1 AND t.org_id = $2`,
+     FROM transcripts t WHERE t.id = $1 AND (t.org_id = $2 OR t.org_id = '00000000-0000-0000-0000-000000000060')`,
     [id, orgId]
   );
 

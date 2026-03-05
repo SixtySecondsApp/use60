@@ -7,17 +7,18 @@
  */
 
 import { motion } from 'framer-motion';
-import { Clock, CheckCircle2, Loader2, XCircle, AlertTriangle } from 'lucide-react';
+import { Clock, CheckCircle2, Loader2, XCircle, AlertTriangle, Ticket } from 'lucide-react';
 import { useOnboardingV2Store } from '@/lib/stores/onboardingV2Store';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrg } from '@/lib/contexts/OrgContext';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cancelJoinRequest } from '@/lib/services/joinRequestService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApprovalDetection } from '@/lib/hooks/useApprovalDetection';
+import { OnboardingSupportModal } from './OnboardingSupportModal';
 
 export function PendingApprovalStep() {
   const navigate = useNavigate();
@@ -28,6 +29,7 @@ export function PendingApprovalStep() {
   const [checking, setChecking] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
   const [joinRequestId, setJoinRequestId] = useState<string | null>(null);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
@@ -96,6 +98,7 @@ export function PendingApprovalStep() {
   // Automatic polling for approval/rejection detection
   useEffect(() => {
     if (!user?.id || !pendingJoinRequest?.orgId) {
+      setIsPolling(false);
       return;
     }
 
@@ -126,7 +129,7 @@ export function PendingApprovalStep() {
   }, [user?.id, pendingJoinRequest?.orgId, isApproved, isRejected, refetch]);
 
   // Handler for when approval is detected
-  const handleApprovalDetected = async (membership: { org_id: string }) => {
+  const handleApprovalDetected = useCallback(async (membership: { org_id: string }) => {
     try {
       // Show success state briefly before loading dashboard
       setShowApprovalSuccess(true);
@@ -263,7 +266,7 @@ export function PendingApprovalStep() {
       toast.error('Failed to load dashboard. Please try refreshing the page.');
       setIsLoadingDashboard(false);
     }
-  };
+  }, [user, refreshOrgs, switchOrg, navigate]);
 
   // Handle approval detection
   useEffect(() => {
@@ -271,8 +274,7 @@ export function PendingApprovalStep() {
       console.log('[PendingApprovalStep] Approval detected!', membership);
       handleApprovalDetected(membership);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApproved, membership, isLoadingDashboard]);
+  }, [isApproved, membership, isLoadingDashboard, handleApprovalDetected]);
 
   // Handle rejection detection
   useEffect(() => {
@@ -379,7 +381,7 @@ export function PendingApprovalStep() {
       toast.success('Restarting onboarding...');
       useOnboardingV2Store.getState().reset();
       setTimeout(() => {
-        navigate('/onboarding?step=website_input', { replace: true });
+        navigate('/onboarding?step=website_input', { replace: true, state: { fromCancelRequest: true } });
       }, 1000);
     } catch (error) {
       console.error('[PendingApprovalStep] Error cancelling request:', error);
@@ -393,7 +395,7 @@ export function PendingApprovalStep() {
     // Reset store state
     useOnboardingV2Store.getState().reset();
     // Redirect to website input step
-    navigate('/onboarding?step=website_input', { replace: true });
+    navigate('/onboarding?step=website_input', { replace: true, state: { fromCancelRequest: true } });
   };
 
   const displayEmail = userEmail || profileEmail;
@@ -467,11 +469,22 @@ export function PendingApprovalStep() {
             {/* Support note */}
             <div className="text-center">
               <p className="text-sm text-gray-400">
-                Questions? <a href="mailto:support@use60.com" className="text-red-400 hover:text-red-300 transition-colors">Contact support</a> for assistance.
+                Questions?{' '}
+                <button onClick={() => setShowSupportModal(true)} className="text-red-400 hover:text-red-300 transition-colors underline">
+                  Contact support
+                </button>{' '}
+                for assistance.
               </p>
             </div>
           </div>
         </div>
+
+        <OnboardingSupportModal
+          open={showSupportModal}
+          onClose={() => setShowSupportModal(false)}
+          orgId={pendingJoinRequest?.orgId}
+          context={`Join request rejected for organization: ${orgName || 'Unknown'}`}
+        />
       </motion.div>
     );
   }
@@ -666,11 +679,21 @@ export function PendingApprovalStep() {
           {/* Support note */}
           <div className="text-center">
             <p className="text-sm text-gray-400">
-              Questions? Please contact your organization administrator or <a href="mailto:support@use60.com" className="text-blue-400 hover:text-blue-300 transition-colors">reach out to support</a>.
+              Questions? Please contact your organization administrator or{' '}
+              <button onClick={() => setShowSupportModal(true)} className="text-blue-400 hover:text-blue-300 transition-colors underline">
+                reach out to support
+              </button>.
             </p>
           </div>
         </div>
       </div>
+
+      <OnboardingSupportModal
+        open={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
+        orgId={pendingJoinRequest?.orgId}
+        context={`Pending join request for organization: ${orgName || 'Unknown'}`}
+      />
 
       {/* Cancel Confirmation Dialog */}
       <ConfirmDialog

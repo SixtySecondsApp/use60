@@ -115,7 +115,8 @@ ALTER TABLE public.agent_daily_logs ENABLE ROW LEVEL SECURITY;
 
 -- Org members can read all logs for their org
 DO $$ BEGIN
-  CREATE POLICY "agent_daily_logs_org_member_select"
+  DROP POLICY IF EXISTS "agent_daily_logs_org_member_select" ON public.agent_daily_logs;
+CREATE POLICY "agent_daily_logs_org_member_select"
   ON public.agent_daily_logs FOR SELECT
   TO authenticated
   USING (
@@ -131,7 +132,8 @@ END $$;
 
 -- Service role: full access for edge function inserts and analytics
 DO $$ BEGIN
-  CREATE POLICY "agent_daily_logs_service_all"
+  DROP POLICY IF EXISTS "agent_daily_logs_service_all" ON public.agent_daily_logs;
+CREATE POLICY "agent_daily_logs_service_all"
   ON public.agent_daily_logs FOR ALL
   TO service_role
   USING (true)

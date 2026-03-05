@@ -26,6 +26,7 @@ export type CopilotIntentType =
   | 'trigger_prep'
   | 'trigger_enrichment'
   | 'schedule_meeting'
+  | 'proposal_request'
   // META
   | 'help'
   | 'feedback'

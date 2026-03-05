@@ -349,6 +349,8 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
   const [chatOverlayState, setChatOverlayState] = useState<ChatOverlayState>('collapsed');
   // Model tier for intelligence toggle
   const [modelTier, setModelTier] = useState<ModelTier>('balanced');
+  // Divider toggle — defaults true, persisted in workspace visuals
+  const [showDividers, setShowDividers] = useState(true);
 
   // Sync phase from workspace on load
   React.useEffect(() => {
@@ -430,6 +432,11 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     setAssemblyBrandConfig(brandConfig);
     setCurrentPhase(2);
     setIsAssemblyMode(true);
+
+    // Restore divider toggle from workspace visuals
+    if (vis.show_dividers !== undefined) {
+      setShowDividers(vis.show_dividers !== false);
+    }
   }, [workspace, isAssemblyMode]);
 
   // Persist assembly sections to workspace (debounced) for session recovery
@@ -863,6 +870,24 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     assetQueueRef.current.process();
   }, []);
 
+  // Toggle dividers on/off — persisted to workspace visuals
+  const handleToggleDividers = useCallback(() => {
+    setShowDividers(prev => {
+      const next = !prev;
+      // Merge with existing visuals JSONB to preserve brand config
+      const existingVisuals = (workspace?.visuals ?? {}) as Record<string, unknown>;
+      updatePhaseOutput({ phase: 'visuals', output: { ...existingVisuals, show_dividers: next } });
+      return next;
+    });
+  }, [updatePhaseOutput, workspace]);
+
+  // Handle inline section update from preview (text edits, asset/divider changes)
+  const handleInlineSectionUpdate = useCallback((sectionId: string, updates: Partial<LandingSection>) => {
+    setAssemblySections(prev => prev.map(s =>
+      s.id === sectionId ? { ...s, ...updates } : s
+    ));
+  }, []);
+
   // Dynamic preview padding based on chat overlay state
   const previewPadding = chatOverlayState === 'collapsed'
     ? 'pb-20'
@@ -881,6 +906,10 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
             brandConfig={assemblyBrandConfig}
             highlightSectionId={highlightSectionId}
             onSectionClick={(id) => setHighlightSectionId(id)}
+            showDividers={showDividers}
+            onToggleDividers={handleToggleDividers}
+            onSectionUpdate={handleInlineSectionUpdate}
+            onRegenerateAsset={handleRegenerateAsset}
           />
 
           {/* Floating chat bar — centered within preview area */}

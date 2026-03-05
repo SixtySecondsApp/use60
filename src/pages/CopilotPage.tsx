@@ -15,13 +15,12 @@ import React, { useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Copilot } from '@/components/Copilot';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
-import { v4 as uuidv4 } from 'uuid';
 
 export const CopilotPage: React.FC = () => {
   const { conversationId: urlConversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { loadConversation, setConversationId, startNewChat, sendMessage } = useCopilot();
+  const { loadConversation, ensureConversation, startNewChat, sendMessage } = useCopilot();
   const routeState = location.state as { seedPrompt?: string; forceNewChat?: boolean } | null;
   const seededPrompt = routeState?.seedPrompt;
   const forceNewChat = routeState?.forceNewChat === true;
@@ -38,12 +37,18 @@ export const CopilotPage: React.FC = () => {
         return;
       }
       initializedForUrl.current = `seeded:${urlConversationId}`;
-      startNewChat();
-      setConversationId(urlConversationId);
-      setTimeout(() => {
-        void sendMessage(seededPrompt);
-      }, 100);
-      navigate(`/copilot/${urlConversationId}`, { replace: true, state: null });
+
+      // Ensure conversation exists in DB, send the seed message, then clear location state
+      (async () => {
+        try {
+          await ensureConversation(urlConversationId);
+          await sendMessage(seededPrompt);
+        } catch (err) {
+          console.error('[CopilotPage] Failed to ensure seeded conversation:', err);
+        }
+        // Clear location.state to prevent re-send on back navigation
+        navigate(`/copilot/${urlConversationId}`, { replace: true, state: null });
+      })();
       return;
     }
 
@@ -54,10 +59,8 @@ export const CopilotPage: React.FC = () => {
 
     // If URL has no conversation ID, generate one and redirect
     if (!urlConversationId) {
-      const newId = uuidv4();
+      const newId = startNewChat();
       initializedForUrl.current = 'empty'; // Mark as handled
-      startNewChat();
-      setConversationId(newId);
       navigate(`/copilot/${newId}`, { replace: true });
       return;
     }
@@ -65,13 +68,11 @@ export const CopilotPage: React.FC = () => {
     // Mark this URL as initialized
     initializedForUrl.current = urlConversationId;
 
-    // Try to load the conversation from database
-    loadConversation(urlConversationId).catch(() => {
-      // If loading fails (conversation doesn't exist yet), just set the ID
-      // This allows new conversations to be created with the URL ID
-      setConversationId(urlConversationId);
+    // Load the conversation from database (ensureConversation is called inside loadConversation)
+    loadConversation(urlConversationId).catch((err) => {
+      console.error('[CopilotPage] Failed to load conversation:', err);
     });
-  }, [urlConversationId, seededPrompt, forceNewChat, startNewChat, setConversationId, sendMessage, navigate]);
+  }, [urlConversationId, seededPrompt, forceNewChat, startNewChat, ensureConversation, sendMessage, navigate, loadConversation]);
 
   return (
     <div className="flex flex-col h-full">

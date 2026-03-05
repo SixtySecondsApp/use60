@@ -8,7 +8,7 @@
  * @see docs/project-requirements/PRD_ACTION_CENTRE.md
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { recordSignal, ApprovalEvent } from '../../_shared/autopilot/signals.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -28,6 +28,9 @@ const ACTION_TYPE_MAP: Record<string, string> = {
   create_task: 'task.create',
   enrich_contact: 'crm.contact_enrich',
   draft_proposal: 'email.draft_save',
+  // AUT-002: Proposal V2 action types
+  generate_proposal: 'proposal.generate',
+  send_proposal: 'proposal.send',
 };
 
 /**

@@ -880,6 +880,58 @@ serve(async (req: Request) => {
       )
     }
 
+    // -------------------------------------------------------------------------
+    // Pipeline version routing
+    // pipeline_version === 1  → legacy pdf-lib path (this function)
+    // pipeline_version === 2  → forward to proposal-render-gotenberg
+    // no pipeline_version     → default to v2 (forward to Gotenberg)
+    // -------------------------------------------------------------------------
+    const pipelineVersion = body.pipeline_version
+
+    if (pipelineVersion === undefined || pipelineVersion === 2) {
+      console.log(
+        `${LOG_PREFIX} Routing to proposal-render-gotenberg (pipeline_version: ${pipelineVersion ?? 'unset → default v2'})`
+      )
+
+      // Re-create the Supabase client with the service-role key so we can invoke
+      // another edge function.  We only need the anon key here because
+      // functions.invoke() sends the caller's auth header through anyway.
+      const routingClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      const authHeader = req.headers.get('Authorization')
+      const { data: gotenbergData, error: gotenbergError } =
+        await routingClient.functions.invoke('proposal-render-gotenberg', {
+          body: { proposal_id },
+          headers: authHeader ? { Authorization: authHeader } : {},
+        })
+
+      if (gotenbergError) {
+        console.error(
+          `${LOG_PREFIX} Error forwarding to proposal-render-gotenberg:`,
+          gotenbergError
+        )
+        return new Response(
+          JSON.stringify({
+            error: 'Failed to forward to Gotenberg renderer',
+            message: gotenbergError.message,
+          }),
+          {
+            status: 502,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        )
+      }
+
+      return new Response(JSON.stringify(gotenbergData), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // pipeline_version === 1 → legacy pdf-lib path
+    console.warn(
+      `${LOG_PREFIX} [DEPRECATED] proposal-generate-pdf using pdf-lib. Migrate to proposal-render-gotenberg.`
+    )
+
     console.log(`${LOG_PREFIX} Generating PDF for proposal: ${proposal_id}`)
 
     // Authenticate user via JWT
@@ -1015,10 +1067,15 @@ serve(async (req: Request) => {
     )
 
     return new Response(
-      JSON.stringify({ pdf_base64: pdfBase64, filename }),
+      JSON.stringify({ pdf_base64: pdfBase64, filename, v1_legacy: true }),
       {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'X-Deprecated':
+            'proposal-generate-pdf (pdf-lib) is deprecated. Use proposal-render-gotenberg with pipeline_version: 2.',
+        },
       }
     )
   } catch (error) {

@@ -18,6 +18,8 @@ import { useNavigate } from 'react-router-dom';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useMemo } from 'react';
+import { useSetupWizardStore } from '@/lib/stores/setupWizardStore';
+import { Button } from '@/components/ui/button';
 import {
   User,
   Palette,
@@ -32,6 +34,7 @@ import {
   Phone,
   Workflow,
   CreditCard,
+  Wand2,
   Brain,
   Briefcase,
   Zap,
@@ -56,6 +59,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { permissions } = useOrg();
   const { isPlatformAdmin, isViewingAsExternal } = useUserPermissions();
+  const setupWizard = useSetupWizardStore();
   const allSettingsSections: SettingsSection[] = [
     {
       id: 'account',
@@ -233,6 +237,14 @@ export default function Settings() {
       requiresOrgAdmin: true,
     },
     {
+      id: 'model-preferences',
+      label: 'AI Model Preferences',
+      icon: Brain,
+      description: 'Choose quality tiers for each AI feature — Economy, Standard, or Premium',
+      path: '/settings/model-preferences',
+      requiresOrgAdmin: true,
+    },
+    {
       id: 'goals',
       label: 'Sales Goals',
       icon: Target,
@@ -337,15 +349,29 @@ export default function Settings() {
   return (
     <div className="min-h-screen">
       <div className="p-4 sm:p-6 lg:p-8">
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div data-tour="settings-hub" className="max-w-4xl mx-auto space-y-8">
           {/* Page Header */}
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-[#1E293B] dark:text-white">
-              Settings
-            </h1>
-            <p className="text-[#64748B] dark:text-gray-400 mt-2">
-              Manage your account, preferences, and integrations
-            </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#1E293B] dark:text-white">
+                Settings
+              </h1>
+              <p className="text-[#64748B] dark:text-gray-400 mt-2">
+                Manage your account, preferences, and integrations
+              </p>
+            </div>
+            {/* SETUP-006: Run Setup Wizard Again — available to admins and owners */}
+            {(permissions.canManageSettings || permissions.canManageTeam || isPlatformAdmin) && !isViewingAsExternal && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-1 shrink-0 gap-2"
+                onClick={() => setupWizard.openWizard()}
+              >
+                <Wand2 className="w-4 h-4" />
+                Run Setup Again
+              </Button>
+            )}
           </div>
 
           {/* Settings Categories */}

@@ -3,6 +3,7 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 import { corsHeaders } from "../_shared/cors.ts";
 import { captureException } from '../_shared/sentryEdge.ts';
 import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts';
+import { ModelResolver } from '../_shared/ai/modelResolver.ts';
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -553,6 +554,18 @@ serve(async (req) => {
       }
     } catch (e) {
       // fail open: enrichment should still work if credit check fails
+    }
+
+    // Resolve model via routing layer (Google Gemini for research_enrichment)
+    let resolvedGeminiModel = GEMINI_MODEL;
+    if (orgId) {
+      try {
+        const resolver = new ModelResolver(supabase);
+        const resolved = await resolver.resolve(orgId, 'research_enrichment');
+        if (resolved.provider === 'google') resolvedGeminiModel = resolved.modelId;
+      } catch {
+        // keep default
+      }
     }
 
     // Parse request body

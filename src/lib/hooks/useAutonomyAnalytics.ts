@@ -100,7 +100,11 @@ export function useAutonomyAnalytics(windowDays: number = 30) {
         p_org_id: orgId,
         p_window_days: windowDays,
       });
-      if (error) throw error;
+      // Gracefully handle missing RPC/table — return empty rather than throw
+      if (error) {
+        console.warn('[useAutonomyAnalytics] RPC error (may not be deployed):', error.message);
+        return [];
+      }
       return (data || []) as ActionAnalytics[];
     },
     enabled: !!orgId,
@@ -126,7 +130,10 @@ export function useAutonomyAuditLog(limit: number = 20) {
         .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(limit);
-      if (error) throw error;
+      if (error) {
+        console.warn('[useAutonomyAuditLog] Table error (may not exist):', error.message);
+        return [];
+      }
       return (data || []) as AuditLogEntry[];
     },
     enabled: !!orgId,
@@ -150,7 +157,10 @@ export function usePromotionSuggestions() {
         .eq('org_id', orgId)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
-      if (error) throw error;
+      if (error) {
+        console.warn('[usePromotionSuggestions] Table error (may not exist):', error.message);
+        return [];
+      }
       return (data || []) as PromotionSuggestion[];
     },
     enabled: !!orgId,

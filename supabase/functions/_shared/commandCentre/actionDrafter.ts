@@ -14,7 +14,9 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../costTracking.ts';
 import type { CommandCentreItem, DraftedAction } from './types.ts';
+import { calculateContextRisk, type ContextRiskInput } from '../orchestrator/contextRiskScorer.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -329,16 +331,63 @@ export async function synthesiseAndDraft(
   }
 
   let result: DraftResult;
+  let contextRiskScore = 0.0;
 
   try {
     // Resolve model from user intelligence settings
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const modelConfig = await resolveModelConfig(supabase, item.user_id);
 
+    // --- AE2-006: Calculate context risk from deal/contact context ---
+    if (item.deal_id || item.contact_id) {
+      try {
+        const riskInput: ContextRiskInput = {
+          dealId: item.deal_id,
+          contactId: item.contact_id,
+        };
+        const contextRisk = await calculateContextRisk(supabase, riskInput);
+        contextRiskScore = contextRisk.score;
+        console.log('[cc-drafter] context risk scored', {
+          item_id: item.id,
+          deal_id: item.deal_id,
+          contact_id: item.contact_id,
+          context_risk_score: contextRiskScore,
+          escalation: contextRisk.escalation_recommendation,
+        });
+      } catch (riskErr) {
+        // Context risk failure must not block drafting — default to 0.0
+        console.warn('[cc-drafter] context risk scoring failed — defaulting to 0.0', String(riskErr), {
+          item_id: item.id,
+        });
+      }
+    }
+
     const systemPrompt = buildSystemPrompt();
     const userPrompt = buildUserPrompt(item, enrichmentContext);
 
     const rawText = await callProvider(modelConfig, systemPrompt, userPrompt);
+
+    // Log AI cost with an estimated token count (provider-agnostic)
+    // We estimate based on prompt length since callProvider() abstracts away raw usage
+    if (modelConfig.provider === 'anthropic' && item.user_id) {
+      const { data: member } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', item.user_id)
+        .limit(1)
+        .maybeSingle();
+      if (member?.org_id) {
+        logAICostEvent(
+          supabase, item.user_id, member.org_id,
+          'anthropic', modelConfig.model,
+          Math.round((systemPrompt.length + userPrompt.length) / 4), // estimate ~4 chars/token
+          Math.round((rawText?.length || 0) / 4),
+          'command_centre_draft',
+          undefined,
+          { source: 'agent_automated', agentType: 'action-drafter' },
+        ).catch((e: unknown) => console.warn('[cc-drafter] cost log error:', e));
+      }
+    }
 
     if (!rawText) {
       throw new Error(`Empty response from ${modelConfig.provider}`);
@@ -368,6 +417,7 @@ export async function synthesiseAndDraft(
       model: modelConfig.model,
       action_type: draftedAction.type,
       confidence: draftedAction.confidence,
+      context_risk_score: contextRiskScore,
     });
   } catch (err) {
     console.error('[cc-drafter] AI synthesis failed — using fallback', String(err), {
@@ -377,7 +427,7 @@ export async function synthesiseAndDraft(
     result = buildFallbackResult(item);
   }
 
-  await persistDraftResult(item.id, result, null);
+  await persistDraftResult(item.id, result, null, contextRiskScore);
   return result;
 }
 
@@ -394,6 +444,7 @@ async function persistDraftResult(
   itemId: string,
   result: DraftResult,
   confidenceScore: number | null,
+  contextRiskScore: number = 0.0,
 ): Promise<void> {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -404,6 +455,7 @@ async function persistDraftResult(
         summary: result.enriched_summary,
         drafted_action: result.drafted_action,
         confidence_score: confidenceScore,
+        context_risk_score: contextRiskScore,
         status: 'ready',
         enriched_at: new Date().toISOString(),
       })
@@ -412,7 +464,7 @@ async function persistDraftResult(
     if (error) {
       console.error('[cc-drafter] persistDraftResult: update failed', error.message, { item_id: itemId });
     } else {
-      console.log('[cc-drafter] persistDraftResult: item updated to ready', { item_id: itemId });
+      console.log('[cc-drafter] persistDraftResult: item updated to ready', { item_id: itemId, context_risk_score: contextRiskScore });
     }
   } catch (err) {
     console.error('[cc-drafter] persistDraftResult: unexpected error', String(err), { item_id: itemId });
@@ -422,12 +474,16 @@ async function persistDraftResult(
 /**
  * Persists the drafted result AND a confidence score + factors in one update.
  * Called by the orchestration layer after confidence scoring is complete.
+ *
+ * contextRiskScore defaults to 0.0 for backward compatibility — existing
+ * callers that don't pass it get no behavior change. (AE2-006)
  */
 export async function persistDraftWithConfidence(
   itemId: string,
   result: DraftResult,
   confidenceScore: number,
   confidenceFactors: Record<string, unknown>,
+  contextRiskScore: number = 0.0,
 ): Promise<void> {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -439,6 +495,7 @@ export async function persistDraftWithConfidence(
         drafted_action: result.drafted_action,
         confidence_score: confidenceScore,
         confidence_factors: confidenceFactors,
+        context_risk_score: contextRiskScore,
         status: 'ready',
         enriched_at: new Date().toISOString(),
       })
@@ -450,6 +507,7 @@ export async function persistDraftWithConfidence(
       console.log('[cc-drafter] persistDraftWithConfidence: item ready', {
         item_id: itemId,
         confidence_score: confidenceScore,
+        context_risk_score: contextRiskScore,
       });
     }
   } catch (err) {

@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Mail } from 'lucide-react';
+import { Mail, Check, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useGmailEmails, useGoogleServiceEnabled } from '@/lib/hooks/useGoogleIntegration';
+import { useGmailEmails, useGoogleServiceEnabled, useGmailMarkAsRead, useGmailTrash } from '@/lib/hooks/useGoogleIntegration';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 export function EmailIcon() {
   const [isOpen, setIsOpen] = useState(false);
@@ -16,6 +17,8 @@ export function EmailIcon() {
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const isGmailEnabled = useGoogleServiceEnabled('gmail');
+  const markAsRead = useGmailMarkAsRead();
+  const trashEmail = useGmailTrash();
   
   // Fetch contacts to match emails against
   const { data: contacts = [] } = useQuery({
@@ -83,13 +86,17 @@ export function EmailIcon() {
       const fromName = fromMatch ? fromMatch[1].replace(/"/g, '') : fromHeader.split('@')[0];
       const fromEmail = fromMatch ? fromMatch[2] : fromHeader;
       
+      // Extract date from headers (Gmail API puts it there, not on msg.date)
+      const dateHeader = headers.find((h: any) => h.name?.toLowerCase() === 'date')?.value;
+      const emailDate = dateHeader ? new Date(dateHeader) : (msg.internalDate ? new Date(Number(msg.internalDate)) : null);
+
       return {
         id: msg.id,
         from: fromEmail,
         fromName,
         subject: headers.find((h: any) => h.name?.toLowerCase() === 'subject')?.value || '(No Subject)',
         preview: msg.snippet || '',
-        timestamp: msg.date ? new Date(msg.date) : new Date(),
+        timestamp: emailDate,
         read: !msg.labelIds?.includes('UNREAD'),
         to: msg.to || []
       };
@@ -200,6 +207,20 @@ export function EmailIcon() {
     setIsOpen(false);
   };
 
+  const handleMarkAsRead = (e: React.MouseEvent, emailId: string) => {
+    e.stopPropagation();
+    markAsRead.mutate({ messageId: emailId, read: true }, {
+      onError: () => toast.error('Failed to mark email as read'),
+    });
+  };
+
+  const handleTrash = (e: React.MouseEvent, emailId: string) => {
+    e.stopPropagation();
+    trashEmail.mutate(emailId, {
+      onError: () => toast.error('Failed to delete email'),
+    });
+  };
+
   return (
     <>
       {/* Email Icon */}
@@ -272,7 +293,7 @@ export function EmailIcon() {
               </div>
 
               {/* Content */}
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-custom p-4">
                 {!isGmailEnabled ? (
                   <div className="text-center py-8">
                     <Mail className="w-12 h-12 text-gray-400 mx-auto mb-3" />
@@ -326,7 +347,7 @@ export function EmailIcon() {
                       <div
                         key={email.id}
                         className={cn(
-                          "p-3 rounded-lg border transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30",
+                          "p-3 rounded-lg border transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30 group",
                           !email.read ? "border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-900/10" : "border-gray-200 dark:border-gray-700"
                         )}
                         onClick={() => {
@@ -348,16 +369,31 @@ export function EmailIcon() {
                         <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
                           {email.preview || email.snippet || ''}
                         </p>
-                        {email.timestamp && (
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                            {formatDistanceToNow(new Date(email.timestamp), { addSuffix: true })}
-                          </p>
-                        )}
-                        {email.date && !email.timestamp && (
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                            {formatDistanceToNow(new Date(email.date), { addSuffix: true })}
-                          </p>
-                        )}
+                        <div className="flex items-center justify-between mt-2">
+                          {email.timestamp && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              {formatDistanceToNow(new Date(email.timestamp), { addSuffix: true })}
+                            </p>
+                          )}
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
+                            {!email.read && (
+                              <button
+                                onClick={(e) => handleMarkAsRead(e, email.id)}
+                                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                title="Mark as read"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => handleTrash(e, email.id)}
+                              className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -70,7 +70,8 @@ ALTER TABLE public.explorium_crm_mappings ENABLE ROW LEVEL SECURITY;
 
 -- Org members can read their org's mappings (for exclusion count display in UI)
 DO $$ BEGIN
-  CREATE POLICY "Org members can read explorium CRM mappings"
+  DROP POLICY IF EXISTS "Org members can read explorium CRM mappings" ON public.explorium_crm_mappings;
+CREATE POLICY "Org members can read explorium CRM mappings"
     ON public.explorium_crm_mappings
     FOR SELECT
     USING (
@@ -84,7 +85,8 @@ END $$;
 
 -- Only service role writes (edge functions handle all sync logic)
 DO $$ BEGIN
-  CREATE POLICY "Service role full access to explorium_crm_mappings"
+  DROP POLICY IF EXISTS "Service role full access to explorium_crm_mappings" ON public.explorium_crm_mappings;
+CREATE POLICY "Service role full access to explorium_crm_mappings"
     ON public.explorium_crm_mappings
     FOR ALL
     USING (auth.role() = 'service_role');

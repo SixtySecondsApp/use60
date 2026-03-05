@@ -11,8 +11,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   AlertTriangle,
-  ArrowUp,
-  Bell,
   ChevronDown,
   Filter,
   RefreshCw,
@@ -31,12 +29,16 @@ import {
   useCommandCentreItemsQuery,
   useCommandCentreStatsQuery,
   useCommandCentreItemMutations,
+  useCommandCentreRealtime,
 } from '@/lib/hooks/useCommandCentreItemsQuery';
+import { useCommandCentreDeepLinks } from '@/lib/hooks/useCommandCentreDeepLinks';
+import { useCommandCentreKeyboard } from '@/lib/hooks/useCommandCentreKeyboard';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
 import { CCDetailPanel } from '@/components/commandCentre/CCDetailPanel';
 import { CCEmptyState } from '@/components/commandCentre/CCEmptyState';
 import { CCFilterBar, type CCFilter } from '@/components/commandCentre/CCFilterBar';
 import { CCItemCard } from '@/components/commandCentre/CCItemCard';
+import { URGENCY_CONFIG, URGENCY_OPTIONS } from '@/components/commandCentre/constants';
 
 // ============================================================================
 // Skeleton loader
@@ -115,31 +117,6 @@ function StatsBar({
 // ============================================================================
 // Urgency/Agent filter pills (sub-filters within the main filter)
 // ============================================================================
-
-const URGENCY_CONFIG = {
-  critical: {
-    label: 'Critical',
-    badgeClass: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400',
-    icon: AlertTriangle,
-  },
-  high: {
-    label: 'High',
-    badgeClass: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400',
-    icon: ArrowUp,
-  },
-  normal: {
-    label: 'Normal',
-    badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
-    icon: Bell,
-  },
-  low: {
-    label: 'Low',
-    badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-    icon: ChevronDown,
-  },
-} as const;
-
-const URGENCY_OPTIONS = ['critical', 'high', 'normal', 'low'] as const;
 
 interface SubFilterBarProps {
   urgencyFilter: string | null;
@@ -240,6 +217,9 @@ export default function CommandCentre() {
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [detailItem, setDetailItem] = useState<CCItem | null>(null);
+
+  // CC-008: Realtime subscriptions — items appear without manual refresh
+  useCommandCentreRealtime();
 
   // Track IDs that are "new" (just arrived via realtime) so we can play an entrance animation.
   // We use a ref for the previous known ID set to avoid stale closure issues in the effect.
@@ -366,6 +346,42 @@ export default function CommandCentre() {
   const handleUndo = (id: string) => withPending(id, () => undoItem.mutate(id));
   const handleViewDetail = (item: CCItem) => setDetailItem(item);
 
+  // CC-009: Deep links — bookmarkable URLs for items and filters
+  const { updateItemParam, updateFilterParam } = useCommandCentreDeepLinks({
+    items: allItems,
+    onSelectItem: setDetailItem,
+    onSelectFilter: (f) => setActiveFilter(f as CCFilter),
+  });
+
+  // Update URL when detail panel opens/closes
+  const handleViewDetailWithDeepLink = (item: CCItem) => {
+    setDetailItem(item);
+    updateItemParam(item.id);
+  };
+
+  const handleCloseDetail = () => {
+    setDetailItem(null);
+    updateItemParam(null);
+  };
+
+  const handleFilterChange = (filter: CCFilter) => {
+    setActiveFilter(filter);
+    updateFilterParam(filter);
+  };
+
+  // CC-010: Keyboard navigation — j/k/Enter/a/d/Esc
+  const { isHighlighted } = useCommandCentreKeyboard({
+    items: filteredItems,
+    selectedItem: detailItem,
+    onSelectItem: (item) => {
+      setDetailItem(item);
+      updateItemParam(item?.id ?? null);
+    },
+    onApprove: handleApprove,
+    onDismiss: handleDismiss,
+    isPanelOpen: detailItem !== null,
+  });
+
   if (allItemsQuery.isError) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -445,7 +461,7 @@ export default function CommandCentre() {
           <div className="flex-shrink-0 px-6 pt-3 pb-2 bg-white dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800/60">
             <CCFilterBar
               activeFilter={activeFilter}
-              onFilterChange={setActiveFilter}
+              onFilterChange={handleFilterChange}
               needsYouCount={needsYouCount}
             />
           </div>
@@ -482,9 +498,10 @@ export default function CommandCentre() {
                     onDismiss={handleDismiss}
                     onSnooze={handleSnooze}
                     onUndo={handleUndo}
-                    onViewDetail={handleViewDetail}
+                    onViewDetail={handleViewDetailWithDeepLink}
                     isPending={pendingIds.has(item.id)}
                     animationClass={newItemIds.has(item.id) ? 'animate-slide-in-top' : undefined}
+                    isHighlighted={isHighlighted(item.id)}
                   />
                 ))}
               </div>
@@ -493,7 +510,7 @@ export default function CommandCentre() {
         </div>
 
         {/* Detail panel — inline, compresses the feed (no overlay) */}
-        <CCDetailPanel item={detailItem} onClose={() => setDetailItem(null)} />
+        <CCDetailPanel item={detailItem} onClose={handleCloseDetail} />
       </div>
     </div>
   );

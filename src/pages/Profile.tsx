@@ -375,6 +375,7 @@ export default function Profile({ embedded = false }: ProfileProps) {
                 </label>
                 <input
                   type="text"
+                  maxLength={100}
                   value={formData.firstName}
                   onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                   className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-all duration-200"
@@ -386,6 +387,7 @@ export default function Profile({ embedded = false }: ProfileProps) {
                 </label>
                 <input
                   type="text"
+                  maxLength={100}
                   value={formData.lastName}
                   onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                   className="w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-all duration-200"
@@ -411,7 +413,7 @@ export default function Profile({ embedded = false }: ProfileProps) {
                     Change
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Click "Change" to request a new email address</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Click &ldquo;Change&rdquo; to request a new email address</p>
               </div>
 
               {/* Organization Info */}

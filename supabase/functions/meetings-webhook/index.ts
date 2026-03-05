@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import { captureException } from "../_shared/sentryEdge.ts"
+import { runFullMeetingAnalysisPipeline } from "../_shared/meetingAnalysisPipeline.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -365,7 +366,7 @@ async function handleActionItems(supabase: any, data: any) {
 async function handleTranscript(supabase: any, data: any) {
   try {
     const { shareId } = extractIds(data)
-    
+
     if (!shareId) {
       throw new Error('Missing shareId')
     }
@@ -381,9 +382,31 @@ async function handleTranscript(supabase: any, data: any) {
 
     if (updateError) throw updateError
 
+    // Query the meeting to check if transcript_text is already populated
+    // (Fathom may have sent the actual text via an earlier event or a sync job).
+    // If it is, fire the full analysis pipeline fire-and-forget so the webhook
+    // responds immediately and doesn't block Fathom's retry logic.
+    const { data: meeting } = await supabase
+      .from('meetings')
+      .select('id, org_id, owner_user_id, transcript_text')
+      .eq('fathom_recording_id', shareId)
+      .maybeSingle()
+
+    if (meeting?.transcript_text && meeting?.owner_user_id && meeting?.org_id) {
+      console.log(`[meetings-webhook] transcript event — transcript_text present on meeting ${meeting.id}, firing analysis pipeline`)
+      runFullMeetingAnalysisPipeline(
+        supabase,
+        meeting.id,
+        meeting.org_id,
+        meeting.owner_user_id
+      ).catch(err => console.error('[meetings-webhook] Pipeline error (fire-and-forget):', err))
+    } else {
+      console.log(`[meetings-webhook] transcript event — transcript_text not yet populated for shareId ${shareId}, pipeline will be triggered when text is available`)
+    }
+
     return new Response(
       JSON.stringify({ success: true }),
-      { 
+      {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }

@@ -105,9 +105,11 @@ export function DashboardTab({ className, period, dateRange }: DashboardTabProps
   // Alerts section collapsed state
   const [alertsExpanded, setAlertsExpanded] = useState(true);
 
-  // Meeting analytics hooks for pipeline and alerts
-  const { data: dashboard } = useMaDashboard();
-  const { data: alerts } = useMaAlerts();
+  // Meeting analytics hooks for pipeline and alerts — pass date filter
+  const startDate = dateRange?.start ? dateRange.start.toISOString() : undefined;
+  const endDate = dateRange?.end ? dateRange.end.toISOString() : undefined;
+  const { data: dashboard } = useMaDashboard({ startDate, endDate });
+  const { data: alerts } = useMaAlerts({ startDate, endDate });
 
   const pipelineHealth = dashboard?.pipelineHealth ?? [];
   const dashboardAlerts = alerts ?? dashboard?.alerts ?? [];

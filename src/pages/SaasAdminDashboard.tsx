@@ -17,13 +17,10 @@ import {
   DollarSign,
   AlertCircle,
   ChevronRight,
-  Search,
-  Filter,
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   getAdminDashboardStats,
   getCustomers,
@@ -35,7 +32,7 @@ import type {
   CustomerWithDetails,
   SubscriptionPlan,
 } from '@/lib/types/saasAdmin';
-import { CustomerList } from '@/components/saas-admin/CustomerList';
+import { CustomerTrackingTab } from '@/components/saas-admin/CustomerTrackingTab';
 import { UsageOverview } from '@/components/saas-admin/UsageOverview';
 import { FeatureFlagsManager } from '@/components/saas-admin/FeatureFlagsManager';
 import { toast } from 'sonner';
@@ -91,7 +88,6 @@ export function SaasAdminDashboard() {
   const [customers, setCustomers] = useState<CustomerWithDetails[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Load initial data
   useEffect(() => {
@@ -127,13 +123,6 @@ export function SaasAdminDashboard() {
       throw error; // Re-throw so CustomerList dialog knows it failed
     }
   }
-
-  // Filter customers by search query
-  const filteredCustomers = customers.filter(
-    (c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -204,23 +193,8 @@ export function SaasAdminDashboard() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <div className="mb-6 flex items-center gap-4">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <Input
-                    placeholder="Search customers..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Filter className="w-4 h-4" />
-                  Filters
-                </Button>
-              </div>
-              <CustomerList
-                customers={filteredCustomers}
+              <CustomerTrackingTab
+                customers={customers}
                 plans={plans}
                 isLoading={isLoading}
                 onRefresh={loadData}

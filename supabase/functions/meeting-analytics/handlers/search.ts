@@ -4,6 +4,7 @@
 
 import { getRailwayDb } from '../db.ts';
 import { successResponse, errorResponse } from '../helpers.ts';
+import { SHARED_DEMO_ORG_ID } from '../constants.ts';
 
 async function generateEmbedding(text: string): Promise<number[]> {
   const apiKey = Deno.env.get('OPENAI_API_KEY');
@@ -51,7 +52,8 @@ export async function handleSearch(req: Request, orgId: string): Promise<Respons
            t.title as "transcriptTitle",
            1 - (ts.embedding <=> $1::vector) AS similarity
     FROM transcript_segments ts
-    JOIN transcripts t ON t.id = ts.transcript_id AND t.org_id = $2
+    JOIN transcripts t ON t.id = ts.transcript_id AND (t.org_id = $2 OR t.org_id = '${SHARED_DEMO_ORG_ID}')
+      AND (t.is_demo = false OR t.is_demo IS NULL)
     WHERE ts.embedding IS NOT NULL AND 1 - (ts.embedding <=> $1::vector) >= $3
   `;
   const params: unknown[] = [embeddingStr, orgId, threshold];
@@ -135,7 +137,8 @@ export async function handleSearchSimilar(req: Request, orgId: string): Promise<
   const segRows = await db.unsafe(
     `SELECT ts.id, ts.transcript_id, ts.segment_index, ts.text, ts.start_time, ts.end_time, ts.word_count, ts.avg_confidence
      FROM transcript_segments ts
-     JOIN transcripts t ON t.id = ts.transcript_id AND t.org_id = $2
+     JOIN transcripts t ON t.id = ts.transcript_id AND (t.org_id = $2 OR t.org_id = '${SHARED_DEMO_ORG_ID}')
+       AND (t.is_demo = false OR t.is_demo IS NULL)
      WHERE ts.id = $1`,
     [segmentId, orgId]
   );
@@ -154,7 +157,8 @@ export async function handleSearchSimilar(req: Request, orgId: string): Promise<
            t.title as "transcriptTitle",
            1 - (ts.embedding <=> $1::vector) AS similarity
     FROM transcript_segments ts
-    JOIN transcripts t ON t.id = ts.transcript_id AND t.org_id = $4
+    JOIN transcripts t ON t.id = ts.transcript_id AND (t.org_id = $4 OR t.org_id = '${SHARED_DEMO_ORG_ID}')
+      AND (t.is_demo = false OR t.is_demo IS NULL)
     WHERE ts.embedding IS NOT NULL AND ts.id != $2 AND 1 - (ts.embedding <=> $1::vector) >= $3
   `;
   const params: unknown[] = [embeddingStr, segmentId, threshold, orgId];
@@ -221,7 +225,8 @@ export async function handleSearchMulti(req: Request, orgId: string): Promise<Re
                 t.title as "transcriptTitle",
                 1 - (ts.embedding <=> $1::vector) AS similarity
          FROM transcript_segments ts
-         JOIN transcripts t ON t.id = ts.transcript_id AND t.org_id = $3
+         JOIN transcripts t ON t.id = ts.transcript_id AND (t.org_id = $3 OR t.org_id = '${SHARED_DEMO_ORG_ID}')
+           AND (t.is_demo = false OR t.is_demo IS NULL)
          WHERE ts.embedding IS NOT NULL
            AND ts.transcript_id = $2
            AND 1 - (ts.embedding <=> $1::vector) >= $4

@@ -184,6 +184,24 @@ async function executeSingleButtonAction(
       return;
     }
 
+    case 'run_prompt': {
+      const { data, error } = await supabase.functions.invoke('run-prompt', {
+        body: {
+          table_id: ctx.tableId,
+          row_id: ctx.rowId,
+          action_config: action.config,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      // Update the output cell in the UI
+      const outputKey = action.config.output_column_key as string;
+      if (outputKey && data?.result) {
+        ctx.onUpdateCell?.(outputKey, typeof data.result === 'string' ? data.result : JSON.stringify(data.result));
+      }
+      return;
+    }
+
     default:
       throw new Error(`Unknown action type: ${action.type}`);
   }

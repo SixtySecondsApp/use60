@@ -87,11 +87,18 @@ serve(async (req) => {
       .select("role")
       .eq("org_id", org_id)
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (membershipError || !membership || !["owner", "admin"].includes(membership.role)) {
+    if (membershipError) {
       return new Response(
-        JSON.stringify({ error: "You do not have permission to manage billing for this organization" }),
+        JSON.stringify({ error: "Failed to verify permissions" }),
+        { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      return new Response(
+        JSON.stringify({ error: "You need to be an organization owner or admin to manage billing" }),
         { status: 403, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
@@ -210,8 +217,8 @@ serve(async (req) => {
       payment_method_collection: "if_required",
       // Allow customer to enter promo codes
       allow_promotion_codes: true,
-      // Customer email for receipts
-      customer_email: customer.email ?? user.email ?? undefined,
+      // Note: customer_email omitted — Stripe does not allow both 'customer' and 'customer_email'
+      // The customer object already has the email from getOrCreateStripeCustomer()
       // Billing address collection - required for tax calculation
       billing_address_collection: "required",
       // ============================================================================

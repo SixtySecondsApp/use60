@@ -114,7 +114,8 @@ ALTER TABLE public.autopilot_confidence ENABLE ROW LEVEL SECURITY;
 
 -- Users read their own confidence rows
 DO $$ BEGIN
-  CREATE POLICY "autopilot_confidence_user_select"
+  DROP POLICY IF EXISTS "autopilot_confidence_user_select" ON public.autopilot_confidence;
+CREATE POLICY "autopilot_confidence_user_select"
   ON public.autopilot_confidence FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
@@ -123,7 +124,8 @@ END $$;
 
 -- Org admins / owners read all rows for their org
 DO $$ BEGIN
-  CREATE POLICY "autopilot_confidence_admin_select"
+  DROP POLICY IF EXISTS "autopilot_confidence_admin_select" ON public.autopilot_confidence;
+CREATE POLICY "autopilot_confidence_admin_select"
   ON public.autopilot_confidence FOR SELECT
   TO authenticated
   USING (
@@ -140,7 +142,8 @@ END $$;
 
 -- Service role: full access (edge functions use service-role client for writes)
 DO $$ BEGIN
-  CREATE POLICY "autopilot_confidence_service_all"
+  DROP POLICY IF EXISTS "autopilot_confidence_service_all" ON public.autopilot_confidence;
+CREATE POLICY "autopilot_confidence_service_all"
   ON public.autopilot_confidence FOR ALL
   TO service_role
   USING (true)

@@ -8,9 +8,12 @@
  */
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { Download, Users2, CalendarRange } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { PipelineHeader } from './PipelineHeader';
 import { PipelineKanban } from './PipelineKanban';
 import { PipelineTable } from './PipelineTable';
+import { RelationshipGraph } from './RelationshipGraph';
 import { DealIntelligenceSheet } from './DealIntelligenceSheet';
 import { DealForm } from './DealForm';
 import { HubSpotImportWizard } from '../ops/HubSpotImportWizard';
@@ -18,8 +21,22 @@ import { AttioImportWizard } from '../ops/AttioImportWizard';
 import { usePipelineData } from './hooks/usePipelineData';
 import { usePipelineFilters, PIPELINE_PAGE_SIZE } from './hooks/usePipelineFilters';
 import { PipelinePagination } from './PipelinePagination';
+import { PipelineSavedViewsPanel } from './PipelineSavedViewsPanel';
+import { PipelineColumnCustomizer } from './PipelineColumnCustomizer';
+import { PipelineManagerView } from './PipelineManagerView';
+import { BulkActionBar } from './BulkActionBar';
+import { usePipelineColumns } from './hooks/usePipelineColumns';
+import { exportDealsToCSV } from './pipelineUtils';
+import type { PipelineSavedView } from './hooks/usePipelineSavedViews';
+import { ForecastSummaryCards } from '@/components/forecast/ForecastSummaryCards';
+import { ForecastVsActualChart } from '@/components/forecast/ForecastVsActualChart';
+import { RepCalibrationCards } from '@/components/forecast/RepCalibrationCards';
+import { PipelineWaterfallChart } from '@/components/forecast/PipelineWaterfallChart';
+import { WeightedPipelineChart } from '@/components/forecast/WeightedPipelineChart';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useOrgStore } from '@/lib/stores/orgStore';
+import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { toast } from 'sonner';
 import logger from '@/lib/utils/logger';
 
@@ -70,8 +87,37 @@ function PipelineSkeleton() {
 
 export function PipelineView() {
   const activeOrgId = useOrgStore((state) => state.activeOrgId);
+  const orgCurrency = useOrgStore((state) => {
+    const org = state.organizations.find((o) => o.id === state.activeOrgId);
+    return org?.currency_code || 'USD';
+  });
   const filterState = usePipelineFilters();
   const isTableView = filterState.viewMode === 'table';
+  const isForecastView = filterState.viewMode === 'forecast';
+
+  // Forecast state
+  const [forecastPeriod, setForecastPeriod] = useState<'month' | 'quarter'>('quarter');
+  const forecastOrgId = useActiveOrgId();
+  const { data: forecastTotals, isLoading: forecastLoading } = useQuery({
+    queryKey: ['forecast-totals', forecastOrgId, forecastPeriod],
+    queryFn: async () => {
+      if (!forecastOrgId) return null;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data, error } = await supabase.rpc('get_forecast_totals', {
+        p_org_id: forecastOrgId,
+        p_user_id: user.id,
+        p_period: forecastPeriod,
+      });
+      if (error) {
+        toast.error('Failed to load forecast totals');
+        throw error;
+      }
+      return data as { commit_total: number; best_case_total: number; pipeline_total: number; period: string };
+    },
+    enabled: !!forecastOrgId && isForecastView,
+    staleTime: 5 * 60 * 1000,
+  });
   const pipelineData = usePipelineData({
     filters: filterState.filters,
     sortBy: filterState.sortBy as any,
@@ -85,6 +131,15 @@ export function PipelineView() {
 
   // Sheet state
   const [selectedDealId, setSelectedDealId] = React.useState<string | null>(null);
+
+  // Multi-select state (PIPE-ADV-002)
+  const [selectedDealIds, setSelectedDealIds] = useState<Set<string>>(new Set());
+
+  // Manager view toggle (PIPE-ADV-003)
+  const [showManagerView, setShowManagerView] = useState(false);
+
+  // Column customization (PIPE-ADV-004)
+  const { visibleColumns, visibleColumnIds, allColumns, toggleColumn, resetColumns } = usePipelineColumns();
 
   // Deal form state
   const [showDealForm, setShowDealForm] = useState(false);
@@ -124,6 +179,20 @@ export function PipelineView() {
     });
     return grouped;
   }, [pipelineData.data.deals, pipelineData.data.stageMetrics]);
+
+  // Apply a saved view (PIPE-ADV-001)
+  const handleApplySavedView = useCallback((view: PipelineSavedView) => {
+    const f = view.filters;
+    if (f.stage_ids !== undefined) filterState.setStageIds(f.stage_ids || []);
+    if (f.health_status !== undefined) filterState.setHealthStatus(f.health_status || []);
+    if (f.risk_level !== undefined) filterState.setRiskLevel(f.risk_level || []);
+    if (f.owner_ids !== undefined) filterState.setOwnerIds(f.owner_ids || []);
+    if (f.search !== undefined) filterState.setSearch(f.search || '');
+    if (f.sort_by) filterState.setSortBy(f.sort_by as any);
+    if (f.sort_dir) filterState.setSortDir(f.sort_dir as any);
+    if (f.view_mode) filterState.setViewMode(f.view_mode as any);
+    toast.success(`View "${view.name}" applied`);
+  }, [filterState]);
 
   // Handle deal click - open sheet
   const handleDealClick = (dealId: string) => {
@@ -232,11 +301,11 @@ export function PipelineView() {
     }
   };
 
-  if (pipelineData.isLoading) {
+  if (!isForecastView && pipelineData.isLoading) {
     return <PipelineSkeleton />;
   }
 
-  if (pipelineData.error) {
+  if (!isForecastView && pipelineData.error) {
     return (
       <div className="flex flex-col items-center justify-center p-8">
         <div className="text-red-500 mb-4">Error loading pipeline data</div>
@@ -267,6 +336,48 @@ export function PipelineView() {
         onImportFromCRM={(source) => setImportSource(source)}
       />
 
+      {/* Table toolbar: saved views, columns, export, manager view (PIPE-ADV-001/004/005/003) */}
+      {isTableView && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <PipelineSavedViewsPanel
+            currentFilters={{
+              ...filterState.filters,
+              sort_by: filterState.sortBy,
+              sort_dir: filterState.sortDir,
+              view_mode: filterState.viewMode,
+            }}
+            onApply={handleApplySavedView}
+          />
+
+          <PipelineColumnCustomizer
+            allColumns={allColumns}
+            visibleColumnIds={visibleColumnIds}
+            onToggle={toggleColumn}
+            onReset={resetColumns}
+          />
+
+          <button
+            onClick={() => setShowManagerView(!showManagerView)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium backdrop-blur-xl transition-all ${
+              showManagerView
+                ? 'bg-blue-50 dark:bg-blue-500/[0.08] border border-blue-200 dark:border-blue-500/30 text-blue-600 dark:text-blue-400'
+                : 'bg-white/60 dark:bg-white/[0.02] border border-gray-200/80 dark:border-white/[0.09] text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/[0.13] hover:text-gray-800 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.04]'
+            }`}
+          >
+            <Users2 className="w-3.5 h-3.5" />
+            Manager
+          </button>
+
+          <button
+            onClick={() => exportDealsToCSV(pipelineData.data.deals)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-white/60 dark:bg-white/[0.02] border border-gray-200/80 dark:border-white/[0.09] text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/[0.13] hover:text-gray-800 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.04] backdrop-blur-xl transition-all"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+        </div>
+      )}
+
       {filterState.viewMode === 'kanban' ? (
         <PipelineKanban
           stageMetrics={pipelineData.data.stageMetrics}
@@ -275,6 +386,62 @@ export function PipelineView() {
           onDealStageChange={handleDealStageChange}
           onAddDealClick={handleAddDealClick}
         />
+      ) : showManagerView ? (
+        <PipelineManagerView
+          deals={pipelineData.data.deals}
+          stageMetrics={pipelineData.data.stageMetrics}
+          onDealClick={handleDealClick}
+        />
+      ) : filterState.viewMode === 'graph' ? (
+        <RelationshipGraph />
+      ) : isForecastView ? (
+        <div className="space-y-6">
+          {/* Period selector */}
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {forecastPeriod === 'quarter' ? 'This quarter' : 'This month'} — pipeline health and revenue forecast
+            </p>
+            <div className="flex items-center gap-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-white/5 p-1">
+              <Button
+                variant={forecastPeriod === 'month' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={() => setForecastPeriod('month')}
+              >
+                <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+                Month
+              </Button>
+              <Button
+                variant={forecastPeriod === 'quarter' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={() => setForecastPeriod('quarter')}
+              >
+                <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+                Quarter
+              </Button>
+            </div>
+          </div>
+
+          {/* Summary cards */}
+          <ForecastSummaryCards data={forecastTotals} isLoading={forecastLoading} currency={orgCurrency} />
+
+          {/* Forecast vs Actual + Rep Calibration */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <ForecastVsActualChart />
+            </div>
+            <div>
+              <RepCalibrationCards />
+            </div>
+          </div>
+
+          {/* Pipeline Waterfall + Weighted Pipeline */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <PipelineWaterfallChart />
+            <WeightedPipelineChart />
+          </div>
+        </div>
       ) : (
         <PipelineTable
           deals={pipelineData.data.deals}
@@ -289,6 +456,29 @@ export function PipelineView() {
               filterState.setSortDir('desc');
             }
           }}
+          selectedIds={selectedDealIds}
+          onSelectionChange={setSelectedDealIds}
+          visibleColumns={visibleColumns}
+        />
+      )}
+
+      {isTableView && totalPages > 1 && !showManagerView && (
+        <PipelinePagination
+          currentPage={filterState.page}
+          totalPages={totalPages}
+          totalCount={pipelineData.data.totalCount}
+          pageSize={PIPELINE_PAGE_SIZE}
+          onPageChange={filterState.setPage}
+        />
+      )}
+
+      {/* Bulk action bar (PIPE-ADV-002) */}
+      {isTableView && selectedDealIds.size > 0 && (
+        <BulkActionBar
+          selectedIds={selectedDealIds}
+          stageMetrics={pipelineData.data.stageMetrics}
+          onClear={() => setSelectedDealIds(new Set())}
+          onRefresh={() => pipelineData.refetch().catch((err) => logger.warn('Refetch after bulk action failed:', err))}
         />
       )}
 

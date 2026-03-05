@@ -127,6 +127,8 @@ const SKILL_DEFINITIONS = [
   },
 ];
 
+const MAX_ITEMS = 10;
+
 export default function AIIntelligencePage() {
   const { activeOrgId, activeOrg, permissions, refreshOrgs } = useOrg();
 
@@ -615,11 +617,14 @@ export default function AIIntelligencePage() {
                                     const newCriteria = [...(skillData.criteria || []), ''];
                                     handleSkillChange(skillDef.id, 'criteria', newCriteria);
                                   }}
-                                  disabled={!permissions.canManageSettings}
+                                  disabled={!permissions.canManageSettings || (skillData.criteria || []).length >= MAX_ITEMS}
                                 >
                                   <Plus className="w-4 h-4 mr-1" />
                                   Add Criteria
                                 </Button>
+                                {(skillData.criteria || []).length >= MAX_ITEMS && (
+                                  <p className="text-xs text-amber-400 mt-1">Maximum {MAX_ITEMS} items</p>
+                                )}
                               </div>
                               <div className="space-y-2">
                                 <label className="text-sm font-medium">Disqualifying Signals</label>
@@ -656,11 +661,14 @@ export default function AIIntelligencePage() {
                                     const newDisqualifiers = [...(skillData.disqualifiers || []), ''];
                                     handleSkillChange(skillDef.id, 'disqualifiers', newDisqualifiers);
                                   }}
-                                  disabled={!permissions.canManageSettings}
+                                  disabled={!permissions.canManageSettings || (skillData.disqualifiers || []).length >= MAX_ITEMS}
                                 >
                                   <Plus className="w-4 h-4 mr-1" />
                                   Add Disqualifier
                                 </Button>
+                                {(skillData.disqualifiers || []).length >= MAX_ITEMS && (
+                                  <p className="text-xs text-amber-400 mt-1">Maximum {MAX_ITEMS} items</p>
+                                )}
                               </div>
                             </>
                           )}
@@ -701,11 +709,14 @@ export default function AIIntelligencePage() {
                                   const newQuestions = [...(skillData.questions || []), ''];
                                   handleSkillChange(skillDef.id, 'questions', newQuestions);
                                 }}
-                                disabled={!permissions.canManageSettings}
+                                disabled={!permissions.canManageSettings || (skillData.questions || []).length >= MAX_ITEMS}
                               >
                                 <Plus className="w-4 h-4 mr-1" />
                                 Add Question
                               </Button>
+                              {(skillData.questions || []).length >= MAX_ITEMS && (
+                                <p className="text-xs text-amber-400 mt-1">Maximum {MAX_ITEMS} items</p>
+                              )}
                             </div>
                           )}
 
@@ -743,9 +754,10 @@ export default function AIIntelligencePage() {
                                   <Input
                                     placeholder="Add word..."
                                     className="w-32 h-7 text-sm"
-                                    disabled={!permissions.canManageSettings}
+                                    disabled={!permissions.canManageSettings || (skillData.avoid || []).length >= MAX_ITEMS}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter' && e.currentTarget.value) {
+                                        if ((skillData.avoid || []).length >= MAX_ITEMS) return;
                                         const newAvoid = [...(skillData.avoid || []), e.currentTarget.value];
                                         handleSkillChange(skillDef.id, 'avoid', newAvoid);
                                         e.currentTarget.value = '';
@@ -753,6 +765,9 @@ export default function AIIntelligencePage() {
                                     }}
                                   />
                                 </div>
+                                {(skillData.avoid || []).length >= MAX_ITEMS && (
+                                  <p className="text-xs text-amber-400 mt-1">Maximum {MAX_ITEMS} items</p>
+                                )}
                               </div>
                             </>
                           )}
@@ -806,11 +821,14 @@ export default function AIIntelligencePage() {
                                   const newObjections = [...(skillData.objections || []), { trigger: '', response: '' }];
                                   handleSkillChange(skillDef.id, 'objections', newObjections);
                                 }}
-                                disabled={!permissions.canManageSettings}
+                                disabled={!permissions.canManageSettings || (skillData.objections || []).length >= MAX_ITEMS}
                               >
                                 <Plus className="w-4 h-4 mr-1" />
                                 Add Objection
                               </Button>
+                              {(skillData.objections || []).length >= MAX_ITEMS && (
+                                <p className="text-xs text-amber-400 mt-1">Maximum {MAX_ITEMS} items</p>
+                              )}
                             </div>
                           )}
 
@@ -859,9 +877,10 @@ export default function AIIntelligencePage() {
                                   <Input
                                     placeholder="Add signal..."
                                     className="w-40 h-7 text-sm"
-                                    disabled={!permissions.canManageSettings}
+                                    disabled={!permissions.canManageSettings || (skillData.buyingSignals || []).length >= MAX_ITEMS}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter' && e.currentTarget.value) {
+                                        if ((skillData.buyingSignals || []).length >= MAX_ITEMS) return;
                                         const newSignals = [...(skillData.buyingSignals || []), e.currentTarget.value];
                                         handleSkillChange(skillDef.id, 'buyingSignals', newSignals);
                                         e.currentTarget.value = '';
@@ -869,6 +888,9 @@ export default function AIIntelligencePage() {
                                     }}
                                   />
                                 </div>
+                                {(skillData.buyingSignals || []).length >= MAX_ITEMS && (
+                                  <p className="text-xs text-amber-400 mt-1">Maximum {MAX_ITEMS} items</p>
+                                )}
                               </div>
                             </>
                           )}
@@ -1000,7 +1022,7 @@ export default function AIIntelligencePage() {
               </h3>
               <p className="text-sm text-blue-700 dark:text-blue-300">
                 These settings are automatically generated when you complete onboarding by analyzing your company website.
-                You can customize any setting to better match your sales process. Click "Re-analyze Company" to regenerate
+                You can customize any setting to better match your sales process. Click &quot;Re-analyze Company&quot; to regenerate
                 AI settings from your website.
               </p>
             </div>

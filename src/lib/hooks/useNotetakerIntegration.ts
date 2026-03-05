@@ -239,19 +239,21 @@ export function useNotetakerIntegration() {
     },
   });
 
-  // Update user settings
+  // Update user settings — upsert so it works even if no row exists yet
   const updateSettingsMutation = useMutation({
     mutationFn: async (updates: Partial<NotetakerUserSettings>) => {
       if (!userId || !orgId) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
         .from('notetaker_user_settings')
-        .update({
+        .upsert({
+          user_id: userId,
+          org_id: orgId,
           ...updates,
           updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,org_id',
         })
-        .eq('user_id', userId)
-        .eq('org_id', orgId)
         .select()
         .single();
 

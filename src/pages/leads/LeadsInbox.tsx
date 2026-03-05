@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useMemo, useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { LeadWithPrep } from '@/lib/services/leadService';
 import { toast } from 'sonner';
@@ -11,10 +11,12 @@ import { useUser } from '@/lib/hooks/useUser';
 import { useActiveOrgId, useOrgStore } from '@/lib/stores/orgStore';
 import { supabase } from '@/lib/supabase/clientV2';
 import logger from '@/lib/utils/logger';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const OpsDetailPage = lazy(() => import('@/pages/OpsDetailPage'));
 
 export default function LeadsInbox() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { data: leads = [], isLoading, isFetching, refetch } = useLeads();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const { mutateAsync: runPrep, isPending } = useLeadPrepRunner();
@@ -23,11 +25,10 @@ export default function LeadsInbox() {
   const orgId = useActiveOrgId();
   const loadOrganizations = useOrgStore((state) => state.loadOrganizations);
   const isLoadingOrgs = useOrgStore((state) => state.isLoading);
-  const orgError = useOrgStore((state) => state.error);
   const [reprocessingLeadId, setReprocessingLeadId] = useState<string | null>(null);
   const [orgLoadAttempted, setOrgLoadAttempted] = useState(false);
 
-  // Look up the standard Leads Ops table ID for table view navigation
+  // Look up the standard Leads Ops table ID for table view
   const { data: leadsOpsTableId } = useQuery({
     queryKey: ['ops-leads-table-id', orgId],
     queryFn: async () => {
@@ -44,7 +45,7 @@ export default function LeadsInbox() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // View mode from URL params (table view navigates to Ops, so only 'list' renders here)
+  // View mode from URL params
   const viewMode = (searchParams.get('view') || 'list') as 'list' | 'table';
 
   // URL-based filters
@@ -170,20 +171,19 @@ export default function LeadsInbox() {
     }
   }, [user?.id, orgId, isLoadingOrgs, orgLoadAttempted, loadOrganizations]);
 
-  // Handle view mode change — table view navigates to Ops table
+  // Handle view mode change — toggles between inbox and embedded ops table
   const handleViewModeChange = (view: 'list' | 'table') => {
-    if (view === 'table') {
-      if (leadsOpsTableId) {
-        navigate(`/ops/${leadsOpsTableId}`);
-      } else {
-        toast.error('Leads table not provisioned yet. Visit Ops to set up standard tables.');
-      }
+    if (view === 'table' && !leadsOpsTableId) {
+      toast.error('Leads table not provisioned yet. Visit Ops to set up standard tables.');
       return;
     }
     setSearchParams((prev) => {
       const newParams = new URLSearchParams(prev);
-      newParams.set('view', view);
-      newParams.set('page', '1');
+      if (view === 'list') {
+        newParams.delete('view');
+      } else {
+        newParams.set('view', view);
+      }
       return newParams;
     });
   };
@@ -250,6 +250,25 @@ export default function LeadsInbox() {
     }
   };
 
+  // Table view — render the full Ops table layout inline
+  if (viewMode === 'table' && leadsOpsTableId) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <Suspense
+          fallback={
+            <div className="flex min-h-[400px] flex-col gap-3 p-6">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-[400px] w-full" />
+            </div>
+          }
+        >
+          <OpsDetailPage embeddedTableId={leadsOpsTableId} embedded />
+        </Suspense>
+      </div>
+    );
+  }
+
+  // Inbox view — the default list + detail panel layout
   return (
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
         <div className="flex h-[calc(100vh-160px)] sm:h-[calc(100vh-140px)] lg:h-[calc(100vh-120px)] flex-col rounded-xl sm:rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800/60 dark:bg-gray-950/40 overflow-hidden">
@@ -321,6 +340,3 @@ export default function LeadsInbox() {
     </div>
   );
 }
-
-
-

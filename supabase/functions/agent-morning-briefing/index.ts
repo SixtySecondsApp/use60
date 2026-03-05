@@ -20,6 +20,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts';
 import { verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
 import { sendSlackDM } from '../_shared/proactive/deliverySlack.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
+import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -73,7 +75,7 @@ serve(async (req) => {
 
         // Generate natural language briefing via Haiku
         const narrativeBriefing = ANTHROPIC_API_KEY
-          ? await generateNarrativeBriefing(briefing, persona)
+          ? await generateNarrativeBriefing(briefing, persona, supabase)
           : formatFallbackBriefing(briefing, persona);
 
         // Deliver via Slack DM
@@ -93,6 +95,28 @@ serve(async (req) => {
             overnight_alerts: briefing.overnightAlerts.length,
           },
         });
+
+        // Write to Command Centre for inbox feed
+        try {
+          await writeToCommandCentre({
+            org_id: persona.org_id,
+            user_id: persona.user_id,
+            source_agent: 'morning-brief',
+            item_type: 'insight',
+            title: `Morning Briefing: ${briefing.deals.length} deal${briefing.deals.length !== 1 ? 's' : ''}, ${briefing.meetings.length} meeting${briefing.meetings.length !== 1 ? 's' : ''} today`,
+            summary: narrativeBriefing.substring(0, 500),
+            context: {
+              deals_count: briefing.deals.length,
+              meetings_count: briefing.meetings.length,
+              tasks_count: briefing.tasks.length,
+              overnight_alerts: briefing.overnightAlerts.length,
+            },
+            urgency: 'normal',
+          });
+        } catch (ccErr) {
+          // CC failure must not break morning briefing delivery
+          console.error('[agent-morning-briefing] CC write failed for user', persona.user_id, String(ccErr));
+        }
 
         // Mark batched notifications as delivered
         if (briefing.batchedNotificationIds.length > 0) {
@@ -229,6 +253,7 @@ async function assembleBriefing(
 async function generateNarrativeBriefing(
   data: BriefingData,
   persona: Record<string, any>,
+  supabase?: any,
 ): Promise<string> {
   const toneInstructions: Record<string, string> = {
     concise: 'Be brief and bullet-pointed. No fluff.',
@@ -273,6 +298,17 @@ Write a 2-3 paragraph briefing. Start with the most urgent item. End with one ac
     }
 
     const result = await response.json();
+    // Log AI cost event (fire-and-forget)
+    if (supabase && persona.user_id && result.usage) {
+      logAICostEvent(
+        supabase, persona.user_id, persona.org_id ?? null,
+        'anthropic', 'claude-haiku-4-5-20251001',
+        result.usage.input_tokens || 0, result.usage.output_tokens || 0,
+        'agent_morning_briefing',
+        undefined,
+        { source: 'agent_automated', agentType: 'morning_briefing' },
+      ).catch((e: unknown) => console.warn('[agent-morning-briefing] cost log error:', e));
+    }
     return result.content?.[0]?.text || formatFallbackBriefing(data, persona);
   } catch (err) {
     console.error('[agent-morning-briefing] Haiku call failed:', err);

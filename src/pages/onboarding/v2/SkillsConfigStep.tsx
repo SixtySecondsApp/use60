@@ -38,11 +38,22 @@ import { toast } from 'sonner';
 type SkillStatus = 'pending' | 'configured' | 'skipped';
 
 // Input validation constants
-const MAX_TEXTAREA_LENGTH = 2000;
+const MAX_TEXTAREA_LENGTH = 1000;
+const MAX_TEXTAREA_WORDS = 150;
 const MAX_TAG_LENGTH = 100;
 const MAX_ITEM_LENGTH = 500;
 const MAX_ITEMS = 10;
 const MAX_OBJECTION_WORDS = 50;
+
+// Count words in a string
+const countWords = (text: string): number =>
+  text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+
+// Truncate text to MAX_TEXTAREA_WORDS if exceeded
+const truncateToWordLimit = (text: string): string => {
+  const words = text.trim().split(/\s+/);
+  return words.length > MAX_TEXTAREA_WORDS ? words.slice(0, MAX_TEXTAREA_WORDS).join(' ') : text;
+};
 
 // Sanitize input to prevent injection attacks
 const sanitizeInput = (input: string): string => {
@@ -51,7 +62,7 @@ const sanitizeInput = (input: string): string => {
 
 export function SkillsConfigStep() {
   const queryClient = useQueryClient();
-  const { skillConfigs, updateSkillConfig, setStep, saveAllSkills, organizationId, enrichment, resetAndCleanup } =
+  const { skillConfigs, updateSkillConfig, setStep, persistSkillsToServer, organizationId, enrichment, resetAndCleanup } =
     useOnboardingV2Store();
   const [isResetting, setIsResetting] = useState(false);
 
@@ -95,19 +106,19 @@ export function SkillsConfigStep() {
     if (currentSkillIndex < SKILLS.length - 1) {
       setCurrentSkillIndex(currentSkillIndex + 1);
     } else {
-      // All skills reviewed, save and complete
+      // All skills reviewed, save then advance to notetaker_connection
       if (organizationId) {
-        const success = await saveAllSkills(organizationId);
+        const success = await persistSkillsToServer(organizationId);
         if (success) {
-          setStep('complete');
+          setStep('notetaker_connection');
         } else {
           toast.error('Failed to save skills. Please try again.');
         }
       } else {
-        setStep('complete');
+        setStep('notetaker_connection');
       }
     }
-  }, [currentSkillIndex, organizationId, saveAllSkills, setStep]);
+  }, [currentSkillIndex, organizationId, persistSkillsToServer, setStep]);
 
   const movePrev = useCallback(() => {
     if (currentSkillIndex > 0) {
@@ -132,7 +143,7 @@ export function SkillsConfigStep() {
   }, [activeSkill.id, moveNext]);
 
   const handleSkipAll = useCallback(async () => {
-    // Mark all remaining skills as skipped and go to complete
+    // Mark all remaining skills as skipped then advance to notetaker_connection
     const updated = { ...skillStatuses };
     for (const skill of SKILLS) {
       if (updated[skill.id] === 'pending') {
@@ -142,14 +153,16 @@ export function SkillsConfigStep() {
     setSkillStatuses(updated);
 
     if (organizationId) {
-      const success = await saveAllSkills(organizationId);
+      const success = await persistSkillsToServer(organizationId);
       if (success) {
-        setStep('complete');
+        setStep('notetaker_connection');
+      } else {
+        toast.error('Failed to save skill preferences. Please try again.');
       }
     } else {
-      setStep('complete');
+      setStep('notetaker_connection');
     }
-  }, [skillStatuses, organizationId, saveAllSkills, setStep]);
+  }, [skillStatuses, organizationId, persistSkillsToServer, setStep]);
 
   const renderSkillConfig = () => {
     if (!activeConfig) return null;
@@ -165,7 +178,7 @@ export function SkillsConfigStep() {
                   Qualification Criteria
                 </label>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
-                  Click to edit
+                  Editable Suggestions
                 </span>
               </div>
               <div className="space-y-1.5">
@@ -265,9 +278,10 @@ export function SkillsConfigStep() {
                 <textarea
                   value={q}
                   onChange={(e) => {
-                    if (e.target.value.length <= MAX_TEXTAREA_LENGTH) {
+                    const truncated = truncateToWordLimit(e.target.value);
+                    if (truncated.length <= MAX_TEXTAREA_LENGTH) {
                       const newQuestions = [...(activeConfig.questions || [])];
-                      newQuestions[i] = sanitizeInput(e.target.value);
+                      newQuestions[i] = sanitizeInput(truncated);
                       updateSkillConfig('lead_enrichment', { questions: newQuestions });
                     }
                   }}
@@ -275,7 +289,7 @@ export function SkillsConfigStep() {
                   className="w-full p-3 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none h-24 text-sm bg-gray-800 border-gray-700 text-white border"
                 />
                 <span className="absolute bottom-2 left-3 text-xs text-gray-500">
-                  {(q || '').length}/{MAX_TEXTAREA_LENGTH}
+                  {countWords(q || '')}/{MAX_TEXTAREA_WORDS} words
                 </span>
                 <button
                   onClick={() =>
@@ -317,14 +331,15 @@ export function SkillsConfigStep() {
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-gray-300">Tone Description</label>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
-                  {(activeConfig.tone || '').length}/{MAX_TEXTAREA_LENGTH}
+                  {countWords(activeConfig.tone || '')}/{MAX_TEXTAREA_WORDS} words
                 </span>
               </div>
               <textarea
                 value={activeConfig.tone || ''}
                 onChange={(e) => {
-                  if (e.target.value.length <= MAX_TEXTAREA_LENGTH) {
-                    updateSkillConfig('brand_voice', { tone: sanitizeInput(e.target.value) });
+                  const truncated = truncateToWordLimit(e.target.value);
+                  if (truncated.length <= MAX_TEXTAREA_LENGTH) {
+                    updateSkillConfig('brand_voice', { tone: sanitizeInput(truncated) });
                   }
                 }}
                 maxLength={MAX_TEXTAREA_LENGTH}
@@ -549,14 +564,15 @@ export function SkillsConfigStep() {
                   Ideal Company Profile
                 </label>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
-                  {(activeConfig.companyProfile || '').length}/{MAX_TEXTAREA_LENGTH}
+                  {countWords(activeConfig.companyProfile || '')}/{MAX_TEXTAREA_WORDS} words
                 </span>
               </div>
               <textarea
                 value={activeConfig.companyProfile || ''}
                 onChange={(e) => {
-                  if (e.target.value.length <= MAX_TEXTAREA_LENGTH) {
-                    updateSkillConfig('icp', { companyProfile: sanitizeInput(e.target.value) });
+                  const truncated = truncateToWordLimit(e.target.value);
+                  if (truncated.length <= MAX_TEXTAREA_LENGTH) {
+                    updateSkillConfig('icp', { companyProfile: sanitizeInput(truncated) });
                   }
                 }}
                 maxLength={MAX_TEXTAREA_LENGTH}
@@ -566,20 +582,20 @@ export function SkillsConfigStep() {
 
             {/* Buyer Persona */}
             <div>
-              <label className="text-sm font-medium mb-2 block text-gray-300">
-                Buyer Persona
-              </label>
               <div className="flex items-center justify-between mb-2">
-                <span></span>
+                <label className="text-sm font-medium text-gray-300">
+                  Buyer Persona
+                </label>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
-                  {(activeConfig.buyerPersona || '').length}/{MAX_TEXTAREA_LENGTH}
+                  {countWords(activeConfig.buyerPersona || '')}/{MAX_TEXTAREA_WORDS} words
                 </span>
               </div>
               <textarea
                 value={activeConfig.buyerPersona || ''}
                 onChange={(e) => {
-                  if (e.target.value.length <= MAX_TEXTAREA_LENGTH) {
-                    updateSkillConfig('icp', { buyerPersona: sanitizeInput(e.target.value) });
+                  const truncated = truncateToWordLimit(e.target.value);
+                  if (truncated.length <= MAX_TEXTAREA_LENGTH) {
+                    updateSkillConfig('icp', { buyerPersona: sanitizeInput(truncated) });
                   }
                 }}
                 maxLength={MAX_TEXTAREA_LENGTH}
@@ -775,10 +791,7 @@ export function SkillsConfigStep() {
         <div className="p-4 sm:p-6">
           <div className="mb-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-white">{activeSkill.name}</h3>
-                <p className="text-sm text-gray-400">{activeSkill.description}</p>
-              </div>
+              <p className="text-sm text-gray-400">{activeSkill.description}</p>
               <span className="text-sm text-gray-500">
                 {currentSkillIndex + 1} of {SKILLS.length}
               </span>
@@ -792,7 +805,7 @@ export function SkillsConfigStep() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
-              className="max-h-[calc(100vh-300px)] overflow-y-auto pr-1"
+              className="min-h-[400px] max-h-[calc(100vh-240px)] overflow-y-auto pr-1"
             >
               {renderSkillConfig()}
             </motion.div>

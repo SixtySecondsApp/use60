@@ -72,7 +72,7 @@ export class CallTypeService {
         .order('name', { ascending: true });
 
       if (error) throw error;
-      return (data || []) as OrgCallType[];
+      return (data || []) as unknown as OrgCallType[];
     } catch (error) {
       console.error('Error fetching call types:', CallTypeService.formatSupabaseError(error), error);
       throw error;
@@ -93,7 +93,7 @@ export class CallTypeService {
         .order('name', { ascending: true });
 
       if (error) throw error;
-      return (data || []) as OrgCallType[];
+      return (data || []) as unknown as OrgCallType[];
     } catch (error) {
       console.error('Error fetching active call types:', CallTypeService.formatSupabaseError(error), error);
       throw error;
@@ -116,7 +116,7 @@ export class CallTypeService {
         if (error.code === 'PGRST116') return null; // Not found
         throw error;
       }
-      return data as OrgCallType;
+      return data as unknown as OrgCallType;
     } catch (error) {
       console.error('Error fetching call type:', CallTypeService.formatSupabaseError(error), error);
       throw error;
@@ -159,7 +159,7 @@ export class CallTypeService {
         .single();
 
       if (error) throw error;
-      return data as OrgCallType;
+      return data as unknown as OrgCallType;
     } catch (error) {
       console.error('Error creating call type:', CallTypeService.formatSupabaseError(error), error);
       throw error;
@@ -184,7 +184,7 @@ export class CallTypeService {
         .single();
 
       if (error) throw error;
-      return data as OrgCallType;
+      return data as unknown as OrgCallType;
     } catch (error) {
       console.error('Error updating call type:', CallTypeService.formatSupabaseError(error), error);
       throw error;

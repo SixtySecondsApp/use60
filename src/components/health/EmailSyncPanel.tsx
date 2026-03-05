@@ -154,6 +154,14 @@ export function EmailSyncPanel() {
       </button>
 
       {/* Progress Indicator */}
+      {loading && progress.total === 0 && (
+        <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-md flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
+          <span className="text-sm text-blue-700 dark:text-blue-300">
+            Fetching emails from Gmail and matching against CRM contacts...
+          </span>
+        </div>
+      )}
       {loading && progress.total > 0 && (
         <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-md">
           <div className="flex items-center justify-between mb-2">
@@ -177,57 +185,93 @@ export function EmailSyncPanel() {
 
       {/* Error Display */}
       {error && (
-        <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-md flex items-start gap-2">
-          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-red-900 dark:text-red-100">Sync Errors</p>
-            <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+        error.includes('No CRM contacts found') ? (
+          <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-md flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-100">No contacts to sync</p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                Add contacts to your CRM first to sync emails. Email sync only matches emails from your existing CRM contacts.
+              </p>
+              <a
+                href="/contacts"
+                className="inline-flex items-center gap-1 mt-2 text-sm font-medium text-amber-800 dark:text-amber-200 underline hover:no-underline"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Go to Contacts
+              </a>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-md flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-900 dark:text-red-100">Sync failed</p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+            </div>
+          </div>
+        )
       )}
 
       {/* Sync Status */}
-      {syncStatus && !loading && (
-        <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-md">
-          <div className="flex items-start gap-2 mb-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-green-900 dark:text-green-100">
-                Sync Completed
-              </p>
-              <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                Last sync: {new Date(syncStatus.lastSyncTime).toLocaleString()}
-              </p>
+      {syncStatus && !loading && !error && (
+        <>
+          {syncStatus.emailsStored === 0 && syncStatus.crmContactCount > 0 ? (
+            <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-md flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                  No matching emails found
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                  Searched {syncStatus.totalEmails} emails but none matched your {syncStatus.crmContactCount} CRM contacts.
+                  This can happen if your contacts use different email addresses than what's in Gmail.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-md">
+              <div className="flex items-start gap-2 mb-3">
+                <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                    Sync Completed
+                  </p>
+                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                    Last sync: {new Date(syncStatus.lastSyncTime).toLocaleString()}
+                  </p>
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-gray-600 dark:text-gray-400">CRM Contacts</p>
-              <p className="font-semibold text-gray-900 dark:text-gray-100">
-                {syncStatus.crmContactCount}
-              </p>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600 dark:text-gray-400">CRM Contacts</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">
+                    {syncStatus.crmContactCount}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600 dark:text-gray-400">Emails Synced</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">
+                    {syncStatus.emailsStored}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600 dark:text-gray-400">CRM Matches</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">
+                    {syncStatus.crmEmailsMatched}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-600 dark:text-gray-400">AI Analyses</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">
+                    {syncStatus.emailsAnalyzed}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-gray-600 dark:text-gray-400">Emails Synced</p>
-              <p className="font-semibold text-gray-900 dark:text-gray-100">
-                {syncStatus.emailsStored}
-              </p>
-            </div>
-            <div>
-              <p className="text-gray-600 dark:text-gray-400">CRM Matches</p>
-              <p className="font-semibold text-gray-900 dark:text-gray-100">
-                {syncStatus.crmEmailsMatched}
-              </p>
-            </div>
-            <div>
-              <p className="text-gray-600 dark:text-gray-400">AI Analyses</p>
-              <p className="font-semibold text-gray-900 dark:text-gray-100">
-                {syncStatus.emailsAnalyzed}
-              </p>
-            </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );

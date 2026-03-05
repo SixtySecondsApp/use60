@@ -5,13 +5,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNotifications } from '@/lib/hooks/useNotifications';
 import { NotificationCenter } from './notifications/NotificationCenter';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [panelPosition, setPanelPosition] = useState({ top: 0, left: 0 });
   const bellRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const { unreadCount } = useNotifications({ limit: 20 });
+  const { unreadCount, clearAll } = useNotifications({ limit: 20 });
 
   // Close panel when clicking outside
   useEffect(() => {
@@ -83,6 +94,7 @@ export function NotificationBell() {
           )}
           aria-label="Notifications"
           aria-expanded={isOpen}
+          data-tour="notification-bell"
         >
           <Bell className="w-5 h-5 text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors" />
           
@@ -135,11 +147,38 @@ export function NotificationBell() {
               left: `${panelPosition.left}px`,
             } : {}}
           >
-            <NotificationCenter onClose={() => setIsOpen(false)} />
+            <NotificationCenter
+              onClose={() => setIsOpen(false)}
+              onDeleteAll={() => {
+                setIsOpen(false);
+                setShowDeleteConfirm(true);
+              }}
+            />
           </motion.div>
         </AnimatePresence>,
         document.body
       )}
+
+      {/* Delete all confirmation - rendered outside panel so it persists after panel closes */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete all notifications?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all your notifications. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => clearAll()}
+              className="bg-red-600 hover:bg-red-700 focus-visible:ring-red-500"
+            >
+              Delete All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

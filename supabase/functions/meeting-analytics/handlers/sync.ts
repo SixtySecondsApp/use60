@@ -159,6 +159,7 @@ interface MeetingRecord {
   meeting_start?: string;
   duration_minutes?: number;
   owner_user_id?: string;
+  org_id?: string;
 }
 
 interface SyncPayload {
@@ -190,9 +191,11 @@ export async function handleSyncMeeting(req: Request): Promise<Response> {
     return successResponse({ message: 'No transcript_text, skipping', meetingId }, req);
   }
 
-  // Resolve org_id from owner_user_id
+  // Resolve org_id — use explicit override if provided, otherwise resolve from owner_user_id
   let orgId: string | null = null;
-  if (record.owner_user_id) {
+  if (record.org_id) {
+    orgId = record.org_id;
+  } else if (record.owner_user_id) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     if (supabaseUrl && serviceRoleKey) {

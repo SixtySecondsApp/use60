@@ -23,6 +23,7 @@ import {
   Grid3X3,
   Sparkles,
   Bot,
+  Loader2,
 } from 'lucide-react';
 import ReactDOM from 'react-dom';
 import { PendingJoinRequestBanner } from '@/components/PendingJoinRequestBanner';
@@ -34,7 +35,7 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { TeamKPIGrid } from '@/components/insights/TeamKPIGrid';
 import { TeamComparisonMatrix } from '@/components/insights/TeamComparisonMatrix';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ActivationChecklist } from '@/components/dashboard/ActivationChecklist';
+
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 const LazyActivityLog = lazy(() => import('@/pages/ActivityLog'));
@@ -784,16 +785,13 @@ export default function Dashboard() {
 
         <TabsContent value="overview">
 
-      {/* Activation Checklist for new users */}
-      <ActivationChecklist />
-
       {/* Pending Join Request Banner */}
       <div className="mb-6">
         <PendingJoinRequestBanner />
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-8">
+      <div data-tour="dashboard-overview" className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-8">
         <MetricCard
           key="revenue-metric"
           title="New Business"
@@ -938,22 +936,11 @@ export default function Dashboard() {
 
         <TabsContent value="heatmap">
           <Suspense fallback={
-            <div className="pt-4 rounded-xl bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 p-4">
-              <div className="grid grid-cols-[30px_repeat(7,1fr)] gap-1">
-                {/* day labels */}
-                <div />
-                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (
-                  <Skeleton key={d} className="h-5 w-full rounded" />
-                ))}
-                {/* 5 weeks of cells */}
-                {Array.from({ length: 5 }).map((_, w) => (
-                  <React.Fragment key={w}>
-                    <Skeleton className="h-8 w-full rounded" />
-                    {Array.from({ length: 7 }).map((_, d) => (
-                      <Skeleton key={d} className="aspect-square w-full rounded" />
-                    ))}
-                  </React.Fragment>
-                ))}
+            <div className="p-4 sm:p-6 lg:p-8 mt-12 lg:mt-0 flex flex-col">
+              <div className="max-w-7xl mx-auto w-full">
+                <div className="bg-white dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700/50 shadow-sm dark:shadow-none p-8 flex items-center justify-center min-h-[400px]">
+                  <Loader2 className="h-6 w-6 text-gray-400 animate-spin" />
+                </div>
               </div>
             </div>
           }>

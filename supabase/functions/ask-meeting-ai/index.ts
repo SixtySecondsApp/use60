@@ -8,6 +8,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { captureException } from '../_shared/sentryEdge.ts'
+import { validateTranscript } from '../_shared/transcriptValidation.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -86,10 +87,11 @@ serve(async (req) => {
       )
     }
 
-    if (!meeting.transcript_text) {
+    const transcriptValidation = validateTranscript(meeting.transcript_text)
+    if (!transcriptValidation.valid) {
       return new Response(
-        JSON.stringify({ error: 'This meeting does not have a transcript yet' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: transcriptValidation.error, details: transcriptValidation.details }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 

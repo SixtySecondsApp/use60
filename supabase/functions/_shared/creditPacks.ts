@@ -68,14 +68,14 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
   starter: {
     packType: 'starter',
     credits: 100,
-    priceGBP: 49,
+    priceGBP: 15,
     label: 'Signal',
     description: 'Perfect for small teams getting started',
   },
   growth: {
     packType: 'growth',
     credits: 250,
-    priceGBP: 99,
+    priceGBP: 30,
     label: 'Insight',
     description: 'Best value for growing sales teams',
     popular: true,
@@ -83,7 +83,7 @@ export const CREDIT_PACKS: Record<PackType, CreditPack> = {
   scale: {
     packType: 'scale',
     credits: 500,
-    priceGBP: 149,
+    priceGBP: 50,
     label: 'Intelligence',
     description: 'Best value for high-volume AI usage',
   },

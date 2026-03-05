@@ -76,7 +76,7 @@ export type PlanSlug = 'free' | 'starter' | 'pro' | 'enterprise';
 // Organization Subscriptions
 // ============================================================================
 
-export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'paused';
+export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'paused' | 'grace_period' | 'expired';
 export type BillingCycle = 'monthly' | 'yearly';
 
 export interface OrganizationSubscription {
@@ -94,6 +94,8 @@ export interface OrganizationSubscription {
   current_period_end: string;
   trial_ends_at: string | null;
   canceled_at: string | null;
+  grace_period_started_at: string | null;
+  grace_period_ends_at: string | null;
 
   // External references
   stripe_subscription_id: string | null;
@@ -261,12 +263,21 @@ export interface BillingHistoryItem {
 // API Response Types
 // ============================================================================
 
+export interface OrgCreditBalance {
+  org_id: string;
+  balance_credits: number;
+  lifetime_purchased: number;
+  lifetime_consumed: number;
+}
+
 export interface CustomerWithDetails extends Organization {
   subscription: OrganizationSubscription | null;
   plan: SubscriptionPlan | null;
   member_count: number;
   current_usage: OrganizationUsage | null;
   feature_flags: OrganizationFeatureFlag[];
+  credit_balance: OrgCreditBalance | null;
+  owner_email: string | null;
 }
 
 export interface UsageStats {

@@ -15,6 +15,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 import { verifyCronSecret, isServiceRoleAuth, getUserOrgId } from '../_shared/edgeAuth.ts';
 import { getCorsHeaders, handleCorsPreflightRequest, errorResponse, jsonResponse } from '../_shared/corsHelper.ts';
 
@@ -842,9 +843,21 @@ async function categorizeEmail(
         confidence = aiResult.confidence;
         signals = aiResult.signals;
         source = 'ai';
-        
+
         // Add CRM context to signals
         signals.isCrmRelated = isCrmRelated;
+
+        // Log AI cost event (fire-and-forget)
+        if (aiResult.inputTokens !== undefined || aiResult.outputTokens !== undefined) {
+          logAICostEvent(
+            supabase, userId, orgId,
+            'anthropic', 'claude-3-5-haiku-20241022',
+            aiResult.inputTokens || 0, aiResult.outputTokens || 0,
+            'scheduled_email_categorize',
+            undefined,
+            { source: 'agent_automated', agentType: 'scheduled-google-context-sync' },
+          ).catch((e: unknown) => console.warn('[scheduled-google-context-sync] cost log error:', e));
+        }
       } catch (aiError: any) {
         console.warn(`[categorize] AI failed, falling back to rules: ${aiError.message}`);
         const rulesResult = categorizeByrules(message, direction, fromEmail, subject, isCrmRelated);
@@ -982,6 +995,8 @@ async function categorizeWithAI(
   category: string;
   confidence: number;
   signals: any;
+  inputTokens?: number;
+  outputTokens?: number;
 }> {
   const systemPrompt = `You are an email categorizer. Categorize emails into exactly one of these categories:
 - to_respond: Requires a reply (questions, requests, asks)
@@ -1045,6 +1060,8 @@ Preview: ${snippet.substring(0, 500)}`;
       is_sales_related: Boolean(parsed.signals?.is_sales_related),
       keywords: parsed.signals?.keywords || [],
     },
+    inputTokens: data.usage?.input_tokens || 0,
+    outputTokens: data.usage?.output_tokens || 0,
   };
 }
 

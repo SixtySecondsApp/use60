@@ -424,6 +424,13 @@ function OpsPage() {
           )}
           New Table
         </button>
+        <button
+          onClick={() => navigate('/ops/pipelines')}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-violet-600/30 bg-violet-600/10 px-3 py-2.5 text-sm font-medium text-violet-300 transition-colors hover:bg-violet-600/20 hover:border-violet-500/50"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          AI Pipelines
+        </button>
       </div>
 
       <p className="mb-6 text-sm text-zinc-500">AI-powered lead enrichment and data processing</p>

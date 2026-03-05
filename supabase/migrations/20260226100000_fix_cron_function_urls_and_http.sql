@@ -527,7 +527,12 @@ $$;
 -- =============================================================================
 
 -- Job 20: process-notification-queue (every 5 min)
-SELECT cron.unschedule(20);
+DO $$
+BEGIN
+  PERFORM cron.unschedule(20);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'cron job 20 not found, skipping unschedule';
+END $$;
 SELECT cron.schedule(
   'process-notification-queue',
   '*/5 * * * *',
@@ -544,7 +549,12 @@ SELECT cron.schedule(
 );
 
 -- Job 21: send-feedback-requests (daily 10am)
-SELECT cron.unschedule(21);
+DO $$
+BEGIN
+  PERFORM cron.unschedule(21);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'cron job 21 not found, skipping unschedule';
+END $$;
 SELECT cron.schedule(
   'send-feedback-requests',
   '0 10 * * *',
@@ -561,7 +571,12 @@ SELECT cron.schedule(
 );
 
 -- Job 28: process-reengagement (every 4 hours)
-SELECT cron.unschedule(28);
+DO $$
+BEGIN
+  PERFORM cron.unschedule(28);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'cron job 28 not found, skipping unschedule';
+END $$;
 SELECT cron.schedule(
   'process-reengagement',
   '0 */4 * * *',
@@ -578,7 +593,12 @@ SELECT cron.schedule(
 );
 
 -- Job 49: meeting-analytics-cron daily (8am)
-SELECT cron.unschedule(49);
+DO $$
+BEGIN
+  PERFORM cron.unschedule(49);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'cron job 49 not found, skipping unschedule';
+END $$;
 SELECT cron.schedule(
   'meeting-analytics-daily',
   '0 8 * * *',
@@ -595,7 +615,12 @@ SELECT cron.schedule(
 );
 
 -- Job 50: meeting-analytics-cron weekly (Monday 9am)
-SELECT cron.unschedule(50);
+DO $$
+BEGIN
+  PERFORM cron.unschedule(50);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'cron job 50 not found, skipping unschedule';
+END $$;
 SELECT cron.schedule(
   'meeting-analytics-weekly',
   '0 9 * * 1',
@@ -612,7 +637,12 @@ SELECT cron.schedule(
 );
 
 -- Job 61: agent-engagement-patterns (Sunday 2am)
-SELECT cron.unschedule(61);
+DO $$
+BEGIN
+  PERFORM cron.unschedule(61);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'cron job 61 not found, skipping unschedule';
+END $$;
 SELECT cron.schedule(
   'agent-engagement-patterns',
   '0 2 * * 0',
@@ -629,7 +659,12 @@ SELECT cron.schedule(
 );
 
 -- Job 62: agent-org-learning (Sunday 6am)
-SELECT cron.unschedule(62);
+DO $$
+BEGIN
+  PERFORM cron.unschedule(62);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'cron job 62 not found, skipping unschedule';
+END $$;
 SELECT cron.schedule(
   'agent-org-learning',
   '0 6 * * 0',
@@ -646,7 +681,12 @@ SELECT cron.schedule(
 );
 
 -- Job 63: agent-pipeline-snapshot (Monday 5:30am)
-SELECT cron.unschedule(63);
+DO $$
+BEGIN
+  PERFORM cron.unschedule(63);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'cron job 63 not found, skipping unschedule';
+END $$;
 SELECT cron.schedule(
   'agent-pipeline-snapshot',
   '30 5 * * 1',
@@ -663,7 +703,12 @@ SELECT cron.schedule(
 );
 
 -- Job 64: memory-commitment-tracker (daily 8am)
-SELECT cron.unschedule(64);
+DO $$
+BEGIN
+  PERFORM cron.unschedule(64);
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'cron job 64 not found, skipping unschedule';
+END $$;
 SELECT cron.schedule(
   'memory-commitment-tracker',
   '0 8 * * *',

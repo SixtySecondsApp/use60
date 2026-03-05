@@ -65,7 +65,8 @@ ALTER TABLE slack_copilot_analytics ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own analytics
 DO $$ BEGIN
-  CREATE POLICY "Users can read own copilot analytics"
+  DROP POLICY IF EXISTS "Users can read own copilot analytics" ON slack_copilot_analytics;
+CREATE POLICY "Users can read own copilot analytics"
     ON slack_copilot_analytics
     FOR SELECT
     USING (auth.uid() = user_id);
@@ -74,7 +75,8 @@ END $$;
 
 -- Service role can do everything (for edge functions)
 DO $$ BEGIN
-  CREATE POLICY "Service role full access to copilot analytics"
+  DROP POLICY IF EXISTS "Service role full access to copilot analytics" ON slack_copilot_analytics;
+CREATE POLICY "Service role full access to copilot analytics"
     ON slack_copilot_analytics
     FOR ALL
     USING (auth.role() = 'service_role');

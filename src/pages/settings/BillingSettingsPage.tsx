@@ -18,6 +18,7 @@ import {
   useCurrentSubscription,
   useCreateCheckoutSession,
 } from '@/lib/hooks/useSubscription';
+import { useSubscriptionGate } from '@/lib/hooks/useSubscriptionGate';
 import { PLAN_DETAILS, ANNUAL_SAVINGS } from '@/lib/config/planDetails';
 import { CreditBalanceSection } from '@/components/billing/CreditBalanceSection';
 import { TransactionHistorySection } from '@/components/billing/TransactionHistorySection';
@@ -93,6 +94,7 @@ export default function BillingSettingsPage() {
   const { symbol } = useOrgMoney();
   const { subscription, trial, isLoading, error } = useCurrentSubscription();
   const createCheckoutSession = useCreateCheckoutSession();
+  const subscriptionGate = useSubscriptionGate(organizationId);
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
@@ -102,12 +104,28 @@ export default function BillingSettingsPage() {
     cycle: ModalBillingCycle;
   } | null>(null);
 
+  // Internal admin orgs bypass subscription entirely
+  const isInternalAdmin = subscriptionGate.status === 'internal_admin';
+
   const currentPlan = subscription?.plan;
-  const currentPlanSlug = (currentPlan?.slug ?? 'basic') as PlanSlug;
-  const isBasicUser = currentPlanSlug === 'basic' || currentPlan?.is_free_tier;
+  const hasSubscription = !!subscription || isInternalAdmin;
+  const currentPlanSlug = currentPlan?.slug as PlanSlug | null ?? null;
+  const hasNoPlan = !hasSubscription;
+  const isBasicUser = hasSubscription && (currentPlanSlug === 'basic' || currentPlan?.is_free_tier);
   const hasStripeSubscription = !!subscription?.stripe_subscription_id;
   const currentBillingCycle: ModalBillingCycle =
     subscription?.billing_cycle === 'yearly' ? 'annual' : 'monthly';
+
+  // Bundled credits from plan features
+  const bundledCredits = currentPlan?.features?.bundled_credits;
+  const bundledDisplay =
+    typeof bundledCredits === 'number' && bundledCredits > 0
+      ? `${bundledCredits}/mo`
+      : '0';
+
+  // Cancelled / cancel-at-period-end state
+  const isCancelled = subscription?.status === 'canceled';
+  const isCancelPending = subscription?.cancel_at_period_end && !isCancelled;
 
   // Format next billing date
   const nextBillingDate = subscription?.current_period_end
@@ -119,13 +137,15 @@ export default function BillingSettingsPage() {
     : null;
 
   // Billing cycle label
-  const billingCycleLabel =
+  const billingCycleLabel = !hasSubscription ? '—' :
     subscription?.billing_cycle === 'yearly' ? 'Annual' : 'Monthly';
 
   // Monthly cost display
-  const monthlyCostDisplay = currentPlan?.price_monthly != null
-    ? `${symbol}${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
-    : `${symbol}29/mo`;
+  const monthlyCostDisplay = isInternalAdmin
+    ? 'Free'
+    : currentPlan?.price_monthly != null
+      ? `${symbol}${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
+      : hasSubscription ? `${symbol}29/mo` : '—';
 
   // Trial progress
   const daysRemaining = trial?.daysRemaining ?? 0;
@@ -225,17 +245,19 @@ export default function BillingSettingsPage() {
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-xl font-bold text-gray-900 dark:text-white">
-                      {currentPlan?.name ?? 'Basic Plan'}
+                      {isInternalAdmin ? 'Internal Admin' : hasSubscription ? (currentPlan?.name ?? 'Basic Plan') : 'No Plan Selected'}
                     </span>
-                    {subscription?.status ? (
+                    {isInternalAdmin ? (
+                      <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
+                        No Subscription Required
+                      </span>
+                    ) : subscription?.status ? (
                       <StatusBadge status={subscription.status} />
-                    ) : (
-                      <StatusBadge status="active" />
-                    )}
+                    ) : null}
                   </div>
 
-                  {/* Upgrade CTA for Basic users */}
-                  {isBasicUser && (
+                  {/* Upgrade CTA for Basic users or no-plan users (hidden for internal admins) */}
+                  {!isInternalAdmin && (isBasicUser || hasNoPlan) && (
                     <Button
                       size="sm"
                       onClick={() => handlePlanAction('pro')}
@@ -247,14 +269,14 @@ export default function BillingSettingsPage() {
                       ) : (
                         <Sparkles className="w-3.5 h-3.5 mr-1.5" />
                       )}
-                      Upgrade to Pro
+                      {hasNoPlan ? 'Choose a Plan' : 'Upgrade to Pro'}
                       <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                     </Button>
                   )}
                 </div>
 
                 {/* Stats grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
                   {/* Monthly cost */}
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
@@ -276,22 +298,65 @@ export default function BillingSettingsPage() {
                     </p>
                   </div>
 
+                  {/* Credits included */}
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      Credits Included
+                    </p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {bundledDisplay}
+                    </p>
+                  </div>
+
                   {/* Next billing date */}
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      Next Billing
+                      {isCancelPending ? 'Ends On' : 'Next Billing'}
                     </p>
                     <p className={cn(
                       'text-lg font-semibold',
-                      nextBillingDate
-                        ? 'text-gray-900 dark:text-white'
-                        : 'text-gray-400 dark:text-gray-500'
+                      isCancelPending
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : nextBillingDate
+                          ? 'text-gray-900 dark:text-white'
+                          : 'text-gray-400 dark:text-gray-500'
                     )}>
                       {nextBillingDate ?? '—'}
                     </p>
                   </div>
                 </div>
+
+                {/* Cancelled / cancel-pending banner */}
+                {isCancelled && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 p-3">
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <AlertCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <span>Your subscription has ended. Re-subscribe to regain access.</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handlePlanAction(currentPlanSlug)}
+                        disabled={createCheckoutSession.isPending}
+                        className="bg-[#37bd7e] hover:bg-[#2da76c] text-white flex-shrink-0"
+                      >
+                        Re-subscribe
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {isCancelPending && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-700 dark:text-amber-400">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      <span>
+                        Subscription ends on {nextBillingDate}. You&apos;ll keep access until then.
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Trial progress */}
                 {trial?.isTrialing && (
@@ -408,9 +473,9 @@ export default function BillingSettingsPage() {
             {(['basic', 'pro'] as const).map((slug) => {
               const plan = PLAN_DETAILS[slug];
               const savings = ANNUAL_SAVINGS[slug];
-              const isCurrentPlan = currentPlanSlug === slug;
-              const isUpgrade = slug === 'pro' && isBasicUser;
-              const isDowngrade = slug === 'basic' && !isBasicUser;
+              const isCurrentPlan = currentPlanSlug !== null && currentPlanSlug === slug;
+              const isUpgrade = slug === 'pro' && (hasNoPlan || isBasicUser);
+              const isDowngrade = slug === 'basic' && !isBasicUser && !hasNoPlan;
               // Cycle switch: on the current plan card but selected a different cycle
               const isCycleSwitch = isCurrentPlan && billingCycle !== currentBillingCycle;
 
@@ -510,7 +575,15 @@ export default function BillingSettingsPage() {
                   </ul>
 
                   {/* CTA button */}
-                  {isCurrentPlan && !isCycleSwitch ? (
+                  {isInternalAdmin ? (
+                    <Button
+                      variant="outline"
+                      disabled
+                      className="w-full opacity-60 cursor-default"
+                    >
+                      No Subscription Required
+                    </Button>
+                  ) : isCurrentPlan && !isCycleSwitch ? (
                     <Button
                       variant="outline"
                       disabled
@@ -582,7 +655,7 @@ export default function BillingSettingsPage() {
           isOpen={!!planChangeTarget}
           onClose={() => setPlanChangeTarget(null)}
           orgId={organizationId}
-          currentPlanSlug={currentPlanSlug}
+          currentPlanSlug={(currentPlanSlug ?? 'basic') as PlanSlug}
           currentBillingCycle={currentBillingCycle}
           currentPeriodEnd={subscription?.current_period_end ?? null}
           targetPlanSlug={planChangeTarget.slug}

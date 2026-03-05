@@ -2,7 +2,8 @@
 // Handles Slack Interactivity - button clicks, modal submissions, shortcuts
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
   buildTaskAddedConfirmation,
@@ -44,6 +45,9 @@ import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
 import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
 import { handleAutopilotPromotion } from './handlers/autopilotPromotion.ts';
 import { handlePrepBriefingAction, handlePrepBriefingAskSubmission, handlePrepBriefingFeedbackSubmission } from './handlers/prepBriefing.ts';
+import { enrichContactContext } from '../_shared/orchestrator/adapters/contextEnrichment.ts';
+import { buildFollowupEmailPrompt } from '../_shared/orchestrator/adapters/emailSend.ts';
+import { buildEmailDraftApprovalBlocks } from '../_shared/orchestrator/adapters/emailDraftApproval.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -789,6 +793,17 @@ Return JSON: { "subject": "...", "body": "..." }`;
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
           emailDraft = { subject: parsed.subject || emailDraft.subject, body: parsed.body || emailDraft.body };
+        }
+        // Log AI cost event (fire-and-forget)
+        if (aiData.usage && ctx?.userId) {
+          logAICostEvent(
+            supabase, ctx.userId, ctx.orgId ?? null,
+            'anthropic', 'claude-haiku-4-5-20251001',
+            aiData.usage.input_tokens || 0, aiData.usage.output_tokens || 0,
+            'slack_draft_followup',
+            undefined,
+            { source: 'user_initiated', agentType: 'slack-interactive' },
+          ).catch((e: unknown) => console.warn('[slack-interactive] cost log error:', e));
         }
       }
     }
@@ -3328,6 +3343,85 @@ async function handleHITLApprove(
       resumeOrchestratorJob(propJobId, hitlAction.approvalId).catch(() => {});
     }
 
+    // AUT-002: Record autopilot signal for proposal approval (fire-and-forget).
+    // If the rep edited sections before approving, compute Levenshtein edit distance
+    // and record 'approved_edited' with edit_distance + edit_fields.
+    // Otherwise record plain 'approved' for proposal.send.
+    if (ctx?.userId && approval.org_id) {
+      const approvedAt = Date.now();
+      const createdAt = approval.created_at ? new Date(approval.created_at).getTime() : approvedAt;
+      const timeToRespondMs = approvedAt - createdAt;
+      const proposalId = (approval.original_content?.proposal_id as string | undefined) ||
+        (approval.metadata?.proposal_id as string | undefined);
+
+      Promise.resolve().then(async () => {
+        try {
+          const { recordSignal } = await import('../_shared/autopilot/signals.ts');
+          const { computeProposalEditMetrics } = await import('../_shared/autopilot/editDistance.ts');
+
+          // Determine autonomy tier for this action
+          const { data: tierRow } = await supabase
+            .from('autopilot_confidence')
+            .select('current_tier')
+            .eq('user_id', ctx.userId!)
+            .eq('action_type', 'proposal.send')
+            .maybeSingle();
+          const autonomyTier = (tierRow as Record<string, unknown> | null)?.current_tier as string ?? 'approve';
+
+          // Check for edited sections in edited_content
+          type ProposalSectionRaw = { id: string; title: string; content: string; order: number };
+          const editedSections = (approval.edited_content?.sections as ProposalSectionRaw[] | undefined);
+
+          if (editedSections && editedSections.length > 0 && proposalId) {
+            // Fetch original sections from proposals table
+            const { data: proposalRow } = await supabase
+              .from('proposals')
+              .select('sections')
+              .eq('id', proposalId)
+              .maybeSingle();
+
+            const originalSections = (proposalRow?.sections as ProposalSectionRaw[] | undefined) ?? [];
+
+            if (originalSections.length > 0) {
+              const metrics = computeProposalEditMetrics(originalSections, editedSections);
+              const editFields = metrics.edited_section_ids.map((id) => {
+                const sec = [...originalSections, ...editedSections].find((s) => s.id === id);
+                return sec?.title ?? id;
+              });
+
+              await recordSignal(supabase as Parameters<typeof recordSignal>[0], {
+                user_id: ctx.userId!,
+                org_id: approval.org_id,
+                action_type: 'proposal.send',
+                agent_name: 'proposal-pipeline-v2',
+                signal: 'approved_edited',
+                edit_distance: metrics.overall_distance,
+                edit_fields: editFields,
+                time_to_respond_ms: timeToRespondMs,
+                deal_id: (approval.original_content?.deal_id as string | undefined) ?? undefined,
+                autonomy_tier_at_time: autonomyTier,
+              });
+              return;
+            }
+          }
+
+          // No edits detected — plain approval signal
+          await recordSignal(supabase as Parameters<typeof recordSignal>[0], {
+            user_id: ctx.userId!,
+            org_id: approval.org_id,
+            action_type: 'proposal.send',
+            agent_name: 'proposal-pipeline-v2',
+            signal: 'approved',
+            time_to_respond_ms: timeToRespondMs,
+            deal_id: (approval.original_content?.deal_id as string | undefined) ?? undefined,
+            autonomy_tier_at_time: autonomyTier,
+          });
+        } catch (err) {
+          console.error('[AUT-002] Failed to record proposal approval signal:', err);
+        }
+      }).catch(() => {});
+    }
+
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -3918,12 +4012,8 @@ async function handleScheduleEmailModal(
     });
   }
 
-  // Validate the approval still exists and is pending.
-  const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
-  if (!validation.valid || !validation.approval) {
-    return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
-  }
-
+  // IMPORTANT: trigger_id expires in 3 seconds. Fetch bot token FIRST (single query),
+  // then open the modal immediately. Validation happens in the submission handler.
   const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
   if (!orgConnection) {
     console.warn('[EMAIL-008] No org connection — cannot open schedule modal');
@@ -3933,7 +4023,7 @@ async function handleScheduleEmailModal(
     });
   }
 
-  // Default: tomorrow at 9am (local Slack user's date; Slack will format it correctly)
+  // Default: tomorrow at 9am
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const defaultDate = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD
@@ -3947,6 +4037,7 @@ async function handleScheduleEmailModal(
     slackTeamId: payload.team?.id,
   });
 
+  // Open modal immediately — don't waste trigger_id on validation
   const modalRes = await fetch('https://slack.com/api/views.open', {
     method: 'POST',
     headers: {
@@ -3993,7 +4084,7 @@ async function handleScheduleEmailModal(
             },
             hint: {
               type: 'plain_text',
-              text: 'Times are in UTC. Convert from your local timezone before submitting.',
+              text: 'Time is in your local timezone.',
             },
           },
         ],
@@ -4048,8 +4139,31 @@ async function handleScheduleEmailSubmission(
     );
   }
 
-  // Construct scheduled_at as UTC ISO string (date_picker + time_picker are both UTC in Slack)
-  const scheduledAt = new Date(`${datePicked}T${timePicked}:00.000Z`);
+  // Slack's datepicker/timepicker return values in the user's local timezone.
+  // Fetch the user's tz offset and IANA tz name from Slack to construct the correct UTC timestamp.
+  let tzOffset = 0; // fallback: UTC
+  let userTimezone = 'UTC'; // IANA timezone for display (e.g. "America/New_York")
+  try {
+    const orgConn = await getSlackOrgConnection(supabase, payload.team?.id);
+    if (orgConn?.botToken) {
+      const userInfoResp = await fetch(`https://slack.com/api/users.info?user=${payload.user.id}`, {
+        headers: { 'Authorization': `Bearer ${orgConn.botToken}` },
+      });
+      const userInfo = await userInfoResp.json();
+      if (userInfo.ok && userInfo.user?.tz_offset != null) {
+        tzOffset = userInfo.user.tz_offset; // seconds offset from UTC
+      }
+      if (userInfo.ok && userInfo.user?.tz) {
+        userTimezone = userInfo.user.tz; // IANA timezone string
+      }
+    }
+  } catch {
+    // Fallback to UTC on failure
+  }
+
+  // Construct as UTC: parse as local time, then subtract tz offset
+  const localMs = new Date(`${datePicked}T${timePicked}:00.000Z`).getTime();
+  const scheduledAt = new Date(localMs - tzOffset * 1000);
 
   // Must be in the future
   if (scheduledAt <= new Date()) {
@@ -4067,18 +4181,21 @@ async function handleScheduleEmailSubmission(
   }
   const approval = validation.approval;
 
-  // Human-readable label, e.g. "Fri Feb 28 · 9:00am UTC"
+  // Human-readable label in the user's timezone, e.g. "Fri Feb 28 · 9:00 AM EST"
+  const tzShortName = new Intl.DateTimeFormat('en-US', { timeZone: userTimezone, timeZoneName: 'short' })
+    .formatToParts(scheduledAt)
+    .find(p => p.type === 'timeZoneName')?.value || userTimezone;
   const scheduledLabel = scheduledAt.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
-    timeZone: 'UTC',
+    timeZone: userTimezone,
   }) + ' · ' + scheduledAt.toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-    timeZone: 'UTC',
-  }) + ' UTC';
+    timeZone: userTimezone,
+  }) + ' ' + tzShortName;
 
   const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
 
@@ -4316,13 +4433,22 @@ function buildHITLEditModalBlocks(
   const blocks: unknown[] = [];
 
   switch (resourceType) {
-    case 'email_draft':
-      // Normalize recipient for the "To:" context line (supports multiple producer shapes).
-      if (!originalContent.recipient && (originalContent.recipientEmail || originalContent.to)) {
-        originalContent.recipient = (originalContent.recipientEmail as string) || (originalContent.to as string);
-      }
+    case 'email_draft': {
+      // Normalize recipient (supports multiple producer shapes).
+      const recipientEmail = (originalContent.to as string) || (originalContent.recipientEmail as string) || (originalContent.recipient as string) || '';
 
       blocks.push(
+        {
+          type: 'input',
+          block_id: 'to',
+          label: { type: 'plain_text', text: 'To' },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'to_input',
+            initial_value: recipientEmail,
+            placeholder: { type: 'plain_text', text: 'Recipient email' },
+          },
+        },
         {
           type: 'input',
           block_id: 'subject',
@@ -4347,13 +4473,8 @@ function buildHITLEditModalBlocks(
           },
         }
       );
-      if (originalContent.recipient) {
-        blocks.unshift({
-          type: 'context',
-          elements: [{ type: 'mrkdwn', text: `*To:* ${originalContent.recipient}` }],
-        });
-      }
       break;
+    }
 
     case 'task_list':
       const tasks = Array.isArray(originalContent.tasks)
@@ -4413,7 +4534,10 @@ function buildHITLEditModalBlocks(
 }
 
 /**
- * Handle HITL edit action - opens a modal for editing (or, for email_draft, updates Slack message)
+ * Handle HITL edit action - opens a modal for editing
+ *
+ * IMPORTANT: trigger_id expires in 3 seconds. We fetch bot token + approval
+ * in parallel (2 queries), then open the modal immediately.
  */
 async function handleHITLEdit(
   supabase: ReturnType<typeof createClient>,
@@ -4421,16 +4545,18 @@ async function handleHITLEdit(
   action: SlackAction,
   hitlAction: ParsedHITLAction
 ): Promise<Response> {
-  // Validate the approval first (needed for both email_draft and modal flows)
-  const validation = await validateHITLApproval(supabase, hitlAction.approvalId);
+  // Run both queries in parallel to maximise time for views.open
+  const [validation, orgConnection] = await Promise.all([
+    validateHITLApproval(supabase, hitlAction.approvalId),
+    getSlackOrgConnection(supabase, payload.team?.id),
+  ]);
+
   if (!validation.valid || !validation.approval) {
     return handleExpiredHITLApproval(supabase, payload, validation.approval, validation.error || 'Invalid approval');
   }
 
   const approval = validation.approval;
 
-  // Get org connection for bot token (needed for both flows)
-  const orgConnection = await getSlackOrgConnection(supabase, payload.team?.id);
   if (!orgConnection) {
     if (payload.response_url) {
       await sendEphemeral(payload.response_url, {
@@ -4438,70 +4564,6 @@ async function handleHITLEdit(
         text: 'Slack is not connected.',
       });
     }
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
-  // EMAIL-007: For email_draft approvals, the [Edit in 60] button is a URL button that already
-  // navigates the rep to the app. The Slack handler's job is to:
-  //   1. Update the Slack message to show "Editing in 60..." with the deep link
-  //   2. Record the editing action in audit logs
-  // The approval row stays 'pending' so the frontend can re-submit and create a new approval (AC4).
-  if (hitlAction.resourceType === 'email_draft') {
-    const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
-    const deepLinkUrl = `${appUrl}/meetings?approval=${hitlAction.approvalId}`;
-    const resourceLabel = approval.resource_name || 'Follow-up Email';
-    const timestamp = new Date().toISOString();
-
-    // Update Slack message to show editing state
-    const editingBlocks = [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `_Editing in Sixty..._ <${deepLinkUrl}|Open in Sixty>\n_${resourceLabel}_`,
-        },
-      },
-      {
-        type: 'context',
-        elements: [
-          {
-            type: 'mrkdwn',
-            text: `Editing started by <@${payload.user.id}> • ${new Date(timestamp).toLocaleString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-              hour12: true,
-            })}`,
-          },
-        ],
-      },
-    ];
-
-    // Try response_url first (fastest, works within ~30 min of message send)
-    if (payload.response_url) {
-      await updateMessage(payload.response_url, editingBlocks);
-    } else if (approval.slack_channel_id && approval.slack_message_ts) {
-      await updateMessageViaApi(
-        orgConnection.botToken,
-        approval.slack_channel_id,
-        approval.slack_message_ts,
-        editingBlocks,
-        `Editing in Sixty... ${resourceLabel}`
-      );
-    }
-
-    // Log the action
-    await logHITLAction(supabase, approval, 'editing_started', ctx?.userId || payload.user.id, {
-      deep_link: deepLinkUrl,
-      slack_user_id: payload.user.id,
-    });
-
-    console.log(`[EMAIL-007] Edit in 60 clicked for approval ${hitlAction.approvalId} — Slack message updated to editing state`);
-
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -4607,7 +4669,7 @@ async function handleHITLEdit(
         callback_id: 'hitl_edit_modal',
         private_metadata: privateMetadata,
         title: { type: 'plain_text', text: `Edit ${getResourceTypeLabel(hitlAction.resourceType)}`, emoji: true },
-        submit: { type: 'plain_text', text: '✅ Save & Approve', emoji: true },
+        submit: { type: 'plain_text', text: 'Approve and Send', emoji: true },
         close: { type: 'plain_text', text: 'Cancel' },
         blocks: editBlocks,
       },
@@ -4642,6 +4704,7 @@ function extractEditedContent(
 
   switch (resourceType) {
     case 'email_draft':
+      editedContent.to = values['to']?.['to_input']?.value || '';
       editedContent.subject = values['subject']?.['subject_input']?.value || '';
       editedContent.body = values['body']?.['body_input']?.value || '';
       break;
@@ -4663,13 +4726,16 @@ function extractEditedContent(
 
 /**
  * Handle HITL edit modal submission
+ *
+ * Slack requires a response within 3 seconds for view_submission payloads.
+ * We parse metadata synchronously, return immediately, then do all async
+ * work (DB update, Slack message update, email callback) in the background.
  */
 async function handleHITLEditSubmission(
   supabase: ReturnType<typeof createClient>,
   payload: InteractivePayload
 ): Promise<Response> {
-  const ctx = await getSixtyUserContext(supabase, payload.user.id, payload.team?.id);
-
+  // Parse metadata synchronously — this is the only thing that can block the response
   let meta: {
     approvalId?: string;
     resourceType?: HITLResourceType;
@@ -4690,73 +4756,69 @@ async function handleHITLEditSubmission(
     return new Response('', { status: 200, headers: corsHeaders });
   }
 
-  // Validate the approval is still valid
-  const validation = await validateHITLApproval(supabase, meta.approvalId);
-  if (!validation.valid || !validation.approval) {
-    return new Response(
-      JSON.stringify({
-        response_action: 'errors',
-        errors: {
-          content: validation.error || 'This approval is no longer valid.',
-        },
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  const approval = validation.approval;
+  // Extract form values synchronously (already in memory from payload)
   const values = (payload.view?.state?.values || {}) as Record<string, Record<string, { value?: string }>>;
-
-  // Extract edited content
   const editedContent = extractEditedContent(meta.resourceType, values);
   const feedback = values['feedback']?.['feedback_input']?.value || null;
 
-  // Process the edit action
-  const { error: updateError } = await supabase.rpc('process_hitl_action', {
-    p_approval_id: meta.approvalId,
-    p_action: 'edited',
-    p_actioned_by: ctx?.userId || null,
-    p_response: {
-      slack_user_id: payload.user.id,
-      feedback,
-    },
-    p_edited_content: editedContent,
-  });
+  // Fire-and-forget: all DB/network operations run after the response is sent
+  const approvalId = meta.approvalId;
+  const resourceType = meta.resourceType;
+  const slackUserId = payload.user.id;
+  const teamId = payload.team?.id;
+  const responseUrl = meta.responseUrl;
 
-  if (updateError) {
-    console.error('Error processing HITL edit submission:', updateError);
-    return new Response(
-      JSON.stringify({
-        response_action: 'errors',
-        errors: {
-          content: 'Failed to save changes. Please try again.',
-        },
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+  (async () => {
+    try {
+      const ctx = await getSixtyUserContext(supabase, slackUserId, teamId);
 
-  // Update the original message if we have the response URL
-  if (meta.responseUrl) {
-    const confirmationData: HITLActionedConfirmation = {
-      action: 'edited',
-      resourceType: meta.resourceType,
-      resourceName: approval.resource_name || getResourceTypeLabel(meta.resourceType),
-      slackUserId: payload.user.id,
-      timestamp: new Date().toISOString(),
-      editSummary: feedback || undefined,
-    };
-    const confirmationMessage = buildHITLActionedConfirmation(confirmationData);
-    await updateMessage(meta.responseUrl, confirmationMessage.blocks);
-  }
+      // Validate the approval
+      const validation = await validateHITLApproval(supabase, approvalId);
+      if (!validation.valid || !validation.approval) {
+        console.error(`[hitl_edit_modal] Approval ${approvalId} is no longer valid:`, validation.error);
+        return;
+      }
+      const approval = validation.approval;
 
-  // Log the action
-  await logHITLAction(supabase, approval, 'edited', ctx?.userId || payload.user.id, { feedback });
+      // Save edited content to DB
+      const { error: updateError } = await supabase.rpc('process_hitl_action', {
+        p_approval_id: approvalId,
+        p_action: 'edited',
+        p_actioned_by: ctx?.userId || null,
+        p_response: { slack_user_id: slackUserId, feedback },
+        p_edited_content: editedContent,
+      });
 
-  // Trigger callback with edited content
-  await triggerHITLCallback(approval, 'edited', editedContent);
+      if (updateError) {
+        console.error('[hitl_edit_modal] process_hitl_action error:', updateError);
+        return;
+      }
 
-  // Close the modal
+      // Update the original Slack message
+      if (responseUrl) {
+        const confirmationData: HITLActionedConfirmation = {
+          action: 'edited',
+          resourceType,
+          resourceName: approval.resource_name || getResourceTypeLabel(resourceType),
+          slackUserId,
+          timestamp: new Date().toISOString(),
+          editSummary: feedback || undefined,
+        };
+        const confirmationMessage = buildHITLActionedConfirmation(confirmationData);
+        await updateMessage(responseUrl, confirmationMessage.blocks);
+      }
+
+      // Log + trigger email send callback
+      await logHITLAction(supabase, approval, 'edited', ctx?.userId || slackUserId, { feedback });
+      await triggerHITLCallback(approval, 'edited', editedContent);
+
+      console.log(`[hitl_edit_modal] Completed async processing for approval ${approvalId}`);
+    } catch (err) {
+      console.error('[hitl_edit_modal] Background processing error:', err);
+    }
+  })();
+
+  // Return immediately so Slack doesn't show "trouble connecting"
   return new Response('', { status: 200, headers: corsHeaders });
 }
 
@@ -8561,8 +8623,11 @@ function getDefaultCoachingInsight(sentiment: 'positive' | 'neutral' | 'challeng
 }
 
 /**
- * Handle "Draft Follow-up" button from debrief
- * Triggers the follow-up command for meeting attendees
+ * Handle "Draft Follow-up" button from debrief card.
+ *
+ * Generates an AI follow-up email on-demand and delivers it back in Slack
+ * with HITL send/edit/schedule/skip buttons (same pattern as the former
+ * automatic email-draft-approval sequence step).
  */
 async function handleDebriefDraftFollowup(
   supabase: ReturnType<typeof createClient>,
@@ -8588,21 +8653,25 @@ async function handleDebriefDraftFollowup(
   }
 
   const ctx = await getSixtyUserContext(supabase, payload.user.id, teamId);
-
-  // Log interaction
-  if (ctx) {
-    logSlackInteraction(supabase, {
-      userId: ctx.userId,
-      orgId: ctx.orgId,
-      actionType: 'debrief_draft_followup',
-      actionCategory: 'meeting_action',
-      entityType: 'meeting',
-      entityId: actionData.meetingId,
-      metadata: { dealId: actionData.dealId },
+  if (!ctx) {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  // Send loading message
+  // Log interaction
+  logSlackInteraction(supabase, {
+    userId: ctx.userId,
+    orgId: ctx.orgId,
+    actionType: 'debrief_draft_followup',
+    actionCategory: 'meeting_action',
+    entityType: 'meeting',
+    entityId: actionData.meetingId,
+    metadata: { dealId: actionData.dealId },
+  });
+
+  // Send ephemeral loading message
   if (channelId) {
     await fetch('https://slack.com/api/chat.postEphemeral', {
       method: 'POST',
@@ -8613,40 +8682,316 @@ async function handleDebriefDraftFollowup(
       body: JSON.stringify({
         channel: channelId,
         user: payload.user.id,
-        text: `✨ Drafting follow-up for ${actionData.meetingTitle || 'meeting'}...`,
+        text: `Drafting follow-up for ${actionData.meetingTitle || 'meeting'}...`,
       }),
     });
   }
 
-  // Call the follow-up command with meeting context
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const followUpTarget = actionData.dealName || actionData.attendees?.[0] || actionData.meetingTitle || '';
+  // --- Run the email generation + HITL creation in the background ---
+  // Return 200 immediately so Slack doesn't time out (3s limit).
+  const bgCtx = { ...ctx };
+  const bgActionData = { ...actionData };
+  const bgBotToken = orgConnection.botToken;
+  const bgChannelId = channelId;
+  const bgSlackUserId = payload.user.id;
+  const bgTeamId = teamId;
 
-  try {
-    await fetch(`${supabaseUrl}/functions/v1/slack-slash-commands`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'x-slack-request-timestamp': Math.floor(Date.now() / 1000).toString(),
-      },
-      body: new URLSearchParams({
-        command: '/sixty',
-        text: `follow-up ${followUpTarget}`,
-        user_id: payload.user.id,
-        team_id: teamId || '',
-        channel_id: channelId || '',
-        trigger_id: payload.trigger_id || '',
-        response_url: payload.response_url || '',
-      }).toString(),
+  // Keep background work alive in Edge runtime instead of plain fire-and-forget.
+  const draftPromise = (async () => {
+    try {
+      await generateAndDeliverEmailDraft(
+        supabase, bgCtx, bgActionData, bgBotToken, bgChannelId, bgSlackUserId, bgTeamId
+      );
+    } catch (err) {
+      console.error('[debrief-draft-followup] Background error:', err);
+      // Notify user of failure via ephemeral message
+      if (bgChannelId) {
+        await fetch('https://slack.com/api/chat.postEphemeral', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${bgBotToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: bgChannelId,
+            user: bgSlackUserId,
+            text: `Sorry, I couldn't generate the follow-up email. Please try again or draft it manually in Sixty.`,
+          }),
+        });
+      }
+    }
+  })();
+
+  // @ts-ignore - EdgeRuntime is a Deno Deploy/Supabase global
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(draftPromise);
+  } else {
+    draftPromise.catch((err) => {
+      console.error('[debrief-draft-followup] Background task dropped:', err);
     });
-  } catch (error) {
-    console.error('Error calling follow-up command:', error);
   }
 
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+/**
+ * Background worker for handleDebriefDraftFollowup.
+ * Generates AI email, creates HITL approval row, and posts Block Kit message.
+ */
+async function generateAndDeliverEmailDraft(
+  supabase: ReturnType<typeof createClient>,
+  ctx: { userId: string; orgId?: string },
+  actionData: { meetingId?: string; meetingTitle?: string; dealId?: string; dealName?: string; attendees?: string[] },
+  botToken: string,
+  channelId: string | undefined,
+  slackUserId: string,
+  teamId?: string,
+): Promise<void> {
+  const meetingId = actionData.meetingId;
+  const meetingTitle = actionData.meetingTitle || 'Our meeting';
+  const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://app.use60.com';
+  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+
+  // --- 1. Fetch meeting data ---
+  let transcript = '';
+  let summary = '';
+  if (meetingId) {
+    const { data: meeting } = await supabase
+      .from('meetings')
+      .select('transcript_text, summary')
+      .eq('id', meetingId)
+      .maybeSingle();
+    transcript = meeting?.transcript_text || '';
+    summary = meeting?.summary || '';
+  }
+
+  // --- 2. Resolve external contact from meeting_attendees ---
+  let contactEmail = '';
+  let contactName = '';
+  if (meetingId) {
+    const { data: attendees } = await supabase
+      .from('meeting_attendees')
+      .select('email, name, is_external')
+      .eq('meeting_id', meetingId)
+      .not('email', 'is', null);
+
+    const extAttendee = attendees?.find((a: any) => a.is_external) || attendees?.[0];
+    if (extAttendee?.email) {
+      contactEmail = extAttendee.email;
+      contactName = extAttendee.name || extAttendee.email;
+    }
+  }
+
+  // Fallback: derive recipient from attendees passed in the action payload.
+  if (!contactEmail && Array.isArray(actionData.attendees) && actionData.attendees.length > 0) {
+    const firstWithEmail = actionData.attendees.find((a) => /<[^>]+>/.test(a) || /\S+@\S+\.\S+/.test(a));
+    if (firstWithEmail) {
+      const bracketEmail = firstWithEmail.match(/<([^>]+)>/)?.[1];
+      const directEmail = firstWithEmail.match(/([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1];
+      const parsedEmail = bracketEmail || directEmail || '';
+      if (parsedEmail) {
+        contactEmail = parsedEmail;
+        contactName = firstWithEmail.replace(/<[^>]+>/g, '').trim() || parsedEmail;
+      }
+    }
+  }
+
+  if (!contactEmail) {
+    console.log('[debrief-draft-followup] No contact email found, cannot draft');
+    if (channelId) {
+      await fetch('https://slack.com/api/chat.postEphemeral', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${botToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: channelId,
+          user: slackUserId,
+          text: `I couldn't find a contact email for this meeting. Please draft the follow-up manually.`,
+        }),
+      });
+    }
+    return;
+  }
+
+  // --- 3. Get rep profile and org ---
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, email')
+    .eq('id', ctx.userId)
+    .maybeSingle();
+  const repName = profile?.full_name || 'Team';
+
+  let orgName = '';
+  if (ctx.orgId) {
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('name')
+      .eq('id', ctx.orgId)
+      .maybeSingle();
+    orgName = org?.name || '';
+  }
+
+  // --- 4. Generate AI email draft ---
+  let emailSubject = `Follow-up: ${meetingTitle}`;
+  let emailBody = `Hi ${contactName || 'there'},\n\nThank you for taking the time to meet today.\n\nLooking forward to our next steps.\n\nBest,\n${repName}`;
+  let aiGenerated = false;
+
+  if (anthropicKey && (transcript || summary)) {
+    try {
+      const enrichment = await enrichContactContext(supabase, { id: contactEmail, name: contactName, email: contactEmail }, meetingId);
+
+      const prompt = buildFollowupEmailPrompt({
+        repName,
+        orgName: orgName || 'Our team',
+        meetingTitle,
+        transcript,
+        summary,
+        enrichment,
+        actionItems: null,
+        intents: null,
+        callType: null,
+      });
+
+      const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5-20250929',
+          max_tokens: 1500,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      if (aiResponse.ok) {
+        const aiData = await aiResponse.json();
+        const content = aiData.content?.[0]?.text || '';
+        if (content) {
+          let jsonText = content.trim();
+          if (jsonText.startsWith('```')) {
+            const lines = jsonText.split('\n');
+            jsonText = lines.slice(1, -1).join('\n');
+            if (jsonText.startsWith('json')) jsonText = jsonText.substring(4).trim();
+          }
+          const parsed = JSON.parse(jsonText);
+          emailSubject = parsed.subject || emailSubject;
+          emailBody = parsed.body || emailBody;
+          aiGenerated = true;
+        }
+      } else {
+        console.error('[debrief-draft-followup] Anthropic API error:', await aiResponse.text().catch(() => ''));
+      }
+    } catch (aiErr) {
+      console.error('[debrief-draft-followup] AI generation failed, using template:', aiErr);
+    }
+  }
+
+  // --- 5. Open DM channel ---
+  const dmResponse = await fetch('https://slack.com/api/conversations.open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${botToken}` },
+    body: JSON.stringify({ users: slackUserId }),
+  });
+  const dmData = await dmResponse.json();
+  const dmChannelId = dmData.channel?.id;
+  const slackTeamId = dmData.channel?.context_team_id || teamId || '';
+
+  if (!dmChannelId) {
+    console.error('[debrief-draft-followup] Failed to open DM channel:', dmData.error);
+    return;
+  }
+
+  // --- 6. Create HITL pending approval row ---
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const { data: approval, error: approvalError } = await supabase
+    .from('hitl_pending_approvals')
+    .insert({
+      org_id: ctx.orgId,
+      user_id: ctx.userId,
+      created_by: ctx.userId,
+      resource_type: 'email_draft',
+      resource_id: meetingId || ctx.orgId,
+      resource_name: `Follow-up: ${meetingTitle}`,
+      slack_team_id: slackTeamId,
+      slack_channel_id: dmChannelId,
+      slack_message_ts: '',
+      status: 'pending',
+      original_content: {
+        to: contactEmail,
+        toName: contactName,
+        subject: emailSubject,
+        body: emailBody,
+        meeting_id: meetingId,
+        meeting_title: meetingTitle,
+        ai_generated: aiGenerated,
+      },
+      callback_type: 'edge_function',
+      callback_target: 'hitl-send-followup-email',
+      callback_metadata: {
+        meeting_id: meetingId,
+        source: 'debrief_button',
+      },
+      expires_at: expiresAt,
+      metadata: {
+        source: 'debrief_button',
+        meeting_id: meetingId,
+      },
+    })
+    .select('id')
+    .single();
+
+  if (approvalError || !approval?.id) {
+    console.error('[debrief-draft-followup] Failed to create approval row:', approvalError);
+    return;
+  }
+
+  const approvalId = approval.id;
+
+  // --- 7. Build and post Block Kit message with HITL buttons ---
+  const blocks = buildEmailDraftApprovalBlocks({
+    approvalId,
+    to: contactEmail,
+    contactName,
+    subject: emailSubject,
+    body: emailBody,
+    meetingTitle,
+    aiGenerated,
+    appUrl,
+  });
+
+  const slackResponse = await fetch('https://slack.com/api/chat.postMessage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${botToken}` },
+    body: JSON.stringify({
+      channel: dmChannelId,
+      text: `Follow-up email draft ready for review: ${emailSubject}`,
+      blocks,
+    }),
+  });
+
+  const slackResult = await slackResponse.json();
+
+  if (!slackResult.ok) {
+    console.error('[debrief-draft-followup] Slack postMessage failed:', slackResult.error);
+    await supabase.from('hitl_pending_approvals').delete().eq('id', approvalId);
+    return;
+  }
+
+  // --- 8. Update approval row with Slack message timestamp ---
+  await supabase
+    .from('hitl_pending_approvals')
+    .update({ slack_message_ts: slackResult.ts || '', updated_at: new Date().toISOString() })
+    .eq('id', approvalId);
+
+  console.log(
+    `[debrief-draft-followup] HITL email draft delivered: approval=${approvalId}, to=${contactEmail}, subject=${emailSubject}`
+  );
 }
 
 /**
@@ -9966,7 +10311,23 @@ serve(async (req) => {
           return new Response('', { status: 200, headers: corsHeaders });
         }
         if (payload.view?.callback_id === 'hitl_edit_modal') {
-          return handleHITLEditSubmission(supabase, payload);
+          // Fire-and-forget — Slack requires immediate 200 ack for view submissions
+          handleHITLEditSubmission(supabase, payload).catch(err =>
+            console.error('[hitl_edit_modal] Submission handler error:', err),
+          );
+          return new Response('', { status: 200, headers: corsHeaders });
+        }
+        // EMAIL-008: Schedule email modal submission
+        if (payload.view?.callback_id === 'schedule_email_modal') {
+          // Fire-and-forget — Slack requires immediate 200 ack for view submissions
+          handleScheduleEmailSubmission(supabase, payload).catch(err =>
+            console.error('[schedule_email_modal] Submission handler error:', err),
+          );
+          return new Response('', { status: 200, headers: corsHeaders });
+        }
+        // EMAIL-008: Schedule email modal submission
+        if (payload.view?.callback_id === 'schedule_email_modal') {
+          return handleScheduleEmailSubmission(supabase, payload);
         }
         // EMAIL-008: Schedule email modal submission
         if (payload.view?.callback_id === 'schedule_email_modal') {

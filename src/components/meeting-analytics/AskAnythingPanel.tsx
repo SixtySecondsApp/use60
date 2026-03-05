@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Bot, Loader2, Sparkles, FileText, ChevronDown, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useMaAsk } from '@/lib/hooks/useMeetingAnalytics';
 import { useUser } from '@/lib/hooks/useUser';
+import { useTourStore } from '@/lib/stores/tourStore';
 import type { MaAskResponse, MaAskSource } from '@/lib/types/meetingAnalytics';
 
 const botIconUrl = (import.meta.env.VITE_COPILOT_BOT_ICON_URL as string | undefined) || '/favicon_0_64x64.png';
@@ -39,6 +40,35 @@ const STARTER_QUESTIONS = [
   'Summarize key decisions',
   'Which deals are progressing?',
   'What promises were made?',
+];
+
+// ── Tour demo data — shown when the product tour highlights this panel ────────
+const TOUR_DEMO_MESSAGES: ChatMessage[] = [
+  {
+    role: 'user',
+    content: 'What objections came up in my last 3 meetings?',
+  },
+  {
+    role: 'assistant',
+    content: `Based on your last 3 meetings, here are the key objections raised:
+
+**1. Budget Concerns** — DataFlow Systems raised concerns about the annual pricing vs. monthly flexibility. They asked whether a quarterly billing option is available.
+
+**2. Integration Timeline** — Vertex AI Labs pushed back on the 6-week implementation estimate. Their IT lead wants a phased rollout with a pilot team first.
+
+**3. Competitor Comparison** — NovaTech Solutions directly compared your platform to Gong, specifically around call recording quality and CRM sync speed.
+
+**Recommended Actions:**
+- Prepare a quarterly billing proposal for DataFlow
+- Draft a phased implementation plan template
+- Update the competitive battlecard for Gong comparisons`,
+    sources: [
+      { transcriptId: 'demo-1', transcriptTitle: 'DataFlow Systems — Platform Demo', text: '"We like it, but the annual commitment is a big ask for a team our size..."', similarity: 0.92 },
+      { transcriptId: 'demo-2', transcriptTitle: 'Vertex AI Labs — Technical Review', text: '"Six weeks feels aggressive. Can we start with just the sales team?"', similarity: 0.87 },
+      { transcriptId: 'demo-3', transcriptTitle: 'NovaTech Solutions — Discovery Call', text: '"How does this compare to what Gong offers for the same price point?"', similarity: 0.81 },
+    ],
+    metadata: { segmentsSearched: 847, meetingsAnalyzed: 3, totalMeetings: 12 },
+  },
 ];
 
 function getSimilarityColors(similarity: number) {
@@ -137,6 +167,9 @@ function CollapsibleSources({ sources }: { sources: MaAskSource[] }) {
   );
 }
 
+/** Step index where the tour highlights this panel. Keep in sync with ProductTour.tsx. */
+const ASK_ANYTHING_TOUR_STEP = 8;
+
 export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -147,15 +180,25 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
 
   const askMutation = useMaAsk();
 
+  // Tour-aware: show demo messages when the tour is highlighting this panel
+  const { isTourActive, currentTourStep } = useTourStore();
+  const isTourDemo = isTourActive && currentTourStep >= ASK_ANYTHING_TOUR_STEP;
+
+  // Use demo messages when tour is active, otherwise real messages
+  const displayMessages = useMemo(
+    () => (isTourDemo ? TOUR_DEMO_MESSAGES : messages),
+    [isTourDemo, messages]
+  );
+
   // Expand when there are messages or a request is in flight
-  const shouldExpand = isExpanded || messages.length > 0 || askMutation.isPending;
+  const shouldExpand = isExpanded || displayMessages.length > 0 || askMutation.isPending;
 
   // Scroll the page so the latest message is visible (no internal scroll trap)
   useEffect(() => {
-    if ((messages.length > 0 || askMutation.isPending) && scrollRef.current) {
+    if ((displayMessages.length > 0 || askMutation.isPending) && scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
-  }, [messages, askMutation.isPending]);
+  }, [displayMessages, askMutation.isPending]);
 
   // Auto-focus textarea when expanding
   useEffect(() => {
@@ -217,7 +260,7 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   }
 
-  const showStarters = !compact && messages.length === 0;
+  const showStarters = !compact && displayMessages.length === 0 && !isTourDemo;
   const avatarUrl = userData?.avatar_url;
   const userInitial = userData?.first_name?.[0]?.toUpperCase() || 'U';
 
@@ -268,8 +311,8 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
   // ── Expanded mode: full chat interface ──
   return (
     <div className="bg-white/60 dark:bg-gray-900/30 backdrop-blur-xl rounded-2xl border border-gray-200/50 dark:border-gray-700/30 overflow-hidden relative">
-      {/* Collapse button — only when no messages */}
-      {messages.length === 0 && !askMutation.isPending && (
+      {/* Collapse button — only when no messages and not in tour demo */}
+      {displayMessages.length === 0 && !askMutation.isPending && !isTourDemo && (
         <button
           onClick={() => setIsExpanded(false)}
           className="absolute top-3 right-3 z-10 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100/80 dark:hover:bg-gray-800/50 transition-colors"
@@ -280,7 +323,7 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
 
       {/* Messages area */}
       <div ref={scrollRef} className="space-y-4 p-4 sm:p-5">
-        {messages.length === 0 && !askMutation.isPending && (
+        {displayMessages.length === 0 && !askMutation.isPending && (
           <div className="flex flex-col items-center justify-center min-h-[200px] text-center">
             <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 mb-4">
               <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
@@ -295,7 +338,7 @@ export function AskAnythingPanel({ transcriptId, compact }: AskAnythingPanelProp
         )}
 
         <AnimatePresence initial={false}>
-          {messages.map((msg, i) => (
+          {displayMessages.map((msg, i) => (
             <motion.div
               key={i}
               initial={{ opacity: 0, y: 10 }}

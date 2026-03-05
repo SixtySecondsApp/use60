@@ -20,7 +20,7 @@ import { useSearchParams } from 'react-router-dom';
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useCreditBalance, creditKeys } from '@/lib/hooks/useCreditBalance';
 import { grantCredits } from '@/lib/services/creditService';
-import { useOrgId } from '@/lib/contexts/OrgContext';
+import { useOrgId, useOrg } from '@/lib/contexts/OrgContext';
 import CreditPurchaseModal from '@/components/credits/CreditPurchaseModal';
 import { UsageChart } from '@/components/credits/UsageChart';
 import { CreditEstimator } from '@/components/credits/CreditEstimator';
@@ -52,16 +52,15 @@ import {
   Bot,
   Settings,
   Receipt,
-  ChevronDown,
   Tag,
   Star,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { isUserAdmin } from '@/lib/utils/adminUtils';
-import { useUser } from '@/lib/hooks/useUser';
+import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { CREDIT_PACKS, STANDARD_PACKS, getPackPrice } from '@/lib/config/creditPacks';
+import type { PackType } from '@/lib/config/creditPacks';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 // ============================================================================
@@ -104,8 +103,11 @@ export default function CreditsSettingsPage() {
   const { data: balance, isLoading: balanceLoading } = useCreditBalance();
   const { currencyCode } = useOrgMoney();
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
-  const { userData } = useUser();
-  const isAdmin = userData ? isUserAdmin(userData) : false;
+  const [purchasePack, setPurchasePack] = useState<PackType | undefined>(undefined);
+  const [purchaseInitialPack, setPurchaseInitialPack] = useState<PackType | undefined>();
+  const { permissions } = useOrg();
+  const { isPlatformAdmin } = useUserPermissions();
+  const isAdmin = permissions.canManageSettings || permissions.canManageTeam || isPlatformAdmin;
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -133,9 +135,6 @@ export default function CreditsSettingsPage() {
     }
     setSearchParams(next, { replace: true });
   };
-
-  // Collapsible estimator state
-  const [estimatorOpen, setEstimatorOpen] = useState(false);
 
   // Admin grant credits state
   const [grantAmount, setGrantAmount] = useState('');
@@ -321,59 +320,69 @@ export default function CreditsSettingsPage() {
 
           {/* ── Tab: Top Up ─────────────────────────────────────────── */}
           <TabsContent value="topup" className="space-y-6 mt-4">
-            {/* Quick Top-Up */}
+            {/* What Can Your Credits Do? — always visible */}
+            <div className="border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-4">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-[#37bd7e]" />
+                What Can Your Credits Do?
+              </h3>
+              <CreditEstimator />
+            </div>
+
+            {/* Top Up Credits — pack cards */}
             {isAdmin && (
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                   <Plus className="w-4 h-4 text-[#37bd7e]" />
-                  Quick Top-Up
+                  Top Up Credits
                 </h3>
-                <div className="flex flex-wrap gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {STANDARD_PACKS.map((packType) => {
                     const pack = CREDIT_PACKS[packType];
+                    const { symbol, price, isApproximate } = getPackPrice(packType, currencyCode);
+                    const isPopular = pack.popular;
+
                     return (
-                      <Button
+                      <button
                         key={packType}
-                        variant="outline"
-                        onClick={() => setPurchaseModalOpen(true)}
-                        className="hover:border-[#37bd7e] hover:text-[#37bd7e] flex items-center gap-2"
+                        type="button"
+                        onClick={() => { setPurchasePack(packType); setPurchaseInitialPack(packType); setPurchaseModalOpen(true); }}
+                        className={cn(
+                          'relative flex flex-col items-center gap-1.5 rounded-xl border-2 p-5 text-center transition-all',
+                          'hover:border-[#37bd7e] hover:bg-[#37bd7e]/5',
+                          isPopular
+                            ? 'border-blue-500 dark:border-blue-500'
+                            : 'border-gray-200 dark:border-gray-700'
+                        )}
                       >
-                        <CreditCard className="w-4 h-4" />
-                        {pack.label} — {pack.credits} credits / {(() => { const { symbol, price, isApproximate } = getPackPrice(packType, currencyCode); return `${isApproximate ? '~' : ''}${symbol}${price}`; })()}
-                        {pack.popular && (
-                          <span className="ml-1 inline-flex items-center gap-1 bg-blue-500/90 dark:bg-blue-600/90 text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
+                        {isPopular && (
+                          <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 bg-blue-500/90 dark:bg-blue-600/90 text-white text-[10px] font-medium px-2.5 py-0.5 rounded-full">
                             <Star className="h-2.5 w-2.5 fill-white" />
                             Most Popular
                           </span>
                         )}
-                      </Button>
+                        <span className="text-base font-bold text-gray-900 dark:text-white">
+                          {pack.label}
+                        </span>
+                        <span className="text-2xl font-bold text-[#37bd7e]">
+                          {pack.credits}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          credits
+                        </span>
+                        <span className="text-lg font-semibold text-gray-900 dark:text-white mt-1">
+                          {isApproximate ? '~' : ''}{symbol}{price}
+                        </span>
+                        <span className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[#37bd7e]">
+                          <CreditCard className="w-3.5 h-3.5" />
+                          Purchase
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
               </div>
             )}
-
-            {/* Credit Estimator — collapsible */}
-            <div className="border border-gray-200 dark:border-gray-800 rounded-xl">
-              <button
-                onClick={() => setEstimatorOpen(!estimatorOpen)}
-                className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-xl transition-colors"
-              >
-                <span className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-[#37bd7e]" />
-                  What Can Your Credits Do?
-                </span>
-                <ChevronDown className={cn(
-                  'w-4 h-4 text-gray-400 transition-transform duration-200',
-                  estimatorOpen && 'rotate-180'
-                )} />
-              </button>
-              {estimatorOpen && (
-                <div className="px-5 pb-5">
-                  <CreditEstimator />
-                </div>
-              )}
-            </div>
           </TabsContent>
 
           {/* ── Tab: Inventory ─────────────────────────────────────── */}
@@ -400,7 +409,17 @@ export default function CreditsSettingsPage() {
               <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5">
                 <UsageBreakdownChart
                   usageByFeature={balance?.usageByFeature ?? []}
-                  storageCostCredits={balance?.storage?.projectedMonthlyCostCredits}
+                  storageCostCredits={
+                    // Only include projected storage cost when the org has actual storage usage.
+                    // New orgs with 0 audio/transcripts/docs show phantom storage fees otherwise.
+                    balance?.storage &&
+                    (balance.storage.audioHours > 0 ||
+                      balance.storage.transcriptCount > 0 ||
+                      balance.storage.documentCount > 0 ||
+                      balance.storage.enrichmentRecords > 0)
+                      ? balance.storage.projectedMonthlyCostCredits
+                      : undefined
+                  }
                 />
               </div>
             </div>
@@ -409,7 +428,7 @@ export default function CreditsSettingsPage() {
             <div>
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-[#37bd7e]" />
-                Spend Trend (30 Days)
+                Usage Trend (30 Days)
               </h3>
               <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5">
                 <UsageChart days={30} />
@@ -491,7 +510,7 @@ export default function CreditsSettingsPage() {
                 </h3>
                 <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-4">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Add credits directly to this organization without payment. Appears as "bonus" in the transaction log.
+                    Add credits directly to this organization without payment. Appears as &quot;bonus&quot; in the transaction log.
                   </p>
                   <div className="flex flex-wrap items-end gap-3">
                     <div className="flex-1 min-w-[120px] max-w-[200px]">
@@ -553,7 +572,9 @@ export default function CreditsSettingsPage() {
       {/* Purchase modal */}
       <CreditPurchaseModal
         open={purchaseModalOpen}
-        onOpenChange={setPurchaseModalOpen}
+        onOpenChange={(open) => { setPurchaseModalOpen(open); if (!open) { setPurchaseInitialPack(undefined); setPurchasePack(undefined); } }}
+        defaultPack={purchasePack}
+        initialPack={purchaseInitialPack}
       />
 
       {/* Post-migration onboarding modal (shown once per user) */}

@@ -108,7 +108,8 @@ ALTER TABLE public.autopilot_events ENABLE ROW LEVEL SECURITY;
 
 -- Users read their own events
 DO $$ BEGIN
-  CREATE POLICY "autopilot_events_user_select"
+  DROP POLICY IF EXISTS "autopilot_events_user_select" ON public.autopilot_events;
+CREATE POLICY "autopilot_events_user_select"
   ON public.autopilot_events FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
@@ -117,7 +118,8 @@ END $$;
 
 -- Org admins / owners read all events for their org
 DO $$ BEGIN
-  CREATE POLICY "autopilot_events_admin_select"
+  DROP POLICY IF EXISTS "autopilot_events_admin_select" ON public.autopilot_events;
+CREATE POLICY "autopilot_events_admin_select"
   ON public.autopilot_events FOR SELECT
   TO authenticated
   USING (
@@ -134,7 +136,8 @@ END $$;
 
 -- Service role: full access (edge functions write events via service-role client)
 DO $$ BEGIN
-  CREATE POLICY "autopilot_events_service_all"
+  DROP POLICY IF EXISTS "autopilot_events_service_all" ON public.autopilot_events;
+CREATE POLICY "autopilot_events_service_all"
   ON public.autopilot_events FOR ALL
   TO service_role
   USING (true)
@@ -249,7 +252,8 @@ ALTER TABLE public.autopilot_thresholds ENABLE ROW LEVEL SECURITY;
 
 -- All authenticated users can read platform defaults (org_id IS NULL)
 DO $$ BEGIN
-  CREATE POLICY "autopilot_thresholds_platform_select"
+  DROP POLICY IF EXISTS "autopilot_thresholds_platform_select" ON public.autopilot_thresholds;
+CREATE POLICY "autopilot_thresholds_platform_select"
   ON public.autopilot_thresholds FOR SELECT
   TO authenticated
   USING (org_id IS NULL);
@@ -258,7 +262,8 @@ END $$;
 
 -- Org admins / owners can read their org's overrides
 DO $$ BEGIN
-  CREATE POLICY "autopilot_thresholds_org_admin_select"
+  DROP POLICY IF EXISTS "autopilot_thresholds_org_admin_select" ON public.autopilot_thresholds;
+CREATE POLICY "autopilot_thresholds_org_admin_select"
   ON public.autopilot_thresholds FOR SELECT
   TO authenticated
   USING (
@@ -276,7 +281,8 @@ END $$;
 
 -- Org admins / owners can insert new org-level overrides
 DO $$ BEGIN
-  CREATE POLICY "autopilot_thresholds_org_admin_insert"
+  DROP POLICY IF EXISTS "autopilot_thresholds_org_admin_insert" ON public.autopilot_thresholds;
+CREATE POLICY "autopilot_thresholds_org_admin_insert"
   ON public.autopilot_thresholds FOR INSERT
   TO authenticated
   WITH CHECK (
@@ -294,7 +300,8 @@ END $$;
 
 -- Org admins / owners can update their org's overrides
 DO $$ BEGIN
-  CREATE POLICY "autopilot_thresholds_org_admin_update"
+  DROP POLICY IF EXISTS "autopilot_thresholds_org_admin_update" ON public.autopilot_thresholds;
+CREATE POLICY "autopilot_thresholds_org_admin_update"
   ON public.autopilot_thresholds FOR UPDATE
   TO authenticated
   USING (
@@ -322,7 +329,8 @@ END $$;
 
 -- Org admins / owners can delete their org's overrides
 DO $$ BEGIN
-  CREATE POLICY "autopilot_thresholds_org_admin_delete"
+  DROP POLICY IF EXISTS "autopilot_thresholds_org_admin_delete" ON public.autopilot_thresholds;
+CREATE POLICY "autopilot_thresholds_org_admin_delete"
   ON public.autopilot_thresholds FOR DELETE
   TO authenticated
   USING (
@@ -340,7 +348,8 @@ END $$;
 
 -- Service role: full access (edge functions manage platform defaults)
 DO $$ BEGIN
-  CREATE POLICY "autopilot_thresholds_service_all"
+  DROP POLICY IF EXISTS "autopilot_thresholds_service_all" ON public.autopilot_thresholds;
+CREATE POLICY "autopilot_thresholds_service_all"
   ON public.autopilot_thresholds FOR ALL
   TO service_role
   USING (true)

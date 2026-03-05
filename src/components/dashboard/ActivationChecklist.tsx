@@ -1,83 +1,74 @@
+/**
+ * ActivationChecklist (SETUP-003, SETUP-005)
+ *
+ * Visible for 7 days after sign-up or until 100% complete.
+ * "Complete Setup" button opens the SetupWizardDialog.
+ * Dismissable with localStorage. Re-appears if not dismissed and not 100%.
+ * Progress driven by setup_wizard_progress steps (integration-aware).
+ */
+
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
   Circle,
   ChevronDown,
   ChevronUp,
   X,
-  UserCheck,
   Calendar,
-  Brain,
-  Plug,
-  Users,
-  Rocket,
+  Mic,
+  BarChart3,
+  Zap,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
-import { useWaitlistOnboardingProgress } from '@/lib/hooks/useWaitlistOnboarding';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
+import { useSetupWizardStore, SETUP_STEPS } from '@/lib/stores/setupWizardStore';
 
 const DISMISSED_KEY = 'activation_checklist_dismissed';
-const SHOW_DAYS = 7;
+const SHOW_DAYS = 14;
 
 interface ChecklistItem {
   key: string;
   label: string;
   description: string;
   icon: React.ElementType;
-  href: string;
-  actionLabel: string;
 }
 
+// Maps setup_wizard_progress steps to display items
 const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
-    key: 'account_created',
-    label: 'Account Created',
-    description: 'Your account is set up and ready to go',
-    icon: Rocket,
-    href: '',
-    actionLabel: '',
-  },
-  {
-    key: 'profile_completed',
-    label: 'Complete Your Profile',
-    description: 'Add your details and preferences',
-    icon: UserCheck,
-    href: '/settings/profile',
-    actionLabel: 'Go to Profile',
-  },
-  {
-    key: 'first_meeting_synced',
-    label: 'Sync Your First Meeting',
-    description: 'Connect your calendar to start capturing insights',
+    key: 'calendar',
+    label: 'Connect your calendar',
+    description: 'So Sixty can prep you for every meeting',
     icon: Calendar,
-    href: '/settings/integrations',
-    actionLabel: 'Connect Calendar',
   },
   {
-    key: 'meeting_intelligence_used',
-    label: 'Try Meeting Intelligence',
-    description: 'Experience AI-powered meeting search and analysis',
-    icon: Brain,
-    href: '/meetings',
-    actionLabel: 'View Meetings',
+    key: 'notetaker',
+    label: 'Enable meeting recording',
+    description: 'So Sixty can join and take notes',
+    icon: Mic,
   },
   {
-    key: 'crm_integrated',
-    label: 'Integrate Your CRM',
-    description: 'Connect your sales tools for a seamless workflow',
-    icon: Plug,
-    href: '/settings/integrations',
-    actionLabel: 'Connect CRM',
+    key: 'crm',
+    label: 'Connect your pipeline',
+    description: 'So Sixty can monitor your deals',
+    icon: BarChart3,
   },
   {
-    key: 'team_invited',
-    label: 'Invite Your Team',
-    description: 'Collaborate with colleagues and share insights',
-    icon: Users,
-    href: '/settings/team',
-    actionLabel: 'Invite Team',
+    key: 'followups',
+    label: 'Learn your writing style',
+    description: 'So follow-up emails sound like you',
+    icon: Zap,
+  },
+  {
+    key: 'test',
+    label: 'See Sixty in action',
+    description: 'Watch AI research and write a cold email',
+    icon: Sparkles,
   },
 ];
 
@@ -91,41 +82,34 @@ function isWithinDays(dateStr: string | null | undefined, days: number): boolean
 export function ActivationChecklist() {
   const { user } = useAuth();
   const { progress: onboardingProgress, loading: onboardingLoading } = useOnboardingProgress();
-  const { data: waitlistProgress, isLoading: waitlistLoading } = useWaitlistOnboardingProgress(
-    user?.id ?? null
-  );
+  const store = useSetupWizardStore();
 
   const [collapsed, setCollapsed] = useState(false);
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem(DISMISSED_KEY) === 'true'
   );
-  const navigate = useNavigate();
 
-  if (onboardingLoading || waitlistLoading) return null;
+  if (!user) return null;
+  if (onboardingLoading || !store.hasFetched) return null;
   if (dismissed) return null;
 
-  // Only show for users who completed onboarding within the last 7 days
-  // OR who skipped onboarding (they still need activation)
+  // Show for 7 days after onboarding or if skipped
   const completedAt = onboardingProgress?.onboarding_completed_at;
   const skipped = onboardingProgress?.skipped_onboarding;
   const isRecentlyOnboarded = isWithinDays(completedAt, SHOW_DAYS) || skipped;
 
-  if (!isRecentlyOnboarded) return null;
+  // Also show if any wizard steps exist (user has started setup)
+  const hasAnyWizardProgress = SETUP_STEPS.some(s => store.steps[s].completed);
 
-  // Determine which steps are complete
-  const completedKeys = new Set<string>();
-  // account_created is always done
-  completedKeys.add('account_created');
-  if (waitlistProgress?.profile_completed_at) completedKeys.add('profile_completed');
-  if (waitlistProgress?.first_meeting_synced_at) completedKeys.add('first_meeting_synced');
-  if (waitlistProgress?.meeting_intelligence_used_at) completedKeys.add('meeting_intelligence_used');
-  if (waitlistProgress?.crm_integrated_at) completedKeys.add('crm_integrated');
-  if (waitlistProgress?.team_invited_at) completedKeys.add('team_invited');
+  if (!isRecentlyOnboarded && !hasAnyWizardProgress) return null;
 
-  // Also check user_onboarding_progress fields as fallback
-  if (onboardingProgress?.fathom_connected || onboardingProgress?.first_meeting_synced) {
-    completedKeys.add('first_meeting_synced');
-  }
+  // Don't show once everything is done
+  if (store.allCompleted) return null;
+
+  // Build completed set from setup wizard store
+  const completedKeys = new Set<string>(
+    SETUP_STEPS.filter(s => store.steps[s].completed)
+  );
 
   const completedCount = completedKeys.size;
   const totalCount = CHECKLIST_ITEMS.length;
@@ -136,31 +120,37 @@ export function ActivationChecklist() {
     setDismissed(true);
   };
 
-  const handleAction = (href: string) => {
-    if (href) navigate(href);
-  };
-
   return (
-    <Card className="mb-6 border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/50 to-white dark:from-emerald-950/20 dark:to-gray-900/80">
+    <Card className="mb-6 border-indigo-200 dark:border-indigo-800/50 bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/20 dark:to-gray-900/80">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
-              <Rocket className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/40">
+              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             </div>
             <div>
               <h3 className="text-base font-semibold text-[#1E293B] dark:text-white">
-                Get Started with use60
+                Set up Sixty
               </h3>
               <p className="text-xs text-[#64748B] dark:text-gray-400 mt-0.5">
-                {completedCount}/{totalCount} steps complete
+                {completedCount}/{totalCount} steps complete — {progressPct}%
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* SETUP-003: Complete Setup button opens wizard */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-3 text-xs border-indigo-300 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+              onClick={() => store.openWizard()}
+            >
+              Complete Setup
+              <ArrowRight className="w-3 h-3 ml-1.5" />
+            </Button>
             <button
               onClick={() => setCollapsed((c) => !c)}
-              className="p-1.5 rounded-lg text-[#64748B] hover:text-[#1E293B] dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="p-1.5 rounded-lg text-[#64748B] hover:text-[#1E293B] dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
               aria-label={collapsed ? 'Expand checklist' : 'Collapse checklist'}
             >
               {collapsed ? (
@@ -171,7 +161,7 @@ export function ActivationChecklist() {
             </button>
             <button
               onClick={handleDismiss}
-              className="p-1.5 rounded-lg text-[#64748B] hover:text-[#1E293B] dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="p-1.5 rounded-lg text-[#64748B] hover:text-[#1E293B] dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1"
               aria-label="Dismiss checklist"
             >
               <X className="w-4 h-4" />
@@ -183,19 +173,20 @@ export function ActivationChecklist() {
         <div className="mt-3">
           <div className="h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+              className="h-full bg-indigo-500 rounded-full transition-all duration-500"
               style={{ width: `${progressPct}%` }}
             />
           </div>
         </div>
       </CardHeader>
 
-      {!collapsed && (
-        <CardContent className="pt-0">
-          <ul className="space-y-1">
-            {CHECKLIST_ITEMS.map((item) => {
-              const done = completedKeys.has(item.key);
-              const Icon = item.icon;
+      <AnimatePresence>
+        {!collapsed && (
+          <CardContent className="pt-0">
+            <ul className="space-y-1">
+              {CHECKLIST_ITEMS.map((item) => {
+                const done = completedKeys.has(item.key);
+                const Icon = item.icon;
 
               return (
                 <li
@@ -203,29 +194,29 @@ export function ActivationChecklist() {
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                     done
                       ? 'opacity-60'
-                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer'
+                      : 'hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1'
                   }`}
-                  onClick={() => !done && handleAction(item.href)}
-                  role={!done && item.href ? 'button' : undefined}
+                  onClick={() => !done && store.openWizard()}
+                  onKeyDown={(e) => e.key === 'Enter' && !done && store.openWizard()}
+                  tabIndex={!done ? 0 : undefined}
+                  role={!done ? 'button' : undefined}
                 >
-                  {/* Step icon */}
                   <div
                     className={`p-1.5 rounded-lg flex-shrink-0 ${
                       done
-                        ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                        ? 'bg-indigo-100 dark:bg-indigo-900/30'
                         : 'bg-gray-100 dark:bg-gray-800'
                     }`}
                   >
                     <Icon
                       className={`w-3.5 h-3.5 ${
                         done
-                          ? 'text-emerald-600 dark:text-emerald-400'
+                          ? 'text-indigo-600 dark:text-indigo-400'
                           : 'text-[#64748B] dark:text-gray-400'
                       }`}
                     />
                   </div>
 
-                  {/* Label + description */}
                   <div className="flex-1 min-w-0">
                     <p
                       className={`text-sm font-medium leading-tight ${
@@ -241,20 +232,9 @@ export function ActivationChecklist() {
                     </p>
                   </div>
 
-                  {/* Action button or check icon */}
                   <div className="flex-shrink-0">
                     {done ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
-                    ) : item.href ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAction(item.href);
-                        }}
-                        className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 whitespace-nowrap px-2 py-1 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
-                      >
-                        {item.actionLabel}
-                      </button>
+                      <CheckCircle2 className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
                     ) : (
                       <Circle className="w-5 h-5 text-gray-300 dark:text-gray-600" />
                     )}
@@ -265,6 +245,7 @@ export function ActivationChecklist() {
           </ul>
         </CardContent>
       )}
+      </AnimatePresence>
     </Card>
   );
 }

@@ -45,57 +45,37 @@ export function useConversationHistory(limit: number = 20) {
     queryFn: async (): Promise<ConversationSummary[]> => {
       if (!user?.id) return [];
 
-      // Fetch conversations with message count and last message
-      const { data: conversations, error } = await supabase
-        .from('copilot_conversations')
-        .select(`
-          id,
-          title,
-          created_at,
-          updated_at
-        `)
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-        .limit(limit);
+      // Single RPC call replaces 3 separate queries
+      const { data, error } = await supabase.rpc('get_conversation_summaries', {
+        p_user_id: user.id,
+        p_limit: limit,
+      });
 
       if (error) {
-        console.error('Error fetching conversations:', error);
+        console.error('Error fetching conversation summaries:', error);
         throw error;
       }
 
-      if (!conversations || conversations.length === 0) {
-        return [];
-      }
+      if (!data || data.length === 0) return [];
 
-      // Fetch message counts and last messages for each conversation
-      const conversationIds = conversations.map(c => c.id);
-
-      const { data: messageCounts, error: countError } = await supabase
-        .from('copilot_messages')
-        .select('conversation_id, content, role, created_at')
-        .in('conversation_id', conversationIds)
-        .order('created_at', { ascending: false });
-
-      if (countError) {
-        console.error('Error fetching message counts:', countError);
-      }
-
-      // Build summary for each conversation
-      const summaries: ConversationSummary[] = conversations.map(conv => {
-        const convMessages = messageCounts?.filter(m => m.conversation_id === conv.id) || [];
-        const userMessage = convMessages.find(m => m.role === 'user');
-
+      return (data as Array<{
+        id: string;
+        title: string | null;
+        created_at: string;
+        updated_at: string;
+        message_count: number;
+        first_user_message: string | null;
+      }>).map((row) => {
+        const preview = row.first_user_message;
         return {
-          id: conv.id,
-          title: conv.title || (userMessage?.content?.substring(0, 50) + (userMessage?.content?.length > 50 ? '...' : '')) || 'New Conversation',
-          created_at: conv.created_at,
-          updated_at: conv.updated_at,
-          message_count: convMessages.length,
-          last_message: userMessage?.content
+          id: row.id,
+          title: row.title || (preview ? preview.substring(0, 50) + (preview.length > 50 ? '...' : '') : 'New Conversation'),
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          message_count: row.message_count,
+          last_message: preview ?? undefined,
         };
       });
-
-      return summaries;
     },
     enabled: !!user?.id,
     staleTime: 30 * 1000, // 30 seconds
@@ -158,7 +138,17 @@ export function useDeleteConversation() {
     mutationFn: async (conversationId: string) => {
       if (!user?.id) throw new Error('Not authenticated');
 
-      // Delete messages first (foreign key constraint)
+      // Delete session summaries first (FK to conversation)
+      try {
+        await supabase
+          .from('copilot_session_summaries')
+          .delete()
+          .eq('conversation_id', conversationId);
+      } catch {
+        // Table may not exist yet — safe to ignore
+      }
+
+      // Delete messages (foreign key constraint)
       const { error: msgError } = await supabase
         .from('copilot_messages')
         .delete()

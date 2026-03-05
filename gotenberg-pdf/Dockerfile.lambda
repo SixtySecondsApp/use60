@@ -1,0 +1,19 @@
+FROM gotenberg/gotenberg:8
+
+# AWS Lambda Web Adapter — bridges Lambda invoke API to internal HTTP server
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
+
+# Tell the adapter which port Gotenberg listens on
+ENV AWS_LWA_PORT=3000
+# Readiness probe — adapter waits for this before accepting invokes
+ENV AWS_LWA_READINESS_CHECK_PATH=/health
+# Min events before idle timeout (keep warm between rapid calls)
+ENV AWS_LWA_READINESS_CHECK_MIN_UNHEALTHY_STATUS=500
+
+CMD ["gotenberg", \
+     "--api-port=3000", \
+     "--api-timeout=60s", \
+     "--libreoffice-disable-routes=true", \
+     "--log-level=info"]
+
+EXPOSE 3000

@@ -71,6 +71,7 @@ function App() {
         <Route path="/waitlist-hero" element={<WaitlistLanding />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsOfServicePage />} />
         <Route path="/hero-v5" element={<HeroV5Preview />} />
         <Route path="/hero-v5-alt" element={<HeroV5AltPreview />} />

@@ -298,7 +298,19 @@ export async function previewReport(params: GenerateReportParams & { format?: 'j
   return apiFetch<MaReport>(`/api/reports/preview?${qs.toString()}`);
 }
 
-export async function sendReport(params: { type: 'daily' | 'weekly'; settingId?: string }) {
+/** Fetch the email-html preview as raw HTML string (not JSON-wrapped). */
+export async function previewReportHtml(type: 'daily' | 'weekly'): Promise<string> {
+  const url = `${BASE_URL}/api/reports/preview?type=${type}&format=email-html`;
+  const headers = await getHeaders();
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`Preview failed: ${text}`);
+  }
+  return res.text();
+}
+
+export async function sendReport(params: { type: 'daily' | 'weekly'; settingId?: string; channels?: 'slack' | 'email' }) {
   return apiFetch<{ results: Array<{ channel: string; success: boolean; error?: string }>; summary: { sent: number; failed: number; total: number } }>(
     '/api/reports/send',
     { method: 'POST', body: JSON.stringify(params) }
@@ -322,6 +334,13 @@ export async function testSlackWebhook(webhookUrl: string) {
   return apiFetch<{ success: boolean; error?: string }>('/api/reports/test/slack', {
     method: 'POST',
     body: JSON.stringify({ webhookUrl }),
+  });
+}
+
+export async function testEmailDelivery(emailAddress: string) {
+  return apiFetch<{ success: boolean; error?: string }>('/api/reports/test/email', {
+    method: 'POST',
+    body: JSON.stringify({ emailAddress }),
   });
 }
 

@@ -16,8 +16,15 @@ export default function Login() {
   const [needsVerification, setNeedsVerification] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { signIn, verifySecondFactor } = useAuth();
+  const { signIn, verifySecondFactor, isAuthenticated, loading: authLoading } = useAuth();
   const { logoDark } = usePublicBrandingSettings();
+
+  // Redirect authenticated users to their intended destination
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      navigate(getRedirectPath(), { replace: true });
+    }
+  }, [isAuthenticated, authLoading, navigate]);
 
   // Pre-fill email from URL params if provided (from invitation or signup existing account)
   useEffect(() => {

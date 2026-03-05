@@ -17,6 +17,7 @@ export default function AIPersonalizationSettings() {
   const [styles, setStyles] = useState<UserWritingStyle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [editingStyleId, setEditingStyleId] = useState<string | null>(null);
   const [showTrainingWizard, setShowTrainingWizard] = useState(false);
   const [emailSignOff, setEmailSignOff] = useState('');
   const [emailSignOffSaving, setEmailSignOffSaving] = useState(false);
@@ -122,19 +123,49 @@ export default function AIPersonalizationSettings() {
       // Filter empty examples
       const cleanExamples = (currentStyle.examples || []).filter(ex => ex.trim());
 
-      await SalesTemplateService.createWritingStyle({
-        name,
-        tone_description: toneDescription,
-        examples: cleanExamples,
-        is_default: styles.length === 0 // Make default if it's the first one
-      });
+      if (editingStyleId) {
+        await SalesTemplateService.updateWritingStyle(editingStyleId, {
+          name,
+          tone_description: toneDescription,
+          examples: cleanExamples,
+        });
+        toast.success('Writing style updated');
+      } else {
+        await SalesTemplateService.createWritingStyle({
+          name,
+          tone_description: toneDescription,
+          examples: cleanExamples,
+          is_default: styles.length === 0
+        });
+        toast.success('Writing style saved');
+      }
 
-      toast.success('Writing style saved');
       setIsEditing(false);
+      setEditingStyleId(null);
       setCurrentStyle({ name: '', tone_description: '', examples: [''] });
       fetchStyles();
     } catch (error) {
       toast.error('Failed to save writing style');
+    }
+  };
+
+  const handleEdit = (style: UserWritingStyle) => {
+    setEditingStyleId(style.id);
+    setCurrentStyle({
+      name: style.name,
+      tone_description: style.tone_description,
+      examples: style.examples.length > 0 ? [...style.examples] : [''],
+    });
+    setIsEditing(true);
+  };
+
+  const handleDelete = async (styleId: string) => {
+    try {
+      await SalesTemplateService.deleteWritingStyle(styleId);
+      toast.success('Writing style deleted');
+      fetchStyles();
+    } catch (error) {
+      toast.error('Failed to delete writing style');
     }
   };
 
@@ -343,7 +374,7 @@ export default function AIPersonalizationSettings() {
         >
           <div className="flex items-center gap-2 text-[#37bd7e] mb-2">
             <Sparkles className="w-5 h-5" />
-            <h3 className="font-medium">Create New Style Manually</h3>
+            <h3 className="font-medium">{editingStyleId ? 'Edit Style' : 'Create New Style Manually'}</h3>
           </div>
 
           <div className="space-y-2">
@@ -391,10 +422,10 @@ export default function AIPersonalizationSettings() {
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => { setIsEditing(false); setEditingStyleId(null); setCurrentStyle({ name: '', tone_description: '', examples: [''] }); }}>Cancel</Button>
             <Button onClick={handleSave} className="bg-[#37bd7e] hover:bg-[#2da76c]">
               <Save className="w-4 h-4 mr-2" />
-              Save Style
+              {editingStyleId ? 'Update Style' : 'Save Style'}
             </Button>
           </div>
         </motion.div>
@@ -419,8 +450,11 @@ export default function AIPersonalizationSettings() {
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(style)}>
                     <PenTool className="w-4 h-4 text-gray-400" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleDelete(style.id)}>
+                    <Trash2 className="w-4 h-4 text-red-400" />
                   </Button>
                 </div>
               </div>

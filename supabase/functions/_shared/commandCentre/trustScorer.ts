@@ -250,12 +250,28 @@ export async function recordOutcome(
  *   autonomous  — agent executes without rep involvement (confidence >= autoThreshold)
  *   one_click   — rep sees a single approve button (confidence >= 0.70)
  *   needs_input — rep must review and edit before confirming (confidence < 0.70)
+ *
+ * When context_risk is provided and exceeds 0.7, the auto_threshold is raised
+ * by 0.10 (capped at 0.99) — making autonomous execution harder to achieve
+ * for high-value deals, senior buyers, and cold relationships. (AE2-006)
  */
 export function classifyExecutionTier(
   confidenceScore: number,
   autoThreshold: number,
+  contextRisk?: number,
 ): ExecutionTier {
-  if (confidenceScore >= autoThreshold) return 'autonomous';
+  let effectiveThreshold = autoThreshold;
+
+  if (contextRisk !== undefined && contextRisk > 0.7) {
+    effectiveThreshold = Math.min(0.99, autoThreshold + 0.10);
+    console.log('[cc-trust] classifyExecutionTier: context_risk elevated threshold', {
+      original: autoThreshold,
+      contextRisk,
+      effectiveThreshold,
+    });
+  }
+
+  if (confidenceScore >= effectiveThreshold) return 'autonomous';
   if (confidenceScore >= 0.70) return 'one_click';
   return 'needs_input';
 }
