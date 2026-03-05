@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
+// Deploy trigger: 2026-03-03
 import { MeetingsLandingV4 } from './pages/MeetingsLandingV4';
 import { LandingPage } from './pages/LandingPage';
 import  WaitlistLanding  from './pages/WaitlistLanding';
@@ -30,6 +31,7 @@ import DemoExperienceV2 from './demo-v2/DemoExperience';
 import { LandingPageV5 } from './pages/LandingPageV5';
 import { getAppUrl } from './lib/utils/siteUrl';
 import { trackPageView } from './lib/pageViewTracker';
+import { CookieConsentBanner } from './lib/consent/CookieConsentBanner';
 
 // Initialize i18next for internationalization
 import './lib/i18n/config';
@@ -50,6 +52,7 @@ function App() {
   return (
     <BrowserRouter>
       <PageViewTracker />
+      <CookieConsentBanner />
       <Toaster position="top-center" richColors closeButton />
       <Routes>
         <Route path="/landing" element={<MeetingsLandingV4 />} />

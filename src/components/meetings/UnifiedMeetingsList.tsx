@@ -310,6 +310,7 @@ const UnifiedMeetingsList: React.FC = () => {
     totalCount,
     stats,
     isLoading,
+    isRefetching,
     error,
     searchQuery,
     setSearchQuery,
@@ -532,7 +533,7 @@ const UnifiedMeetingsList: React.FC = () => {
     )
   }
 
-  if (isLoading) {
+  if (isLoading && items.length === 0) {
     return <ListSkeleton view={view} />
   }
 
@@ -540,6 +541,13 @@ const UnifiedMeetingsList: React.FC = () => {
     <div data-tour="meetings-list" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-4 sm:space-y-6 w-full overflow-x-hidden">
       {/* Meeting Usage Bar */}
       <MeetingUsageBar />
+
+      {/* Subtle background refetch indicator */}
+      {isRefetching && (
+        <div className="w-full h-0.5 bg-gray-200/50 dark:bg-gray-700/30 rounded-full overflow-hidden">
+          <div className="h-full bg-emerald-500/60 rounded-full animate-pulse w-2/3" />
+        </div>
+      )}
 
       {/* Active Recordings Banner */}
       {activeRecordings.length > 0 && (

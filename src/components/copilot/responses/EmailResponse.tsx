@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import type { EmailResponse as EmailResponseData } from '../types';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
+import { useGmailSendEnabled } from '@/lib/hooks/useGoogleIntegration';
 
 interface EmailResponseProps {
   data: EmailResponseData;

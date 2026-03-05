@@ -10329,6 +10329,10 @@ serve(async (req) => {
         if (payload.view?.callback_id === 'schedule_email_modal') {
           return handleScheduleEmailSubmission(supabase, payload);
         }
+        // EMAIL-008: Schedule email modal submission
+        if (payload.view?.callback_id === 'schedule_email_modal') {
+          return handleScheduleEmailSubmission(supabase, payload);
+        }
         if (payload.view?.callback_id === 'create_task_from_message_modal') {
           return handleCreateTaskFromMessageSubmission(supabase, payload);
         }

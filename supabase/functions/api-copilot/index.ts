@@ -1813,10 +1813,11 @@ RECIPIENT: ${context?.contactName || 'the recipient'}
 CRITICAL REQUIREMENTS:
 1. Keep ALL the same information, meeting references, action items, and key points
 2. Only adjust the tone/style as requested - DO NOT remove content
-3. Keep the greeting style appropriate for the new tone
+3. The greeting MUST address the EXACT SAME PERSON as the original email. If the original says "Hi Haris," the adjusted email MUST also address Haris. NEVER change the recipient name.
 4. Sign off with "${userName}" (never use placeholders like "[Your Name]")
 5. If the email mentions specific dates, names, or action items - KEEP THEM ALL
 6. The adjusted email should be roughly the same length (unless "concise" is requested)
+7. Never use em dashes. Use commas, periods, or rewrite instead.
 
 Return ONLY a JSON object:
 {"subject": "adjusted subject", "body": "adjusted email body with proper greeting and sign-off"}`
@@ -1849,41 +1850,78 @@ Return ONLY a JSON object:
 
     const geminiData = await geminiResponse.json()
     const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    
+
+    console.log('[REGENERATE-TONE] Gemini response length:', responseText.length, 'first 200:', responseText.slice(0, 200))
+
+    // Extract original recipient name from the current email greeting
+    const originalGreetingMatch = currentEmail.body.match(/^(?:Hi|Hey|Hello|Dear)\s+([A-Z][a-zA-Z]+)/m)
+    const originalRecipientName = originalGreetingMatch ? originalGreetingMatch[1] : null
+
+    // Post-process regenerated email: fix recipient name and clean artifacts
+    function postProcessEmail(emailBody: string): string {
+      let result = emailBody
+      // Strip markdown blockquote prefixes ("> " at start of lines)
+      result = result.replace(/^>\s?/gm, '')
+      // If original had a specific name, ensure the new email uses the same name
+      if (originalRecipientName) {
+        result = result.replace(
+          /^((?:Hi|Hey|Hello|Dear)\s+)([A-Z][a-zA-Z]+)/m,
+          `$1${originalRecipientName}`
+        )
+      }
+      // Clean em dashes and placeholders
+      result = result
+        .replace(/\u2014/g, ',')
+        .replace(/\[Your Name\]/gi, userName)
+        .replace(/\[Your (?:Title|Company|Phone|Email)[^\]]*\]/gi, '')
+      return result.trim()
+    }
+
+    // Try parsing as JSON directly
     try {
       const emailJson = JSON.parse(responseText)
       if (emailJson.subject && emailJson.body) {
-        console.log('[REGENERATE-TONE] ✅ Successfully regenerated email with', newTone, 'tone')
+        console.log('[REGENERATE-TONE] Successfully regenerated email with', newTone, 'tone')
         return new Response(JSON.stringify({
           subject: emailJson.subject,
-          body: emailJson.body,
+          body: postProcessEmail(emailJson.body),
           tone: newTone
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
-    } catch (parseError) {
-      // Try to extract JSON
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        try {
-          const emailJson = JSON.parse(jsonMatch[0])
-          if (emailJson.subject && emailJson.body) {
-            return new Response(JSON.stringify({
-              subject: emailJson.subject,
-              body: emailJson.body,
-              tone: newTone
-            }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            })
-          }
-        } catch (e) {
-          // Fall through to error
+    } catch (_parseError) {
+      // Try to extract JSON from response
+    }
+
+    // Try to extract JSON from response text
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      try {
+        const emailJson = JSON.parse(jsonMatch[0])
+        if (emailJson.subject && emailJson.body) {
+          return new Response(JSON.stringify({
+            subject: emailJson.subject,
+            body: postProcessEmail(emailJson.body),
+            tone: newTone
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
         }
+      } catch (_e) {
+        // Fall through
       }
     }
-    
-    return createErrorResponse('Failed to parse regenerated email', 500, 'PARSE_ERROR')
+
+    // If Gemini returned text but we couldn't parse, return the original email unchanged
+    console.error('[REGENERATE-TONE] Failed to parse Gemini response, returning original email. Response:', responseText.slice(0, 300))
+    return new Response(JSON.stringify({
+      subject: currentEmail.subject,
+      body: currentEmail.body,
+      tone: newTone
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
     
   } catch (error) {
     console.error('[REGENERATE-TONE] Error:', error)
@@ -4550,36 +4588,37 @@ Gather data from multiple sources and present a **well-formatted markdown summar
    - Use execute_action with get_contacts_needing_attention { days_since_contact: 7 } for follow-ups due
    - Use execute_action with get_pipeline_summary {} for current pipeline snapshot
 
-2. **Format your response with these EXACT markdown sections:**
+2. **Format your response with these EXACT markdown sections (NO emojis):**
 
-## 📊 This Week's Snapshot
+## This Week's Snapshot
 - **Pipeline Value:** $X total, $Y weighted
 - **Deals Closing Soon:** X deals worth $Y
 - **Stale Opportunities:** X deals with no recent activity
 - **Follow-ups Overdue:** X contacts need attention
 
-## 📅 Today's Schedule
+## Today's Schedule
 | Time | Meeting | Company | Prep Status |
 |------|---------|---------|-------------|
-| 9:00 AM | Call with **John Smith** | Acme Corp | ✅ Ready |
-| 2:30 PM | Demo for **Jane Doe** | TechStart | ⚠️ Needs prep |
+| 9:00 AM | Call with **John Smith** | Acme Corp | Ready |
+| 2:30 PM | Demo for **Jane Doe** | TechStart | Needs prep |
 
-## ✅ Priority Actions
+## Priority Actions
 1. **Follow up with Stan** at Acme Corp - last contact 10 days ago
 2. **Prepare for 2:30 PM demo** with TechStart - review their requirements
 3. **Update Globex deal** - close date is tomorrow, confirm status
 
-## 💡 Key Insights
+## Key Insights
 - Your **weighted pipeline is up 12%** from last week
 - **3 deals** moved to negotiation stage
 - Consider reaching out to dormant contacts at **BigCorp** and **MegaInc**
 
 **IMPORTANT Formatting Rules:**
+- **NEVER use emojis** — no emoji section headers, no emoji bullets, no emoji anywhere
 - Use **bold** for names, numbers, and key metrics
-- Use bullet points (•) for lists within sections
+- Use bullet points for lists within sections
 - Use numbered lists (1. 2. 3.) for priority actions
-- Use tables for schedules with clear columns
-- Use emoji sparingly: 📊 📅 ✅ 💡 ⚠️ for section headers only
+- Use markdown tables for schedules and structured data
+- Use horizontal rules (---) to separate distinct sections
 - Keep each section concise - max 5-7 items per section
 
 ## Core Rules
@@ -4599,13 +4638,7 @@ You are a TEAM MEMBER, not a generic AI assistant. Your responses should feel li
   - Afternoon (12pm-5pm): "Hey!" "Quick update:" "Here's the rundown:"
   - Evening (5pm-10pm): "Working late?" "End of day check:" "Wrapping up?"
   - Late night (10pm-5am): "Burning the midnight oil?" "Late night hustle!"
-- **Sparse Emojis**: Use sparingly for visual clarity:
-  - 📊 for pipeline/data summaries
-  - ⚠️ for warnings/overdue items
-  - ✅ for completed/healthy items
-  - 🎯 for goals/targets
-  - 📅 for calendar/schedule
-  - 💰 for revenue/deals
+- **No Emojis**: Never use emojis in responses. Use clean markdown headings, bold, and tables for visual structure instead.
 - **Short Paragraphs**: Max 2-3 sentences per thought
 - **Scannable Structure**: Use bold, bullets, and whitespace
 
@@ -4617,30 +4650,29 @@ For data-heavy responses (tasks, deals, meetings, contacts):
 \`\`\`
 Hey {name}! {time_aware_greeting}
 
-{emoji} **{Section Title}** — {one-line summary}
-• {Item 1 with key details}
-• {Item 2 with key details}
+## {Section Title}
+{one-line summary}
+- {Item 1 with key details}
+- {Item 2 with key details}
 
-{emoji} **{Section Title}** — {one-line summary}
-• {Item 1}
-• {Item 2}
-
-[Action Button] [Action Button]
+## {Section Title}
+{one-line summary}
+- {Item 1}
+- {Item 2}
 
 {Optional follow-up question or offer}
 \`\`\`
 
 **Example - Tasks needing attention:**
 \`\`\`
-Hey Andrew! 👋 Working late? Here's the quick rundown:
+Hey Andrew! Working late? Here's the quick rundown:
 
-📊 **Deals** — All clear, nothing urgent!
+## Deals
+All clear, nothing urgent.
 
-⚠️ **Tasks** — 11 need attention
-• 3 overdue (oldest: Oct 30)
-• 8 due this week
-
-[View All Tasks] [Show Overdue Only]
+## Tasks — 11 need attention
+- **3 overdue** (oldest: Oct 30)
+- **8 due** this week
 
 Want me to help prioritize these?
 \`\`\`

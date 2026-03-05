@@ -554,7 +554,7 @@ export function PrivacyPolicyPage() {
           <div className="flex flex-col items-center gap-4">
             <img src={logoDark} alt="60" className="h-8 w-auto" />
             <p className="text-gray-400 text-sm text-center">
-              © 2025 Sixty Seconds Ltd. All rights reserved.
+              © 2026 Sixty Seconds Ltd. All rights reserved.
             </p>
           </div>
         </div>

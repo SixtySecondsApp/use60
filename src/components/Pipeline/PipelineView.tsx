@@ -482,6 +482,16 @@ export function PipelineView() {
         />
       )}
 
+      {isTableView && totalPages > 1 && (
+        <PipelinePagination
+          currentPage={filterState.page}
+          totalPages={totalPages}
+          totalCount={pipelineData.data.totalCount}
+          pageSize={PIPELINE_PAGE_SIZE}
+          onPageChange={filterState.setPage}
+        />
+      )}
+
       {/* Deal Intelligence Sheet */}
       <DealIntelligenceSheet
         dealId={selectedDealId}

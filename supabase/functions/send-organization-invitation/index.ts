@@ -131,6 +131,15 @@ serve(async (req) => {
     });
   }
 
+  // Auth: require cron secret
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const {
       to_email,
