@@ -13,6 +13,7 @@ import {
   extractAndTruncateSummary,
   // Action Items
   processActionItems,
+  fetchRecordingDetails,
   // Helpers
   buildEmbedUrl,
   normalizeInviteesType,
@@ -1910,6 +1911,27 @@ async function syncSingleCall(
     // - Internal users: Create meeting_attendees entry only (no contact creation)
     // - External users: Create/update contacts + meeting_contacts junction (no meeting_attendees)
     const externalContactIds: string[] = []
+
+    // If the list API didn't include participants, fetch from individual recording endpoint
+    const hasParticipants = (call.calendar_invitees?.length > 0) || (call.participants?.length > 0)
+    if (!hasParticipants) {
+      const recordingId = call.recording_id || call.id || call.recordingId
+      if (recordingId) {
+        try {
+          console.log(`[fathom-sync] No participants in list response — fetching from /recordings/${recordingId}`)
+          const details = await fetchRecordingDetails(integration.access_token, recordingId)
+          if (details?.calendar_invitees?.length) {
+            call.calendar_invitees = details.calendar_invitees
+            console.log(`[fathom-sync] Got ${details.calendar_invitees.length} calendar_invitees from recording details`)
+          } else if (details?.participants?.length) {
+            call.participants = details.participants
+            console.log(`[fathom-sync] Got ${details.participants.length} participants from recording details`)
+          }
+        } catch (err) {
+          console.warn(`[fathom-sync] Failed to fetch recording details for participants:`, err instanceof Error ? err.message : String(err))
+        }
+      }
+    }
 
     // Determine which participant list to use
     const inviteeList = (call.calendar_invitees && call.calendar_invitees.length > 0)

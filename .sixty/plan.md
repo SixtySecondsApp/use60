@@ -7,6 +7,16 @@
 
 ---
 
+## Active Plan Pointer (2026-03-05)
+
+- Feature: `copilot-daily-actions-gap-closure`
+- Plan file: `.sixty/plan-copilot-daily-actions-gap-closure.json`
+- Progress file: `.sixty/progress-copilot-daily-actions-gap-closure.md`
+- Scope: top 10 reliability/orchestration gaps for everyday copilot asks
+- Status: pending (planning complete, implementation not started)
+
+---
+
 ## Story 1 — TSK-0450-S1: Replace "acme.com" placeholder with "mycompany.com"
 
 **Type:** fix | **Risk:** Low | **Dependencies:** None

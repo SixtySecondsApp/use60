@@ -57,6 +57,21 @@ export interface EntityDisambiguationData {
   name_searched: string;
   disambiguation_reason?: string;
   candidates: EntityCandidate[];
+  // Extended: multi-entity-type disambiguation
+  entityType?: 'contact' | 'company' | 'deal';
+  selectionMode?: 'single' | 'multi';
+  workflowId?: string;
+  // Compact choice cards for companies/deals
+  compactCandidates?: CompactCandidate[];
+}
+
+export interface CompactCandidate {
+  id: string;
+  entityType: 'contact' | 'company' | 'deal';
+  name: string;
+  subtitle?: string;
+  metadata: Record<string, string | number | boolean | null>;
+  matchReason: string;
 }
 
 interface EntityDisambiguationResponseProps {
@@ -251,25 +266,81 @@ const CandidateCard: React.FC<{
 };
 
 /**
+ * Compact Card for company/deal disambiguation
+ */
+const CompactCandidateCard: React.FC<{
+  candidate: CompactCandidate;
+  index: number;
+  selected?: boolean;
+  onSelect: () => void;
+}> = ({ candidate, index, selected, onSelect }) => {
+  const entityIcon = candidate.entityType === 'company'
+    ? <Building2 className="w-4 h-4" />
+    : candidate.entityType === 'deal'
+    ? <ExternalLink className="w-4 h-4" />
+    : <User className="w-4 h-4" />;
+
+  return (
+    <motion.button
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.15, delay: index * 0.04 }}
+      onClick={onSelect}
+      className={cn(
+        'w-full text-left p-3 rounded-lg border transition-all duration-200',
+        'bg-white dark:bg-gray-800/60',
+        selected
+          ? 'border-blue-500 dark:border-blue-400 ring-1 ring-blue-500/30'
+          : 'border-gray-200 dark:border-gray-700/50 hover:border-blue-400 dark:hover:border-blue-500/50',
+        'group cursor-pointer'
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0 text-white">
+          {entityIcon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
+              {candidate.name}
+            </span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 flex-shrink-0">
+              {candidate.matchReason}
+            </span>
+          </div>
+          {candidate.subtitle && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+              {candidate.subtitle}
+            </p>
+          )}
+        </div>
+        <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-blue-500 transition-colors flex-shrink-0" />
+      </div>
+    </motion.button>
+  );
+};
+
+/**
  * Entity Disambiguation Response Component
  *
- * Displays when the AI finds multiple contacts matching a name and needs
- * the user to select which one they meant.
+ * Displays when the AI finds multiple contacts, companies, or deals matching
+ * a search and needs the user to select which one(s) they meant.
+ * Supports single-select and multi-select modes.
  */
 export const EntityDisambiguationResponse: React.FC<EntityDisambiguationResponseProps> = ({
   data,
   onSelect
 }) => {
   const { sendMessage } = useCopilot();
+  const [multiSelected, setMultiSelected] = React.useState<Set<string>>(new Set());
+  const isMulti = data.selectionMode === 'multi';
 
   const handleSelect = async (candidate: EntityCandidate) => {
-    // If custom handler provided, use that
     if (onSelect) {
       onSelect(candidate);
       return;
     }
 
-    // Otherwise, send a follow-up message to the copilot
     const selectionMessage = candidate.email
       ? `I mean ${candidate.full_name} (${candidate.email})`
       : candidate.company_name
@@ -279,9 +350,70 @@ export const EntityDisambiguationResponse: React.FC<EntityDisambiguationResponse
     await sendMessage(selectionMessage);
   };
 
+  const handleCompactSelect = async (candidate: CompactCandidate) => {
+    if (isMulti) {
+      setMultiSelected(prev => {
+        const next = new Set(prev);
+        next.has(candidate.id) ? next.delete(candidate.id) : next.add(candidate.id);
+        return next;
+      });
+      return;
+    }
+
+    await sendMessage(`I mean "${candidate.name}" (${candidate.entityType} ID: ${candidate.id})`);
+  };
+
+  const handleMultiConfirm = async () => {
+    const selectedNames = (data.compactCandidates || [])
+      .filter(c => multiSelected.has(c.id))
+      .map(c => c.name);
+    await sendMessage(`I selected: ${selectedNames.join(', ')}`);
+  };
+
+  // Compact candidates (companies, deals)
+  if (data.compactCandidates && data.compactCandidates.length > 0) {
+    const entityLabel = data.entityType === 'company' ? 'companies' : data.entityType === 'deal' ? 'deals' : 'matches';
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          {data.entityType === 'company' ? <Building2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
+          <span>
+            Found {data.compactCandidates.length} {entityLabel} matching &quot;{data.name_searched}&quot;.
+            {isMulti ? ' Select all that apply.' : ' Which one did you mean?'}
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          {data.compactCandidates.map((candidate, index) => (
+            <CompactCandidateCard
+              key={candidate.id}
+              candidate={candidate}
+              index={index}
+              selected={multiSelected.has(candidate.id)}
+              onSelect={() => handleCompactSelect(candidate)}
+            />
+          ))}
+        </div>
+        {isMulti && multiSelected.size > 0 && (
+          <button
+            onClick={handleMultiConfirm}
+            className="w-full py-2 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            Confirm {multiSelected.size} selected
+          </button>
+        )}
+        <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
+          {isMulti ? 'Select one or more, then confirm.' : 'Click to select, or provide more details.'}
+        </p>
+      </div>
+    );
+  }
+
+  // Classic contact candidates
   if (!data.candidates || data.candidates.length === 0) {
     return null;
   }
+
+  const entityLabel = data.entityType === 'company' ? 'companies' : data.entityType === 'deal' ? 'deals' : 'people';
 
   return (
     <div className="space-y-4">
@@ -289,7 +421,7 @@ export const EntityDisambiguationResponse: React.FC<EntityDisambiguationResponse
       <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
         <User className="w-4 h-4" />
         <span>
-          I found {data.candidates.length} people named "{data.name_searched}". Which one did you mean?
+          I found {data.candidates.length} {entityLabel} named &quot;{data.name_searched}&quot;. Which one did you mean?
         </span>
       </div>
 

@@ -897,15 +897,77 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     );
   }
 
-  // Formula (read-only, computed value)
+  // Formula (read-only, computed value) — click to expand full text
   if (columnType === 'formula') {
+    const hasFormulaValue = cell.value != null && cell.value !== '';
+    const formulaValueColor = hasFormulaValue ? ({
+      positive: 'text-emerald-400', neutral: 'text-zinc-400', negative: 'text-red-400',
+      hot: 'text-red-400', warm: 'text-amber-400', cold: 'text-blue-400',
+      high: 'text-red-400', medium: 'text-amber-400', low: 'text-emerald-400',
+      strong: 'text-emerald-400', partial: 'text-amber-400', weak: 'text-red-400',
+      true: 'text-emerald-400', false: 'text-red-400',
+    } as Record<string, string>)[cell.value!.trim().toLowerCase()] : undefined;
+    const formulaDotColor = hasFormulaValue ? ({
+      positive: 'bg-emerald-400', neutral: 'bg-zinc-400', negative: 'bg-red-400',
+      hot: 'bg-red-400', warm: 'bg-amber-400', cold: 'bg-blue-400',
+      high: 'bg-red-400', medium: 'bg-amber-400', low: 'bg-emerald-400',
+      strong: 'bg-emerald-400', partial: 'bg-amber-400', weak: 'bg-red-400',
+      true: 'bg-emerald-400', false: 'bg-red-400',
+    } as Record<string, string>)[cell.value!.trim().toLowerCase()] : undefined;
     return (
-      <div className="w-full h-full flex items-center cursor-default" title={formulaExpression ?? undefined}>
-        <FunctionSquare className="w-3 h-3 text-blue-400 shrink-0 mr-1.5" />
-        <span className="truncate text-sm text-blue-300">
-          {cell.value ?? <span className="text-gray-600 italic text-xs">No value</span>}
-        </span>
-      </div>
+      <>
+        <div
+          className={`w-full h-full flex items-center ${hasFormulaValue ? 'cursor-pointer group/formula' : 'cursor-default'}`}
+          title={formulaExpression ?? undefined}
+          onClick={hasFormulaValue ? () => setExpanded(true) : undefined}
+        >
+          <FunctionSquare className="w-3 h-3 text-blue-400 shrink-0 mr-1.5" />
+          {formulaDotColor && <span className={`w-1.5 h-1.5 rounded-full ${formulaDotColor} shrink-0 mr-1`} />}
+          <span className={`truncate text-sm ${formulaValueColor || 'text-blue-300'} group-hover/formula:text-blue-200 transition-colors`}>
+            {cell.value ?? <span className="text-gray-600 italic text-xs">No value</span>}
+          </span>
+        </div>
+        {expanded && hasFormulaValue && createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center"
+            onClick={() => { setExpanded(false); setCopied(false); }}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div
+              className="relative z-10 w-full max-w-2xl mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                <div className="flex items-center gap-2">
+                  <FunctionSquare className="w-4 h-4 text-blue-400" />
+                  <span className="text-sm font-medium text-gray-200">{columnLabel || 'Formula'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(cell.value!); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                    className="p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+                    title="Copy"
+                  >
+                    {copied ? <CheckCheck className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setExpanded(false); setCopied(false); }}
+                    className="p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-4 overflow-auto max-h-[60vh] whitespace-pre-wrap text-sm text-gray-200 leading-relaxed">
+                {cell.value}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+      </>
     );
   }
 
@@ -1378,17 +1440,21 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         >
           {selected ? (
             <span
-              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-              style={{ backgroundColor: `${selected.color ?? '#6366f1'}20`, color: selected.color ?? '#6366f1' }}
+              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border"
+              style={{
+                backgroundColor: `${selected.color ?? '#6366f1'}15`,
+                color: selected.color ?? '#6366f1',
+                borderColor: `${selected.color ?? '#6366f1'}30`,
+              }}
             >
               <span
-                className="w-1.5 h-1.5 rounded-full mr-1.5"
+                className="w-1.5 h-1.5 rounded-full mr-1.5 shrink-0"
                 style={{ backgroundColor: selected.color ?? '#6366f1' }}
               />
               {selected.label}
             </span>
           ) : cell.value ? (
-            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-700/50 text-gray-300">
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20">
               {cell.value}
             </span>
           ) : (

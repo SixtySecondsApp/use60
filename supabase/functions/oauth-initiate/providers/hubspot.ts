@@ -151,6 +151,9 @@ export async function handleInitiate(req: Request): Promise<Response> {
       'timeline',
       // Forms
       'forms',
+      // Sequences (list sequences + enroll contacts)
+      'automation.sequences.read',
+      'automation.sequences.enrollments.write',
     ]
 
     // Generate secure random state for CSRF protection

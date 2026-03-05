@@ -18,16 +18,19 @@ interface SupabaseClient {
 async function insertRowsAndCells(
   svc: SupabaseClient,
   tableId: string,
-  rows: Array<{ source_type: string; source_id: string }>,
+  rows: Array<{ source_type: string; source_id: string; source_data?: Record<string, unknown> }>,
   cellsData: Array<{ column_id: string; value: any }[]>
 ): Promise<number> {
   if (rows.length === 0) return 0;
 
   const { data: insertedRows, error: rowError } = await svc
     .from('dynamic_table_rows')
-    .upsert(
-      rows.map(r => ({ ...r, table_id: tableId })),
-      { onConflict: 'table_id,source_id', ignoreDuplicates: true }
+    .insert(
+      rows.map(r => {
+        const row: any = { source_type: r.source_type, source_id: r.source_id, table_id: tableId };
+        if (r.source_data) row.source_data = r.source_data;
+        return row;
+      })
     )
     .select('id');
 
@@ -81,6 +84,57 @@ async function resolveOwnerNames(
   });
 
   return nameMap;
+}
+
+// Extract next actions from meeting summary using Claude Haiku
+async function extractNextActionsWithHaiku(
+  summaries: Array<{ meetingId: string; summary: string; title: string }>
+): Promise<Map<string, string>> {
+  const results = new Map<string, string>();
+  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!apiKey || summaries.length === 0) return results;
+
+  // Process in batches of 5 concurrent calls
+  for (let i = 0; i < summaries.length; i += 5) {
+    const batch = summaries.slice(i, i + 5);
+    const promises = batch.map(async ({ meetingId, summary, title }) => {
+      try {
+        const truncatedSummary = summary.length > 1500 ? summary.slice(0, 1500) + '...' : summary;
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 150,
+            temperature: 0.2,
+            messages: [{
+              role: 'user',
+              content: `Extract 1-3 concrete next action items from this meeting summary. Return ONLY a comma-separated list of short action items (max 10 words each). If no clear actions, return "No actions identified".
+
+Meeting: ${title}
+Summary: ${truncatedSummary}`,
+            }],
+          }),
+        });
+
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const text = data.content?.[0]?.text?.trim();
+        if (text && !text.toLowerCase().includes('no actions identified')) {
+          results.set(meetingId, text);
+        }
+      } catch {
+        // Non-fatal per meeting
+      }
+    });
+    await Promise.all(promises);
+  }
+
+  return results;
 }
 
 // Extract readable summary from potentially JSON-encoded summary field
@@ -214,10 +268,21 @@ async function backfillLeads(
     }
 
 
-    const rows = newLeads.map((l: any) => ({
-      source_type: 'app' as const,
-      source_id: l.id
-    }));
+    const rows = newLeads.map((l: any) => {
+      // Resolve domain for company logo rendering
+      let domain = l.domain || null;
+      if (!domain && l.contact_email?.includes('@')) {
+        const emailDomain = l.contact_email.split('@')[1]?.toLowerCase();
+        if (emailDomain && !['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'live.com', 'me.com', 'msn.com', 'protonmail.com'].includes(emailDomain)) {
+          domain = emailDomain;
+        }
+      }
+      return {
+        source_type: 'app' as const,
+        source_id: l.id,
+        source_data: domain ? { company_domain: domain } : undefined,
+      };
+    });
 
     const cellsData = newLeads.map((l: any) => {
       const cells: Array<{ column_id: string; value: any }> = [];
@@ -296,7 +361,7 @@ async function backfillContacts(
         engagement_level,
         created_at,
         company_id,
-        companies(name)
+        companies(name, domain)
       `)
       .in('owner_id', memberUserIds)
       .order('created_at', { ascending: false })
@@ -311,10 +376,20 @@ async function backfillContacts(
       continue;
     }
 
-    const rows = newContacts.map((c: any) => ({
-      source_type: 'app' as const,
-      source_id: c.id
-    }));
+    const rows = newContacts.map((c: any) => {
+      let domain = (c.companies as any)?.domain || null;
+      if (!domain && c.email?.includes('@')) {
+        const emailDomain = c.email.split('@')[1]?.toLowerCase();
+        if (emailDomain && !['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'live.com', 'me.com', 'msn.com', 'protonmail.com'].includes(emailDomain)) {
+          domain = emailDomain;
+        }
+      }
+      return {
+        source_type: 'app' as const,
+        source_id: c.id,
+        source_data: domain ? { company_domain: domain } : undefined,
+      };
+    });
 
     const cellsData = newContacts.map((c: any) => {
       const cells: Array<{ column_id: string; value: any }> = [];
@@ -489,7 +564,7 @@ async function backfillMeetings(
         share_url,
         transcript_text,
         fathom_recording_id,
-        companies!meetings_company_id_fkey(name),
+        companies!meetings_company_id_fkey(name, domain),
         contacts!meetings_primary_contact_id_fkey(first_name, last_name, email, company_id)
       `)
       .eq('org_id', orgId)
@@ -767,73 +842,193 @@ async function backfillMeetings(
       }
     }
 
-    // Step 7: Parse meeting title as contact name (last resort)
-    // Titles like "Alex William", "Amy Lawson" are often the external contact's name
+    // Step 7: Parse meeting title to extract contact/company info (last resort)
+    // Handles: "Peter smith", "Ben - Follow up", "Demo with Steve @ Sixty Seconds",
+    //          "Takumi", "Matt Craven", "Andrew, Steve & Ryccielli"
     const needStep7 = meetingIds.filter((id: string) => !contactMap.has(id));
     if (needStep7.length > 0) {
-      // Filter to titles that look like person names (2-3 capitalized words, no special chars)
-      const titleCandidates: Array<{ meetingId: string; title: string }> = [];
+      const SKIP_TITLE_PATTERNS = /^(Dev |Test |Internal |Friday |Monday |Weekly (Catch|Lead)|Daily |Team |Sprint |Standup|Stand Up|Impromptu|Motivation|LinkedIn|Planning)/i;
+
+      // Extract potential person names from titles using multiple strategies
+      const titleCandidates: Array<{ meetingId: string; extractedName: string; originalTitle: string }> = [];
       for (const m of newMeetings) {
         if (contactMap.has(m.id)) continue;
-        if (!m.title) continue;
+        if (!m.title?.trim()) continue;
         const title = m.title.trim();
-        // Match "FirstName LastName" or "FirstName MiddleName LastName"
-        // Exclude common non-name patterns
-        if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+){1,2}$/.test(title) &&
-            !/^(Dev |Test |Internal |Friday |Monday |Weekly |Daily |Team |Sprint |Standup|Stand Up)/i.test(title)) {
-          titleCandidates.push({ meetingId: m.id, title });
+        if (SKIP_TITLE_PATTERNS.test(title)) continue;
+
+        // Strategy 1: Entire title is a name ("Peter smith", "Matt Craven", "Takumi", "Byron")
+        // Relaxed: 1-3 words, any case, letters only
+        if (/^[A-Za-z]+(\s+[A-Za-z]+){0,2}$/.test(title) && title.length >= 3) {
+          titleCandidates.push({ meetingId: m.id, extractedName: title, originalTitle: title });
+          continue;
+        }
+
+        // Strategy 2: "X with Y", "X @ Y", "X and Y" — extract person name after preposition
+        // "Discovery Meeting - Steve @ Sixty S" → "Steve"
+        // "Let's Chat: Matt Conlon" → "Matt Conlon"
+        // "Demo with Steve @ Sixty Seconds" → "Steve"
+        const afterPrepMatch = title.match(/(?:with|@|:)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?:\s|$|[^a-z])/i);
+        if (afterPrepMatch && afterPrepMatch[1].trim().length >= 3) {
+          const extracted = afterPrepMatch[1].trim();
+          // Skip if it's a known non-name word
+          if (!/^(Sixty|The|Our|Your|New|All|Some)/i.test(extracted)) {
+            titleCandidates.push({ meetingId: m.id, extractedName: extracted, originalTitle: title });
+            continue;
+          }
+        }
+
+        // Strategy 3: Extract name after colon/dash ("Let's Chat: Matt Conlon" → "Matt Conlon")
+        const afterSepMatch = title.match(/[-–—:]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\s*$/);
+        if (afterSepMatch && afterSepMatch[1].trim().length >= 3) {
+          const extracted = afterSepMatch[1].trim();
+          if (!/^(Follow|Catch|Check|Kick|Stand|Update|Review|Call|Demo|Meeting)/i.test(extracted)) {
+            titleCandidates.push({ meetingId: m.id, extractedName: extracted, originalTitle: title });
+            continue;
+          }
+        }
+
+        // Strategy 4: Extract name BEFORE separator, but only if it looks like a name (1-3 words, alpha only)
+        // "Ben - Follow up" → "Ben"
+        const beforeSepMatch = title.match(/^([A-Za-z]+(?:\s+[A-Za-z]+){0,2})\s*[-–—:\/]/);
+        if (beforeSepMatch) {
+          const extracted = beforeSepMatch[1].trim();
+          // Only use if it's short and looks like a name, not a generic word
+          if (extracted.length >= 3 && extracted.split(/\s+/).length <= 3 &&
+              !/^(Discovery|Resource|Weekly|Daily|Monthly|Quarterly|Annual|Quick|Follow|Catch|General|Team|Project|Product|Sales|Client|Demo|Call)/i.test(extracted)) {
+            titleCandidates.push({ meetingId: m.id, extractedName: extracted, originalTitle: title });
+            continue;
+          }
         }
       }
 
       if (titleCandidates.length > 0) {
-        // Search contacts by matching first + last name from title
-        const { data: titleMatchedContacts } = await svc
-          .from('contacts')
-          .select('id, first_name, last_name, email, company_id, companies(name)')
-          .in('owner_id', memberUserIds)
-          .or(titleCandidates.map(tc => {
-            const parts = tc.title.split(/\s+/);
-            const first = parts[0];
-            const last = parts.slice(1).join(' ');
-            return `and(first_name.ilike.${first},last_name.ilike.${last})`;
-          }).join(','));
-
-        if (titleMatchedContacts?.length) {
-          const contactsByName = new Map<string, any>();
-          titleMatchedContacts.forEach((c: any) => {
-            const fullName = `${c.first_name || ''} ${c.last_name || ''}`.trim().toLowerCase();
-            if (fullName && !contactsByName.has(fullName)) {
-              contactsByName.set(fullName, c);
-            }
-          });
-
-          for (const tc of titleCandidates) {
-            if (contactMap.has(tc.meetingId)) continue;
-            const contact = contactsByName.get(tc.title.toLowerCase());
-            if (contact) {
-              const fullName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
-              const companyName = (contact.companies as any)?.name || null;
-              contactMap.set(tc.meetingId, {
-                name: fullName,
-                email: contact.email || '',
-                company: companyName
-              });
-            }
+        // Build search queries for contacts — search by first_name + last_name, or first_name alone
+        const orClauses: string[] = [];
+        for (const tc of titleCandidates) {
+          const parts = tc.extractedName.split(/\s+/);
+          if (parts.length >= 2) {
+            orClauses.push(`and(first_name.ilike.${parts[0]},last_name.ilike.${parts.slice(1).join(' ')})`);
+          } else {
+            orClauses.push(`first_name.ilike.${parts[0]}`);
           }
         }
 
-        // For title candidates with NO contact match, still use the title as contact name
-        // (it's better than nothing — the user named the calendar event with the person's name)
+        // Deduplicate and batch query (max 50 to avoid URL limit)
+        const uniqueClauses = [...new Set(orClauses)].slice(0, 50);
+        const { data: titleMatchedContacts } = await svc
+          .from('contacts')
+          .select('id, first_name, last_name, email, company_id, companies(name, domain)')
+          .in('owner_id', memberUserIds)
+          .or(uniqueClauses.join(','));
+
+        const contactsByName = new Map<string, any>();
+        const contactsByFirst = new Map<string, any>();
+        titleMatchedContacts?.forEach((c: any) => {
+          const fullName = `${c.first_name || ''} ${c.last_name || ''}`.trim().toLowerCase();
+          if (fullName && !contactsByName.has(fullName)) contactsByName.set(fullName, c);
+          const first = (c.first_name || '').toLowerCase();
+          if (first && !contactsByFirst.has(first)) contactsByFirst.set(first, c);
+        });
+
         for (const tc of titleCandidates) {
           if (contactMap.has(tc.meetingId)) continue;
-          contactMap.set(tc.meetingId, {
-            name: tc.title,
-            email: '',
-            company: null
-          });
+          const nameLower = tc.extractedName.toLowerCase();
+          // Try full name first, then first name only
+          const contact = contactsByName.get(nameLower) || contactsByFirst.get(nameLower);
+          if (contact) {
+            const fullName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
+            const companyName = (contact.companies as any)?.name || null;
+            contactMap.set(tc.meetingId, {
+              name: fullName,
+              email: contact.email || '',
+              company: companyName
+            });
+          }
+        }
+
+        // For unmatched candidates — only use as contact name if it looks like a person name
+        // (1-3 alphabetic words, not a generic meeting/business term)
+        const GENERIC_WORDS = /^(call|demo|meeting|discovery|resource|agent|kick|off|refresh|review|catchup|catch|follow|up|weekly|daily|chat|intro|introductory|session|sync)$/i;
+        for (const tc of titleCandidates) {
+          if (contactMap.has(tc.meetingId)) continue;
+          const words = tc.extractedName.split(/\s+/);
+          const looksLikeName = words.length <= 3 && words.every((w: string) => /^[A-Za-z]+$/.test(w)) &&
+            !words.some((w: string) => GENERIC_WORDS.test(w));
+          if (looksLikeName) {
+            contactMap.set(tc.meetingId, {
+              name: tc.extractedName,
+              email: '',
+              company: null
+            });
+          }
         }
       }
     }
+
+    // Step 8: Match meeting title against companies table
+    // Titles can be company names ("Viewpoint", "Anuncia Medical"), or contain them
+    // ("Challenger Lighting - Catch Up", "SixtySecondsVideo refresher demo")
+    const needStep8 = meetingIds.filter((id: string) => !contactMap.has(id));
+    if (needStep8.length > 0) {
+      // Get ALL companies for this org to do in-memory matching (faster than N queries)
+      const { data: allCompanies } = await svc
+        .from('companies')
+        .select('id, name, domain')
+        .in('owner_id', memberUserIds);
+
+      if (allCompanies?.length) {
+        const companiesByNameLower = new Map<string, any>();
+        allCompanies.forEach((c: any) => {
+          if (c.name) companiesByNameLower.set(c.name.toLowerCase(), c);
+        });
+
+        for (const m of newMeetings) {
+          if (contactMap.has(m.id)) continue;
+          if (!m.title?.trim()) continue;
+          const titleLower = m.title.trim().toLowerCase();
+
+          // Try exact match first
+          if (companiesByNameLower.has(titleLower)) {
+            const co = companiesByNameLower.get(titleLower)!;
+            contactMap.set(m.id, { name: '', email: '', company: co.name });
+            continue;
+          }
+
+          // Try: title contains company name, or company name contains title
+          // Extract segments from title (split by -, /, &, @, :, "with", "and")
+          const segments = m.title.trim().split(/\s*[-–—\/&@:]\s*|\s+(?:with|and)\s+/i)
+            .map((s: string) => s.trim().toLowerCase())
+            .filter((s: string) => s.length >= 3);
+
+          let matched = false;
+          for (const seg of segments) {
+            if (companiesByNameLower.has(seg)) {
+              const co = companiesByNameLower.get(seg)!;
+              contactMap.set(m.id, { name: '', email: '', company: co.name });
+              matched = true;
+              break;
+            }
+          }
+          if (matched) continue;
+
+          // Fuzzy: check if any company name appears in the title
+          for (const [coNameLower, co] of companiesByNameLower) {
+            if (coNameLower.length >= 4 && titleLower.includes(coNameLower)) {
+              contactMap.set(m.id, { name: '', email: '', company: co.name });
+              matched = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Step 8b: For meetings matched by Step 7 as person name but no company,
+    // also check if Step 7's extracted name happens to be in the contacts table
+    // and Step 7 already set it as contact name. Now try to get company from
+    // meetings that have contactInfo.company still null.
+    // (This is handled by the company resolution chain below)
 
     // --- Company resolution chain ---
     // For meetings without a company, try to get it from:
@@ -858,13 +1053,15 @@ async function backfillMeetings(
     }
 
     const companyNameMap = new Map<string, string>();
+    const companyDomainMap = new Map<string, string>();
     if (companyIdSet.size > 0) {
       const { data: companies } = await svc
         .from('companies')
-        .select('id, name')
+        .select('id, name, domain')
         .in('id', [...companyIdSet]);
       companies?.forEach((c: any) => {
         if (c.name) companyNameMap.set(c.id, c.name);
+        if (c.domain) companyDomainMap.set(c.id, c.domain);
       });
     }
 
@@ -899,11 +1096,58 @@ async function backfillMeetings(
     const ownerIds = [...new Set(newMeetings.map((m: any) => m.owner_user_id).filter(Boolean))];
     const ownerMap = await resolveOwnerNames(svc, ownerIds);
 
+    // --- Fetch action items for next_actions column ---
+    const actionItemsByMeeting = new Map<string, string>();
+    if (colMap.next_actions) {
+      const { data: actionItems } = await svc
+        .from('meeting_action_items')
+        .select('meeting_id, title')
+        .in('meeting_id', meetingIds)
+        .eq('completed', false)
+        .order('priority', { ascending: true })
+        .order('created_at', { ascending: false });
+
+      if (actionItems) {
+        const grouped = new Map<string, string[]>();
+        for (const ai of actionItems) {
+          const list = grouped.get(ai.meeting_id) || [];
+          if (list.length < 3) list.push(ai.title);
+          grouped.set(ai.meeting_id, list);
+        }
+        for (const [meetingId, titles] of grouped) {
+          actionItemsByMeeting.set(meetingId, titles.join(','));
+        }
+      }
+    }
+
     // --- Build rows & cells ---
-    const rows = newMeetings.map((m: any) => ({
-      source_type: 'app' as const,
-      source_id: m.id
-    }));
+    const rows = newMeetings.map((m: any) => {
+      // Resolve company domain for logo rendering
+      let domain = (m.companies as any)?.domain || null;
+      if (!domain) {
+        // Try from contact's company_id
+        const contact = m.contacts as any;
+        if (contact?.company_id) {
+          domain = companyDomainMap.get(contact.company_id) || null;
+        }
+      }
+      if (!domain) {
+        // Extract from contact email
+        const contactInfo = contactMap.get(m.id);
+        const email = contactInfo?.email;
+        if (email && email.includes('@')) {
+          const emailDomain = email.split('@')[1]?.toLowerCase();
+          if (emailDomain && !['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'live.com', 'me.com', 'msn.com', 'protonmail.com'].includes(emailDomain)) {
+            domain = emailDomain;
+          }
+        }
+      }
+      return {
+        source_type: 'app' as const,
+        source_id: m.id,
+        source_data: domain ? { company_domain: domain } : undefined,
+      };
+    });
 
     const cellsData = newMeetings.map((m: any) => {
       const cells: Array<{ column_id: string; value: any }> = [];
@@ -940,6 +1184,20 @@ async function backfillMeetings(
       // Company: direct FK → junction contact's company → primary_contact's company
       if (colMap.contact_company) {
         let companyName = (m.companies as any)?.name || null;
+        const companyDomain = (m.companies as any)?.domain || null;
+
+        // Fix: If company name is actually a person's name (bad data), use domain-derived name
+        if (companyName && contactInfo?.name) {
+          const compLower = companyName.toLowerCase().trim();
+          const contactLower = contactInfo.name.toLowerCase().trim();
+          if (compLower === contactLower || compLower === m.title?.toLowerCase()?.trim()) {
+            if (companyDomain) {
+              const domainName = companyDomain.split('.')[0];
+              companyName = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+            }
+          }
+        }
+
         if (!companyName) {
           // Check if junction resolution (step 1) found a company
           companyName = contactInfo?.company || null;
@@ -978,6 +1236,12 @@ async function backfillMeetings(
       if (colMap.transcript) cells.push({ column_id: colMap.transcript, value: m.transcript_text });
       if (colMap.lead_source) {
         cells.push({ column_id: colMap.lead_source, value: leadSourceMap.get(m.id) || 'Direct' });
+      }
+
+      // Next actions: top action items from meeting_action_items
+      if (colMap.next_actions) {
+        const actions = actionItemsByMeeting.get(m.id);
+        cells.push({ column_id: colMap.next_actions, value: actions || null });
       }
 
       return cells;
