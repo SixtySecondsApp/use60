@@ -51,7 +51,7 @@ export default function CreditPurchaseModal({ open, onOpenChange, defaultPack, s
   // Use defaultPack when provided, otherwise fall back to growth
   const packType: PackType = defaultPack && CREDIT_PACKS[defaultPack] ? defaultPack : 'growth';
   const pack = CREDIT_PACKS[packType];
-  const { symbol, price, isApproximate } = getPackPrice(packType, currencyCode);
+  const { symbol: packSymbol, price, isApproximate } = getPackPrice(packType, currencyCode);
   const costPerCredit = getCostPerCredit(packType);
 
   // Reset redirecting state when modal closes

@@ -1,0 +1,35 @@
+import type { UnifiedMeeting } from '@/lib/types/unifiedMeeting';
+
+export const TOUR_DEMO_MEETING_ID = 'tour-demo-meeting';
+
+export const TOUR_DEMO_MEETING: UnifiedMeeting = {
+  id: TOUR_DEMO_MEETING_ID,
+  source: 'fathom',
+  sourceTable: 'meetings',
+  title: 'Demo: Discovery Call with Acme Corp',
+  date: new Date().toISOString(),
+  durationMinutes: 32,
+  companyName: 'Acme Corp',
+  ownerEmail: null,
+  thumbnailUrl: null,
+  summary: 'A demo meeting used during the product tour.',
+  sentimentScore: 8,
+  coachRating: 7,
+  talkTimeRepPct: 45,
+  talkTimeJudgement: 'good',
+  meetingType: 'discovery',
+  status: null,
+  platform: null,
+  provider: null,
+  thumbnailStatus: null,
+  transcriptStatus: null,
+  summaryStatus: null,
+  openTaskCount: 0,
+  recordingS3Key: null,
+  hitlRequired: false,
+  speakers: null,
+  attendeeNames: ['Jane Smith', 'John Doe'],
+  detailPath: '/meetings/tour-demo',
+  shareUrl: null,
+  fathomRecordingId: null,
+};

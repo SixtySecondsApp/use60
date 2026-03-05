@@ -7,3 +7,9 @@ import React from 'react';
 export function CreditTopUpProvider({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
+
+export function useCreditTopUp() {
+  return {
+    openTopUp: () => {},
+  };
+}
