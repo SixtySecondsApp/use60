@@ -33,8 +33,9 @@ import {
   TrendingUp,
   RefreshCw,
   Loader2,
-  Globe,
   Crosshair,
+  Trash2,
+  Search,
 } from 'lucide-react';
 import { useAuth } from '@/lib/contexts/AuthContext';
 
@@ -60,15 +61,6 @@ interface ProspectRow {
   title: string;
   company: string;
   domain: string;
-}
-
-interface ExistingCampaign {
-  campaign_name: string;
-  campaign_source: string | null;
-  link_count: number;
-  total_views: number;
-  created_at: string;
-  links: CampaignLink[];
 }
 
 interface CampaignVisitorRow {
@@ -103,9 +95,27 @@ interface CampaignStats {
   ctr: number;
 }
 
+interface FlatLink {
+  id: string;
+  code: string;
+  campaign_name: string | null;
+  campaign_source: string | null;
+  visitor_company: string;
+  visitor_first_name: string | null;
+  visitor_last_name: string | null;
+  visitor_email: string | null;
+  visitor_title: string | null;
+  view_count: number;
+  status: string;
+  created_at: string;
+  engagement_score: number;
+  conversions: number;
+}
+
 type SortField = 'name' | 'source' | 'links' | 'visitors' | 'avgScore' | 'conversions' | 'ctr';
+type LinkSortField = 'visitor_company' | 'campaign_name' | 'view_count' | 'engagement_score' | 'created_at';
 type SortDir = 'asc' | 'desc';
-type ManagerView = 'list' | 'create' | 'results';
+type ManagerView = 'table' | 'create' | 'results';
 
 interface BatchProgress {
   totalBatches: number;
@@ -267,7 +277,20 @@ export default function AbmCampaignsPage() {
 // ===========================================================================
 
 function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken: string }) {
-  const [view, setView] = useState<ManagerView>('list');
+  const [view, setView] = useState<ManagerView>('table');
+
+  // ── Table state ──
+  const [allLinks, setAllLinks] = useState<FlatLink[]>([]);
+  const [loadingLinks, setLoadingLinks] = useState(true);
+  const [linkFilter, setLinkFilter] = useState('');
+  const [campaignFilter, setCampaignFilter] = useState<string>('all');
+  const [linkSort, setLinkSort] = useState<LinkSortField>('created_at');
+  const [linkSortDir, setLinkSortDir] = useState<SortDir>('desc');
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [deletingLink, setDeletingLink] = useState<string | null>(null);
+  const [confirmDeleteLink, setConfirmDeleteLink] = useState<string | null>(null);
+
+  // ── Create state ──
   const [campaignName, setCampaignName] = useState('');
   const [source, setSource] = useState('email');
   const [prospects, setProspects] = useState<ProspectRow[]>([]);
@@ -276,12 +299,8 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
   const [results, setResults] = useState<CampaignLink[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [bulkCopied, setBulkCopied] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [campaigns, setCampaigns] = useState<ExistingCampaign[]>([]);
-  const [loadingCampaigns, setLoadingCampaigns] = useState(true);
-  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [batchErrors, setBatchErrors] = useState<string[]>([]);
@@ -290,36 +309,110 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
     first_name: '', last_name: '', email: '', title: '', company: '', domain: '',
   });
 
-  const fetchCampaigns = useCallback(async () => {
-    setLoadingCampaigns(true);
+  // ── Fetch all links flat ──
+  const fetchLinks = useCallback(async () => {
+    setLoadingLinks(true);
     try {
       const response = await fetch(
-        `${supabaseUrl}/rest/v1/campaign_links?select=code,campaign_name,campaign_source,visitor_company,visitor_first_name,visitor_last_name,visitor_email,visitor_title,view_count,status,created_at&order=created_at.desc`,
+        `${supabaseUrl}/rest/v1/campaign_links?select=id,code,campaign_name,campaign_source,visitor_company,visitor_first_name,visitor_last_name,visitor_email,visitor_title,view_count,status,created_at,campaign_visitors(engagement_score,converted_at)&order=created_at.desc`,
         { headers: { apikey: ANON_KEY, Authorization: `Bearer ${authToken}` } }
       );
-      if (!response.ok) { setCampaigns([]); return; }
+      if (!response.ok) { setAllLinks([]); return; }
       const data = await response.json();
-      const grouped: Record<string, ExistingCampaign> = {};
-      for (const row of data) {
-        const name = row.campaign_name || 'Untitled';
-        if (!grouped[name]) {
-          grouped[name] = { campaign_name: name, campaign_source: row.campaign_source, link_count: 0, total_views: 0, created_at: row.created_at, links: [] };
-        }
-        grouped[name].link_count += 1;
-        grouped[name].total_views += row.view_count || 0;
-        grouped[name].links.push({
-          code: row.code, company: row.visitor_company, url: generateLinkUrl(row.code), status: row.status,
-          visitor_first_name: row.visitor_first_name, visitor_last_name: row.visitor_last_name,
-          visitor_email: row.visitor_email, visitor_title: row.visitor_title,
-        });
-      }
-      setCampaigns(Object.values(grouped));
-    } catch { setCampaigns([]); }
-    finally { setLoadingCampaigns(false); }
+      const links: FlatLink[] = data.map((row: CampaignLinkRow & { visitor_company: string; visitor_first_name: string | null; visitor_last_name: string | null; visitor_email: string | null; visitor_title: string | null }) => {
+        const visitors = row.campaign_visitors || [];
+        const topScore = visitors.length > 0 ? Math.max(...visitors.map((v: CampaignVisitorRow) => v.engagement_score)) : 0;
+        const conversions = visitors.filter((v: CampaignVisitorRow) => v.converted_at).length;
+        return {
+          id: row.id,
+          code: row.code,
+          campaign_name: row.campaign_name,
+          campaign_source: row.campaign_source,
+          visitor_company: row.visitor_company,
+          visitor_first_name: row.visitor_first_name,
+          visitor_last_name: row.visitor_last_name,
+          visitor_email: row.visitor_email,
+          visitor_title: row.visitor_title,
+          view_count: row.view_count,
+          status: row.status,
+          created_at: row.created_at,
+          engagement_score: topScore,
+          conversions,
+        };
+      });
+      setAllLinks(links);
+    } catch { setAllLinks([]); }
+    finally { setLoadingLinks(false); }
   }, [supabaseUrl, authToken]);
 
-  useEffect(() => { fetchCampaigns(); }, [fetchCampaigns]);
+  useEffect(() => { fetchLinks(); }, [fetchLinks]);
 
+  // ── Derived data ──
+  const campaignNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const l of allLinks) { if (l.campaign_name) names.add(l.campaign_name); }
+    return Array.from(names).sort();
+  }, [allLinks]);
+
+  const filteredLinks = useMemo(() => {
+    let filtered = allLinks;
+    if (campaignFilter !== 'all') {
+      if (campaignFilter === '_none') filtered = filtered.filter((l) => !l.campaign_name);
+      else filtered = filtered.filter((l) => l.campaign_name === campaignFilter);
+    }
+    if (linkFilter) {
+      const q = linkFilter.toLowerCase();
+      filtered = filtered.filter((l) =>
+        l.visitor_company?.toLowerCase().includes(q) ||
+        l.visitor_first_name?.toLowerCase().includes(q) ||
+        l.visitor_last_name?.toLowerCase().includes(q) ||
+        l.visitor_email?.toLowerCase().includes(q) ||
+        l.campaign_name?.toLowerCase().includes(q) ||
+        l.code.toLowerCase().includes(q)
+      );
+    }
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      const av = a[linkSort]; const bv = b[linkSort];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'string' && typeof bv === 'string') return linkSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      return linkSortDir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+    return sorted;
+  }, [allLinks, campaignFilter, linkFilter, linkSort, linkSortDir]);
+
+  // ── Actions ──
+  const copyLink = useCallback((code: string, url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  }, []);
+
+  const deleteLink = useCallback(async (linkId: string) => {
+    setDeletingLink(linkId);
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/campaign_links?id=eq.${linkId}`,
+        { method: 'DELETE', headers: { apikey: ANON_KEY, Authorization: `Bearer ${authToken}`, Prefer: 'return=minimal' } }
+      );
+      if (!response.ok) throw new Error(`Delete failed (${response.status})`);
+      setConfirmDeleteLink(null);
+      setAllLinks((prev) => prev.filter((l) => l.id !== linkId));
+    } catch (err) {
+      console.error('Failed to delete link:', err);
+    } finally {
+      setDeletingLink(null);
+    }
+  }, [supabaseUrl, authToken]);
+
+  const toggleLinkSort = useCallback((field: LinkSortField) => {
+    if (linkSort === field) setLinkSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setLinkSort(field); setLinkSortDir('desc'); }
+  }, [linkSort]);
+
+  // ── Campaign create helpers ──
   const addProspect = useCallback(() => {
     if (!newProspect.company.trim() && !newProspect.domain.trim()) return;
     const prospect = { ...newProspect };
@@ -361,12 +454,12 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
   }, []);
 
   const createCampaign = useCallback(async () => {
-    if (!campaignName.trim() || prospects.length === 0) return;
+    if (prospects.length === 0) return;
     setIsCreating(true);
     setCreateError(null);
     setBatchErrors([]);
     const batches = chunkArray(prospects, BATCH_SIZE);
-    const allLinks: CampaignLink[] = [];
+    const createdLinks: CampaignLink[] = [];
     let failedCount = 0;
     const errors: string[] = [];
     setBatchProgress({ totalBatches: batches.length, completedBatches: 0, totalProspects: prospects.length, enrichedCount: 0, failedCount: 0, isRunning: true });
@@ -377,7 +470,7 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
         const response = await fetch(`${supabaseUrl}/functions/v1/campaign-enrich`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', apikey: ANON_KEY, Authorization: `Bearer ${authToken}` },
-          body: JSON.stringify({ campaign_name: campaignName, campaign_source: source, prospects: batch, expires_in_days: 30 }),
+          body: JSON.stringify({ campaign_name: campaignName || null, campaign_source: source, prospects: batch, expires_in_days: 30 }),
         });
         if (!response.ok) {
           const errBody = await response.text().catch(() => '');
@@ -385,27 +478,21 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
         }
         const data = await response.json();
         const links: CampaignLink[] = (data.links || []).map((l: CampaignLink) => ({ ...l, url: generateLinkUrl(l.code) }));
-        allLinks.push(...links);
+        createdLinks.push(...links);
       } catch (err) {
         errors.push(err instanceof Error ? err.message : `Batch ${i + 1} failed`);
         failedCount += batch.length;
       }
-      setBatchProgress({ totalBatches: batches.length, completedBatches: i + 1, totalProspects: prospects.length, enrichedCount: allLinks.length, failedCount, isRunning: i < batches.length - 1 });
+      setBatchProgress({ totalBatches: batches.length, completedBatches: i + 1, totalProspects: prospects.length, enrichedCount: createdLinks.length, failedCount, isRunning: i < batches.length - 1 });
     }
 
     setBatchErrors(errors);
-    setResults(allLinks);
-    if (allLinks.length > 0) { setView('results'); fetchCampaigns(); }
+    setResults(createdLinks);
+    if (createdLinks.length > 0) { setView('results'); fetchLinks(); }
     else { setCreateError('All batches failed. No links were created.'); }
     setIsCreating(false);
     setBatchProgress((prev) => (prev ? { ...prev, isRunning: false } : null));
-  }, [campaignName, source, prospects, supabaseUrl, authToken, fetchCampaigns]);
-
-  const copyLink = useCallback((code: string, url: string) => {
-    navigator.clipboard.writeText(url);
-    setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2000);
-  }, []);
+  }, [campaignName, source, prospects, supabaseUrl, authToken, fetchLinks]);
 
   const copyAllLinks = useCallback((links: CampaignLink[]) => {
     const text = links.map((l) => `${l.company}\t${l.url}`).join('\n');
@@ -414,14 +501,11 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
     setTimeout(() => setBulkCopied(false), 2000);
   }, []);
 
-  const resetToCreate = useCallback(() => {
+  const goToCreate = useCallback(() => {
     setResults([]); setProspects([]); setCampaignName(''); setSource('email');
     setCreateError(null); setBatchProgress(null); setBatchErrors([]);
     setShowDomainPreview(false); setView('create');
   }, []);
-
-  const totalLinks = useMemo(() => campaigns.reduce((acc, c) => acc + c.link_count, 0), [campaigns]);
-  const totalViews = useMemo(() => campaigns.reduce((acc, c) => acc + c.total_views, 0), [campaigns]);
 
   const domainStats = useMemo(() => {
     const domainSet = new Set<string>();
@@ -440,106 +524,173 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
       {/* Sub-header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {view !== 'list' && (
-            <button onClick={() => setView('list')} className="p-2 -ml-2 rounded-lg hover:bg-white/[0.04] transition-colors text-zinc-500 hover:text-zinc-300">
+          {view !== 'table' && (
+            <button onClick={() => setView('table')} className="p-2 -ml-2 rounded-lg hover:bg-white/[0.04] transition-colors text-zinc-500 hover:text-zinc-300">
               <ArrowLeft className="w-4 h-4" />
             </button>
           )}
           <p className="text-sm text-zinc-400">
-            {view === 'list' ? (
-              <>{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''} <span className="text-zinc-600">·</span> {totalLinks} link{totalLinks !== 1 ? 's' : ''} <span className="text-zinc-600">·</span> {totalViews} view{totalViews !== 1 ? 's' : ''}</>
-            ) : view === 'results' ? `${results.length} links created` : 'Create personalized demo links'}
+            {view === 'table' ? (
+              <>{allLinks.length} link{allLinks.length !== 1 ? 's' : ''} {campaignFilter !== 'all' && <span className="text-zinc-600">· filtered</span>}</>
+            ) : view === 'results' ? `${results.length} links created` : 'Create campaign links'}
           </p>
         </div>
-        {view === 'list' && (
-          <button onClick={resetToCreate} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500/20 to-violet-500/20 border border-violet-500/20 text-sm text-violet-300 hover:border-violet-500/40 transition-all">
-            <Plus className="w-3.5 h-3.5" /> New campaign
+        {view === 'table' && (
+          <button onClick={goToCreate} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500/20 to-violet-500/20 border border-violet-500/20 text-sm text-violet-300 hover:border-violet-500/40 transition-all">
+            <Plus className="w-3.5 h-3.5" /> New links
           </button>
         )}
       </div>
 
-      {/* ── LIST VIEW ── */}
-      {view === 'list' && (
+      {/* ── TABLE VIEW ── */}
+      {view === 'table' && (
         <>
-          {loadingCampaigns ? (
+          {/* Filters */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600" />
+              <input
+                type="text"
+                value={linkFilter}
+                onChange={(e) => setLinkFilter(e.target.value)}
+                placeholder="Search by name, company, email..."
+                className={inputCls + ' w-full pl-9'}
+              />
+              {linkFilter && (
+                <button onClick={() => setLinkFilter('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <select value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)} className={inputCls + ' [&>option]:bg-zinc-900'}>
+              <option value="all">All campaigns</option>
+              <option value="_none">No campaign</option>
+              {campaignNames.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <button onClick={fetchLinks} className="p-2.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition-all" title="Refresh">
+              <RefreshCw className={`w-4 h-4 ${loadingLinks ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {loadingLinks ? (
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-16 text-center">
               <Loader2 className="w-5 h-5 text-violet-400 animate-spin mx-auto mb-3" />
-              <p className="text-sm text-zinc-500">Loading campaigns...</p>
+              <p className="text-sm text-zinc-500">Loading links...</p>
             </div>
-          ) : campaigns.length === 0 ? (
+          ) : allLinks.length === 0 ? (
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-16 text-center">
               <div className="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-5 h-5 text-violet-400" />
               </div>
-              <p className="text-sm text-zinc-400 mb-1">No campaigns yet</p>
-              <p className="text-xs text-zinc-600 mb-5">Create your first ABM campaign to generate personalized demo links</p>
-              <button onClick={resetToCreate} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-sm font-medium text-white hover:shadow-lg hover:shadow-violet-500/20 transition-all">
-                <Plus className="w-4 h-4" /> Create campaign
+              <p className="text-sm text-zinc-400 mb-1">No links yet</p>
+              <p className="text-xs text-zinc-600 mb-5">Create your first ABM link to generate a personalized demo experience</p>
+              <button onClick={goToCreate} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-sm font-medium text-white hover:shadow-lg hover:shadow-violet-500/20 transition-all">
+                <Plus className="w-4 h-4" /> Create links
               </button>
             </div>
+          ) : filteredLinks.length === 0 ? (
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-12 text-center">
+              <p className="text-sm text-zinc-500">No links match your filters.</p>
+            </div>
           ) : (
-            <div className="space-y-2">
-              {campaigns.map((campaign) => (
-                <div key={campaign.campaign_name} className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden hover:border-white/[0.1] transition-colors">
-                  <button
-                    onClick={() => setExpandedCampaign(expandedCampaign === campaign.campaign_name ? null : campaign.campaign_name)}
-                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-8 h-8 rounded-lg bg-white/[0.04] flex items-center justify-center">
-                        {expandedCampaign === campaign.campaign_name ? <ChevronDown className="w-4 h-4 text-zinc-400" /> : <ChevronRight className="w-4 h-4 text-zinc-500" />}
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-medium text-white">{campaign.campaign_name}</p>
-                        <div className="flex items-center gap-4 mt-1">
-                          {campaign.campaign_source && (
-                            <span className="inline-flex items-center gap-1 text-xs text-zinc-500 capitalize">
-                              <Globe className="w-3 h-3" /> {campaign.campaign_source}
-                            </span>
+            <div className="rounded-xl border border-white/[0.06] overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-white/[0.03] text-zinc-400 text-left">
+                    {([
+                      ['visitor_company', 'Contact / Company'],
+                      ['campaign_name', 'Campaign'],
+                      ['engagement_score', 'Score'],
+                      ['view_count', 'Views'],
+                      ['created_at', 'Created'],
+                    ] as [LinkSortField, string][]).map(([field, label]) => (
+                      <th
+                        key={field}
+                        className="px-4 py-3 font-medium cursor-pointer select-none hover:text-zinc-200 transition-colors whitespace-nowrap text-xs uppercase tracking-wider"
+                        onClick={() => toggleLinkSort(field)}
+                      >
+                        {label}
+                        {linkSort === field && (linkSortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
+                      </th>
+                    ))}
+                    <th className="px-4 py-3 text-xs uppercase tracking-wider font-medium w-[1%]">Link</th>
+                    <th className="px-4 py-3 text-xs uppercase tracking-wider font-medium w-[1%]" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {filteredLinks.map((link) => {
+                    const contactName = [link.visitor_first_name, link.visitor_last_name].filter(Boolean).join(' ');
+                    const score = link.engagement_score;
+                    const tier = tierLabel(score);
+                    const tierColor = tier === 'Hot' ? 'text-amber-400 bg-amber-400/10' : tier === 'High' ? 'text-violet-400 bg-violet-400/10' : tier === 'Medium' ? 'text-blue-400 bg-blue-400/10' : 'text-zinc-500 bg-zinc-500/10';
+                    return (
+                      <tr key={link.id} className="hover:bg-white/[0.02] transition-colors group">
+                        <td className="px-4 py-3">
+                          <div>
+                            {contactName && <p className="text-zinc-100 font-medium">{contactName}</p>}
+                            <p className={contactName ? 'text-zinc-500 text-xs mt-0.5' : 'text-zinc-100'}>{link.visitor_company}</p>
+                            {link.visitor_email && <p className="text-zinc-600 text-xs mt-0.5">{link.visitor_email}</p>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {link.campaign_name ? (
+                            <span className="inline-block px-2 py-0.5 text-xs rounded bg-white/[0.06] text-zinc-400">{link.campaign_name}</span>
+                          ) : (
+                            <span className="text-zinc-600 text-xs">—</span>
                           )}
-                          <span className="text-xs text-zinc-500 flex items-center gap-1"><Link2 className="w-3 h-3" /> {campaign.link_count} links</span>
-                          <span className="text-xs text-zinc-500 flex items-center gap-1"><Eye className="w-3 h-3" /> {campaign.total_views} views</span>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); copyAllLinks(campaign.links); }}
-                      className="p-2 rounded-lg hover:bg-white/[0.06] transition-colors text-zinc-500 hover:text-zinc-300"
-                      title="Copy all links"
-                    >
-                      {bulkCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Clipboard className="w-4 h-4" />}
-                    </button>
-                  </button>
-
-                  <AnimatePresence>
-                    {expandedCampaign === campaign.campaign_name && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
-                        <div className="border-t border-white/[0.04] bg-white/[0.01]">
-                          {campaign.links.map((link) => (
-                            <div key={link.code} className="flex items-center justify-between px-5 py-3 border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm text-white">
-                                  {link.visitor_first_name ? `${link.visitor_first_name} ${link.visitor_last_name || ''}`.trim() : ''}{' '}
-                                  <span className="text-zinc-500">{link.visitor_first_name ? '· ' : ''}{link.company}</span>
-                                </p>
-                                <p className="text-xs text-zinc-600 font-mono truncate mt-0.5">{link.url}</p>
-                              </div>
-                              <div className="flex items-center gap-1 flex-shrink-0 ml-4">
-                                <button onClick={() => copyLink(link.code, link.url)} className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors">
-                                  {copiedCode === link.code ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500" />}
-                                </button>
-                                <a href={link.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors">
-                                  <ExternalLink className="w-3.5 h-3.5 text-zinc-500" />
-                                </a>
-                              </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {score > 0 ? (
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded ${tierColor}`}>
+                              {score} <span className="opacity-70">{tier}</span>
+                            </span>
+                          ) : (
+                            <span className="text-zinc-600 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-zinc-300 tabular-nums">{link.view_count}</td>
+                        <td className="px-4 py-3 text-zinc-500 text-xs whitespace-nowrap">
+                          {new Date(link.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => copyLink(link.code, generateLinkUrl(link.code))} className="p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors" title="Copy link">
+                              {copiedCode === link.code ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-500" />}
+                            </button>
+                            <a href={generateLinkUrl(link.code)} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors" title="Open link">
+                              <ExternalLink className="w-3.5 h-3.5 text-zinc-500" />
+                            </a>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {confirmDeleteLink === link.id ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => deleteLink(link.id)}
+                                disabled={deletingLink === link.id}
+                                className="px-2 py-1 rounded bg-red-500/15 text-xs font-medium text-red-400 hover:bg-red-500/25 disabled:opacity-50 transition-all"
+                              >
+                                {deletingLink === link.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Delete'}
+                              </button>
+                              <button onClick={() => setConfirmDeleteLink(null)} className="px-1.5 py-1 text-xs text-zinc-600 hover:text-zinc-400">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              ))}
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteLink(link.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors text-zinc-700 hover:text-red-400 opacity-0 group-hover:opacity-100"
+                              title="Delete link"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </>
@@ -550,11 +701,15 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
         <div className="space-y-5">
           {/* Campaign details card */}
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 space-y-4">
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Campaign Details</h3>
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Campaign (optional)</h3>
+            <p className="text-xs text-zinc-600 -mt-2">Assign a campaign name to group these links. Leave blank for ungrouped links.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-zinc-500 mb-1.5 block">Campaign Name</label>
-                <input type="text" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder="Q1 Outreach - Enterprise" className={inputCls + ' w-full'} />
+                <input type="text" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder="e.g. Q1 Outreach - Enterprise" className={inputCls + ' w-full'} list="existing-campaigns" />
+                <datalist id="existing-campaigns">
+                  {campaignNames.map((n) => <option key={n} value={n} />)}
+                </datalist>
               </div>
               <div>
                 <label className="text-xs text-zinc-500 mb-1.5 block">Source</label>
@@ -724,7 +879,7 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
           )}
 
           {/* Create button */}
-          <button onClick={createCampaign} disabled={!campaignName.trim() || prospects.length === 0 || isCreating}
+          <button onClick={createCampaign} disabled={prospects.length === 0 || isCreating}
             className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm font-semibold disabled:opacity-30 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-violet-500/20 active:scale-[0.99] transition-all">
             {isCreating && batchProgress ? (
               <span className="flex items-center justify-center gap-2">
@@ -757,7 +912,7 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
               <button onClick={() => copyAllLinks(results)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-white/[0.08] text-xs text-zinc-300 hover:bg-white/[0.04] transition-all">
                 {bulkCopied ? <><Check className="w-3.5 h-3.5 text-emerald-400" /> Copied!</> : <><Clipboard className="w-3.5 h-3.5" /> Copy all</>}
               </button>
-              <button onClick={resetToCreate} className="px-4 py-2 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-all">Create another</button>
+              <button onClick={() => setView('table')} className="px-4 py-2 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-all">Back to table</button>
             </div>
           </div>
 
