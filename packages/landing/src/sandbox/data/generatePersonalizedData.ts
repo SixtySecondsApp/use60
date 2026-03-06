@@ -468,18 +468,56 @@ export function generatePersonalizedData(
     ],
   };
 
-  // ── Proposals (personalized from deals) ─────────────────────────
+  // ── Proposals (personalized from deals + visitor's product/service) ──
+  const productSummary = research.company?.product_summary;
+  const valueProps = research.company?.value_props ?? [];
   const proposals: SandboxProposal[] = defaults.proposals.map((p, i) => {
     const deal = deals[i];
     if (!deal) return p;
     const contact = contacts.find((c) => c.company_id === deal.company_id);
+    const contactFullName = contact ? `${contact.first_name} ${contact.last_name}` : p.contact_name;
+    const contactFirstName = contact?.first_name ?? p.contact_name.split(' ')[0];
+
+    // For the primary proposal, build fully personalized sections
+    if (i === 0 && productSummary) {
+      return {
+        ...p,
+        title: `${deal.company_name} — ${companyName} Proposal`,
+        deal_name: deal.name,
+        company_name: deal.company_name,
+        contact_name: contactFullName,
+        value: deal.value,
+        sections: buildPersonalizedProposalSections(
+          companyName,
+          deal.company_name,
+          contactFullName,
+          contactFirstName,
+          deal.value,
+          productSummary,
+          valueProps,
+          industry,
+          deal.company_domain ?? '',
+        ),
+      };
+    }
+
     return {
       ...p,
-      title: `${deal.company_name} — Proposal`,
+      title: `${deal.company_name} — ${companyName} Proposal`,
       deal_name: deal.name,
       company_name: deal.company_name,
-      contact_name: contact ? `${contact.first_name} ${contact.last_name}` : p.contact_name,
+      contact_name: contactFullName,
       value: deal.value,
+      // Update exec summary for secondary proposals too
+      sections: p.sections.map((sec) => {
+        if (sec.type === 'executive_summary' && productSummary) {
+          return {
+            ...sec,
+            content: `<p>This proposal outlines how <strong>${companyName}</strong> can help ${deal.company_name} — ${productSummary.charAt(0).toLowerCase()}${productSummary.slice(1).replace(/\.$/, '')}. Based on our conversations with ${contactFullName}, we've tailored this engagement to address your team's specific needs.</p>`,
+          };
+        }
+        return sec;
+      }),
     };
   });
 
@@ -671,4 +709,78 @@ Looking forward to your thoughts.
 
 Best,
 ${senderFirstName}`;
+}
+
+function buildPersonalizedProposalSections(
+  senderCompany: string,
+  prospectCompany: string,
+  contactName: string,
+  contactFirstName: string,
+  dealValue: number,
+  productSummary: string,
+  valueProps: string[],
+  industry: string,
+  prospectDomain: string,
+): SandboxProposal['sections'] {
+  const valueK = (dealValue / 1000).toFixed(0);
+  const bullets = valueProps.length >= 2
+    ? valueProps.slice(0, 4)
+    : [
+        'Streamline your team\'s workflow and eliminate manual tasks',
+        'Get real-time visibility into performance and pipeline',
+        'Automate follow-ups and keep deals moving forward',
+        'Dedicated onboarding and hands-on implementation support',
+      ];
+
+  return [
+    {
+      id: 'sec-p-cover',
+      type: 'cover',
+      title: `${senderCompany} — Proposal for ${prospectCompany}`,
+      content: '',
+      order: 0,
+    },
+    {
+      id: 'sec-p-exec',
+      type: 'executive_summary',
+      title: 'Executive Summary',
+      content: `<p>This proposal outlines how <strong>${senderCompany}</strong> can transform ${prospectCompany}'s operations — ${productSummary.charAt(0).toLowerCase()}${productSummary.slice(1).replace(/\.$/, '')}.</p><p>Based on our conversations with ${contactName}, we've identified key areas where ${senderCompany} delivers immediate value. We project measurable results within the first 90 days, with a full return on investment by quarter two.</p>`,
+      order: 1,
+    },
+    {
+      id: 'sec-p-problem',
+      type: 'problem',
+      title: 'The Challenge',
+      content: `<p>${prospectCompany} is facing challenges common to growing ${industry.toLowerCase()} organizations:</p><table style="width:100%; border-collapse:collapse; margin:16px 0;"><thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);"><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Challenge</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Impact</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Priority</th></tr></thead><tbody><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px;">Fragmented tools and manual processes</td><td style="padding:10px 16px;">~15 hours/week lost to admin</td><td style="padding:10px 16px;"><span style="color:#ef4444; font-weight:600;">High</span></td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px;">Limited visibility into performance</td><td style="padding:10px 16px;">Missed opportunities and slow decisions</td><td style="padding:10px 16px;"><span style="color:#ef4444; font-weight:600;">High</span></td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px;">Inconsistent follow-up and engagement</td><td style="padding:10px 16px;">Deals stalling in pipeline</td><td style="padding:10px 16px;"><span style="color:#f59e0b; font-weight:600;">Medium</span></td></tr></tbody></table><p>${contactFirstName} highlighted these as top priorities in our most recent conversation. Addressing them will have an estimated <strong>$${(dealValue * 1.8 / 1000).toFixed(0)}K annual impact</strong> on ${prospectCompany}'s bottom line.</p>`,
+      order: 2,
+    },
+    {
+      id: 'sec-p-solution',
+      type: 'solution',
+      title: 'Our Solution',
+      content: `<p><strong>${senderCompany}</strong> provides a comprehensive solution designed for ${prospectCompany}:</p><table style="width:100%; border-collapse:collapse; margin:16px 0;"><thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);"><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Capability</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">What You Get</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Expected Outcome</th></tr></thead><tbody>${bullets.map((vp, i) => `<tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px; font-weight:500;">${vp.length > 50 ? vp.slice(0, 50) + '...' : vp}</td><td style="padding:10px 16px;">${vp}</td><td style="padding:10px 16px; color:#37bd7e;">+${15 + i * 8}% improvement</td></tr>`).join('')}</tbody></table>`,
+      order: 3,
+    },
+    {
+      id: 'sec-p-timeline',
+      type: 'timeline',
+      title: 'Implementation Timeline',
+      content: `<table style="width:100%; border-collapse:collapse; margin:16px 0;"><thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);"><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Phase</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Timeline</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Activities</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Milestone</th></tr></thead><tbody><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px; font-weight:500;">Onboarding</td><td style="padding:10px 16px;">Week 1-2</td><td style="padding:10px 16px;">Account setup, data migration, team provisioning</td><td style="padding:10px 16px; color:#37bd7e;">Go live</td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px; font-weight:500;">Training</td><td style="padding:10px 16px;">Week 3-4</td><td style="padding:10px 16px;">Team training sessions, workflow configuration</td><td style="padding:10px 16px; color:#37bd7e;">Team activated</td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px; font-weight:500;">Optimization</td><td style="padding:10px 16px;">Week 5-8</td><td style="padding:10px 16px;">Custom tuning, automation setup, performance review</td><td style="padding:10px 16px; color:#37bd7e;">Full ROI</td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px; font-weight:500;">Ongoing</td><td style="padding:10px 16px;">Month 3+</td><td style="padding:10px 16px;">Quarterly reviews, feature roadmap alignment</td><td style="padding:10px 16px; color:#37bd7e;">Scale</td></tr></tbody></table>`,
+      order: 4,
+    },
+    {
+      id: 'sec-p-pricing',
+      type: 'pricing',
+      title: 'Investment',
+      content: `<p>Tailored pricing for ${prospectCompany}:</p><table style="width:100%; border-collapse:collapse; margin:16px 0;"><thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);"><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Item</th><th style="text-align:right; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Annual Cost</th></tr></thead><tbody><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px;">${senderCompany} Platform License</td><td style="text-align:right; padding:10px 16px;">$${(dealValue * 0.7 / 1000).toFixed(0)},000</td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px;">Implementation & Onboarding</td><td style="text-align:right; padding:10px 16px;">$${(dealValue * 0.15 / 1000).toFixed(0)},000</td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px;">Priority Support (Year 1)</td><td style="text-align:right; padding:10px 16px;">$${(dealValue * 0.15 / 1000).toFixed(0)},000</td></tr><tr style="border-top:2px solid rgba(255,255,255,0.15);"><td style="padding:10px 16px; font-weight:700;">Total Investment</td><td style="text-align:right; padding:10px 16px; font-weight:700; color:#37bd7e;">$${valueK},000</td></tr></tbody></table><p style="margin-top:12px; padding:12px 16px; background:rgba(55,189,126,0.08); border:1px solid rgba(55,189,126,0.15); border-radius:8px; font-size:0.875rem;"><strong>90-day pilot available</strong> — $${(dealValue * 0.3 / 1000).toFixed(0)},000 for a 3-month commitment to prove ROI before full engagement.</p>`,
+      order: 5,
+    },
+    {
+      id: 'sec-p-terms',
+      type: 'terms',
+      title: 'Terms & Next Steps',
+      content: `<p>This proposal is valid for 30 days. To move forward:</p><table style="width:100%; border-collapse:collapse; margin:16px 0;"><thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);"><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Step</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Action</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Owner</th><th style="text-align:left; padding:10px 16px; font-weight:600; color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.03);">Timeline</th></tr></thead><tbody><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px; font-weight:500;">1</td><td style="padding:10px 16px;">Review and approve this proposal</td><td style="padding:10px 16px;">${contactFirstName}</td><td style="padding:10px 16px;">This week</td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px; font-weight:500;">2</td><td style="padding:10px 16px;">Align stakeholders on scope and timeline</td><td style="padding:10px 16px;">${contactFirstName} + team</td><td style="padding:10px 16px;">Week 1</td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px; font-weight:500;">3</td><td style="padding:10px 16px;">Execute service agreement</td><td style="padding:10px 16px;">Both parties</td><td style="padding:10px 16px;">Week 2</td></tr><tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:10px 16px; font-weight:500;">4</td><td style="padding:10px 16px;">Kick off onboarding</td><td style="padding:10px 16px;">${senderCompany}</td><td style="padding:10px 16px;">Week 2-3</td></tr></tbody></table><p>We're confident this partnership will deliver measurable results for ${prospectCompany}. Let's make it happen.</p>`,
+      order: 6,
+    },
+  ];
 }
