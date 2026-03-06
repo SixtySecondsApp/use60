@@ -530,7 +530,7 @@ const builtIntegrations: IntegrationConfig[] = [
   },
   {
     id: 'heygen',
-    name: 'HeyGen',
+    name: 'Video Avatar',
     description: 'AI avatars & personalized video outreach.',
     permissions: [
       { title: 'Create avatars', description: 'Generate AI sales avatars from photos.' },

@@ -48,7 +48,7 @@ export function useHeyGenIntegration() {
     if (error) throw new Error(error.message || 'Failed to save HeyGen API key');
     if (data?.error) throw new Error(data.error);
 
-    toast.success('HeyGen connected');
+    toast.success('Video Avatar connected');
     setIsConnected(true);
     await refreshStatus();
   }, [activeOrgId, isAuthenticated, refreshStatus]);
@@ -58,7 +58,7 @@ export function useHeyGenIntegration() {
 
     // Remove credentials via service role (handled by edge function)
     setIsConnected(false);
-    toast.success('HeyGen disconnected');
+    toast.success('Video Avatar disconnected');
   }, [activeOrgId]);
 
   return {

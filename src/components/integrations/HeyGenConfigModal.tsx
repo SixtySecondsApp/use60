@@ -48,7 +48,7 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
       open={open}
       onOpenChange={onOpenChange}
       integrationId="heygen"
-      integrationName="HeyGen"
+      integrationName="Video Avatar"
       fallbackIcon={<Video className="w-6 h-6 text-purple-500" />}
       showFooter={false}
     >
@@ -77,7 +77,7 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
       <ConfigSection title="API Key">
         <div className="space-y-3">
           <div className="text-sm text-gray-700 dark:text-gray-300">
-            Enter your HeyGen API key to enable AI avatar creation and personalized video outreach.
+            Enter your API key to enable AI avatar creation and personalized video outreach.
           </div>
           <div className="space-y-2">
             <Label htmlFor="heygen_api_key">API Key</Label>
@@ -101,7 +101,7 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
           <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
             <div className="flex items-center gap-2">
               <Check className="w-4 h-4 text-emerald-500" />
-              AI Avatar Creation (Photo + LORA Training)
+              AI Avatar Creation (Photo + AI Training)
             </div>
             <div className="flex items-center gap-2">
               <Check className="w-4 h-4 text-emerald-500" />
@@ -123,7 +123,7 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
             onClick={handleDisconnect}
             disabled={disconnecting}
           >
-            {disconnecting ? 'Disconnecting...' : 'Disconnect HeyGen'}
+            {disconnecting ? 'Disconnecting...' : 'Disconnect Video Avatar'}
           </Button>
         </DangerZone>
       )}
