@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
-import { Shield, User, Loader2 } from 'lucide-react';
-import { useSupportMessages, type SupportMessage } from '@/lib/hooks/useSupportMessages';
+import { Shield, User, Loader2, EyeOff } from 'lucide-react';
+import { useSupportMessages, useSupportMessagesRealtime, type SupportMessage } from '@/lib/hooks/useSupportMessages';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useUserProfileById } from '@/lib/hooks/useUserProfile';
 import { format } from 'date-fns';
@@ -27,6 +27,25 @@ function MessageBubble({ message }: { message: SupportMessage }) {
         <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 rounded-full">
           {message.content}
         </span>
+      </div>
+    );
+  }
+
+  if (message.is_internal) {
+    return (
+      <div className="flex gap-2.5 justify-start">
+        <div className="p-1.5 rounded-lg h-fit mt-0.5 shrink-0 border bg-amber-50 dark:bg-amber-500/10 border-amber-100 dark:border-amber-500/20">
+          <EyeOff className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
+        </div>
+        <div className="max-w-[75%] space-y-1">
+          <p className="text-xs text-amber-600 dark:text-amber-400 font-medium px-1">Internal Note</p>
+          <div className="px-3.5 py-2.5 rounded-2xl text-sm bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-500/20 rounded-bl-sm">
+            <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+          </div>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 px-1">
+            {format(new Date(message.created_at), 'MMM d, h:mm a')}
+          </p>
+        </div>
       </div>
     );
   }
@@ -88,6 +107,7 @@ function MessageBubble({ message }: { message: SupportMessage }) {
 
 export function TicketConversation({ ticketId }: TicketConversationProps) {
   const { data: messages, isLoading } = useSupportMessages(ticketId);
+  useSupportMessagesRealtime(ticketId);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
