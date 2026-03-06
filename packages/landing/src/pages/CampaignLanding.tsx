@@ -1,25 +1,39 @@
 /**
  * CampaignLanding
  *
- * Resolves /t/{code} campaign links, loads pre-enriched data,
- * and renders the personalized sandbox experience instantly.
+ * Resolves /t/{code} campaign links OR /t/{domain.com} creator URLs.
+ *
+ * Route detection:
+ * - If :code contains a "." → domain mode → render CreatorView (auth-gated)
+ * - If :code is alphanumeric (6-char base62) → prospect mode → existing flow
  *
  * CMP-004: Instant load from pre-enriched data + tracking init
- * - If campaign_link has research_data, use it directly (no re-enrichment)
- * - If research_data is null but ai_content exists, generate research from domain and merge ai_content
- * - Pass campaignLinkId to useSandboxTracking for visitor attribution
- * - Branded loading spinner with "Preparing your demo..."
- * - Fallback to live enrichment if research_data is null
+ * UCR-001: Domain vs code route detection
+ * UCR-002: Auth gate + query param parsing for creator view
  */
 
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Sparkles, AlertCircle } from 'lucide-react';
 import { SandboxExperience } from '../sandbox/SandboxExperience';
 import type { ResearchData } from '../demo/demo-types';
 import type { VisitorInfo } from '../sandbox/data/generatePersonalizedData';
 import { generateResearchFromUrl } from '../demo/demo-data';
+
+const CreatorView = lazy(() => import('./CreatorView'));
+
+/** UCR-001: Domain contains a dot, campaign codes are alphanumeric base62. */
+function isDomain(code: string): boolean {
+  return code.includes('.');
+}
+
+export interface CampaignQueryParams {
+  fn?: string;
+  ln?: string;
+  email?: string;
+  cid?: string;
+}
 
 interface CampaignLinkRow {
   id: string;
@@ -38,6 +52,29 @@ interface CampaignLinkRow {
 
 export default function CampaignLanding() {
   const { code } = useParams<{ code: string }>();
+  const [searchParams] = useSearchParams();
+
+  // UCR-001: If code is a domain, render the creator view
+  if (code && isDomain(code)) {
+    const queryParams: CampaignQueryParams = {
+      fn: searchParams.get('fn') || undefined,
+      ln: searchParams.get('ln') || undefined,
+      email: searchParams.get('email') || undefined,
+      cid: searchParams.get('cid') || undefined,
+    };
+
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-zinc-950" />}>
+        <CreatorView domain={code} queryParams={queryParams} />
+      </Suspense>
+    );
+  }
+
+  // Prospect view — existing campaign link resolution
+  return <ProspectView code={code} />;
+}
+
+function ProspectView({ code }: { code: string | undefined }) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
