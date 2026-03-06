@@ -1,0 +1,164 @@
+name: Database Migrations
+
+on:
+  pull_request:
+    branches: [staging, main]
+    paths:
+      - 'supabase/migrations/**'
+  push:
+    branches: [staging, main]
+    paths:
+      - 'supabase/migrations/**'
+
+concurrency:
+  group: db-migrations-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate-migrations:
+    name: Validate migrations (dry-run)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Dry-run against staging
+        if: github.base_ref == 'staging'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_DATABASE_PASSWORD }}
+        run: |
+          npx supabase link --project-ref caerqjzvuerejfrdtygb
+          npx supabase db push --linked --dry-run
+
+      - name: Dry-run against production
+        if: github.base_ref == 'main'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DATABASE_PASSWORD }}
+        run: |
+          npx supabase link --project-ref ygdpgliavpxeugaajgrb
+          npx supabase db push --linked --dry-run
+
+  apply-staging:
+    name: Apply migrations to staging
+    if: github.event_name == 'push' && github.ref_name == 'staging'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Link and push migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_DATABASE_PASSWORD }}
+        run: |
+          npx supabase link --project-ref caerqjzvuerejfrdtygb
+          npx supabase db push --linked
+
+      - name: Notify Slack (success)
+        if: success()
+        run: |
+          curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"text\": \"Database migrations applied to *staging* :white_check_mark:\",
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \":white_check_mark: *Database migrations applied to staging*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${GITHUB_SHA::7}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
+                  }
+                }
+              ]
+            }"
+
+      - name: Notify Slack (failure)
+        if: failure()
+        run: |
+          curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"text\": \"Database migration FAILED on *staging* :x:\",
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \":x: *Database migration FAILED on staging*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${GITHUB_SHA::7}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
+                  }
+                }
+              ]
+            }"
+
+  apply-production:
+    name: Apply migrations to production
+    if: github.event_name == 'push' && github.ref_name == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Link and push migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DATABASE_PASSWORD }}
+        run: |
+          npx supabase link --project-ref ygdpgliavpxeugaajgrb
+          npx supabase db push --linked
+
+      - name: Notify Slack (success)
+        if: success()
+        run: |
+          curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"text\": \"Database migrations applied to *production* :white_check_mark:\",
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \":white_check_mark: *Database migrations applied to production*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${GITHUB_SHA::7}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
+                  }
+                }
+              ]
+            }"
+
+      - name: Notify Slack (failure)
+        if: failure()
+        run: |
+          curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"text\": \"Database migration FAILED on *production* :x:\",
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \":x: *Database migration FAILED on production*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${GITHUB_SHA::7}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
+                  }
+                }
+              ]
+            }"

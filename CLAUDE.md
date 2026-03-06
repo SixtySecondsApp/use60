@@ -37,6 +37,7 @@ Born from 10 years of running Sixty Seconds — go-to-market and sales for hundr
 - Async/await over `.then()` chains.
 - Errors get toast feedback to users.
 - Lucide React icons only. Never emoji.
+- Database migrations are auto-applied by CI on merge. Never apply migrations directly via the Supabase dashboard.
 
 ### Never
 - Expose service role key to frontend.
