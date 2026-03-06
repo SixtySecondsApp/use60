@@ -91,9 +91,9 @@ export default function CreatorView({ domain, queryParams }: CreatorViewProps) {
 
   // Split screen: preview + composer
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col lg:flex-row">
-      {/* Left: Preview */}
-      <div className="lg:w-[60%] w-full lg:h-screen overflow-y-auto border-r border-zinc-800/50">
+    <div className="min-h-screen bg-zinc-950 pt-16 flex flex-col lg:flex-row">
+      {/* Left: Preview — offset by top bar (fixed h-16) */}
+      <div className="lg:w-[60%] w-full lg:h-[calc(100vh-4rem)] overflow-y-auto border-r border-zinc-800/50">
         <div className="sticky top-0 z-10 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800/50 px-4 py-2">
           <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Preview — what your prospect will see</p>
         </div>
@@ -106,7 +106,7 @@ export default function CreatorView({ domain, queryParams }: CreatorViewProps) {
       </div>
 
       {/* Right: Outreach Composer */}
-      <div className="lg:w-[40%] w-full lg:h-screen overflow-y-auto bg-zinc-900/50">
+      <div className="lg:w-[40%] w-full lg:h-[calc(100vh-4rem)] overflow-y-auto bg-zinc-900/50">
         <OutreachComposer
           domain={domain}
           research={research}

@@ -34,31 +34,31 @@ const CHANNEL_CONFIG: Record<Channel, { icon: typeof Mail; label: string; maxLen
 
 /**
  * Generate an outreach draft promoting 60 TO the prospect company.
- * The enrichment data tells us about the prospect — we use it to personalize
- * the pitch, not to write from their perspective.
+ * Uses enrichment data to personalize — but the message is always
+ * FROM us (60) TO the prospect, never the other way around.
  */
 function generateDraft(channel: Channel, research: ResearchData, queryParams: CampaignQueryParams): { subject?: string; body: string } {
-  const company = research.company;
+  const name = research.company.name;
   const recipientName = queryParams.fn || 'there';
+  const vertical = research.company.vertical;
 
-  // Build a context-aware hook based on what we know about the prospect
-  const vertical = company.vertical || 'your space';
-  const productContext = company.product_summary
-    ? `I can see ${company.name} is focused on ${company.product_summary.toLowerCase().slice(0, 80)}`
-    : `I've been looking at what ${company.name} is building`;
+  // Short, natural context line — avoid dumping raw product_summary
+  const contextLine = vertical
+    ? `Been following what ${name} is doing in the ${vertical.toLowerCase()} space`
+    : `Been looking at what ${name} is building`;
 
   if (channel === 'email') {
-    const subject = `${company.name} + 60 — quick personalized demo`;
+    const subject = `Quick demo for ${name}`;
     const body = `Hi ${recipientName},
 
-${productContext} — really impressive.
+${contextLine} — impressive stuff.
 
-I work at 60, where we help ${vertical} teams automate everything either side of the sales call. Lead research, meeting prep, follow-ups, proposals — all handled by AI agents so your team can focus on conversations that close revenue.
+I'm with 60. We build AI agents that handle everything either side of the sales call — lead research, meeting prep, follow-ups, proposals. Your team just focuses on the conversations that close.
 
-I put together a personalized demo showing exactly how 60 would work for ${company.name}:
+Put together a personalized demo for ${name}:
 [LINK]
 
-Takes 60 seconds to check out. Worth a look?
+60 seconds. Worth a look?
 
 Best,`;
 
@@ -67,13 +67,13 @@ Best,`;
 
   if (channel === 'linkedin') {
     return {
-      body: `Hi ${recipientName} — ${productContext}. I put together a quick personalized demo showing how 60 could help ${company.name} automate sales admin: [LINK]\n\nTakes 60 seconds — worth a look?`,
+      body: `Hi ${recipientName} — ${contextLine.toLowerCase()}. Put together a quick personalized demo showing how 60 could work for your team: [LINK]\n\n60 seconds — worth a look?`,
     };
   }
 
   // Slack
   return {
-    body: `Hey ${recipientName} — put together a personalized demo of 60 for ${company.name}: [LINK]\n\nShows how AI agents could handle your lead research, meeting prep, and follow-ups. 60 seconds to check out.`,
+    body: `Hey ${recipientName} — put together a personalized demo of 60 for ${name}: [LINK]\n\nAI agents for lead research, meeting prep, follow-ups. 60 seconds to check out.`,
   };
 }
 
