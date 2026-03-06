@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers, Search } from 'lucide-react';
+import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers, Search, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { GENERIC_TEMPLATES, EXA_TEMPLATES, DEAL_ENRICHMENT_TEMPLATES, type EnrichmentTemplate } from './enrichmentTemplates';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -205,6 +205,7 @@ const HUBSPOT_COLUMN_TYPE = { value: 'hubspot_property', label: 'HubSpot Propert
 const APOLLO_COLUMN_TYPE = { value: 'apollo_property', label: 'Apollo Property' };
 const LINKEDIN_COLUMN_TYPE = { value: 'linkedin_property', label: 'LinkedIn Property' };
 const INSTANTLY_COLUMN_TYPE = { value: 'instantly', label: 'Instantly Campaign' };
+const VIDEO_AVATAR_COLUMN_TYPE = { value: 'heygen_video', label: 'Video Avatar' };
 
 const INTEGRATION_TYPES = [
   { value: 'reoon_email_verify', label: 'Reoon Email Verification' },
@@ -299,6 +300,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
     types.push(APOLLO_COLUMN_TYPE);
     types.push(LINKEDIN_COLUMN_TYPE);
     types.push(INSTANTLY_COLUMN_TYPE);
+    types.push(VIDEO_AVATAR_COLUMN_TYPE);
     return types;
   }, [isHubSpotTable]);
   const [label, setLabel] = useState('');
@@ -1392,6 +1394,18 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
               <p className="text-sm text-amber-300">
                 Save this table first before adding Instantly columns.
               </p>
+            </div>
+          )}
+
+          {/* Video Avatar Section */}
+          {columnType === 'heygen_video' && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3.5 py-3">
+              <Video className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
+              <div>
+                <p className="text-xs leading-relaxed text-gray-300">
+                  Video Avatar columns track personalized video generation per row. Select rows and use <strong className="text-purple-300">Generate Videos</strong> to create AI avatar videos for each prospect.
+                </p>
+              </div>
             </div>
           )}
 
