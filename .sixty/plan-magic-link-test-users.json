@@ -1,0 +1,319 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "createdAt": "2026-03-02T00:00:00Z"
+  },
+  "features": [
+    {
+      "id": "magic-link",
+      "name": "Magic Link Test User Onboarding",
+      "status": "pending",
+      "consultReport": ".sixty/consult/magic-link-test-users.md",
+      "createdAt": "2026-03-02T00:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "MAGIC-001",
+      "feature": "magic-link",
+      "title": "Create test_user_magic_links migration with RLS policies",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["organizations"]
+      },
+      "blocks": ["MAGIC-002", "MAGIC-003", "MAGIC-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "test_user_magic_links table created with: id (UUID PK), token (TEXT UNIQUE), org_id (FK organizations), email (TEXT), is_test_user (BOOLEAN), credit_amount (DECIMAL default 500), expires_at (TIMESTAMPTZ), created_at, used_at (nullable), created_by (FK auth.users), activated_user_id (FK auth.users nullable), org_name (TEXT)",
+        "Indexes on token, email, expires_at, created_by",
+        "RLS enabled: service_role full access, public can SELECT unexpired+unused tokens, platform admins can SELECT all",
+        "CHECK constraints: token_not_empty, valid_credit_amount >= 0",
+        "Migration applies cleanly on dev environment"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260302000001_test_user_magic_links.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null,
+      "implementation_notes": "Follow pattern from supabase/migrations/20260119000002_create_waitlist_magic_tokens.sql. Use same RLS structure. Add platform admin SELECT policy (missing from waitlist tokens)."
+    },
+    {
+      "id": "MAGIC-002",
+      "feature": "magic-link",
+      "title": "Build generate-test-user-link edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["MAGIC-001"],
+        "files": [],
+        "schema": ["test_user_magic_links", "organizations", "organization_memberships"]
+      },
+      "blocks": ["MAGIC-005"],
+      "parallelWith": ["MAGIC-003"],
+      "acceptance": [
+        "Edge function at POST /functions/v1/generate-test-user-link",
+        "Auth: 3-tier (EDGE_FUNCTION_SECRET, service_role, user JWT + is_admin check) — clone from generate-waitlist-token",
+        "Request: { email: string, org_name: string, is_test_user?: boolean, credit_amount?: number }",
+        "Creates organization with name=org_name, is_active=true, created_by=admin user id",
+        "Generates 64-char hex token (crypto.getRandomValues), 7-day expiry, inserts into test_user_magic_links with org_id",
+        "Returns: { success: true, token, link: 'https://app.use60.com/auth/test-signup/{token}', org_id, expires_at }",
+        "Uses getCorsHeaders(req) from _shared/corsHelper.ts"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/generate-test-user-link/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null,
+      "implementation_notes": "Clone structure from supabase/functions/generate-waitlist-token/index.ts (256 lines). Key differences: (1) creates an organization row, (2) 7-day expiry not 24h, (3) stores org_id in token row, (4) does NOT create membership yet (that happens on signup). Token generation: crypto.getRandomValues(new Uint8Array(32)) → hex. Use createClient with SUPABASE_SERVICE_ROLE_KEY for org creation. Do NOT create org_credit_balance yet — that happens in MAGIC-004."
+    },
+    {
+      "id": "MAGIC-003",
+      "feature": "magic-link",
+      "title": "Build validate-test-user-link edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["MAGIC-001"],
+        "files": [],
+        "schema": ["test_user_magic_links"]
+      },
+      "blocks": ["MAGIC-006"],
+      "parallelWith": ["MAGIC-002"],
+      "acceptance": [
+        "Edge function at POST /functions/v1/validate-test-user-link",
+        "Public endpoint — no auth required (token IS the auth)",
+        "Request: { token: string }",
+        "Validates: token exists, expires_at > now(), used_at IS NULL",
+        "Returns: { valid: true, email, org_name, is_test_user } or { valid: false, error: string }",
+        "Uses maybeSingle() for token lookup (may not exist)",
+        "Uses getCorsHeaders(req) from _shared/corsHelper.ts"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/validate-test-user-link/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null,
+      "implementation_notes": "Clone from supabase/functions/validate-waitlist-token/index.ts (147 lines). Simpler than generate — no auth needed, just token lookup + expiry check + used_at check. Return org_name from test_user_magic_links.org_name (denormalized) or join to organizations table."
+    },
+    {
+      "id": "MAGIC-004",
+      "feature": "magic-link",
+      "title": "Build complete-test-user-signup edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["MAGIC-001", "MAGIC-002", "MAGIC-003"],
+        "files": [],
+        "schema": ["test_user_magic_links", "organizations", "organization_memberships", "org_credit_balance"]
+      },
+      "blocks": ["MAGIC-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Edge function at POST /functions/v1/complete-test-user-signup",
+        "Public endpoint — token is the auth",
+        "Request: { token: string, email: string, password: string, first_name: string, last_name: string }",
+        "Validates: token not expired, not used, email matches token email",
+        "Creates auth user via supabase.auth.admin.createUser({ email, password, email_confirm: false })",
+        "Creates profile: upsert into profiles with id, email, first_name, last_name",
+        "Creates membership: INSERT organization_memberships with org_id (from token), user_id, role='owner'",
+        "Marks onboarding complete: UPSERT user_onboarding_progress with onboarding_step='complete', onboarding_completed_at=NOW(), skipped_onboarding=false",
+        "If is_test_user: calls admin_grant_credits(org_id, credit_amount, 'Test user provisioning') via RPC",
+        "Marks token used: UPDATE test_user_magic_links SET used_at=NOW(), activated_user_id=new_user_id",
+        "Sends confirmation email via supabase.auth.admin.generateLink({ type: 'signup', email }) for email verification",
+        "Returns: { success: true, message: 'Check your email to verify your account' }"
+      ],
+      "estimatedMinutes": 45,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/complete-test-user-signup/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null,
+      "implementation_notes": "This is the most complex function. Key sequence: (1) validate token, (2) create auth user (admin.createUser), (3) create profile (defensive upsert — see InviteSignup.tsx pattern), (4) create org membership as owner, (5) upsert user_onboarding_progress to skip onboarding (see complete_invite_signup RPC pattern in 20260117000004), (6) grant credits if test user (call admin_grant_credits RPC with service role), (7) mark token used, (8) generate email verification link. Use supabase.auth.admin.generateLink({ type: 'magiclink', email, options: { redirectTo } }) to send verification email. The user will click verification link → AuthCallback → since onboarding is complete + has org membership, they'll land on /dashboard. Important: admin_grant_credits requires auth.uid() context — since this runs as service role, we may need to call add_credits() directly instead, or use a custom RPC that doesn't check is_platform_admin."
+    },
+    {
+      "id": "MAGIC-005",
+      "feature": "magic-link",
+      "title": "Add Magic Links tab to platform Users page with generation dialog",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["MAGIC-002"],
+        "files": ["src/pages/admin/Users.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["MAGIC-006"],
+      "acceptance": [
+        "New tab value 'magicLinks' added to activeTab union type: 'users' | 'authCodes' | 'magicLinks'",
+        "Tab button styled identically to existing tabs (border-b-2, green active state)",
+        "MagicLinkGenerator component rendered when tab is active (same pattern as AuthCodeGenerator)",
+        "Component shows table of existing magic links with columns: Org Name, Email, Status (active/used/expired), Created, Expires, Actions",
+        "Generate New Link button opens dialog with fields: Org Name (required), Email (required), Test User checkbox (default checked), Credit Amount input (default 500, only visible when Test User checked)",
+        "Generate button calls generate-test-user-link edge function, displays resulting link with copy button",
+        "Link status computed: 'used' if used_at not null, 'expired' if expires_at < now, otherwise 'active'",
+        "Copy link button uses navigator.clipboard.writeText() with toast confirmation"
+      ],
+      "estimatedMinutes": 40,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/admin/Users.tsx",
+        "src/components/admin/MagicLinkGenerator.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null,
+      "implementation_notes": "Follow AuthCodeGenerator.tsx pattern (398 lines) exactly. Tab switching: extend type from 'users' | 'authCodes' to 'users' | 'authCodes' | 'magicLinks'. Add third tab button. Conditional render: activeTab === 'magicLinks' ? <MagicLinkGenerator /> : ... Use Lucide icons: Link, Copy, Trash2, Plus, Check, X. Fetch links from test_user_magic_links table (admin can see all via RLS). Format expiry with date-fns format(). Edge function call uses supabase.functions.invoke('generate-test-user-link', { body: {...} }) with Authorization header."
+    },
+    {
+      "id": "MAGIC-006",
+      "feature": "magic-link",
+      "title": "Build TestUserSignup page and add route",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["MAGIC-003", "MAGIC-004"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["MAGIC-007"],
+      "parallelWith": ["MAGIC-005"],
+      "acceptance": [
+        "New page at src/pages/auth/TestUserSignup.tsx",
+        "Route added to App.tsx: <Route path='/auth/test-signup/:token' element={<TestUserSignup />} />",
+        "Route added to ProtectedRoute.tsx publicRoutes array: '/auth/test-signup'",
+        "On mount: extracts token from URL via useParams, calls validate-test-user-link edge function",
+        "Loading state while validating token",
+        "Invalid/expired token: shows error message with link to login page",
+        "Valid token: shows signup form with org name displayed, email pre-filled (readonly from token), password field, first name field, last name field",
+        "Submit calls complete-test-user-signup edge function",
+        "Success: shows 'Check your email to verify your account' message with link to login",
+        "Error: shows toast with error message"
+      ],
+      "estimatedMinutes": 40,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/auth/TestUserSignup.tsx",
+        "src/App.tsx",
+        "src/components/ProtectedRoute.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null,
+      "implementation_notes": "Reference InviteSignup.tsx for the exact UX pattern — it's the closest existing page. Key differences: (1) email is readonly/pre-filled from token validation, (2) no invitation acceptance step (the complete-test-user-signup function handles everything), (3) shows org name they're joining. Form fields: email (disabled input), password (min 6 chars), first_name, last_name. Use same styling as InviteSignup.tsx (motion animations, card layout). Route placement in App.tsx: add near other /auth/* routes (around line 337). ProtectedRoute.tsx: add '/auth/test-signup' to publicRoutes array (around line 20)."
+    },
+    {
+      "id": "MAGIC-007",
+      "feature": "magic-link",
+      "title": "Handle post-email-verification redirect to skip onboarding",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["MAGIC-006"],
+        "files": ["src/pages/auth/AuthCallback.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "When test user clicks email verification link, they land on AuthCallback.tsx",
+        "AuthCallback detects user has organization membership + onboarding_completed_at set",
+        "User is redirected to /dashboard (NOT /onboarding)",
+        "Org store loads correctly — user's pre-created org is set as active org",
+        "No additional code changes needed IF complete-test-user-signup correctly set onboarding_completed_at and created membership — verify this works end-to-end",
+        "Test: create magic link → signup → verify email → should land on dashboard with org loaded"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/auth/AuthCallback.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null,
+      "implementation_notes": "AuthCallback.tsx already has logic at lines 571-606 that auto-completes onboarding when user has org membership with role='member'. Our test user is 'owner' role — verify this code path handles 'owner' too. The check is: memberships.some(m => m.role === 'member') — this may MISS owner role. If so, change to: memberships.length > 0 (any membership). Also check lines 544-627 navigateBasedOnOnboarding — user_onboarding_progress should already have onboarding_completed_at set by complete-test-user-signup, so the check at line 618-620 should pass. This story is mostly verification + minor fix if needed."
+    },
+    {
+      "id": "MAGIC-008",
+      "feature": "magic-link",
+      "title": "Add edge function configs to config.toml",
+      "type": "config",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["MAGIC-002", "MAGIC-003", "MAGIC-004"],
+        "files": ["supabase/config.toml"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["MAGIC-005", "MAGIC-006"],
+      "acceptance": [
+        "Three new entries in supabase/config.toml with verify_jwt = false",
+        "[functions.generate-test-user-link] verify_jwt = false",
+        "[functions.validate-test-user-link] verify_jwt = false",
+        "[functions.complete-test-user-signup] verify_jwt = false",
+        "Each entry has comment explaining why JWT is disabled (manual auth inside function / public token validation)"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "supabase/config.toml"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null,
+      "implementation_notes": "Add entries near existing waitlist token entries in config.toml (around lines 279-323). Follow exact format: [functions.name] newline verify_jwt = false. Add comment above each entry."
+    }
+  ],
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 0,
+    "currentFeature": "magic-link",
+    "lastUpdated": "2026-03-02T00:00:00Z",
+    "parallelGroups": [
+      {
+        "group": ["MAGIC-002", "MAGIC-003"],
+        "reason": "Both depend only on MAGIC-001 (schema), no file overlap",
+        "time_saved": "20min"
+      },
+      {
+        "group": ["MAGIC-005", "MAGIC-006", "MAGIC-008"],
+        "reason": "Frontend + config can run in parallel after backend stories complete",
+        "time_saved": "40min"
+      }
+    ],
+    "estimatedTotal": {
+      "sequential": "215 minutes (3.5 hours)",
+      "parallel": "155 minutes (2.5 hours)"
+    },
+    "criticalPath": ["MAGIC-001", "MAGIC-002/003", "MAGIC-004", "MAGIC-006", "MAGIC-007"]
+  }
+}

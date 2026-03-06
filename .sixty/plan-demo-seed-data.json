@@ -1,0 +1,265 @@
+{
+  "feature": "demo-seed-data",
+  "name": "Demo Seed Data for Magic Link Test Users",
+  "createdAt": "2026-03-02T00:00:00Z",
+  "consultReport": ".sixty/consult/demo-seed-data.md",
+  "description": "Pre-fill magic link test accounts with realistic seeded data — companies, contacts, deals, meetings with transcripts, intelligence, scorecards, classifications — creating a fully simulated demo where real AI features work against seeded data and consume real credits.",
+
+  "stories": [
+    {
+      "id": "SEED-001",
+      "feature": "demo-seed-data",
+      "title": "Write realistic transcript templates for 6 sales call scenarios",
+      "type": "data",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SEED-003", "SEED-004"],
+      "parallelWith": ["SEED-002"],
+      "acceptance": [
+        "6 transcript templates: discovery, demo, negotiation, follow-up, closing, general check-in",
+        "Each transcript is 80-150 lines of realistic sales dialogue",
+        "Transcripts include placeholder tokens for company/contact name injection",
+        "Transcripts contain varied signals: objections, buying signals, pricing discussions, competitor mentions",
+        "Format matches existing transcript_text field (plain text, speaker labels)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": 20,
+      "files": [
+        "supabase/functions/seed-demo-data/transcriptTemplates.ts"
+      ],
+      "designRef": null,
+      "startedAt": "2026-03-02T01:00:00Z",
+      "completedAt": "2026-03-02T01:20:00Z"
+    },
+    {
+      "id": "SEED-002",
+      "feature": "demo-seed-data",
+      "title": "Build seed-demo-data edge function — companies, contacts, stages",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["companies", "contacts", "stages"]
+      },
+      "blocks": ["SEED-003", "SEED-004", "SEED-005", "SEED-006"],
+      "parallelWith": ["SEED-001"],
+      "acceptance": [
+        "New edge function supabase/functions/seed-demo-data/index.ts created",
+        "Seeds 8-10 companies with realistic names, domains, industries, sizes",
+        "Seeds 30+ contacts across those companies with names, titles, emails, engagement levels",
+        "Seeds 5 default pipeline stages (Lead, Qualified, Proposal, Negotiation, Closed Won)",
+        "Uses service role client, getCorsHeaders pattern, pinned supabase-js@2.43.4",
+        "Accepts { org_id, user_id } as input params"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": 25,
+      "files": [
+        "supabase/functions/seed-demo-data/index.ts",
+        "supabase/functions/seed-demo-data/seedData.ts"
+      ],
+      "designRef": null,
+      "startedAt": "2026-03-02T01:00:00Z",
+      "completedAt": "2026-03-02T01:25:00Z"
+    },
+    {
+      "id": "SEED-003",
+      "feature": "demo-seed-data",
+      "title": "Add meeting seeding with transcripts, attendees, contacts",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["SEED-001", "SEED-002"],
+        "files": ["supabase/functions/seed-demo-data/index.ts"],
+        "schema": ["meetings", "meeting_attendees", "meeting_contacts"]
+      },
+      "blocks": ["SEED-004", "SEED-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "Seeds 15-20 meetings spread across 3 months with realistic date distribution",
+        "Each meeting linked to a company/contact via meeting_contacts (is_primary=true)",
+        "transcript_text populated from templates with company/contact names injected",
+        "meeting_attendees created for each meeting (rep + 1-3 external attendees)",
+        "All processing statuses set to 'complete' (transcript_status, summary_status, etc.)",
+        "meeting_type set appropriately (discovery, demo, negotiation, etc.)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": 25,
+      "files": [
+        "supabase/functions/seed-demo-data/index.ts"
+      ],
+      "designRef": null,
+      "startedAt": "2026-03-02T01:25:00Z",
+      "completedAt": "2026-03-02T01:50:00Z"
+    },
+    {
+      "id": "SEED-004",
+      "feature": "demo-seed-data",
+      "title": "Add meeting intelligence seeding — classifications, scorecards, summaries, action items",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": {
+        "stories": ["SEED-003"],
+        "files": ["supabase/functions/seed-demo-data/index.ts"],
+        "schema": ["meeting_classifications", "meeting_scorecards", "meeting_structured_summaries", "meeting_action_items"]
+      },
+      "blocks": ["SEED-007"],
+      "parallelWith": ["SEED-005", "SEED-006"],
+      "acceptance": [
+        "Each meeting gets a meeting_classifications row with realistic boolean signals, topics, objections, stage detection",
+        "Each meeting gets a meeting_scorecards row with overall_score, grade, metric_scores, strengths, coaching_tips",
+        "Each meeting gets a meeting_structured_summaries row with key_decisions, commitments, stakeholders, outcome_signals",
+        "Key meetings get 2-4 action items each with realistic titles, assignees, priorities, deadlines"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": 30,
+      "files": [
+        "supabase/functions/seed-demo-data/index.ts",
+        "supabase/functions/seed-demo-data/intelligenceTemplates.ts"
+      ],
+      "designRef": null,
+      "startedAt": "2026-03-02T01:50:00Z",
+      "completedAt": "2026-03-02T02:20:00Z"
+    },
+    {
+      "id": "SEED-005",
+      "feature": "demo-seed-data",
+      "title": "Add deals and deal notes seeding",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["SEED-002"],
+        "files": ["supabase/functions/seed-demo-data/index.ts"],
+        "schema": ["deals", "stages"]
+      },
+      "blocks": ["SEED-007"],
+      "parallelWith": ["SEED-004", "SEED-006"],
+      "acceptance": [
+        "Seeds 10-12 deals across pipeline stages with realistic values ($5K-$150K)",
+        "Deals linked to seeded companies and primary contacts",
+        "Mix of active, won, and at-risk deals with appropriate health_scores and risk_levels",
+        "2-3 deals have deal notes with context"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": 20,
+      "files": [
+        "supabase/functions/seed-demo-data/index.ts"
+      ],
+      "designRef": null,
+      "startedAt": "2026-03-02T02:20:00Z",
+      "completedAt": "2026-03-02T02:40:00Z"
+    },
+    {
+      "id": "SEED-006",
+      "feature": "demo-seed-data",
+      "title": "Add activities, tasks, and org context seeding",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": {
+        "stories": ["SEED-002"],
+        "files": ["supabase/functions/seed-demo-data/index.ts"],
+        "schema": ["activities", "organization_enrichment", "organization_context"]
+      },
+      "blocks": ["SEED-007"],
+      "parallelWith": ["SEED-004", "SEED-005"],
+      "acceptance": [
+        "Seeds 20-30 activities (mix of meetings, outbound emails, proposals) over 3 months",
+        "Seeds 5-8 pending tasks with realistic titles and due dates",
+        "Seeds organization_enrichment with completed status and realistic company data",
+        "Seeds organization_context with industry insights and ICP data"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 20,
+      "files": [
+        "supabase/functions/seed-demo-data/index.ts"
+      ],
+      "designRef": null,
+      "startedAt": "2026-03-02T02:20:00Z",
+      "completedAt": "2026-03-02T02:40:00Z"
+    },
+    {
+      "id": "SEED-007",
+      "feature": "demo-seed-data",
+      "title": "Wire seed-demo-data into complete-test-user-signup as async call",
+      "type": "backend",
+      "status": "complete",
+      "priority": 7,
+      "dependencies": {
+        "stories": ["SEED-002", "SEED-003", "SEED-004", "SEED-005", "SEED-006"],
+        "files": [
+          "supabase/functions/seed-demo-data/index.ts",
+          "supabase/functions/complete-test-user-signup/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": ["SEED-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "complete-test-user-signup calls seed-demo-data async after step 7 (fire-and-forget)",
+        "Only triggers seeding when tokenData.is_test_user is true",
+        "seed-demo-data registered in supabase/config.toml with verify_jwt = false",
+        "Seeding failure does not block signup response"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": 10,
+      "files": [
+        "supabase/functions/complete-test-user-signup/index.ts",
+        "supabase/config.toml"
+      ],
+      "designRef": null,
+      "startedAt": "2026-03-02T02:40:00Z",
+      "completedAt": "2026-03-02T02:50:00Z"
+    },
+    {
+      "id": "SEED-008",
+      "feature": "demo-seed-data",
+      "title": "Deploy seed-demo-data to staging and test end-to-end",
+      "type": "deploy",
+      "status": "complete",
+      "priority": 8,
+      "dependencies": {
+        "stories": ["SEED-007"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "seed-demo-data deployed to staging with --no-verify-jwt",
+        "complete-test-user-signup redeployed to staging",
+        "New magic link generates account with full seeded data",
+        "Dashboard shows meetings, deals, contacts after signup",
+        "Ask Anything search works against seeded transcript data",
+        "Aggregate analytics (heatmap, team comparison) show data from seeded classifications"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": 10,
+      "files": [],
+      "designRef": null,
+      "startedAt": "2026-03-02T02:50:00Z",
+      "completedAt": "2026-03-02T03:00:00Z"
+    }
+  ],
+
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 8,
+    "currentFeature": "demo-seed-data",
+    "lastUpdated": "2026-03-02T03:00:00Z",
+    "estimatedTotal": "3-3.5 hours",
+    "parallelGroups": [
+      { "stories": ["SEED-001", "SEED-002"], "reason": "No file overlap, independent data", "timeSaved": "30m" },
+      { "stories": ["SEED-004", "SEED-005", "SEED-006"], "reason": "Different tables, all depend only on SEED-002/003", "timeSaved": "25m" }
+    ]
+  }
+}
