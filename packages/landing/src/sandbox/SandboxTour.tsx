@@ -30,7 +30,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'pipeline',
     title: 'Visual Pipeline',
-    description: "Your company's deal is in the pipeline. Health scores and risk signals update in real-time.",
+    description: "Your deals are in the pipeline. Health scores and risk signals update in real-time.",
     position: { top: '200px', left: '400px' },
     highlightView: 'pipeline',
   },
@@ -47,6 +47,13 @@ const TOUR_STEPS: TourStep[] = [
     description: 'Personalized emails drafted with full awareness of your deal, ready to send.',
     position: { top: '180px', left: '350px' },
     highlightView: 'email',
+  },
+  {
+    id: 'proposals',
+    title: 'AI Proposals',
+    description: 'Watch proposals generate in real-time from your deal context and meeting transcripts.',
+    position: { top: '180px', left: '350px' },
+    highlightView: 'proposals',
   },
   {
     id: 'copilot',

@@ -17,6 +17,7 @@ interface PersonalizeRequest {
   company_domain?: string;
   company_vertical?: string;
   company_summary?: string;
+  /** The visitor (they are the rep/user in the demo) */
   visitor_name?: string;
   visitor_title?: string;
   visitor_email?: string;
@@ -73,35 +74,35 @@ async function generatePersonalizedContent(
   apiKey: string,
   input: PersonalizeRequest
 ): Promise<PersonalizeResponse> {
-  const visitorName = input.visitor_name || 'the prospect';
-  const firstName = visitorName.split(' ')[0] || 'there';
-  const companyName = input.company_name;
+  // The visitor IS the rep/user — they're viewing their own demo dashboard
+  const senderName = input.visitor_name || 'the user';
+  const senderFirstName = senderName.split(' ')[0] || 'You';
+  const companyName = input.company_name; // visitor's company
   const vertical = input.company_vertical || 'technology';
   const dealValue = input.deal_value ? `$${(input.deal_value / 1000).toFixed(0)}K` : '$95K';
   const employeeRange = input.employee_range || '51-200';
 
-  const prompt = `You are writing sales content for a CRM AI platform called "60". Generate personalized content for a sales demo targeting ${companyName}.
+  const prompt = `You are generating sales demo content for a CRM AI platform called "60". The person viewing this demo is ${senderName} from ${companyName} (${vertical} company). They are the SALES REP using 60 to manage their deals.
 
-Context:
-- Company: ${companyName} (${input.company_domain || 'unknown domain'})
-- Industry: ${vertical}
-- Size: ${employeeRange} employees
-- Contact: ${visitorName}, ${input.visitor_title || 'Decision Maker'}
-- Deal value: ${dealValue}
-${input.company_summary ? `- About: ${input.company_summary}` : ''}
+Context about the viewer/rep:
+- Name: ${senderName} (${input.visitor_title || 'Sales Leader'}) at ${companyName}
+- Their company: ${companyName} (${input.company_domain || 'unknown domain'})
+- Their industry: ${vertical}
+- Their company size: ${employeeRange} employees
+${input.company_summary ? `- About their company: ${input.company_summary}` : ''}
 
 Generate a JSON response with this exact structure:
 {
   "email_draft": {
-    "subject": "Brief, natural email subject line about following up on a demo/proposal",
-    "body": "A warm, professional follow-up email from 'Alex' (the sales rep) to '${firstName}' at ${companyName}. Reference their specific industry (${vertical}), mention the platform demo they had, include 3-4 bullet points about what 60 would do for them specifically, and end with a clear next step. Keep it under 200 words. Use first name only. Sound human, not robotic."
+    "subject": "Brief, natural email subject line about following up after a demo/meeting with a prospect",
+    "body": "A warm, professional follow-up email FROM ${senderFirstName} at ${companyName} TO a prospect they recently met with. The email should reference ${companyName}'s ${vertical} expertise, mention a recent demo/call, include 3-4 bullet points about how ${companyName}'s solution would help the prospect, and end with a clear next step. Sign off as '${senderFirstName}'. Keep it under 200 words. Sound human, not robotic."
   },
   "meeting_prep": {
-    "company_overview": "2-3 sentence overview of ${companyName} as a ${vertical} company with ${employeeRange} employees, mentioning their likely sales challenges",
-    "talking_points": ["5 specific talking points tailored to ${companyName}'s likely needs in ${vertical}"],
-    "risk_signals": ["3 potential risks or objections to watch for with a ${employeeRange}-employee ${vertical} company"],
-    "questions_to_ask": ["3 discovery questions specific to ${companyName}'s situation"],
-    "deal_context": "One sentence summarizing the ${dealValue} deal at proposal stage with ${companyName}"
+    "company_overview": "2-3 sentence overview of a prospect company that would be an ideal customer for ${companyName}'s ${vertical} offering",
+    "talking_points": ["5 specific talking points ${senderFirstName} should use when selling ${companyName}'s solution, referencing their ${vertical} expertise"],
+    "risk_signals": ["3 potential risks or objections to watch for in this deal"],
+    "questions_to_ask": ["3 discovery questions ${senderFirstName} should ask the prospect"],
+    "deal_context": "One sentence summarizing a ${dealValue} deal at proposal stage"
   }
 }
 

@@ -42,10 +42,10 @@ interface PromptOption {
 }
 
 const ALL_PROMPTS: PromptOption[] = [
-  { icon: Video, patternKey: 'meeting', label: 'Prepare for my meeting with {company}' },
+  { icon: Video, patternKey: 'meeting', label: 'Prepare for my meeting with {prospect}' },
   { icon: Mail, patternKey: 'email', label: 'Draft a follow-up email to {contact}' },
-  { icon: Heart, patternKey: 'deal', label: 'Show deal health for {company}' },
-  { icon: UserSearch, patternKey: 'lead', label: 'Find new leads in {company} industry' },
+  { icon: Heart, patternKey: 'deal', label: 'Show deal health for {prospect}' },
+  { icon: UserSearch, patternKey: 'lead', label: 'Find new leads similar to {prospect}' },
   { icon: HelpCircle, patternKey: 'help', label: 'What can you help me with?' },
 ];
 
@@ -61,7 +61,8 @@ export default function SandboxCopilot() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const msgCounter = useRef(1);
 
-  const companyName = data.visitorCompany.name;
+  const myCompanyName = data.visitorCompany.name;
+  const prospectCompany = data.visitorDeal.company_name;
   const contactName = data.emailDraft.to_name;
 
   const availablePrompts = ALL_PROMPTS.filter((p) => !usedPatterns.has(p.patternKey));
@@ -90,7 +91,7 @@ export default function SandboxCopilot() {
         return {
           tools: ['Searching meetings...', 'Loading deal context...', 'Generating prep doc...'],
           toolLabels: ['Meeting lookup', 'Deal context', 'Prep generator'],
-          response: `Here's your meeting prep for **${companyName}**:
+          response: `Here's your meeting prep for **${prospectCompany}**:
 
 **Meeting:** ${data.meetings[0]?.title ?? 'Demo & Pricing Review'}
 **When:** Tomorrow at 2:00 PM (45 min)
@@ -127,7 +128,7 @@ Want me to adjust the tone or add anything?`,
         return {
           tools: ['Pulling deal data...', 'Calculating health score...', 'Checking risk factors...'],
           toolLabels: ['Deal lookup', 'Health calculator', 'Risk analyzer'],
-          response: `Here's the deal health summary for **${companyName}**:
+          response: `Here's the deal health summary for **${prospectCompany}**:
 
 **Deal:** ${data.visitorDeal.name}
 **Value:** $${(data.visitorDeal.value / 1000).toFixed(0)}K
@@ -145,20 +146,20 @@ Overall the deal looks ${data.visitorDeal.health_status === 'healthy' ? 'solid' 
 
       case 'lead': {
         const industry = data.visitorCompany.industry ?? 'technology';
-        // Pull competitor names from deals that aren't the visitor's own deal
-        const competitorNames = data.deals
-          .filter((d) => !d.isVisitorDeal && d.company_name !== companyName)
+        // Pull other deal company names for cross-reference
+        const otherDeals = data.deals
+          .filter((d) => !d.isVisitorDeal && d.company_name !== prospectCompany)
           .map((d) => d.company_name)
           .slice(0, 2);
 
-        const competitorLine = competitorNames.length > 0
-          ? `\n\nI also noticed **${competitorNames.join('** and **')}** ${competitorNames.length === 1 ? 'is' : 'are'} in your pipeline — leads in the **${industry.toLowerCase()}** space often overlap with these accounts.`
+        const crossRefLine = otherDeals.length > 0
+          ? `\n\nI also noticed **${otherDeals.join('** and **')}** ${otherDeals.length === 1 ? 'is' : 'are'} already in your pipeline — leads like these often overlap with similar accounts.`
           : '';
 
         return {
           tools: ['Scanning industry data...', 'Matching ICP criteria...', 'Enriching contacts...'],
           toolLabels: ['Industry scan', 'ICP matcher', 'Contact enricher'],
-          response: `I found some promising leads in the **${industry}** space — similar profile to **${companyName}**:
+          response: `I found some promising leads similar to **${prospectCompany}** — companies that match your ideal customer profile:
 
 **1. Sarah Mitchell** — VP of Sales at TechFlow Inc.
    50-200 employees, Series B, actively hiring sales team
@@ -167,9 +168,9 @@ Overall the deal looks ${data.visitorDeal.health_status === 'healthy' ? 'solid' 
    100-500 employees, ${industry.toLowerCase()} vertical, using a competitor CRM
 
 **3. Rachel Torres** — COO at GrowthMetrics
-   Recently posted about scaling sales operations${competitorLine}
+   Recently posted about scaling sales operations${crossRefLine}
 
-All three match your ideal customer profile based on ${companyName}'s ${industry.toLowerCase()} profile. Want me to draft personalized outreach for any of them?`,
+All three match your ideal customer profile. Want me to draft personalized outreach for any of them?`,
         };
       }
 
@@ -256,7 +257,7 @@ What would you like to tackle first?`,
   async function playConversation() {
     setIsAnimating(true);
 
-    await addMessage({ id: 'user-1', role: 'user', content: `Prepare for my meeting with ${companyName} tomorrow` });
+    await addMessage({ id: 'user-1', role: 'user', content: `Prepare for my meeting with ${prospectCompany} tomorrow` });
     await delay(600);
 
     // Show tool calls
@@ -267,7 +268,7 @@ What would you like to tackle first?`,
     setMessages((prev) => prev.filter((m) => m.id !== 'typing'));
 
     const prep = data.meetings[0]?.prep;
-    const aiResponse = `Here's your meeting prep for **${companyName}**:
+    const aiResponse = `Here's your meeting prep for **${prospectCompany}**:
 
 **Meeting:** ${data.meetings[0]?.title ?? 'Demo & Pricing Review'}
 **When:** Tomorrow at 2:00 PM (45 min)
@@ -319,7 +320,7 @@ I've also drafted a follow-up email ready for after the call. Want me to show it
   }
 
   function handlePromptClick(prompt: string) {
-    const resolved = prompt.replace('{company}', companyName).replace('{contact}', contactName);
+    const resolved = prompt.replace('{prospect}', prospectCompany).replace('{contact}', contactName);
     setInputValue(resolved);
   }
 
@@ -414,7 +415,7 @@ I've also drafted a follow-up email ready for after the call. Want me to show it
             <div className="flex flex-wrap gap-2 mb-3">
               {availablePrompts.map((prompt) => {
                 const Icon = prompt.icon;
-                const label = prompt.label.replace('{company}', companyName).replace('{contact}', contactName);
+                const label = prompt.label.replace('{prospect}', prospectCompany).replace('{contact}', contactName);
                 return (
                   <button
                     key={prompt.patternKey}

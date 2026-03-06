@@ -13,6 +13,7 @@ import {
   Video,
   Mail,
   Bot,
+  FileText,
 } from 'lucide-react';
 import { SandboxDataProvider, useSandboxData } from './data/SandboxDataProvider';
 import { SandboxSidebar } from './SandboxSidebar';
@@ -29,6 +30,7 @@ const SandboxPipeline = lazy(() => import('./views/SandboxPipeline'));
 const SandboxMeetings = lazy(() => import('./views/SandboxMeetings'));
 const SandboxEmailDraft = lazy(() => import('./views/SandboxEmailDraft'));
 const SandboxCopilot = lazy(() => import('./views/SandboxCopilot'));
+const SandboxProposals = lazy(() => import('./views/SandboxProposals'));
 
 interface SandboxAppProps {
   data?: SandboxData;
@@ -41,6 +43,8 @@ interface SandboxAppProps {
   campaignCode?: string;
   /** Campaign link UUID for visitor tracking attribution */
   campaignLinkId?: string;
+  /** Deep research data that arrives async (phase 2) */
+  deepResearchData?: Partial<SandboxData> | null;
   onSignup?: () => void;
   className?: string;
 }
@@ -51,6 +55,7 @@ const VIEW_MAP: Record<SandboxView, React.LazyExoticComponent<React.ComponentTyp
   contacts: SandboxDashboard, // contacts folded into dashboard for v3
   meetings: SandboxMeetings,
   email: SandboxEmailDraft,
+  proposals: SandboxProposals,
   copilot: SandboxCopilot,
 };
 
@@ -73,6 +78,7 @@ export function SandboxApp({
   visitorDomain,
   campaignCode,
   campaignLinkId,
+  deepResearchData,
   onSignup,
   className = '',
 }: SandboxAppProps) {
@@ -82,6 +88,7 @@ export function SandboxApp({
       initialView={initialView}
       visitorName={visitorName}
       visitorEmail={visitorEmail}
+      deepResearchData={deepResearchData}
     >
       <div className={`h-screen w-full ${className}`}>
         <SandboxAppInner
@@ -101,6 +108,7 @@ const MOBILE_TABS: { id: SandboxView; label: string; icon: React.ElementType }[]
   { id: 'pipeline', label: 'Deals', icon: Kanban },
   { id: 'meetings', label: 'Meetings', icon: Video },
   { id: 'email', label: 'Email', icon: Mail },
+  { id: 'proposals', label: 'Proposals', icon: FileText },
   { id: 'copilot', label: 'Copilot', icon: Bot },
 ];
 
@@ -238,10 +246,11 @@ function SandboxAppInner({
               onClick={handleSignup}
               className="flex items-center gap-2 px-4 md:px-5 py-2.5 md:py-3 rounded-xl bg-[#37bd7e] hover:bg-[#2da76c] text-white text-sm font-semibold shadow-lg shadow-[#37bd7e]/25 hover:shadow-[#37bd7e]/40 hover:scale-[1.02] transition-all duration-200"
             >
-              {activeView === 'dashboard' ? `Get these numbers for ${data.visitorCompany?.name ?? 'your company'}`
-                : activeView === 'pipeline' ? `Track your ${data.visitorCompany?.name ?? ''} deal for real`
+              {activeView === 'dashboard' ? `Get this dashboard for ${data.visitorCompany?.name ?? 'your company'}`
+                : activeView === 'pipeline' ? 'Track your real pipeline like this'
                 : activeView === 'meetings' ? 'Get AI meeting prep for real'
                 : activeView === 'email' ? `Send this email to ${data.emailDraft?.to_name ?? 'your prospect'} for real`
+                : activeView === 'proposals' ? 'Generate proposals from your deal context'
                 : activeView === 'copilot' ? 'Ask 60 anything about your pipeline'
                 : 'This is real. Try it free'}
               <span className="text-white/60">&rarr;</span>

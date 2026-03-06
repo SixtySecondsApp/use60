@@ -185,8 +185,29 @@ export interface SandboxData {
   kpis: SandboxKPIs;
   emailDraft: SandboxEmailDraft;
   slackMessages: SandboxSlackMessage[];
+  proposals: SandboxProposal[];
   visitorCompany: SandboxCompany;
   visitorDeal: SandboxDeal;
+}
+
+/** A pre-loaded proposal for the sandbox demo */
+export interface SandboxProposal {
+  id: string;
+  title: string;
+  deal_name: string;
+  company_name: string;
+  contact_name: string;
+  status: 'draft' | 'sent' | 'viewed' | 'signed';
+  created_at: string;
+  value: number;
+  sections: {
+    id: string;
+    type: 'cover' | 'executive_summary' | 'problem' | 'solution' | 'approach' | 'timeline' | 'pricing' | 'terms';
+    title: string;
+    content: string;
+    order: number;
+  }[];
+  brand_color: string;
 }
 
 /** Active sandbox view */
@@ -196,6 +217,7 @@ export type SandboxView =
   | 'contacts'
   | 'meetings'
   | 'email'
+  | 'proposals'
   | 'copilot';
 
 /** Logo.dev URL for company logos — uses public token from main app */

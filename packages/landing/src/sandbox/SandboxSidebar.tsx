@@ -13,6 +13,7 @@ import {
   Kanban,
   Mail,
   Bot,
+  FileText,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -34,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'pipeline', label: 'Pipeline', icon: Kanban },
   { id: 'meetings', label: 'Meetings', icon: Video },
   { id: 'email', label: 'Follow-Up Drafts', icon: Mail },
+  { id: 'proposals', label: 'Proposals', icon: FileText },
   { id: 'copilot', label: 'AI Copilot', icon: Bot },
 ];
 

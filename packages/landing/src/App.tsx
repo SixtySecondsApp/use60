@@ -89,7 +89,7 @@ function App() {
         {/* Campaign analytics dashboard */}
         {/* Campaign personalized demo links */}
         <Route path="/t/:code" element={<Suspense fallback={<div className="min-h-screen bg-zinc-950" />}><CampaignLanding /></Suspense>} />
-        <Route path="/demo" element={<DemoExperience />} />
+        <Route path="/demo-v3" element={<DemoExperience />} />
         <Route path="/demo-v2" element={<DemoExperienceV2 />} />
         {/* Redirect auth routes to app domain */}
         <Route path="/auth/*" element={<RedirectToApp />} />

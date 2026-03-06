@@ -40,14 +40,14 @@ export function SandboxQuickAdd({ isOpen, onClose, onNavigate }: SandboxQuickAdd
   const [search, setSearch] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const companyName = data.visitorCompany?.name ?? 'Acme Corp';
+  const prospectCompany = data.visitorDeal?.company_name ?? 'Prospect';
   const contactName = data.emailDraft?.to_name ?? 'Sarah Chen';
 
   const actions: QuickAction[] = [
     {
       id: 'meeting-prep',
       icon: Video,
-      label: `Prepare for ${companyName} meeting`,
+      label: `Prepare for ${prospectCompany} meeting`,
       description: 'AI-generated talking points, risk signals, and questions',
       accentColor: 'text-emerald-400',
       view: 'meetings',
@@ -63,7 +63,7 @@ export function SandboxQuickAdd({ isOpen, onClose, onNavigate }: SandboxQuickAdd
     {
       id: 'deal-health',
       icon: Heart,
-      label: `Check ${companyName} deal health`,
+      label: `Check ${prospectCompany} deal health`,
       description: `Health score, risk signals, and next steps`,
       accentColor: 'text-rose-400',
       view: 'pipeline',
@@ -71,7 +71,7 @@ export function SandboxQuickAdd({ isOpen, onClose, onNavigate }: SandboxQuickAdd
     {
       id: 'contacts',
       icon: Users,
-      label: `View ${companyName} stakeholders`,
+      label: `View ${prospectCompany} stakeholders`,
       description: 'Contacts, engagement levels, and relationship map',
       accentColor: 'text-amber-400',
       view: 'contacts',
@@ -87,7 +87,7 @@ export function SandboxQuickAdd({ isOpen, onClose, onNavigate }: SandboxQuickAdd
     {
       id: 'proposal',
       icon: FileText,
-      label: `Generate proposal for ${companyName}`,
+      label: `Generate proposal for ${prospectCompany}`,
       description: 'AI-drafted proposal based on deal stage and requirements',
       accentColor: 'text-indigo-400',
     },
