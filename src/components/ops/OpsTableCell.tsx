@@ -1507,6 +1507,53 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     );
   }
 
+  // HeyGen video column — thumbnail + status badge
+  if (columnType === 'heygen_video') {
+    let videoData: { status?: string; video_url?: string; thumbnail_url?: string; duration_seconds?: number; error_message?: string } | null = null;
+    if (cell.value) {
+      try { videoData = JSON.parse(cell.value); } catch { /* not JSON, treat as status string */ }
+    }
+    const status = videoData?.status || cell.value || null;
+    const isProcessing = status === 'pending' || status === 'processing';
+    const isComplete = status === 'completed';
+    const isFailed = status === 'failed';
+
+    if (!status) {
+      return (
+        <div className="w-full h-full flex items-center">
+          <span className="text-gray-600 text-xs italic">--</span>
+        </div>
+      );
+    }
+
+    const badgeClass = isComplete
+      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+      : isFailed
+        ? 'bg-red-500/15 text-red-400 border-red-500/30'
+        : 'bg-blue-500/15 text-blue-400 border-blue-500/30';
+
+    return (
+      <div className="w-full h-full flex items-center gap-2">
+        {videoData?.thumbnail_url && (
+          <div className="w-7 h-7 rounded overflow-hidden shrink-0 bg-gray-800">
+            <img src={videoData.thumbnail_url} alt="" className="w-full h-full object-cover" />
+          </div>
+        )}
+        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium border ${badgeClass}`}>
+          {isProcessing ? (
+            <><Loader2 className="w-3 h-3 animate-spin" />{status === 'pending' ? 'Queued' : 'Generating'}</>
+          ) : isComplete ? (
+            <><Check className="w-3 h-3" />{videoData?.duration_seconds ? `${videoData.duration_seconds}s` : 'Ready'}</>
+          ) : isFailed ? (
+            <><AlertCircle className="w-3 h-3" />Failed</>
+          ) : (
+            status
+          )}
+        </span>
+      </div>
+    );
+  }
+
   // Check if cell value looks like JSON
   const isJsonValue = (() => {
     if (!cell.value) return false;
