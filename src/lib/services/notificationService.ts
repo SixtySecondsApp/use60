@@ -38,6 +38,9 @@ export interface CreateNotificationParams {
   expires_at?: string;
 }
 
+/** Notification types that contain raw agent output and should be hidden from the customer UI. */
+export const HIDDEN_NOTIFICATION_TYPES = ['agent_scheduled_run', 'agent_trigger_run'] as const;
+
 class NotificationService {
   private channel: RealtimeChannel | null = null;
   private listeners: Set<(notification: Notification) => void> = new Set();
@@ -124,6 +127,11 @@ class NotificationService {
         .select('*')
         .eq('user_id', resolvedUserId)
         .order('created_at', { ascending: false });
+
+      // Filter out agent raw dump notifications from customer view
+      for (const hiddenType of HIDDEN_NOTIFICATION_TYPES) {
+        query = query.neq('type', hiddenType);
+      }
 
       if (options?.unreadOnly) {
         query = query.eq('read', false);
@@ -290,12 +298,18 @@ class NotificationService {
         },
         (payload) => {
           const notification = payload.new as Notification;
+
+          // Skip agent raw dump notifications in customer UI
+          if ((HIDDEN_NOTIFICATION_TYPES as readonly string[]).includes(notification.type)) {
+            return;
+          }
+
           // Show toast notification
           this.showToastNotification(notification);
-          
+
           // Notify listeners
           this.notifyListeners(notification);
-          
+
           // Update unread count
           this.updateUnreadCount();
         }

@@ -155,6 +155,14 @@
       "status": "pending",
       "consultReport": ".sixty/consult/support-electron-readiness.md",
       "createdAt": "2026-03-06"
+    },
+    {
+      "id": "notification-audit-fixes",
+      "name": "Notification Audit — Fix Duplicates, Spam & Customer Readiness",
+      "status": "complete",
+      "prd": null,
+      "consultReport": null,
+      "createdAt": "2026-03-06"
     }
   ],
   "stories": [
@@ -6870,12 +6878,271 @@
       "files": [
         "src/lib/hooks/useSupportMessages.ts"
       ]
+    },
+    {
+      "id": "NOTIF-001",
+      "feature": "notification-audit-fixes",
+      "title": "Remove support ticket duplicate in-app trigger — keep only edge function path",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["support_messages", "support_tickets", "notifications"]
+      },
+      "blocks": [],
+      "parallelWith": ["NOTIF-002", "NOTIF-003"],
+      "acceptance": [
+        "New migration drops trg_notify_on_support_message trigger from support_messages",
+        "New migration drops trg_notify_on_support_status_change trigger from support_tickets",
+        "Drops the functions notify_on_support_message() and notify_on_support_status_change()",
+        "Edge function triggers (trg_support_notify_new_message, trg_support_notify_status_change) remain intact",
+        "support-ticket-notification edge function continues to handle email + Slack + in-app creation"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/new_remove_support_duplicate_triggers.sql"
+      ]
+    },
+    {
+      "id": "NOTIF-002",
+      "feature": "notification-audit-fixes",
+      "title": "Add in-app notification creation to support-ticket-notification edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": ["NOTIF-001"],
+        "files": ["supabase/functions/support-ticket-notification/index.ts"],
+        "schema": ["notifications"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "ticket_created event inserts in-app notification for ticket owner (category: support)",
+        "new_reply event with sender_type=agent inserts in-app notification for ticket owner",
+        "new_reply event with sender_type=user inserts in-app notification for platform admins",
+        "status_changed event inserts in-app notification for ticket owner (skip in_progress and closed statuses)",
+        "No in-app notification when updater is the ticket owner themselves"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/support-ticket-notification/index.ts"
+      ]
+    },
+    {
+      "id": "NOTIF-003",
+      "feature": "notification-audit-fixes",
+      "title": "Reduce support ticket email noise — skip low-value status changes",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/support-ticket-notification/index.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["NOTIF-001"],
+      "acceptance": [
+        "status_changed to in_progress does NOT send email to customer (low value)",
+        "status_changed to closed does NOT send email to customer (redundant after resolved)",
+        "status_changed to waiting_on_customer DOES send email (actionable)",
+        "status_changed to resolved DOES send email (useful confirmation)",
+        "Slack channel notification still fires for ALL status changes (internal visibility)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/support-ticket-notification/index.ts"
+      ]
+    },
+    {
+      "id": "NOTIF-004",
+      "feature": "notification-audit-fixes",
+      "title": "Filter agent raw dump notifications from NotificationCenter",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": ["src/components/notifications/NotificationCenter.tsx"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["NOTIF-001", "NOTIF-003"],
+      "acceptance": [
+        "Notifications with type agent_scheduled_run are filtered out of the notification list",
+        "Notifications with type agent_trigger_run are filtered out of the notification list",
+        "These notifications remain in the database (not deleted, just hidden from UI)",
+        "Unread count excludes filtered notification types",
+        "AgentActivityBell feed is unaffected (separate system)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/notifications/NotificationCenter.tsx",
+        "src/lib/services/notificationService.ts"
+      ]
+    },
+    {
+      "id": "NOTIF-005",
+      "feature": "notification-audit-fixes",
+      "title": "Add dedup guard to deal notification DB triggers",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["deals", "notifications"]
+      },
+      "blocks": [],
+      "parallelWith": ["NOTIF-004", "NOTIF-006"],
+      "acceptance": [
+        "notify_on_high_value_deal checks for existing notification with same deal_id in last 1 hour before inserting",
+        "notify_on_deal_closed checks for existing notification with same deal_id and stage in last 1 hour",
+        "Bulk deal imports do not create more than 10 deal notifications per org per minute",
+        "Rate limit is implemented inside the trigger functions, not as separate infrastructure"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/new_deal_notification_dedup.sql"
+      ]
+    },
+    {
+      "id": "NOTIF-006",
+      "feature": "notification-audit-fixes",
+      "title": "Remove Slack mirror duplicate notifications from slack-post-meeting and slack-sales-assistant",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/slack-post-meeting/index.ts",
+          "supabase/functions/slack-sales-assistant/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["NOTIF-005"],
+      "acceptance": [
+        "slack-post-meeting no longer inserts into notifications table (createInAppNotification calls removed)",
+        "slack-sales-assistant no longer inserts mirror notification into notifications table",
+        "Slack delivery continues to work normally",
+        "slack_notifications_sent logging is preserved"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/slack-post-meeting/index.ts",
+        "supabase/functions/slack-sales-assistant/index.ts"
+      ]
+    },
+    {
+      "id": "NOTIF-007",
+      "feature": "notification-audit-fixes",
+      "title": "Wire notification preferences into notify_org_members RPC",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["user_settings", "notifications"]
+      },
+      "blocks": [],
+      "parallelWith": ["NOTIF-006"],
+      "acceptance": [
+        "notify_org_members() checks user_settings.preferences->'notifications'->'in_app_enabled' before inserting",
+        "If in_app_enabled is explicitly false, skip that user",
+        "Default behavior (no settings row or null) is to deliver (opt-out model, not opt-in)",
+        "Existing notification preferences UI in settings page continues to work unchanged"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/new_notify_org_members_prefs.sql"
+      ]
+    },
+    {
+      "id": "NOTIF-008",
+      "feature": "notification-audit-fixes",
+      "title": "Add 30-day grace period to low engagement alerts for new orgs",
+      "type": "schema",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["organizations"]
+      },
+      "blocks": [],
+      "parallelWith": ["NOTIF-009"],
+      "acceptance": [
+        "send_low_engagement_alerts() skips orgs created less than 30 days ago",
+        "Grace period is based on organizations.created_at",
+        "Existing orgs older than 30 days continue to receive alerts normally"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/new_engagement_alerts_grace.sql"
+      ]
+    },
+    {
+      "id": "NOTIF-009",
+      "feature": "notification-audit-fixes",
+      "title": "Migrate credit-auto-topup to use notifications table instead of user_notifications",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [],
+        "files": ["supabase/functions/credit-auto-topup/index.ts"],
+        "schema": ["notifications"]
+      },
+      "blocks": [],
+      "parallelWith": ["NOTIF-008"],
+      "acceptance": [
+        "credit-auto-topup inserts into notifications table instead of user_notifications",
+        "Notification uses category: system and type: warning or error",
+        "action_url points to /settings/credits",
+        "Credit notifications appear in NotificationCenter for org admins/owners",
+        "useRealtimeHub subscription for user_notifications is removed if no other writers exist"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/credit-auto-topup/index.ts",
+        "src/lib/hooks/useRealtimeHub.ts"
+      ]
+    },
+    {
+      "id": "NOTIF-010",
+      "feature": "notification-audit-fixes",
+      "title": "Add customer notification type filter to getUnreadCount RPC",
+      "type": "schema",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": ["NOTIF-004"],
+        "files": [],
+        "schema": ["notifications"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "get_unread_notification_count() excludes agent_scheduled_run and agent_trigger_run types",
+        "Unread badge count matches visible notifications in NotificationCenter",
+        "Performance: uses index on user_id + read for efficient count"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/new_unread_count_filter.sql"
+      ]
     }
   ],
   "execution": {
-    "totalStories": 189,
+    "totalStories": 199,
     "completedStories": 178,
-    "currentFeature": "support-electron-readiness",
-    "lastUpdated": "2026-03-06T13:53:26.761Z"
+    "currentFeature": "notification-audit-fixes",
+    "lastUpdated": "2026-03-06T18:00:00.000Z"
   }
 }
