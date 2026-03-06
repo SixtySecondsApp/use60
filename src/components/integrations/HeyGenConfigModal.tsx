@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ConfigureModal, ConfigSection, DangerZone } from './ConfigureModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { KeyRound, Video, Check, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { KeyRound, Video, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
 
@@ -15,12 +14,10 @@ interface HeyGenConfigModalProps {
 }
 
 export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps) {
-  const navigate = useNavigate();
   const { isConnected, loading, connectApiKey, disconnect } = useHeyGenIntegration();
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [showByok, setShowByok] = useState(false);
 
   const handleSaveApiKey = async () => {
     if (!apiKey.trim()) return;
@@ -28,7 +25,6 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
     try {
       await connectApiKey(apiKey.trim());
       setApiKey('');
-      setShowByok(false);
     } catch (e: any) {
       toast.error(e?.message || 'Failed to save');
     } finally {
@@ -52,7 +48,7 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
       open={open}
       onOpenChange={onOpenChange}
       integrationId="heygen"
-      integrationName="Video Avatar"
+      integrationName="HeyGen"
       fallbackIcon={<Video className="w-6 h-6 text-purple-500" />}
       showFooter={false}
     >
@@ -75,80 +71,60 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
               </Badge>
             )}
           </div>
-          {isConnected && (
-            <p className="text-xs text-gray-500 dark:text-gray-500">
-              Using 60 platform credits. Video generation is included in your plan.
-            </p>
-          )}
         </div>
       </ConfigSection>
 
-      <ConfigSection title="Features">
-        <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-          <div className="flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-500" />
-            AI Avatar Creation (Photo + AI Training)
+      <ConfigSection title="API Key">
+        <div className="space-y-3">
+          <div className="text-sm text-gray-700 dark:text-gray-300">
+            Connect your HeyGen account to use your own credits for AI avatar videos in Ops campaigns.
           </div>
-          <div className="flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-500" />
-            Personalized Video Generation
+          <div className="space-y-2">
+            <Label htmlFor="heygen_api_key">HeyGen API Key</Label>
+            <Input
+              id="heygen_api_key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk_..."
+              type="password"
+            />
           </div>
-          <div className="flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-500" />
-            Video Outreach in Ops Campaigns
-          </div>
+          <Button onClick={handleSaveApiKey} disabled={!apiKey.trim() || saving} size="sm">
+            <KeyRound className="w-4 h-4 mr-1.5" />
+            {saving ? 'Verifying...' : isConnected ? 'Update Key' : 'Connect'}
+          </Button>
         </div>
       </ConfigSection>
 
       {isConnected && (
-        <ConfigSection title="Get Started">
-          <Button
-            size="sm"
-            onClick={() => {
-              onOpenChange(false);
-              navigate('/settings/integrations/video-avatar');
-            }}
-            className="bg-purple-600 hover:bg-purple-500 text-white"
-          >
-            <Sparkles className="w-4 h-4 mr-1.5" />
-            Create Your Avatar
-          </Button>
+        <ConfigSection title="Features">
+          <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-500" />
+              AI Avatar Creation (Photo + AI Training)
+            </div>
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-500" />
+              Personalized Video Generation
+            </div>
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-500" />
+              Use your own HeyGen credits
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-500">
+            Add a Video Avatar column to any Ops table to start generating videos.
+          </p>
         </ConfigSection>
       )}
 
-      {/* Bring Your Own Key — collapsible advanced section */}
-      <ConfigSection title="Advanced">
-        <button
-          type="button"
-          onClick={() => setShowByok(!showByok)}
-          className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-        >
-          {showByok ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          Use your own HeyGen API key
-        </button>
-
-        {showByok && (
-          <div className="mt-3 space-y-3">
-            <div className="text-xs text-gray-500 dark:text-gray-500">
-              Optionally connect your own HeyGen account to use your own credits instead of 60 platform credits.
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="heygen_api_key">HeyGen API Key</Label>
-              <Input
-                id="heygen_api_key"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk_..."
-                type="password"
-              />
-            </div>
-            <Button onClick={handleSaveApiKey} disabled={!apiKey.trim() || saving} size="sm" variant="outline">
-              <KeyRound className="w-4 h-4 mr-1.5" />
-              {saving ? 'Verifying...' : 'Connect Own Key'}
-            </Button>
-          </div>
-        )}
-      </ConfigSection>
+      {!isConnected && (
+        <ConfigSection title="Don't have a HeyGen account?">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            No worries — you can use <strong className="text-gray-300">Video Avatar</strong> directly in Ops tables without connecting HeyGen. Video generation is included with 60 credits.
+          </p>
+        </ConfigSection>
+      )}
 
       {isConnected && (
         <DangerZone>
@@ -158,7 +134,7 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
             onClick={handleDisconnect}
             disabled={disconnecting}
           >
-            {disconnecting ? 'Disconnecting...' : 'Disconnect Video Avatar'}
+            {disconnecting ? 'Disconnecting...' : 'Disconnect HeyGen'}
           </Button>
         </DangerZone>
       )}

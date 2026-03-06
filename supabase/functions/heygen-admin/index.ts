@@ -103,28 +103,23 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'test_credentials': {
-        // Check org-specific key first
+        // Only check org-specific key (integration page = BYOK)
         const { data: creds } = await svc
           .from('heygen_org_credentials')
           .select('api_key')
           .eq('org_id', orgId)
           .maybeSingle();
 
-        const apiKey = creds?.api_key || Deno.env.get('HEYGEN_API_KEY');
-        if (!apiKey) {
-          return jsonResponse({ connected: false, using_own_key: false, message: 'No API key available' }, req);
+        if (!creds?.api_key) {
+          return jsonResponse({ connected: false, message: 'No HeyGen API key configured' }, req);
         }
 
-        const client = new HeyGenClient(apiKey);
+        const client = new HeyGenClient(creds.api_key);
         const connected = await client.testConnection();
-        const usingOwnKey = !!creds?.api_key;
 
         return jsonResponse({
           connected,
-          using_own_key: usingOwnKey,
-          message: connected
-            ? usingOwnKey ? 'Connected (your API key)' : 'Connected (60 platform credits)'
-            : 'Connection failed',
+          message: connected ? 'Connected to HeyGen' : 'Connection failed',
         }, req);
       }
 

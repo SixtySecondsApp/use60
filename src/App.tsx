@@ -118,7 +118,7 @@ import {
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
 const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
-const AvatarCreatorWizard = lazy(() => import('./pages/settings/heygen/AvatarCreatorWizard').then(m => ({ default: m.AvatarCreatorWizard })));
+// AvatarCreatorWizard is now inline in Ops table VideoAvatarColumnWizard — no standalone route needed
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -672,7 +672,6 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/integrations/bullhorn" element={<AppLayout><BullhornSettings /></AppLayout>} />
                 {/* Instantly Settings */}
                 <Route path="/settings/integrations/instantly" element={<AppLayout><InstantlySettings /></AppLayout>} />
-                <Route path="/settings/integrations/video-avatar" element={<AppLayout><AvatarCreatorWizard /></AppLayout>} />
                 {/* Smart Listening Settings */}
                 <Route path="/settings/smart-listening" element={<AppLayout><SmartListeningSettings /></AppLayout>} />
                 {/* Proactive Agent Settings - admin only */}
