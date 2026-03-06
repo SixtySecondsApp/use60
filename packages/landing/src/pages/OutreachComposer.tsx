@@ -13,7 +13,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Linkedin, MessageSquare, Copy, Check, ExternalLink, Sparkles, Loader2, Link2, RefreshCw, User } from 'lucide-react';
+import { Mail, Linkedin, MessageSquare, Copy, Check, ExternalLink, Sparkles, Loader2, Link2, RefreshCw, User, Video } from 'lucide-react';
+import { VideoPreviewCard } from '../components/VideoPreviewCard';
 import type { ResearchData } from '../demo/demo-types';
 import type { CampaignQueryParams } from './CampaignLanding';
 import type { Session } from '../lib/supabase/clientV2';
@@ -70,6 +71,9 @@ export default function OutreachComposer({
   const [sequenceMode, setSequenceMode] = useState(false);
   const [activeTouch, setActiveTouch] = useState(0);
   const [sequenceTouches, setSequenceTouches] = useState<Array<{ day: number; subject: string; body: string }> | null>(null);
+  const [includeVideo, setIncludeVideo] = useState(false);
+  const [videoScript, setVideoScript] = useState<string | null>(null);
+  const [videoStatus, setVideoStatus] = useState<'idle' | 'scripting' | 'generating' | 'ready' | 'failed'>('idle');
   const draftCacheRef = useRef<Record<Channel, { subject?: string; body: string } | null>>({
     email: null,
     linkedin: null,
@@ -101,6 +105,7 @@ export default function OutreachComposer({
         body: JSON.stringify({
           company: research.company,
           channel: ch,
+          include_video: includeVideo,
           prospect: queryParams.fn ? {
             first_name: prospectIntel?.first_name || queryParams.fn,
             last_name: prospectIntel?.last_name || queryParams.ln,
@@ -125,6 +130,13 @@ export default function OutreachComposer({
         setBody(draft.body || '');
         if (draft.suggested_role) setSuggestedRole(draft.suggested_role);
         draftCacheRef.current[ch] = { subject: draft.subject, body: draft.body };
+        // Capture video script if returned
+        if (data.video_script) {
+          setVideoScript(data.video_script);
+          setVideoStatus('ready');
+        } else if (includeVideo) {
+          setVideoStatus('idle');
+        }
         return;
       }
       throw new Error('No draft returned');
@@ -137,7 +149,7 @@ export default function OutreachComposer({
     } finally {
       setDrafting(false);
     }
-  }, [session, research, queryParams, recipientName]);
+  }, [session, research, queryParams, recipientName, includeVideo]);
 
   // Fetch sequence drafts (3-touch email sequence)
   const fetchSequence = useCallback(async () => {
@@ -208,6 +220,10 @@ export default function OutreachComposer({
   }, [channel, sequenceMode, fetchAiDraft, fetchSequence]);
 
   const handleRegenerate = useCallback(() => {
+    if (includeVideo) {
+      setVideoScript(null);
+      setVideoStatus('scripting');
+    }
     if (sequenceMode) {
       sequenceCacheRef.current = null;
       fetchSequence();
@@ -215,7 +231,7 @@ export default function OutreachComposer({
       draftCacheRef.current[channel] = null;
       fetchAiDraft(channel);
     }
-  }, [channel, sequenceMode, fetchAiDraft, fetchSequence]);
+  }, [channel, sequenceMode, includeVideo, fetchAiDraft, fetchSequence]);
 
   const handleCreateLink = useCallback(async () => {
     setCreating(true);
@@ -280,8 +296,12 @@ export default function OutreachComposer({
     ? sequenceTouches[activeTouch]?.body || ''
     : body;
 
-  // Replace [LINK] placeholder with actual link
-  const displayBody = linkResult ? currentBody.replace('[LINK]', linkResult.url) : currentBody;
+  // Replace [LINK] and [VIDEO_LINK] placeholders with actual URLs
+  let displayBody = currentBody;
+  if (linkResult) displayBody = displayBody.replace('[LINK]', linkResult.url);
+  if (includeVideo && videoStatus === 'ready') {
+    displayBody = displayBody.replace('[VIDEO_LINK]', '[Video will be attached]');
+  }
 
   return (
     <div className="p-6 flex flex-col h-full">
@@ -405,6 +425,48 @@ export default function OutreachComposer({
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Video toggle */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1.5">
+          <Video className="w-3.5 h-3.5 text-purple-400" />
+          <span className="text-xs text-zinc-500">Personalized video</span>
+        </div>
+        <button
+          onClick={() => {
+            const next = !includeVideo;
+            setIncludeVideo(next);
+            if (next) {
+              setVideoStatus('scripting');
+              // Clear cache to refetch with video
+              draftCacheRef.current[channel] = null;
+              fetchAiDraft(channel);
+            } else {
+              setVideoScript(null);
+              setVideoStatus('idle');
+            }
+          }}
+          className={`relative w-8 h-4.5 rounded-full transition-colors ${
+            includeVideo ? 'bg-purple-500' : 'bg-zinc-700'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${
+              includeVideo ? 'translate-x-4' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Video preview card */}
+      {includeVideo && (
+        <div className="mb-3">
+          <VideoPreviewCard
+            status={drafting ? 'scripting' : videoStatus}
+            script={videoScript}
+          />
         </div>
       )}
 
