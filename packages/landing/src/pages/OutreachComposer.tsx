@@ -6,11 +6,14 @@
  * 2. See an AI-drafted outreach message based on enrichment
  * 3. Edit the message
  * 4. Create a campaign link (/t/{code}) with one click
+ *
+ * Calls campaign-outreach-draft edge function for AI-generated copy.
+ * Falls back to a simple template if the AI call fails.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Linkedin, MessageSquare, Copy, Check, ExternalLink, Sparkles, Loader2, Link2 } from 'lucide-react';
+import { Mail, Linkedin, MessageSquare, Copy, Check, ExternalLink, Sparkles, Loader2, Link2, RefreshCw } from 'lucide-react';
 import type { ResearchData } from '../demo/demo-types';
 import type { CampaignQueryParams } from './CampaignLanding';
 import type { Session } from '../lib/supabase/clientV2';
@@ -32,49 +35,18 @@ const CHANNEL_CONFIG: Record<Channel, { icon: typeof Mail; label: string; maxLen
   slack: { icon: MessageSquare, label: 'Slack', maxLength: 500 },
 };
 
-/**
- * Generate an outreach draft promoting 60 TO the prospect company.
- * Uses enrichment data to personalize — but the message is always
- * FROM us (60) TO the prospect, never the other way around.
- */
-function generateDraft(channel: Channel, research: ResearchData, queryParams: CampaignQueryParams): { subject?: string; body: string } {
-  const name = research.company.name;
-  const recipientName = queryParams.fn || 'there';
-  const vertical = research.company.vertical;
-
-  // Short, natural context line — avoid dumping raw product_summary
-  const contextLine = vertical
-    ? `Been following what ${name} is doing in the ${vertical.toLowerCase()} space`
-    : `Been looking at what ${name} is building`;
-
+/** Quick fallback template if AI draft fails. */
+function fallbackDraft(channel: Channel, companyName: string, recipientName: string): { subject?: string; body: string } {
   if (channel === 'email') {
-    const subject = `Quick demo for ${name}`;
-    const body = `Hi ${recipientName},
-
-${contextLine} — impressive stuff.
-
-I'm with 60. We build AI agents that handle everything either side of the sales call — lead research, meeting prep, follow-ups, proposals. Your team just focuses on the conversations that close.
-
-Put together a personalized demo for ${name}:
-[LINK]
-
-60 seconds. Worth a look?
-
-Best,`;
-
-    return { subject, body };
-  }
-
-  if (channel === 'linkedin') {
     return {
-      body: `Hi ${recipientName} — ${contextLine.toLowerCase()}. Put together a quick personalized demo showing how 60 could work for your team: [LINK]\n\n60 seconds — worth a look?`,
+      subject: `Quick demo for ${companyName}`,
+      body: `Hi ${recipientName},\n\nPut together a personalized demo for ${companyName} — shows how AI agents could handle your sales admin (research, prep, follow-ups) so your team just focuses on closing.\n\n[LINK]\n\n60 seconds. Worth a look?`,
     };
   }
-
-  // Slack
-  return {
-    body: `Hey ${recipientName} — put together a personalized demo of 60 for ${name}: [LINK]\n\nAI agents for lead research, meeting prep, follow-ups. 60 seconds to check out.`,
-  };
+  if (channel === 'linkedin') {
+    return { body: `Hi ${recipientName} — put together a quick personalized demo for ${companyName}: [LINK]\n\n60 seconds — worth a look?` };
+  }
+  return { body: `Hey ${recipientName} — made a personalized demo of 60 for ${companyName}: [LINK]\n\n60 seconds to check out.` };
 }
 
 export default function OutreachComposer({
@@ -88,16 +60,83 @@ export default function OutreachComposer({
   const [channel, setChannel] = useState<Channel>('email');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [suggestedRole, setSuggestedRole] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const draftCacheRef = useRef<Record<Channel, { subject?: string; body: string } | null>>({
+    email: null,
+    linkedin: null,
+    slack: null,
+  });
 
-  // Generate draft when channel or research changes
+  const recipientName = queryParams.fn || 'there';
+
+  // Fetch AI draft for the current channel
+  const fetchAiDraft = useCallback(async (ch: Channel) => {
+    // Return cached draft if available
+    if (draftCacheRef.current[ch]) {
+      const cached = draftCacheRef.current[ch]!;
+      setSubject(cached.subject || '');
+      setBody(cached.body);
+      return;
+    }
+
+    setDrafting(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const response = await fetch(`${supabaseUrl}/functions/v1/campaign-outreach-draft`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          company: research.company,
+          channel: ch,
+          prospect: queryParams.fn ? {
+            first_name: queryParams.fn,
+            last_name: queryParams.ln,
+            title: undefined,
+          } : undefined,
+          sender_name: session.user?.user_metadata?.full_name || undefined,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Draft generation failed');
+
+      const data = await response.json();
+      if (data.success && data.draft) {
+        const draft = data.draft;
+        setSubject(draft.subject || '');
+        setBody(draft.body || '');
+        if (draft.suggested_role) setSuggestedRole(draft.suggested_role);
+        draftCacheRef.current[ch] = { subject: draft.subject, body: draft.body };
+        return;
+      }
+      throw new Error('No draft returned');
+    } catch {
+      // Fall back to template
+      const fb = fallbackDraft(ch, research.company.name, recipientName);
+      setSubject(fb.subject || '');
+      setBody(fb.body);
+      draftCacheRef.current[ch] = fb;
+    } finally {
+      setDrafting(false);
+    }
+  }, [session, research, queryParams, recipientName]);
+
+  // Fetch draft on mount and when channel changes
   useEffect(() => {
-    const draft = generateDraft(channel, research, queryParams);
-    setSubject(draft.subject || '');
-    setBody(draft.body);
-  }, [channel, research, queryParams]);
+    fetchAiDraft(channel);
+  }, [channel, fetchAiDraft]);
+
+  const handleRegenerate = useCallback(() => {
+    // Clear cache for this channel and re-fetch
+    draftCacheRef.current[channel] = null;
+    fetchAiDraft(channel);
+  }, [channel, fetchAiDraft]);
 
   const handleCreateLink = useCallback(async () => {
     setCreating(true);
@@ -105,7 +144,6 @@ export default function OutreachComposer({
 
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-      const accessToken = session.access_token;
 
       const prospect = {
         first_name: queryParams.fn,
@@ -119,7 +157,7 @@ export default function OutreachComposer({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           campaign_name: queryParams.cid || 'URL Direct',
@@ -155,7 +193,7 @@ export default function OutreachComposer({
     setTimeout(() => setCopied(false), 2000);
   }, [linkResult]);
 
-  // Replace [LINK] placeholder with actual link in the displayed body
+  // Replace [LINK] placeholder with actual link
   const displayBody = linkResult ? body.replace('[LINK]', linkResult.url) : body;
 
   return (
@@ -163,7 +201,11 @@ export default function OutreachComposer({
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-white mb-1">Outreach for {research.company.name}</h2>
-        <p className="text-sm text-zinc-500">Draft a message and create a personalized link</p>
+        <p className="text-sm text-zinc-500">
+          {suggestedRole
+            ? <>Target: <strong className="text-zinc-300">{suggestedRole}</strong></>
+            : 'AI-personalized message with demo link'}
+        </p>
       </div>
 
       {/* Prospect info (if available) */}
@@ -216,21 +258,45 @@ export default function OutreachComposer({
       <div className="mb-4 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-1">
           <label className="text-xs text-zinc-500">Message</label>
-          <span className="text-xs text-zinc-600 flex items-center gap-1">
-            <Sparkles className="w-3 h-3" />
-            AI-drafted from research
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRegenerate}
+              disabled={drafting}
+              className="text-xs text-zinc-600 hover:text-violet-400 flex items-center gap-1 transition-colors disabled:opacity-50"
+              title="Regenerate draft"
+            >
+              <RefreshCw className={`w-3 h-3 ${drafting ? 'animate-spin' : ''}`} />
+              {drafting ? 'Drafting...' : 'Regenerate'}
+            </button>
+            <span className="text-xs text-zinc-700">|</span>
+            <span className="text-xs text-zinc-600 flex items-center gap-1">
+              <Sparkles className="w-3 h-3" />
+              AI draft
+            </span>
+          </div>
         </div>
-        <textarea
-          value={displayBody}
-          onChange={(e) => setBody(e.target.value)}
-          rows={12}
-          className="w-full flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 resize-none font-mono leading-relaxed"
-          maxLength={CHANNEL_CONFIG[channel].maxLength}
-        />
-        <p className="text-xs text-zinc-600 mt-1 text-right">
-          {displayBody.length}/{CHANNEL_CONFIG[channel].maxLength}
-        </p>
+
+        {drafting ? (
+          <div className="w-full flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg flex items-center justify-center min-h-[200px]">
+            <div className="flex items-center gap-2 text-zinc-500 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Writing personalized draft...
+            </div>
+          </div>
+        ) : (
+          <textarea
+            value={displayBody}
+            onChange={(e) => setBody(e.target.value)}
+            rows={12}
+            className="w-full flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 resize-none font-mono leading-relaxed"
+            maxLength={CHANNEL_CONFIG[channel].maxLength}
+          />
+        )}
+        {!drafting && (
+          <p className="text-xs text-zinc-600 mt-1 text-right">
+            {displayBody.length}/{CHANNEL_CONFIG[channel].maxLength}
+          </p>
+        )}
       </div>
 
       {/* Error message */}
@@ -244,7 +310,7 @@ export default function OutreachComposer({
       {!linkResult ? (
         <button
           onClick={handleCreateLink}
-          disabled={creating}
+          disabled={creating || drafting}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {creating ? (
