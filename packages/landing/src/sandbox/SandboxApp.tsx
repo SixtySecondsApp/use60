@@ -18,7 +18,6 @@ import {
 import { SandboxDataProvider, useSandboxData } from './data/SandboxDataProvider';
 import { SandboxSidebar } from './SandboxSidebar';
 import { SandboxTopbar } from './SandboxTopbar';
-import { SandboxTour } from './SandboxTour';
 import { useSandboxSignup } from './hooks/useSandboxSignup';
 import { useSandboxTracking } from './hooks/useSandboxTracking';
 import { SocialProofBar } from './components/SocialProofBar';
@@ -132,9 +131,6 @@ function SandboxAppInner({
     enabled: true,
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showTour, setShowTour] = useState(
-    () => !localStorage.getItem('sbx_tour_dismissed')
-  );
   const { submit: submitSignup } = useSandboxSignup();
 
   // Social proof bar — show after 90s, dismiss for session
@@ -162,17 +158,6 @@ function SandboxAppInner({
     [setActiveView, trackViewChange]
   );
 
-  const handleTourDismiss = useCallback(() => {
-    localStorage.setItem('sbx_tour_dismissed', '1');
-    setShowTour(false);
-  }, []);
-
-  const handleTourNavigate = useCallback(
-    (view: string) => {
-      navigateToView(view as SandboxView);
-    },
-    [navigateToView]
-  );
 
   // Build a signup handler that captures all demo context
   const handleSignup = useCallback(() => {
@@ -281,20 +266,9 @@ function SandboxAppInner({
         </nav>
       </div>
 
-      {/* Guided tour overlay */}
+      {/* Social proof sticky bar — appears after 90s */}
       <AnimatePresence>
-        {showTour && (
-          <SandboxTour
-            onDismiss={handleTourDismiss}
-            onNavigate={handleTourNavigate}
-            activeView={activeView}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Social proof sticky bar — appears after 90s, hidden if tour is active */}
-      <AnimatePresence>
-        {proofTimerElapsed && !proofDismissed && !showTour && (
+        {proofTimerElapsed && !proofDismissed && (
           <SocialProofBar isVisible onClose={handleProofDismiss} />
         )}
       </AnimatePresence>

@@ -8,7 +8,6 @@
 export { SandboxApp } from './SandboxApp';
 export { SandboxExperience } from './SandboxExperience';
 export { SandboxEntrance } from './SandboxEntrance';
-export { SandboxTour } from './SandboxTour';
 export { CampaignManager } from './CampaignManager';
 
 // Data
