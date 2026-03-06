@@ -103,21 +103,29 @@ Deno.serve(async (req: Request) => {
       }
 
       case 'test_credentials': {
-        // Load existing credentials
+        // Check org-specific key first
         const { data: creds } = await svc
           .from('heygen_org_credentials')
           .select('api_key')
           .eq('org_id', orgId)
           .maybeSingle();
 
-        if (!creds?.api_key) {
-          return jsonResponse({ connected: false, message: 'No API key configured' }, req);
+        const apiKey = creds?.api_key || Deno.env.get('HEYGEN_API_KEY');
+        if (!apiKey) {
+          return jsonResponse({ connected: false, using_own_key: false, message: 'No API key available' }, req);
         }
 
-        const client = new HeyGenClient(creds.api_key);
+        const client = new HeyGenClient(apiKey);
         const connected = await client.testConnection();
+        const usingOwnKey = !!creds?.api_key;
 
-        return jsonResponse({ connected, message: connected ? 'Connection successful' : 'Connection failed' }, req);
+        return jsonResponse({
+          connected,
+          using_own_key: usingOwnKey,
+          message: connected
+            ? usingOwnKey ? 'Connected (your API key)' : 'Connected (60 platform credits)'
+            : 'Connection failed',
+        }, req);
       }
 
       case 'list_voices': {

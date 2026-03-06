@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { KeyRound, Video, Check, Sparkles } from 'lucide-react';
+import { KeyRound, Video, Check, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
 
@@ -20,6 +20,7 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [showByok, setShowByok] = useState(false);
 
   const handleSaveApiKey = async () => {
     if (!apiKey.trim()) return;
@@ -27,6 +28,7 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
     try {
       await connectApiKey(apiKey.trim());
       setApiKey('');
+      setShowByok(false);
     } catch (e: any) {
       toast.error(e?.message || 'Failed to save');
     } finally {
@@ -73,49 +75,30 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
               </Badge>
             )}
           </div>
+          {isConnected && (
+            <p className="text-xs text-gray-500 dark:text-gray-500">
+              Using 60 platform credits. Video generation is included in your plan.
+            </p>
+          )}
         </div>
       </ConfigSection>
 
-      <ConfigSection title="API Key">
-        <div className="space-y-3">
-          <div className="text-sm text-gray-700 dark:text-gray-300">
-            Enter your API key to enable AI avatar creation and personalized video outreach.
+      <ConfigSection title="Features">
+        <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-500" />
+            AI Avatar Creation (Photo + AI Training)
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="heygen_api_key">API Key</Label>
-            <Input
-              id="heygen_api_key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk_..."
-              type="password"
-            />
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-500" />
+            Personalized Video Generation
           </div>
-          <Button onClick={handleSaveApiKey} disabled={!apiKey.trim() || saving} size="sm">
-            <KeyRound className="w-4 h-4 mr-1.5" />
-            {saving ? 'Verifying...' : isConnected ? 'Update Key' : 'Connect'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-500" />
+            Video Outreach in Ops Campaigns
+          </div>
         </div>
       </ConfigSection>
-
-      {isConnected && (
-        <ConfigSection title="Features">
-          <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-            <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-500" />
-              AI Avatar Creation (Photo + AI Training)
-            </div>
-            <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-500" />
-              Personalized Video Generation
-            </div>
-            <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-500" />
-              Video Outreach in Ops Campaigns
-            </div>
-          </div>
-        </ConfigSection>
-      )}
 
       {isConnected && (
         <ConfigSection title="Get Started">
@@ -132,6 +115,40 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
           </Button>
         </ConfigSection>
       )}
+
+      {/* Bring Your Own Key — collapsible advanced section */}
+      <ConfigSection title="Advanced">
+        <button
+          type="button"
+          onClick={() => setShowByok(!showByok)}
+          className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+        >
+          {showByok ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          Use your own HeyGen API key
+        </button>
+
+        {showByok && (
+          <div className="mt-3 space-y-3">
+            <div className="text-xs text-gray-500 dark:text-gray-500">
+              Optionally connect your own HeyGen account to use your own credits instead of 60 platform credits.
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="heygen_api_key">HeyGen API Key</Label>
+              <Input
+                id="heygen_api_key"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk_..."
+                type="password"
+              />
+            </div>
+            <Button onClick={handleSaveApiKey} disabled={!apiKey.trim() || saving} size="sm" variant="outline">
+              <KeyRound className="w-4 h-4 mr-1.5" />
+              {saving ? 'Verifying...' : 'Connect Own Key'}
+            </Button>
+          </div>
+        )}
+      </ConfigSection>
 
       {isConnected && (
         <DangerZone>

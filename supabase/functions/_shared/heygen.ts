@@ -316,18 +316,31 @@ export class HeyGenClient {
 
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 
+/**
+ * Creates a HeyGenClient using:
+ * 1. Org's own API key (if they brought their own), or
+ * 2. Platform default key from HEYGEN_API_KEY env var
+ */
 export async function createHeyGenClient(
   serviceClient: SupabaseClient,
   orgId: string,
 ): Promise<HeyGenClient> {
-  const { data, error } = await serviceClient
+  // Check for org-specific key first
+  const { data } = await serviceClient
     .from('heygen_org_credentials')
     .select('api_key')
     .eq('org_id', orgId)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to fetch HeyGen credentials: ${error.message}`);
-  if (!data?.api_key) throw new Error('HeyGen API key not configured for this organization');
+  if (data?.api_key) {
+    return new HeyGenClient(data.api_key);
+  }
 
-  return new HeyGenClient(data.api_key);
+  // Fall back to platform default key
+  const platformKey = Deno.env.get('HEYGEN_API_KEY');
+  if (!platformKey) {
+    throw new Error('Video Avatar not available — contact support');
+  }
+
+  return new HeyGenClient(platformKey);
 }
