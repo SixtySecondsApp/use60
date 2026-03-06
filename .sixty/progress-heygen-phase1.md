@@ -60,4 +60,29 @@ HG-001 (schema)
 
 ## Session Log
 
-(No sessions yet)
+### 2026-03-06 — HG-001 through HG-014 ALL COMPLETE
+
+**Session**: Full implementation run (all 14 stories)
+
+| Story | Title | Files | Status |
+|-------|-------|-------|--------|
+| HG-001 | Database migration | `20260306160544_heygen_integration_schema.sql` | Done |
+| HG-002 | Shared API client | `_shared/heygen.ts` | Done |
+| HG-003 | Admin edge function | `heygen-admin/index.ts` | Done |
+| HG-004 | Avatar creation edge function | `heygen-avatar-create/index.ts` | Done |
+| HG-005 | Avatar status polling | `heygen-avatar-status/index.ts` | Done |
+| HG-006 | Voice listing | `heygen-voices/index.ts` | Done |
+| HG-007 | Integration settings UI | `HeyGenConfigModal.tsx`, `useHeyGenIntegration.ts` | Done |
+| HG-008 | Avatar Creator wizard | `AvatarCreatorWizard.tsx` | Done |
+| HG-009 | Video generation edge function | `heygen-video-generate/index.ts` | Done |
+| HG-010 | Video webhook + polling | `heygen-video-webhook/index.ts` | Done |
+| HG-011 | Outreach draft + video script | `campaign-outreach-draft/index.ts` | Done |
+| HG-012 | Frontend types | `heygen.ts` | Done |
+| HG-013 | OutreachComposer video toggle | `OutreachComposer.tsx`, `VideoPreviewCard.tsx` | Done |
+| HG-014 | Ops table video cell + batch UI | `HeyGenVideoCell.tsx`, `GenerateVideosAction.tsx`, `useHeyGenVideos.ts` | Done |
+
+**Next steps**:
+- Deploy edge functions to staging (`--no-verify-jwt`)
+- Apply migration to staging database
+- Save HeyGen API key via config modal
+- Test avatar creation flow end-to-end

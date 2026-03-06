@@ -439,8 +439,9 @@
 
   "execution": {
     "totalStories": 14,
-    "completedStories": 0,
-    "currentFeature": "heygen-infra",
-    "lastUpdated": "2026-03-06T00:00:00Z"
+    "completedStories": 14,
+    "currentFeature": null,
+    "lastUpdated": "2026-03-06T17:00:00Z",
+    "status": "complete"
   }
 }
