@@ -1,165 +1,449 @@
 {
-  "project": "Go-Live Polish — Insights, Integrations & Reports Fixes",
-  "runSlug": "golive-polish",
-  "branchName": "feature/support-docs-fixes",
-  "description": "Batch of 5 in-progress tickets (10 stories) covering Insights rename, sync error, Slack branding, help panel, and 6 Reports subtask bugs blocking go-live sign-off.",
+  "project": "Onboarding & First-Run UX Fixes",
+  "runSlug": "onboarding-ux-fixes",
+  "branchName": "feature/onboarding-ux-fixes",
+  "description": "Fix 5 broken CTAs, config save failure, weak passwords, misleading credit displays, unpolished dropdowns, missing item limits, and auto-trigger meeting analysis pipeline on ingestion.",
   "aiDevHubProjectId": null,
-  "createdAt": "2026-03-04T14:00:00.000Z",
+  "createdAt": "2026-03-03T11:00:00Z",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Rename Intelligence to Insights in Navigation and Page Heading",
-      "description": "As a user, I want the nav item and page heading to say 'Insights' instead of 'Intelligence' / 'Meeting Analytics' so the branding is consistent.",
+      "title": "Fix ActivationChecklist 'Complete Your Profile' CTA",
+      "description": "As a new user, I want the 'Go to Profile' button to take me to a working profile page so I can complete my setup.",
       "acceptanceCriteria": [
-        "Navigation sidebar label changed from 'Intelligence' to 'Insights' in routeConfig.ts",
-        "Page heading changed from 'Meeting Analytics' to 'Insights' in MeetingAnalyticsPage.tsx",
-        "data-tour attribute updated if it references 'intelligence'",
+        "href changed from /settings/profile to /settings/account in ActivationChecklist.tsx",
+        "Clicking 'Go to Profile' lands on a working page",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "TSK-0503 | Nav/heading already Insights, updated data-tour attribute",
+      "passes": false,
+      "notes": "File: src/components/dashboard/ActivationChecklist.tsx line 43",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-002",
-      "title": "Fix Sync Button Error Message",
-      "description": "As a user clicking the Sync button, I want a helpful error message instead of the confusing 'Sync your meetings/calls first to enable AI search'.",
+      "title": "Fix ActivationChecklist 'Connect Calendar' CTA",
+      "description": "As a new user, I want the 'Connect Calendar' button to take me to the integrations page so I can sync my first meeting.",
       "acceptanceCriteria": [
-        "Error message changed to 'No conversations to index. Please ensure integrations are configured correctly'",
-        "Message only shows when there are genuinely no meetings/calls to index",
+        "href changed from /settings/integrations to /integrations for first_meeting_synced item",
+        "Clicking 'Connect Calendar' lands on the integrations hub page",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "TSK-0504 | Already fixed in useMeetingIntelligence.ts line 657-658",
+      "passes": false,
+      "notes": "File: src/components/dashboard/ActivationChecklist.tsx. /settings/integrations does not exist — only /integrations does.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-003",
-      "title": "Fix Slack App Display Name",
-      "description": "As a user connecting Slack, I want to see 'Use60' as the app name, not 'use60 (staging)'.",
+      "title": "Fix ActivationChecklist 'Connect Notetaker' CTA",
+      "description": "As a new user, I want the 'Connect Notetaker' button to take me to the integrations page.",
       "acceptanceCriteria": [
-        "Slack OAuth app name displays as 'Use60' during connection flow",
-        "Review Slack app permissions are correctly scoped",
-        "If Slack API dashboard config change, document what was changed",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "href changed from /settings/integrations to /integrations for notetaker_connected item",
+        "Clicking 'Connect Notetaker' lands on integrations hub",
+        "Typecheck passes"
       ],
-      "priority": 2,
-      "passes": true,
-      "notes": "TSK-0507 | NOT a code fix — app name is set in Slack API dashboard (api.slack.com/apps). Rename from 'use60 (staging)' to 'Use60' there.",
+      "priority": 3,
+      "passes": false,
+      "notes": "Same root cause as US-002 — /settings/integrations does not exist",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-004",
-      "title": "Fix Help Panel on Integrations Page",
-      "description": "As a user clicking the '?' help icon next to Integrations, I want the help panel to show actual documentation instead of 'Documentation not available yet.'",
+      "title": "Fix ActivationChecklist 'Connect CRM' CTA",
+      "description": "As a new user, I want the 'Connect CRM' button to take me to the integrations page.",
       "acceptanceCriteria": [
-        "Help panel loads and displays documentation content for the Integrations page",
-        "If no docs_articles record exists, create seed content or show useful fallback",
-        "Evaluate whether HelpPanel should appear on other pages",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "href changed from /settings/integrations to /integrations for crm_integrated item",
+        "Clicking 'Connect CRM' lands on integrations hub",
+        "Typecheck passes"
       ],
-      "priority": 2,
-      "passes": true,
-      "notes": "TSK-0506 | Fallback already updated to 'coming soon' with docs.use60.com link. Slug is integrations-overview — needs docs_articles seed.",
+      "priority": 4,
+      "passes": false,
+      "notes": "Same root cause as US-002 — /settings/integrations does not exist",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-005",
-      "title": "Fix Reports History Showing Pre-User Dates",
-      "description": "As a user viewing Reports, I should only see reports generated after my account was created, not phantom historical reports.",
+      "title": "Fix ActivationChecklist 'Invite Team' CTA",
+      "description": "As a new user, I want the 'Invite Team' button to take me to the team management page.",
       "acceptanceCriteria": [
-        "Report history query filters by user's created_at or org membership date",
-        "No reports appear dated before the user's account creation",
+        "href changed from /settings/team to /settings/team-members for team_invited item",
+        "Clicking 'Invite Team' lands on organization management page",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 3,
-      "passes": true,
-      "notes": "TSK-0505 subtask 1 | Files: ReportsTab.tsx, useMaReportHistory",
+      "priority": 5,
+      "passes": false,
+      "notes": "File: src/components/dashboard/ActivationChecklist.tsx. /settings/team redirects to /settings which is wrong.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-006",
-      "title": "Fix Send to All Channels Email Notifications",
-      "description": "As a user clicking 'Send to All Channels' after adding an email in Notification Settings, I want the email to actually be delivered.",
+      "title": "Seed missing config keys in agent_config_defaults",
+      "description": "As a new user, I want saving my configuration during onboarding to succeed instead of showing 'Failed to save configuration.'",
       "acceptanceCriteria": [
-        "Email notification is sent to configured email address",
-        "Success toast only shows after API call succeeds",
-        "If email sending fails, show error toast instead of success",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "New migration seeds 14 onboarding config keys into agent_config_defaults table",
+        "Keys: fiscal_year_start_month, typical_deal_size_range, average_sales_cycle_days, crm_stage_mapping (agent_type: deal_risk)",
+        "Keys: sales_methodology, sales_motion_type, key_competitors, pricing_model, target_customer_profile, common_objections (agent_type: crm_update)",
+        "Keys: industry_vertical, company_size, product_service_category, team_size (agent_type: morning_briefing)",
+        "Migration uses ON CONFLICT DO NOTHING for idempotency",
+        "setOrgOverride calls succeed for all config keys after migration",
+        "Typecheck passes"
       ],
-      "priority": 3,
-      "passes": true,
-      "notes": "TSK-0505 subtask 2 | Files: ReportsTab.tsx, useMaSendReport",
+      "priority": 6,
+      "passes": false,
+      "notes": "Root cause: agent-config-admin edge function validates config_key exists in agent_config_defaults before allowing set_org_override. None of the onboarding keys were ever seeded. File: supabase/functions/agent-config-admin/index.ts lines 96-105.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-007",
-      "title": "Fix Generate Preview Button UX",
-      "description": "As a user on the Reports tab, the 'Generate Preview' button should clearly communicate what it does.",
+      "title": "Strengthen password validation on signup",
+      "description": "As a platform admin, I want signup passwords to require at least 1 uppercase letter and 1 special character for better security.",
       "acceptanceCriteria": [
-        "Button label or tooltip clarifies the action",
-        "Button behavior matches user expectation — generates preview before sending",
+        "Password requires: min 6 chars, 1 uppercase, 1 special character",
+        "Validation in src/pages/auth/signup.tsx handleSubmit",
+        "Hint text updated to: 'Min 6 chars, 1 uppercase, 1 special character'",
+        "Specific toast error message for each missing requirement",
+        "Same validation applied in TestUserSignup.tsx and InviteSignup.tsx",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 4,
-      "passes": true,
-      "notes": "TSK-0505 subtask 3 | Files: ReportsTab.tsx",
+      "priority": 7,
+      "passes": false,
+      "notes": "Current validation only checks length >= 6 at signup.tsx line 124",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-008",
-      "title": "Fix Total Meetings Count Showing 0",
-      "description": "As a user with meetings, the Reports section should show the correct meeting count instead of 0.",
+      "title": "Fix credits depleted banner race condition for new users",
+      "description": "As a new user, I want to see a welcome banner about my free credits instead of 'AI credits depleted'.",
       "acceptanceCriteria": [
-        "Total meetings metric reflects actual meeting count for the user",
-        "Query uses correct column meetings.owner_user_id (NOT user_id)",
-        "Count matches what the user sees in other parts of the app",
+        "When balance <= 0 AND user has zero ai_cost_events, do NOT show red depleted banner",
+        "Show green banner or suppress entirely while welcome credits are pending",
+        "If welcome credits localStorage flag is 'pending', show green banner even before balance refreshes",
+        "After credits granted and balance > 0, green banner shows '10 Free AI credits have been added!'",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 3,
-      "passes": true,
-      "notes": "TSK-0505 subtask 4 | Files: ReportsTab.tsx, useMaReportHistory",
+      "priority": 8,
+      "passes": false,
+      "notes": "File: src/components/credits/LowBalanceBanner.tsx. Welcome banner logic exists at line 48 but depends on timing. grant-welcome-credits runs from CompletionStep.tsx line 116-125.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-009",
-      "title": "Fix Generic AI Tips When No Transcripts Exist",
-      "description": "As a user with no meeting transcripts, the Reports section should not show AI-generated coaching tips that have no data basis.",
+      "title": "Remove credit migration popup for new users",
+      "description": "As a new user, I want to not see a 'We've upgraded your credits' popup since I never had a prior version.",
       "acceptanceCriteria": [
-        "If user has zero transcripts, AI tips section is hidden or shows fallback message",
-        "Tips only appear when there is actual transcript data to derive them from",
+        "CreditMigrationModal does NOT show for orgs created after credit system launch",
+        "Add guard: check org.created_at against cutoff date or check for migration ledger entries",
+        "Existing users who haven't dismissed it should still see it",
+        "localStorage DISMISSED_KEY check remains as secondary guard",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 3,
-      "passes": true,
-      "notes": "TSK-0505 subtask 5 | Files: ReportsTab.tsx",
+      "priority": 9,
+      "passes": false,
+      "notes": "File: src/components/credits/CreditMigrationModal.tsx. Currently only guards via localStorage key (line 24) — no server-side new-user detection.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-010",
-      "title": "Fix Notification Settings Slack Webhook URL Overflow",
-      "description": "As a user adding a Slack webhook URL in Notification Settings, the popup should not break layout with a wide scrollbar.",
+      "title": "Fix UsageChart header stats — remove dollar signs",
+      "description": "As a user, I want the usage chart header pills to show credits not dollars.",
       "acceptanceCriteria": [
-        "Webhook URL input truncates or wraps long URLs within popup width",
-        "No horizontal scrollbar appears in notification settings popup",
-        "URL still fully accessible via tooltip or expandable field",
+        "Line 356: Change from $X.XX to 'X.X credits'",
+        "Line 363: Change 30d estimate from $X.XX to credits format",
+        "Lines 384: Change projection cards from '$X.XX/mo' to 'X.X credits/mo'",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 4,
-      "passes": true,
-      "notes": "TSK-0505 subtask 6 | Files: ReportsTab.tsx (notification settings modal)",
+      "priority": 10,
+      "passes": false,
+      "notes": "File: src/components/credits/UsageChart.tsx. estimated_cost stores credit units not USD.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-011",
+      "title": "Fix UsageChart tooltip and Y-axis — remove dollar signs",
+      "description": "As a user, I want chart tooltips and axis labels to show credits not dollars.",
+      "acceptanceCriteria": [
+        "Line 201 (CustomTooltip): Change from $X.XXXX to credits format",
+        "Line 414 (Y-axis tickFormatter): Change from $X to credits format",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "File: src/components/credits/UsageChart.tsx",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-012",
+      "title": "Fix UsageChart legend and section header labels",
+      "description": "As a user, I want the chart legend and page header to use credit-appropriate language.",
+      "acceptanceCriteria": [
+        "renderLegend: 'Actual spend' changed to 'Credits used'",
+        "CreditsSettingsPage.tsx line 411: 'Spend Trend (30 Days)' changed to 'Usage Trend (30 Days)'",
+        "Header stat label 'Actual' updated if needed for clarity",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "File: src/components/credits/UsageChart.tsx lines 212-240, src/pages/settings/CreditsSettingsPage.tsx line 411",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-013",
+      "title": "Tag onboarding cost events with source metadata",
+      "description": "As a new user, I want onboarding AI costs to be tagged so they can be excluded from my usage display.",
+      "acceptanceCriteria": [
+        "deep-enrich-organization logAICostEvent (line 522) adds metadata: { source: 'onboarding' }",
+        "agent-initial-scan logAICostEvent adds metadata: { source: 'onboarding' }",
+        "api-skill-builder logAICostEvent calls add metadata: { source: 'onboarding' } when called during onboarding",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "deep-enrich-organization logs with hardcoded 1000/800 token counts. metadata jsonb column already exists on ai_cost_events.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-014",
+      "title": "Filter onboarding cost events from UsageChart display",
+      "description": "As a new user, I want the usage chart to exclude onboarding setup costs so I see 0 usage on first login.",
+      "acceptanceCriteria": [
+        "UsageChart query (line 73-79) filters out events where metadata->>'source' = 'onboarding'",
+        "New users see 0 usage on first login (not $3 / 3 credits)",
+        "Admin/power users can optionally see all events if needed",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Depends on US-013 (tagging) being deployed first. File: src/components/credits/UsageChart.tsx",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-015",
+      "title": "Fix fiscal year dropdown to show month names",
+      "description": "As a new user, I want the fiscal year dropdown to show month names instead of numbers.",
+      "acceptanceCriteria": [
+        "Dropdown shows Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec",
+        "Stored value remains numeric (1-12) — only display label changes",
+        "Fix applied in AgentConfigConfirmStep.tsx lines 83-85",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "File: src/pages/onboarding/v2/AgentConfigConfirmStep.tsx",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-016",
+      "title": "Fix sales methodology dropdown capitalisation",
+      "description": "As a new user, I want sales methodology options properly capitalised.",
+      "acceptanceCriteria": [
+        "Options display as: Generic, MEDDIC, BANT, SPIN, Challenger",
+        "Acronyms fully capitalised: MEDDIC, BANT, SPIN",
+        "Non-acronyms start with capital: Generic, Challenger",
+        "Stored value can remain lowercase — only display label changes",
+        "Fix applied in AgentConfigConfirmStep.tsx line 64",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "File: src/pages/onboarding/v2/AgentConfigConfirmStep.tsx",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-017",
+      "title": "Add sales methodology hover tooltips",
+      "description": "As a new user, I want hover tooltips explaining each methodology so I can choose correctly.",
+      "acceptanceCriteria": [
+        "Generic tooltip: 'A flexible, general-purpose sales approach'",
+        "MEDDIC tooltip: 'Metrics, Economic Buyer, Decision Criteria, Decision Process, Identify Pain, Champion'",
+        "BANT tooltip: 'Budget, Authority, Need, Timeline'",
+        "SPIN tooltip: 'Situation, Problem, Implication, Need-Payoff'",
+        "Challenger tooltip: 'The Challenger Sale — teach, tailor, and take control of the conversation'",
+        "Uses existing Radix/shadcn Tooltip component",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "File: src/pages/onboarding/v2/AgentConfigConfirmStep.tsx",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-018",
+      "title": "Add item limit to AgentConfigConfirmStep TagEditor",
+      "description": "As a new user, I want tag inputs limited to 10 items so the system isn't overloaded.",
+      "acceptanceCriteria": [
+        "TagEditor component (lines 217-270) enforces MAX_ITEMS = 10",
+        "add() function (line 226) checks values.length >= MAX_ITEMS before adding",
+        "Input disabled or hidden when limit reached",
+        "Warning text shown: 'Maximum 10 items'",
+        "Affects: key_competitors and common_objections fields",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "File: src/pages/onboarding/v2/AgentConfigConfirmStep.tsx. TagEditor has zero length enforcement currently.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-019",
+      "title": "Add item limits to AIIntelligencePage settings",
+      "description": "As a user editing AI settings, I want all list inputs limited to 10 items for consistency.",
+      "acceptanceCriteria": [
+        "Define MAX_ITEMS = 10 constant in AIIntelligencePage.tsx",
+        "Add buttons for criteria (611), disqualifiers (652), questions (697), objections (802) disabled at limit",
+        "onKeyDown Enter handlers for avoid words (743) and buyingSignals (859) check count before adding",
+        "Warning text shown when limit reached for each field",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "File: src/pages/settings/AIIntelligencePage.tsx. 6 separate add-item locations all unlimited.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-020",
+      "title": "Auto-trigger basic analysis on Fathom webhook ingestion",
+      "description": "As a user, I want meetings synced via Fathom to be automatically analyzed by AI so I don't have to manually click Reprocess.",
+      "acceptanceCriteria": [
+        "When meetings-webhook receives a transcript event, auto-trigger analyzeTranscriptWithClaude",
+        "Analysis runs asynchronously so webhook responds quickly",
+        "Credits checked via checkCreditBalance — skip silently if insufficient",
+        "Cost event logged with feature key meeting_summary",
+        "Idempotency: skip if meeting already has sentiment_score",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "File: supabase/functions/meetings-webhook/index.ts. Currently only stores data, no AI analysis triggered.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-021",
+      "title": "Auto-trigger basic analysis on MeetingBaaS ingestion",
+      "description": "As a user using the 60 Notetaker, I want meetings automatically analyzed when transcription completes.",
+      "acceptanceCriteria": [
+        "When meetingbaas-webhook receives transcript.ready, after process-recording, auto-trigger analyzeTranscriptWithClaude",
+        "Same credit check and idempotency guards as US-020",
+        "Cost event logged",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "File: supabase/functions/meetingbaas-webhook/index.ts",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-022",
+      "title": "Auto-trigger deep structured summary after basic analysis",
+      "description": "As a user, I want the deep structured summary to run automatically so dashboard stats are populated without manual action.",
+      "acceptanceCriteria": [
+        "After analyzeTranscriptWithClaude completes, auto-invoke meeting-process-structured-summary",
+        "Credit check before running — skip silently if insufficient (basic summary remains as fallback)",
+        "Populates: meeting_structured_summaries, meeting_classifications, deal_truth_fields",
+        "Dashboard stats update automatically",
+        "Cost event logged",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": "meeting-process-structured-summary uses Claude Sonnet 4 (~3 credits). Populates meeting_classifications boolean flags that power aggregate dashboard queries.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-023",
+      "title": "Auto-trigger scorecard generation after structured summary",
+      "description": "As a user, I want coaching scorecards generated automatically so team KPI grid and coaching views are populated.",
+      "acceptanceCriteria": [
+        "After meeting-process-structured-summary completes, auto-invoke meeting-generate-scorecard",
+        "Credit check before running — skip silently if insufficient",
+        "Populates: meeting_scorecards (overall_score, grade, metric_scores, coaching_tips)",
+        "Team KPI grid and coaching leaderboards update automatically",
+        "Cost event logged",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "meeting-generate-scorecard uses Claude Sonnet 4 (~3 credits). Feeds meeting_scorecards.overall_score into team KPI views.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-024",
+      "title": "Auto-queue meeting for Gemini intelligence indexing",
+      "description": "As a user, I want new meetings automatically indexed for semantic search so Ask Anything works without manual intervention.",
+      "acceptanceCriteria": [
+        "After analysis pipeline completes, insert row into meeting_index_queue",
+        "meeting-intelligence-process-queue picks it up on next cron run",
+        "Meeting becomes searchable via Ask Anything RAG panel",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Gemini File Search Store per org. meeting_index_queue table already exists. meeting-intelligence-process-queue already handles queue processing.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-025",
+      "title": "Create analysis pipeline orchestrator shared function",
+      "description": "As a developer, I want a single orchestrator function that chains all analysis steps so all ingestion paths use one consistent pipeline.",
+      "acceptanceCriteria": [
+        "Create runFullMeetingAnalysisPipeline(supabase, meetingId, orgId, userId) shared function",
+        "Pipeline: (1) analyzeTranscriptWithClaude → (2) meeting-process-structured-summary → (3) meeting-generate-scorecard → (4) queue Gemini indexing",
+        "Each step has independent credit check — pipeline continues if one step lacks credits",
+        "Each step has error handling — failure in one step does not block subsequent steps",
+        "Pipeline logs total credits consumed",
+        "All ingestion paths call this single orchestrator",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "Shared function in supabase/functions/_shared/. Called by meetings-webhook, meetingbaas-webhook, fathom-sync, voice-transcribe-poll, and reprocess-meetings-ai.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-026",
+      "title": "Keep manual Reprocess button as fallback — upgrade to full pipeline",
+      "description": "As a user, I want to manually reprocess a meeting to trigger the full analysis pipeline if auto-analysis was skipped.",
+      "acceptanceCriteria": [
+        "Existing Reprocess button in MeetingDetail.tsx remains functional",
+        "Button now triggers the full pipeline (basic + structured summary + scorecard + indexing) not just basic",
+        "If meeting already has complete analysis, hide the reprocess banner",
+        "Credit-gated check remains via useCreditGatedAction",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "File: src/pages/MeetingDetail.tsx lines 921-963. Currently only calls reprocess-meetings-ai (basic). Should call runFullMeetingAnalysisPipeline.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-027",
+      "title": "Show analysis status indicators on meeting detail page",
+      "description": "As a user, I want to see what analysis has been completed on a meeting so I know if deeper insights are available.",
+      "acceptanceCriteria": [
+        "MeetingDetail shows analysis status: Basic Analysis (check/pending), Structured Summary (check/pending), Scorecard (check/pending)",
+        "If all three complete, show 'Full analysis complete' badge",
+        "If only basic complete, show 'Deep analysis pending' with option to trigger",
+        "Status reads from meeting_structured_summaries and meeting_scorecards table presence",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "File: src/pages/MeetingDetail.tsx. Query meeting_structured_summaries and meeting_scorecards for the meeting_id to determine status.",
       "aiDevHubTaskId": null
     }
   ]

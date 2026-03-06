@@ -1,0 +1,222 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind",
+      "testing": "vitest"
+    }
+  },
+  "features": [
+    {
+      "id": "product-tour-v2",
+      "name": "Smooth Multi-Page Product Tour",
+      "status": "pending",
+      "description": "Replace react-joyride with driver.js for a smooth, multi-page onboarding tour that navigates users through each page with no overlay flashing. Each sidebar item is highlighted, clicking Next navigates to the page and shows page-level details.",
+      "createdAt": "2026-03-02T00:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "TOUR-001",
+      "feature": "product-tour-v2",
+      "title": "Install driver.js and remove react-joyride",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["TOUR-002", "TOUR-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "driver.js is installed as a dependency",
+        "react-joyride and react-floater are uninstalled",
+        "No remaining imports of react-joyride in the codebase",
+        "Build succeeds with no errors"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "id": "TOUR-002",
+      "feature": "product-tour-v2",
+      "title": "Create driver.js CSS theme matching glassmorphic design system",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["TOUR-001"], "files": [], "schema": [] },
+      "blocks": ["TOUR-004"],
+      "parallelWith": ["TOUR-003"],
+      "acceptance": [
+        "driver.js CSS custom properties overridden in global CSS (src/index.css or similar)",
+        "Popover background: rgba(17, 24, 39, 0.95) with backdrop-blur(12px)",
+        "Border: 1px solid rgba(124, 58, 237, 0.35) (violet-600/35 glow)",
+        "Box-shadow matches existing: 0 25px 50px -12px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.15)",
+        "Border-radius: 1rem (16px) on popover",
+        "Title: text-white, 1rem, font-weight 700",
+        "Body: text-gray-300, 0.875rem, line-height 1.5",
+        "Next button: bg-violet-600, rounded-lg, text-sm font-medium, white text",
+        "Back button: text-gray-400",
+        "Skip button: text-gray-500",
+        "Progress dots match SetupWizard stepper pattern: active=wide pill, inactive=small dot",
+        "Overlay color: rgba(0, 0, 0, 0.55)",
+        "Spotlight border-radius: 0.5rem",
+        "Smooth spotlight transition: CSS transition on all position/size properties ~350ms ease-in-out",
+        "Dark mode and light mode both look correct"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/index.css",
+        "src/styles/tour.css"
+      ]
+    },
+    {
+      "id": "TOUR-003",
+      "feature": "product-tour-v2",
+      "title": "Add data-tour targets on each page for page-level highlights",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["TOUR-001"], "files": [], "schema": [] },
+      "blocks": ["TOUR-004"],
+      "parallelWith": ["TOUR-002"],
+      "acceptance": [
+        "Dashboard page: data-tour='dashboard-overview' on the main metrics/overview section",
+        "Meetings page: data-tour='meetings-list' on the UnifiedMeetingsList container",
+        "Intelligence page: data-tour='intelligence-dashboard' on the dashboard tab content area",
+        "Integrations page: data-tour='integrations-grid' on the integration cards grid",
+        "Settings page: data-tour='settings-hub' on the settings cards container",
+        "Credits widget (top bar): already has data-tour='credits' — verify it works",
+        "No visual changes to any page — just data attributes added"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/pages/Dashboard.tsx",
+        "src/components/meetings/UnifiedMeetingsList.tsx",
+        "src/pages/MeetingAnalyticsPage.tsx",
+        "src/pages/Integrations.tsx",
+        "src/pages/Settings.tsx"
+      ]
+    },
+    {
+      "id": "TOUR-004",
+      "feature": "product-tour-v2",
+      "title": "Build ProductTour component with driver.js multi-page navigation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["TOUR-002", "TOUR-003"], "files": [], "schema": [] },
+      "blocks": ["TOUR-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "ProductTour.tsx rewritten to use driver.js instead of react-joyride",
+        "Tour has ~10 steps in this flow: sidebar highlight -> page detail for each section",
+        "Step 1: Highlight sidebar 'Dashboard' — tooltip: 'Your Command Centre' — placement right",
+        "Step 2: Navigate to /dashboard, highlight dashboard-overview — tooltip: page details (metrics, targets, activity)",
+        "Step 3: Highlight sidebar 'Meetings' — tooltip: 'Meeting Intelligence'",
+        "Step 4: Navigate to /meetings, highlight meetings-list — tooltip: page details (all meetings, AI summaries, sources)",
+        "Step 5: Highlight sidebar 'Intelligence' — tooltip: 'Analytics & Insights'",
+        "Step 6: Navigate to /meeting-analytics, highlight intelligence-dashboard — tooltip: page details (talk ratios, sentiment, coaching)",
+        "Step 7: Highlight sidebar 'Integrations' — tooltip: 'Connect Your Tools'",
+        "Step 8: Navigate to /integrations, highlight integrations-grid — tooltip: page details (CRM, calendar, email connections)",
+        "Step 9: Highlight sidebar 'Settings' — tooltip: 'Your Settings'",
+        "Step 10: Highlight credits widget — tooltip: 'AI Credits' — final step with 'Let's Go' button",
+        "onNextClick handler: navigates to correct route before advancing step, with 150ms delay for DOM mount",
+        "onPrevClick handler: navigates back to correct route",
+        "Tour dismissal persists to localStorage (sixty_tour_completed_{userId})",
+        "Tour only shows within 1 hour of onboarding completion (existing logic preserved)",
+        "Tour starts after 4000ms delay (existing WelcomeSplash wait preserved)",
+        "On tour complete: calls useSetupWizardStore.getState().openWizard() (existing behavior)",
+        "On skip: does NOT open wizard (existing behavior)",
+        "Spotlight moves smoothly between sidebar items — no flashing",
+        "Spotlight moves smoothly from sidebar to page content — no flashing",
+        "Overlay stays constant throughout — never unmounts"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/ProductTour.tsx"
+      ]
+    },
+    {
+      "id": "TOUR-005",
+      "feature": "product-tour-v2",
+      "title": "Polish tour UX: edge cases, keyboard nav, and final design pass",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["TOUR-004"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "ESC key dismisses the tour (driver.js default — verify it works)",
+        "Clicking overlay dismisses the tour (verify or disable based on preference)",
+        "Window resize recalculates spotlight position correctly",
+        "Tour handles edge case: target element not found (skip step gracefully)",
+        "Tour progress indicator shows current step / total (e.g., '3 of 10')",
+        "Last step button text is 'Let's Go' instead of 'Next'",
+        "First step has no 'Back' button",
+        "All tooltip content is concise and action-oriented",
+        "Tour works in both expanded and collapsed sidebar states",
+        "Navigating away from the page during tour gracefully cleans up",
+        "No console errors during tour flow",
+        "Verify smooth spotlight animation on each transition (no flash, smooth slide)",
+        "Design review: tooltips match glassmorphic violet theme from TOUR-002"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/ProductTour.tsx",
+        "src/styles/tour.css"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 5,
+    "completedStories": 0,
+    "currentFeature": "product-tour-v2",
+    "lastUpdated": "2026-03-02T00:00:00Z",
+    "estimatedTotal": "1.5-2 hours",
+    "parallelGroups": [
+      {
+        "stories": ["TOUR-002", "TOUR-003"],
+        "reason": "CSS theme and data-tour attributes are independent — can run in parallel after TOUR-001"
+      }
+    ]
+  },
+  "designNotes": {
+    "libraryChoice": "driver.js (~5kb) replaces react-joyride (broken overlay remount architecture)",
+    "whyNotJoyride": "react-joyride unmounts/remounts the Portal DOM node on every step change. CSS transitions have nothing to animate against because the element is destroyed and recreated. This is a known, unresolved issue (GitHub #872, #918, #973).",
+    "whyDriverJs": "Single persistent DOM element for overlay — spotlight moves via CSS transitions, no DOM remount. Built-in onNextClick hook for page navigation. 5kb gzipped. Active maintenance.",
+    "whyNotCustom": "framer-motion custom build (~200 lines + floating-ui) is overkill for a 10-step tour. Revisit if tour becomes a core product surface with branching logic.",
+    "tourFlow": [
+      "1. Sidebar: Dashboard → 2. Page: Dashboard overview",
+      "3. Sidebar: Meetings → 4. Page: Meetings list",
+      "5. Sidebar: Intelligence → 6. Page: Analytics dashboard",
+      "7. Sidebar: Integrations → 8. Page: Integration cards",
+      "9. Sidebar: Settings → 10. Credits widget (Let's Go)"
+    ],
+    "theme": {
+      "popoverBg": "rgba(17, 24, 39, 0.95) + backdrop-blur(12px)",
+      "border": "1px solid rgba(124, 58, 237, 0.35)",
+      "shadow": "0 25px 50px -12px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.15)",
+      "radius": "1rem",
+      "nextButton": "bg-violet-600 rounded-lg text-sm font-medium",
+      "overlay": "rgba(0, 0, 0, 0.55)",
+      "spotlightRadius": "0.5rem",
+      "spotlightTransition": "all 350ms ease-in-out",
+      "accentColor": "#7c3aed (violet-600)"
+    },
+    "animationEasing": "[0.25, 0.46, 0.45, 0.94] — matches existing animation-variants.ts",
+    "existingDataTourTargets": [
+      "dashboard", "meetings", "intelligence", "integrations",
+      "credits", "settings", "copilot", "notification-bell",
+      "setup-wizard", "activation-checklist"
+    ],
+    "newDataTourTargets": [
+      "dashboard-overview", "meetings-list", "intelligence-dashboard",
+      "integrations-grid", "settings-hub"
+    ]
+  }
+}
