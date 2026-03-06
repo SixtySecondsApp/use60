@@ -319,6 +319,17 @@ export interface UpsertTargetParams {
   value: number;
 }
 
+// Re-export write policy types for convenience
+export type {
+  WriteRequest,
+  WriteResult,
+  WriteError,
+  WritePolicy,
+  WriteStatus,
+  OperationClass,
+  SourceOfTruth,
+} from './writePolicy.ts';
+
 export interface ExecuteActionRequest {
   action: ExecuteActionName;
   params: Record<string, unknown>;

@@ -23,15 +23,15 @@ import { useSetOrgOverride, useAgentConfig } from '@/lib/hooks/useAgentConfig';
 
 // Agent stage definitions (methodology-agnostic labels)
 const AGENT_STAGES = [
-  { key: 'prospecting', label: 'Prospecting' },
-  { key: 'qualification', label: 'Qualification' },
-  { key: 'discovery', label: 'Discovery' },
-  { key: 'proposal', label: 'Proposal / Demo' },
-  { key: 'negotiation', label: 'Negotiation' },
-  { key: 'closing', label: 'Closing' },
-  { key: 'won', label: 'Won' },
-  { key: 'lost', label: 'Lost / Churned' },
-  { key: 'unclassified', label: 'Unclassified' },
+  { key: 'prospecting', label: 'Prospecting', hint: 'Initial outreach and lead generation' },
+  { key: 'qualification', label: 'Qualification', hint: 'Assessing fit and budget' },
+  { key: 'discovery', label: 'Discovery', hint: 'Understanding needs and pain points' },
+  { key: 'proposal', label: 'Proposal / Demo', hint: 'Presenting your solution' },
+  { key: 'negotiation', label: 'Negotiation', hint: 'Terms, pricing, and contracts' },
+  { key: 'closing', label: 'Closing', hint: 'Final steps to win the deal' },
+  { key: 'won', label: 'Won', hint: 'Deal closed successfully' },
+  { key: 'lost', label: 'Lost / Churned', hint: 'Deal lost or customer churned' },
+  { key: 'unclassified', label: 'Unclassified', hint: 'Stage doesn\'t map to a standard phase' },
 ];
 
 interface DealStage {
@@ -125,6 +125,11 @@ export function StageMappingEditor({ orgId, disabled = false }: StageMappingEdit
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-xl">
+          <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+            <span className="font-medium">Why map stages?</span> When a deal moves in your CRM, 60 needs to understand what that means for coaching and risk scoring. For example, if your CRM stage &quot;Proposal Sent&quot; maps to &quot;Proposal / Demo&quot;, 60 knows to check if you&apos;ve covered pricing objections and decision criteria.
+          </p>
+        </div>
         {/* Column headers */}
         <div className="grid grid-cols-2 gap-4 text-xs font-medium text-gray-500 dark:text-gray-400 px-1">
           <span>CRM Stage</span>
@@ -161,7 +166,10 @@ export function StageMappingEditor({ orgId, disabled = false }: StageMappingEdit
               <SelectContent>
                 {AGENT_STAGES.map((as) => (
                   <SelectItem key={as.key} value={as.key}>
-                    {as.label}
+                    <div>
+                      <span>{as.label}</span>
+                      <span className="block text-xs text-gray-400">{as.hint}</span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>

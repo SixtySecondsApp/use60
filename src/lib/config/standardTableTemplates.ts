@@ -367,10 +367,10 @@ export const MEETINGS_TABLE: StandardTableTemplate = {
       app_source_table: 'meetings',
       app_source_column: 'sentiment_score',
       dropdown_options: [
-        { value: 'Negative', label: 'Negative', color: 'red' },
-        { value: 'Neutral', label: 'Neutral', color: 'gray' },
-        { value: 'Positive', label: 'Positive', color: 'green' },
-        { value: 'Very Positive', label: 'Very Positive', color: 'blue' }
+        { value: 'Negative', label: 'Negative', color: '#ef4444' },
+        { value: 'Neutral', label: 'Neutral', color: '#6b7280' },
+        { value: 'Positive', label: 'Positive', color: '#22c55e' },
+        { value: 'Very Positive', label: 'Very Positive', color: '#a78bfa' }
       ]
     },
     {
@@ -448,7 +448,7 @@ export const MEETINGS_TABLE: StandardTableTemplate = {
     {
       name: 'All Meetings',
       is_default: true,
-      column_config: ['title', 'meeting_date', 'duration_minutes', 'contact_name', 'contact_email', 'contact_company', 'sentiment', 'owner', 'recording_url', 'lead_source'],
+      column_config: ['title', 'meeting_date', 'duration_minutes', 'contact_name', 'contact_email', 'contact_company', 'sentiment', 'summary', 'next_actions', 'owner', 'recording_url', 'lead_source'],
       sort_config: { column: 'meeting_date', direction: 'desc' }
     },
     {

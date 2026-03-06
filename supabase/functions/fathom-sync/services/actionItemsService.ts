@@ -136,13 +136,22 @@ export async function processActionItems(
 }
 
 /**
- * Fetch action items from Fathom API for a specific recording
- * Used when action items are not included in the bulk meetings response
+ * Full recording details from Fathom API
  */
-export async function fetchRecordingActionItems(
+export interface FathomRecordingDetails {
+  action_items: FathomActionItem[] | null
+  participants: Array<{ name: string; email?: string; is_host?: boolean; is_external?: boolean }> | null
+  calendar_invitees: Array<{ name: string; email?: string; is_host?: boolean; is_external?: boolean }> | null
+}
+
+/**
+ * Fetch full recording details from Fathom API for a specific recording.
+ * Returns action items, participants, and calendar invitees.
+ */
+export async function fetchRecordingDetails(
   apiKey: string,
   recordingId: string | number
-): Promise<FathomActionItem[] | null> {
+): Promise<FathomRecordingDetails | null> {
   const url = `https://api.fathom.ai/external/v1/recordings/${recordingId}`
 
   // Try with Authorization: Bearer header first
@@ -170,9 +179,21 @@ export async function fetchRecordingActionItems(
   const data = await resp.json().catch(() => null)
   if (!data) return null
 
-  if (data?.action_items && Array.isArray(data.action_items)) {
-    return data.action_items
+  return {
+    action_items: Array.isArray(data?.action_items) ? data.action_items : null,
+    participants: Array.isArray(data?.participants) ? data.participants : null,
+    calendar_invitees: Array.isArray(data?.calendar_invitees) ? data.calendar_invitees : null,
   }
+}
 
-  return null
+/**
+ * Fetch action items from Fathom API for a specific recording
+ * Used when action items are not included in the bulk meetings response
+ */
+export async function fetchRecordingActionItems(
+  apiKey: string,
+  recordingId: string | number
+): Promise<FathomActionItem[] | null> {
+  const details = await fetchRecordingDetails(apiKey, recordingId)
+  return details?.action_items ?? null
 }

@@ -4,7 +4,7 @@ import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelpe
 import { HubSpotClient } from '../_shared/hubspot.ts'
 
 // HubSpot Admin Edge Function - v3 (added update actions)
-type Action = 'status' | 'enqueue' | 'save_settings' | 'get_properties' | 'get_pipelines' | 'get_forms' | 'get_lists' | 'preview_contacts' | 'trigger_sync' | 'create_contact' | 'create_deal' | 'create_task' | 'update_contact' | 'update_deal' | 'update_task' | 'delete_contact' | 'delete_deal' | 'delete_task' | 'detect_fields' | 'test_mapping'
+type Action = 'status' | 'enqueue' | 'save_settings' | 'get_properties' | 'get_pipelines' | 'get_forms' | 'get_lists' | 'preview_contacts' | 'trigger_sync' | 'create_contact' | 'create_deal' | 'create_task' | 'update_contact' | 'update_deal' | 'update_task' | 'delete_contact' | 'delete_deal' | 'delete_task' | 'detect_fields' | 'test_mapping' | 'get_sequences' | 'enroll_in_sequence'
 
 /**
  * Get a valid HubSpot access token, refreshing if expired or about to expire
@@ -1515,6 +1515,90 @@ serve(async (req) => {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+  }
+
+  // ============================================================================
+  // Get Sequences — lists all sequences in the HubSpot account
+  // ============================================================================
+
+  if (action === 'get_sequences') {
+    const { accessToken, error: tokenError } = await getValidAccessToken(svc, orgId)
+    if (tokenError || !accessToken) {
+      return new Response(JSON.stringify({ success: false, error: tokenError || 'No access token' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const hs = new HubSpotClient({ accessToken })
+    try {
+      const resp = await hs.request<{ results: any[] }>({
+        method: 'GET',
+        path: '/automation/v4/sequences',
+      })
+      const sequences = (resp?.results ?? []).map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        stepsCount: s.steps?.length ?? 0,
+        folderId: s.folderId ?? null,
+        updatedAt: s.updatedAt ?? null,
+      }))
+      return new Response(JSON.stringify({ success: true, sequences }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    } catch (err: any) {
+      const msg = err?.message ?? String(err)
+      // 403 means missing scopes
+      if (msg.includes('403') || msg.includes('forbidden') || msg.includes('scope')) {
+        return new Response(JSON.stringify({ success: false, error: 'Missing sequence scopes. Please reconnect HubSpot to grant sequence permissions.', missing_scopes: true }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      throw err
+    }
+  }
+
+  // ============================================================================
+  // Enroll in Sequence — enrolls a contact into a HubSpot sequence
+  // ============================================================================
+
+  if (action === 'enroll_in_sequence') {
+    const { accessToken, error: tokenError } = await getValidAccessToken(svc, orgId)
+    if (tokenError || !accessToken) {
+      return new Response(JSON.stringify({ success: false, error: tokenError || 'No access token' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const { sequence_id, contact_id, sender_email } = body
+    if (!sequence_id || !contact_id || !sender_email) {
+      return new Response(JSON.stringify({ success: false, error: 'sequence_id, contact_id, and sender_email are required' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const hs = new HubSpotClient({ accessToken })
+    try {
+      const result = await hs.request<{ id?: string }>({
+        method: 'POST',
+        path: '/automation/v4/sequences/enrollments',
+        body: {
+          sequenceId: sequence_id,
+          contactId: contact_id,
+          senderEmail: sender_email,
+        },
+      })
+      return new Response(JSON.stringify({ success: true, enrollment_id: result?.id ?? null }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    } catch (err: any) {
+      const msg = err?.message ?? String(err)
+      if (msg.includes('403') || msg.includes('forbidden') || msg.includes('scope')) {
+        return new Response(JSON.stringify({ success: false, error: 'Missing sequence scopes. Please reconnect HubSpot.', missing_scopes: true }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      throw err
     }
   }
 

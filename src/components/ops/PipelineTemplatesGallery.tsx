@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Sparkles,
-  Loader2,
   ArrowRight,
   RotateCcw,
   Target,
@@ -16,10 +15,8 @@ import {
   ListChecks,
   Send,
 } from 'lucide-react';
-import { toast } from 'sonner';
-import { useOrg } from '@/lib/contexts/OrgContext';
-import { supabase } from '@/lib/supabase/clientV2';
 import { PIPELINE_TEMPLATES, type PipelineTemplate } from '@/lib/config/pipelineTemplates';
+import { PipelineConfigWizard } from './PipelineConfigWizard';
 
 interface PipelineTemplatesGalleryProps {
   onPipelineCreated?: (tableId: string) => void;
@@ -56,48 +53,13 @@ const STEP_DOT_COLORS: Record<string, string> = {
 
 export default function PipelineTemplatesGallery({ onPipelineCreated }: PipelineTemplatesGalleryProps) {
   const navigate = useNavigate();
-  const { activeOrg } = useOrg();
-  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const [wizardTemplate, setWizardTemplate] = useState<PipelineTemplate | null>(null);
 
-  async function handleCreate(template: PipelineTemplate) {
-    if (!activeOrg?.id) {
-      toast.error('No active organisation');
-      return;
-    }
-
-    setLoadingKey(template.key);
-    try {
-      const { data, error } = await supabase.functions.invoke('setup-pipeline-template', {
-        body: {
-          org_id: activeOrg.id,
-          template_key: template.key,
-          template_config: template,
-        },
-      });
-
-      if (error) {
-        let msg = error?.message || 'Edge function error';
-        try {
-          const body = await (error as any)?.context?.json?.();
-          if (body?.error) msg = body.error + (body.detail ? ` (${body.detail})` : '');
-        } catch { /* ignore */ }
-        throw new Error(msg);
-      }
-      if (data?.error) throw new Error(data.error + (data.detail ? ` (${data.detail})` : ''));
-      if (!data?.table_id) throw new Error('No table ID returned');
-
-      const suffix = data.used_synthetic ? ' (sample data)' : '';
-      toast.success(`${template.name} created${suffix}`);
-
-      if (onPipelineCreated) {
-        onPipelineCreated(data.table_id);
-      } else {
-        navigate(`/ops/${data.table_id}`);
-      }
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to create pipeline');
-    } finally {
-      setLoadingKey(null);
+  function handleComplete(tableId: string) {
+    if (onPipelineCreated) {
+      onPipelineCreated(tableId);
+    } else {
+      navigate(`/ops/${tableId}`);
     }
   }
 
@@ -114,8 +76,6 @@ export default function PipelineTemplatesGallery({ onPipelineCreated }: Pipeline
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {PIPELINE_TEMPLATES.map((template) => {
           const Icon = ICON_MAP[template.icon] || Sparkles;
-          const isLoading = loadingKey === template.key;
-          const isDisabled = loadingKey !== null;
 
           return (
             <div
@@ -145,7 +105,6 @@ export default function PipelineTemplatesGallery({ onPipelineCreated }: Pipeline
               {/* Steps preview */}
               <div className="flex items-center gap-1.5 mb-4">
                 {template.steps.map((step, i) => {
-                  const StepIcon = ICON_MAP[step.icon] || Sparkles;
                   return (
                     <div key={step.action_column_key} className="flex items-center gap-1.5">
                       {i > 0 && <div className="w-3 h-px bg-zinc-700" />}
@@ -167,26 +126,26 @@ export default function PipelineTemplatesGallery({ onPipelineCreated }: Pipeline
 
               {/* CTA */}
               <button
-                onClick={() => handleCreate(template)}
-                disabled={isDisabled}
-                className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg border border-violet-600/40 bg-violet-600/10 px-3 py-2 text-xs font-medium text-violet-300 transition-all hover:bg-violet-600/20 hover:border-violet-500/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setWizardTemplate(template)}
+                className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg border border-violet-600/40 bg-violet-600/10 px-3 py-2 text-xs font-medium text-violet-300 transition-all hover:bg-violet-600/20 hover:border-violet-500/60"
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                    Create Pipeline
-                  </>
-                )}
+                <ArrowRight className="h-3.5 w-3.5" />
+                Create Pipeline
               </button>
             </div>
           );
         })}
       </div>
+
+      {/* Config wizard */}
+      {wizardTemplate && (
+        <PipelineConfigWizard
+          open={!!wizardTemplate}
+          onOpenChange={(open) => { if (!open) setWizardTemplate(null); }}
+          template={wizardTemplate}
+          onComplete={handleComplete}
+        />
+      )}
     </div>
   );
 }
