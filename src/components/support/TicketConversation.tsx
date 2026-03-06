@@ -15,9 +15,9 @@ interface TicketConversationProps {
   typingUsers?: TypingUser[];
 }
 
-function useSenderName(senderId: string, senderType: string) {
+function useSenderName(senderId: string, isOwn: boolean) {
   return useQuery({
-    queryKey: ['agent-name', senderId],
+    queryKey: ['sender-name', senderId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
@@ -25,9 +25,9 @@ function useSenderName(senderId: string, senderType: string) {
         .eq('id', senderId)
         .single();
       if (error) throw error;
-      return data.first_name || 'Agent';
+      return data.first_name || 'User';
     },
-    enabled: senderType === 'agent',
+    enabled: !isOwn,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -35,9 +35,9 @@ function useSenderName(senderId: string, senderType: string) {
 function MessageBubble({ message }: { message: SupportMessage }) {
   const { user } = useAuth();
   const { data: userProfile } = useUserProfileById(user?.id);
-  const isOwn = message.sender_id === user?.id && message.sender_type === 'user';
+  const isOwn = message.sender_id === user?.id;
   const isAgent = message.sender_type === 'agent';
-  const { data: agentFirstName } = useSenderName(message.sender_id, message.sender_type);
+  const { data: senderFirstName } = useSenderName(message.sender_id, isOwn);
   const isSystem = message.sender_type === 'system';
 
   const initials = userProfile
@@ -93,7 +93,7 @@ function MessageBubble({ message }: { message: SupportMessage }) {
       <div className={cn('max-w-[75%] space-y-1', isOwn ? 'items-end' : 'items-start')}>
         {!isOwn && (
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium px-1">
-            {isAgent ? `${agentFirstName || 'Agent'} (Agent)` : 'You'}
+            {isAgent ? `${senderFirstName || 'Agent'} (Agent)` : senderFirstName || 'Customer'}
           </p>
         )}
         <div

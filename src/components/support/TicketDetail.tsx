@@ -19,7 +19,7 @@ function useAgentName(agentId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('first_name, last_name')
+        .select('first_name')
         .eq('id', agentId!)
         .single();
       if (error) throw error;
