@@ -5,15 +5,15 @@
  * Can be initialized with default mock data or personalized data from research.
  */
 
-import { createContext, useContext, useMemo, useState, useCallback } from 'react';
+import { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
 import type { SandboxData, SandboxView } from './sandboxTypes';
 import { getDefaultSandboxData } from './defaultMockData';
 
 /** Total number of sandbox views in the guided flow */
-export const TOTAL_VIEWS = 5;
+export const TOTAL_VIEWS = 6;
 
-/** Guided flow order: dashboard → pipeline → meetings → email → copilot */
-const FLOW_ORDER: SandboxView[] = ['dashboard', 'pipeline', 'meetings', 'email', 'copilot'];
+/** Guided flow order: dashboard → pipeline → meetings → email → proposals → copilot */
+const FLOW_ORDER: SandboxView[] = ['dashboard', 'pipeline', 'meetings', 'email', 'proposals', 'copilot'];
 
 interface SandboxContextValue {
   data: SandboxData;
@@ -23,6 +23,8 @@ interface SandboxContextValue {
   setActiveView: (view: SandboxView) => void;
   /** Whether sandbox has been personalized with real research data */
   isPersonalized: boolean;
+  /** Whether deep product research has loaded (phase 2) */
+  isDeepResearchReady: boolean;
   /** Visitor info (from /t/{code} or research) */
   visitorName?: string;
   visitorEmail?: string;
@@ -47,6 +49,8 @@ interface SandboxDataProviderProps {
   /** Visitor info for personalized greeting */
   visitorName?: string;
   visitorEmail?: string;
+  /** Deep research data that arrives async (phase 2 — updates email/copilot) */
+  deepResearchData?: Partial<SandboxData> | null;
 }
 
 export function SandboxDataProvider({
@@ -55,13 +59,33 @@ export function SandboxDataProvider({
   initialView = 'dashboard',
   visitorName,
   visitorEmail,
+  deepResearchData,
 }: SandboxDataProviderProps) {
   const [activeView, setActiveViewRaw] = useState<SandboxView>(initialView);
   const [visitedViews, setVisitedViews] = useState<Set<SandboxView>>(new Set([initialView]));
+  const [mergedDeepData, setMergedDeepData] = useState<Partial<SandboxData> | null>(null);
 
-  const data = useMemo(() => customData ?? getDefaultSandboxData(), [customData]);
+  // When deep research arrives, merge it in
+  useEffect(() => {
+    if (deepResearchData) {
+      setMergedDeepData(deepResearchData);
+    }
+  }, [deepResearchData]);
+
+  const baseData = useMemo(() => customData ?? getDefaultSandboxData(), [customData]);
+
+  // Merge deep research into base data (only overrides emailDraft + meetings for now)
+  const data = useMemo(() => {
+    if (!mergedDeepData) return baseData;
+    return {
+      ...baseData,
+      ...(mergedDeepData.emailDraft ? { emailDraft: mergedDeepData.emailDraft } : {}),
+      ...(mergedDeepData.meetings ? { meetings: mergedDeepData.meetings } : {}),
+    };
+  }, [baseData, mergedDeepData]);
 
   const isPersonalized = !!customData;
+  const isDeepResearchReady = !!mergedDeepData;
 
   const suggestedNextView = useMemo(() => {
     for (const view of FLOW_ORDER) {
@@ -88,6 +112,7 @@ export function SandboxDataProvider({
       activeView: activeView,
       setActiveView: handleSetActiveView,
       isPersonalized,
+      isDeepResearchReady,
       visitorName,
       visitorEmail,
       visitedViews,
@@ -95,7 +120,7 @@ export function SandboxDataProvider({
       visitedCount,
       completionPercentage,
     }),
-    [data, activeView, handleSetActiveView, isPersonalized, visitorName, visitorEmail, visitedViews, suggestedNextView, visitedCount, completionPercentage]
+    [data, activeView, handleSetActiveView, isPersonalized, isDeepResearchReady, visitorName, visitorEmail, visitedViews, suggestedNextView, visitedCount, completionPercentage]
   );
 
   return (

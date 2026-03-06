@@ -29,9 +29,9 @@ export function DemoHero({ onSubmit }: DemoHeroProps) {
     onSubmit(trimmed);
   };
 
-  const handleExample = () => {
-    setUrl('example.com');
-    onSubmit('example.com');
+  const handleExample = (domain: string) => {
+    setUrl(domain);
+    onSubmit(domain);
   };
 
   return (
@@ -95,7 +95,7 @@ export function DemoHero({ onSubmit }: DemoHeroProps) {
           className="mt-4 sm:mt-6 text-base sm:text-xl text-gray-400 max-w-md mx-auto text-pretty
             motion-reduce:transition-none"
         >
-          Enter your website. 6 AI agents will research your business, draft outreach, and show you what they'd do every day.
+          Enter your website and watch AI research your business, write outreach and prep your meetings. In 30 seconds.
         </motion.p>
 
         {/* URL Input */}
@@ -148,29 +148,34 @@ export function DemoHero({ onSubmit }: DemoHeroProps) {
               'motion-reduce:transform-none'
             )}
           >
-            Activate Agents
+            Go
             <ArrowRight className="w-4 h-4" />
           </motion.button>
         </motion.form>
 
-        {/* Example fallback */}
-        <motion.p
+        {/* Example domains */}
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.65, duration: 0.4 }}
-          className="mt-8 sm:mt-10 text-sm text-gray-500 motion-reduce:transition-none"
+          className="mt-8 sm:mt-10 flex flex-wrap items-center justify-center gap-2 text-sm text-gray-500
+            motion-reduce:transition-none"
         >
-          Just exploring?{' '}
-          <button
-            type="button"
-            onClick={handleExample}
-            className="text-gray-400 underline underline-offset-4 decoration-gray-600
-              hover:text-white hover:decoration-gray-400 transition-colors
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:rounded"
-          >
-            Try with example.com &rarr;
-          </button>
-        </motion.p>
+          <span className="text-gray-600">Try:</span>
+          {['hubspot.com', 'stripe.com', 'salesforce.com'].map((domain) => (
+            <button
+              key={domain}
+              type="button"
+              onClick={() => handleExample(domain)}
+              className="px-2.5 py-1 rounded-lg border border-white/[0.06] bg-white/[0.02]
+                text-gray-400 hover:text-white hover:border-white/15 hover:bg-white/[0.04]
+                transition-all duration-150
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            >
+              {domain}
+            </button>
+          ))}
+        </motion.div>
       </div>
     </motion.div>
   );

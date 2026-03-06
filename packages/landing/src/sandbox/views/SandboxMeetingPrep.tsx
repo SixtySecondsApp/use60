@@ -32,8 +32,8 @@ const fadeUp = {
 export default function SandboxMeetingPrep() {
   const { data } = useSandboxData();
 
-  // Find the visitor's upcoming meeting
-  const meeting = data.meetings.find((m) => m.company_id === data.visitorCompany.id) ?? data.meetings[0];
+  // Find the primary deal meeting (first meeting with prep data, or first overall)
+  const meeting = data.meetings.find((m) => m.prep) ?? data.meetings[0];
   const prep = meeting?.prep;
 
   if (!meeting) {

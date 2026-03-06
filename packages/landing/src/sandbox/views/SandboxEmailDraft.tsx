@@ -46,7 +46,11 @@ export default function SandboxEmailDraft() {
       setTypedLength(current);
     }, 15);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Reset so the effect can re-run after StrictMode remount
+      hasAnimated.current = false;
+    };
   }, [emailDraft.body]);
 
   const visibleBody = emailDraft.body.slice(0, typedLength);

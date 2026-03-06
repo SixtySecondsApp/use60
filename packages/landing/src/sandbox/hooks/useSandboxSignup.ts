@@ -8,13 +8,13 @@
 
 import { useState, useCallback } from 'react';
 
-/** Build the signup redirect URL with all available demo context */
+/** Build the waitlist redirect URL with demo context */
 function buildSignupUrl(data: Pick<SignupData, 'email' | 'name' | 'company' | 'domain' | 'campaignCode'>): string {
-  const url = new URL('https://app.use60.com/signup');
+  const url = new URL('/waitlist', window.location.origin);
   if (data.email) url.searchParams.set('email', data.email);
-  if (data.name) url.searchParams.set('demo_name', data.name);
-  if (data.company) url.searchParams.set('demo_company', data.company);
-  if (data.domain) url.searchParams.set('demo_domain', data.domain);
+  if (data.name) url.searchParams.set('name', data.name);
+  if (data.company) url.searchParams.set('company', data.company);
+  if (data.domain) url.searchParams.set('domain', data.domain);
   if (data.campaignCode) url.searchParams.set('campaign_code', data.campaignCode);
   return url.toString();
 }

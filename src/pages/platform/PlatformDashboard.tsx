@@ -55,6 +55,7 @@ import {
   Coins,
   Send,
   FileText,
+  Crosshair,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -583,6 +584,15 @@ const platformSections: Record<string, PlatformSection[]> = {
       href: '/campaigns',
       color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
       badge: 'In Dev',
+    },
+    {
+      id: 'abm-campaigns',
+      title: 'ABM Campaigns',
+      description: 'Account-based marketing campaigns with targeting and engagement tracking',
+      icon: Crosshair,
+      href: '/platform/abm-campaigns',
+      color: 'text-rose-600 bg-rose-100 dark:bg-rose-900/30',
+      badge: 'New',
     },
     {
       id: 'proposals',

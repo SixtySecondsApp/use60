@@ -72,7 +72,7 @@ function DealCard({ deal, index, onClick }: { deal: SandboxDeal; index: number; 
       {deal.isVisitorDeal && (
         <div className="relative z-[1] px-3 pt-2.5">
           <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-[#37bd7e]/15 text-[#37bd7e] uppercase tracking-wider">
-            Your company
+            Top deal
           </span>
         </div>
       )}
@@ -745,7 +745,7 @@ export default function SandboxPipeline() {
         >
           <div>
             <p className="text-sm font-semibold text-white">
-              Track your {companyName} deal for real
+              Track your real pipeline like this
             </p>
             <p className="text-xs text-gray-400 mt-0.5">
               Health scores, risk alerts, and AI-powered next steps — updated in real time

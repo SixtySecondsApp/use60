@@ -197,8 +197,6 @@ export default function SandboxContacts() {
     : null;
 
   const sorted = [...data.contacts].sort((a, b) => {
-    if (a.company_id === data.visitorCompany.id && b.company_id !== data.visitorCompany.id) return -1;
-    if (b.company_id === data.visitorCompany.id && a.company_id !== data.visitorCompany.id) return 1;
     const engOrder = { hot: 0, warm: 1, cold: 2 };
     return engOrder[a.engagement_level] - engOrder[b.engagement_level];
   });

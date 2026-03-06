@@ -17,21 +17,22 @@ import type {
   SandboxEmailDraft,
   SandboxSlackMessage,
   SandboxMeetingPrep,
+  SandboxProposal,
   SandboxData,
 } from './sandboxTypes';
 // SandboxMetricCard used within SandboxKPIs.metrics array
 
-// ─── Current User ───────────────────────────────────────────────
+// ─── Current User (fallback when not personalized) ──────────────
 export const defaultUser: SandboxUser = {
   id: 'user-demo-001',
-  full_name: 'Alex Morgan',
-  email: 'alex@demo.use60.com',
-  initials: 'AM',
+  full_name: 'You',
+  email: 'you@yourcompany.com',
+  initials: 'YO',
 };
 
 export const defaultOrg: SandboxOrg = {
   id: 'org-demo-001',
-  name: 'Demo Workspace',
+  name: 'Your Company',
   currency_symbol: '$',
 };
 
@@ -235,7 +236,7 @@ export const defaultDeals: SandboxDeal[] = [
     momentum_score: 15,
     probability: 65,
     owner_id: 'user-demo-001',
-    owner_initials: 'AM',
+    owner_initials: 'YO',
     primary_contact_id: 'contact-001',
     primary_contact_name: 'Sarah Chen',
     expected_close_date: futureDate(21),
@@ -263,7 +264,7 @@ export const defaultDeals: SandboxDeal[] = [
     momentum_score: 30,
     probability: 80,
     owner_id: 'user-demo-001',
-    owner_initials: 'AM',
+    owner_initials: 'YO',
     primary_contact_id: 'contact-004',
     primary_contact_name: 'Tom Wilson',
     expected_close_date: futureDate(10),
@@ -290,7 +291,7 @@ export const defaultDeals: SandboxDeal[] = [
     momentum_score: -5,
     probability: 40,
     owner_id: 'user-demo-001',
-    owner_initials: 'AM',
+    owner_initials: 'YO',
     primary_contact_id: 'contact-005',
     primary_contact_name: 'Emily Brooks',
     expected_close_date: futureDate(45),
@@ -317,7 +318,7 @@ export const defaultDeals: SandboxDeal[] = [
     momentum_score: 0,
     probability: 20,
     owner_id: 'user-demo-001',
-    owner_initials: 'AM',
+    owner_initials: 'YO',
     primary_contact_id: 'contact-006',
     primary_contact_name: 'Ryan Patel',
     expected_close_date: futureDate(60),
@@ -344,7 +345,7 @@ export const defaultDeals: SandboxDeal[] = [
     momentum_score: 50,
     probability: 100,
     owner_id: 'user-demo-001',
-    owner_initials: 'AM',
+    owner_initials: 'YO',
     primary_contact_id: 'contact-007',
     primary_contact_name: 'Lisa Nguyen',
     expected_close_date: daysAgo(3),
@@ -665,34 +666,34 @@ export const defaultKPIs: SandboxKPIs = {
   ],
 };
 
-// ─── Email Draft ────────────────────────────────────────────────
+// ─── Email Draft (from the user to a prospect) ─────────────────
 export const defaultEmailDraft: SandboxEmailDraft = {
   to_name: 'Sarah Chen',
   to_email: 'sarah.chen@acme.com',
   to_title: 'VP of Sales',
   to_company: 'Acme Corp',
-  subject: 'Re: Platform demo — revised proposal attached',
+  subject: 'Re: Next steps — revised proposal attached',
   body: `Hi Sarah,
 
 Great speaking with you and James yesterday. I could tell from the conversation that pipeline visibility and follow-up automation are exactly the pain points we can solve for your team.
 
-As promised, I've put together a revised proposal with the enterprise tier pricing we discussed. The key highlights:
+As promised, I've put together a revised proposal with the pricing we discussed. The key highlights:
 
 - Full platform access for your team of 8 reps
-- Dedicated onboarding and CRM migration support
+- Dedicated onboarding and migration support
 - Meeting intelligence + AI follow-ups from day one
 - 90-day pilot option if you'd prefer to start smaller
 
-I also noticed James had questions about the HubSpot integration depth — I've included a technical spec sheet that covers the full bidirectional sync capabilities.
+I also noticed James had questions about integration depth — I've included a technical spec sheet that covers the full capabilities.
 
-Given your board meeting in 6 weeks, I'd suggest we aim to have a decision by the end of this month so your team can show early results. Happy to jump on a quick call to walk through the proposal if that's helpful.
+Given your timeline, I'd suggest we aim to have a decision by the end of this month so your team can start seeing results quickly. Happy to jump on a quick call to walk through the proposal.
 
 Looking forward to your thoughts.
 
 Best,
-Alex`,
+You`,
   reasoning:
-    'Generated based on yesterday\'s demo call context. Sarah\'s pain points (pipeline visibility, follow-up automation) addressed directly. Board meeting urgency incorporated. James\'s integration questions proactively handled.',
+    'Generated based on yesterday\'s demo call context. Sarah\'s pain points (pipeline visibility, follow-up automation) addressed directly. Timeline urgency incorporated. James\'s integration questions proactively handled.',
 };
 
 // ─── Slack Messages ─────────────────────────────────────────────
@@ -738,6 +739,140 @@ export const defaultSlackMessages: SandboxSlackMessage[] = [
   },
 ];
 
+// ─── Proposals ──────────────────────────────────────────────────
+export const defaultProposals: SandboxProposal[] = [
+  {
+    id: 'proposal-001',
+    title: 'Acme Corp — Platform License Proposal',
+    deal_name: 'Acme Corp — Platform License',
+    company_name: 'Acme Corp',
+    contact_name: 'Sarah Chen',
+    status: 'viewed',
+    created_at: daysAgo(2),
+    value: 95000,
+    brand_color: '#1e40af',
+    sections: [
+      {
+        id: 'sec-001-cover',
+        type: 'cover',
+        title: 'Platform License Proposal',
+        content: '',
+        order: 0,
+      },
+      {
+        id: 'sec-001-exec',
+        type: 'executive_summary',
+        title: 'Executive Summary',
+        content: '<p>This proposal outlines a comprehensive platform solution designed to eliminate the 15+ hours per week your sales team spends on manual admin tasks. By consolidating your fragmented sales stack (HubSpot, Calendly, Notion) into a single command center, we project a <strong>41% improvement</strong> in follow-up rates and a <strong>28% reduction</strong> in sales cycle length within the first 90 days.</p><p>Based on our conversations with Sarah Chen and James Park, pipeline visibility and automated follow-ups are your team\'s top priorities. This proposal addresses both with a solution that pays for itself within the first quarter.</p>',
+        order: 1,
+      },
+      {
+        id: 'sec-001-problem',
+        type: 'problem',
+        title: 'The Challenge',
+        content: '<p>Acme Corp\'s sales team of 8 reps is experiencing three core challenges:</p><ul><li><strong>Fragmented tools:</strong> Your team switches between 4+ applications daily, losing context and creating data silos</li><li><strong>Manual follow-ups:</strong> Reps spend 3+ hours per day on admin instead of selling — drafting emails, updating CRM, preparing for meetings</li><li><strong>Pipeline blind spots:</strong> No unified view of deal health, risk signals, or relationship status across accounts</li></ul><p>These challenges are costing an estimated <strong>$180K annually</strong> in lost productivity and missed opportunities.</p>',
+        order: 2,
+      },
+      {
+        id: 'sec-001-solution',
+        type: 'solution',
+        title: 'Our Solution',
+        content: '<p>60 provides an AI-powered command center that:</p><ul><li><strong>AI Meeting Intelligence:</strong> Automatic prep docs before every call with talking points, risk signals, and deal context. Post-meeting follow-up emails drafted in your team\'s voice within minutes.</li><li><strong>Pipeline Health Engine:</strong> Real-time health scoring across all deals with predictive risk alerts and AI-recommended next steps</li><li><strong>Unified Workspace:</strong> One platform for CRM, email, meetings, and tasks — no more context switching</li><li><strong>Autonomous Actions:</strong> AI handles the repetitive work (data entry, reminders, research) while your team focuses on conversations that close revenue</li></ul>',
+        order: 3,
+      },
+      {
+        id: 'sec-001-timeline',
+        type: 'timeline',
+        title: 'Implementation Timeline',
+        content: '<p><strong>Week 1-2: Onboarding & Integration</strong></p><ul><li>CRM data migration and sync setup</li><li>Calendar and email integration</li><li>Team account provisioning</li></ul><p><strong>Week 3-4: Training & Activation</strong></p><ul><li>Team training sessions (2 x 1hr)</li><li>Meeting intelligence configuration</li><li>Custom pipeline stages and health scoring</li></ul><p><strong>Week 5-8: Optimization</strong></p><ul><li>AI tone calibration from your team\'s writing style</li><li>Workflow automation setup</li><li>Monthly performance review</li></ul>',
+        order: 4,
+      },
+      {
+        id: 'sec-001-pricing',
+        type: 'pricing',
+        title: 'Investment',
+        content: '<p><strong>Enterprise Plan — 8 seats</strong></p><table><thead><tr><th>Item</th><th>Annual</th></tr></thead><tbody><tr><td>Platform License (8 seats)</td><td>$76,800</td></tr><tr><td>Meeting Intelligence Add-on</td><td>$9,600</td></tr><tr><td>Dedicated Onboarding</td><td>$4,800</td></tr><tr><td>Priority Support (Year 1)</td><td>$3,800</td></tr><tr><td><strong>Total Investment</strong></td><td><strong>$95,000</strong></td></tr></tbody></table><p><em>90-day pilot option available at $28,500 (3-month commitment, 3 seats)</em></p>',
+        order: 5,
+      },
+      {
+        id: 'sec-001-terms',
+        type: 'terms',
+        title: 'Terms & Next Steps',
+        content: '<p>This proposal is valid for 30 days from the date of issue. To proceed:</p><ol><li>Review and approve this proposal</li><li>Schedule a CEO intro call to align on strategic value</li><li>Execute the service agreement</li><li>Kick off onboarding within 5 business days of signing</li></ol><p>We\'re confident this partnership will transform how your team sells. Let\'s make it happen.</p>',
+        order: 6,
+      },
+    ],
+  },
+  {
+    id: 'proposal-002',
+    title: 'Northstar Analytics — Annual Plan',
+    deal_name: 'Northstar Analytics — Annual Plan',
+    company_name: 'Northstar Analytics',
+    contact_name: 'Tom Wilson',
+    status: 'sent',
+    created_at: daysAgo(5),
+    value: 48000,
+    brand_color: '#7c3aed',
+    sections: [
+      {
+        id: 'sec-002-cover',
+        type: 'cover',
+        title: 'Annual Plan Proposal',
+        content: '',
+        order: 0,
+      },
+      {
+        id: 'sec-002-exec',
+        type: 'executive_summary',
+        title: 'Executive Summary',
+        content: '<p>Northstar Analytics is scaling rapidly and needs a sales intelligence platform that grows with you. This proposal covers a full annual plan with meeting intelligence, pipeline automation, and dedicated onboarding — designed to help your CRO team close 30% more deals in the next two quarters.</p>',
+        order: 1,
+      },
+      {
+        id: 'sec-002-pricing',
+        type: 'pricing',
+        title: 'Investment',
+        content: '<p><strong>Growth Plan — 4 seats</strong></p><table><thead><tr><th>Item</th><th>Annual</th></tr></thead><tbody><tr><td>Platform License (4 seats)</td><td>$38,400</td></tr><tr><td>Meeting Intelligence</td><td>$4,800</td></tr><tr><td>Onboarding Package</td><td>$4,800</td></tr><tr><td><strong>Total</strong></td><td><strong>$48,000</strong></td></tr></tbody></table>',
+        order: 2,
+      },
+    ],
+  },
+  {
+    id: 'proposal-003',
+    title: 'Greenfield Partners — Consulting Package',
+    deal_name: 'Greenfield Partners — Consulting Package',
+    company_name: 'Greenfield Partners',
+    contact_name: 'Emily Brooks',
+    status: 'draft',
+    created_at: daysAgo(1),
+    value: 120000,
+    brand_color: '#059669',
+    sections: [
+      {
+        id: 'sec-003-cover',
+        type: 'cover',
+        title: 'Consulting Package Proposal',
+        content: '',
+        order: 0,
+      },
+      {
+        id: 'sec-003-exec',
+        type: 'executive_summary',
+        title: 'Executive Summary',
+        content: '<p>A tailored consulting engagement to help Greenfield Partners implement enterprise-grade sales intelligence across their advisory practice. Includes custom workflow design, team training, and a 12-month support plan.</p>',
+        order: 1,
+      },
+      {
+        id: 'sec-003-pricing',
+        type: 'pricing',
+        title: 'Investment',
+        content: '<p><strong>Enterprise Consulting — 10 seats</strong></p><table><thead><tr><th>Item</th><th>Annual</th></tr></thead><tbody><tr><td>Platform License (10 seats)</td><td>$84,000</td></tr><tr><td>Custom Workflow Design</td><td>$18,000</td></tr><tr><td>Training & Enablement</td><td>$12,000</td></tr><tr><td>Priority Support</td><td>$6,000</td></tr><tr><td><strong>Total</strong></td><td><strong>$120,000</strong></td></tr></tbody></table>',
+        order: 2,
+      },
+    ],
+  },
+];
+
 // ─── Helpers ────────────────────────────────────────────────────
 
 function daysAgo(days: number): string {
@@ -776,6 +911,7 @@ export function getDefaultSandboxData(): SandboxData {
     kpis: defaultKPIs,
     emailDraft: defaultEmailDraft,
     slackMessages: defaultSlackMessages,
+    proposals: defaultProposals,
     visitorCompany,
     visitorDeal,
   };
