@@ -23,6 +23,15 @@
         "-y",
         "@rive-mcp/server-core"
       ]
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "sbp_8dcf73e4ef813ee1c679de3207ce9efeb7dc6820"
+      ]
     }
   }
 }

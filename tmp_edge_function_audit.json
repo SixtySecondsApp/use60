@@ -1,0 +1,4295 @@
+{
+  "total": 493,
+  "used_count": 380,
+  "unreferenced_count": 113,
+  "unreferenced": [
+    "add-activity",
+    "add-sale",
+    "admin-credit-menu",
+    "agent-dead-letter-retry",
+    "agent-deal-risk-batch",
+    "agent-deal-temperature",
+    "agent-email-signals",
+    "agent-morning-briefing",
+    "ai-ark-credits",
+    "ai-ark-semantic",
+    "api-action-centre",
+    "api-copilot-memory",
+    "api-monitor",
+    "api-skill-builder",
+    "api-v1-companies",
+    "api-v1-tasks",
+    "apify-auto-map",
+    "attio-list-ops",
+    "auth-rate-limit",
+    "auto-re-enrich",
+    "autonomy-promotion-notify",
+    "autopilot-backfill",
+    "backfill-lead-sources",
+    "backfill-transcripts",
+    "bullhorn-oauth-callback",
+    "bullhorn-process-queue",
+    "bullhorn-token-refresh",
+    "bullhorn-webhook",
+    "calculate-deal-health",
+    "cc-auto-execute",
+    "cc-auto-report",
+    "cc-daily-cleanup",
+    "cleanup-incomplete-onboarding",
+    "clients",
+    "cloudinary-analytics",
+    "companies",
+    "contacts",
+    "create-deal-stages",
+    "create-profile",
+    "create-task-from-action-item",
+    "deal-activities",
+    "deal-memory",
+    "deal-splits",
+    "deals",
+    "enrich-cascade",
+    "execute-migration",
+    "explorium-enrich",
+    "extract-deal-memory-events",
+    "extract-stakeholder-roles",
+    "facebook-leads-webhook",
+    "fathom-backfill-companies",
+    "fetch-deepgram-usage",
+    "fetch-gladia-usage",
+    "fetch-meetingbaas-usage",
+    "fleet-admin",
+    "fleet-health",
+    "freepik-proxy",
+    "generate-magic-link",
+    "generate-more-actions",
+    "gmail-push-webhook",
+    "google-oauth-callback-public",
+    "handle-join-request-action",
+    "handle-organization-joining",
+    "hubspot-initial-sync",
+    "initialize-onboarding",
+    "instantly-push",
+    "justcall-oauth-callback",
+    "justcall-oauth-initiate",
+    "logs-cleanup",
+    "meeting-intelligence-search",
+    "meeting-workflow-notifications",
+    "memory-backfill",
+    "memory-snapshot-generator",
+    "meter-storage",
+    "ms-graph-email",
+    "notification-triage",
+    "org-deletion-cron",
+    "owners",
+    "pipeline-tables",
+    "populate-attio-column",
+    "proactive-signal-scanner",
+    "proactive-weekly-scorecard",
+    "proposal-assemble-context",
+    "proposal-compose-v2",
+    "proposal-deliver",
+    "proposal-enrich-deal",
+    "purge-credit-logs",
+    "relationship-milestone-scanner",
+    "research-router",
+    "run-apify-actor",
+    "run-migration",
+    "run-reoon-verification",
+    "send-org-member-deactivation-email",
+    "send-org-notification-slack",
+    "send-scheduled-emails",
+    "send-slack-notification",
+    "sentry-bridge-worker",
+    "slack-deal-room",
+    "slack-deal-room-update",
+    "slack-events",
+    "slack-hitl-notification",
+    "slack-interactive",
+    "stages",
+    "stripe-create-product",
+    "stripe-sync-product",
+    "stripe-update-product",
+    "stripe-webhook",
+    "support-ticket-notification",
+    "sync-skills-from-github",
+    "task-auto-expire",
+    "voice-audio-url",
+    "voice-transcribe-poll",
+    "warmth-signal-ingest"
+  ],
+  "references": {
+    "account-monitor": {
+      "invoke": [
+        "dist/js/SmartListeningSettings-BOif8zxs.js",
+        "src/components/ops/WatchlistPanel.tsx"
+      ],
+      "url": [
+        ".sixty/plan-smart-listening.json",
+        "api/cron/slack-account-monitor.ts"
+      ]
+    },
+    "account-signal-digest": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-account-digest.ts"
+      ]
+    },
+    "add-activity": {
+      "invoke": [],
+      "url": []
+    },
+    "add-sale": {
+      "invoke": [],
+      "url": []
+    },
+    "admin-credit-menu": {
+      "invoke": [],
+      "url": []
+    },
+    "admin-s3-metrics": {
+      "invoke": [
+        "src/hooks/queries/useS3Metrics.ts"
+      ],
+      "url": []
+    },
+    "agent-competitive-intel": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/competitiveIntelSlack.ts",
+        "supabase/functions/_shared/orchestrator/adapters/competitiveIntelSlack.ts"
+      ]
+    },
+    "agent-config-admin": {
+      "invoke": [
+        "dist/js/SalesMethodologySettings-B2EWI76h.js",
+        "dist/js/agentConfigService-4w74qcsl.js",
+        "dist/js/AutonomySettingsPage-DAXMfxwV.js",
+        "src/components/agent/CustomMethodologyWizard.tsx",
+        "src/lib/hooks/useManagerAutonomy.ts",
+        "src/lib/services/agentConfigService.ts"
+      ],
+      "url": []
+    },
+    "agent-crm-approval": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    "agent-crm-heartbeat": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/agent-crm-update/TESTING.md"
+      ]
+    },
+    "agent-crm-update": {
+      "invoke": [
+        "dist/js/CRMFieldMappingSettings-DVtXxbas.js",
+        "src/components/settings/CRMPreviewMode.tsx"
+      ],
+      "url": []
+    },
+    "agent-dead-letter-retry": {
+      "invoke": [],
+      "url": []
+    },
+    "agent-deal-risk-batch": {
+      "invoke": [],
+      "url": []
+    },
+    "agent-deal-temperature": {
+      "invoke": [],
+      "url": []
+    },
+    "agent-email-signals": {
+      "invoke": [],
+      "url": []
+    },
+    "agent-engagement-patterns": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260222900003_engagement_patterns_cron.sql"
+      ]
+    },
+    "agent-eod-synthesis": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/agent-eod-synthesis/TESTING.md",
+        "supabase/functions/agent-eod-synthesis/TESTING.md",
+        "supabase/functions/agent-eod-synthesis/TESTING.md",
+        "supabase/functions/agent-eod-synthesis/TESTING.md"
+      ]
+    },
+    "agent-initial-scan": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/components/setup-wizard/SetupWizardComplete.tsx"
+      ],
+      "url": []
+    },
+    "agent-morning-briefing": {
+      "invoke": [],
+      "url": []
+    },
+    "agent-orchestrator": {
+      "invoke": [
+        "dist/js/AgentAbilitiesPage-yN17DLkX.js",
+        "dist/js/AgentMarketplacePage-CoZrDb65.js",
+        "src/components/agent/AbilityRunPanel.tsx",
+        "src/components/agent/marketplace/AbilityTestPanel.tsx",
+        "src/pages/platform/ProactiveAgentV2Demo.tsx"
+      ],
+      "url": [
+        "docs/copilot/proactive_agent_plan.md",
+        "supabase/functions/process-recording/index.ts",
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-interactive/handlers/orchestrator.ts",
+        "supabase/functions/slack-interactive/handlers/calendar.ts",
+        "supabase/functions/slack-interactive/handlers/calendar.ts",
+        "supabase/functions/slack-interactive/handlers/campaigns.ts",
+        "supabase/functions/slack-interactive/handlers/proposal.ts",
+        "supabase/functions/slack-interactive/handlers/emailSend.ts",
+        "supabase/functions/gmail-push-webhook/index.ts",
+        "supabase/functions/proactive-meeting-prep/index.ts",
+        "supabase/functions/proactive-meeting-prep/index.ts",
+        "supabase/functions/proactive-simulate/index.ts",
+        "supabase/functions/agent-dead-letter-retry/index.ts",
+        "supabase/functions/slack-morning-brief/index.ts",
+        "supabase/functions/slack-morning-brief/index.ts",
+        "supabase/functions/agent-reengagement/TESTING.md",
+        "supabase/functions/agent-reengagement/index.ts",
+        "supabase/functions/agent-trigger/index.ts",
+        "supabase/functions/_shared/orchestrator/deadLetter.ts",
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/functions/_shared/orchestrator/triggerPreMeeting.ts",
+        "supabase/functions/fathom-sync/services/transcriptService.ts",
+        "supabase/functions/slack-stale-deals/index.ts",
+        "supabase/functions/fireflies-sync/enrichment.ts"
+      ]
+    },
+    "agent-org-learning": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260223100004_org_learning_fleet_routes.sql",
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql"
+      ]
+    },
+    "agent-pipeline-patterns": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/pipelinePatternSlack.ts"
+      ]
+    },
+    "agent-pipeline-snapshot": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260223100008_phase6_fleet_routes.sql"
+      ]
+    },
+    "agent-reengagement": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/agent-reengagement/TESTING.md"
+      ]
+    },
+    "agent-relationship-graph": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/relationshipGraph.ts",
+        "supabase/functions/_shared/orchestrator/adapters/relationshipGraph.ts"
+      ]
+    },
+    "agent-scheduler": {
+      "invoke": [
+        "dist/js/AgentTeamSettings-C3sBcdFs.js",
+        "src/lib/services/agentTeamService.ts"
+      ],
+      "url": []
+    },
+    "agent-trigger": {
+      "invoke": [
+        "dist/js/AgentTeamSettings-C3sBcdFs.js",
+        "src/lib/services/agentTeamService.ts"
+      ],
+      "url": []
+    },
+    "aggregate-global-topics": {
+      "invoke": [],
+      "url": [
+        "dist/js/ContentTopics-BLo31lBy.js",
+        "packages/landing/src/lib/services/globalTopicsService.ts",
+        "src/lib/services/globalTopicsService.ts"
+      ]
+    },
+    "ai-ark-credits": {
+      "invoke": [],
+      "url": []
+    },
+    "ai-ark-enrich": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/copilot-dynamic-table/index.ts"
+      ]
+    },
+    "ai-ark-search": {
+      "invoke": [
+        "dist/js/Workflows-CZ5PDOwU.js"
+      ],
+      "url": [
+        "dist/js/aiArkSearchService-H99l36Y5.js",
+        "dist/js/aiArkSearchService-H99l36Y5.js",
+        "supabase/functions/copilot-dynamic-table/index.ts",
+        "supabase/functions/prospecting-search/index.ts",
+        "src/lib/services/aiArkSearchService.ts",
+        "src/lib/services/aiArkSearchService.ts"
+      ]
+    },
+    "ai-ark-semantic": {
+      "invoke": [],
+      "url": []
+    },
+    "ai-ark-similarity": {
+      "invoke": [],
+      "url": [
+        "dist/js/AiArkSimilaritySearch-BNRoX7Rc.js",
+        "src/components/prospecting/AiArkSimilaritySearch.tsx"
+      ]
+    },
+    "analytics-web-vitals": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "packages/landing/src/lib/utils/webVitals.ts",
+        "src/lib/utils/webVitals.ts"
+      ],
+      "url": []
+    },
+    "analyze-action-item": {
+      "invoke": [
+        "packages/landing/src/lib/services/aiActionItemAnalysisService.ts",
+        "src/lib/services/aiActionItemAnalysisService.ts"
+      ],
+      "url": [
+        "tests/scripts/deployment/test-ai-edge-function.sh",
+        "tests/scripts/deployment/test-ai-edge-function.sh",
+        "tests/scripts/deployment/TRIGGER_AI_ANALYSIS.sh",
+        "tests/scripts/deployment/TRIGGER_AI_ANALYSIS.sh",
+        "supabase/migrations/20260108203000_baseline_fixed.sql",
+        "supabase/migrations/20260108203000_baseline_fixed.sql",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/_migrations_archive/20251025210000_add_ai_action_item_analysis.sql",
+        "supabase/_migrations_archive/20251025210000_add_ai_action_item_analysis.sql"
+      ]
+    },
+    "analyze-email": {
+      "invoke": [
+        "dist/js/EmailSyncPage-CT0dvYR3.js",
+        "packages/landing/src/lib/services/emailAIAnalysis.ts",
+        "src/lib/services/emailAIAnalysis.ts"
+      ],
+      "url": []
+    },
+    "analyze-writing-style": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "packages/landing/src/lib/services/writingStyleTrainingService.ts",
+        "packages/landing/src/lib/services/writingStyleTrainingService.ts",
+        "packages/landing/src/lib/services/writingStyleTrainingService.ts",
+        "src/lib/services/writingStyleTrainingService.ts",
+        "src/lib/services/writingStyleTrainingService.ts",
+        "src/lib/services/writingStyleTrainingService.ts"
+      ],
+      "url": []
+    },
+    "answer-config-question": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/configQuestionService.ts"
+      ],
+      "url": []
+    },
+    "api-action-centre": {
+      "invoke": [],
+      "url": []
+    },
+    "api-auth": {
+      "invoke": [],
+      "url": [
+        "docs/deployment/DEPLOYMENT.md"
+      ]
+    },
+    "api-copilot": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "docs/testing/QA_COPILOT_LAB_TEST_REPORT.md",
+        "docs/testing/QA_COPILOT_LAB_TEST_REPORT.md",
+        "src/lib/copilot/agent/understand.ts",
+        "src/lib/copilot/agent/planner.ts"
+      ],
+      "url": []
+    },
+    "api-copilot-memory": {
+      "invoke": [],
+      "url": []
+    },
+    "api-monitor": {
+      "invoke": [],
+      "url": []
+    },
+    "api-monitor-notify": {
+      "invoke": [
+        "scripts/test-api-monitor-notify.js"
+      ],
+      "url": [
+        "supabase/migrations/20260108203000_baseline_fixed.sql",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/_migrations_archive/20260103000003_api_monitor_slack_notifications.sql"
+      ]
+    },
+    "api-proxy": {
+      "invoke": [],
+      "url": [
+        "dist/js/ApiTesting-C8cexe8V.js",
+        "src/pages/ApiTesting.tsx"
+      ]
+    },
+    "api-sequence-execute": {
+      "invoke": [
+        "dist/js/AgentSequenceBuilderPage-oGT5o0kj.js",
+        "dist/js/SkillsQAPage-v7ymDDPK.js",
+        "src/lib/utils/skillQAHarness.ts",
+        "src/lib/hooks/useSequenceExecution.ts"
+      ],
+      "url": []
+    },
+    "api-skill-builder": {
+      "invoke": [],
+      "url": []
+    },
+    "api-skill-execute": {
+      "invoke": [
+        "dist/js/AgentSequenceBuilderPage-oGT5o0kj.js",
+        "dist/js/SkillUpgradeReport-iughnXc2.js",
+        "dist/js/SkillsQAPage-v7ymDDPK.js",
+        "src/lib/utils/skillQAHarness.ts",
+        "src/lib/hooks/useSequenceExecution.ts",
+        "src/lib/sequences/SequenceOrchestrator.ts",
+        "src/pages/platform/SkillUpgradeReport.tsx"
+      ],
+      "url": []
+    },
+    "api-usage-alerts": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/api-usage-cron/index.ts"
+      ]
+    },
+    "api-usage-cron": {
+      "invoke": [
+        "dist/js/ApiUsageDashboard-CeOXVDuG.js"
+      ],
+      "url": []
+    },
+    "api-v1-activities": {
+      "invoke": [],
+      "url": [
+        "tools/testing/test-activities-only.js",
+        "tools/testing/test-activities-only.js",
+        "tools/testing/test-activities-only.js"
+      ]
+    },
+    "api-v1-companies": {
+      "invoke": [],
+      "url": []
+    },
+    "api-v1-contacts": {
+      "invoke": [],
+      "url": [
+        "tools/testing/test-edge-function-auth.js",
+        "tools/testing/test-auth.html",
+        "docs/api/API_QUICKSTART.md",
+        "docs/api/API_DOCUMENTATION.md",
+        "docs/api/API_DOCUMENTATION.md",
+        "docs/api/API_REFERENCE.md",
+        "docs/api/API_REFERENCE.md",
+        "scripts/deployment/test-api-endpoints.sh"
+      ]
+    },
+    "api-v1-deals": {
+      "invoke": [],
+      "url": [
+        "docs/api/API_QUICKSTART.md",
+        "docs/api/API_QUICKSTART.md",
+        "docs/api/API_REFERENCE.md"
+      ]
+    },
+    "api-v1-meetings": {
+      "invoke": [],
+      "url": [
+        "tools/testing/test-meetings-detailed.js"
+      ]
+    },
+    "api-v1-tasks": {
+      "invoke": [],
+      "url": []
+    },
+    "apify-actor-introspect": {
+      "invoke": [
+        "dist/js/useApifyIntegration-D96S4Wg4.js",
+        "src/lib/services/apifyService.ts"
+      ],
+      "url": []
+    },
+    "apify-auto-map": {
+      "invoke": [],
+      "url": []
+    },
+    "apify-connect": {
+      "invoke": [
+        "dist/js/useApifyIntegration-D96S4Wg4.js",
+        "dist/js/useApifyIntegration-D96S4Wg4.js",
+        "dist/js/useApifyIntegration-D96S4Wg4.js",
+        ".sixty/plan-apify-integration.json",
+        "src/lib/services/apifyService.ts",
+        "src/lib/services/apifyService.ts",
+        "src/lib/services/apifyService.ts"
+      ],
+      "url": []
+    },
+    "apify-linkedin-enrich": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/lib/hooks/useLinkedInEnrichment.ts"
+      ],
+      "url": []
+    },
+    "apify-multi-query": {
+      "invoke": [
+        "dist/js/AgentResearchDemo-CiHa7vJT.js",
+        "src/pages/demo/AgentResearchDemo.tsx"
+      ],
+      "url": []
+    },
+    "apify-run-start": {
+      "invoke": [
+        "dist/js/useApifyIntegration-D96S4Wg4.js",
+        "src/lib/services/apifyService.ts"
+      ],
+      "url": []
+    },
+    "apify-run-webhook": {
+      "invoke": [],
+      "url": [
+        ".sixty/plan-apify-integration.json",
+        "supabase/functions/apify-run-webhook/README.md",
+        "supabase/functions/apify-run-start/index.ts"
+      ]
+    },
+    "apollo-collect-more": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        ".sixty/progress-ops-collect-more.md",
+        ".sixty/plan-ops-collect-more.json",
+        "src/lib/hooks/useApolloCollectMore.ts"
+      ],
+      "url": []
+    },
+    "apollo-credits": {
+      "invoke": [
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "src/lib/hooks/useOpsTableSearch.ts"
+      ],
+      "url": []
+    },
+    "apollo-enrich": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        ".sixty/plan-apollo-integration.json",
+        "src/lib/hooks/useApolloEnrichment.ts"
+      ],
+      "url": [
+        "supabase/functions/copilot-dynamic-table/index.ts",
+        "supabase/functions/copilot-dynamic-table/index.ts",
+        "supabase/functions/apollo-collect-more/index.ts",
+        "supabase/functions/apollo-collect-more/index.ts"
+      ]
+    },
+    "apollo-org-enrich": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/lib/hooks/useApolloEnrichment.ts"
+      ],
+      "url": []
+    },
+    "apollo-reveal": {
+      "invoke": [],
+      "url": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/components/setup-wizard/steps/TestSetupStep.tsx"
+      ]
+    },
+    "apollo-search": {
+      "invoke": [
+        "dist/js/AgentResearchDemo-CiHa7vJT.js",
+        "src/pages/demo/AgentResearchDemo.tsx"
+      ],
+      "url": [
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "supabase/functions/apify-multi-query/index.ts",
+        "supabase/functions/copilot-dynamic-table/index.ts",
+        "supabase/functions/apollo-collect-more/index.ts",
+        "supabase/functions/prospecting-search/index.ts",
+        "src/components/setup-wizard/steps/TestSetupStep.tsx",
+        "src/lib/services/apolloSearchService.ts"
+      ]
+    },
+    "app-data-batch": {
+      "invoke": [
+        "src/lib/hooks/useBatchQuery.ts"
+      ],
+      "url": []
+    },
+    "ask-meeting-ai": {
+      "invoke": [],
+      "url": [
+        "dist/js/MeetingsPage-CEpY-pLD.js",
+        "src/components/meetings/AskAIChat.tsx"
+      ]
+    },
+    "attio-admin": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        ".sixty/plan-attio-integration.json",
+        ".sixty/plan-attio-integration.json",
+        "src/lib/hooks/useAttioIntegration.ts",
+        "src/lib/hooks/useAttioIntegration.ts",
+        "src/lib/hooks/useAttioIntegration.ts",
+        "src/lib/hooks/useAttioIntegration.ts",
+        "src/lib/hooks/useAttioIntegration.ts",
+        "src/lib/hooks/useAttioIntegration.ts",
+        "src/lib/hooks/useAttioIntegration.ts",
+        "src/lib/hooks/useAttioIntegration.ts"
+      ],
+      "url": []
+    },
+    "attio-disconnect": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/hooks/useAttioIntegration.ts"
+      ],
+      "url": []
+    },
+    "attio-list-ops": {
+      "invoke": [],
+      "url": []
+    },
+    "attio-oauth-callback": {
+      "invoke": [],
+      "url": [
+        ".sixty/plan-attio-integration.json",
+        ".sixty/plan-attio-integration.json",
+        ".sixty/plan-attio-integration.json"
+      ]
+    },
+    "attio-oauth-initiate": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/hooks/useAttioIntegration.ts"
+      ],
+      "url": []
+    },
+    "attio-process-queue": {
+      "invoke": [],
+      "url": [
+        "api/cron/attio-process-queue.ts"
+      ]
+    },
+    "attio-token-refresh": {
+      "invoke": [],
+      "url": [
+        "api/cron/attio-token-refresh.ts"
+      ]
+    },
+    "attio-webhook": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/attio-admin/index.ts"
+      ]
+    },
+    "auth-logger": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "packages/landing/src/lib/services/authLogger.ts",
+        "src/lib/services/authLogger.ts"
+      ],
+      "url": []
+    },
+    "auth-rate-limit": {
+      "invoke": [],
+      "url": []
+    },
+    "auto-join-scheduler": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/functions/auto-join-scheduler/index.ts",
+        "supabase/_migrations_archive/20260104210000_auto_join_scheduler_cron.sql"
+      ]
+    },
+    "auto-populate-stakeholders": {
+      "invoke": [
+        "dist/js/PipelinePage-BygI51JG.js",
+        "src/lib/hooks/useStakeholders.ts"
+      ],
+      "url": []
+    },
+    "auto-re-enrich": {
+      "invoke": [],
+      "url": []
+    },
+    "auto-verify-email": {
+      "invoke": [
+        "dist/js/signup-BF9JiPKB.js",
+        "src/pages/auth/signup.tsx"
+      ],
+      "url": [
+        "packages/landing/src/demo-v2/DemoSignup.tsx"
+      ]
+    },
+    "autonomy-promotion-notify": {
+      "invoke": [],
+      "url": []
+    },
+    "autopilot-admin": {
+      "invoke": [
+        "dist/js/AutopilotTestPage-D2HldAZO.js",
+        "dist/js/AutonomySettingsPage-DAXMfxwV.js",
+        "src/lib/hooks/useTeamAutopilot.ts",
+        "src/pages/platform/AutopilotTestPage.tsx"
+      ],
+      "url": []
+    },
+    "autopilot-backfill": {
+      "invoke": [],
+      "url": []
+    },
+    "autopilot-evaluate": {
+      "invoke": [
+        "dist/js/AutopilotTestPage-D2HldAZO.js"
+      ],
+      "url": []
+    },
+    "autopilot-record-signal": {
+      "invoke": [
+        "dist/js/MeetingsPage-CEpY-pLD.js",
+        "dist/js/AutopilotTestPage-D2HldAZO.js",
+        "dist/js/AutopilotTestPage-D2HldAZO.js",
+        "dist/js/AutopilotTestPage-D2HldAZO.js",
+        "dist/js/ProposalsList-B03wwbEV.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/components/proposals/ProposalProgressOverlay.tsx",
+        "src/lib/services/proposalService.ts",
+        "src/pages/ProposalsList.tsx",
+        "src/pages/platform/AutopilotTestPage.tsx",
+        "src/pages/platform/AutopilotTestPage.tsx"
+      ],
+      "url": []
+    },
+    "backfill-lead-sources": {
+      "invoke": [],
+      "url": []
+    },
+    "backfill-notetaker-transcripts": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/backfill-notetaker-transcripts/index.ts"
+      ]
+    },
+    "backfill-standard-ops-tables": {
+      "invoke": [
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "src/components/ops/StandardTablesGallery.tsx",
+        "src/components/ops/StandardTablesHealth.tsx"
+      ],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260220200003_schedule_standard_ops_backfill.sql"
+      ]
+    },
+    "backfill-thumbnails": {
+      "invoke": [],
+      "url": [
+        "tests/scripts/deployment/backfill-all-thumbnails.sh"
+      ]
+    },
+    "backfill-transcripts": {
+      "invoke": [],
+      "url": []
+    },
+    "bulk-import-activities": {
+      "invoke": [
+        "dist/js/ActivityLog-D7kMdNay.js",
+        "src/components/admin/ActivityUploadModal.tsx"
+      ],
+      "url": []
+    },
+    "bullhorn-admin": {
+      "invoke": [
+        "src/lib/hooks/useBullhornIntegration.ts",
+        "src/lib/hooks/useBullhornIntegration.ts",
+        "src/lib/hooks/useBullhornIntegration.ts",
+        "src/lib/hooks/useBullhornIntegration.ts",
+        "src/lib/hooks/useBullhornIntegration.ts",
+        "src/lib/hooks/useBullhornIntegration.ts",
+        "src/lib/hooks/useBullhornIntegration.ts"
+      ],
+      "url": []
+    },
+    "bullhorn-disconnect": {
+      "invoke": [
+        "src/lib/hooks/useBullhornIntegration.ts"
+      ],
+      "url": []
+    },
+    "bullhorn-oauth-callback": {
+      "invoke": [],
+      "url": []
+    },
+    "bullhorn-oauth-initiate": {
+      "invoke": [
+        "dist/js/BullhornSettings-CFsVXTus.js",
+        "src/components/integrations/BullhornConfigModal.tsx",
+        "src/lib/hooks/useBullhornIntegration.ts",
+        "src/pages/settings/BullhornSettings.tsx"
+      ],
+      "url": []
+    },
+    "bullhorn-process-queue": {
+      "invoke": [],
+      "url": []
+    },
+    "bullhorn-token-refresh": {
+      "invoke": [],
+      "url": []
+    },
+    "bullhorn-webhook": {
+      "invoke": [],
+      "url": []
+    },
+    "calculate-deal-health": {
+      "invoke": [],
+      "url": []
+    },
+    "calculate-stakeholder-engagement": {
+      "invoke": [
+        "dist/js/PipelinePage-BygI51JG.js",
+        "src/lib/hooks/useStakeholders.ts"
+      ],
+      "url": []
+    },
+    "calendar-search": {
+      "invoke": [
+        "packages/landing/src/lib/hooks/useCalendarSearch.ts",
+        "src/lib/hooks/useCalendarSearch.ts"
+      ],
+      "url": []
+    },
+    "calendar-sync": {
+      "invoke": [
+        "src/components/admin/GoogleIntegrationTestSuite.tsx",
+        "src/components/admin/GoogleIntegrationTestSuite.tsx"
+      ],
+      "url": []
+    },
+    "categorize-email": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/emailClassifier.ts"
+      ]
+    },
+    "cc-action-sync": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/commandCentreItemsService.ts",
+        "src/lib/services/commandCentreItemsService.ts"
+      ],
+      "url": []
+    },
+    "cc-auto-execute": {
+      "invoke": [],
+      "url": []
+    },
+    "cc-auto-report": {
+      "invoke": [],
+      "url": []
+    },
+    "cc-daily-cleanup": {
+      "invoke": [],
+      "url": []
+    },
+    "cc-enrich": {
+      "invoke": [],
+      "url": [
+        "docs/audits/COMMAND_CENTRE_WIRING_PLAN.md"
+      ]
+    },
+    "cc-prioritise": {
+      "invoke": [],
+      "url": [
+        "docs/audits/COMMAND_CENTRE_WIRING_PLAN.md"
+      ]
+    },
+    "cc-undo": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/commandCentreItemsService.ts"
+      ],
+      "url": []
+    },
+    "check-credit-alerts": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    "check-org-capabilities": {
+      "invoke": [
+        "dist/js/skillReadiness-hZcoA56-.js"
+      ],
+      "url": []
+    },
+    "cleanup-expired-invitations": {
+      "invoke": [],
+      "url": [
+        "api/cron/cleanup-expired-invitations.ts"
+      ]
+    },
+    "cleanup-incomplete-onboarding": {
+      "invoke": [],
+      "url": []
+    },
+    "clients": {
+      "invoke": [],
+      "url": []
+    },
+    "cloudinary-analytics": {
+      "invoke": [],
+      "url": []
+    },
+    "coaching-analysis": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/coaching.ts",
+        "supabase/functions/_shared/orchestrator/adapters/coaching.ts",
+        "supabase/functions/_shared/orchestrator/adapters/coaching.ts",
+        "supabase/functions/_shared/orchestrator/adapters/coaching.ts"
+      ]
+    },
+    "companies": {
+      "invoke": [],
+      "url": []
+    },
+    "compile-organization-skills": {
+      "invoke": [
+        "dist/js/platformSkillService-wHdE56-s.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "supabase/functions/research-fact-profile/index.ts",
+        "supabase/functions/sync-skills-from-github/index.ts",
+        "scripts/test_compile_function.ts",
+        "scripts/compile-org-skills.ts",
+        "scripts/sync-skills.ts",
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/lib/hooks/useOrganizationContext.ts",
+        "src/lib/services/platformSkillService.ts",
+        "src/lib/services/platformSkillService.ts"
+      ],
+      "url": []
+    },
+    "compute-engagement": {
+      "invoke": [],
+      "url": [
+        "supabase/_migrations_archive/20260102000018_schedule_engagement_cron.sql"
+      ]
+    },
+    "condense-meeting-summary": {
+      "invoke": [],
+      "url": [
+        "tests/scripts/deployment/test-condense-summary.sh",
+        "tests/scripts/deployment/manually-condense-meeting.sh",
+        "tests/scripts/deployment/test-ai-direct.sh",
+        "tests/scripts/deployment/test-ai-condense.sh",
+        "supabase/functions/fathom-sync/services/transcriptService.ts"
+      ]
+    },
+    "contacts": {
+      "invoke": [],
+      "url": []
+    },
+    "conversational-copilot": {
+      "invoke": [
+        "dist/js/DemoConversationalCopilot-CT9_MnMS.js",
+        "src/pages/platform/DemoConversationalCopilot.tsx"
+      ],
+      "url": []
+    },
+    "copilot-autonomous": {
+      "invoke": [
+        "dist/js/PipelinePage-BygI51JG.js",
+        "dist/js/ProductProfileEditPage-DmxXp5vT.js",
+        "supabase/functions/demo-enrichment-comparison/index.ts",
+        "supabase/functions/deep-enrich-organization/index.ts.backup",
+        "supabase/functions/deep-enrich-organization/index.ts.backup",
+        "supabase/functions/deep-enrich-organization/index.ts",
+        "src/components/Pipeline/hooks/useDealCopilotChat.ts",
+        "src/components/product-profiles/ProductProfileBuilderWizard.tsx",
+        "src/components/product-profiles/ProductProfileBuilderWizard.tsx.backup"
+      ],
+      "url": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        ".sixty/research-agent-team-integration.md",
+        "src/components/setup-wizard/steps/TestSetupStep.tsx",
+        "src/lib/hooks/useCopilotChat.ts"
+      ]
+    },
+    "copilot-dynamic-table": {
+      "invoke": [
+        "dist/js/aiArkSearchService-H99l36Y5.js",
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "dist/js/OpsPage-BFUlOSUY.js",
+        ".sixty/plan-ai-ark-integration.json",
+        "src/components/prospecting/ImportToOpsDialog.tsx",
+        "src/lib/services/apolloSearchService.ts",
+        "src/lib/services/aiArkSearchService.ts",
+        "src/lib/services/explloriumSearchService.ts"
+      ],
+      "url": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ]
+    },
+    "create-api-key": {
+      "invoke": [
+        "tools/testing/test-api-key-creation.html",
+        "tools/testing/test-api-key-creation.html",
+        "dist/js/ApiTesting-C8cexe8V.js",
+        "src/components/ApiKeyManager.tsx"
+      ],
+      "url": [
+        "tools/testing/test-create-api-key.js",
+        "tools/testing/test-session-simple.html",
+        "tools/testing/test-auth-session.html",
+        "tools/testing/test-production-api-keys.html",
+        "tests/api-keys/e2e/userWorkflow.spec.ts",
+        "tests/api-keys/e2e/userWorkflow.spec.ts",
+        "tests/api-keys/e2e/userWorkflow.spec.ts",
+        "tests/api-keys/e2e/userWorkflow.spec.ts",
+        "tests/api-keys/e2e/userWorkflow.spec.ts",
+        "scripts/deployment/deploy-api-keys-production.sh",
+        "scripts/deployment/test-with-token.sh",
+        "scripts/deployment/deploy-and-test-api-keys.sh",
+        "scripts/deployment/test-api-key-with-token.sh"
+      ]
+    },
+    "create-calendar-event": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/slack-interactive/handlers/calendar.ts"
+      ]
+    },
+    "create-checkout-session": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "packages/landing/src/lib/services/subscriptionService.ts",
+        "src/lib/services/subscriptionService.ts",
+        "src/lib/services/subscriptionService.ts"
+      ],
+      "url": []
+    },
+    "create-credit-checkout": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/creditService.ts",
+        "src/lib/services/creditService.ts"
+      ],
+      "url": []
+    },
+    "create-deal-stages": {
+      "invoke": [],
+      "url": []
+    },
+    "create-portal-session": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "packages/landing/src/lib/services/subscriptionService.ts",
+        "src/lib/services/subscriptionService.ts"
+      ],
+      "url": []
+    },
+    "create-profile": {
+      "invoke": [],
+      "url": []
+    },
+    "create-task-from-action-item": {
+      "invoke": [],
+      "url": []
+    },
+    "create-task-unified": {
+      "invoke": [
+        "dist/js/CallActionItemsList-BETyBJRY.js",
+        "dist/js/TasksDemo-CsIYqxpG.js",
+        "tests/scripts/api/test-edge-function.mjs",
+        "tests/scripts/api/test-unified-function.mjs",
+        "supabase/functions/suggest-next-actions/index.ts",
+        "supabase/functions/create-task-from-action-item/index.ts",
+        "src/components/calls/CallActionItemsList.tsx",
+        "src/components/meetings/ActionItemsList.tsx"
+      ],
+      "url": [
+        "tests/scripts/api/test-edge-detailed.mjs",
+        "supabase/functions/_shared/orchestrator/adapters/createTasks.ts"
+      ]
+    },
+    "create-users-from-profiles": {
+      "invoke": [
+        "tests/scripts/api/call-create-users.mjs"
+      ],
+      "url": []
+    },
+    "credit-auto-topup": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/_shared/costTracking.ts"
+      ]
+    },
+    "crm-writeback-worker": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/crm-writeback-worker/config.toml"
+      ]
+    },
+    "cron-admin": {
+      "invoke": [
+        "dist/js/CronJobsAdmin-DwepVPZc.js",
+        "src/pages/admin/CronJobsAdmin.tsx"
+      ],
+      "url": []
+    },
+    "deal-activities": {
+      "invoke": [],
+      "url": []
+    },
+    "deal-analyze-risk-signals": {
+      "invoke": [
+        "src/lib/hooks/useDealRiskSignals.ts"
+      ],
+      "url": []
+    },
+    "deal-memory": {
+      "invoke": [],
+      "url": []
+    },
+    "deal-splits": {
+      "invoke": [],
+      "url": []
+    },
+    "deals": {
+      "invoke": [],
+      "url": []
+    },
+    "deep-enrich-organization": {
+      "invoke": [
+        "dist/js/AISettings-VFXj9Rfc.js",
+        "dist/js/AISettings-VFXj9Rfc.js",
+        "dist/js/AIIntelligencePage-CmGCCN2r.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        ".sixty/plan.md",
+        ".sixty/plan.md",
+        ".sixty/bugs/onboarding-manual-enrichment-race-condition.md",
+        "docs/testing/enrichment-skill-testing.md",
+        "supabase/functions/auto-re-enrich/index.ts",
+        "supabase/functions/auto-re-enrich/index.ts",
+        "supabase/functions/deep-enrich-organization/README.md",
+        "scripts/test_enrichment.ts",
+        "scripts/test_enrichment_with_auth.ts",
+        "scripts/validate-enrichment.ts",
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/pages/settings/AISettings.tsx",
+        "src/pages/settings/AISettings.tsx",
+        "src/pages/settings/AIIntelligencePage.tsx"
+      ],
+      "url": [
+        "docs/deployment/enrichment-staging-deployment.md",
+        "supabase/functions/demo-convert-account/index.ts",
+        "scripts/test_onboarding_enrichment.ts"
+      ]
+    },
+    "delete-organization": {
+      "invoke": [
+        "dist/js/saasAdminService-0ru2MZ0H.js",
+        ".sixty/plan-delete-organization.json",
+        "src/lib/services/saasAdminService.ts"
+      ],
+      "url": []
+    },
+    "delete-user": {
+      "invoke": [
+        "USER_DELETION_BUG_ANALYSIS.md",
+        "USER_DELETION_FIX_CODE_SNIPPETS.md",
+        "USER_DELETION_FIX_CODE_SNIPPETS.md",
+        "USER_DELETION_FIX_GUIDE.md",
+        "USER_DELETION_FIX_GUIDE.md",
+        "USER_DELETION_VISUAL_FLOWS.md",
+        "USER_DELETION_VISUAL_FLOWS.md",
+        "dist/js/useUsers-DxaFVF2P.js",
+        "src/lib/hooks/useUsers.ts"
+      ],
+      "url": []
+    },
+    "demo-convert-account": {
+      "invoke": [],
+      "url": [
+        "packages/landing/src/demo-v2/DemoSignup.tsx"
+      ]
+    },
+    "demo-enrichment-comparison": {
+      "invoke": [
+        "dist/js/EnrichmentComparison-BPTyvZdX.js",
+        "dist/js/EnrichmentComparison-BPTyvZdX.js",
+        "src/pages/demo/EnrichmentComparison.tsx",
+        "src/pages/demo/EnrichmentComparison.tsx"
+      ],
+      "url": []
+    },
+    "demo-prep-briefing": {
+      "invoke": [],
+      "url": [
+        "dist/js/DemoPrepBriefing-CBsBOoF8.js",
+        "dist/js/DemoPrepBriefing-CBsBOoF8.js",
+        "src/pages/platform/DemoPrepBriefing.tsx",
+        "src/pages/platform/DemoPrepBriefing.tsx"
+      ]
+    },
+    "demo-recent-meetings": {
+      "invoke": [
+        "dist/js/DemoPrepBriefing-CBsBOoF8.js",
+        "src/pages/platform/DemoPrepBriefing.tsx"
+      ],
+      "url": []
+    },
+    "demo-research": {
+      "invoke": [],
+      "url": [
+        "packages/landing/dist/assets/index-CJL1IzXI.js",
+        "packages/landing/src/demo/useDemoResearch.ts"
+      ]
+    },
+    "deploy-recording-bot": {
+      "invoke": [
+        "src/lib/hooks/useMeetingBaaSTest.ts"
+      ],
+      "url": [
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/functions/meetingbaas-webhook/index.ts",
+        "supabase/functions/auto-join-scheduler/index.ts",
+        "supabase/functions/deploy-recording-bot/index.ts",
+        "supabase/_migrations_archive/20260104220000_calendar_event_auto_record_trigger.sql",
+        "src/lib/services/recordingService.ts",
+        "src/lib/services/recordingService.ts"
+      ]
+    },
+    "detect-intents": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/detectIntents.ts"
+      ]
+    },
+    "docs-agent": {
+      "invoke": [],
+      "url": [
+        "dist/js/SupportCentrePage-RUlnyh8G.js",
+        "src/lib/hooks/useSupportChat.ts"
+      ]
+    },
+    "docs-api": {
+      "invoke": [
+        "dist/js/DocsAdminPage-BMIecnB9.js",
+        "dist/js/DocsAdminPage-BMIecnB9.js",
+        "dist/js/DocsAdminPage-BMIecnB9.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/components/docs/DocsFeedback.tsx",
+        "src/pages/platform/DocsAdminPage.tsx",
+        "src/pages/platform/DocsAdminPage.tsx",
+        "src/pages/platform/DocsAdminPage.tsx"
+      ],
+      "url": []
+    },
+    "email-send-as-rep": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        ".sixty/progress-deal-copilot-email-actions.md",
+        ".sixty/progress-deal-copilot-email-actions.md",
+        ".sixty/audit-batch-2-findings.md",
+        ".sixty/plan-deal-copilot-email-actions.json",
+        ".sixty/plan-deal-copilot-email-actions.json",
+        "supabase/functions/_shared/commandCentre/actionExecutor.ts",
+        "src/components/copilot/responses/EmailResponse.tsx",
+        "src/lib/services/commandCentreItemsService.ts"
+      ],
+      "url": [
+        "supabase/functions/slack-interactive/handlers/prepBriefing.ts",
+        "supabase/functions/slack-interactive/handlers/emailSend.ts",
+        "supabase/functions/send-scheduled-emails/index.ts",
+        "supabase/functions/_shared/orchestrator/adapters/emailSend.ts"
+      ]
+    },
+    "encharge-email": {
+      "invoke": [
+        "src/lib/services/enchargeEmailService.ts"
+      ],
+      "url": [
+        "supabase/functions/fathom-sync/index.ts",
+        "supabase/functions/scheduled-encharge-emails/index.ts"
+      ]
+    },
+    "encharge-send-email": {
+      "invoke": [
+        "WAITLIST_TOKEN_401_ANALYSIS.md",
+        "CODE_COMPARISON_REFERENCE.md",
+        "test/email-integration.test.ts",
+        "test/email-integration.test.ts",
+        "dist/js/MeetingsWaitlist-BwlUnDv5.js",
+        "dist/js/MeetingsWaitlist-BwlUnDv5.js",
+        "dist/js/enchargeTemplateService-Bq1e3Zw1.js",
+        "dist/js/useUsers-DxaFVF2P.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        ".sixty/EMAIL_ARCHITECTURE_GUIDE.md",
+        ".sixty/EMAIL_ARCHITECTURE_GUIDE.md",
+        ".sixty/EMAIL_VARIABLE_REFERENCE.md",
+        ".sixty/EMAIL_VARIABLE_REFERENCE.md",
+        "supabase/functions/request-email-change/index.ts",
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/lib/hooks/useUsers.ts",
+        "src/lib/services/waitlistAdminService.ts",
+        "src/lib/services/waitlistAdminService.ts",
+        "src/lib/services/enchargeTemplateService.ts"
+      ],
+      "url": [
+        "dist/js/TeamMembersPage-BQF2w1NP.js",
+        "dist/js/OrganizationManagementPage-ke2t_7kB.js",
+        "tests/scripts/deployment/verify-email-setup.sh",
+        "tests/scripts/deployment/test-ses-connection.sh",
+        "tests/scripts/deployment/test-encharge-email.sh",
+        "tests/scripts/deployment/test-full-email-setup.sh",
+        "tests/scripts/deployment/test-full-email-setup.sh",
+        ".sixty/EMAIL_ARCHITECTURE_GUIDE.md",
+        ".sixty/EMAIL_ARCHITECTURE_GUIDE.md",
+        ".sixty/EMAIL_ARCHITECTURE_GUIDE.md",
+        ".sixty/EMAIL_ARCHITECTURE_GUIDE.md",
+        ".sixty/PHASE_6_ACTION_ITEMS.md",
+        ".sixty/PHASE_3_DEPLOYMENT_GUIDE.md",
+        ".sixty/FINAL_AUTH_COMPLETION_REPORT.md",
+        ".sixty/PHASE_6_TECHNICAL_STATUS.md",
+        ".sixty/PHASE_6_TECHNICAL_STATUS.md",
+        ".sixty/PHASE_6_TECHNICAL_STATUS.md",
+        ".sixty/PHASE_3_FINAL_REPORT.md",
+        ".sixty/PHASE_3_FINAL_REPORT.md",
+        ".sixty/EMAIL_VARIABLE_REFERENCE.md",
+        ".sixty/EMAIL_VARIABLE_REFERENCE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/EMAIL_TESTING_CHECKLIST.md",
+        ".sixty/ANALYSIS_SUMMARY.md",
+        ".sixty/PHASE_6_DEPLOYMENT_CHECKLIST.md",
+        ".sixty/PHASE_6_DEPLOYMENT_PLAN.md",
+        ".sixty/consult/org-user-removal.md",
+        "supabase/migrations/20260202102718_update_reject_join_request_email.sql",
+        "supabase/functions/meeting-limit-warning-email/index.ts",
+        "supabase/functions/send-org-member-deactivation-email/index.ts",
+        "supabase/functions/permission-to-close-email/index.ts",
+        "supabase/functions/send-org-deactivation-email/index.ts",
+        "supabase/functions/send-org-deactivation-email/index.ts",
+        "supabase/functions/org-approval-email/index.ts",
+        "supabase/functions/invite-user/index.ts",
+        "supabase/functions/handle-join-request-action/index.ts",
+        "supabase/functions/handle-join-request-action/index.ts",
+        "supabase/functions/fathom-connected-email/index.ts",
+        "supabase/functions/send-password-reset-email/index.ts",
+        "supabase/functions/first-meeting-synced-email/index.ts",
+        "supabase/functions/subscription-confirmed-email/index.ts",
+        "supabase/functions/org-deletion-cron/index.ts",
+        "supabase/functions/org-deletion-cron/index.ts",
+        "supabase/functions/send-removal-email/index.ts",
+        "api/admin/resend-invitation.ts",
+        "api/admin/invite-user.ts",
+        "src/pages/settings/TeamMembersPage.tsx",
+        "src/pages/settings/OrganizationManagementPage.tsx"
+      ]
+    },
+    "enrich-cascade": {
+      "invoke": [],
+      "url": []
+    },
+    "enrich-company": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/savvycal-leads-webhook/index.ts",
+        "scripts/clear-and-rerun-enrichments.ts"
+      ]
+    },
+    "enrich-crm-record": {
+      "invoke": [
+        "dist/js/RelationshipHealthWidget-lUqBdFD0.js",
+        "dist/js/RelationshipHealthWidget-lUqBdFD0.js",
+        "packages/landing/src/lib/services/geminiEnrichmentService.ts",
+        "packages/landing/src/lib/services/geminiEnrichmentService.ts",
+        "src/lib/services/geminiEnrichmentService.ts",
+        "src/lib/services/geminiEnrichmentService.ts"
+      ],
+      "url": []
+    },
+    "enrich-dynamic-table": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "supabase/functions/evaluate-ops-rule/index.ts",
+        "src/components/ops/AddColumnModal.tsx",
+        "src/lib/hooks/useEnrichment.ts",
+        "src/lib/hooks/useEnrichment.ts",
+        "src/lib/hooks/useActionExecution.ts",
+        "src/lib/hooks/useActionExecution.ts"
+      ],
+      "url": [
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ]
+    },
+    "enrich-organization": {
+      "invoke": [
+        "dist/js/index-Bn0yEsGC.js"
+      ],
+      "url": []
+    },
+    "entity-search": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/hooks/useUnifiedSearch.ts",
+        "src/lib/hooks/useEntitySearch.ts"
+      ],
+      "url": []
+    },
+    "evaluate-config-questions": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/_shared/config/questionTriggerHook.ts"
+      ]
+    },
+    "evaluate-formula": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "url": []
+    },
+    "evaluate-ops-rule": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260222900001_ops_rule_event_triggers.sql",
+        "supabase/migrations/20260222900001_ops_rule_event_triggers.sql"
+      ]
+    },
+    "evaluate-recording-rules": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/evaluate-recording-rules/index.ts"
+      ]
+    },
+    "exa-abilities-demo": {
+      "invoke": [
+        "dist/js/ExaAbilitiesDemo-CkNC-u0X.js",
+        "src/pages/demo/ExaAbilitiesDemo.tsx"
+      ],
+      "url": []
+    },
+    "execute-migration": {
+      "invoke": [],
+      "url": []
+    },
+    "explorium-enrich": {
+      "invoke": [],
+      "url": []
+    },
+    "explorium-match": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/copilot-dynamic-table/index.ts"
+      ]
+    },
+    "explorium-search": {
+      "invoke": [
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "src/lib/services/explloriumSearchService.ts"
+      ],
+      "url": [
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "supabase/functions/copilot-dynamic-table/index.ts",
+        "src/lib/services/explloriumSearchService.ts"
+      ]
+    },
+    "extract-action-items": {
+      "invoke": [
+        "dist/js/TasksDemo-CsIYqxpG.js",
+        "src/components/meetings/MeetingDetail.tsx",
+        "src/pages/admin/TasksDemo.tsx"
+      ],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/actionItems.ts"
+      ]
+    },
+    "extract-call-action-items": {
+      "invoke": [
+        "dist/js/Calls-D6qfo93K.js",
+        "dist/js/TasksDemo-CsIYqxpG.js",
+        "dist/js/CallDetail-Dd3X-HpX.js",
+        "src/pages/CallDetail.tsx",
+        "src/pages/Calls.tsx",
+        "src/pages/admin/TasksDemo.tsx"
+      ],
+      "url": []
+    },
+    "extract-content-topics": {
+      "invoke": [
+        "supabase/functions/extract-content-topics/examples.md",
+        "supabase/functions/extract-content-topics/examples.md",
+        "supabase/functions/extract-content-topics/examples.md",
+        "supabase/functions/extract-content-topics/examples.md",
+        "supabase/functions/extract-content-topics/examples.md",
+        "supabase/functions/extract-content-topics/examples.md",
+        "supabase/functions/extract-content-topics/examples.md",
+        "supabase/functions/extract-content-topics/README.md",
+        "supabase/functions/extract-content-topics/README.md",
+        "supabase/functions/extract-content-topics/README.md",
+        "supabase/functions/extract-content-topics/README.md"
+      ],
+      "url": [
+        "dist/js/contentService-U_PgNBzy.js",
+        "docs/guides/CONTENT_TAB_DEVELOPER_GUIDE.md",
+        "docs/guides/CONTENT_TAB_DEVELOPER_GUIDE.md",
+        "supabase/functions/extract-content-topics/README.md",
+        "supabase/functions/extract-content-topics/README.md",
+        "supabase/functions/extract-content-topics/README.md",
+        "supabase/functions/extract-content-topics/README.md",
+        "supabase/functions/extract-content-topics/README.md",
+        "supabase/functions/extract-content-topics/README.md",
+        "supabase/functions/extract-content-topics/DEPLOYMENT.md",
+        "supabase/functions/extract-content-topics/DEPLOYMENT.md",
+        "packages/landing/src/lib/services/contentService.ts",
+        "packages/landing/src/lib/services/__tests__/contentService.test.ts",
+        "packages/landing/src/lib/services/__tests__/contentService.test.ts",
+        "src/lib/services/contentService.ts",
+        "src/lib/services/__tests__/contentService.test.ts",
+        "src/lib/services/__tests__/contentService.test.ts"
+      ]
+    },
+    "extract-deal-memory-events": {
+      "invoke": [],
+      "url": []
+    },
+    "extract-stakeholder-roles": {
+      "invoke": [],
+      "url": []
+    },
+    "facebook-leads-webhook": {
+      "invoke": [],
+      "url": []
+    },
+    "fact-profile-approve": {
+      "invoke": [
+        "dist/js/PublicFactProfile-d6TAqcBz.js",
+        "dist/js/PublicFactProfile-d6TAqcBz.js",
+        "dist/js/PublicFactProfile-d6TAqcBz.js",
+        "dist/js/PublicFactProfile-d6TAqcBz.js",
+        "src/pages/public/PublicFactProfile.tsx",
+        "src/pages/public/PublicFactProfile.tsx",
+        "src/pages/public/PublicFactProfile.tsx",
+        "src/pages/public/PublicFactProfile.tsx"
+      ],
+      "url": []
+    },
+    "fact-profile-share": {
+      "invoke": [
+        "src/components/fact-profiles/ShareFactProfileDialog.tsx",
+        "src/components/fact-profiles/ShareFactProfileDialog.tsx",
+        "src/components/fact-profiles/ShareFactProfileDialog.tsx",
+        "src/components/fact-profiles/ShareFactProfileDialog.tsx"
+      ],
+      "url": []
+    },
+    "fathom-backfill-companies": {
+      "invoke": [],
+      "url": []
+    },
+    "fathom-connected-email": {
+      "invoke": [],
+      "url": [
+        ".sixty/PHASE_3_FINAL_REPORT.md"
+      ]
+    },
+    "fathom-cron-sync": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260108203000_baseline_fixed.sql",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/_migrations_archive/20250124000003_setup_fathom_cron_sync.sql",
+        "supabase/_migrations_archive/20251213190000_fix_fathom_cron_config.sql",
+        "api/cron/fathom-sync.ts"
+      ]
+    },
+    "fathom-disconnect": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/hooks/useFathomIntegration.ts"
+      ],
+      "url": []
+    },
+    "fathom-oauth-callback": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "docs/integrations/OAUTH_RELAY_SETUP.md",
+        "src/lib/hooks/useFathomIntegration.ts",
+        "src/pages/auth/FathomCallback.tsx"
+      ],
+      "url": []
+    },
+    "fathom-oauth-initiate": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "packages/landing/src/lib/hooks/useFathomIntegration.ts",
+        "src/lib/hooks/useFathomIntegration.ts"
+      ],
+      "url": [
+        "scripts/test-auth-session.sh",
+        "scripts/test-auth-session.sh"
+      ]
+    },
+    "fathom-oauth-token": {
+      "invoke": [],
+      "url": [
+        ".sixty/plan-go-live-audit.json",
+        ".sixty/plan-go-live-audit.json",
+        "packages/landing/src/lib/services/fathomApiService.ts",
+        "src/lib/services/fathomApiService.ts"
+      ]
+    },
+    "fathom-self-map": {
+      "invoke": [
+        "dist/js/FathomUserMapping-L7RM8C0s.js",
+        "src/lib/hooks/useFathomSettings.ts"
+      ],
+      "url": []
+    },
+    "fathom-sync": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "packages/landing/src/lib/hooks/useFathomIntegration.ts",
+        "src/lib/hooks/useFathomIntegration.ts"
+      ],
+      "url": [
+        "tests/scripts/integrations/trigger-fathom-sync.sh",
+        "tests/scripts/deployment/reset-and-test.sh",
+        "tests/scripts/deployment/test-token-refresh-manually.sh",
+        "tests/scripts/deployment/reset-and-retry-transcripts.sh",
+        "tests/scripts/deployment/test-sync-verbose.sh",
+        "tests/scripts/deployment/test-sync-verbose.sh",
+        "tests/scripts/deployment/test-fathom-sync-simple.sh",
+        "tests/scripts/deployment/check-and-sync-transcripts.sh",
+        "tests/scripts/deployment/test_ai_analysis.sh",
+        "tests/scripts/deployment/manual-trigger-sync.sh",
+        "tests/scripts/api/test-fathom-sync.js",
+        "tests/scripts/api/test-fathom-sync.js",
+        "tests/scripts/api/test-token-refresh.js",
+        "supabase/functions/fathom-cron-sync/index.ts",
+        "supabase/functions/fathom-webhook/index.ts.backup",
+        "supabase/functions/fathom-webhook/index-improved.ts",
+        "supabase/functions/fathom-webhook/index.ts",
+        "supabase/functions/fathom-webhook/index.ts",
+        "supabase/functions/workflow-webhook/index.ts"
+      ]
+    },
+    "fathom-token-refresh": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260125161000_add_fathom_token_refresh_cron.sql",
+        "api/cron/fathom-token-refresh.ts"
+      ]
+    },
+    "fathom-transcript-retry": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/fathom-sync/index.ts",
+        "supabase/_migrations_archive/20250125000002_setup_transcript_retry_cron.sql",
+        "scripts/manually-trigger-retry.sh",
+        "scripts/test-transcript-retry-system.sh",
+        "scripts/verify-transcript-retry-setup.sql",
+        "scripts/fetch-transcripts-now.sh"
+      ]
+    },
+    "fathom-update-user-mapping": {
+      "invoke": [
+        "dist/js/FathomUserMapping-L7RM8C0s.js",
+        "src/lib/hooks/useFathomSettings.ts"
+      ],
+      "url": []
+    },
+    "fathom-webhook": {
+      "invoke": [],
+      "url": [
+        "tests/scripts/deployment/check-fathom-webhook-config.sh",
+        "tests/scripts/deployment/test-webhook-manually.sh",
+        "tests/scripts/deployment/test-webhook-manually.sh",
+        "tests/scripts/deployment/refetch-all-meetings.sh",
+        "tests/scripts/api/test-fathom-webhook.js",
+        "tests/scripts/api/test-fathom-webhook.js",
+        "docs/testing/STAGING_TEST_CHECKLIST.md",
+        "api/webhooks/fathom.ts",
+        "api/webhooks/fathom.ts"
+      ]
+    },
+    "fetch-company-logo": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/useCompanyLogo-VzOD1QeX.js",
+        "scripts/test-logo-fetch.ts"
+      ],
+      "url": [
+        "scripts/test-logo-direct.ts"
+      ]
+    },
+    "fetch-company-logos-batch": {
+      "invoke": [
+        "src/components/Pipeline/hooks/useCompanyLogoBatch.ts"
+      ],
+      "url": []
+    },
+    "fetch-deepgram-usage": {
+      "invoke": [],
+      "url": []
+    },
+    "fetch-gladia-usage": {
+      "invoke": [],
+      "url": []
+    },
+    "fetch-logo": {
+      "invoke": [
+        "dist/js/proposalService-BkUHhaw-.js",
+        "src/lib/services/proposalService.ts"
+      ],
+      "url": []
+    },
+    "fetch-meetingbaas-usage": {
+      "invoke": [],
+      "url": []
+    },
+    "fetch-openrouter-models": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/components/ops/OpenRouterModelPicker.tsx"
+      ],
+      "url": []
+    },
+    "fetch-savvycal-link": {
+      "invoke": [
+        "dist/js/savvycalTests-NZlGOomT.js",
+        "dist/js/SettingsSavvyCal-JviHs42j.js",
+        "dist/js/SettingsSavvyCal-JviHs42j.js",
+        "dist/js/SettingsSavvyCal-JviHs42j.js",
+        "src/lib/integrationTesting/suites/savvycalTests.ts",
+        "src/pages/admin/SettingsSavvyCal.tsx",
+        "src/pages/admin/SettingsSavvyCal.tsx",
+        "src/pages/admin/SettingsSavvyCal.tsx"
+      ],
+      "url": []
+    },
+    "fetch-summary": {
+      "invoke": [
+        "packages/landing/src/lib/hooks/useFetchSummary.ts",
+        "src/lib/hooks/useFetchSummary.ts"
+      ],
+      "url": []
+    },
+    "fetch-transcript": {
+      "invoke": [
+        "dist/js/ActivityLog-D7kMdNay.js",
+        "packages/landing/src/lib/hooks/useFetchTranscript.ts",
+        "src/components/SalesTable.tsx",
+        "src/lib/hooks/useFetchTranscript.ts"
+      ],
+      "url": [
+        "tests/scripts/deployment/force-fetch-transcripts.sh",
+        "supabase/functions/extract-action-items/index.ts"
+      ]
+    },
+    "find-available-slots": {
+      "invoke": [
+        "supabase/functions/_shared/commandCentre/actionExecutor.ts"
+      ],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/calendar.ts",
+        "supabase/functions/_shared/orchestrator/adapters/calendar.ts"
+      ]
+    },
+    "fireflies-sync": {
+      "invoke": [
+        "dist/js/FirefliesSettings-BLR_jlid.js",
+        "dist/js/FirefliesSettings-BLR_jlid.js",
+        "src/lib/hooks/useFirefliesIntegration.ts",
+        "src/lib/hooks/useFirefliesIntegration.ts"
+      ],
+      "url": []
+    },
+    "first-meeting-synced-email": {
+      "invoke": [],
+      "url": [
+        ".sixty/PHASE_3_FINAL_REPORT.md"
+      ]
+    },
+    "fleet-admin": {
+      "invoke": [],
+      "url": []
+    },
+    "fleet-health": {
+      "invoke": [],
+      "url": []
+    },
+    "freepik-proxy": {
+      "invoke": [],
+      "url": []
+    },
+    "gemini-research": {
+      "invoke": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "url": [
+        ".sixty/research-agent-team-integration.md",
+        "supabase/functions/_shared/orchestrator/adapters/reengagement.ts"
+      ]
+    },
+    "generate-email-sequence": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "url": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts"
+      ]
+    },
+    "generate-embedding": {
+      "invoke": [
+        "dist/js/platformSkillService-wHdE56-s.js",
+        "src/lib/services/platformSkillService.ts",
+        "src/lib/services/embeddingService.ts"
+      ],
+      "url": []
+    },
+    "generate-follow-up": {
+      "invoke": [],
+      "url": [
+        "src/pages/platform/FollowUpDemoPage.tsx",
+        "src/pages/platform/FollowUpDemoPage.tsx",
+        "src/pages/platform/FollowUpDemoPage.tsx"
+      ]
+    },
+    "generate-icp-profiles": {
+      "invoke": [
+        "dist/js/ProspectingTab-Dx_QzQil.js",
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "src/components/prospecting/AIProfileGenerator.tsx",
+        "src/lib/hooks/useICPProfiles.ts",
+        "src/lib/hooks/useICPProfiles.ts"
+      ],
+      "url": []
+    },
+    "generate-magic-link": {
+      "invoke": [],
+      "url": []
+    },
+    "generate-marketing-content": {
+      "invoke": [
+        "supabase/functions/generate-marketing-content/QUICK_REFERENCE.md"
+      ],
+      "url": [
+        "dist/js/contentService-U_PgNBzy.js",
+        "docs/guides/CONTENT_TAB_DEVELOPER_GUIDE.md",
+        "supabase/functions/generate-marketing-content/EXAMPLES.md",
+        "supabase/functions/generate-marketing-content/EXAMPLES.md",
+        "supabase/functions/generate-marketing-content/EXAMPLES.md",
+        "supabase/functions/generate-marketing-content/IMPLEMENTATION_SUMMARY.md",
+        "supabase/functions/generate-marketing-content/README.md",
+        "supabase/functions/generate-marketing-content/README.md",
+        "supabase/functions/generate-marketing-content/README.md",
+        "supabase/functions/generate-marketing-content/QUICK_REFERENCE.md",
+        "supabase/functions/generate-marketing-content/DEPLOYMENT_CHECKLIST.md",
+        "supabase/functions/generate-marketing-content/DEPLOYMENT_CHECKLIST.md",
+        "supabase/functions/generate-marketing-content/DEPLOYMENT_CHECKLIST.md",
+        "supabase/functions/generate-marketing-content/DEPLOYMENT_CHECKLIST.md",
+        "supabase/functions/generate-marketing-content/DEPLOYMENT_CHECKLIST.md",
+        "supabase/functions/generate-marketing-content/DEPLOYMENT_CHECKLIST.md",
+        "supabase/functions/generate-marketing-content/DEPLOYMENT_CHECKLIST.md",
+        "packages/landing/src/lib/services/contentService.ts",
+        "packages/landing/src/lib/services/__tests__/contentService.test.ts",
+        "packages/landing/src/lib/services/__tests__/contentService.test.ts",
+        "src/lib/services/contentService.ts",
+        "src/lib/services/__tests__/contentService.test.ts",
+        "src/lib/services/__tests__/contentService.test.ts"
+      ]
+    },
+    "generate-more-actions": {
+      "invoke": [],
+      "url": []
+    },
+    "generate-process-map": {
+      "invoke": [
+        "dist/js/ProcessMaps-DpvvYJ9A.js",
+        "dist/js/TasksDemo-CsIYqxpG.js",
+        "dist/js/TasksDemo-CsIYqxpG.js",
+        "dist/js/testDataStore-D-R5fRfF.js",
+        "src/components/process-maps/ProcessMapButton.tsx",
+        "src/components/process-maps/ProcessMapDisplay.tsx",
+        "src/lib/hooks/useProcessMap.ts",
+        "src/pages/admin/ProcessMaps.tsx"
+      ],
+      "url": []
+    },
+    "generate-proposal": {
+      "invoke": [
+        "dist/js/proposalService-BkUHhaw-.js",
+        "dist/js/proposalService-BkUHhaw-.js",
+        "packages/landing/src/lib/services/proposalService.ts",
+        "packages/landing/src/lib/services/proposalService.ts",
+        "src/lib/services/proposalService.ts",
+        "src/lib/services/proposalService.ts"
+      ],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts",
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts",
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+      ]
+    },
+    "generate-s3-video-thumbnail": {
+      "invoke": [
+        "docs/integrations/S3_STORAGE_IMPLEMENTATION.md",
+        "docs/integrations/S3_STORAGE_IMPLEMENTATION.md",
+        "supabase/functions/_shared/recordingCompleteSync.ts"
+      ],
+      "url": [
+        "docs/integrations/thumbnail_lambda.md",
+        "supabase/functions/generate-s3-video-thumbnail/index.ts"
+      ]
+    },
+    "generate-svg": {
+      "invoke": [
+        "dist/js/geminiSvgService-gI7f78Zk.js",
+        "src/lib/services/geminiSvgService.ts"
+      ],
+      "url": []
+    },
+    "generate-video-thumbnail": {
+      "invoke": [
+        "packages/landing/src/lib/services/thumbnailCaptureService.ts",
+        "src/lib/services/thumbnailCaptureService.ts"
+      ],
+      "url": [
+        "tests/scripts/deployment/deploy-thumbnail-service.sh",
+        "tests/scripts/api/test-fullscreen-thumbnail.js"
+      ]
+    },
+    "generate-video-thumbnail-v2": {
+      "invoke": [
+        "dist/js/MeetingsPage-CEpY-pLD.js",
+        "tests/scripts/api/regenerate-all-thumbnails.js",
+        "src/components/meetings/MeetingDetail.tsx",
+        "src/components/meetings/MeetingsList.tsx",
+        "src/pages/MeetingDetail.tsx"
+      ],
+      "url": [
+        "tests/scripts/api/test-thumbnail.js",
+        "supabase/functions/reprocess-pending-meetings/index.ts",
+        "supabase/functions/backfill-thumbnails/index.ts",
+        "supabase/functions/fathom-transcript-retry/index.ts",
+        "supabase/functions/fathom-sync/index.ts"
+      ]
+    },
+    "generate-waitlist-token": {
+      "invoke": [
+        "WAITLIST_TOKEN_401_ANALYSIS.md",
+        "DETAILED_ROOT_CAUSE_ANALYSIS.md",
+        "DETAILED_ROOT_CAUSE_ANALYSIS.md",
+        "CODE_COMPARISON_REFERENCE.md",
+        "WAITLIST_BUG_FIX_SUMMARY.md",
+        "WAITLIST_BUG_FIX_SUMMARY.md",
+        "INVESTIGATION_EVIDENCE.md",
+        "INVESTIGATION_EVIDENCE.md",
+        "WAITLIST_TOKEN_BUG_ANALYSIS.md",
+        "ANALYSIS_SUMMARY.md",
+        "BUG_QUICK_REFERENCE.md",
+        "BUG_QUICK_REFERENCE.md",
+        "BUG_QUICK_REFERENCE.md",
+        "BUG_QUICK_REFERENCE.md",
+        "dist/js/MeetingsWaitlist-BwlUnDv5.js",
+        "dist/js/MeetingsWaitlist-BwlUnDv5.js",
+        "dist/js/useUsers-DxaFVF2P.js",
+        "src/lib/hooks/useUsers.ts",
+        "src/lib/services/waitlistAdminService.ts",
+        "src/lib/services/waitlistAdminService.ts"
+      ],
+      "url": [
+        "VISUAL_BUG_SUMMARY.md",
+        "CODE_COMPARISON_REFERENCE.md",
+        "CODE_COMPARISON_REFERENCE.md",
+        "WAITLIST_BUG_FIX_SUMMARY.md"
+      ]
+    },
+    "get-agent-skills": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js"
+      ],
+      "url": []
+    },
+    "get-aggregated-topics": {
+      "invoke": [],
+      "url": [
+        "dist/js/ContentTopics-BLo31lBy.js",
+        "packages/landing/src/lib/services/globalTopicsService.ts",
+        "src/lib/services/globalTopicsService.ts"
+      ]
+    },
+    "get-batch-signed-urls": {
+      "invoke": [],
+      "url": [
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "supabase/functions/get-batch-signed-urls/index.ts",
+        "src/lib/services/recordingService.ts"
+      ]
+    },
+    "get-credit-balance": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        ".sixty/plan-credit-system.json"
+      ],
+      "url": []
+    },
+    "get-credit-menu": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js"
+      ],
+      "url": []
+    },
+    "get-credit-usage-summary": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ]
+    },
+    "get-invitation-by-token": {
+      "invoke": [],
+      "url": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/invitationService.ts"
+      ]
+    },
+    "get-recording-url": {
+      "invoke": [],
+      "url": [
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "docs/integrations/thumbnail_lambda.md",
+        "supabase/functions/get-recording-url/index.ts",
+        "src/lib/services/recordingService.ts",
+        "src/lib/services/recordingService.ts"
+      ]
+    },
+    "gmail-apply-labels": {
+      "invoke": [
+        "dist/js/EmailCategorizationSettings-DScTtJj9.js",
+        "src/components/integrations/EmailCategorizationSettings.tsx"
+      ],
+      "url": []
+    },
+    "gmail-push-webhook": {
+      "invoke": [],
+      "url": []
+    },
+    "google-calendar": {
+      "invoke": [
+        "dist/js/GoogleCallback-DR_K_6TR.js",
+        "dist/js/GoogleCallback-DR_K_6TR.js",
+        "scripts/manual-webhook-subscribe.js",
+        "packages/landing/src/lib/hooks/useGoogleIntegration.ts",
+        "src/lib/hooks/useGoogleIntegration.ts",
+        "src/lib/services/googleCalendarWebhookService.ts",
+        "src/lib/services/googleCalendarWebhookService.ts"
+      ],
+      "url": [
+        "supabase/migrations/20260221000000_schedule_webhook_renewal.sql",
+        "supabase/migrations/20260221300001_fix_webhook_renewal_settings.sql"
+      ]
+    },
+    "google-calendar-sync": {
+      "invoke": [
+        "supabase/functions/google-calendar-webhook/index.ts"
+      ],
+      "url": [
+        "supabase/migrations/20260123000005_schedule_google_calendar_sync.sql",
+        "supabase/migrations/20260123000002_fix_google_calendar_sync_http.sql",
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/_shared/structuredResponseDetector.ts",
+        "supabase/functions/api-copilot/index.ts"
+      ]
+    },
+    "google-calendar-webhook": {
+      "invoke": [],
+      "url": [
+        "dist/js/GoogleCallback-DR_K_6TR.js",
+        "docs/testing/STAGING_TEST_CHECKLIST.md",
+        "docs/testing/STAGING_TEST_CHECKLIST.md",
+        "scripts/manual-webhook-subscribe.js",
+        "src/lib/services/googleCalendarWebhookService.ts"
+      ]
+    },
+    "google-docs": {
+      "invoke": [
+        "src/components/contacts/ContactDocuments.tsx",
+        "src/components/contacts/ContactDocuments.tsx"
+      ],
+      "url": []
+    },
+    "google-docs-create": {
+      "invoke": [],
+      "url": [
+        "dist/js/Workflows-CZ5PDOwU.js",
+        "tests/scripts/browser/test-google-docs-direct.html",
+        "supabase/functions/fathom-sync/index.ts",
+        "packages/landing/src/lib/services/googleDocsService.ts",
+        "src/lib/services/googleDocsService.ts"
+      ]
+    },
+    "google-drive": {
+      "invoke": [
+        "dist/js/googleTests-D3MTY2IA.js",
+        "packages/landing/src/lib/hooks/useGoogleIntegration.ts",
+        "packages/landing/src/lib/hooks/useGoogleIntegration.ts",
+        "packages/landing/src/lib/hooks/useGoogleIntegration.ts",
+        "src/components/admin/GoogleIntegrationTestSuite.tsx",
+        "src/components/admin/GoogleIntegrationTestSuite.tsx",
+        "src/lib/integrationTesting/suites/googleTests.ts",
+        "src/lib/hooks/useGoogleIntegration.ts",
+        "src/lib/hooks/useGoogleIntegration.ts",
+        "src/lib/hooks/useGoogleIntegration.ts"
+      ],
+      "url": []
+    },
+    "google-gmail": {
+      "invoke": [
+        "dist/js/EmailActionCenter-BDpHb7HH.js",
+        "dist/js/EmailSyncPage-CT0dvYR3.js",
+        "dist/js/EmailSyncPage-CT0dvYR3.js",
+        "dist/js/EmailCategorizationSettings-DScTtJj9.js",
+        "dist/js/EmailCategorizationSettings-DScTtJj9.js",
+        "dist/js/EmailCategorizationSettings-DScTtJj9.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "packages/landing/src/lib/hooks/useGoogleIntegration.ts",
+        "packages/landing/src/lib/hooks/useGoogleIntegration.ts",
+        "packages/landing/src/lib/services/gmailService.ts",
+        "packages/landing/src/lib/services/emailSyncService.ts",
+        "packages/landing/src/lib/services/emailSyncService.ts",
+        "src/lib/hooks/useEmailActions.ts",
+        "src/lib/hooks/useGoogleIntegration.ts",
+        "src/lib/hooks/useGoogleIntegration.ts",
+        "src/lib/services/gmailService.ts",
+        "src/lib/services/emailSyncService.ts",
+        "src/lib/services/emailSyncService.ts",
+        "src/lib/services/emailCategorizationService.ts",
+        "src/lib/services/emailCategorizationService.ts",
+        "src/lib/services/emailCategorizationService.ts"
+      ],
+      "url": []
+    },
+    "google-oauth-callback": {
+      "invoke": [
+        "docs/integrations/OAUTH_RELAY_SETUP.md"
+      ],
+      "url": []
+    },
+    "google-oauth-callback-public": {
+      "invoke": [],
+      "url": []
+    },
+    "google-oauth-exchange": {
+      "invoke": [
+        "dist/js/GoogleCallback-DR_K_6TR.js",
+        "src/pages/GoogleCallback.tsx"
+      ],
+      "url": []
+    },
+    "google-oauth-initiate": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "tests/scripts/browser/test-oauth-dynamic.html",
+        "src/lib/api/googleIntegration.ts"
+      ],
+      "url": [
+        "scripts/test-google-oauth.js"
+      ]
+    },
+    "google-tasks": {
+      "invoke": [
+        "dist/js/googleTests-D3MTY2IA.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "tests/scripts/browser/test-google-tasks-connection.html",
+        "packages/landing/src/lib/services/googleTasksSync.ts",
+        "packages/landing/src/lib/services/googleTasksSync.ts",
+        "packages/landing/src/lib/services/googleTasksSync.ts",
+        "packages/landing/src/lib/services/googleTasksSync.ts",
+        "packages/landing/src/lib/services/googleTasksSync.ts",
+        "src/components/GoogleTasksSync.tsx",
+        "src/components/GoogleTasksSync.tsx",
+        "src/components/admin/GoogleTasksTests.tsx",
+        "src/components/admin/GoogleTasksTests.tsx",
+        "src/components/admin/GoogleTasksTests.tsx",
+        "src/components/admin/GoogleTasksTests.tsx",
+        "src/components/admin/GoogleTasksSyncDebugger.tsx",
+        "src/components/admin/GoogleTasksSyncDebugger.tsx",
+        "src/lib/integrationTesting/suites/googleTests.ts",
+        "src/lib/services/googleTasksSync.ts",
+        "src/lib/services/googleTasksSync.ts",
+        "src/lib/services/googleTasksSync.ts",
+        "src/lib/services/googleTasksSync.ts",
+        "src/lib/services/googleTasksSync.ts",
+        "src/pages/TestGoogleTasks.tsx",
+        "src/pages/TestGoogleTasks.tsx"
+      ],
+      "url": []
+    },
+    "google-test-connection": {
+      "invoke": [
+        "dist/js/googleTests-D3MTY2IA.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/integrationTesting/suites/googleTests.ts",
+        "src/lib/api/googleIntegration.ts"
+      ],
+      "url": []
+    },
+    "google-token-refresh": {
+      "invoke": [],
+      "url": [
+        "api/cron/google-token-refresh.ts"
+      ]
+    },
+    "google-workspace-batch": {
+      "invoke": [
+        "src/lib/hooks/useBatchQuery.ts"
+      ],
+      "url": []
+    },
+    "grant-welcome-credits": {
+      "invoke": [
+        "dist/js/index-Bn0yEsGC.js",
+        ".sixty/plan.md",
+        "src/pages/onboarding/v2/CompletionStep.tsx"
+      ],
+      "url": []
+    },
+    "graph-agent-trigger": {
+      "invoke": [
+        "dist/js/PipelinePage-BygI51JG.js",
+        "src/components/Pipeline/RelationshipGraph/GraphAgentActions.tsx"
+      ],
+      "url": []
+    },
+    "handle-join-request-action": {
+      "invoke": [],
+      "url": []
+    },
+    "handle-organization-joining": {
+      "invoke": [],
+      "url": []
+    },
+    "heal-deal-links": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260228200001_heal_deal_links_cron.sql"
+      ]
+    },
+    "health": {
+      "invoke": [],
+      "url": [
+        "docs/deployment/DEPLOYMENT.md",
+        "scripts/deploy-functions-staging.sh",
+        "scripts/deploy-functions-staging.sh",
+        "scripts/setup-dev-supabase.sh",
+        "scripts/deploy-functions-dev.sh",
+        "scripts/deploy-functions-production.sh",
+        "scripts/deploy-functions-production.sh"
+      ]
+    },
+    "health-recalculate": {
+      "invoke": [],
+      "url": [
+        ".sixty/implementation-summary-pipeline-intelligence.md"
+      ]
+    },
+    "hitl-send-followup-email": {
+      "invoke": [
+        "dist/js/FollowUpDraftsPage-BY6Q8uBa.js",
+        "dist/js/EmailActionCenter-BDpHb7HH.js",
+        "dist/js/ControlRoom-C_3w9SHP.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/components/copilot/responses/PipelineOutreachResponse.tsx",
+        "src/components/followups/DraftEditor.tsx",
+        "src/components/control-room/ApprovalReviewDialog.tsx",
+        "src/lib/hooks/useEmailActions.ts"
+      ],
+      "url": [
+        "supabase/migrations/20260227200001_scheduled_sends.sql"
+      ]
+    },
+    "hubspot-admin": {
+      "invoke": [
+        "dist/js/hubspotTests-BkVmDdvK.js",
+        "dist/js/hubspotTests-BkVmDdvK.js",
+        "dist/js/hubspotTests-BkVmDdvK.js",
+        "dist/js/CRMFieldMappingSettings-DVtXxbas.js",
+        "dist/js/CRMFieldMappingSettings-DVtXxbas.js",
+        "dist/js/ProcessMaps-DpvvYJ9A.js",
+        "dist/js/ProcessMaps-DpvvYJ9A.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/integrationTesting/suites/hubspotTests.ts",
+        "src/lib/integrationTesting/suites/hubspotTests.ts",
+        "src/lib/integrationTesting/suites/hubspotTests.ts",
+        "src/lib/testing/integrations/IntegrationExecutor.ts",
+        "src/lib/testing/cleanup/CleanupService.ts",
+        "src/lib/hooks/useHubSpotIntegration.ts",
+        "src/lib/hooks/useHubSpotIntegration.ts",
+        "src/lib/hooks/useHubSpotIntegration.ts",
+        "src/lib/hooks/useHubSpotIntegration.ts",
+        "src/lib/hooks/useHubSpotIntegration.ts",
+        "src/lib/hooks/useHubSpotIntegration.ts",
+        "src/lib/hooks/useHubSpotIntegration.ts",
+        "src/lib/hooks/useHubSpotIntegration.ts",
+        "src/lib/hooks/useHubSpotIntegration.ts",
+        "src/pages/OpsDetailPage.tsx",
+        "src/pages/settings/CRMFieldMappingSettings.tsx",
+        "src/pages/settings/CRMFieldMappingSettings.tsx"
+      ],
+      "url": []
+    },
+    "hubspot-disconnect": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/hooks/useHubSpotIntegration.ts"
+      ],
+      "url": []
+    },
+    "hubspot-initial-sync": {
+      "invoke": [],
+      "url": []
+    },
+    "hubspot-list-ops": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/pages/OpsDetailPage.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "url": []
+    },
+    "hubspot-oauth-callback": {
+      "invoke": [],
+      "url": [
+        ".env.sync",
+        ".env.staging",
+        ".env.development",
+        ".claude/commands/new-environment.md",
+        "docs/integrations/OAUTH_RELAY_SETUP.md",
+        "docs/integrations/OAUTH_RELAY_SETUP.md",
+        "docs/integrations/OAUTH_RELAY_SETUP.md",
+        "scripts/deploy-hubspot-staging.sh",
+        "scripts/set-hubspot-staging-secrets.sh"
+      ]
+    },
+    "hubspot-oauth-initiate": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/hooks/useHubSpotIntegration.ts"
+      ],
+      "url": []
+    },
+    "hubspot-process-queue": {
+      "invoke": [],
+      "url": [
+        "api/cron/hubspot-process-queue.ts"
+      ]
+    },
+    "hubspot-token-refresh": {
+      "invoke": [],
+      "url": [
+        "api/cron/hubspot-token-refresh.ts"
+      ]
+    },
+    "hubspot-webhook": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/hubspot-admin/index.ts",
+        "scripts/deploy-hubspot-staging.sh",
+        "scripts/get-hubspot-webhook-url-api.sh",
+        "api/webhooks/hubspot.ts",
+        "api/webhooks/hubspot.ts"
+      ]
+    },
+    "impersonate-user": {
+      "invoke": [
+        "dist/js/useUsers-DxaFVF2P.js",
+        "packages/landing/src/lib/hooks/useUser.ts",
+        "packages/landing/src/lib/hooks/useUsers.ts",
+        "src/lib/hooks/useUser.ts",
+        "src/lib/hooks/useUsers.ts"
+      ],
+      "url": []
+    },
+    "import-from-attio": {
+      "invoke": [],
+      "url": [
+        "dist/js/AttioImportWizard-BuTAZILP.js",
+        "src/components/ops/AttioImportWizard.tsx"
+      ]
+    },
+    "import-from-hubspot": {
+      "invoke": [],
+      "url": [
+        "dist/js/AttioImportWizard-BuTAZILP.js",
+        "src/components/ops/HubSpotImportWizard.tsx"
+      ]
+    },
+    "import-from-ops-table": {
+      "invoke": [
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "src/components/ops/CrossOpImportWizard.tsx"
+      ],
+      "url": []
+    },
+    "import-leads-generic": {
+      "invoke": [
+        "dist/js/csvImportService-DDSz4vwe.js",
+        "packages/landing/src/lib/services/csvImportService.ts",
+        "src/lib/services/csvImportService.ts"
+      ],
+      "url": []
+    },
+    "initialize-onboarding": {
+      "invoke": [],
+      "url": []
+    },
+    "instantly-admin": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/InstantlySettings-INeMatGQ.js",
+        "dist/js/InstantlySettings-INeMatGQ.js",
+        "dist/js/InstantlySettings-INeMatGQ.js",
+        "dist/js/CampaignsPage-CdKfMaua.js",
+        "dist/js/CampaignsPage-CdKfMaua.js",
+        "dist/js/CampaignsPage-CdKfMaua.js",
+        "dist/js/CampaignsPage-CdKfMaua.js",
+        "dist/js/CampaignsPage-CdKfMaua.js",
+        "dist/js/CampaignsPage-CdKfMaua.js",
+        ".sixty/progress-campaign-dashboard.md",
+        "src/components/ops/InstantlyCampaignPickerModal.tsx",
+        "src/components/ops/InstantlyCampaignPickerModal.tsx",
+        "src/components/ops/EditInstantlySettingsModal.tsx",
+        "src/components/ops/EditInstantlySettingsModal.tsx",
+        "src/components/ops/InstantlyAnalyticsPanel.tsx",
+        "src/components/ops/InstantlyColumnWizard.tsx",
+        "src/components/ops/InstantlyColumnWizard.tsx",
+        "src/components/ops/InstantlyColumnWizard.tsx",
+        "src/components/ops/InstantlyColumnWizard.tsx",
+        "src/components/ops/InstantlyColumnWizard.tsx",
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/lib/hooks/useInstantlyPush.ts",
+        "src/lib/services/campaignService.ts",
+        "src/lib/services/campaignService.ts",
+        "src/lib/services/campaignService.ts",
+        "src/lib/services/campaignService.ts",
+        "src/lib/services/campaignService.ts",
+        "src/lib/services/campaignService.ts",
+        "src/lib/services/campaignService.ts",
+        "src/pages/OpsDetailPage.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/pages/OpsDetailPage.tsx",
+        "src/pages/settings/InstantlySettings.tsx",
+        "src/pages/settings/InstantlySettings.tsx",
+        "src/pages/settings/InstantlySettings.tsx"
+      ],
+      "url": [
+        "supabase/functions/ops-workflow-orchestrator/index.ts"
+      ]
+    },
+    "instantly-push": {
+      "invoke": [],
+      "url": []
+    },
+    "integration-health-batch": {
+      "invoke": [
+        "src/lib/hooks/useBatchQuery.ts"
+      ],
+      "url": []
+    },
+    "invite-user": {
+      "invoke": [],
+      "url": [
+        ".sixty/bugs/invite-user-401.md"
+      ]
+    },
+    "justcall-config": {
+      "invoke": [
+        "dist/js/useJustCallIntegration-_dlCC3tC.js",
+        "dist/js/useJustCallIntegration-_dlCC3tC.js",
+        "dist/js/useJustCallIntegration-_dlCC3tC.js",
+        "src/lib/hooks/useJustCallIntegration.ts",
+        "src/lib/hooks/useJustCallIntegration.ts",
+        "src/lib/hooks/useJustCallIntegration.ts"
+      ],
+      "url": []
+    },
+    "justcall-oauth-callback": {
+      "invoke": [],
+      "url": []
+    },
+    "justcall-oauth-initiate": {
+      "invoke": [],
+      "url": []
+    },
+    "justcall-search": {
+      "invoke": [
+        "dist/js/JustCallSettings-CLpcEK53.js",
+        "dist/js/Integrations-D01bXXDN.js",
+        "src/components/integrations/JustCallConfigModal.tsx",
+        "src/pages/settings/JustCallSettings.tsx"
+      ],
+      "url": []
+    },
+    "justcall-sync": {
+      "invoke": [
+        "dist/js/JustCallSettings-CLpcEK53.js",
+        "dist/js/useJustCallIntegration-_dlCC3tC.js",
+        "src/lib/hooks/useJustCallIntegration.ts",
+        "src/pages/settings/JustCallSettings.tsx"
+      ],
+      "url": []
+    },
+    "justcall-webhook": {
+      "invoke": [],
+      "url": [
+        "api/webhooks/justcall.ts",
+        "api/webhooks/justcall.ts"
+      ]
+    },
+    "landing-research": {
+      "invoke": [
+        "dist/js/LandingPageBuilderPage-BMAfShlg.js",
+        "src/lib/services/landingResearchService.ts"
+      ],
+      "url": []
+    },
+    "logs-cleanup": {
+      "invoke": [],
+      "url": []
+    },
+    "materialize-crm-deals": {
+      "invoke": [
+        "dist/js/AttioImportWizard-BuTAZILP.js",
+        "dist/js/AttioImportWizard-BuTAZILP.js",
+        "supabase/functions/hubspot-webhook/index.ts",
+        "supabase/functions/attio-webhook/index.ts",
+        "src/components/ops/HubSpotImportWizard.tsx",
+        "src/components/ops/AttioImportWizard.tsx"
+      ],
+      "url": []
+    },
+    "meeting-aggregate-insights-query": {
+      "invoke": [
+        "src/lib/hooks/useAggregateInsights.ts",
+        "src/lib/hooks/useAggregateInsights.ts",
+        "src/lib/hooks/useAggregateInsights.ts"
+      ],
+      "url": []
+    },
+    "meeting-analysis-batch": {
+      "invoke": [
+        "src/lib/hooks/useBatchQuery.ts"
+      ],
+      "url": []
+    },
+    "meeting-analytics": {
+      "invoke": [],
+      "url": [
+        ".env.example",
+        ".env.example",
+        "dist/js/meetingAnalyticsService-EjUQRMGZ.js",
+        ".sixty/plan-meeting-intelligence-copilot.json",
+        "supabase/functions/_shared/rag/ragClient.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "src/lib/services/meetingAnalyticsService.ts"
+      ]
+    },
+    "meeting-analytics-cron": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260216300001_meeting_analytics_cron.sql",
+        "supabase/migrations/20260216300001_meeting_analytics_cron.sql",
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql"
+      ]
+    },
+    "meeting-generate-scorecard": {
+      "invoke": [
+        "dist/js/useCoachingScorecard-biYXe7Qq.js",
+        "src/lib/hooks/useCoachingScorecard.ts"
+      ],
+      "url": []
+    },
+    "meeting-intelligence-index": {
+      "invoke": [
+        "dist/js/MeetingAnalyticsPage-Ct0lgNHS.js",
+        "packages/landing/src/lib/hooks/useMeetingIntelligence.ts",
+        "src/lib/hooks/useMeetingIntelligence.ts"
+      ],
+      "url": []
+    },
+    "meeting-intelligence-process-queue": {
+      "invoke": [
+        "dist/js/MeetingAnalyticsPage-Ct0lgNHS.js",
+        "packages/landing/src/lib/hooks/useMeetingIntelligence.ts",
+        "src/lib/hooks/useMeetingIntelligence.ts"
+      ],
+      "url": [
+        "supabase/functions/fathom-sync/index.ts"
+      ]
+    },
+    "meeting-intelligence-search": {
+      "invoke": [],
+      "url": []
+    },
+    "meeting-limit-warning-email": {
+      "invoke": [],
+      "url": [
+        ".sixty/PHASE_3_FINAL_REPORT.md"
+      ]
+    },
+    "meeting-process-structured-summary": {
+      "invoke": [
+        "dist/js/MeetingsPage-CEpY-pLD.js",
+        "src/lib/hooks/useStructuredSummary.ts"
+      ],
+      "url": []
+    },
+    "meeting-workflow-notifications": {
+      "invoke": [],
+      "url": []
+    },
+    "meetingbaas-connect-calendar": {
+      "invoke": [
+        "src/lib/hooks/useMeetingBaaSTest.ts"
+      ],
+      "url": [
+        "dist/js/EnableAutoRecordingPrompt-C2aCxV_Y.js",
+        "src/lib/hooks/useMeetingBaaSCalendar.ts"
+      ]
+    },
+    "meetingbaas-disconnect-calendar": {
+      "invoke": [],
+      "url": [
+        "dist/js/EnableAutoRecordingPrompt-C2aCxV_Y.js",
+        "src/lib/hooks/useMeetingBaaSCalendar.ts"
+      ]
+    },
+    "meetingbaas-enable-bot-scheduling": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/meetingbaas-enable-bot-scheduling/index.ts"
+      ]
+    },
+    "meetingbaas-webhook": {
+      "invoke": [],
+      "url": [
+        "docs/integrations/MEETINGBAAS_NEXT_STAGE.md",
+        "docs/integrations/MEETINGBAAS_NEXT_STAGE.md",
+        "docs/integrations/MEETINGBAAS_NEXT_STAGE.md",
+        "docs/integrations/MEETINGBAAS_WEBHOOK_TESTING.md",
+        "docs/integrations/MEETINGBAAS_WEBHOOK_SETUP.md",
+        "docs/integrations/MEETINGBAAS_WEBHOOK_SETUP.md",
+        "supabase/functions/meetingbaas-webhook-simulate/index.ts",
+        "supabase/functions/process-calendar-events/index.ts",
+        "supabase/functions/deploy-recording-bot/index.ts",
+        "supabase/functions/deploy-recording-bot/index.ts",
+        "supabase/functions/meetingbaas-connect-calendar/index.ts",
+        "scripts/deploy-async-processing.sh",
+        "scripts/test-webhook-with-signature.ts",
+        "scripts/check-staging-config.ts",
+        "scripts/check-webhook-config.ts",
+        "scripts/test-webhook.ts"
+      ]
+    },
+    "meetingbaas-webhook-simulate": {
+      "invoke": [
+        "src/lib/hooks/useMeetingBaaSTest.ts"
+      ],
+      "url": []
+    },
+    "meetings-webhook": {
+      "invoke": [],
+      "url": [
+        "tools/testing/test-meetings-webhook.html",
+        "docs/guides/meetings-webhook-curl-examples.md",
+        "docs/guides/meetings-webhook-curl-examples.md",
+        "docs/guides/meetings-webhook-curl-examples.md",
+        "docs/guides/meetings-webhook-curl-examples.md",
+        "docs/guides/meetings-webhook-curl-examples.md",
+        "docs/guides/meetings-webhook-curl-examples.md",
+        "docs/guides/meetings-webhook-curl-examples.md",
+        "docs/guides/meetings-webhook-curl-examples.md",
+        "docs/api/API_DOCUMENTATION.md",
+        "scripts/deployment/create-example-meetings.sh",
+        "scripts/deployment/create-meetings-for-user.sh",
+        "scripts/deployment/test-meeting-webhook-auth.sh"
+      ]
+    },
+    "memory-backfill": {
+      "invoke": [],
+      "url": []
+    },
+    "memory-commitment-tracker": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260225100004_commitment_tracker_cron.sql"
+      ]
+    },
+    "memory-snapshot-generator": {
+      "invoke": [],
+      "url": []
+    },
+    "meter-storage": {
+      "invoke": [],
+      "url": []
+    },
+    "monitor-campaigns": {
+      "invoke": [
+        "dist/js/CampaignsPage-CdKfMaua.js",
+        "src/lib/services/campaignService.ts"
+      ],
+      "url": [
+        "supabase/functions/_shared/orchestrator/adapters/campaignMonitor.ts",
+        "supabase/functions/_shared/orchestrator/adapters/campaignMonitor.ts",
+        "supabase/functions/_shared/orchestrator/adapters/campaignMonitor.ts"
+      ]
+    },
+    "ms-graph-email": {
+      "invoke": [],
+      "url": []
+    },
+    "notification-triage": {
+      "invoke": [],
+      "url": []
+    },
+    "offering-extract": {
+      "invoke": [
+        "src/components/proposals/OfferingUploader.tsx",
+        "src/components/proposals/OfferingReviewPanel.tsx"
+      ],
+      "url": []
+    },
+    "ops-table-ai-query": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        ".sixty/plan-powerful-views.json",
+        ".sixty/plan-powerful-views.json",
+        ".sixty/OPS_INTELLIGENCE_REMAINING_WORK.md",
+        "src/lib/services/opsTableService.ts",
+        "src/pages/OpsDetailPage.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "url": [
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ]
+    },
+    "ops-table-cross-query": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        ".sixty/OPS_INTELLIGENCE_REMAINING_WORK.md",
+        "supabase/functions/ops-table-ai-query/index.ts",
+        "src/lib/services/opsTableService.ts"
+      ],
+      "url": []
+    },
+    "ops-table-inbound-webhook": {
+      "invoke": [],
+      "url": [
+        "dist/js/OpsWebhookDemo-Chc-6U_F.js",
+        ".sixty/plan-ops-table-webhooks.json",
+        "supabase/functions/ops-table-inbound-webhook/index.ts",
+        "src/pages/demo/OpsWebhookDemo.tsx"
+      ]
+    },
+    "ops-table-insights-engine": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/opsTableService.ts"
+      ],
+      "url": [
+        "supabase/functions/sync-hubspot-ops-table/index.ts",
+        "supabase/functions/sync-attio-ops-table/index.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ]
+    },
+    "ops-table-predictions": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/opsTableService.ts",
+        "src/lib/services/opsTableService.ts"
+      ],
+      "url": []
+    },
+    "ops-table-transform-column": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/pages/OpsDetailPage.tsx",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "url": [
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ]
+    },
+    "ops-table-workflow-engine": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/components/ops/WorkflowBuilder.tsx",
+        "src/lib/services/opsTableService.ts",
+        "src/lib/services/opsTableService.ts"
+      ],
+      "url": [
+        ".sixty/OPS_INTELLIGENCE_DEPLOYMENT.md",
+        "supabase/functions/sync-hubspot-ops-table/index.ts",
+        "supabase/functions/sync-attio-ops-table/index.ts"
+      ]
+    },
+    "ops-workflow-orchestrator": {
+      "invoke": [],
+      "url": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/hooks/useWorkflowOrchestrator.ts"
+      ]
+    },
+    "org-approval-email": {
+      "invoke": [],
+      "url": [
+        ".sixty/PHASE_3_DEPLOYMENT_GUIDE.md",
+        ".sixty/PHASE_3_FINAL_REPORT.md"
+      ]
+    },
+    "org-deletion-cron": {
+      "invoke": [],
+      "url": []
+    },
+    "owners": {
+      "invoke": [],
+      "url": []
+    },
+    "parse-ai-ark-query": {
+      "invoke": [
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "src/lib/hooks/useParseAiArkQuery.ts"
+      ],
+      "url": []
+    },
+    "parse-apollo-query": {
+      "invoke": [
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "src/lib/hooks/useOpsTableSearch.ts"
+      ],
+      "url": []
+    },
+    "parse-nl-query": {
+      "invoke": [
+        "dist/js/AgentResearchDemo-CiHa7vJT.js",
+        "src/components/prospecting/NaturalLanguageQueryBar.tsx"
+      ],
+      "url": []
+    },
+    "permission-to-close-email": {
+      "invoke": [],
+      "url": [
+        ".sixty/PHASE_3_FINAL_REPORT.md"
+      ]
+    },
+    "pipeline-tables": {
+      "invoke": [],
+      "url": []
+    },
+    "poll-gladia-jobs": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260126150000_poll_gladia_cron.sql",
+        "supabase/functions/README_GLADIA_POLLING.md",
+        "supabase/functions/README_GLADIA_POLLING.md"
+      ]
+    },
+    "poll-s3-upload-queue": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260126161000_poll_s3_upload_cron.sql",
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql"
+      ]
+    },
+    "poll-stuck-bots": {
+      "invoke": [],
+      "url": [
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "supabase/migrations/20260216000000_add_poll_stuck_bots_cron.sql",
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "src/lib/services/recordingService.ts",
+        "src/lib/services/recordingService.ts"
+      ]
+    },
+    "poll-transcription-queue": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260128100000_poll_transcription_queue_cron.sql"
+      ]
+    },
+    "populate-attio-column": {
+      "invoke": [],
+      "url": []
+    },
+    "populate-hubspot-column": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "url": []
+    },
+    "proactive-meeting-prep": {
+      "invoke": [
+        "supabase/functions/slack-copilot-actions/index.ts"
+      ],
+      "url": [
+        "supabase/functions/proactive-meeting-prep/TESTING-INTERNAL.md"
+      ]
+    },
+    "proactive-pipeline-analysis": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/proactive-pipeline-analysis/TESTING.md"
+      ]
+    },
+    "proactive-signal-scanner": {
+      "invoke": [],
+      "url": []
+    },
+    "proactive-simulate": {
+      "invoke": [
+        "dist/js/AgentAbilitiesPage-yN17DLkX.js",
+        "dist/js/AgentMarketplacePage-CoZrDb65.js",
+        "src/components/agent/AbilityRunPanel.tsx",
+        "src/components/agent/marketplace/AbilityTestPanel.tsx",
+        "src/pages/platform/ProactiveSimulator.tsx"
+      ],
+      "url": []
+    },
+    "proactive-task-analysis": {
+      "invoke": [
+        "supabase/functions/slack-copilot-actions/index.ts"
+      ],
+      "url": []
+    },
+    "proactive-weekly-scorecard": {
+      "invoke": [],
+      "url": []
+    },
+    "process-ai-analysis": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/README_ASYNC_PROCESSING.md",
+        "supabase/functions/process-transcription-callback/index.ts",
+        "supabase/functions/process-gladia-webhook/index.ts"
+      ]
+    },
+    "process-calendar-events": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/process-calendar-events/index.ts"
+      ]
+    },
+    "process-compress-callback": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/upload-recording-to-s3/index.ts",
+        "lambda-compress-upload/handler.py"
+      ]
+    },
+    "process-gladia-webhook": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/README_ASYNC_PROCESSING.md",
+        "supabase/functions/README_ASYNC_PROCESSING.md",
+        "supabase/functions/README_GLADIA_POLLING.md",
+        "supabase/functions/meetingbaas-webhook/index.ts",
+        "supabase/functions/process-gladia-webhook/index.ts",
+        "supabase/functions/poll-gladia-jobs/index.ts",
+        "scripts/deploy-async-processing.sh",
+        "scripts/recover-failed-recording.sh"
+      ]
+    },
+    "process-lead-prep": {
+      "invoke": [
+        "dist/js/useLeads-CXl61yaY.js",
+        "scripts/test-lead-prep.ts",
+        "scripts/test-lead-prep-direct-service.ts",
+        "packages/landing/src/lib/services/leadService.ts",
+        "src/lib/services/leadService.ts"
+      ],
+      "url": [
+        "supabase/functions/savvycal-leads-webhook/index.ts",
+        "supabase/functions/reprocess-lead-prep/index.ts",
+        "scripts/reset-and-regenerate-prep.ts",
+        "scripts/test-lead-prep-fetch.ts",
+        "scripts/test-lead-prep-direct.sh",
+        "scripts/check-and-test-leads.ts",
+        "scripts/clear-and-rerun-enrichments.ts"
+      ]
+    },
+    "process-notification-queue": {
+      "invoke": [
+        "dist/js/EngagementSimulator-CoUxG0Y9.js",
+        "src/pages/platform/EngagementSimulator.tsx"
+      ],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/_migrations_archive/20260102200001_notification_queue.sql"
+      ]
+    },
+    "process-recording": {
+      "invoke": [],
+      "url": [
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "docs/integrations/ASSEMBLYAI_DEPLOYMENT_COMPLETE.md",
+        "docs/integrations/AWS_S3_SETUP.md",
+        "supabase/functions/poll-stuck-bots/index.ts",
+        "supabase/functions/process-recording/index.ts",
+        "supabase/functions/meetingbaas-webhook/index.ts",
+        "supabase/functions/poll-transcription-queue/index.ts",
+        "supabase/functions/process-transcription-callback/index.ts",
+        "scripts/reprocess-recording.ts",
+        "src/lib/services/recordingService.ts"
+      ]
+    },
+    "process-reengagement": {
+      "invoke": [
+        "dist/js/EngagementSimulator-CoUxG0Y9.js",
+        "src/pages/platform/EngagementSimulator.tsx"
+      ],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/_migrations_archive/20260102200003_reengagement.sql"
+      ]
+    },
+    "process-single-activity": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/ActivityProcessingPage-DNzYnFR3.js",
+        "packages/landing/src/lib/hooks/useActivities.ts",
+        "src/lib/hooks/useActivities.ts",
+        "src/pages/ActivityProcessingPage.tsx"
+      ],
+      "url": [
+        "supabase/functions/process-single-activity/index.ts"
+      ]
+    },
+    "process-transcription-callback": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/poll-transcription-queue/index.ts",
+        "supabase/functions/process-compress-callback/index.ts",
+        "lambda-transcribe/handler.py",
+        "lambda-transcribe/CLAUDE.md"
+      ]
+    },
+    "proposal-assemble-context": {
+      "invoke": [],
+      "url": []
+    },
+    "proposal-compose-v2": {
+      "invoke": [],
+      "url": []
+    },
+    "proposal-deliver": {
+      "invoke": [],
+      "url": []
+    },
+    "proposal-enrich-deal": {
+      "invoke": [],
+      "url": []
+    },
+    "proposal-generate-docx": {
+      "invoke": [
+        "dist/js/proposalService-BkUHhaw-.js",
+        "src/lib/services/proposalService.ts"
+      ],
+      "url": []
+    },
+    "proposal-generate-pdf": {
+      "invoke": [
+        "dist/js/proposalService-BkUHhaw-.js",
+        "src/lib/services/proposalService.ts"
+      ],
+      "url": []
+    },
+    "proposal-parse-document": {
+      "invoke": [
+        "dist/js/proposalService-BkUHhaw-.js",
+        "src/lib/services/proposalService.ts"
+      ],
+      "url": []
+    },
+    "proposal-pipeline-v2": {
+      "invoke": [
+        ".sixty/qa-proposal-engine-v2.md",
+        ".sixty/qa-proposal-engine-v2.md",
+        ".sixty/plan-proposal-engine-v2.json",
+        "supabase/functions/slack-copilot/index.ts"
+      ],
+      "url": [
+        ".sixty/qa-proposal-engine-v2.md",
+        "supabase/functions/run-skill/index.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+      ]
+    },
+    "proposal-render-gotenberg": {
+      "invoke": [
+        "dist/js/MeetingsPage-CEpY-pLD.js",
+        "dist/js/ProposalLineTunerPage-CPy3KkRR.js",
+        "supabase/functions/proposal-generate-pdf/index.ts",
+        "src/components/proposals/ProposalProgressOverlay.tsx",
+        "src/pages/platform/ProposalLineTunerPage.tsx"
+      ],
+      "url": []
+    },
+    "prospecting-refine": {
+      "invoke": [
+        "src/components/prospecting/RefinementSuggestions.tsx"
+      ],
+      "url": []
+    },
+    "prospecting-search": {
+      "invoke": [
+        "src/lib/hooks/useProspectingSearch.ts",
+        "src/lib/hooks/useProspectingSearch.ts"
+      ],
+      "url": []
+    },
+    "provision-standard-ops-tables": {
+      "invoke": [
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "dist/js/OpsPage-BFUlOSUY.js",
+        "src/components/ops/StandardTablesGallery.tsx",
+        "src/components/ops/StandardTablesGallery.tsx"
+      ],
+      "url": []
+    },
+    "proxy-fathom-video": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/generate-video-thumbnail/index.ts"
+      ]
+    },
+    "proxy-justcall-recording": {
+      "invoke": [],
+      "url": [
+        "dist/js/CallDetail-Dd3X-HpX.js",
+        "src/pages/CallDetail.tsx"
+      ]
+    },
+    "purge-credit-logs": {
+      "invoke": [],
+      "url": []
+    },
+    "push-cell-to-attio": {
+      "invoke": [
+        "src/lib/hooks/useAttioWriteBack.ts"
+      ],
+      "url": []
+    },
+    "push-cell-to-hubspot": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        ".sixty/plan-hubspot-bidirectional-sync.json",
+        "src/lib/hooks/useHubSpotWriteBack.ts"
+      ],
+      "url": []
+    },
+    "push-to-attio": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/components/ops/AttioPushModal.tsx"
+      ],
+      "url": []
+    },
+    "push-to-hubspot": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/lib/hooks/useActionExecution.ts",
+        "src/lib/hooks/useActionExecution.ts",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "url": []
+    },
+    "push-to-instantly": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/components/ops/CampaignApprovalBanner.tsx",
+        "src/lib/hooks/useInstantlyPush.ts",
+        "src/lib/hooks/useActionExecution.ts",
+        "src/lib/hooks/useActionExecution.ts",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "url": [
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ]
+    },
+    "reanalyze-action-item-importance": {
+      "invoke": [
+        "dist/js/TaskSyncSettings-DyPhWDDQ.js",
+        "src/pages/settings/TaskSyncSettings.tsx"
+      ],
+      "url": []
+    },
+    "reconcile-billing": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260108203000_baseline_fixed.sql",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/_migrations_archive/20260103000008_schedule_billing_reconciliation.sql"
+      ]
+    },
+    "refresh-organization-skills": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260211100002_skills_recompile_cron.sql"
+      ]
+    },
+    "relationship-milestone-scanner": {
+      "invoke": [],
+      "url": []
+    },
+    "reprocess-lead-prep": {
+      "invoke": [
+        "dist/js/useLeads-CXl61yaY.js",
+        "packages/landing/src/lib/services/leadService.ts",
+        "src/lib/services/leadService.ts"
+      ],
+      "url": []
+    },
+    "reprocess-meetings-ai": {
+      "invoke": [
+        "dist/js/MeetingsPage-CEpY-pLD.js",
+        "dist/js/FathomUserMapping-L7RM8C0s.js",
+        "src/components/integrations/FathomSettings.tsx",
+        "src/pages/MeetingDetail.tsx"
+      ],
+      "url": []
+    },
+    "reprocess-pending-meetings": {
+      "invoke": [],
+      "url": [
+        "dist/js/FathomUserMapping-L7RM8C0s.js",
+        "dist/js/FathomUserMapping-L7RM8C0s.js",
+        "src/components/integrations/FathomSettings.tsx",
+        "src/components/integrations/FathomSettings.tsx"
+      ]
+    },
+    "request-email-change": {
+      "invoke": [
+        "dist/js/Profile-D9KdxH4e.js",
+        "src/components/EmailChangeModal.tsx"
+      ],
+      "url": []
+    },
+    "research-comparison": {
+      "invoke": [
+        "dist/js/ResearchComparison-KXNEFq9y.js",
+        ".sixty/RESEARCH_COMPARISON_IMPLEMENTATION.md",
+        "src/pages/demo/ResearchComparison.tsx"
+      ],
+      "url": []
+    },
+    "research-fact-profile": {
+      "invoke": [
+        "dist/js/FactProfilesPage-BC8050qq.js",
+        "dist/js/ProfilesPage-CXzjdlFG.js",
+        "dist/js/index-Bn0yEsGC.js",
+        "dist/js/ResearchProgress-ByHS3SpM.js",
+        "dist/js/ResearchProgress-ByHS3SpM.js",
+        "dist/js/OrganizationSettingsPage-NoogiahF.js",
+        "src/components/settings/OrgProfileSettings.tsx",
+        "src/components/fact-profiles/ResearchProgress.tsx",
+        "src/pages/ProfilesPage.tsx",
+        "src/pages/FactProfilesPage.tsx",
+        "src/pages/onboarding/v2/CompletionStep.tsx"
+      ],
+      "url": [
+        "supabase/functions/savvycal-leads-webhook/index.ts"
+      ]
+    },
+    "research-orchestrator": {
+      "invoke": [
+        "dist/js/AgentResearchDemo-CiHa7vJT.js",
+        "dist/js/AgentResearchDemo-CiHa7vJT.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/components/ops/AgentColumnHeader.tsx",
+        "src/components/ops/OpsTable.tsx",
+        "src/components/ops/OpsTable.tsx",
+        "src/pages/demo/AgentResearchDemo.tsx",
+        "src/pages/demo/AgentResearchDemo.tsx"
+      ],
+      "url": []
+    },
+    "research-product-profile": {
+      "invoke": [
+        "dist/js/NewProductProfileDialog-CCkdA-T4.js"
+      ],
+      "url": []
+    },
+    "research-router": {
+      "invoke": [],
+      "url": []
+    },
+    "restore-user": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "packages/landing/src/lib/hooks/useUser.ts",
+        "src/lib/hooks/useUser.ts"
+      ],
+      "url": []
+    },
+    "revert-hubspot-sync": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/components/ops/HubSpotSyncHistory.tsx"
+      ],
+      "url": []
+    },
+    "route-message": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/contexts/CopilotContext.tsx",
+        "src/lib/contexts/CopilotContext.tsx"
+      ],
+      "url": [
+        "supabase/functions/conversational-copilot/index.ts",
+        "supabase/functions/slack-copilot/index.ts",
+        "supabase/functions/agent-orchestrator/index.ts"
+      ]
+    },
+    "run-apify-actor": {
+      "invoke": [],
+      "url": []
+    },
+    "run-migration": {
+      "invoke": [],
+      "url": []
+    },
+    "run-prompt": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/lib/hooks/useActionExecution.ts",
+        "src/pages/OpsDetailPage.tsx"
+      ],
+      "url": []
+    },
+    "run-reoon-verification": {
+      "invoke": [],
+      "url": []
+    },
+    "run-skill": {
+      "invoke": [
+        "dist/js/MeetingsPage-CEpY-pLD.js",
+        "src/components/proposals/ProposalQuickGenerate.tsx"
+      ],
+      "url": []
+    },
+    "save-organization-skills": {
+      "invoke": [
+        "dist/js/AIIntelligencePage-CmGCCN2r.js",
+        "dist/js/AIIntelligencePage-CmGCCN2r.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/stores/onboardingV2Store.ts",
+        "src/pages/settings/AIIntelligencePage.tsx",
+        "src/pages/settings/AIIntelligencePage.tsx"
+      ],
+      "url": []
+    },
+    "savvycal-config": {
+      "invoke": [
+        "dist/js/useSavvyCalIntegration-CVUGvayu.js",
+        "dist/js/useSavvyCalIntegration-CVUGvayu.js",
+        "dist/js/useSavvyCalIntegration-CVUGvayu.js",
+        "dist/js/useSavvyCalIntegration-CVUGvayu.js",
+        "dist/js/useSavvyCalIntegration-CVUGvayu.js",
+        "dist/js/useSavvyCalIntegration-CVUGvayu.js",
+        "dist/js/savvycalTests-NZlGOomT.js",
+        "dist/js/savvycalTests-NZlGOomT.js",
+        "src/lib/integrationTesting/suites/savvycalTests.ts",
+        "src/lib/integrationTesting/suites/savvycalTests.ts",
+        "src/lib/hooks/useSavvyCalIntegration.ts",
+        "src/lib/hooks/useSavvyCalIntegration.ts",
+        "src/lib/hooks/useSavvyCalIntegration.ts",
+        "src/lib/hooks/useSavvyCalIntegration.ts",
+        "src/lib/hooks/useSavvyCalIntegration.ts",
+        "src/lib/hooks/useSavvyCalIntegration.ts"
+      ],
+      "url": []
+    },
+    "savvycal-leads-webhook": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/sync-savvycal-events/index.ts",
+        "scripts/import-dec8-13-leads.ts",
+        "scripts/backfill-savvycal-events.ts",
+        "scripts/backfill-savvycal-events.ts",
+        "api/webhooks/savvycal.ts",
+        "api/webhooks/savvycal.ts"
+      ]
+    },
+    "scheduled-email-sync": {
+      "invoke": [],
+      "url": [
+        "api/cron/email-sync.ts"
+      ]
+    },
+    "scheduled-encharge-emails": {
+      "invoke": [],
+      "url": [
+        "supabase/_migrations_archive/20251211000003_setup_encharge_cron.sql",
+        "supabase/_migrations_archive/20251211000003_setup_encharge_cron.sql",
+        "supabase/_migrations_archive/20251211000003_setup_encharge_cron.sql",
+        "scripts/fix-cron-auth.sql"
+      ]
+    },
+    "scheduled-google-context-sync": {
+      "invoke": [],
+      "url": [
+        "api/cron/google-context-sync.ts"
+      ]
+    },
+    "scheduled-health-refresh": {
+      "invoke": [],
+      "url": [
+        "api/cron/health-refresh.ts"
+      ]
+    },
+    "search-crm-with-icp": {
+      "invoke": [
+        "src/components/ops/FindMoreSheet.tsx"
+      ],
+      "url": []
+    },
+    "send-feedback-requests": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/_migrations_archive/20260102200002_feedback_functions.sql"
+      ]
+    },
+    "send-org-deactivation-email": {
+      "invoke": [
+        "dist/js/OrganizationManagementPage-ke2t_7kB.js",
+        "src/lib/services/organizationDeactivationService.ts"
+      ],
+      "url": []
+    },
+    "send-org-member-deactivation-email": {
+      "invoke": [],
+      "url": []
+    },
+    "send-org-notification-slack": {
+      "invoke": [],
+      "url": []
+    },
+    "send-organization-invitation": {
+      "invoke": [
+        "test/email-integration.test.ts",
+        "test/email-integration.test.ts",
+        "test/email-integration.test.ts",
+        "test/email-integration.test.ts",
+        "dist/js/index.html-D9cCYfI6.js",
+        ".sixty/EMAIL_ARCHITECTURE_GUIDE.md",
+        ".sixty/EMAIL_PROFILE_PHOTOS_GUIDE.md",
+        ".sixty/BOTH_FIXES_COMPLETE.md",
+        ".sixty/EMAIL_VARIABLE_REFERENCE.md",
+        ".sixty/EMAIL_VARIABLE_REFERENCE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        "src/lib/services/invitationService.ts"
+      ],
+      "url": [
+        ".sixty/FINAL_STATUS.md",
+        ".sixty/PHASE_6_ACTION_ITEMS.md",
+        ".sixty/PHASE_3_DEPLOYMENT_GUIDE.md",
+        ".sixty/QUICK_TEST_GUIDE.md",
+        ".sixty/QUICK_TEST_GUIDE.md",
+        ".sixty/PHASE_6_TECHNICAL_STATUS.md",
+        ".sixty/PHASE_3_FINAL_REPORT.md",
+        ".sixty/PHASE_3_FINAL_REPORT.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/PHASE_6_DEPLOYMENT_CHECKLIST.md",
+        ".sixty/PHASE_6_DEPLOYMENT_PLAN.md"
+      ]
+    },
+    "send-password-reset-email": {
+      "invoke": [],
+      "url": [
+        "dist/js/Users-B3BqXXtU.js",
+        "src/pages/admin/Users.tsx"
+      ]
+    },
+    "send-recording-notification": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/process-recording/index.ts",
+        "supabase/functions/meetingbaas-webhook/index.ts",
+        "supabase/functions/sync-recording-to-crm/index.ts",
+        "supabase/functions/process-ai-analysis/index.ts",
+        "supabase/functions/send-recording-notification/index.ts"
+      ]
+    },
+    "send-rejoin-invitation": {
+      "invoke": [],
+      "url": [
+        "dist/js/OrganizationManagementPage-ke2t_7kB.js",
+        "src/pages/settings/OrganizationManagementPage.tsx"
+      ]
+    },
+    "send-removal-email": {
+      "invoke": [],
+      "url": [
+        "dist/js/TeamMembersPage-BQF2w1NP.js",
+        "dist/js/OrganizationManagementPage-ke2t_7kB.js",
+        "tests/e2e/removal-edge-cases.spec.ts",
+        ".sixty/PHASE_3_DEPLOYMENT_GUIDE.md",
+        ".sixty/PHASE_6_TECHNICAL_STATUS.md",
+        ".sixty/PHASE_3_FINAL_REPORT.md",
+        "src/pages/settings/TeamMembersPage.tsx",
+        "src/pages/settings/OrganizationManagementPage.tsx"
+      ]
+    },
+    "send-scheduled-emails": {
+      "invoke": [],
+      "url": []
+    },
+    "send-slack-message": {
+      "invoke": [
+        ".cursor/rules/integrations.mdc"
+      ],
+      "url": [
+        "dist/js/index.html-D9cCYfI6.js",
+        ".claude/skills/slack-block-kit/SKILL.md",
+        "supabase/functions/ops-workflow-orchestrator/index.ts",
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts",
+        "packages/landing/src/lib/services/slackOAuthService.ts",
+        "skills/atomic/slack-block-kit/SKILL.md",
+        "src/lib/services/slackOAuthService.ts"
+      ]
+    },
+    "send-slack-notification": {
+      "invoke": [],
+      "url": []
+    },
+    "send-slack-task-notification": {
+      "invoke": [],
+      "url": [
+        "supabase/_migrations_archive/20251103125342_add_slack_task_notifications.sql"
+      ]
+    },
+    "send-waitlist-invitation": {
+      "invoke": [
+        ".sixty/IMPLEMENTATION_GUIDE.md"
+      ],
+      "url": [
+        ".sixty/IMPLEMENTATION_GUIDE.md"
+      ]
+    },
+    "send-waitlist-invite": {
+      "invoke": [
+        "dist/landing-drue/assets/index-B0DyM128.js",
+        "public/landing-drue/assets/index-B0DyM128.js",
+        "packages/landing/dist/assets/index-CJL1IzXI.js",
+        "packages/landing/src/lib/services/waitlistAdminService.ts",
+        "packages/landing/src/lib/services/waitlistAdminService.ts",
+        "packages/landing/src/lib/services/emailInviteService.ts",
+        "src/lib/services/emailInviteService.ts"
+      ],
+      "url": [
+        "supabase/functions/send-waitlist-invite/README.md"
+      ]
+    },
+    "sentry-bridge-worker": {
+      "invoke": [],
+      "url": []
+    },
+    "sentry-webhook": {
+      "invoke": [],
+      "url": [
+        "api/webhooks/sentry.ts",
+        "api/webhooks/sentry.ts"
+      ]
+    },
+    "setup-reengagement-demo": {
+      "invoke": [
+        "src/pages/demo/DemoReengagementPage.tsx"
+      ],
+      "url": []
+    },
+    "slack-campaign-alerts": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-campaign-alerts.ts"
+      ]
+    },
+    "slack-copilot": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/slack-events/index.ts",
+        "supabase/functions/slack-events/index.ts"
+      ]
+    },
+    "slack-copilot-actions": {
+      "invoke": [
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "url": []
+    },
+    "slack-daily-digest": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-daily-digest.ts"
+      ]
+    },
+    "slack-deal-momentum": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-deal-momentum.ts"
+      ]
+    },
+    "slack-deal-risk-alert": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-deal-risk-alert.ts"
+      ]
+    },
+    "slack-deal-room": {
+      "invoke": [],
+      "url": []
+    },
+    "slack-deal-room-archive": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-deal-room-archive.ts"
+      ]
+    },
+    "slack-deal-room-update": {
+      "invoke": [],
+      "url": []
+    },
+    "slack-email-reply-alert": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-email-reply-alert.ts"
+      ]
+    },
+    "slack-events": {
+      "invoke": [],
+      "url": []
+    },
+    "slack-expire-actions": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-expire-actions.ts"
+      ]
+    },
+    "slack-hitl-notification": {
+      "invoke": [],
+      "url": []
+    },
+    "slack-interactive": {
+      "invoke": [],
+      "url": []
+    },
+    "slack-join-channel": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/hooks/useSlackSettings.ts"
+      ],
+      "url": []
+    },
+    "slack-list-channels": {
+      "invoke": [
+        "dist/js/slackTests-nb2a2hOc.js",
+        "dist/js/slackTests-nb2a2hOc.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/integrationTesting/suites/slackTests.ts",
+        "src/lib/integrationTesting/suites/slackTests.ts",
+        "src/lib/hooks/useSlackSettings.ts"
+      ],
+      "url": []
+    },
+    "slack-meeting-prep": {
+      "invoke": [
+        "supabase/functions/slack-interactive/index.ts"
+      ],
+      "url": [
+        "supabase/functions/slack-interactive/handlers/prepBriefing.ts",
+        "api/cron/slack-meeting-prep.ts"
+      ]
+    },
+    "slack-morning-brief": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-morning-brief.ts"
+      ]
+    },
+    "slack-oauth-callback": {
+      "invoke": [],
+      "url": [
+        ".env.development",
+        "dist/js/index.html-D9cCYfI6.js",
+        "docs/integrations/OAUTH_RELAY_SETUP.md",
+        "docs/integrations/OAUTH_RELAY_SETUP.md",
+        "docs/integrations/OAUTH_RELAY_SETUP.md",
+        "supabase/functions/slack-oauth-callback/index.ts",
+        "packages/landing/src/lib/services/slackOAuthService.ts",
+        "src/lib/services/slackOAuthService.ts"
+      ]
+    },
+    "slack-post-meeting": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/slack-post-meeting/index.ts",
+        "api/cron/slack-post-meeting.ts"
+      ]
+    },
+    "slack-refresh-user-channels": {
+      "invoke": [],
+      "url": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/slackOAuthService.ts"
+      ]
+    },
+    "slack-sales-assistant": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-sales-assistant.ts"
+      ]
+    },
+    "slack-self-map": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/hooks/useSlackSettings.ts"
+      ],
+      "url": []
+    },
+    "slack-slash-commands": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-interactive/index.ts",
+        "supabase/functions/slack-interactive/index.ts"
+      ]
+    },
+    "slack-snooze-check": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-snooze-check.ts"
+      ]
+    },
+    "slack-stale-deals": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-stale-deals.ts"
+      ]
+    },
+    "slack-task-reminders": {
+      "invoke": [],
+      "url": [
+        "api/cron/slack-task-reminders.ts"
+      ]
+    },
+    "slack-test-message": {
+      "invoke": [
+        "dist/js/SlackSettings-DqDrwAGA.js",
+        "dist/js/SlackSettings-DqDrwAGA.js",
+        "src/pages/settings/SlackSettings.tsx",
+        "src/pages/settings/SlackSettings.tsx"
+      ],
+      "url": []
+    },
+    "slack-waitlist-notification": {
+      "invoke": [
+        "dist/js/WaitlistSlackSettings-_sCqdWjW.js",
+        "src/components/admin/waitlist/SlackNotificationSettings.tsx"
+      ],
+      "url": [
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/_migrations_archive/20251224000000_waitlist_slack_triggers.sql",
+        "supabase/_migrations_archive/20251224000000_waitlist_slack_triggers.sql",
+        "supabase/_migrations_archive/20251224000000_waitlist_slack_triggers.sql",
+        "api/cron/waitlist-daily-digest.ts"
+      ]
+    },
+    "stages": {
+      "invoke": [],
+      "url": []
+    },
+    "start-free-trial": {
+      "invoke": [
+        "dist/js/index-Bn0yEsGC.js",
+        "packages/landing/src/lib/services/subscriptionService.ts",
+        "src/lib/services/subscriptionService.ts",
+        "src/pages/onboarding/v2/CompletionStep.tsx"
+      ],
+      "url": []
+    },
+    "stop-recording-bot": {
+      "invoke": [],
+      "url": [
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "dist/js/useRecordings-Bpv78hBE.js",
+        "supabase/functions/stop-recording-bot/index.ts",
+        "src/lib/services/recordingService.ts",
+        "src/lib/services/recordingService.ts"
+      ]
+    },
+    "stripe-create-product": {
+      "invoke": [],
+      "url": []
+    },
+    "stripe-sync-product": {
+      "invoke": [],
+      "url": []
+    },
+    "stripe-update-product": {
+      "invoke": [],
+      "url": []
+    },
+    "stripe-webhook": {
+      "invoke": [],
+      "url": []
+    },
+    "subscription-confirmed-email": {
+      "invoke": [],
+      "url": [
+        ".sixty/PHASE_3_FINAL_REPORT.md"
+      ]
+    },
+    "suggest-next-actions": {
+      "invoke": [
+        "dist/js/nextActionsService-6m1SoqQz.js",
+        "dist/js/NextActionSuggestions-D5s5UUXa.js",
+        "packages/landing/src/lib/services/nextActionsService.ts",
+        "src/components/meetings/NextActionSuggestions.tsx",
+        "src/lib/services/nextActionsService.ts"
+      ],
+      "url": [
+        "tests/scripts/integrations/trigger-ai-analysis.sh",
+        "tests/scripts/deployment/test-ai-one-meeting.sh",
+        "tests/scripts/deployment/diagnose-ai-issue.sh",
+        "tests/scripts/deployment/apply-trigger-fix.sh",
+        "tests/scripts/deployment/test-claude-direct.sh",
+        "tests/scripts/deployment/test-edge-function-direct.sh",
+        "tests/scripts/deployment/test-direct-curl.sh",
+        "supabase/migrations/20260108203000_baseline_fixed.sql",
+        "supabase/migrations/20260108203000_baseline_fixed.sql",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/migrations/00000000000000_baseline.sql",
+        "supabase/functions/_shared/orchestrator/adapters/nextActions.ts",
+        "supabase/_migrations_archive/20251031000003_create_system_config_table.sql",
+        "supabase/_migrations_archive/20251031000003_create_system_config_table.sql",
+        "supabase/_migrations_archive/20251031000004_fix_pg_net_schema_reference.sql",
+        "supabase/_migrations_archive/20251031000004_fix_pg_net_schema_reference.sql",
+        "supabase/_migrations_archive/20251031000005_update_triggers_to_use_system_config.sql",
+        "supabase/_migrations_archive/20251031000005_update_triggers_to_use_system_config.sql",
+        "supabase/_migrations_archive/20251031120001_create_next_actions_triggers.sql",
+        "supabase/_migrations_archive/20251031120001_create_next_actions_triggers.sql"
+      ]
+    },
+    "support-ticket-notification": {
+      "invoke": [],
+      "url": []
+    },
+    "sync-ai-models": {
+      "invoke": [
+        "dist/js/aiUsageService-BDN0Brgi.js",
+        "src/lib/services/aiModelService.ts"
+      ],
+      "url": []
+    },
+    "sync-attio-ops-table": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/components/ops/AttioSyncHistory.tsx",
+        "src/lib/hooks/useAttioSync.ts"
+      ],
+      "url": [
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ]
+    },
+    "sync-fact-profile-context": {
+      "invoke": [
+        "dist/js/FactProfilesPage-BC8050qq.js",
+        "dist/js/ProfilesPage-CXzjdlFG.js",
+        "dist/js/FactProfileViewPage-17rl2YCv.js",
+        "dist/js/OrganizationSettingsPage-NoogiahF.js",
+        "dist/js/OrganizationSettingsPage-NoogiahF.js",
+        "dist/js/useFactProfiles-Bfm2iTez.js",
+        "src/components/settings/OrgProfileSettings.tsx",
+        "src/components/fact-profiles/SyncFactProfileToOrg.tsx"
+      ],
+      "url": []
+    },
+    "sync-hubspot-ops-table": {
+      "invoke": [
+        "dist/js/OpsDetailPage-DUxCmGtk.js",
+        "src/lib/hooks/useHubSpotSync.ts"
+      ],
+      "url": [
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ]
+    },
+    "sync-instantly-engagement": {
+      "invoke": [
+        "dist/js/CampaignsPage-CdKfMaua.js",
+        "src/components/campaigns/CampaignSyncSection.tsx",
+        "src/lib/hooks/useInstantlySync.ts"
+      ],
+      "url": []
+    },
+    "sync-profile-names": {
+      "invoke": [
+        "dist/js/SetPassword-DACxJbdd.js",
+        "src/pages/auth/SetPassword.tsx"
+      ],
+      "url": []
+    },
+    "sync-recording-to-crm": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/process-recording/index.ts",
+        "supabase/functions/sync-recording-to-crm/index.ts"
+      ]
+    },
+    "sync-savvycal-events": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260220200002_fix_savvycal_cron_secret.sql",
+        "supabase/functions/savvycal-config/index.ts",
+        "supabase/functions/sync-savvycal-events/index.ts",
+        "supabase/functions/sync-savvycal-events/index.ts",
+        "supabase/_migrations_archive/20260102200000_optimize_cron_schedules.sql",
+        "supabase/_migrations_archive/20251213160000_add_sync_cron_jobs.sql",
+        "scripts/fix-cron-auth.sql"
+      ]
+    },
+    "sync-skills-from-github": {
+      "invoke": [],
+      "url": []
+    },
+    "task-auto-expire": {
+      "invoke": [],
+      "url": []
+    },
+    "task-signal-processor": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/meetingbaas-webhook/index.ts",
+        "supabase/functions/proactive-signal-scanner/index.ts",
+        "supabase/functions/relationship-milestone-scanner/index.ts"
+      ]
+    },
+    "unified-task-ai-worker": {
+      "invoke": [
+        "src/lib/hooks/useTaskActions.ts",
+        "src/lib/hooks/useExecuteSkillForTask.ts"
+      ],
+      "url": [
+        "supabase/functions/task-signal-processor/index.ts"
+      ]
+    },
+    "update-deal-dossier": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260228300001_dossier_meeting_trigger.sql"
+      ]
+    },
+    "update-lead-sources": {
+      "invoke": [
+        "scripts/recategorize-lead-sources.ts"
+      ],
+      "url": [
+        "scripts/recategorize-lead-sources.ts"
+      ]
+    },
+    "update-s3-metrics": {
+      "invoke": [],
+      "url": [
+        "supabase/migrations/20260226100000_fix_cron_function_urls_and_http.sql",
+        "supabase/migrations/20260126164000_s3_metrics_cron.sql"
+      ]
+    },
+    "update-subscription": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/subscriptionService.ts"
+      ],
+      "url": []
+    },
+    "upload-branding-logo": {
+      "invoke": [
+        "dist/js/LogoSettings-urp0alIt.js",
+        "src/pages/settings/LogoSettings.tsx",
+        "src/pages/admin/BrandingSettings.tsx"
+      ],
+      "url": []
+    },
+    "upload-recording-to-s3": {
+      "invoke": [
+        "supabase/functions/poll-s3-upload-queue/index.ts",
+        "scripts/trigger-s3-upload.ts"
+      ],
+      "url": [
+        "scripts/fix-dev-standup-recording.ts"
+      ]
+    },
+    "validate-waitlist-token": {
+      "invoke": [
+        "dist/js/SetPassword-DACxJbdd.js",
+        "src/pages/auth/SetPassword.tsx"
+      ],
+      "url": []
+    },
+    "verify-email-change": {
+      "invoke": [
+        "src/pages/auth/EmailChangeVerification.tsx"
+      ],
+      "url": []
+    },
+    "verify-proposal-password": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/pages/PublicProposal.tsx"
+      ],
+      "url": []
+    },
+    "voice-audio-url": {
+      "invoke": [],
+      "url": []
+    },
+    "voice-presigned-url": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/voiceRecordingService.ts"
+      ],
+      "url": []
+    },
+    "voice-share": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/voiceRecordingService.ts",
+        "src/lib/services/voiceRecordingService.ts"
+      ],
+      "url": []
+    },
+    "voice-share-playback": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/voiceRecordingService.ts"
+      ],
+      "url": []
+    },
+    "voice-transcribe": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/voiceRecordingService.ts"
+      ],
+      "url": []
+    },
+    "voice-transcribe-poll": {
+      "invoke": [],
+      "url": []
+    },
+    "voice-upload": {
+      "invoke": [
+        "dist/js/index.html-D9cCYfI6.js",
+        "src/lib/services/voiceRecordingService.ts"
+      ],
+      "url": []
+    },
+    "waitlist-welcome-email": {
+      "invoke": [
+        "test/email-integration.test.ts",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        "packages/landing/dist/assets/index-CJL1IzXI.js",
+        "packages/landing/src/pages/WaitlistThankYouPage.tsx",
+        "src/product-pages/meetings/components/WaitlistHeroV2.tsx",
+        "src/lib/hooks/useWaitlistSignup.ts"
+      ],
+      "url": [
+        ".sixty/PHASE_6_TECHNICAL_STATUS.md",
+        ".sixty/PHASE_3_FINAL_REPORT.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/IMPLEMENTATION_GUIDE.md",
+        ".sixty/EXECUTION_STATUS.md",
+        "packages/landing/dist/assets/index-CJL1IzXI.js",
+        "packages/landing/src/pages/WaitlistThankYouPage.tsx",
+        "src/product-pages/meetings/components/WaitlistHeroV2.tsx",
+        "src/lib/hooks/useWaitlistSignup.ts"
+      ]
+    },
+    "warmth-backfill": {
+      "invoke": [
+        "dist/js/PipelinePage-BygI51JG.js",
+        ".sixty/plan.json",
+        "src/components/Pipeline/RelationshipGraph/hooks/useWarmthBackfill.ts"
+      ],
+      "url": []
+    },
+    "warmth-recalculate": {
+      "invoke": [],
+      "url": [
+        "supabase/functions/warmth-backfill/index.ts"
+      ]
+    },
+    "warmth-signal-ingest": {
+      "invoke": [],
+      "url": []
+    },
+    "workflow-webhook": {
+      "invoke": [
+        "src/api/workflows/webhook.ts"
+      ],
+      "url": [
+        "tests/scripts/api/test-edge-function-direct.js"
+      ]
+    }
+  }
+}

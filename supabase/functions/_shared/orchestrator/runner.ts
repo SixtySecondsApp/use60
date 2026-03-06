@@ -12,7 +12,24 @@
  * Entry points:
  * - runSequence() - Start a new sequence from an event
  * - resumeSequence() - Resume after HITL approval
+ * - Task orchestrator (plain-language tasks): see ./taskOrchestrator.ts
  */
+
+// Re-export task orchestrator for plain-language one-shot tasks
+export {
+  resolveTaskKey,
+  buildTaskPlan,
+  executeTaskPlan,
+  listTaskTemplates,
+} from './taskOrchestrator.ts';
+export type {
+  TaskPlan,
+  TaskStep,
+  TaskStepStatus,
+  TaskContext,
+  TaskOrchestratorResult,
+  StepExecutor,
+} from './taskOrchestrator.ts';
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type {

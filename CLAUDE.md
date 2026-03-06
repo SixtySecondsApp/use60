@@ -56,6 +56,16 @@ Born from 10 years of running Sixty Seconds — go-to-market and sales for hundr
 | `activities` | `user_id` | Standard |
 | `calendar_events` | `user_id` | Standard |
 
+### Database Migrations
+- Create new migrations with `./scripts/new-migration.sh <description>` — generates UTC-timestamped file.
+- One migration per concern. Don't bundle unrelated changes.
+- Use `CREATE OR REPLACE`, `IF NOT EXISTS`, `DROP ... IF EXISTS` — make migrations re-runnable where possible.
+- `CREATE POLICY` is NOT idempotent — always `DROP POLICY IF EXISTS` before `CREATE POLICY`.
+- Test before committing: `npx supabase db push --linked --dry-run`.
+- Destructive changes (DROP TABLE/COLUMN, ALTER type) need a rollback strategy in the file header.
+- CI auto-validates on PR, auto-applies on merge. Never apply via the Supabase dashboard.
+- Never reuse or edit an already-merged migration timestamp. Create a new file instead.
+
 ### Edge Functions
 - Pin `@supabase/supabase-js@2.43.4` on esm.sh — `@2` resolves to a broken version.
 - New functions: `getCorsHeaders(req)` from `_shared/corsHelper.ts`.
@@ -83,4 +93,5 @@ Landing pages: `packages/landing/` — localhost:5173 (dev), www.use60.com (prod
 | Security | `docs/security/SECURITY_IMPLEMENTATION_SUMMARY.md` |
 | Integrations | `docs/integrations/` (19 docs) |
 | Deployment | `docs/deployment/PRODUCTION_DEPLOYMENT_CHECKLIST.md` |
+| Migrations | `docs/deployment/DATABASE_MIGRATIONS.md` |
 | All docs | `docs/DOCUMENTATION_INDEX.md` |

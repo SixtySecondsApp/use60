@@ -102,7 +102,7 @@ export function useAttioIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('attio-oauth-initiate', {
+    const resp = await supabase.functions.invoke('oauth-initiate/attio', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',

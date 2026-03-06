@@ -1,2 +1,0 @@
-# Apify sends webhooks without a Supabase JWT.
-verify_jwt = false

@@ -1,6 +1,7 @@
 // @ts-nocheck — Deno edge function
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { InstantlyClient } from '../_shared/instantly.ts'
 
 /**
  * setup-pipeline-template — Create an ops table from any pipeline template config.
@@ -42,7 +43,7 @@ serve(async (req: Request) => {
     }
 
     const body = await req.json()
-    const { org_id, template_key, template_config } = body
+    const { org_id, template_key, template_config, filters, use_synthetic } = body
     if (!org_id || !template_config) {
       return new Response(
         JSON.stringify({ error: 'org_id and template_config required' }),
@@ -58,19 +59,33 @@ serve(async (req: Request) => {
     const dataSource = template_config.dataSource
     let sourceRows: Record<string, string>[] = []
 
-    if (dataSource.type === 'meetings') {
-      const { data: meetings, error: meetErr } = await supabase
+    // If use_synthetic is explicitly requested, skip fetching real data
+    if (use_synthetic) {
+      sourceRows = dataSource.synthetic_rows ?? []
+      console.log(`[setup-pipeline-template] Using ${sourceRows.length} synthetic rows (user requested)`)
+    }
+
+    if (sourceRows.length === 0 && dataSource.type === 'meetings') {
+      let meetQuery = supabase
         .from('meetings')
-        .select('id, title, meeting_start, owner_user_id, transcript_text, contact_id')
+        .select('id, title, meeting_start, owner_user_id, transcript_text, contact_id, primary_contact_id, summary, sentiment_score')
         .eq('org_id', org_id)
         .not('transcript_text', 'is', null)
         .order('meeting_start', { ascending: false })
         .limit(dataSource.limit ?? 10)
 
+      // Apply optional filters
+      if (filters?.date_from) meetQuery = meetQuery.gte('meeting_start', filters.date_from)
+      if (filters?.sentiment === 'positive') meetQuery = meetQuery.gte('sentiment_score', 0.6)
+      else if (filters?.sentiment === 'negative') meetQuery = meetQuery.lte('sentiment_score', -0.3)
+      else if (filters?.sentiment === 'neutral') meetQuery = meetQuery.gt('sentiment_score', -0.3).lt('sentiment_score', 0.6)
+
+      const { data: meetings, error: meetErr } = await meetQuery
+
       if (meetErr) throw meetErr
 
-      // Resolve contacts
-      const contactIds = (meetings ?? []).map(m => m.contact_id).filter(Boolean)
+      // Resolve contacts — use contact_id or primary_contact_id
+      const contactIds = (meetings ?? []).map(m => m.contact_id ?? m.primary_contact_id).filter(Boolean)
       let contactMap: Record<string, { first_name: string; last_name: string; company: string }> = {}
       if (contactIds.length > 0) {
         const { data: contacts } = await supabase
@@ -83,7 +98,8 @@ serve(async (req: Request) => {
       }
 
       for (const meeting of meetings ?? []) {
-        const contact = meeting.contact_id ? contactMap[meeting.contact_id] : null
+        const resolvedContactId = meeting.contact_id ?? meeting.primary_contact_id
+        const contact = resolvedContactId ? contactMap[resolvedContactId] : null
         const row: Record<string, string> = {}
         const mapping = dataSource.column_mapping ?? {}
 
@@ -100,13 +116,19 @@ serve(async (req: Request) => {
       console.log(`[setup-pipeline-template] Meetings found: ${sourceRows.length}`)
     }
 
-    if (dataSource.type === 'contacts') {
-      const { data: contacts, error: contactErr } = await supabase
+    if (sourceRows.length === 0 && dataSource.type === 'contacts') {
+      let contactQuery = supabase
         .from('contacts')
-        .select('id, first_name, last_name, company, title, industry, company_size')
+        .select('id, first_name, last_name, company, title, email, engagement_level')
         .eq('owner_id', user.id)
         .order('created_at', { ascending: false })
         .limit(dataSource.limit ?? 10)
+
+      if (filters?.search) {
+        contactQuery = contactQuery.or(`first_name.ilike.%${filters.search}%,last_name.ilike.%${filters.search}%,company.ilike.%${filters.search}%`)
+      }
+
+      const { data: contacts, error: contactErr } = await contactQuery
 
       if (contactErr) throw contactErr
 
@@ -122,7 +144,7 @@ serve(async (req: Request) => {
       console.log(`[setup-pipeline-template] Contacts found: ${sourceRows.length}`)
     }
 
-    if (dataSource.type === 'deals') {
+    if (sourceRows.length === 0 && dataSource.type === 'deals') {
       const { data: deals, error: dealErr } = await supabase
         .from('deals')
         .select('id, name, stage, amount, close_date, company_name, contact_name')
@@ -144,8 +166,8 @@ serve(async (req: Request) => {
       console.log(`[setup-pipeline-template] Deals found: ${sourceRows.length}`)
     }
 
-    // Fallback to synthetic data if no real data found
-    if (sourceRows.length === 0 && dataSource.synthetic_rows && dataSource.synthetic_rows.length > 0) {
+    // Fallback to synthetic data if no real data found (and not already loaded via use_synthetic)
+    if (sourceRows.length === 0 && !use_synthetic && dataSource.synthetic_rows && dataSource.synthetic_rows.length > 0) {
       sourceRows = dataSource.synthetic_rows
       console.log(`[setup-pipeline-template] Using ${sourceRows.length} synthetic rows (no real data)`)
     }
@@ -200,6 +222,7 @@ serve(async (req: Request) => {
       is_enrichment: false,
       ...(col.formula_expression ? { formula_expression: col.formula_expression } : {}),
       ...(col.action_config ? { action_config: col.action_config } : {}),
+      ...(col.integration_config ? { integration_config: col.integration_config } : {}),
     }))
 
     const { data: createdColumns, error: colError } = await supabase
@@ -249,6 +272,139 @@ serve(async (req: Request) => {
       }
     }
 
+    // ── 5. Instantly integration (optional) ──────────────────────
+    const instantlyConfig = body.instantly_config
+    let instantlyCampaignId: string | null = null
+
+    if (instantlyConfig?.enabled) {
+      try {
+        const { data: creds } = await supabase
+          .from('instantly_org_credentials')
+          .select('api_key')
+          .eq('org_id', org_id)
+          .maybeSingle()
+
+        if (creds?.api_key) {
+          const instantly = new InstantlyClient({ apiKey: creds.api_key })
+          instantlyCampaignId = instantlyConfig.campaign_id ?? null
+
+          if (instantlyConfig.create_new) {
+            const sequences = [{
+              steps: (instantlyConfig.steps ?? []).map((s: any) => ({
+                type: 'email',
+                delay: s.delay ?? 0,
+                wait: s.delay ?? 0,
+                variants: [{
+                  subject: `{{step_${s.step_number}_subject}}`,
+                  body: `{{step_${s.step_number}_body}}`,
+                }],
+              })),
+            }]
+
+            const campaign = await instantly.request<{ id?: string }>({
+              method: 'POST',
+              path: '/api/v2/campaigns',
+              body: {
+                name: instantlyConfig.campaign_name || tableName,
+                campaign_schedule: {
+                  schedules: [{
+                    name: 'Default',
+                    timing: { from: '09:00', to: '17:00' },
+                    days: { 1: true, 2: true, 3: true, 4: true, 5: true },
+                    timezone: 'America/Chicago',
+                  }],
+                },
+                sequences,
+              },
+            })
+            instantlyCampaignId = campaign?.id ?? null
+            console.log(`[setup-pipeline-template] Instantly campaign created: ${instantlyCampaignId}`)
+          }
+
+          if (instantlyCampaignId) {
+            await supabase.from('instantly_campaign_links').insert({
+              table_id: tableId,
+              campaign_id: instantlyCampaignId,
+              campaign_name: instantlyConfig.campaign_name || tableName,
+              field_mapping: instantlyConfig.field_mapping ?? {},
+              auto_sync_engagement: true,
+            })
+            console.log(`[setup-pipeline-template] Instantly campaign linked to table ${tableId}`)
+          }
+        } else {
+          console.warn('[setup-pipeline-template] Instantly enabled but no API key found for org')
+        }
+      } catch (instantlyErr: any) {
+        // Non-fatal — table is still created even if Instantly setup fails
+        console.warn('[setup-pipeline-template] Instantly setup failed (non-fatal):', instantlyErr?.message ?? instantlyErr)
+      }
+    }
+
+    // ── 6. HubSpot Sequences (optional) ─────────────────────────
+    const hubspotConfig = body.hubspot_sequence_config
+    let hubspotEnrolledCount = 0
+
+    if (hubspotConfig?.enabled && hubspotConfig?.sequence_id) {
+      try {
+        const { data: hsCreds } = await supabase
+          .from('hubspot_org_credentials')
+          .select('access_token')
+          .eq('org_id', org_id)
+          .maybeSingle()
+
+        if (hsCreds?.access_token) {
+          const emailColKey = sourceColumnKeys.find((k: string) => k === 'email' || k === 'contact_email')
+          if (emailColKey) {
+            for (const rowData of sourceRows) {
+              const email = rowData[emailColKey]
+              if (!email) continue
+
+              try {
+                // Look up HubSpot contact by email
+                const searchResp = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/search', {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${hsCreds.access_token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ', value: email }] }],
+                    limit: 1,
+                  }),
+                })
+                const searchData = await searchResp.json()
+                const contactId = searchData?.results?.[0]?.id
+                if (!contactId) continue
+
+                // Enroll in sequence
+                const enrollResp = await fetch('https://api.hubapi.com/automation/v4/sequences/enrollments', {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${hsCreds.access_token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    sequenceId: hubspotConfig.sequence_id,
+                    contactId,
+                    senderEmail: hubspotConfig.sender_email,
+                  }),
+                })
+                if (enrollResp.ok) hubspotEnrolledCount++
+              } catch (rowErr: any) {
+                console.warn(`[setup-pipeline-template] HubSpot enroll failed for ${email}:`, rowErr?.message)
+              }
+            }
+            console.log(`[setup-pipeline-template] HubSpot: enrolled ${hubspotEnrolledCount} contacts in sequence`)
+          }
+        } else {
+          console.warn('[setup-pipeline-template] HubSpot enabled but no credentials found for org')
+        }
+      } catch (hsErr: any) {
+        // Non-fatal
+        console.warn('[setup-pipeline-template] HubSpot enrollment failed (non-fatal):', hsErr?.message ?? hsErr)
+      }
+    }
+
     console.log(`[setup-pipeline-template] Done. Rows: ${sourceRows.length}, Columns: ${createdColumns?.length ?? 0}`)
 
     return new Response(
@@ -258,6 +414,8 @@ serve(async (req: Request) => {
         rows_created: sourceRows.length,
         columns_created: createdColumns?.length ?? 0,
         used_synthetic: sourceRows === dataSource.synthetic_rows,
+        ...(instantlyCampaignId ? { instantly_campaign_id: instantlyCampaignId } : {}),
+        ...(hubspotEnrolledCount > 0 ? { hubspot_enrolled_count: hubspotEnrolledCount } : {}),
       }),
       { status: 200, headers: JSON_HEADERS },
     )

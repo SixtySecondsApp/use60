@@ -107,7 +107,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('hubspot-oauth-initiate', {
+    const resp = await supabase.functions.invoke('oauth-initiate/hubspot', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -328,6 +328,31 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     }>;
   }, [activeOrgId, enabled]);
 
+  const getSequences = useCallback(async () => {
+    if (!enabled) throw new Error('HubSpot integration is disabled');
+    if (!activeOrgId) throw new Error('No active organization selected');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('No active session');
+
+    const resp = await supabase.functions.invoke('hubspot-admin', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'get_sequences', org_id: activeOrgId }),
+    });
+    if (resp.error) throw new Error(resp.error.message || 'Failed to fetch sequences');
+    if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch sequences');
+    return resp.data.sequences as Array<{
+      id: string;
+      name: string;
+      stepsCount: number;
+      folderId: string | null;
+      updatedAt: string | null;
+    }>;
+  }, [activeOrgId, enabled]);
+
   const previewContacts = useCallback(
     async (args: { list_id?: string; filters?: { propertyName: string; operator: string; value: string }[]; filter_logic?: 'AND' | 'OR'; limit?: number }) => {
       if (!enabled) throw new Error('HubSpot integration is disabled');
@@ -388,6 +413,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
 
   const isConnected = Boolean(status?.connected);
 
+  const hasSequenceScopes = useMemo(() => {
+    const scopes = status?.integration?.scopes ?? [];
+    return scopes.includes('automation.sequences.read')
+      && scopes.includes('automation.sequences.enrollments.write');
+  }, [status?.integration?.scopes]);
+
   const webhookUrl = useMemo(() => {
     return status?.webhook_url || null;
   }, [status?.webhook_url]);
@@ -399,6 +430,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     settings: status?.settings || {},
     webhookUrl,
     isConnected,
+    hasSequenceScopes,
     canManage,
     loading,
     saving,
@@ -414,6 +446,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     getPipelines,
     getForms,
     getSegments,
+    getSequences,
     previewContacts,
     triggerSync,
   };
