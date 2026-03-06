@@ -32,30 +32,33 @@ const CHANNEL_CONFIG: Record<Channel, { icon: typeof Mail; label: string; maxLen
   slack: { icon: MessageSquare, label: 'Slack', maxLength: 500 },
 };
 
+/**
+ * Generate an outreach draft promoting 60 TO the prospect company.
+ * The enrichment data tells us about the prospect — we use it to personalize
+ * the pitch, not to write from their perspective.
+ */
 function generateDraft(channel: Channel, research: ResearchData, queryParams: CampaignQueryParams): { subject?: string; body: string } {
   const company = research.company;
   const recipientName = queryParams.fn || 'there';
-  const coldOutreach = research.demo_actions?.cold_outreach;
+
+  // Build a context-aware hook based on what we know about the prospect
+  const vertical = company.vertical || 'your space';
+  const productContext = company.product_summary
+    ? `I can see ${company.name} is focused on ${company.product_summary.toLowerCase().slice(0, 80)}`
+    : `I've been looking at what ${company.name} is building`;
 
   if (channel === 'email') {
-    // Use the AI-generated email preview if available
-    if (coldOutreach?.email_preview) {
-      const subject = `Quick question for ${company.name}`;
-      return { subject, body: coldOutreach.email_preview };
-    }
-
-    const hook = coldOutreach?.personalised_hook || `I came across ${company.name} and was impressed by what you're building`;
-    const subject = `Quick question for ${company.name}`;
+    const subject = `${company.name} + 60 — quick personalized demo`;
     const body = `Hi ${recipientName},
 
-${hook}.
+${productContext} — really impressive.
 
-${company.product_summary ? `I can see you're focused on ${company.product_summary.toLowerCase().slice(0, 100)} — ` : ''}I think there's a way we could help accelerate your sales pipeline.
+I work at 60, where we help ${vertical} teams automate everything either side of the sales call. Lead research, meeting prep, follow-ups, proposals — all handled by AI agents so your team can focus on conversations that close revenue.
 
-I put together a quick personalized demo showing exactly how:
+I put together a personalized demo showing exactly how 60 would work for ${company.name}:
 [LINK]
 
-Worth a look? Takes 60 seconds.
+Takes 60 seconds to check out. Worth a look?
 
 Best,`;
 
@@ -63,15 +66,14 @@ Best,`;
   }
 
   if (channel === 'linkedin') {
-    const hook = coldOutreach?.personalised_hook || `Noticed what ${company.name} is doing`;
     return {
-      body: `Hi ${recipientName} — ${hook}. Put together something personalized for your team: [LINK]\n\nWorth 60 seconds?`,
+      body: `Hi ${recipientName} — ${productContext}. I put together a quick personalized demo showing how 60 could help ${company.name} automate sales admin: [LINK]\n\nTakes 60 seconds — worth a look?`,
     };
   }
 
   // Slack
   return {
-    body: `Hey ${recipientName} — just put together a personalized demo for ${company.name}: [LINK]\n\nThought you might find it interesting. Takes 60 seconds to check out.`,
+    body: `Hey ${recipientName} — put together a personalized demo of 60 for ${company.name}: [LINK]\n\nShows how AI agents could handle your lead research, meeting prep, and follow-ups. 60 seconds to check out.`,
   };
 }
 
