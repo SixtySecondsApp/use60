@@ -7,8 +7,9 @@ on:
       - 'supabase/migrations/**'
   push:
     branches: [staging, main]
-    paths:
-      - 'supabase/migrations/**'
+    # No paths filter on push — merge commits don't reliably detect
+    # migration file changes. The apply jobs are idempotent (db push
+    # exits cleanly when no pending migrations exist).
 
 concurrency:
   group: db-migrations-${{ github.ref_name }}
