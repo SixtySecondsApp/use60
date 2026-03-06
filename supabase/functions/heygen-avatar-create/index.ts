@@ -106,15 +106,24 @@ Deno.serve(async (req: Request) => {
       // Step 1: Generate AI photo
       // ---------------------------------------------------------------
       case 'generate_photo': {
+        // HeyGen enum values (exact casing required):
+        // age: 'Young Adult' | 'Early Middle Age' | 'Late Middle Age' | 'Senior' | 'Unspecified'
+        // gender: 'Man' | 'Woman' | 'Unspecified'
+        // orientation: 'square' | 'horizontal' | 'vertical'
+        // pose: 'half_body' | 'close_up' | 'full_body'
+        // style: 'Realistic' | 'Pixar' | 'Cinematic' | 'Vintage' | 'Noir' | 'Cyberpunk' | 'Unspecified'
+        const AGE_MAP: Record<string, string> = { young_adult: 'Young Adult', middle_aged: 'Early Middle Age', senior: 'Senior' };
+        const GENDER_MAP: Record<string, string> = { female: 'Woman', male: 'Man' };
+
         const result = await heygen.generatePhoto({
           name: body.name || 'avatar',
-          age: body.age || '30',
-          gender: body.gender || 'male',
-          ethnicity: body.ethnicity || 'caucasian',
-          orientation: body.orientation || 'front',
+          age: AGE_MAP[body.age || ''] || body.age || 'Young Adult',
+          gender: GENDER_MAP[body.gender || ''] || body.gender || 'Woman',
+          ethnicity: body.ethnicity || 'White',
+          orientation: body.orientation || 'square',
           pose: body.pose || 'half_body',
-          style: body.style || 'photorealistic',
-          appearance: body.appearance || 'professional business attire',
+          style: body.style || 'Realistic',
+          appearance: body.appearance || 'Professional business attire, friendly smile',
         });
 
         // Create avatar record
@@ -140,6 +149,42 @@ Deno.serve(async (req: Request) => {
           avatar_id: avatar.id,
           generation_id: result.generation_id,
           status: 'creating',
+        }, req);
+      }
+
+      // ---------------------------------------------------------------
+      // Step 1b: Upload user photo as talking photo (no training needed)
+      // ---------------------------------------------------------------
+      case 'upload_photo': {
+        if (!body.image_url) return errorResponse('image_url required', req, 400);
+
+        // Upload to HeyGen as a talking photo
+        const talkingPhoto = await heygen.uploadTalkingPhoto(body.image_url);
+
+        // Create avatar record — status 'ready' (no training needed)
+        const { data: uploadAvatar, error: uploadInsertError } = await svc
+          .from('heygen_avatars')
+          .insert({
+            org_id: orgId,
+            user_id: user.id,
+            avatar_name: body.avatar_name || 'My Avatar',
+            avatar_type: 'talking_photo',
+            status: 'ready',
+            heygen_avatar_id: talkingPhoto.talking_photo_id,
+            thumbnail_url: body.image_url,
+          })
+          .select('id')
+          .single();
+
+        if (uploadInsertError) {
+          console.error('[heygen-avatar-create] upload insert error:', uploadInsertError);
+          return errorResponse('Failed to create avatar record', req, 500);
+        }
+
+        return jsonResponse({
+          avatar_id: uploadAvatar.id,
+          talking_photo_id: talkingPhoto.talking_photo_id,
+          status: 'ready',
         }, req);
       }
 
@@ -271,11 +316,8 @@ Deno.serve(async (req: Request) => {
         return errorResponse(`Unknown action: ${action}`, req, 400);
     }
   } catch (err) {
-    console.error('[heygen-avatar-create] Error:', err);
-    return errorResponse(
-      err instanceof Error ? err.message : 'Internal error',
-      req,
-      500,
-    );
+    const msg = err instanceof Error ? err.message : typeof err === 'object' && err !== null ? JSON.stringify(err) : 'Internal error';
+    console.error('[heygen-avatar-create] Error:', msg, err);
+    return errorResponse(msg, req, 500);
   }
 });

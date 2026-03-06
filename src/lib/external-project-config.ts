@@ -78,7 +78,7 @@ export const INTERNAL_ONLY_FUNCTIONS = [
   // Leads & Pipeline
   'process-lead-prep',
   'reprocess-lead-prep',
-  'savvycal-leads-webhook',
+  'webhook-leads',
   'import-leads-generic',
 
   // Admin

@@ -244,6 +244,37 @@ export class HeyGenClient {
     return this.request('POST', '/v2/photo_avatar/photo/generate', params);
   }
 
+  /**
+   * Upload a user photo as a "talking photo" — no LORA training needed.
+   * Fetches the image from a URL and uploads as multipart/form-data.
+   */
+  async uploadTalkingPhoto(imageUrl: string): Promise<{ talking_photo_id: string }> {
+    // Fetch the image
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) throw { status: imgRes.status, message: 'Failed to fetch image from URL' } as HeyGenError;
+    const imageBlob = await imgRes.blob();
+
+    const formData = new FormData();
+    formData.append('file', imageBlob, 'avatar.jpg');
+
+    const res = await fetch(`${HEYGEN_BASE}/v1/talking_photo`, {
+      method: 'POST',
+      headers: { 'x-api-key': this.apiKey },
+      body: formData,
+    });
+
+    const json = await res.json();
+    if (!res.ok || json.error) {
+      throw {
+        status: res.status,
+        message: json.error?.message || json.message || 'Failed to upload talking photo',
+        code: json.error?.code,
+      } as HeyGenError;
+    }
+
+    return json.data ?? json;
+  }
+
   async getGenerationStatus(generationId: string): Promise<GenerationStatus> {
     return this.request('GET', `/v2/photo_avatar/generation/${generationId}`);
   }

@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Loader2, Upload, Sparkles, ChevronRight, ChevronLeft, Check, Play, Pause, Video, Mic, FileText, AlertCircle, Image } from 'lucide-react';
+import { Loader2, Upload, Sparkles, ChevronRight, ChevronLeft, Check, Play, Pause, Video, Mic, FileText, AlertCircle, Image, Camera, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
 
@@ -39,7 +39,8 @@ const STEP_LABELS: Record<WizardStep, string> = {
   script: 'Script Template',
 };
 
-const STEPS: WizardStep[] = ['photo', 'training', 'voice', 'script'];
+const ALL_STEPS: WizardStep[] = ['photo', 'training', 'voice', 'script'];
+const SKIP_TRAINING_STEPS: WizardStep[] = ['photo', 'voice', 'script'];
 
 interface Voice {
   voice_id: string;
@@ -59,15 +60,26 @@ export function VideoAvatarColumnWizard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Whether this avatar skips training (uploaded/captured photos = talking_photo)
+  const [skipTraining, setSkipTraining] = useState(false);
+  const STEPS = skipTraining ? SKIP_TRAINING_STEPS : ALL_STEPS;
+
   // Photo step
-  const [photoMode, setPhotoMode] = useState<'upload' | 'generate'>('generate');
+  const [photoMode, setPhotoMode] = useState<'upload' | 'generate' | 'capture'>('generate');
   const [avatarName, setAvatarName] = useState('');
-  const [gender, setGender] = useState('female');
-  const [age, setAge] = useState('young_adult');
-  const [ethnicity, setEthnicity] = useState('white');
+  const [gender, setGender] = useState('Woman');
+  const [age, setAge] = useState('Young Adult');
+  const [ethnicity, setEthnicity] = useState('White');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [generationId, setGenerationId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Webcam capture
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
 
   // Training step
   const [avatarId, setAvatarId] = useState<string | null>(null);
@@ -101,9 +113,9 @@ export function VideoAvatarColumnWizard({
           age,
           gender,
           ethnicity,
-          orientation: 'front',
+          orientation: 'square',
           pose: 'half_body',
-          style: 'Photorealistic',
+          style: 'Realistic',
           appearance: 'Professional business attire, friendly smile, clean background',
         },
       });
@@ -130,13 +142,15 @@ export function VideoAvatarColumnWizard({
         const { data } = await supabase.functions.invoke('heygen-avatar-status', {
           body: { avatar_id: avId, generation_id: genId },
         });
-        if (data?.status === 'completed' || data?.image_url) {
+        // Status endpoint returns generation_status + looks array
+        if (data?.generation_status === 'completed' || data?.looks?.length > 0) {
           clearInterval(poll);
-          setPhotoUrl(data.image_url || data.thumbnail_url);
+          const thumbUrl = data.looks?.[0]?.thumbnail_url || data.thumbnail_url || data.image_url;
+          setPhotoUrl(thumbUrl);
           setTrainingStatus('photo_ready');
-        } else if (data?.status === 'failed') {
+        } else if (data?.generation_status === 'failed' || data?.status === 'failed') {
           clearInterval(poll);
-          setError('Photo generation failed');
+          setError(data?.error || 'Photo generation failed');
           setTrainingStatus('idle');
         }
       } catch {
@@ -148,40 +162,116 @@ export function VideoAvatarColumnWizard({
     setTimeout(() => clearInterval(poll), 120000);
   }, []);
 
-  // ─── Photo: Upload ──────────────────────────────────────────────────
+  // ─── Webcam: Start/Stop/Capture ─────────────────────────────────────
+  const startCamera = useCallback(async () => {
+    setError(null);
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1024 }, height: { ideal: 1024 } },
+        audio: false,
+      });
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+        videoRef.current.onloadedmetadata = () => setCameraReady(true);
+      }
+    } catch {
+      setError('Camera access denied. Please allow camera access and try again.');
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    stream?.getTracks().forEach((t) => t.stop());
+    setStream(null);
+    setCameraReady(false);
+  }, [stream]);
+
+  // Stop camera on unmount or mode change
+  useEffect(() => {
+    return () => { stream?.getTracks().forEach((t) => t.stop()); };
+  }, [stream]);
+
+  const handleCapture = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    // Square crop from center
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const sx = (video.videoWidth - size) / 2;
+    const sy = (video.videoHeight - size) / 2;
+    ctx.drawImage(video, sx, sy, size, size, 0, 0, size, size);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      setCapturedBlob(blob);
+      setPhotoUrl(URL.createObjectURL(blob));
+      stopCamera();
+    }, 'image/jpeg', 0.92);
+  }, [stopCamera]);
+
+  const handleRetake = useCallback(() => {
+    setCapturedBlob(null);
+    setPhotoUrl(null);
+    setTrainingStatus('idle');
+    startCamera();
+  }, [startCamera]);
+
+  // ─── Upload to Supabase Storage → HeyGen talking photo ────────────
+  const uploadPhotoToStorage = useCallback(async (blob: Blob): Promise<string> => {
+    const fileName = `heygen/${orgId}-${Date.now()}.jpg`;
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+    if (uploadError) throw new Error(uploadError.message);
+    const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+    if (!data?.publicUrl) throw new Error('Failed to get public URL');
+    return data.publicUrl;
+  }, [orgId]);
+
+  const handleUploadAndRegister = useCallback(async (blob: Blob) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const publicUrl = await uploadPhotoToStorage(blob);
+
+      const { data, error: fnError } = await supabase.functions.invoke('heygen-avatar-create', {
+        body: {
+          action: 'upload_photo',
+          avatar_name: avatarName || 'My Avatar',
+          image_url: publicUrl,
+        },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
+
+      setAvatarId(data.avatar_id);
+      setSkipTraining(true);
+      setTrainingStatus('photo_ready');
+      toast.success('Photo uploaded — no training needed!');
+    } catch (e: any) {
+      setError(e.message || 'Upload failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [avatarName, uploadPhotoToStorage]);
+
+  // ─── Photo: File Upload ────────────────────────────────────────────
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setLoading(true);
-    setError(null);
-    try {
-      // Convert to base64 for the edge function
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        const { data, error: fnError } = await supabase.functions.invoke('heygen-avatar-create', {
-          body: {
-            action: 'upload_photo',
-            avatar_name: avatarName || 'My Avatar',
-            image_base64: base64,
-            file_name: file.name,
-          },
-        });
-        if (fnError) throw new Error(fnError.message);
-        if (data?.error) throw new Error(data.error);
-
-        setAvatarId(data.avatar_id);
-        setPhotoUrl(URL.createObjectURL(file));
-        setTrainingStatus('photo_ready');
-        setLoading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (e: any) {
-      setError(e.message || 'Upload failed');
-      setLoading(false);
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image must be under 10MB');
+      return;
     }
-  }, [avatarName]);
+
+    setPhotoUrl(URL.createObjectURL(file));
+    setCapturedBlob(file);
+  }, []);
 
   // ─── Training: Kick off and poll ────────────────────────────────────
   const handleStartTraining = useCallback(async () => {
@@ -372,30 +462,29 @@ export function VideoAvatarColumnWizard({
 
           {/* Mode toggle */}
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPhotoMode('generate')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                photoMode === 'generate'
-                  ? 'border-purple-500/30 bg-purple-500/10 text-purple-300'
-                  : 'border-gray-700 text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              AI Generate
-            </button>
-            <button
-              type="button"
-              onClick={() => setPhotoMode('upload')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                photoMode === 'upload'
-                  ? 'border-purple-500/30 bg-purple-500/10 text-purple-300'
-                  : 'border-gray-700 text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Upload Photo
-            </button>
+            {([
+              { mode: 'capture' as const, icon: Camera, label: 'Take Photo' },
+              { mode: 'upload' as const, icon: Upload, label: 'Upload' },
+              { mode: 'generate' as const, icon: Sparkles, label: 'AI Generate' },
+            ]).map(({ mode, icon: Icon, label }) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  if (photoMode === 'capture' && mode !== 'capture') stopCamera();
+                  setPhotoMode(mode);
+                  if (mode === 'capture' && !stream) startCamera();
+                }}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                  photoMode === mode
+                    ? 'border-purple-500/30 bg-purple-500/10 text-purple-300'
+                    : 'border-gray-700 text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
           </div>
 
           {photoMode === 'generate' && (
@@ -403,29 +492,75 @@ export function VideoAvatarColumnWizard({
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Gender</label>
                 <select value={gender} onChange={(e) => setGender(e.target.value)} className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-200">
-                  <option value="female">Female</option>
-                  <option value="male">Male</option>
+                  <option value="Woman">Female</option>
+                  <option value="Man">Male</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Age</label>
                 <select value={age} onChange={(e) => setAge(e.target.value)} className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-200">
-                  <option value="young_adult">Young Adult</option>
-                  <option value="middle_aged">Middle Aged</option>
-                  <option value="senior">Senior</option>
+                  <option value="Young Adult">Young Adult</option>
+                  <option value="Early Middle Age">Middle Aged</option>
+                  <option value="Senior">Senior</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Ethnicity</label>
                 <select value={ethnicity} onChange={(e) => setEthnicity(e.target.value)} className="w-full rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-200">
-                  <option value="white">White</option>
-                  <option value="black">Black</option>
-                  <option value="asian">Asian</option>
-                  <option value="hispanic">Hispanic</option>
-                  <option value="middle_eastern">Middle Eastern</option>
-                  <option value="south_asian">South Asian</option>
+                  <option value="White">White</option>
+                  <option value="Black">Black</option>
+                  <option value="Asian">Asian</option>
+                  <option value="Hispanic">Hispanic</option>
+                  <option value="Middle Eastern">Middle Eastern</option>
+                  <option value="South Asian">South Asian</option>
                 </select>
               </div>
+            </div>
+          )}
+
+          {photoMode === 'capture' && (
+            <div className="space-y-3">
+              {!capturedBlob ? (
+                <div className="relative rounded-lg overflow-hidden bg-black aspect-square max-w-[280px] mx-auto">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover mirror"
+                    style={{ transform: 'scaleX(-1)' }}
+                  />
+                  <canvas ref={canvasRef} className="hidden" />
+                  {!cameraReady && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+                      <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+                    </div>
+                  )}
+                  {cameraReady && (
+                    <button
+                      type="button"
+                      onClick={handleCapture}
+                      className="absolute bottom-3 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-white/90 hover:bg-white border-4 border-purple-500 transition-colors flex items-center justify-center"
+                    >
+                      <Camera className="w-5 h-5 text-purple-600" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="relative max-w-[280px] mx-auto">
+                  <img src={photoUrl!} alt="Captured" className="w-full rounded-lg aspect-square object-cover" />
+                  <button
+                    type="button"
+                    onClick={handleRetake}
+                    className="absolute bottom-2 right-2 flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-black/70 hover:bg-black/90 text-white text-xs"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Retake
+                  </button>
+                </div>
+              )}
+              <p className="text-[10px] text-gray-600 text-center">
+                Face the camera directly with good lighting. A clear, front-facing photo works best.
+              </p>
             </div>
           )}
 
@@ -434,7 +569,7 @@ export function VideoAvatarColumnWizard({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 onChange={handleFileUpload}
                 className="hidden"
               />
@@ -469,9 +604,10 @@ export function VideoAvatarColumnWizard({
 
           {/* Actions */}
           <div className="flex justify-between pt-2">
-            <button type="button" onClick={onCancel} className="text-xs text-gray-500 hover:text-gray-300">
+            <button type="button" onClick={() => { stopCamera(); onCancel(); }} className="text-xs text-gray-500 hover:text-gray-300">
               Cancel
             </button>
+            {/* AI Generate button */}
             {!photoUrl && photoMode === 'generate' && (
               <button
                 type="button"
@@ -483,13 +619,36 @@ export function VideoAvatarColumnWizard({
                 Generate Photo
               </button>
             )}
-            {photoUrl && (
+            {/* AI-generated photo → needs training */}
+            {photoUrl && photoMode === 'generate' && (
               <button
                 type="button"
                 onClick={() => { setStep('training'); handleStartTraining(); }}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium"
               >
                 Train Avatar <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {/* Captured/uploaded photo → upload to storage + HeyGen, skip training */}
+            {photoUrl && capturedBlob && (photoMode === 'capture' || photoMode === 'upload') && (
+              <button
+                type="button"
+                onClick={() => handleUploadAndRegister(capturedBlob)}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                {loading ? 'Uploading...' : 'Use This Photo'}
+              </button>
+            )}
+            {/* Already uploaded talking photo → go to voice */}
+            {skipTraining && trainingStatus === 'photo_ready' && (
+              <button
+                type="button"
+                onClick={() => setStep('voice')}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium"
+              >
+                Choose Voice <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -505,7 +664,7 @@ export function VideoAvatarColumnWizard({
                 <Loader2 className="w-10 h-10 text-purple-400 animate-spin mb-4" />
                 <p className="text-sm text-gray-200 font-medium">Training your avatar...</p>
                 <p className="text-xs text-gray-500 mt-1">{trainingProgress}</p>
-                <p className="text-xs text-gray-600 mt-3">This typically takes 2-5 minutes. Don't close this.</p>
+                <p className="text-xs text-gray-600 mt-3">This typically takes 2-5 minutes. Do not close this.</p>
               </>
             ) : trainingStatus === 'ready' ? (
               <>
@@ -589,7 +748,7 @@ export function VideoAvatarColumnWizard({
           </div>
 
           <div className="flex justify-between pt-2">
-            <button type="button" onClick={() => setStep('photo')} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300">
+            <button type="button" onClick={() => setStep(skipTraining ? 'photo' : 'training')} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300">
               <ChevronLeft className="w-3.5 h-3.5" /> Back
             </button>
             <button

@@ -5,7 +5,7 @@
 //
 // Responsibilities:
 //   1. Validate request body (proposal_id + at least one of meeting_id / deal_id)
-//   2. Look up org_id from organization_memberships for the requesting user
+//   2. Resolve org_id from request/proposal/profile/membership
 //   3. Call assembleProposalContext() — queries all 8 data sources
 //   4. Store the result in proposals.context_payload + set generation_status = 'context_assembled'
 //   5. Return a lightweight context_summary (no raw payload in response)
@@ -39,6 +39,8 @@ interface AssembleContextRequest {
   contact_id?: string
   /** Required — UUID of the proposal creator */
   user_id: string
+  /** Optional — preferred explicit org context from the pipeline */
+  org_id?: string
 }
 
 interface ContextSummary {
@@ -143,7 +145,7 @@ serve(async (req: Request) => {
       return errorResponse('Invalid JSON body', req, 400)
     }
 
-    const { proposal_id, meeting_id, deal_id, contact_id, user_id } = body
+    const { proposal_id, meeting_id, deal_id, contact_id, user_id, org_id: requestedOrgId } = body
 
     if (!proposal_id) {
       return errorResponse('proposal_id is required', req, 400)
@@ -166,27 +168,64 @@ serve(async (req: Request) => {
     )
 
     // ----------------------------------------------------------------
-    // Look up org_id from organization_memberships
+    // Resolve org_id
+    // Prefer the explicit org from the pipeline, then fall back to the
+    // proposal row, the user's profile, and finally memberships.
     // ----------------------------------------------------------------
-    const { data: membership, error: membershipError } = await supabase
-      .from('organization_memberships')
-      .select('org_id')
-      .eq('user_id', user_id)
-      .eq('member_status', 'active')
-      .limit(1)
-      .maybeSingle()
+    let orgId = requestedOrgId ?? null
 
-    if (membershipError) {
-      console.error(`${LOG_PREFIX} Error fetching org membership:`, membershipError.message)
-      return errorResponse('Failed to resolve org membership', req, 500)
+    if (!orgId) {
+      const { data: proposalRow, error: proposalError } = await supabase
+        .from('proposals')
+        .select('org_id')
+        .eq('id', proposal_id)
+        .maybeSingle()
+
+      if (proposalError) {
+        console.error(`${LOG_PREFIX} Error fetching proposal org:`, proposalError.message)
+        return errorResponse('Failed to resolve proposal org', req, 500)
+      }
+
+      orgId = (proposalRow?.org_id as string | null) ?? null
     }
 
-    if (!membership?.org_id) {
-      console.warn(`${LOG_PREFIX} No org membership found for user_id=${user_id}`)
+    if (!orgId) {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('org_id')
+        .eq('id', user_id)
+        .maybeSingle()
+
+      if (profileError) {
+        console.error(`${LOG_PREFIX} Error fetching profile org:`, profileError.message)
+        return errorResponse('Failed to resolve user org', req, 500)
+      }
+
+      orgId = (profile?.org_id as string | null) ?? null
+    }
+
+    if (!orgId) {
+      const { data: membership, error: membershipError } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', user_id)
+        .eq('member_status', 'active')
+        .limit(1)
+        .maybeSingle()
+
+      if (membershipError) {
+        console.error(`${LOG_PREFIX} Error fetching org membership:`, membershipError.message)
+        return errorResponse('Failed to resolve org membership', req, 500)
+      }
+
+      orgId = (membership?.org_id as string | null) ?? null
+    }
+
+    if (!orgId) {
+      console.warn(`${LOG_PREFIX} Could not resolve org_id for user_id=${user_id} proposal=${proposal_id}`)
       return errorResponse('User does not belong to any organisation', req, 400)
     }
 
-    const orgId = membership.org_id
     console.log(`${LOG_PREFIX} Resolved org_id=${orgId}`)
 
     // ----------------------------------------------------------------

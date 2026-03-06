@@ -1,14 +1,14 @@
-;
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 
 // Type alias for Supabase client
 type SupabaseClient = ReturnType<typeof createClient>;
-import { corsHeaders } from "../../../_shared/cors.ts";
-import { extractBusinessDomain, matchOrCreateCompany } from "../../../_shared/companyMatching.ts";
-import { materializeContact } from "../../../_shared/materializationService.ts";
+import { corsHeaders } from "../../_shared/cors.ts";
+import { extractBusinessDomain, matchOrCreateCompany } from "../../_shared/companyMatching.ts";
+import { materializeContact } from "../../_shared/materializationService.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const INTERNAL_SYNC_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 // Legacy global webhook secret (fallback for existing installs without org token)
 const LEGACY_WEBHOOK_SECRET = Deno.env.get("SAVVYCAL_WEBHOOK_SECRET") ?? "";
 
@@ -172,19 +172,26 @@ export async function handleWebhook(req: Request): Promise<Response> {
 
   const rawBody = await req.text();
 
-  // Verify signature - use org-specific secret or legacy global secret
-  const webhookSecret = orgContext.webhookSecret || LEGACY_WEBHOOK_SECRET;
-  try {
-    await verifySignature(req.headers, rawBody, webhookSecret);
-  } catch (error) {
-    console.error("[savvycal-webhook] Signature verification failed:", error);
-    return new Response(
-      JSON.stringify({ error: "Invalid webhook signature" }),
-      {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+  const providedInternalSecret = req.headers.get("x-cron-secret") ?? "";
+  const isInternalReplay =
+    Boolean(INTERNAL_SYNC_SECRET) && providedInternalSecret === INTERNAL_SYNC_SECRET;
+
+  // Allow internally replayed events from sync/backfill jobs while keeping
+  // external webhook deliveries protected by HMAC validation.
+  if (!isInternalReplay) {
+    const webhookSecret = orgContext.webhookSecret || LEGACY_WEBHOOK_SECRET;
+    try {
+      await verifySignature(req.headers, rawBody, webhookSecret);
+    } catch (error) {
+      console.error("[savvycal-webhook] Signature verification failed:", error);
+      return new Response(
+        JSON.stringify({ error: "Invalid webhook signature" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
   }
 
   let events: SavvyCalWebhookEvent[] = [];
@@ -239,7 +246,7 @@ export async function handleWebhook(req: Request): Promise<Response> {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     },
   );
-});
+}
 
 async function verifySignature(headers: Headers, rawBody: string, webhookSecret: string): Promise<void> {
   // If no secret configured, skip signature verification

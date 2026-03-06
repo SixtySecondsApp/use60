@@ -37,7 +37,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
-const WEBHOOK_URL = `${SUPABASE_URL}/functions/v1/savvycal-leads-webhook`;
+const WEBHOOK_URL = `${SUPABASE_URL}/functions/v1/webhook-leads/savvycal`;
 
 interface CSVRow {
   id: string;

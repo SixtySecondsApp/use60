@@ -520,6 +520,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
     }
     return Object.keys(result).length > 0 ? result : null;
   }, [summaryConfig, rows]);
+  const bottomScrollPadding = summaryValues && rows.length > 0 ? ROW_HEIGHT + 24 : 24;
 
   // Virtual row scroller — uses flatItems for grouped view
   const rowVirtualizer = useVirtualizer({
@@ -729,7 +730,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
           {/* ---- BODY (virtualised) ---- */}
           <div
             style={{
-              height: rowVirtualizer.getTotalSize(),
+              height: rowVirtualizer.getTotalSize() + bottomScrollPadding,
               position: 'relative',
             }}
           >
