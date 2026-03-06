@@ -20,6 +20,9 @@ export interface SupportTicket {
   priority: TicketPriority;
   status: TicketStatus;
   assigned_to: string | null;
+  first_response_at: string | null;
+  sla_response_hours: number | null;
+  sla_breached: boolean;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
