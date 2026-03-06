@@ -71,6 +71,7 @@ jobs:
 
       - name: Notify Slack (success)
         if: success()
+        continue-on-error: true
         run: |
           curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
             -H 'Content-Type: application/json' \
@@ -81,7 +82,7 @@ jobs:
                   \"type\": \"section\",
                   \"text\": {
                     \"type\": \"mrkdwn\",
-                    \"text\": \":white_check_mark: *Database migrations applied to staging*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${GITHUB_SHA::7}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
+                    \"text\": \":white_check_mark: *Database migrations applied to staging*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
                   }
                 }
               ]
@@ -89,6 +90,7 @@ jobs:
 
       - name: Notify Slack (failure)
         if: failure()
+        continue-on-error: true
         run: |
           curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
             -H 'Content-Type: application/json' \
@@ -99,7 +101,7 @@ jobs:
                   \"type\": \"section\",
                   \"text\": {
                     \"type\": \"mrkdwn\",
-                    \"text\": \":x: *Database migration FAILED on staging*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${GITHUB_SHA::7}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
+                    \"text\": \":x: *Database migration FAILED on staging*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
                   }
                 }
               ]
@@ -129,6 +131,7 @@ jobs:
 
       - name: Notify Slack (success)
         if: success()
+        continue-on-error: true
         run: |
           curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
             -H 'Content-Type: application/json' \
@@ -139,7 +142,7 @@ jobs:
                   \"type\": \"section\",
                   \"text\": {
                     \"type\": \"mrkdwn\",
-                    \"text\": \":white_check_mark: *Database migrations applied to production*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${GITHUB_SHA::7}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
+                    \"text\": \":white_check_mark: *Database migrations applied to production*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
                   }
                 }
               ]
@@ -147,6 +150,7 @@ jobs:
 
       - name: Notify Slack (failure)
         if: failure()
+        continue-on-error: true
         run: |
           curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
             -H 'Content-Type: application/json' \
@@ -157,7 +161,7 @@ jobs:
                   \"type\": \"section\",
                   \"text\": {
                     \"type\": \"mrkdwn\",
-                    \"text\": \":x: *Database migration FAILED on production*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${GITHUB_SHA::7}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
+                    \"text\": \":x: *Database migration FAILED on production*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
                   }
                 }
               ]
