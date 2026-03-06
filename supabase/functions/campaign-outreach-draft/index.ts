@@ -55,6 +55,7 @@ interface DraftRequest {
   prospect_intel?: ProspectIntel;
   sender_name?: string;
   mode?: 'single' | 'sequence';
+  include_video?: boolean;
 }
 
 Deno.serve(async (req: Request) => {
@@ -96,7 +97,14 @@ Deno.serve(async (req: Request) => {
     }
 
     const draft = await generateDraft(geminiKey, body);
-    return jsonResponse({ success: true, draft }, req);
+
+    // Generate video script alongside text draft when requested
+    let video_script: string | null = null;
+    if (body.include_video) {
+      video_script = await generateVideoScript(geminiKey, body, draft.body);
+    }
+
+    return jsonResponse({ success: true, draft, video_script }, req);
   } catch (err) {
     console.error('[campaign-outreach-draft] Error:', err);
     return errorResponse(
@@ -286,4 +294,63 @@ Return valid JSON:
   }
 
   return JSON.parse(text);
+}
+
+// ---------------------------------------------------------------------------
+// Video script generator (HG-011)
+// ---------------------------------------------------------------------------
+
+async function generateVideoScript(
+  apiKey: string,
+  request: DraftRequest,
+  emailBody: string,
+): Promise<string> {
+  const { company, prospect, sender_name } = request;
+  const recipientName = prospect?.first_name || 'there';
+  const senderFirst = sender_name?.split(' ')[0] || '';
+
+  const prompt = `Write a 15-20 second video script for a personalized outreach video.
+
+CONTEXT: This is a short video where a sales rep's AI avatar speaks directly to the prospect. It accompanies this email:
+---
+${emailBody}
+---
+
+RECIPIENT: ${recipientName}${prospect?.last_name ? ' ' + prospect.last_name : ''} at ${company.name}
+SENDER: ${senderFirst || 'the rep'}
+
+RULES:
+1. 3-4 sentences MAX. Must be under 20 seconds when spoken aloud.
+2. Start with "Hey ${recipientName}" — make it feel personal, like a quick video message.
+3. Reference ONE specific thing about ${company.name} (their product, market, or challenge).
+4. End with a soft CTA: "check out the link" or "take a look when you get a sec".
+5. Sound natural and conversational — this is being SPOKEN, not read.
+6. NO formal greetings. NO "I hope this finds you well". NO corporate language.
+
+Return ONLY the script text, no JSON wrapping.`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 200,
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    console.error('[campaign-outreach-draft] Video script generation failed:', response.status);
+    return `Hey ${recipientName}, I put together a quick demo showing how 60 could help ${company.name} automate the sales work around your calls. Take a look when you get a sec.`;
+  }
+
+  const json = await response.json();
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+  return text || `Hey ${recipientName}, quick video for you — I put together something showing how 60 could help ${company.name}. Take a look when you get a chance.`;
 }

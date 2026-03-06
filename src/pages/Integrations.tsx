@@ -44,6 +44,7 @@ import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
 import { ExplloriumConfigModal } from '@/components/integrations/ExplloriumConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
+import { HeyGenConfigModal } from '@/components/integrations/HeyGenConfigModal';
 
 // Hooks and stores
 import { useGoogleIntegration } from '@/lib/stores/integrationStore';
@@ -60,6 +61,7 @@ import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { useExploriumIntegration } from '@/lib/hooks/useExploriumIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
+import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
 import { getIntegrationDomain, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { useUser } from '@/lib/hooks/useUser';
@@ -527,6 +529,20 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'heygen',
+    name: 'HeyGen',
+    description: 'AI avatars & personalized video outreach.',
+    permissions: [
+      { title: 'Create avatars', description: 'Generate AI sales avatars from photos.' },
+      { title: 'Generate videos', description: 'Create personalized outreach videos at scale.' },
+    ],
+    brandColor: 'purple',
+    iconBgColor: 'bg-purple-50 dark:bg-purple-900/20',
+    iconBorderColor: 'border-purple-100 dark:border-purple-800/40',
+    fallbackIcon: <Video className="w-6 h-6 text-purple-600 dark:text-purple-400" />,
+    isBuilt: true,
+  },
+  {
     id: 'apify',
     name: 'Apify',
     description: 'Run any web scraping actor from the Apify marketplace.',
@@ -736,6 +752,11 @@ export default function Integrations() {
     loading: apifyLoading,
   } = useApifyIntegration();
 
+  const {
+    isConnected: heygenConnected,
+    loading: heygenLoading,
+  } = useHeyGenIntegration();
+
   // Modal states
   const [activeConnectModal, setActiveConnectModal] = useState<string | null>(null);
   const [activeConfigModal, setActiveConfigModal] = useState<string | null>(null);
@@ -830,6 +851,8 @@ export default function Integrations() {
         return instantlyConnected ? 'active' : 'inactive';
       case 'apify':
         return apifyConnected ? 'active' : 'inactive';
+      case 'heygen':
+        return heygenConnected ? 'active' : 'inactive';
       default:
         return 'coming_soon';
     }
@@ -1162,6 +1185,10 @@ export default function Integrations() {
       />
       <ApifyConfigModal
         open={activeConfigModal === 'apify'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <HeyGenConfigModal
+        open={activeConfigModal === 'heygen'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
     </div>
