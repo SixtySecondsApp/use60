@@ -33,6 +33,7 @@ import { LandingPageV5 } from './pages/LandingPageV5';
 import { lazy, Suspense } from 'react';
 
 const CampaignLanding = lazy(() => import('./pages/CampaignLanding'));
+const DemoPage = lazy(() => import('./pages/DemoPage'));
 import { getAppUrl } from './lib/utils/siteUrl';
 import { trackPageView } from './lib/pageViewTracker';
 import { CookieConsentBanner } from './lib/consent/CookieConsentBanner';
@@ -89,6 +90,7 @@ function App() {
         {/* Campaign analytics dashboard */}
         {/* Campaign personalized demo links */}
         <Route path="/t/:code" element={<Suspense fallback={<div className="min-h-screen bg-zinc-950" />}><CampaignLanding /></Suspense>} />
+        <Route path="/demo" element={<Suspense fallback={<div className="min-h-screen bg-zinc-950" />}><DemoPage /></Suspense>} />
         <Route path="/demo-v3" element={<DemoExperience />} />
         <Route path="/demo-v2" element={<DemoExperienceV2 />} />
         {/* Redirect auth routes to app domain */}
