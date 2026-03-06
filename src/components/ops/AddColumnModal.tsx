@@ -11,6 +11,7 @@ import { LinkedInPropertyPicker } from './LinkedInPropertyPicker';
 import { OpenRouterModelPicker } from './OpenRouterModelPicker';
 import { ButtonColumnConfigPanel } from './ButtonColumnConfigPanel';
 import { InstantlyColumnWizard } from './InstantlyColumnWizard';
+import { VideoAvatarColumnWizard } from './VideoAvatarColumnWizard';
 
 interface ExistingColumn {
   key: string;
@@ -393,7 +394,8 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
     && (!isLinkedInProperty || linkedinPropertyName.length > 0)
     && (!isButton || (buttonConfig.label.trim().length > 0 && buttonConfig.actions.length > 0))
     && (!isAgentResearch || agentPromptTemplate.trim().length > 0)
-    && !isInstantly; // Instantly uses its own wizard flow, not the standard Add button
+    && !isInstantly // Instantly uses its own wizard flow, not the standard Add button
+    && columnType !== 'heygen_video'; // Video Avatar uses its own wizard flow
 
   // Filter columns for the @mention dropdown (enrichment prompt)
   const filteredColumns = useMemo(() => {
@@ -1397,15 +1399,28 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
             </div>
           )}
 
-          {/* Video Avatar Section */}
-          {columnType === 'heygen_video' && (
-            <div className="flex items-start gap-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3.5 py-3">
-              <Video className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
-              <div>
-                <p className="text-xs leading-relaxed text-gray-300">
-                  Video Avatar columns track personalized video generation per row. Select rows and use <strong className="text-purple-300">Generate Videos</strong> to create AI avatar videos for each prospect.
-                </p>
-              </div>
+          {/* Video Avatar Wizard */}
+          {columnType === 'heygen_video' && tableId && orgId && (
+            <VideoAvatarColumnWizard
+              tableId={tableId}
+              orgId={orgId}
+              onComplete={(columns) => {
+                if (columns.length === 1) {
+                  onAdd(columns[0]);
+                } else if (onAddMultiple && columns.length > 1) {
+                  onAddMultiple(columns);
+                }
+                onClose();
+              }}
+              onCancel={onClose}
+            />
+          )}
+
+          {columnType === 'heygen_video' && (!tableId || !orgId) && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm text-amber-300">
+                Save this table first before adding a Video Avatar column.
+              </p>
             </div>
           )}
 
