@@ -27,6 +27,7 @@ import {
   type TicketStatusFilter,
   type TicketPriority,
   useUpdateTicketStatus,
+  useAdminTicketsRealtime,
 } from '@/lib/hooks/useSupportTickets';
 import { TicketDetail } from '@/components/support/TicketDetail';
 import { formatDistanceToNow } from 'date-fns';
@@ -288,6 +289,7 @@ export default function SupportTicketsPage() {
 
   const { data: tickets, isLoading, error } = useAdminAllTickets(statusFilter, categoryFilter, priorityFilter);
   const { mutateAsync: updateStatus } = useUpdateTicketStatus();
+  useAdminTicketsRealtime();
 
   // Derive unique org IDs and assigned_to IDs from all tickets
   const allOrgIds = [...new Set((tickets ?? []).map((t) => t.org_id))];

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -66,6 +67,68 @@ export function useSupportTickets(statusFilter: TicketStatusFilter = 'all', cate
     },
     enabled: !!user?.id,
   });
+}
+
+/**
+ * Subscribe to realtime changes on support_tickets for the current user.
+ * Invalidates ticket queries when tickets are inserted or updated.
+ */
+export function useSupportTicketsRealtime() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`support-tickets:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'support_tickets',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['support-tickets'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
+}
+
+/**
+ * Subscribe to realtime changes on ALL support_tickets (for admin views).
+ * Invalidates admin ticket queries on any change.
+ */
+export function useAdminTicketsRealtime() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-support-tickets')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'support_tickets',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['platform-admin-tickets'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 }
 
 export function useCreateSupportTicket() {

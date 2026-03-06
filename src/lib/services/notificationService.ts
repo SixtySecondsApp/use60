@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
-export type NotificationCategory = 'workflow' | 'deal' | 'task' | 'meeting' | 'system' | 'team';
+export type NotificationCategory = 'workflow' | 'deal' | 'task' | 'meeting' | 'system' | 'team' | 'support';
 
 export interface Notification {
   id: string;

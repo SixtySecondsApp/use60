@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Ticket, Clock, AlertCircle, CheckCircle2, XCircle, Loader2, Plus, Filter } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Ticket, Clock, AlertCircle, CheckCircle2, XCircle, Loader2, Plus, Filter, Circle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -11,12 +11,17 @@ import {
 } from '@/components/ui/select';
 import {
   useSupportTickets,
+  useSupportTicketsRealtime,
   type SupportTicket,
   type TicketStatus,
   type TicketStatusFilter,
   type TicketCategory,
 } from '@/lib/hooks/useSupportTickets';
 import { TicketDetail } from './TicketDetail';
+import { useUnreadTicketIds } from '@/lib/hooks/useUnreadTicketIds';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 
 interface TicketListProps {
@@ -46,7 +51,7 @@ const CATEGORY_LABELS: Record<TicketCategory, string> = {
   other: 'Other',
 };
 
-function TicketRow({ ticket, onClick }: { ticket: SupportTicket; onClick: () => void }) {
+function TicketRow({ ticket, onClick, isUnread }: { ticket: SupportTicket; onClick: () => void; isUnread?: boolean }) {
   const statusConfig = STATUS_CONFIG[ticket.status];
   const StatusIcon = statusConfig.icon;
   const priorityConfig = PRIORITY_CONFIG[ticket.priority];
@@ -54,11 +59,12 @@ function TicketRow({ ticket, onClick }: { ticket: SupportTicket; onClick: () => 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0"
+      className={`w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0 ${isUnread ? 'bg-blue-50/50 dark:bg-blue-500/5' : ''}`}
     >
       <div className="flex items-start gap-3">
-        <div className="pt-0.5">
+        <div className="pt-0.5 relative">
           <Ticket className="w-4 h-4 text-gray-400" />
+          {isUnread && <Circle className="w-2 h-2 fill-blue-500 text-blue-500 absolute -top-0.5 -right-0.5" />}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
@@ -92,6 +98,28 @@ export function TicketList({ onCreateTicket }: TicketListProps) {
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
 
   const { data: tickets, isLoading, error } = useSupportTickets(statusFilter, categoryFilter);
+  useSupportTicketsRealtime();
+  const { unreadIds } = useUnreadTicketIds();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  const handleOpenTicket = useCallback(async (ticket: SupportTicket) => {
+    setSelectedTicket(ticket);
+
+    // Mark support notifications for this ticket as read
+    if (user?.id && unreadIds.has(ticket.id)) {
+      await supabase
+        .from('notifications')
+        .update({ read: true, read_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .eq('category', 'support')
+        .eq('entity_type', 'support_ticket')
+        .eq('entity_id', ticket.id)
+        .eq('read', false);
+
+      queryClient.invalidateQueries({ queryKey: ['unread-ticket-ids'] });
+    }
+  }, [user?.id, unreadIds, queryClient]);
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
@@ -177,7 +205,8 @@ export function TicketList({ onCreateTicket }: TicketListProps) {
             <TicketRow
               key={ticket.id}
               ticket={ticket}
-              onClick={() => setSelectedTicket(ticket)}
+              isUnread={unreadIds.has(ticket.id)}
+              onClick={() => handleOpenTicket(ticket)}
             />
           ))
         }
