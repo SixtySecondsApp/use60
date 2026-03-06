@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ConfigureModal, ConfigSection, DangerZone } from './ConfigureModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { KeyRound, Video, Check } from 'lucide-react';
+import { KeyRound, Video, Check, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
 
@@ -14,6 +15,7 @@ interface HeyGenConfigModalProps {
 }
 
 export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps) {
+  const navigate = useNavigate();
   const { isConnected, loading, connectApiKey, disconnect } = useHeyGenIntegration();
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
@@ -112,6 +114,22 @@ export function HeyGenConfigModal({ open, onOpenChange }: HeyGenConfigModalProps
               Video Outreach in Ops Campaigns
             </div>
           </div>
+        </ConfigSection>
+      )}
+
+      {isConnected && (
+        <ConfigSection title="Get Started">
+          <Button
+            size="sm"
+            onClick={() => {
+              onOpenChange(false);
+              navigate('/settings/integrations/video-avatar');
+            }}
+            className="bg-purple-600 hover:bg-purple-500 text-white"
+          >
+            <Sparkles className="w-4 h-4 mr-1.5" />
+            Create Your Avatar
+          </Button>
         </ConfigSection>
       )}
 
