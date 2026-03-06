@@ -29,8 +29,9 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useSandboxData } from '../data/SandboxDataProvider';
-import type { SandboxDeal, DealStage } from '../data/sandboxTypes';
+import type { SandboxDeal, DealStage, SandboxCompetitor } from '../data/sandboxTypes';
 import { STAGE_META, getLogoDevUrl } from '../data/sandboxTypes';
+import { CompetitiveIntel } from '../components/CompetitiveIntel';
 
 const VISIBLE_STAGES: DealStage[] = ['lead', 'qualified', 'proposal', 'negotiation', 'closed_won'];
 
@@ -223,10 +224,12 @@ function DealDetailPanel({
   deal,
   onClose,
   onAskCopilot,
+  competitors,
 }: {
   deal: SandboxDeal;
   onClose: () => void;
   onAskCopilot: (deal: SandboxDeal) => void;
+  competitors?: SandboxCompetitor[];
 }) {
   const stageMeta = STAGE_META[deal.stage];
   const healthCfg = HEALTH_CONFIG[deal.health_status];
@@ -372,6 +375,11 @@ function DealDetailPanel({
                 </div>
               ))}
             </div>
+          )}
+
+          {/* Competitive Intel */}
+          {deal.isVisitorDeal && competitors && competitors.length > 0 && (
+            <CompetitiveIntel companyName={deal.company_name} competitors={competitors} />
           )}
 
           {/* Ask Copilot CTA */}
@@ -766,6 +774,7 @@ export default function SandboxPipeline() {
             deal={selectedDeal}
             onClose={handleClosePanel}
             onAskCopilot={handleAskCopilot}
+            competitors={data.competitive}
           />
         )}
         {selectedDeal && panelMode === 'copilot' && (

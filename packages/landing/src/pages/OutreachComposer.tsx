@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Linkedin, MessageSquare, Copy, Check, ExternalLink, Sparkles, Loader2, Link2, RefreshCw } from 'lucide-react';
+import { Mail, Linkedin, MessageSquare, Copy, Check, ExternalLink, Sparkles, Loader2, Link2, RefreshCw, User } from 'lucide-react';
 import type { ResearchData } from '../demo/demo-types';
 import type { CampaignQueryParams } from './CampaignLanding';
 import type { Session } from '../lib/supabase/clientV2';
@@ -27,6 +27,7 @@ interface OutreachComposerProps {
   session: Session;
   linkResult: { code: string; url: string } | null;
   onLinkCreated: (result: { code: string; url: string }) => void;
+  prospectIntel?: ResearchData['prospect'] | null;
 }
 
 const CHANNEL_CONFIG: Record<Channel, { icon: typeof Mail; label: string; maxLength: number }> = {
@@ -56,6 +57,7 @@ export default function OutreachComposer({
   session,
   linkResult,
   onLinkCreated,
+  prospectIntel,
 }: OutreachComposerProps) {
   const [channel, setChannel] = useState<Channel>('email');
   const [subject, setSubject] = useState('');
@@ -65,11 +67,15 @@ export default function OutreachComposer({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [sequenceMode, setSequenceMode] = useState(false);
+  const [activeTouch, setActiveTouch] = useState(0);
+  const [sequenceTouches, setSequenceTouches] = useState<Array<{ day: number; subject: string; body: string }> | null>(null);
   const draftCacheRef = useRef<Record<Channel, { subject?: string; body: string } | null>>({
     email: null,
     linkedin: null,
     slack: null,
   });
+  const sequenceCacheRef = useRef<Array<{ day: number; subject: string; body: string }> | null>(null);
 
   const recipientName = queryParams.fn || 'there';
 
@@ -96,9 +102,15 @@ export default function OutreachComposer({
           company: research.company,
           channel: ch,
           prospect: queryParams.fn ? {
-            first_name: queryParams.fn,
-            last_name: queryParams.ln,
-            title: undefined,
+            first_name: prospectIntel?.first_name || queryParams.fn,
+            last_name: prospectIntel?.last_name || queryParams.ln,
+            title: prospectIntel?.title || undefined,
+          } : undefined,
+          prospect_intel: prospectIntel ? {
+            title: prospectIntel.title,
+            seniority: prospectIntel.seniority,
+            recent_activity: prospectIntel.recent_activity,
+            interests: prospectIntel.interests,
           } : undefined,
           sender_name: session.user?.user_metadata?.full_name || undefined,
         }),
@@ -127,16 +139,83 @@ export default function OutreachComposer({
     }
   }, [session, research, queryParams, recipientName]);
 
-  // Fetch draft on mount and when channel changes
+  // Fetch sequence drafts (3-touch email sequence)
+  const fetchSequence = useCallback(async () => {
+    if (sequenceCacheRef.current) {
+      setSequenceTouches(sequenceCacheRef.current);
+      return;
+    }
+
+    setDrafting(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const response = await fetch(`${supabaseUrl}/functions/v1/campaign-outreach-draft`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          company: research.company,
+          channel: 'email',
+          mode: 'sequence',
+          prospect: queryParams.fn ? {
+            first_name: prospectIntel?.first_name || queryParams.fn,
+            last_name: prospectIntel?.last_name || queryParams.ln,
+            title: prospectIntel?.title || undefined,
+          } : undefined,
+          prospect_intel: prospectIntel ? {
+            title: prospectIntel.title,
+            seniority: prospectIntel.seniority,
+            recent_activity: prospectIntel.recent_activity,
+            interests: prospectIntel.interests,
+          } : undefined,
+          sender_name: session.user?.user_metadata?.full_name || undefined,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Sequence generation failed');
+
+      const data = await response.json();
+      if (data.success && data.sequence?.touches) {
+        setSequenceTouches(data.sequence.touches);
+        sequenceCacheRef.current = data.sequence.touches;
+        if (data.sequence.suggested_role) setSuggestedRole(data.sequence.suggested_role);
+        return;
+      }
+      throw new Error('No sequence returned');
+    } catch {
+      // Fall back to 3 simple templates
+      const touches = [
+        { day: 0, subject: `Quick demo for ${research.company.name}`, body: fallbackDraft('email', research.company.name, recipientName).body },
+        { day: 3, subject: `Re: ${research.company.name} demo`, body: `Hi ${recipientName},\n\nWanted to make sure you saw this — the personalized demo is still live.\n\n[LINK]\n\nWorth 60 seconds?` },
+        { day: 7, subject: `Last one from me`, body: `Hi ${recipientName},\n\nI'll keep this short. If sales automation isn't on your radar right now, no worries.\n\nBut if it is — this 60-second demo was made specifically for ${research.company.name}: [LINK]\n\nEither way, good luck out there.` },
+      ];
+      setSequenceTouches(touches);
+      sequenceCacheRef.current = touches;
+    } finally {
+      setDrafting(false);
+    }
+  }, [session, research, queryParams, recipientName, prospectIntel]);
+
+  // Fetch draft on mount and when channel/mode changes
   useEffect(() => {
-    fetchAiDraft(channel);
-  }, [channel, fetchAiDraft]);
+    if (sequenceMode && channel === 'email') {
+      fetchSequence();
+    } else {
+      fetchAiDraft(channel);
+    }
+  }, [channel, sequenceMode, fetchAiDraft, fetchSequence]);
 
   const handleRegenerate = useCallback(() => {
-    // Clear cache for this channel and re-fetch
-    draftCacheRef.current[channel] = null;
-    fetchAiDraft(channel);
-  }, [channel, fetchAiDraft]);
+    if (sequenceMode) {
+      sequenceCacheRef.current = null;
+      fetchSequence();
+    } else {
+      draftCacheRef.current[channel] = null;
+      fetchAiDraft(channel);
+    }
+  }, [channel, sequenceMode, fetchAiDraft, fetchSequence]);
 
   const handleCreateLink = useCallback(async () => {
     setCreating(true);
@@ -193,8 +272,16 @@ export default function OutreachComposer({
     setTimeout(() => setCopied(false), 2000);
   }, [linkResult]);
 
+  // Resolve current content based on mode
+  const currentSubject = sequenceMode && sequenceTouches
+    ? sequenceTouches[activeTouch]?.subject || ''
+    : subject;
+  const currentBody = sequenceMode && sequenceTouches
+    ? sequenceTouches[activeTouch]?.body || ''
+    : body;
+
   // Replace [LINK] placeholder with actual link
-  const displayBody = linkResult ? body.replace('[LINK]', linkResult.url) : body;
+  const displayBody = linkResult ? currentBody.replace('[LINK]', linkResult.url) : currentBody;
 
   return (
     <div className="p-6 flex flex-col h-full">
@@ -208,14 +295,55 @@ export default function OutreachComposer({
         </p>
       </div>
 
-      {/* Prospect info (if available) */}
-      {(queryParams.fn || queryParams.email) && (
+      {/* Prospect intelligence card */}
+      {(queryParams.fn || queryParams.email || prospectIntel) && (
         <div className="mb-4 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
-          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Prospect</p>
-          <p className="text-sm text-zinc-200">
-            {[queryParams.fn, queryParams.ln].filter(Boolean).join(' ') || 'Unknown'}
-            {queryParams.email && <span className="text-zinc-500 ml-2">{queryParams.email}</span>}
-          </p>
+          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Prospect</p>
+          <div className="flex items-start gap-3">
+            {prospectIntel?.photo_url ? (
+              <img
+                src={prospectIntel.photo_url}
+                alt=""
+                className="w-10 h-10 rounded-full object-cover shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-violet-500/20 border border-violet-500/20 flex items-center justify-center shrink-0">
+                <User className="w-5 h-5 text-violet-400" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-zinc-200 font-medium">
+                {prospectIntel?.full_name || [queryParams.fn, queryParams.ln].filter(Boolean).join(' ') || 'Unknown'}
+              </p>
+              {(prospectIntel?.title || prospectIntel?.seniority) && (
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {prospectIntel.title}{prospectIntel.seniority ? ` (${prospectIntel.seniority})` : ''}
+                </p>
+              )}
+              {queryParams.email && (
+                <p className="text-xs text-zinc-600 mt-0.5">{queryParams.email}</p>
+              )}
+              {prospectIntel?.linkedin_url && (
+                <a
+                  href={prospectIntel.linkedin_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-violet-400 hover:text-violet-300 mt-0.5 inline-flex items-center gap-1"
+                >
+                  <Linkedin className="w-3 h-3" />
+                  LinkedIn
+                </a>
+              )}
+              {prospectIntel?.recent_activity && prospectIntel.recent_activity.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-zinc-700/50">
+                  <p className="text-xs text-zinc-500 mb-1">Recent activity</p>
+                  {prospectIntel.recent_activity.slice(0, 2).map((activity, i) => (
+                    <p key={i} className="text-xs text-zinc-400 truncate">{activity}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -241,14 +369,61 @@ export default function OutreachComposer({
         })}
       </div>
 
+      {/* Sequence mode toggle (email only) */}
+      {channel === 'email' && (
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs text-zinc-500">Mode</span>
+          <button
+            onClick={() => { setSequenceMode(!sequenceMode); setActiveTouch(0); }}
+            className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+              sequenceMode
+                ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+                : 'text-zinc-500 hover:text-zinc-300 border border-zinc-700/50'
+            }`}
+          >
+            {sequenceMode ? 'Sequence (3 touches)' : 'Single message'}
+          </button>
+        </div>
+      )}
+
+      {/* Sequence touch tabs */}
+      {sequenceMode && channel === 'email' && sequenceTouches && (
+        <div className="flex gap-1 mb-3 p-1 bg-zinc-800/50 rounded-lg">
+          {sequenceTouches.map((touch, i) => {
+            const labels = ['Day 0: Intro', 'Day 3: Follow-up', 'Day 7: Break-up'];
+            return (
+              <button
+                key={i}
+                onClick={() => setActiveTouch(i)}
+                className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  activeTouch === i
+                    ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {labels[i] || `Day ${touch.day}`}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Subject (email only) */}
       {channel === 'email' && (
         <div className="mb-3">
           <label className="text-xs text-zinc-500 mb-1 block">Subject</label>
           <input
             type="text"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
+            value={currentSubject}
+            onChange={(e) => {
+              if (sequenceMode && sequenceTouches) {
+                const updated = [...sequenceTouches];
+                updated[activeTouch] = { ...updated[activeTouch], subject: e.target.value };
+                setSequenceTouches(updated);
+              } else {
+                setSubject(e.target.value);
+              }
+            }}
             className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-violet-500/50"
           />
         </div>
@@ -286,8 +461,16 @@ export default function OutreachComposer({
         ) : (
           <textarea
             value={displayBody}
-            onChange={(e) => setBody(e.target.value)}
-            rows={12}
+            onChange={(e) => {
+              if (sequenceMode && sequenceTouches) {
+                const updated = [...sequenceTouches];
+                updated[activeTouch] = { ...updated[activeTouch], body: e.target.value };
+                setSequenceTouches(updated);
+              } else {
+                setBody(e.target.value);
+              }
+            }}
+            rows={sequenceMode ? 8 : 12}
             className="w-full flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 resize-none font-mono leading-relaxed"
             maxLength={CHANNEL_CONFIG[channel].maxLength}
           />

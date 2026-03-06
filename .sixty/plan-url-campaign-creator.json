@@ -1,0 +1,205 @@
+{
+  "feature": "url-campaign-creator",
+  "name": "URL-Based Campaign Link Creator",
+  "description": "Create personalized campaign links directly from a URL like /t/stripe.com. Split-screen creator view with live preview + outreach composer. Supports query params for prospect data (fn, ln, email, cid). Created links feed into ABM Campaigns table with full analytics.",
+  "createdAt": "2026-03-06",
+  "status": "planned",
+  "consultReport": ".sixty/consult/url-campaign-creator.md",
+
+  "stories": [
+    {
+      "id": "UCR-001",
+      "title": "Route detection: domain vs campaign code in CampaignLanding",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["UCR-002", "UCR-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "If :code param contains a '.', treat as domain -> render CreatorView",
+        "If :code param is alphanumeric (6-char code), use existing CampaignLanding flow",
+        "Edge case: codes like 'abc.de' should still detect as domain (contains dot)"
+      ],
+      "files": [
+        "packages/landing/src/pages/CampaignLanding.tsx"
+      ],
+      "notes": "Simple detection: code.includes('.') -> domain mode. Existing 6-char base62 codes never contain dots."
+    },
+    {
+      "id": "UCR-002",
+      "title": "Auth gate + query param parsing for creator view",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["UCR-001"], "files": [], "schema": [] },
+      "blocks": ["UCR-003"],
+      "parallelWith": [],
+      "acceptance": [
+        "AuthProvider wraps the /t/:code route in App.tsx (lazy, only for domain routes)",
+        "If user is not authenticated when visiting /t/domain.com, redirect to app login with return URL",
+        "Parse query params: fn, ln, email, cid from URL search params",
+        "Pass parsed params to CreatorView component"
+      ],
+      "files": [
+        "packages/landing/src/pages/CampaignLanding.tsx",
+        "packages/landing/src/App.tsx"
+      ],
+      "notes": "AuthContext already exists in packages/landing/src/lib/contexts/AuthContext.tsx with useAuth hook. Need to wrap route or use inline auth check. Redirect unauthenticated users to app.use60.com/login?redirect=/t/domain.com"
+    },
+    {
+      "id": "UCR-003",
+      "title": "CreatorView split-screen component with enrichment",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["UCR-001", "UCR-002"], "files": [], "schema": [] },
+      "blocks": ["UCR-004", "UCR-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Split screen layout: left = SandboxExperience preview (60%), right = OutreachComposer panel (40%)",
+        "Calls useDemoResearch(domain) on mount to enrich company data",
+        "Shows loading state with agent animation while enrichment runs (~4-6s)",
+        "Once enrichment completes, left side shows live SandboxExperience preview",
+        "Responsive: stacks vertically on mobile (preview on top, composer below)"
+      ],
+      "files": [
+        "packages/landing/src/pages/CreatorView.tsx"
+      ],
+      "notes": "Reuse existing SandboxExperience component for the preview. Reuse useDemoResearch hook for enrichment. The preview should be read-only (no tracking, no signup capture)."
+    },
+    {
+      "id": "UCR-004",
+      "title": "OutreachComposer panel with channel picker + AI draft",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["UCR-003"], "files": [], "schema": [] },
+      "blocks": ["UCR-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Channel picker tabs: Email / LinkedIn / Slack",
+        "Pre-fills recipient fields from query params (fn, ln, email)",
+        "AI-generates outreach message using enrichment data (company, value props, pain points)",
+        "Message is editable in a text area before creating the link",
+        "Uses enrichment data to build a prompt inspired by sales-sequence skill (company context + personalization)",
+        "Calls demo-research or generate-email-sequence for the draft"
+      ],
+      "files": [
+        "packages/landing/src/pages/OutreachComposer.tsx"
+      ],
+      "notes": "For MVP, generate a single email draft using the enrichment data. The channel picker changes the format/tone. Call the demo-research edge function which already returns cold_outreach.email_preview in demo_actions. For LinkedIn/Slack, adapt the email content to shorter format client-side."
+    },
+    {
+      "id": "UCR-005",
+      "title": "Create Link action: call campaign-enrich + show encoded URL",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["UCR-003", "UCR-004"], "files": [], "schema": [] },
+      "blocks": ["UCR-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Create Link button calls campaign-enrich edge function with domain, query params, and enrichment data",
+        "Uses authenticated Supabase session token (not anon key) for the edge function call",
+        "On success, displays the encoded URL (use60.com/t/{code}) with copy-to-clipboard button",
+        "Shows 'View in ABM Campaigns' link to the main app campaigns page",
+        "Campaign source defaults to 'url-direct' or uses cid query param value",
+        "Loading state on button while creating"
+      ],
+      "files": [
+        "packages/landing/src/pages/CreatorView.tsx",
+        "packages/landing/src/pages/OutreachComposer.tsx"
+      ],
+      "notes": "campaign-enrich already accepts { campaign_name, campaign_source, prospects[], expires_in_days }. Build a single-prospect payload from the domain + query params. Pass research_data from the enrichment so the link loads instantly for prospects."
+    },
+    {
+      "id": "UCR-006",
+      "title": "Verify ABM table integration + analytics flow",
+      "type": "verification",
+      "status": "pending",
+      "priority": 6,
+      "estimatedMinutes": 10,
+      "dependencies": { "stories": ["UCR-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Links created via /t/domain.com appear in ABM Campaigns flat table",
+        "Campaign source shows 'url-direct' or custom cid value",
+        "Engagement tracking works when prospect visits the encoded URL",
+        "View count, engagement score, and visitor data flow correctly"
+      ],
+      "files": [],
+      "notes": "This is a verification story - no code changes expected. The campaign_links table is shared, so links created here automatically appear in AbmCampaignsPage. Just verify the flow end-to-end."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 6,
+    "estimatedMinutes": 130,
+    "estimatedHours": "2-2.5 hours",
+    "parallelOpportunities": "None - stories are sequential due to dependency chain",
+    "mvp": {
+      "stories": ["UCR-001", "UCR-002", "UCR-003", "UCR-005"],
+      "estimatedMinutes": 90,
+      "delivers": "Working URL-to-link flow without outreach composer (just create link from domain)"
+    }
+  },
+
+  "risks": [
+    {
+      "severity": "medium",
+      "area": "auth",
+      "issue": "AuthProvider not currently wrapping landing routes in App.tsx",
+      "mitigation": "Add AuthProvider lazily only for domain-detected /t/ routes, not all landing pages"
+    },
+    {
+      "severity": "medium",
+      "area": "edge-function-auth",
+      "issue": "campaign-enrich expects authenticated calls but landing package uses anon key for PostgREST",
+      "mitigation": "CreatorView uses Supabase session token via supabase.functions.invoke() pattern"
+    },
+    {
+      "severity": "low",
+      "area": "ux",
+      "issue": "Split-screen may feel cramped on smaller screens",
+      "mitigation": "Stack vertically on screens < 1024px"
+    }
+  ],
+
+  "existingAssets": {
+    "reuse": [
+      { "path": "packages/landing/src/sandbox/SandboxExperience.tsx", "for": "Preview panel in creator view" },
+      { "path": "packages/landing/src/demo/useDemoResearch.ts", "for": "Company enrichment from domain" },
+      { "path": "packages/landing/src/lib/contexts/AuthContext.tsx", "for": "Auth gating creator view" },
+      { "path": "supabase/functions/campaign-enrich/index.ts", "for": "Creating campaign links with enrichment" },
+      { "path": "supabase/functions/demo-research/index.ts", "for": "Domain enrichment API" }
+    ],
+    "noChanges": [
+      { "path": "supabase/migrations/20260305000001_campaign_links.sql", "reason": "Schema already supports all needed fields" },
+      { "path": "src/pages/campaigns/AbmCampaignsPage.tsx", "reason": "Already reads from campaign_links table - no changes needed" },
+      { "path": "packages/landing/src/sandbox/hooks/useSandboxTracking.ts", "reason": "Tracking already works for /t/{code} prospect views" }
+    ]
+  },
+
+  "urlSchema": {
+    "creatorUrl": "/t/{domain}?fn={first_name}&ln={last_name}&email={email}&cid={campaign_id}",
+    "prospectUrl": "/t/{6-char-code}",
+    "examples": [
+      "https://www.use60.com/t/stripe.com",
+      "https://www.use60.com/t/stripe.com?fn=John&ln=Doe&email=john@stripe.com&cid=Q1-outbound",
+      "https://www.use60.com/t/ui234h23p"
+    ],
+    "params": {
+      "fn": { "mapsTo": "visitor_first_name", "required": false },
+      "ln": { "mapsTo": "visitor_last_name", "required": false },
+      "email": { "mapsTo": "visitor_email", "required": false },
+      "cid": { "mapsTo": "campaign_name", "required": false, "default": "URL Direct" }
+    }
+  }
+}

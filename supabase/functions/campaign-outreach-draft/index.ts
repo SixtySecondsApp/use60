@@ -37,6 +37,13 @@ interface CompanyData {
   };
 }
 
+interface ProspectIntel {
+  title?: string;
+  seniority?: string;
+  recent_activity?: string[];
+  interests?: string[];
+}
+
 interface DraftRequest {
   company: CompanyData;
   channel: 'email' | 'linkedin' | 'slack';
@@ -45,7 +52,9 @@ interface DraftRequest {
     last_name?: string;
     title?: string;
   };
+  prospect_intel?: ProspectIntel;
   sender_name?: string;
+  mode?: 'single' | 'sequence';
 }
 
 Deno.serve(async (req: Request) => {
@@ -81,6 +90,11 @@ Deno.serve(async (req: Request) => {
       return errorResponse('GEMINI_API_KEY not configured', req, 500);
     }
 
+    if (body.mode === 'sequence' && body.channel === 'email') {
+      const sequence = await generateSequence(geminiKey, body);
+      return jsonResponse({ success: true, sequence }, req);
+    }
+
     const draft = await generateDraft(geminiKey, body);
     return jsonResponse({ success: true, draft }, req);
   } catch (err) {
@@ -107,6 +121,18 @@ async function generateDraft(
     slack: 'Write a casual Slack DM. 2-3 sentences. Direct and friendly.',
   };
 
+  const { prospect_intel } = request;
+
+  // Build prospect intelligence section
+  const prospectIntelSection = prospect_intel
+    ? `\nPROSPECT INTELLIGENCE (from enrichment — use this to personalize):
+- Title: ${prospect_intel.title || 'Unknown'}
+- Seniority: ${prospect_intel.seniority || 'Unknown'}
+- Recent activity: ${prospect_intel.recent_activity?.join('; ') || 'None found'}
+- Interests: ${prospect_intel.interests?.join(', ') || 'None found'}
+${prospect_intel.recent_activity?.length ? 'Reference their recent activity or interests naturally in the message. This shows you did your homework.' : ''}`
+    : '';
+
   const prompt = `You're writing a short outreach message to someone at ${company.name} to get them to check out a personalized 60-second demo of "60" — an AI command center for sales teams.
 
 ABOUT 60: AI agents that automate everything either side of the sales call. Lead research, meeting prep, follow-ups, proposals, pipeline management. The rep focuses on conversations that close. 60 handles the rest.
@@ -120,8 +146,10 @@ ABOUT THE PROSPECT COMPANY:
 - Size: ${company.employee_range || 'Unknown'}
 - Competitors: ${company.competitors?.join(', ') || 'Unknown'}
 - Their ICP role: ${company.icp?.title || 'Unknown'}
+${(company as Record<string, unknown>).funding_stage ? `- Funding: ${(company as Record<string, unknown>).funding_stage}` : ''}
+${(company as Record<string, unknown>).recent_news ? `- Recent news: ${((company as Record<string, unknown>).recent_news as string[])?.slice(0, 2).join('; ')}` : ''}
 
-${recipientName ? `RECIPIENT: ${recipientName}${prospect?.last_name ? ' ' + prospect.last_name : ''}${prospect?.title ? ', ' + prospect.title : ''}` : 'RECIPIENT: Unknown (use "Hi there" or similar)'}
+${recipientName ? `RECIPIENT: ${recipientName}${prospect?.last_name ? ' ' + prospect.last_name : ''}${prospect?.title ? ', ' + prospect.title : ''}` : 'RECIPIENT: Unknown (use "Hi there" or similar)'}${prospectIntelSection}
 
 CHANNEL: ${channel}
 ${channelGuide[channel]}
@@ -170,6 +198,91 @@ Return valid JSON only:
 
   if (!text) {
     throw new Error('No content returned from Gemini');
+  }
+
+  return JSON.parse(text);
+}
+
+// ---------------------------------------------------------------------------
+// Multi-touch sequence generator (SCC-008)
+// ---------------------------------------------------------------------------
+
+async function generateSequence(
+  apiKey: string,
+  request: DraftRequest,
+): Promise<{ touches: Array<{ day: number; subject: string; body: string }>; suggested_role?: string }> {
+  const { company, prospect, prospect_intel, sender_name } = request;
+  const recipientName = prospect?.first_name || 'there';
+  const senderFirst = sender_name?.split(' ')[0] || 'Alex';
+
+  const prospectContext = prospect_intel
+    ? `\nPROSPECT INTEL: Title: ${prospect_intel.title || 'Unknown'}, Seniority: ${prospect_intel.seniority || 'Unknown'}, Recent activity: ${prospect_intel.recent_activity?.join('; ') || 'None'}, Interests: ${prospect_intel.interests?.join(', ') || 'None'}`
+    : '';
+
+  const prompt = `Generate a 3-email outreach sequence for someone at ${company.name} to get them to check out a personalized demo of "60" (AI command center for sales teams).
+
+COMPANY: ${company.name} (${company.domain}), ${company.vertical || 'Unknown vertical'}
+What they do: ${company.product_summary || 'Unknown'}
+Size: ${company.employee_range || 'Unknown'}
+${(company as Record<string, unknown>).funding_stage ? `Funding: ${(company as Record<string, unknown>).funding_stage}` : ''}
+${(company as Record<string, unknown>).recent_news ? `Recent news: ${((company as Record<string, unknown>).recent_news as string[])?.slice(0, 2).join('; ')}` : ''}
+
+RECIPIENT: ${recipientName}${prospect?.last_name ? ' ' + prospect.last_name : ''}${prospect?.title ? ', ' + prospect.title : ''}${prospectContext}
+
+SEQUENCE STRUCTURE:
+- Touch 1 (Day 0): Personalized intro + demo link [LINK]. Reference their specific product/market. Conversational.
+- Touch 2 (Day 3): Value-add follow-up. Share a relevant insight about their industry or a challenge they face. Reference any recent news or funding. Include [LINK] again.
+- Touch 3 (Day 7): Break-up email. Short. Direct. Last chance framing. Social proof angle if possible. Include [LINK].
+
+EACH EMAIL must use DIFFERENT angles — don't repeat the same pitch. Each references different aspects of ${company.name}'s business.
+
+RULES:
+1. 50-100 words per email. Short sentences. Write like you talk.
+2. NO em dashes. NO oxford commas. Use contractions.
+3. Sign off as "${senderFirst}".
+4. Sound human, not AI. No "leverage", "synergies", "streamline", "empower".
+5. [LINK] placeholder where the demo link goes.
+
+Return valid JSON:
+{
+  "touches": [
+    {"day": 0, "subject": "subject line", "body": "email body with [LINK]"},
+    {"day": 3, "subject": "subject line", "body": "email body with [LINK]"},
+    {"day": 7, "subject": "subject line", "body": "email body with [LINK]"}
+  ],
+  "suggested_role": "job title most likely to buy sales automation"
+}`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 1500,
+          responseMimeType: 'application/json',
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Gemini sequence error: ${response.status} ${errText}`);
+  }
+
+  const json = await response.json();
+  const text = json.candidates?.[0]?.content?.parts
+    ?.filter((p: { thought?: boolean }) => !p.thought)
+    ?.map((p: { text?: string }) => p.text)
+    ?.join('') || '';
+
+  if (!text) {
+    throw new Error('No content returned from Gemini sequence');
   }
 
   return JSON.parse(text);
