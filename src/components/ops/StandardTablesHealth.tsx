@@ -83,7 +83,7 @@ export function StandardTablesHealth() {
   const handleBackfill = async () => {
     setIsBackfilling(true);
     try {
-      const { error } = await supabase.functions.invoke('backfill-standard-ops-tables');
+      const { error } = await supabase.functions.invoke('backfill-runner/standard-ops-tables');
       if (error) throw error;
       toast.success('Backfill started — rows will populate shortly');
       refetch();

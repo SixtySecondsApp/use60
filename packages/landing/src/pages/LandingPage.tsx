@@ -18,15 +18,13 @@ import { useForceDarkMode } from '../lib/hooks/useForceDarkMode';
 import { getLoginUrl } from '../lib/utils/siteUrl';
 import { useDemoResearch } from '../demo/useDemoResearch';
 import { AgentResearch } from '../demo-v2/AgentResearch';
-import { ProductShowcase } from '../demo-v2/ProductShowcase';
-import { WeekRecap } from '../demo-v2/WeekRecap';
-import { DemoSignup } from '../demo-v2/DemoSignup';
+import { SandboxExperience } from '../sandbox/SandboxExperience';
 
 // ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
 
-type DemoPhase = 'idle' | 'research' | 'showcase' | 'recap' | 'signup';
+type DemoPhase = 'idle' | 'research' | 'sandbox';
 
 const EXAMPLE_DOMAINS = ['stripe.com', 'notion.com', 'linear.app', 'figma.com'];
 
@@ -602,10 +600,8 @@ export function LandingPage() {
     handleUrlSubmit('stripe.com');
   }, [handleUrlSubmit]);
 
-  // Demo phase transitions
-  const handleResearchComplete = useCallback(() => setDemoPhase('showcase'), []);
-  const handleShowcaseComplete = useCallback(() => setDemoPhase('recap'), []);
-  const handleRecapContinue = useCallback(() => setDemoPhase('signup'), []);
+  // Demo phase transitions — research completes → sandbox launches
+  const handleResearchComplete = useCallback(() => setDemoPhase('sandbox'), []);
 
   // Scroll to top on demo phase change
   useEffect(() => {
@@ -616,7 +612,8 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 overflow-x-hidden">
-      <Navbar onTryFree={handleTryFree} />
+      {/* Hide navbar when sandbox is active — it has its own topbar */}
+      {demoPhase !== 'sandbox' && <Navbar onTryFree={handleTryFree} />}
 
       {/* Pre-demo sections — hidden once demo starts */}
       {demoPhase === 'idle' && (
@@ -642,27 +639,11 @@ export function LandingPage() {
             />
           )}
 
-          {demoPhase === 'showcase' && research.research && (
-            <ProductShowcase
-              key="showcase"
-              data={research.research}
-              onComplete={handleShowcaseComplete}
-            />
-          )}
-
-          {demoPhase === 'recap' && research.research && (
-            <WeekRecap
-              key="recap"
-              data={research.research}
-              onContinue={handleRecapContinue}
-            />
-          )}
-
-          {demoPhase === 'signup' && (
-            <DemoSignup
-              key="signup"
-              companyName={research.research?.company.name ?? ''}
-              stats={research.research?.stats ?? null}
+          {demoPhase === 'sandbox' && research.research && (
+            <SandboxExperience
+              key="sandbox"
+              research={research.research}
+              onSignup={handleTryFree}
             />
           )}
         </AnimatePresence>

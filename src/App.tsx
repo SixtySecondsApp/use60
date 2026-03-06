@@ -92,6 +92,7 @@ import {
   Events, ActivityLog,
   ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage,
   CampaignsPage,
+  AbmCampaignsPage,
   OutreachAnalyticsPage,
   WinLossPage,
   FollowUpDraftsPage,
@@ -117,10 +118,6 @@ import {
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
 const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
-const RelationshipGraphDemoPage = lazy(() => import('./pages/RelationshipGraphDemoPage'));
-const ProposalLineTunerPage = lazy(() => import('./pages/platform/ProposalLineTunerPage'));
-const DemoReengagementPage = lazy(() => import('./pages/demo/DemoReengagementPage'));
-const PipelineGalleryPage = lazy(() => import('./pages/ops/PipelineGalleryPage'));
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -413,6 +410,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Platform Admin - Email Templates */}
                 <Route path="/platform/email-templates" element={<PlatformAdminRouteGuard><AppLayout><EmailTemplates /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - Customer Management */}
+                <Route path="/platform/abm-campaigns" element={<PlatformAdminRouteGuard><AppLayout><Suspense fallback={null}><AbmCampaignsPage /></Suspense></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/customers" element={<PlatformAdminRouteGuard><AppLayout><SaasAdminDashboard /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/plans" element={<Navigate to="/platform/pricing" replace />} />
                 <Route path="/platform/pricing" element={<PlatformAdminRouteGuard><AppLayout><PricingControl /></AppLayout></PlatformAdminRouteGuard>} />
@@ -514,7 +512,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/dev/billing-analytics" element={<PlatformAdminRouteGuard><AppLayout><BillingAnalytics /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/functions" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/function-testing" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
-                <Route path="/platform/dev/proposal-line-tuner" element={<InternalRouteGuard><AppLayout><ProposalLineTunerPage /></AppLayout></InternalRouteGuard>} />
+
                 <Route path="/platform/onboarding-simulator" element={<InternalRouteGuard><AppLayout><OnboardingSimulator /></AppLayout></InternalRouteGuard>} />
                 <Route path="/platform/quickadd-simulator" element={<PlatformAdminRouteGuard><AppLayout><QuickAddSimulator /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/trial-timeline" element={<InternalRouteGuard><AppLayout><TrialTimelineSimulator /></AppLayout></InternalRouteGuard>} />
@@ -566,8 +564,6 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/follow-ups/drafts" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><FollowUpDraftsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/ops/pipelines" element={<InternalRouteGuard><AppLayout><PipelineGalleryPage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/ops/demo-reengagement" element={<InternalRouteGuard><AppLayout><DemoReengagementPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
                 {/* Unified profiles routes */}
                 <Route path="/profiles" element={<InternalRouteGuard><AppLayout><ProfilesPage /></AppLayout></InternalRouteGuard>} />
@@ -720,7 +716,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/freepik-flow" element={<AppLayout><div className="h-[calc(100vh-4rem)]"><FreepikFlow /></div></AppLayout>} />
                 <Route path="/test-fallback" element={<ProtectedRoute><TestFallback /></ProtectedRoute>} />
                 <Route path="/test-google-tasks" element={<AppLayout><TestGoogleTasks /></AppLayout>} />
-                <Route path="/relationship-graph-demo" element={<InternalRouteGuard><RelationshipGraphDemoPage /></InternalRouteGuard>} />
+
               </Routes>
             </Suspense>
           </ProtectedRoute>

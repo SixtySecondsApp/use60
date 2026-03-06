@@ -1,0 +1,399 @@
+{
+  "feature": {
+    "id": "copilot-daily-actions-gap-closure",
+    "name": "Copilot Daily Actions Gap Closure",
+    "status": "complete",
+    "createdAt": "2026-03-05",
+    "source": "User request via /60-dev-plan",
+    "summary": "Close the top 10 execution gaps between existing Copilot capabilities and dependable day-to-day user outcomes. Prioritize one-shot orchestration, write reliability, and verification loops before adding new surface area."
+  },
+  "objectives": [
+    "Make common user asks complete in one command",
+    "Increase trust in write actions with deterministic safety and verification",
+    "Reduce ambiguity handling failures with structured user disambiguation",
+    "Improve operational quality using reconciliation, idempotency, and auditability"
+  ],
+  "stories": [
+    {
+      "id": "GAP-001",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Build one-shot orchestration layer for common daily asks",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:00:00Z",
+      "priority": 1,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/orchestrator/runner.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "GAP-004",
+        "GAP-010"
+      ],
+      "parallelWith": [
+        "GAP-002"
+      ],
+      "acceptance": [
+        "Add a canonical orchestration contract for plain-language tasks like 'prep my day', 'fix contact-company link', and 'send follow-up pack'",
+        "Single invocation can execute multiple existing skills with explicit step states: planned, running, succeeded, failed",
+        "Orchestration emits user-readable completion summary with deterministic step ordering",
+        "Failure in one step does not silently skip remaining required steps; partial-state handling is explicit"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/functions/_shared/orchestrator/contextLoader.ts",
+        "supabase/functions/_shared/structuredResponseDetector.ts"
+      ]
+    },
+    {
+      "id": "GAP-002",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Ship deterministic CRM write reliability guardrails",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:01:00Z",
+      "priority": 2,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/contacts/index.ts",
+          "supabase/functions/hubspot-webhook/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "GAP-003",
+        "GAP-005"
+      ],
+      "parallelWith": [
+        "GAP-001"
+      ],
+      "acceptance": [
+        "All write actions route through a single write policy adapter with operation class, source-of-truth hints, and retry policy",
+        "Association writes validate foreign keys and ownership before update",
+        "Write failures emit typed errors suitable for user-facing fallback guidance",
+        "Introduce automatic verification re-read after mutation and return canonical success/failure payload"
+      ],
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/_shared/copilot_adapters/dbAdapters.ts",
+        "supabase/functions/_shared/copilot_adapters/types.ts"
+      ]
+    },
+    {
+      "id": "GAP-003",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Implement association-aware mutation paths",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:02:00Z",
+      "priority": 3,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "GAP-002"
+        ],
+        "files": [],
+        "schema": [
+          "contacts",
+          "companies",
+          "deal_contacts"
+        ]
+      },
+      "blocks": [
+        "GAP-008"
+      ],
+      "parallelWith": [
+        "GAP-004"
+      ],
+      "acceptance": [
+        "Copilot resolves relationship writes through FK or junction tables instead of display fields",
+        "Contact-company relink supports create-or-link flow with idempotent behavior",
+        "Mutation response includes old relation and new relation identifiers",
+        "User receives explicit guidance when relationship model is ambiguous or unsupported"
+      ],
+      "files": [
+        "supabase/functions/contacts/index.ts",
+        "supabase/functions/_shared/resolveEntityAdapter.ts",
+        "supabase/functions/_shared/primaryContactSelection.ts"
+      ]
+    },
+    {
+      "id": "GAP-004",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Add structured disambiguation prompts for duplicate matches",
+      "type": "fullstack",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:03:00Z",
+      "priority": 4,
+      "estimatedMinutes": 20,
+      "dependencies": {
+        "stories": [
+          "GAP-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GAP-007"
+      ],
+      "parallelWith": [
+        "GAP-003"
+      ],
+      "acceptance": [
+        "When multiple contacts or companies match, Copilot returns compact choice cards instead of failing",
+        "Disambiguation supports single-select and multi-select where appropriate",
+        "Selected resolution persists only for current workflow unless user confirms persistent preference",
+        "Ambiguity resolution includes enough metadata to avoid wrong-entity writes"
+      ],
+      "files": [
+        "supabase/functions/_shared/slack-copilot/entityResolver.ts",
+        "supabase/functions/_shared/slackEntityResolver.ts",
+        "src/components/copilot/responses/DealDetailsView.tsx"
+      ]
+    },
+    {
+      "id": "GAP-005",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Standardize before/after verification output for every write",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:04:00Z",
+      "priority": 5,
+      "estimatedMinutes": 20,
+      "dependencies": {
+        "stories": [
+          "GAP-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "GAP-006"
+      ],
+      "acceptance": [
+        "Every write action emits normalized payload: intent, target entity, before snapshot, after snapshot, verification status",
+        "Verification failure marks action as partial and surfaces retry guidance",
+        "User-facing response templates can render proof without exposing sensitive internals",
+        "Telemetry captures verification pass/fail per action type"
+      ],
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/crmIndexAdapter.ts",
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts",
+        "supabase/functions/api-copilot/index.ts"
+      ]
+    },
+    {
+      "id": "GAP-006",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Add cross-system reconciliation for HubSpot and app records",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:05:00Z",
+      "priority": 6,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "GAP-002"
+        ],
+        "files": [],
+        "schema": [
+          "crm_contact_index",
+          "crm_writeback_queue"
+        ]
+      },
+      "blocks": [
+        "GAP-009"
+      ],
+      "parallelWith": [
+        "GAP-005"
+      ],
+      "acceptance": [
+        "Define field-level source-of-truth policy for contact, company, and deal mutations",
+        "Reconciliation worker detects and resolves drift with explicit conflict strategy",
+        "Queue retries are bounded and observable; poison records are moved to dead-letter handling",
+        "Copilot responses include whether changes were local-only, CRM-only, or fully synced"
+      ],
+      "files": [
+        "supabase/functions/hubspot-webhook/index.ts",
+        "supabase/functions/materialize-crm-deals/index.ts",
+        "supabase/functions/_shared/materializationService.ts"
+      ]
+    },
+    {
+      "id": "GAP-007",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Deliver idempotent repair actions for common cleanup tasks",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:06:00Z",
+      "priority": 7,
+      "estimatedMinutes": 20,
+      "dependencies": {
+        "stories": [
+          "GAP-004",
+          "GAP-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "GAP-008"
+      ],
+      "acceptance": [
+        "Repair actions can be safely re-run and return 'already correct' when no changes are needed",
+        "Action handlers compute deterministic identity keys per fix operation",
+        "Idempotency applies across retries and repeated user prompts in same session",
+        "Result payload distinguishes mutated_count and unchanged_count"
+      ],
+      "files": [
+        "supabase/functions/heal-deal-links/index.ts",
+        "supabase/functions/_shared/copilot_adapters/dbAdapters.ts"
+      ]
+    },
+    {
+      "id": "GAP-008",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Introduce transactional multi-step execution with rollback hooks",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:07:00Z",
+      "priority": 8,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "GAP-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GAP-010"
+      ],
+      "parallelWith": [
+        "GAP-007"
+      ],
+      "acceptance": [
+        "Multi-step mutating workflows support saga-style rollback for reversible steps",
+        "Non-reversible steps require explicit HITL confirmation before commit",
+        "Workflow state persists for resume/retry without duplicate writes",
+        "Action audit records include compensating operations executed"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/functions/_shared/orchestrator/adapters/emailHandler.ts",
+        "supabase/functions/_shared/orchestrator/adapters/reengagement.ts"
+      ]
+    },
+    {
+      "id": "GAP-009",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Unify daily work queue with ranked priorities and next best action",
+      "type": "fullstack",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:08:00Z",
+      "priority": 9,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "GAP-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "GAP-010"
+      ],
+      "acceptance": [
+        "Single queue view aggregates follow-ups, risks, tasks, and commitment debt with a normalized priority score",
+        "Each queue item includes recommended action, expected impact, and estimated time",
+        "Queue can be requested in one natural-language command and returned in sorted order",
+        "Actions launched from queue write back completion state across source systems"
+      ],
+      "files": [
+        "src/pages/platform/CommandCentre.tsx",
+        "src/lib/services/nextActionsService.ts",
+        "supabase/functions/slack-morning-brief/index.ts"
+      ]
+    },
+    {
+      "id": "GAP-010",
+      "feature": "copilot-daily-actions-gap-closure",
+      "title": "Close the outcome learning loop for action quality",
+      "type": "backend",
+      "status": "complete",
+      "completedAt": "2026-03-05T12:09:00Z",
+      "priority": 10,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "GAP-001",
+          "GAP-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "GAP-009"
+      ],
+      "acceptance": [
+        "Capture acceptance/rejection/edit outcome for generated drafts and autonomous actions",
+        "Store action outcomes with confidence, context, and user correction metadata",
+        "Ranking and prompt policies consume outcomes to improve next recommendations",
+        "Dashboard metrics expose quality trend by action type and user segment"
+      ],
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/reengagementScorer.ts",
+        "supabase/functions/account-signal-digest/index.ts",
+        "src/pages/platform/SkillUpgradeReport.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 10,
+    "parallelGroups": [
+      {
+        "name": "Foundation",
+        "stories": [
+          "GAP-001",
+          "GAP-002"
+        ]
+      },
+      {
+        "name": "Reliability Core",
+        "stories": [
+          "GAP-003",
+          "GAP-004",
+          "GAP-005",
+          "GAP-006"
+        ]
+      },
+      {
+        "name": "Operational Hardening",
+        "stories": [
+          "GAP-007",
+          "GAP-008"
+        ]
+      },
+      {
+        "name": "User Outcome Layer",
+        "stories": [
+          "GAP-009",
+          "GAP-010"
+        ]
+      }
+    ],
+    "estimatedDuration": "2-4 weeks",
+    "lastUpdated": "2026-03-05T12:10:00Z"
+  }
+}

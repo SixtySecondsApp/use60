@@ -160,8 +160,8 @@ async function refreshAccessToken(integration: any): Promise<string> {
     // Token is still valid
     return integration.access_token;
   }
-  const clientId = process.env.VITE_FATHOM_CLIENT_ID;
-  const clientSecret = process.env.VITE_FATHOM_CLIENT_SECRET;
+  const clientId = process.env.FATHOM_CLIENT_ID || process.env.VITE_FATHOM_CLIENT_ID;
+  const clientSecret = process.env.FATHOM_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
     throw new Error('Missing Fathom OAuth configuration for token refresh');

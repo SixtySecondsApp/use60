@@ -26,9 +26,13 @@ import HeroV7Preview from './pages/HeroV7Preview';
 import HeroV8Preview from './pages/HeroV8Preview';
 import HeroV9Preview from './pages/HeroV9Preview';
 import HeroV10Preview from './pages/HeroV10Preview';
+import HeroV11Preview from './pages/HeroV11Preview';
 import DemoExperience from './demo/DemoExperience';
 import DemoExperienceV2 from './demo-v2/DemoExperience';
 import { LandingPageV5 } from './pages/LandingPageV5';
+import { lazy, Suspense } from 'react';
+
+const CampaignLanding = lazy(() => import('./pages/CampaignLanding'));
 import { getAppUrl } from './lib/utils/siteUrl';
 import { trackPageView } from './lib/pageViewTracker';
 import { CookieConsentBanner } from './lib/consent/CookieConsentBanner';
@@ -81,6 +85,10 @@ function App() {
         <Route path="/hero-v8" element={<HeroV8Preview />} />
         <Route path="/hero-v9" element={<HeroV9Preview />} />
         <Route path="/hero-v10" element={<HeroV10Preview />} />
+        <Route path="/hero-v11" element={<HeroV11Preview />} />
+        {/* Campaign analytics dashboard */}
+        {/* Campaign personalized demo links */}
+        <Route path="/t/:code" element={<Suspense fallback={<div className="min-h-screen bg-zinc-950" />}><CampaignLanding /></Suspense>} />
         <Route path="/demo" element={<DemoExperience />} />
         <Route path="/demo-v2" element={<DemoExperienceV2 />} />
         {/* Redirect auth routes to app domain */}

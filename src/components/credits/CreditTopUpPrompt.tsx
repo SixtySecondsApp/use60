@@ -1,15 +1,15 @@
-/**
- * Stub: CreditTopUpPrompt was removed during cleanup.
- * CreditTopUpProvider is a passthrough wrapper.
- */
-import React from 'react';
+import { createContext, useContext } from 'react';
 
-export function CreditTopUpProvider({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
-}
+const CreditTopUpContext = createContext({ openTopUp: () => {} });
 
 export function useCreditTopUp() {
-  return {
-    openTopUp: () => {},
-  };
+  return useContext(CreditTopUpContext);
+}
+
+export function CreditTopUpProvider({ children }: { children: React.ReactNode }) {
+  return <CreditTopUpContext.Provider value={{ openTopUp: () => {} }}>{children}</CreditTopUpContext.Provider>;
+}
+
+export function CreditTopUpPrompt() {
+  return null;
 }

@@ -140,7 +140,7 @@ export function useBullhornIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('bullhorn-oauth-initiate', {
+    const resp = await supabase.functions.invoke('oauth-initiate/bullhorn', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
