@@ -17,6 +17,8 @@ import {
   Info,
   ChevronUp,
   ChevronDown,
+  Lock,
+  ArrowRight,
 } from 'lucide-react';
 import { HelpPanel } from '@/components/docs/HelpPanel';
 import { motion } from 'framer-motion';
@@ -46,7 +48,7 @@ import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigM
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
 
 // Hooks and stores
-import { useGoogleIntegration } from '@/lib/stores/integrationStore';
+import { useGoogleIntegration, useIntegrationStore } from '@/lib/stores/integrationStore';
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
 import { useSlackIntegration } from '@/lib/hooks/useSlackIntegration';
 import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
@@ -95,20 +97,24 @@ function IntegrationCardWithLogo({
   config,
   isBuilt,
   status,
+  statusText,
   onAction,
   actionLoading,
   vote,
   onToggleUpvote,
   sixtyLogoUrl,
+  customFooter,
 }: {
   config: IntegrationConfig;
   isBuilt: boolean;
   status: IntegrationStatus;
+  statusText?: string;
   onAction?: () => void;
   actionLoading?: boolean;
   vote?: IntegrationVoteState | null;
   onToggleUpvote?: (args: { integrationId: string; integrationName: string; description?: string }) => Promise<void>;
   sixtyLogoUrl?: string | null;
+  customFooter?: React.ReactNode;
 }) {
   // Skip S3 fetch for 60-notetaker since it's our own product
   const is60Notetaker = config.id === '60-notetaker';
@@ -118,6 +124,40 @@ function IntegrationCardWithLogo({
   // Use DEFAULT_SIXTY_ICON_URL directly for 60 Notetaker
   const finalLogoUrl = is60Notetaker ? DEFAULT_SIXTY_ICON_URL : logoUrl;
 
+  const voteFooter = !isBuilt && vote && onToggleUpvote ? (
+    <div className="flex items-center justify-between">
+      <div className="text-xs text-gray-500 dark:text-gray-400">Vote to prioritize</div>
+      <button
+        type="button"
+        onClick={async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            await onToggleUpvote({
+              integrationId: config.id,
+              integrationName: config.name,
+              description: config.description,
+            });
+          } catch (err: any) {
+            toast.error(err?.message || 'Failed to upvote');
+          }
+        }}
+        disabled={vote?.isLoading}
+        className={[
+          'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors',
+          vote?.hasVoted
+            ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700',
+          vote?.isLoading ? 'opacity-60 cursor-not-allowed' : '',
+        ].join(' ')}
+        aria-label={`${vote?.hasVoted ? 'Remove upvote' : 'Upvote'} ${config.name} integration`}
+      >
+        <ChevronUp className="w-4 h-4" />
+        <span>{(vote?.votesCount ?? 0).toLocaleString()}</span>
+      </button>
+    </div>
+  ) : undefined;
+
   return (
     <IntegrationCard
       name={config.name}
@@ -125,47 +165,43 @@ function IntegrationCardWithLogo({
       logoUrl={finalLogoUrl}
       fallbackIcon={config.fallbackIcon}
       status={status}
+      statusText={statusText}
       onAction={onAction}
       actionLoading={actionLoading}
       iconBgColor={config.iconBgColor}
       iconBorderColor={config.iconBorderColor}
       sixtyLogoUrl={sixtyLogoUrl}
-      footer={
-        !isBuilt && vote && onToggleUpvote ? (
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Vote to prioritize</div>
-            <button
-              type="button"
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                try {
-                  await onToggleUpvote({
-                    integrationId: config.id,
-                    integrationName: config.name,
-                    description: config.description,
-                  });
-                } catch (err: any) {
-                  toast.error(err?.message || 'Failed to upvote');
-                }
-              }}
-              disabled={vote?.isLoading}
-              className={[
-                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors',
-                vote?.hasVoted
-                  ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700',
-                vote?.isLoading ? 'opacity-60 cursor-not-allowed' : '',
-              ].join(' ')}
-              aria-label={`${vote?.hasVoted ? 'Remove upvote' : 'Upvote'} ${config.name} integration`}
-            >
-              <ChevronUp className="w-4 h-4" />
-              <span>{(vote?.votesCount ?? 0).toLocaleString()}</span>
-            </button>
-          </div>
-        ) : undefined
-      }
+      footer={customFooter || voteFooter}
     />
+  );
+}
+
+function GoogleLimitedFooter({ onUpgrade }: { onUpgrade: () => void }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
+        <span>Gmail send + Calendar</span>
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <Lock className="w-3.5 h-3.5 text-amber-500" />
+          <span>Gmail read + drafts</span>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onUpgrade();
+          }}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20"
+        >
+          Upgrade
+          <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -681,6 +717,10 @@ export default function Integrations() {
     connect: connectGoogle,
   } = useGoogleIntegration();
 
+  // Scope tier awareness for Google
+  const googleScopeTier = useIntegrationStore(state => state.google.scopeTier);
+  const googleCanReadGmail = useIntegrationStore(state => state.google.canReadGmail);
+
   const {
     isConnected: fathomConnected,
     loading: fathomLoading,
@@ -772,6 +812,12 @@ export default function Integrations() {
       const attioErr = searchParams.get('attio_error');
       toast.error(`Failed to connect Attio: ${attioErr}`);
       window.history.replaceState({}, '', '/integrations');
+    } else if (searchParams.get('nylas_status') === 'connected') {
+      toast.success('Gmail fully connected!', {
+        description: 'You now have full Gmail read, draft, and inbox access.',
+      });
+      checkGoogleConnection();
+      window.history.replaceState({}, '', '/integrations');
     } else if (fathomStatus === 'connected') {
       toast.success('Fathom connected successfully!', {
         description: 'Your Fathom account has been connected. Starting initial sync...',
@@ -793,6 +839,7 @@ export default function Integrations() {
       case 'google-workspace':
         if (googleStatus === 'error') return 'error';
         if (googleStatus === 'refreshing') return 'syncing';
+        if (googleConnected && googleScopeTier === 'free' && !googleCanReadGmail) return 'limited';
         return googleConnected ? 'active' : 'inactive';
       case 'fathom':
         // If we're connected, always show Active even if there was a non-fatal error
@@ -1044,17 +1091,31 @@ export default function Integrations() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {builtIntegrations
               .filter((integration) => (integration.id === 'hubspot' ? hubspotEnabled : true))
-              .map((integration) => (
-                <IntegrationCardWithLogo
-                  key={integration.id}
-                  config={integration}
-                  isBuilt={true}
-                  status={getIntegrationStatus(integration.id)}
-                  onAction={() => handleCardAction(integration.id, true)}
-                  actionLoading={builtActionLoadingById[integration.id]}
-                  sixtyLogoUrl={sixtyLogoUrl}
-                />
-              ))}
+              .map((integration) => {
+                const isGoogleLimited = integration.id === 'google-workspace' && googleConnected && googleScopeTier === 'free' && !googleCanReadGmail;
+                return (
+                  <IntegrationCardWithLogo
+                    key={integration.id}
+                    config={integration}
+                    isBuilt={true}
+                    status={getIntegrationStatus(integration.id)}
+                    onAction={() => handleCardAction(integration.id, true)}
+                    actionLoading={builtActionLoadingById[integration.id]}
+                    sixtyLogoUrl={sixtyLogoUrl}
+                    customFooter={isGoogleLimited ? (
+                      <GoogleLimitedFooter onUpgrade={async () => {
+                        try {
+                          const { connectNylas } = useIntegrationStore.getState();
+                          const authUrl = await connectNylas();
+                          window.location.href = authUrl;
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Failed to start Gmail upgrade');
+                        }
+                      }} />
+                    ) : undefined}
+                  />
+                );
+              })}
           </div>
         </div>
 

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Mail, 
-  Loader2, 
+import {
+  Mail,
+  Loader2,
   AlertCircle,
-  ExternalLink 
+  ExternalLink,
+  Lock,
+  ArrowRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,7 +17,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/clientV2';
+import { useIntegrationStore } from '@/lib/stores/integrationStore';
 import EmailComposerModal from './EmailComposerModal';
 
 interface SendEmailButtonProps {
@@ -30,13 +32,6 @@ interface SendEmailButtonProps {
   onEmailSent?: (messageId: string) => void;
 }
 
-interface GoogleIntegrationStatus {
-  isConnected: boolean;
-  loading: boolean;
-  error: string | null;
-  userEmail?: string;
-}
-
 const SendEmailButton: React.FC<SendEmailButtonProps> = ({
   contactEmail,
   contactName,
@@ -48,99 +43,28 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
   showLabel = true,
   onEmailSent
 }) => {
-  const [googleStatus, setGoogleStatus] = useState<GoogleIntegrationStatus>({
-    isConnected: false,
-    loading: true,
-    error: null
-  });
-  
+  const { google, checkGoogleConnection, connectNylas } = useIntegrationStore();
   const [showComposer, setShowComposer] = useState(false);
-  const [checking, setChecking] = useState(false);
-
-  const checkGoogleIntegration = async () => {
-    setChecking(true);
-    
-    try {
-      // Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        setGoogleStatus({
-          isConnected: false,
-          loading: false,
-          error: 'User not authenticated'
-        });
-        return;
-      }
-
-      // Check for Google integration
-      const { data: integration, error: integrationError } = await supabase
-        .from('google_integrations')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .single();
-
-      if (integrationError) {
-        if (integrationError.code === 'PGRST116') {
-          // No integration found
-          setGoogleStatus({
-            isConnected: false,
-            loading: false,
-            error: 'Google integration not found'
-          });
-        } else {
-          setGoogleStatus({
-            isConnected: false,
-            loading: false,
-            error: 'Failed to check Google integration'
-          });
-        }
-        return;
-      }
-
-      // Check if tokens are still valid (basic check)
-      const now = new Date();
-      const expiresAt = new Date(integration?.expires_at || '');
-      const isExpired = expiresAt <= now;
-
-      if (isExpired && !integration?.refresh_token) {
-        setGoogleStatus({
-          isConnected: false,
-          loading: false,
-          error: 'Google integration expired'
-        });
-        return;
-      }
-
-      setGoogleStatus({
-        isConnected: true,
-        loading: false,
-        error: null,
-        userEmail: integration?.email || ''
-      });
-
-    } catch (error) {
-      setGoogleStatus({
-        isConnected: false,
-        loading: false,
-        error: 'Failed to check Google integration'
-      });
-    } finally {
-      setChecking(false);
-    }
-  };
 
   useEffect(() => {
-    checkGoogleIntegration();
+    if (!google.isConnected && !google.isLoading) {
+      checkGoogleConnection();
+    }
   }, []);
 
-  const handleEmailClick = () => {
-    if (!googleStatus.isConnected) {
-      if (googleStatus.error) {
-        toast.error(googleStatus.error);
-      } else {
-        toast.error('Google integration required to send emails');
+  const handleEmailClick = async () => {
+    if (!google.isConnected) {
+      toast.error('Connect Google account to send emails');
+      return;
+    }
+
+    // If connected but can't read Gmail (free tier), show upgrade prompt
+    if (!google.canReadGmail) {
+      try {
+        const authUrl = await connectNylas();
+        window.location.href = authUrl;
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to start Gmail upgrade');
       }
       return;
     }
@@ -152,13 +76,11 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
     if (onEmailSent) {
       onEmailSent(messageId);
     }
-    
-    // Show success message
     toast.success('Email sent successfully!');
   };
 
   const getButtonContent = () => {
-    if (googleStatus.loading || checking) {
+    if (google.isLoading) {
       return (
         <>
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -167,11 +89,20 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
       );
     }
 
-    if (!googleStatus.isConnected) {
+    if (!google.isConnected) {
       return (
         <>
           <AlertCircle className="h-4 w-4" />
           {showLabel && size !== 'icon' && <span>No Gmail</span>}
+        </>
+      );
+    }
+
+    if (!google.canReadGmail) {
+      return (
+        <>
+          <Lock className="h-4 w-4" />
+          {showLabel && size !== 'icon' && <span>Upgrade Gmail</span>}
         </>
       );
     }
@@ -185,22 +116,22 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
   };
 
   const getTooltipContent = () => {
-    if (googleStatus.loading || checking) {
+    if (google.isLoading) {
       return 'Checking Google integration...';
     }
-    
-    if (googleStatus.error) {
-      return googleStatus.error;
-    }
-    
-    if (!googleStatus.isConnected) {
+
+    if (!google.isConnected) {
       return 'Connect Google account to send emails';
     }
-    
-    return `Send email to ${contactEmail}${googleStatus.userEmail ? ` from ${googleStatus.userEmail}` : ''}`;
+
+    if (!google.canReadGmail) {
+      return 'Upgrade to full Gmail access for reading and drafting emails';
+    }
+
+    return `Send email to ${contactEmail}${google.email ? ` from ${google.email}` : ''}`;
   };
 
-  const isDisabled = disabled || googleStatus.loading || checking || !googleStatus.isConnected;
+  const isDisabled = disabled || google.isLoading || !google.isConnected;
 
   // Map 'md' size to 'default' for Button component compatibility
   const buttonSize = size === 'md' ? 'default' : size;
@@ -216,16 +147,16 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
               onClick={handleEmailClick}
               disabled={isDisabled}
               className={`relative ${className} ${
-                !googleStatus.isConnected && !googleStatus.loading 
-                  ? 'opacity-60 cursor-not-allowed' 
+                !google.isConnected && !google.isLoading
+                  ? 'opacity-60 cursor-not-allowed'
                   : ''
               }`}
             >
               <div className="flex items-center gap-2">
                 {getButtonContent()}
               </div>
-              
-              {googleStatus.isConnected && (
+
+              {google.isConnected && google.canReadGmail && (
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
@@ -237,16 +168,24 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
           <TooltipContent side="top" className="max-w-xs">
             <div className="text-center">
               <p>{getTooltipContent()}</p>
-              {googleStatus.isConnected && googleStatus.userEmail && (
+              {google.isConnected && google.email && (
                 <p className="text-xs text-slate-400 mt-1">
-                  Connected as {googleStatus.userEmail}
+                  Connected as {google.email}
                 </p>
               )}
-              {!googleStatus.isConnected && !googleStatus.loading && (
+              {!google.isConnected && !google.isLoading && (
                 <div className="mt-2">
                   <Badge variant="outline" className="text-xs">
                     <ExternalLink className="h-3 w-3 mr-1" />
                     Setup required
+                  </Badge>
+                </div>
+              )}
+              {google.isConnected && !google.canReadGmail && (
+                <div className="mt-2">
+                  <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/30">
+                    <Lock className="h-3 w-3 mr-1" />
+                    Limited access
                   </Badge>
                 </div>
               )}
@@ -264,14 +203,16 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
         />
 
         {/* Connection Status Indicator */}
-        {!googleStatus.loading && (
+        {!google.isLoading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="absolute -bottom-1 -right-1"
           >
-            {googleStatus.isConnected ? (
+            {google.isConnected && google.canReadGmail ? (
               <div className="w-2 h-2 bg-green-500 rounded-full" />
+            ) : google.isConnected ? (
+              <div className="w-2 h-2 bg-amber-500 rounded-full" />
             ) : (
               <div className="w-2 h-2 bg-red-500 rounded-full" />
             )}

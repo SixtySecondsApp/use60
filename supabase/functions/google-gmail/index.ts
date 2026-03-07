@@ -13,6 +13,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
 import { authenticateRequest } from '../_shared/edgeAuth.ts';
+import { getNylasIntegration, nylasRequest } from '../_shared/nylasClient.ts';
 import { 
   modifyEmail,
   archiveEmail,
@@ -149,7 +150,7 @@ serve(async (req) => {
     // Get user's Google integration
     const { data: integration, error: integrationError } = await supabase
       .from('google_integrations')
-      .select('access_token, refresh_token, expires_at, id')
+      .select('access_token, refresh_token, expires_at, id, scope_tier')
       .eq('user_id', userId)
       .eq('is_active', true)
       .single();
@@ -165,6 +166,75 @@ serve(async (req) => {
     
     if (expiresAt <= now) {
       accessToken = await refreshAccessToken(integration.refresh_token, supabase, userId);
+    }
+
+    // Gate actions that require restricted scopes (gmail.readonly, gmail.compose)
+    // Free-tier users can only send, reply, forward, and manage labels
+    const readActions = ['list', 'get', 'get-message', 'draft', 'sync'];
+    const scopeTier = integration.scope_tier || 'free';
+    if (scopeTier === 'free' && readActions.includes(action)) {
+      // Check if user has a Nylas integration — proxy read actions through it
+      const nylasInt = await getNylasIntegration(supabase, userId);
+
+      if (nylasInt) {
+        // Proxy to Nylas for read operations
+        try {
+          let nylasResponse;
+
+          if (action === 'list') {
+            const params: Record<string, string> = {};
+            if (requestBody.maxResults) params.limit = String(requestBody.maxResults);
+            if (requestBody.pageToken) params.page_token = requestBody.pageToken;
+            if (requestBody.q) params.search_query_native = requestBody.q;
+
+            const res = await nylasRequest(nylasInt.grantId, '/messages', { params });
+            const data = await res.json();
+            nylasResponse = {
+              messages: (data.data || []).map(mapNylasMessage),
+              nextPageToken: data.next_cursor || null,
+              resultSizeEstimate: data.data?.length || 0,
+            };
+          } else if (action === 'get' || action === 'get-message') {
+            if (!requestBody.messageId) throw new Error('messageId is required');
+            const res = await nylasRequest(nylasInt.grantId, `/messages/${encodeURIComponent(requestBody.messageId)}`);
+            const data = await res.json();
+            nylasResponse = mapNylasMessage(data.data);
+          } else if (action === 'draft') {
+            const draftBody: Record<string, unknown> = {
+              subject: requestBody.subject || '',
+              body: requestBody.body || '',
+              to: (requestBody.to || '').split(',').map((e: string) => ({ email: e.trim() })),
+            };
+            if (requestBody.threadId) draftBody.thread_id = requestBody.threadId;
+            const res = await nylasRequest(nylasInt.grantId, '/drafts', { method: 'POST', body: draftBody });
+            const data = await res.json();
+            nylasResponse = { id: data.data?.id, message: { id: data.data?.id }, threadId: data.data?.thread_id };
+          } else {
+            // sync — not supported via Nylas proxy yet
+            nylasResponse = { synced: 0, message: 'Email sync via Nylas not yet supported' };
+          }
+
+          return new Response(JSON.stringify(nylasResponse), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } catch (nylasError) {
+          console.error('[google-gmail] Nylas proxy error:', nylasError);
+          return new Response(
+            JSON.stringify({ error: nylasError.message || 'Nylas proxy error' }),
+            { status: nylasError.statusCode || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // No Nylas integration — return upgrade required
+      return new Response(
+        JSON.stringify({
+          error: 'upgrade_required',
+          message: 'Gmail inbox access requires a paid plan. Upgrade to read emails and create drafts.',
+          action,
+        }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     let response;
@@ -989,5 +1059,31 @@ async function getMessage(accessToken: string, request: GetMessageRequest): Prom
     replyTo: replyToHeader || fromEmail,
     attachments,
     snippet: message.snippet || ''
+  };
+}
+
+/**
+ * Maps a Nylas v3 message to the same shape as Gmail API responses
+ * so the frontend works identically regardless of provider.
+ */
+function mapNylasMessage(msg: Record<string, unknown>): Record<string, unknown> {
+  if (!msg) return {};
+  const from = (msg.from as Array<{ email: string; name?: string }>) || [];
+  const to = (msg.to as Array<{ email: string; name?: string }>) || [];
+  return {
+    id: msg.id,
+    threadId: msg.thread_id,
+    subject: msg.subject || '',
+    snippet: msg.snippet || '',
+    from: from[0]?.email || '',
+    fromName: from[0]?.name || '',
+    to: to.map((r) => r.email).join(', '),
+    date: msg.date ? new Date((msg.date as number) * 1000).toISOString() : null,
+    body: msg.body || '',
+    read: msg.read !== false,
+    starred: msg.starred === true,
+    hasAttachments: msg.has_attachments === true,
+    labels: [],
+    provider: 'nylas',
   };
 }

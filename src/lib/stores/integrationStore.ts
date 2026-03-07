@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { googleApi, GoogleIntegration, GoogleServiceStatus } from '@/lib/api/googleIntegration';
+import { supabase } from '@/lib/supabase/clientV2';
 
 interface GoogleState {
   isConnected: boolean;
@@ -10,6 +11,9 @@ interface GoogleState {
   status: 'connected' | 'disconnected' | 'error' | 'refreshing';
   isLoading: boolean;
   error: string | null;
+  canReadGmail: boolean;
+  nylasConnected: boolean;
+  scopeTier: 'free' | 'paid';
 }
 
 interface IntegrationState {
@@ -25,6 +29,9 @@ interface IntegrationState {
   clearError: () => void;
   setLoading: (loading: boolean) => void;
   
+  // Nylas
+  connectNylas: () => Promise<string>; // Returns Nylas auth URL
+
   // Selectors
   isServiceEnabled: (service: keyof GoogleServiceStatus) => boolean;
   getConnectionHealth: () => { isHealthy: boolean; issues: string[] };
@@ -42,7 +49,10 @@ const initialGoogleState: GoogleState = {
   lastSync: null,
   status: 'disconnected',
   isLoading: false,
-  error: null
+  error: null,
+  canReadGmail: false,
+  nylasConnected: false,
+  scopeTier: 'free' as const,
 };
 
 export const useIntegrationStore = create<IntegrationState>((set, get) => ({
@@ -100,6 +110,22 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
       const isConnected = !!integration && integration.is_active;
       const computedStatus: 'connected' | 'disconnected' | 'error' = isConnected ? 'connected' : 'error';
 
+      // Check Nylas integration status
+      const scopeTier = (integration as GoogleIntegration & { scope_tier?: string })?.scope_tier === 'paid' ? 'paid' : 'free';
+      let nylasConnected = false;
+      try {
+        const { data: nylasInt } = await supabase
+          .from('nylas_integrations')
+          .select('id')
+          .eq('is_active', true)
+          .maybeSingle();
+        nylasConnected = !!nylasInt;
+      } catch (e) {
+        console.warn('[integrationStore] Failed to check Nylas status:', e);
+      }
+
+      const canReadGmail = scopeTier === 'paid' || nylasConnected;
+
       set(state => ({
         google: {
           ...state.google,
@@ -110,7 +136,10 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
           lastSync: integration ? new Date(integration.updated_at) : null,
           status: computedStatus,
           isLoading: false,
-          error: null
+          error: null,
+          canReadGmail,
+          nylasConnected,
+          scopeTier,
         }
       }));
     } catch (error: any) {
@@ -152,6 +181,33 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
         }
       }));
       
+      throw error;
+    }
+  },
+
+  connectNylas: async (): Promise<string> => {
+    set(state => ({
+      google: { ...state.google, isLoading: true, error: null }
+    }));
+
+    try {
+      const origin = window.location.origin;
+      const { data, error } = await supabase.functions.invoke('nylas-oauth-initiate', {
+        body: { origin }
+      });
+
+      if (error) throw new Error(error.message || 'Failed to initiate Nylas OAuth');
+      if (!data?.authUrl) throw new Error('No authorization URL received from Nylas');
+
+      return data.authUrl;
+    } catch (error: any) {
+      set(state => ({
+        google: {
+          ...state.google,
+          isLoading: false,
+          error: error.message || 'Failed to initiate Nylas connection'
+        }
+      }));
       throw error;
     }
   },
