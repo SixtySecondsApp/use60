@@ -16,21 +16,42 @@ interface GoogleState {
   scopeTier: 'free' | 'paid';
 }
 
+interface MicrosoftServiceStatus {
+  email: boolean;
+  calendar: boolean;
+  drive: boolean;
+}
+
+interface MicrosoftState {
+  isConnected: boolean;
+  email: string | null;
+  services: MicrosoftServiceStatus;
+  status: 'connected' | 'disconnected' | 'error' | 'refreshing';
+  isLoading: boolean;
+  error: string | null;
+}
+
 interface IntegrationState {
   google: GoogleState;
-  
-  // Actions
+  microsoft: MicrosoftState;
+
+  // Google actions
   checkGoogleConnection: () => Promise<void>;
-  connectGoogle: () => Promise<string>; // Returns auth URL
+  connectGoogle: () => Promise<string>;
   disconnectGoogle: () => Promise<void>;
   toggleService: (service: keyof GoogleServiceStatus) => Promise<void>;
   syncGoogle: () => Promise<void>;
   refreshGoogleTokens: () => Promise<void>;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
-  
+
   // Nylas
-  connectNylas: () => Promise<string>; // Returns Nylas auth URL
+  connectNylas: () => Promise<string>;
+
+  // Microsoft actions
+  checkMicrosoftConnection: () => Promise<void>;
+  connectMicrosoft: () => Promise<string>;
+  disconnectMicrosoft: () => Promise<void>;
 
   // Selectors
   isServiceEnabled: (service: keyof GoogleServiceStatus) => boolean;
@@ -55,8 +76,18 @@ const initialGoogleState: GoogleState = {
   scopeTier: 'free' as const,
 };
 
+const initialMicrosoftState: MicrosoftState = {
+  isConnected: false,
+  email: null,
+  services: { email: false, calendar: false, drive: false },
+  status: 'disconnected',
+  isLoading: false,
+  error: null,
+};
+
 export const useIntegrationStore = create<IntegrationState>((set, get) => ({
   google: initialGoogleState,
+  microsoft: initialMicrosoftState,
 
   checkGoogleConnection: async () => {
     const { google } = get();
@@ -368,6 +399,91 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
     }));
   },
 
+  // Microsoft actions
+  checkMicrosoftConnection: async () => {
+    const { microsoft } = get();
+    if (microsoft.isLoading) return;
+
+    set(state => ({ microsoft: { ...state.microsoft, isLoading: true, error: null } }));
+
+    try {
+      const { data: integration, error } = await supabase
+        .from('microsoft_integrations')
+        .select('id, email, is_active, token_status, scopes')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (error || !integration) {
+        set(state => ({ microsoft: { ...initialMicrosoftState } }));
+        return;
+      }
+
+      set(state => ({
+        microsoft: {
+          ...state.microsoft,
+          isConnected: true,
+          email: integration.email,
+          services: { email: true, calendar: true, drive: true },
+          status: integration.token_status === 'valid' ? 'connected' : 'error',
+          isLoading: false,
+          error: null,
+        },
+      }));
+    } catch (error: any) {
+      set(state => ({
+        microsoft: {
+          ...state.microsoft,
+          isConnected: false,
+          status: 'error',
+          isLoading: false,
+          error: error.message || 'Failed to check Microsoft connection',
+        },
+      }));
+    }
+  },
+
+  connectMicrosoft: async (): Promise<string> => {
+    set(state => ({ microsoft: { ...state.microsoft, isLoading: true, error: null } }));
+
+    try {
+      const origin = window.location.origin;
+      const { data, error } = await supabase.functions.invoke('oauth-initiate/microsoft', {
+        body: { origin },
+      });
+
+      if (error) throw new Error(error.message || 'Failed to initiate Microsoft OAuth');
+      if (!data?.url) throw new Error('No authorization URL received');
+
+      return data.url;
+    } catch (error: any) {
+      set(state => ({
+        microsoft: { ...state.microsoft, isLoading: false, error: error.message },
+      }));
+      throw error;
+    }
+  },
+
+  disconnectMicrosoft: async () => {
+    const { microsoft } = get();
+    if (microsoft.isLoading) return;
+
+    set(state => ({ microsoft: { ...state.microsoft, isLoading: true, error: null } }));
+
+    try {
+      await supabase
+        .from('microsoft_integrations')
+        .update({ is_active: false })
+        .eq('is_active', true);
+
+      set(() => ({ microsoft: { ...initialMicrosoftState } }));
+    } catch (error: any) {
+      set(state => ({
+        microsoft: { ...state.microsoft, isLoading: false, error: error.message },
+      }));
+      throw error;
+    }
+  },
+
   // Selectors
   isServiceEnabled: (service: keyof GoogleServiceStatus): boolean => {
     const { google } = get();
@@ -406,6 +522,23 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
     };
   }
 }));
+
+// Utility hook for Microsoft-specific state
+export const useMicrosoftIntegration = () => {
+  const store = useIntegrationStore();
+
+  return {
+    isConnected: store.microsoft.isConnected,
+    email: store.microsoft.email,
+    services: store.microsoft.services,
+    status: store.microsoft.status,
+    isLoading: store.microsoft.isLoading,
+    error: store.microsoft.error,
+    checkConnection: store.checkMicrosoftConnection,
+    connect: store.connectMicrosoft,
+    disconnect: store.disconnectMicrosoft,
+  };
+};
 
 // Utility hook for Google-specific state
 export const useGoogleIntegration = () => {

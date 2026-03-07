@@ -162,6 +162,13 @@
       "status": "complete",
       "consultReport": null,
       "createdAt": "2026-03-07"
+    },
+    {
+      "id": "workspace-integration-v2",
+      "name": "Google & Microsoft Integration V2 \u2014 Agent-Grade Workspace Intelligence",
+      "status": "complete",
+      "prd": "tasks/prd-google-integration-v2.md",
+      "createdAt": "2026-03-07"
     }
   ],
   "stories": [
@@ -7270,12 +7277,522 @@
       "files": [
         "src/pages/Integrations.tsx"
       ]
+    },
+    {
+      "id": "WS-001",
+      "title": "Provider-Abstracted Client Interface",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": []
+      },
+      "files": [
+        "supabase/functions/_shared/workspaceClient.ts",
+        "supabase/functions/_shared/providers/google.ts",
+        "supabase/functions/_shared/providers/microsoft.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-002",
+      "title": "Centralized Token Refresh",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "estimatedMinutes": 60,
+      "dependencies": {
+        "stories": [
+          "WS-001"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/tokenManager.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-003",
+      "title": "Auto-Pagination Helper",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": []
+      },
+      "files": [
+        "supabase/functions/_shared/pagination.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-004",
+      "title": "Typed Error Classification",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": []
+      },
+      "files": [
+        "supabase/functions/_shared/workspaceErrors.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-005",
+      "title": "Nylas Routing in Centralized Client",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-001"
+        ]
+      },
+      "files": [
+        "supabase/functions/nylas-email/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-006",
+      "title": "Subscription Tier Gating",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "estimatedMinutes": 35,
+      "dependencies": {
+        "stories": []
+      },
+      "files": [
+        "supabase/functions/_shared/tierGating.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-007",
+      "title": "Microsoft OAuth Flow",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 7,
+      "estimatedMinutes": 60,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-002"
+        ]
+      },
+      "files": [
+        "supabase/functions/oauth-initiate/providers/microsoft.ts",
+        "supabase/functions/microsoft-oauth-callback/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-008",
+      "title": "Microsoft Token Refresh",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "WS-002",
+          "WS-007"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/tokenManager.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-009",
+      "title": "Microsoft Email Provider (Outlook / Graph API)",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-003",
+          "WS-004",
+          "WS-008"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/providers/microsoft.ts",
+        "supabase/functions/microsoft-email/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-010",
+      "title": "Microsoft Calendar Provider",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-003",
+          "WS-004",
+          "WS-008"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/providers/microsoft.ts",
+        "supabase/functions/microsoft-calendar/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-011",
+      "title": "Microsoft Drive Provider (OneDrive)",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-003",
+          "WS-004",
+          "WS-008"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/providers/microsoft.ts",
+        "supabase/functions/microsoft-drive/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-012",
+      "title": "Microsoft Integration UI",
+      "feature": "workspace-integration-v2",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 12,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": [
+          "WS-007"
+        ]
+      },
+      "files": [
+        "src/lib/stores/integrationStore.ts",
+        "src/components/integrations/MicrosoftConfigModal.tsx",
+        "src/pages/Integrations.tsx"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-013",
+      "title": "Background Job Dispatcher",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 13,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-006"
+        ]
+      },
+      "files": [
+        "supabase/functions/workspace-background-jobs/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-014",
+      "title": "Background Job Scheduling Migration",
+      "feature": "workspace-integration-v2",
+      "type": "schema",
+      "status": "complete",
+      "priority": 14,
+      "estimatedMinutes": 35,
+      "dependencies": {
+        "stories": [
+          "WS-013"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-015",
+      "title": "Proactive Token Refresh Job",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 15,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "WS-002",
+          "WS-013"
+        ]
+      },
+      "files": [
+        "supabase/functions/workspace-background-jobs/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-016",
+      "title": "Calendar Watch Auto-Renewal",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 16,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "WS-013"
+        ]
+      },
+      "files": [
+        "supabase/functions/workspace-background-jobs/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-017",
+      "title": "Email Sync V2 (Full Paginated)",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 17,
+      "estimatedMinutes": 55,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-003",
+          "WS-013"
+        ]
+      },
+      "files": [
+        "supabase/functions/workspace-background-jobs/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-018",
+      "title": "Email Classification Pipeline",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 18,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-017"
+        ]
+      },
+      "files": [
+        "supabase/functions/email-classify/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-019",
+      "title": "Reply Gap Detection",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 19,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-017"
+        ]
+      },
+      "files": [
+        "supabase/functions/reply-gap-detect/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-020",
+      "title": "Sent-vs-Received Ratio Tracking",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 20,
+      "estimatedMinutes": 35,
+      "dependencies": {
+        "stories": [
+          "WS-017"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-021",
+      "title": "Calendar Attendee Enrichment",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 21,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-013"
+        ]
+      },
+      "files": [
+        "supabase/functions/attendee-enrich/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-022",
+      "title": "Pre-Meeting Research & Slack Alert",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 22,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": [
+          "WS-021"
+        ]
+      },
+      "files": [
+        "supabase/functions/attendee-enrich/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-023",
+      "title": "Proposal Storage to Users Drive",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 23,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-001"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-024",
+      "title": "Drive Document Linking",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 24,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": [
+          "WS-013",
+          "WS-023"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-025",
+      "title": "Integration Dashboard Updates",
+      "feature": "workspace-integration-v2",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 25,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-012"
+        ]
+      },
+      "files": [
+        "src/pages/Integrations.tsx"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-026",
+      "title": "Email Intelligence UI",
+      "feature": "workspace-integration-v2",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 26,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-018",
+          "WS-019",
+          "WS-020"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-027",
+      "title": "Deprecate Legacy Google Functions",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 27,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-002",
+          "WS-003",
+          "WS-004"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-028",
+      "title": "Deprecate S3-Only Proposal Storage",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 28,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "WS-023"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
     }
   ],
   "execution": {
-    "totalStories": 201,
-    "completedStories": 201,
+    "totalStories": 229,
+    "completedStories": 229,
     "currentFeature": "google-scope-nylas",
-    "lastUpdated": "2026-03-07T15:45:00.000Z"
+    "lastUpdated": "2026-03-07T17:40:00Z"
   }
 }
