@@ -1,0 +1,8 @@
+# Progress Log
+Run: workspace-integration-v2
+Started: 2026-03-07T17:00:00Z
+
+## Codebase Patterns
+(Add reusable patterns/gotchas discovered during implementation)
+
+---

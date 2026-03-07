@@ -17,56 +17,56 @@
     },
     {
       "id": "followup-email-v2",
-      "name": "Follow-Up Email v2 — Quality + Demo Polish",
+      "name": "Follow-Up Email v2 \u2014 Quality + Demo Polish",
       "status": "complete",
       "consultReport": ".sixty/consult/followup-email-v2.md",
       "createdAt": "2026-02-25"
     },
     {
       "id": "skill-gold-standard",
-      "name": "Skill Gold Standard Upgrade — Top 10 Sales Skills",
+      "name": "Skill Gold Standard Upgrade \u2014 Top 10 Sales Skills",
       "status": "complete",
       "consultReport": ".sixty/consult/skill-gold-standard-upgrade.md",
       "createdAt": "2026-02-26"
     },
     {
       "id": "landing-page-builder-ui",
-      "name": "Landing Page Builder — Dedicated UI Screen",
+      "name": "Landing Page Builder \u2014 Dedicated UI Screen",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-02-27"
     },
     {
       "id": "landing-builder-v2",
-      "name": "Landing Builder v2 — Agent Teams + Gemini SVGs",
+      "name": "Landing Builder v2 \u2014 Agent Teams + Gemini SVGs",
       "status": "complete",
       "consultReport": ".sixty/consult/landing-builder-v2.md",
       "createdAt": "2026-02-28"
     },
     {
       "id": "landing-builder-progressive",
-      "name": "Landing Builder — Progressive Assembly + Chat Editor",
+      "name": "Landing Builder \u2014 Progressive Assembly + Chat Editor",
       "status": "complete",
       "prd": "docs/landing-page-builder/landing-page-builder-improvements.md",
       "createdAt": "2026-03-01"
     },
     {
       "id": "landing-builder-ux-redesign",
-      "name": "Landing Builder — UX Redesign (Preview Fix + Layout Overhaul)",
+      "name": "Landing Builder \u2014 UX Redesign (Preview Fix + Layout Overhaul)",
       "status": "complete",
       "consultReport": ".sixty/consult/landing-builder-ux-redesign.md",
       "createdAt": "2026-03-01"
     },
     {
       "id": "landing-builder-react-components",
-      "name": "Landing Builder — React Component Upgrade + Design Improvements",
+      "name": "Landing Builder \u2014 React Component Upgrade + Design Improvements",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-01"
     },
     {
       "id": "cc-notification-bridge",
-      "name": "Command Centre — Notification Bridge + Agent Type Fix",
+      "name": "Command Centre \u2014 Notification Bridge + Agent Type Fix",
       "status": "complete",
       "createdAt": "2026-03-03"
     },
@@ -79,7 +79,7 @@
     },
     {
       "id": "relationship-graph",
-      "name": "Relationship Graph — AI Command Surface for Pipeline & Network",
+      "name": "Relationship Graph \u2014 AI Command Surface for Pipeline & Network",
       "status": "complete",
       "prd": "docs/pipeline/relationship_graph_brief.md",
       "consultReport": null,
@@ -88,73 +88,80 @@
     },
     {
       "id": "warmth-backfill",
-      "name": "Warmth Backfill — Populate Graph from Historical Data",
+      "name": "Warmth Backfill \u2014 Populate Graph from Historical Data",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-03"
     },
     {
       "id": "memory-wiring",
-      "name": "Memory Layer Wiring — Connect Existing Infrastructure to Agents",
+      "name": "Memory Layer Wiring \u2014 Connect Existing Infrastructure to Agents",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-03"
     },
     {
       "id": "edge-fn-consolidation",
-      "name": "Edge Function Consolidation — 500 → ~420 Functions",
+      "name": "Edge Function Consolidation \u2014 500 \u2192 ~420 Functions",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-04"
     },
     {
       "id": "sandbox-v2",
-      "name": "Sandbox v2 — Pixel-Perfect App Replica for Landing Page Demo",
+      "name": "Sandbox v2 \u2014 Pixel-Perfect App Replica for Landing Page Demo",
       "status": "complete",
       "consultReport": null,
       "createdAt": "2026-03-05"
     },
     {
       "id": "sandbox-v3",
-      "name": "Sandbox v3 — Focused, Pixel-Perfect, Deeply Personalized",
+      "name": "Sandbox v3 \u2014 Focused, Pixel-Perfect, Deeply Personalized",
       "status": "complete",
       "consultReport": null,
       "createdAt": "2026-03-05"
     },
     {
       "id": "sandbox-funnel",
-      "name": "Sandbox Funnel — Guided Tour, Interactive Copilot, Contextual CTAs",
+      "name": "Sandbox Funnel \u2014 Guided Tour, Interactive Copilot, Contextual CTAs",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-05"
     },
     {
       "id": "campaign-links",
-      "name": "Campaign Links — /t/ Personalised Links Pipeline + Batch Enrichment",
+      "name": "Campaign Links \u2014 /t/ Personalised Links Pipeline + Batch Enrichment",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-05"
     },
     {
       "id": "lead-intelligence",
-      "name": "Lead Intelligence — Engagement Scoring, Slack Alerts, Analytics",
+      "name": "Lead Intelligence \u2014 Engagement Scoring, Slack Alerts, Analytics",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-05"
     },
     {
       "id": "signup-seeding",
-      "name": "Signup Data Seeding — Demo Context Flows into Real Account",
+      "name": "Signup Data Seeding \u2014 Demo Context Flows into Real Account",
       "status": "complete",
       "prd": null,
       "createdAt": "2026-03-05"
     },
     {
       "id": "support-electron-readiness",
-      "name": "Support System — Electron App Readiness",
-      "status": "pending",
+      "name": "Support System \u2014 Electron App Readiness",
+      "status": "complete",
       "consultReport": ".sixty/consult/support-electron-readiness.md",
       "createdAt": "2026-03-06"
+    },
+    {
+      "id": "google-scope-nylas",
+      "name": "Google Scope Slimming + Nylas Integration + Upgrade Gate",
+      "status": "complete",
+      "consultReport": null,
+      "createdAt": "2026-03-07"
     }
   ],
   "stories": [
@@ -205,7 +212,7 @@
         "When guidance provided, re-composes email with same RAG context plus user instructions appended to prompt",
         "Frontend shows text input modal when Regenerate button is clicked",
         "Regenerated email replaces previous result with a 'Regenerated' badge",
-        "No re-query of RAG — uses cached context from first generation (saves credits and time)"
+        "No re-query of RAG \u2014 uses cached context from first generation (saves credits and time)"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": 18,
@@ -272,7 +279,7 @@
       "acceptance": [
         "Edit button on email preview switches to editable textarea for body and input for subject",
         "Preview button returns to styled read-only view with edited content",
-        "Edited content persists in state — Copy button copies edited version",
+        "Edited content persists in state \u2014 Copy button copies edited version",
         "Cancel button reverts to original generated content",
         "Edit state does not re-trigger generation"
       ],
@@ -405,7 +412,7 @@
         "SSE result event includes warnings array listing what degraded: missing writing style, no sentiment, RAG partial results, placeholder attendee",
         "Each warning has a severity (info/warn) and human-readable message",
         "Frontend renders warnings as amber badges below the context breakdown",
-        "Warnings are informational only — generation still completes",
+        "Warnings are informational only \u2014 generation still completes",
         "No warnings shown when all data sources returned successfully"
       ],
       "estimatedMinutes": 10,
@@ -437,7 +444,7 @@
       "priority": 1,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: deal + company enrichment + contact intel + interaction history (RAG) + pricing strategy",
-        "references/proposal-templates.md added with templates by deal stage (discovery, evaluation, negotiation, renewal) — annotated good vs bad examples",
+        "references/proposal-templates.md added with templates by deal stage (discovery, evaluation, negotiation, renewal) \u2014 annotated good vs bad examples",
         "references/pricing-strategy.md added with 3-tier anchoring framework, discount guidelines, competitive pricing context",
         "Instructions include RAG queries: 'pricing discussions with {company}', 'objections about cost from {contact}', 'ROI mentioned in meetings'",
         "Output contract expanded: pricing_rationale, competitive_positioning, roi_metrics, personalization_signals fields added"
@@ -471,7 +478,7 @@
       "priority": 2,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: contact + deal context + meeting RAG (commitments, decisions, concerns) + activity signals + email strategy",
-        "references/followup-templates.md added with templates by type: post-discovery, post-demo, post-proposal, post-negotiation, re-engagement — with annotated examples",
+        "references/followup-templates.md added with templates by type: post-discovery, post-demo, post-proposal, post-negotiation, re-engagement \u2014 with annotated examples",
         "references/personalization-guide.md added with value-add strategies by deal stage, multi-threading guidance (when to switch contacts), send timing research",
         "Instructions include RAG queries: 'commitments made to {contact}', 'concerns raised by {company}', 'next steps discussed'",
         "Output contract expanded: rag_context_used, personalization_signals (min 3), multi_thread_suggestion, confidence_level fields added"
@@ -539,7 +546,7 @@
       "priority": 4,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: objection classification + contact/deal context + RAG (how this objection was handled before) + competitive context + response strategy",
-        "references/objection-playbooks.md added with detailed playbooks for all 7 categories (Price, Timing, Competition, Status Quo, Authority, Need, Trust) — each with 3-5 response templates, bridge questions, proof points",
+        "references/objection-playbooks.md added with detailed playbooks for all 7 categories (Price, Timing, Competition, Status Quo, Authority, Need, Trust) \u2014 each with 3-5 response templates, bridge questions, proof points",
         "references/response-patterns.md added with ACE framework deep dive, multi-turn handling (objection to your response), fake objection detection, when to concede vs push back",
         "Instructions include RAG queries: 'objections from {contact}', 'how {objection_type} was resolved', 'proof points used for {industry}'",
         "Output contract expanded: objection_category, confidence_this_is_real_concern, historical_success_rate, escalation_recommendation fields"
@@ -573,7 +580,7 @@
       "priority": 5,
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: contact + deal health/ghost risk + RAG (last real conversation context) + activity decay signals + re-engagement strategy",
-        "references/chase-templates.md added with templates by silence duration (7-day, 14-day, 21-day, 30+ day) — each with 3 tone variants and annotated examples of great vs mediocre re-engagement emails",
+        "references/chase-templates.md added with templates by silence duration (7-day, 14-day, 21-day, 30+ day) \u2014 each with 3 tone variants and annotated examples of great vs mediocre re-engagement emails",
         "references/reengagement-playbook.md added with multi-channel escalation, pattern detection, value-add library by deal stage",
         "Instructions include RAG queries: 'last substantive conversation with {contact}', 'commitments {contact} made', 'topics {contact} engaged with'",
         "Output contract expanded: silence_analysis, channel_recommendation, multi_thread_option, rag_context_used, confidence_level, escalation_path"
@@ -675,7 +682,7 @@
       "acceptance": [
         "SKILL.md rewritten with 5-layer data model: lead data + company web research (funding, tech stack, hiring) + contact enrichment (AI Ark/Apollo) + CRM relationship history + qualification strategy",
         "references/scoring-frameworks.md enhanced with web-research-informed scoring (tech stack match, funding stage, hiring signals), behavioral data integration guidance",
-        "references/icp-templates.md enhanced with vertical-specific ICP examples (SaaS, healthcare, fintech, agency), enrichment chaining workflow (lead → AI Ark → Apollo → score)",
+        "references/icp-templates.md enhanced with vertical-specific ICP examples (SaaS, healthcare, fintech, agency), enrichment chaining workflow (lead \u2192 AI Ark \u2192 Apollo \u2192 score)",
         "Instructions include web search queries: '{company} funding', '{company} tech stack', '{company} hiring' and enrichment tool calls for contact depth",
         "Output contract expanded: enrichment_data_used, web_research_signals, tech_stack_match, funding_stage_fit, behavioral_score fields"
       ],
@@ -742,7 +749,7 @@
       "priority": 10,
       "acceptance": [
         "SKILL.md enhanced with meeting outcome confidence scoring (how certain are we about each decision/commitment extracted)",
-        "references/pack-templates.md enhanced with templates by meeting type (discovery, demo, negotiation, renewal) — currently generic",
+        "references/pack-templates.md enhanced with templates by meeting type (discovery, demo, negotiation, renewal) \u2014 currently generic",
         "references/artifact-examples.md enhanced with cross-pack consistency checking (does this follow-up align with last meeting's follow-up?)",
         "Instructions include RAG queries: 'previous follow-up packs for {company}', 'commitments tracking for {deal}' to ensure consistency across touchpoints",
         "Output contract expanded: decision_confidence_scores, consistency_check (vs previous pack), stripped_down_option (when meeting lacked clear decisions)"
@@ -850,7 +857,7 @@
         "useLandingBuilderState hook derives phase state from CopilotMessage[] via useMemo",
         "Phase detection heuristics identify phase completions from assistant message content and structured responses",
         "Hook returns { phases, currentPhase, deliverables, isExpressMode, skippedPhases }",
-        "TypeScript strict compliance — no any types"
+        "TypeScript strict compliance \u2014 no any types"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1057,7 +1064,7 @@
         "CopilotResponse.tsx adds 'landing_page_gate' case routing to ApprovalGate component",
         "types.ts in copilot/ adds LandingPageGateData to CopilotResponseType union",
         "LandingPageBuilder passes LandingBuilderEmpty as emptyComponent to AssistantShell",
-        "Full flow verified: navigate to /landing-page-builder → empty state → send message → chat loads"
+        "Full flow verified: navigate to /landing-page-builder \u2192 empty state \u2192 send message \u2192 chat loads"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1265,7 +1272,7 @@
         "After DiscoveryWizard (5Q), Strategist asks 2-3 targeted follow-ups based on gaps in the brief",
         "Uses gemini_research tool to analyze competitor websites and market positioning",
         "Writes enriched brief + strategy + section_list to workspace",
-        "Agent badge shows '🎯 Strategist' on its messages in the chat"
+        "Agent badge shows '\ud83c\udfaf Strategist' on its messages in the chat"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": null,
@@ -1300,7 +1307,7 @@
         "Reads strategy + section_list from workspace (NOT full accumulated context)",
         "Produces A/B copy per section in exact markdown format for CopyPicker parsing",
         "Writes selected copy back to workspace.copy after CopyPicker confirmation",
-        "Agent badge shows '✍️ Copywriter' on its messages"
+        "Agent badge shows '\u270d\ufe0f Copywriter' on its messages"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1334,7 +1341,7 @@
         "Gemini SVG generation calls generate-svg edge function with rich prompts (isometric, detailed, brand-colored)",
         "Generates 2-3 SVGs per section using workspace.strategy.section_list",
         "Nano Banana hero generation uses parseVisualsForImage with workspace brand colors",
-        "All visual assets written to workspace.visuals; agent badge shows '🎨 Visual Artist'"
+        "All visual assets written to workspace.visuals; agent badge shows '\ud83c\udfa8 Visual Artist'"
       ],
       "estimatedMinutes": 30,
       "actualMinutes": null,
@@ -1370,7 +1377,7 @@
         "Reads ALL workspace fields (brief, strategy, copy, visuals) to compose the final component",
         "Embeds approved SVGs directly, uses exact hex colors, exact copy text, approved typography",
         "Code renders in LandingCodePreview iframe (existing component)",
-        "Agent badge shows '⚙️ Builder' on its messages"
+        "Agent badge shows '\u2699\ufe0f Builder' on its messages"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1404,7 +1411,7 @@
         "Badge derived from message metadata (agentRole field) set by each agent",
         "PhaseTimeline shows active agent name next to current phase",
         "Visuals phase shows parallel progress: palette done, SVGs 2/3, hero generating",
-        "Badges are small, non-intrusive — role name in muted text above the message"
+        "Badges are small, non-intrusive \u2014 role name in muted text above the message"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -1436,7 +1443,7 @@
       "status": "complete",
       "priority": 10,
       "acceptance": [
-        "DiscoveryWizard reduced from 7 to 5 questions (remove tone and sections — strategist infers these)",
+        "DiscoveryWizard reduced from 7 to 5 questions (remove tone and sections \u2014 strategist infers these)",
         "After wizard submit, Strategist agent asks 2-3 targeted follow-ups in the chat",
         "Follow-ups are based on gaps: missing competitors, unclear audience, vague outcome",
         "User responds in chat, Strategist incorporates answers into enriched brief",
@@ -1543,7 +1550,7 @@
       "status": "complete",
       "priority": 13,
       "acceptance": [
-        "Full flow: DiscoveryWizard → Strategist follow-ups → Strategy approval → Copywriter → CopyPicker → Visual Artist (parallel) → Builder",
+        "Full flow: DiscoveryWizard \u2192 Strategist follow-ups \u2192 Strategy approval \u2192 Copywriter \u2192 CopyPicker \u2192 Visual Artist (parallel) \u2192 Builder",
         "Agent badges appear correctly on each phase's messages",
         "Workspace persists across page refreshes (session resumes)",
         "Gemini SVGs render in SvgPreview with animation",
@@ -1753,7 +1760,7 @@
       "acceptance": [
         "ProgressivePreview wraps LandingCodePreview iframe with section overlays",
         "Asset status badges render per section (spinner for generating, checkmark for complete)",
-        "Shimmer → image/SVG crossfade at 300ms ease-out on asset completion",
+        "Shimmer \u2192 image/SVG crossfade at 300ms ease-out on asset completion",
         "Section highlight pulse (800ms green ring) on completion",
         "Scroll-to-section when highlightSectionId prop changes",
         "Device width toggles (mobile/tablet/desktop) work correctly"
@@ -1933,7 +1940,7 @@
         "Agent reads workspace (strategy + copy + brand config) and produces structured sections",
         "Each section has copy slotted, layout_variant selected, brand colours applied",
         "All sections have image_status: idle and svg_status: idle",
-        "No code generation in agent — sectionRenderer handles code output",
+        "No code generation in agent \u2014 sectionRenderer handles code output",
         "Agent output is parseable as valid JSON array"
       ],
       "estimatedMinutes": 20,
@@ -2067,7 +2074,7 @@
       "acceptance": [
         "exportPolishAgent takes LandingSection[] + BrandConfig + workspace context, returns polished React+Tailwind code",
         "Uses Sonnet to generate production code with custom animations, refined spacing, responsive breakpoints",
-        "Export result cached in workspace.polished_code — instant on re-export until sections change",
+        "Export result cached in workspace.polished_code \u2014 instant on re-export until sections change",
         "Any section edit invalidates the cache (next export triggers fresh AI pass)",
         "Copy Code: clipboard contains polished component, toast confirms",
         "Download HTML: standalone file with CDN dependencies downloads correctly",
@@ -2104,7 +2111,7 @@
         "On workspace load with sections data: skip Strategy/Copy, render sections into preview immediately",
         "Sections with generating status reset to idle on load (interrupted generation)",
         "Chat shows resume prompt: Welcome back, N sections, M need images, continue or edit?",
-        "User says continue → asset queue restarts for idle/failed sections",
+        "User says continue \u2192 asset queue restarts for idle/failed sections",
         "User can jump straight to editing without regenerating"
       ],
       "estimatedMinutes": 15,
@@ -2129,7 +2136,7 @@
     {
       "id": "LB-UX-001",
       "feature": "landing-builder-ux-redesign",
-      "title": "Fix preview render bug — detect raw HTML vs React JSX",
+      "title": "Fix preview render bug \u2014 detect raw HTML vs React JSX",
       "type": "bugfix",
       "status": "complete",
       "priority": 1,
@@ -2163,7 +2170,7 @@
     {
       "id": "LB-UX-002",
       "feature": "landing-builder-ux-redesign",
-      "title": "Wire right panel — section list + properties editor in assembly mode",
+      "title": "Wire right panel \u2014 section list + properties editor in assembly mode",
       "type": "frontend",
       "status": "complete",
       "priority": 2,
@@ -2202,7 +2209,7 @@
     {
       "id": "LB-UX-003",
       "feature": "landing-builder-ux-redesign",
-      "title": "Build FloatingChatBar — centered bottom, collapsible history",
+      "title": "Build FloatingChatBar \u2014 centered bottom, collapsible history",
       "type": "frontend",
       "status": "complete",
       "priority": 2,
@@ -2240,7 +2247,7 @@
     {
       "id": "LB-UX-004",
       "feature": "landing-builder-ux-redesign",
-      "title": "Assemble hero layout — preview fills space, right panel, chat overlay",
+      "title": "Assemble hero layout \u2014 preview fills space, right panel, chat overlay",
       "type": "frontend",
       "status": "complete",
       "priority": 3,
@@ -2274,7 +2281,7 @@
     {
       "id": "LB-UX-005",
       "feature": "landing-builder-ux-redesign",
-      "title": "Polish — transitions, section click wiring, progress indicator",
+      "title": "Polish \u2014 transitions, section click wiring, progress indicator",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
@@ -2299,7 +2306,7 @@
       },
       "blocks": [],
       "parallelWith": [],
-      "notes": "Final pass: smooth animations, wire section click → editor panel selection, clean progress badges.",
+      "notes": "Final pass: smooth animations, wire section click \u2192 editor panel selection, clean progress badges.",
       "startedAt": "2026-03-01T17:33:26.961Z",
       "completedAt": "2026-03-01T17:33:26.961Z",
       "actualMinutes": 8
@@ -2897,7 +2904,7 @@
     {
       "id": "RC-016",
       "feature": "landing-builder-react-components",
-      "title": "Add coexistence header to sectionRenderer.ts — keep as HTML export fallback",
+      "title": "Add coexistence header to sectionRenderer.ts \u2014 keep as HTML export fallback",
       "type": "docs",
       "status": "complete",
       "priority": 5,
@@ -2934,9 +2941,9 @@
       "status": "complete",
       "priority": 5,
       "acceptance": [
-        "assignAssetStrategy() sets hero→image, features→icon, social-proof→none, pricing→none, stats→none, comparison→none",
+        "assignAssetStrategy() sets hero\u2192image, features\u2192icon, social-proof\u2192none, pricing\u2192none, stats\u2192none, comparison\u2192none",
         "Assigns icon_name from Lucide icon set per section type",
-        "Assigns divider type between key section transitions (hero→problem=wave, etc.)",
+        "Assigns divider type between key section transitions (hero\u2192problem=wave, etc.)",
         "Called during parseWorkspaceToSections()"
       ],
       "estimatedMinutes": 18,
@@ -3092,7 +3099,7 @@
     {
       "id": "RC-023",
       "feature": "landing-builder-react-components",
-      "title": "Update editor panels — new section icons, asset strategy selector, divider picker",
+      "title": "Update editor panels \u2014 new section icons, asset strategy selector, divider picker",
       "type": "frontend",
       "status": "complete",
       "priority": 7,
@@ -3627,7 +3634,7 @@
     {
       "id": "RG-005",
       "feature": "relationship-graph",
-      "title": "Add 'graph' view mode to Pipeline — view switcher, URL param, route integration",
+      "title": "Add 'graph' view mode to Pipeline \u2014 view switcher, URL param, route integration",
       "type": "frontend",
       "status": "complete",
       "priority": 5,
@@ -3665,7 +3672,7 @@
     {
       "id": "RG-006",
       "feature": "relationship-graph",
-      "title": "SVG graph shell — D3 zoom/pan, container, background gradients, orbit rings",
+      "title": "SVG graph shell \u2014 D3 zoom/pan, container, background gradients, orbit rings",
       "type": "frontend",
       "status": "complete",
       "priority": 6,
@@ -3703,7 +3710,7 @@
     {
       "id": "RG-007",
       "feature": "relationship-graph",
-      "title": "Contact node rendering — data hook, radial positioning, tier colours, badges",
+      "title": "Contact node rendering \u2014 data hook, radial positioning, tier colours, badges",
       "type": "frontend",
       "status": "complete",
       "priority": 7,
@@ -3817,7 +3824,7 @@
     {
       "id": "RG-010",
       "feature": "relationship-graph",
-      "title": "Company clustering toggle — group by company mode",
+      "title": "Company clustering toggle \u2014 group by company mode",
       "type": "frontend",
       "status": "complete",
       "priority": 10,
@@ -3853,7 +3860,7 @@
     {
       "id": "RG-011",
       "feature": "relationship-graph",
-      "title": "Detail panel — overview tab with warmth breakdown, stats, and header",
+      "title": "Detail panel \u2014 overview tab with warmth breakdown, stats, and header",
       "type": "frontend",
       "status": "complete",
       "priority": 11,
@@ -3893,7 +3900,7 @@
     {
       "id": "RG-012",
       "feature": "relationship-graph",
-      "title": "Detail panel — deal card, AI next step, related contacts, signals tags",
+      "title": "Detail panel \u2014 deal card, AI next step, related contacts, signals tags",
       "type": "frontend",
       "status": "complete",
       "priority": 12,
@@ -3929,7 +3936,7 @@
     {
       "id": "RG-013",
       "feature": "relationship-graph",
-      "title": "Detail panel — timeline tab with chronological interaction history",
+      "title": "Detail panel \u2014 timeline tab with chronological interaction history",
       "type": "frontend",
       "status": "complete",
       "priority": 13,
@@ -3968,7 +3975,7 @@
     {
       "id": "RG-014",
       "feature": "relationship-graph",
-      "title": "Detail panel — agents tab with 5 action cards and rich previews",
+      "title": "Detail panel \u2014 agents tab with 5 action cards and rich previews",
       "type": "frontend",
       "status": "complete",
       "priority": 14,
@@ -4077,7 +4084,7 @@
     {
       "id": "WB-002",
       "feature": "warmth-backfill",
-      "title": "Build warmth-backfill edge function — extract signals from activities, meetings, deals",
+      "title": "Build warmth-backfill edge function \u2014 extract signals from activities, meetings, deals",
       "type": "backend",
       "status": "complete",
       "priority": 2,
@@ -4155,7 +4162,7 @@
     {
       "id": "WB-004",
       "feature": "warmth-backfill",
-      "title": "Add backfill banner to RelationshipGraph — empty state detection and populate button",
+      "title": "Add backfill banner to RelationshipGraph \u2014 empty state detection and populate button",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
@@ -4188,7 +4195,7 @@
     {
       "id": "MW-001",
       "feature": "memory-wiring",
-      "title": "Build extract-deal-memory-events edge function — parse transcripts into deal_memory_events",
+      "title": "Build extract-deal-memory-events edge function \u2014 parse transcripts into deal_memory_events",
       "type": "backend",
       "status": "complete",
       "priority": 1,
@@ -4239,7 +4246,7 @@
         "generate-follow-up calls getDealContext() from _shared/memory/reader.ts when deal_id is available",
         "Injects commitments, recent events, and snapshot narrative into the follow-up prompt",
         "Follow-up emails reference past commitments and deal history when available",
-        "Graceful fallback — works identically to today if no memory data exists"
+        "Graceful fallback \u2014 works identically to today if no memory data exists"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -4276,7 +4283,7 @@
         "briefingComposer calls getDealContext() when deal_id is present on the calendar event",
         "Meeting prep includes open commitments, recent objections, and stakeholder narrative",
         "AI-generated talking points reference deal memory when available",
-        "Graceful fallback — works identically to today if no memory data exists"
+        "Graceful fallback \u2014 works identically to today if no memory data exists"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -4536,7 +4543,7 @@
         "oauth-token-refresh/index.ts created with provider parameter routing",
         "Provider configs for google, hubspot, fathom, attio, bullhorn",
         "Each config specifies: token endpoint URL, client ID env var, credentials table/columns",
-        "Shared logic: fetch integrations → check expiry → POST token endpoint → update credentials"
+        "Shared logic: fetch integrations \u2192 check expiry \u2192 POST token endpoint \u2192 update credentials"
       ],
       "estimatedMinutes": 25,
       "actualMinutes": null,
@@ -4608,7 +4615,7 @@
       "acceptance": [
         "oauth-initiate/index.ts created with provider parameter routing",
         "Provider configs for google, hubspot, fathom, attio, bullhorn",
-        "Shared logic: validate session → generate state → store state → build auth URL → return",
+        "Shared logic: validate session \u2192 generate state \u2192 store state \u2192 build auth URL \u2192 return",
         "Frontend OAuth trigger code updated to call unified endpoint"
       ],
       "estimatedMinutes": 25,
@@ -4681,7 +4688,7 @@
       "priority": 10,
       "acceptance": [
         "poll-scheduler/index.ts created with poll_configs array",
-        "Each config maps: poll type → table, status column, timeout threshold, fallback action",
+        "Each config maps: poll type \u2192 table, status column, timeout threshold, fallback action",
         "Covers: stuck-bots, transcription-queue, gladia-jobs, s3-upload-queue, voice-transcribe, slack-snooze",
         "Poll type selected via query param or request body"
       ],
@@ -5060,7 +5067,7 @@
         "_shared/oauthCallback.ts created with validateState() and exchangeToken() helpers",
         "All OAuth callback functions refactored to use shared helpers",
         "Provider-specific post-processing remains in individual callback functions",
-        "No behavior changes — all OAuth flows work identically"
+        "No behavior changes \u2014 all OAuth flows work identically"
       ],
       "estimatedMinutes": 20,
       "actualMinutes": null,
@@ -5504,7 +5511,7 @@
     {
       "id": "SBX2-012",
       "feature": "sandbox-v2",
-      "title": "Final polish — responsive, entrance animation, CTA placement",
+      "title": "Final polish \u2014 responsive, entrance animation, CTA placement",
       "type": "frontend",
       "status": "complete",
       "priority": 5,
@@ -5543,9 +5550,9 @@
       "acceptance": [
         "Sidebar shows only: Dashboard, Pipeline, Meetings, Email, Copilot",
         "All locked/greyed-out items removed entirely (not hidden, deleted from nav)",
-        "Group dividers removed — single clean nav list",
+        "Group dividers removed \u2014 single clean nav list",
         "Mobile bottom tabs updated to match (5 tabs max)",
-        "No SignupModal trigger from nav — only from CTA button"
+        "No SignupModal trigger from nav \u2014 only from CTA button"
       ],
       "estimatedMinutes": 15,
       "files": [
@@ -5708,7 +5715,7 @@
     {
       "id": "SBX3-006",
       "feature": "sandbox-v3",
-      "title": "Deep personalization — logos, research signals, industry context",
+      "title": "Deep personalization \u2014 logos, research signals, industry context",
       "type": "frontend",
       "status": "complete",
       "priority": 3,
@@ -5744,7 +5751,7 @@
     {
       "id": "SBX3-007",
       "feature": "sandbox-v3",
-      "title": "Guided narrative flow — progressive reveal, not free-roam",
+      "title": "Guided narrative flow \u2014 progressive reveal, not free-roam",
       "type": "frontend",
       "status": "complete",
       "priority": 4,
@@ -5781,7 +5788,7 @@
     {
       "id": "SBX3-008",
       "feature": "sandbox-v3",
-      "title": "Live AI moments — typing email, assembling meeting brief",
+      "title": "Live AI moments \u2014 typing email, assembling meeting brief",
       "type": "frontend",
       "status": "complete",
       "priority": 5,
@@ -6523,7 +6530,7 @@
       "feature": "support-electron-readiness",
       "title": "Add support tables to Supabase Realtime publication",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 0,
       "dependencies": {
         "stories": [],
@@ -6557,7 +6564,7 @@
       "feature": "support-electron-readiness",
       "title": "Auto-create in-app notifications on support events",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 0,
       "dependencies": {
         "stories": [],
@@ -6590,7 +6597,7 @@
       "feature": "support-electron-readiness",
       "title": "Auto-trigger email+Slack notifications on new messages and status changes",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 0,
       "dependencies": {
         "stories": [],
@@ -6621,7 +6628,7 @@
       "feature": "support-electron-readiness",
       "title": "Add internal notes support to support_messages",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "dependencies": {
         "stories": [],
@@ -6654,7 +6661,7 @@
       "feature": "support-electron-readiness",
       "title": "Update hooks and UI for internal notes",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "dependencies": {
         "stories": [
@@ -6686,7 +6693,7 @@
       "feature": "support-electron-readiness",
       "title": "Create support_canned_responses table and hook",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "dependencies": {
         "stories": [],
@@ -6717,7 +6724,7 @@
       "feature": "support-electron-readiness",
       "title": "Canned responses UI in admin dashboard",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "dependencies": {
         "stories": [
@@ -6749,7 +6756,7 @@
       "feature": "support-electron-readiness",
       "title": "Add SLA tracking columns and auto-calculation",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "dependencies": {
         "stories": [],
@@ -6781,7 +6788,7 @@
       "feature": "support-electron-readiness",
       "title": "SLA display in admin support UI",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "dependencies": {
         "stories": [
@@ -6813,7 +6820,7 @@
       "feature": "support-electron-readiness",
       "title": "Fix support RLS policies to use is_admin_optimized()",
       "type": "schema",
-      "status": "pending",
+      "status": "complete",
       "priority": 2,
       "dependencies": {
         "stories": [],
@@ -6845,7 +6852,7 @@
       "feature": "support-electron-readiness",
       "title": "Add Realtime subscription to support_messages hook",
       "type": "frontend",
-      "status": "pending",
+      "status": "complete",
       "priority": 1,
       "dependencies": {
         "stories": [
@@ -6870,12 +6877,405 @@
       "files": [
         "src/lib/hooks/useSupportMessages.ts"
       ]
+    },
+    {
+      "id": "GSCOPE-001",
+      "feature": "google-scope-nylas",
+      "title": "Remove restricted scopes and add scope_tier to Google OAuth initiate",
+      "type": "backend",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GSCOPE-003"
+      ],
+      "parallelWith": [
+        "GSCOPE-002"
+      ],
+      "acceptance": [
+        "gmail.compose, gmail.readonly, drive.readonly removed from default scopes array",
+        "scope_tier param read from request body ('free' default, 'paid' includes restricted)",
+        "Free tier has 10 scopes (all sensitive/non-sensitive, no CASA required)",
+        "Paid tier adds gmail.readonly, gmail.compose, drive.readonly back"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/oauth-initiate/providers/google.ts"
+      ],
+      "completedAt": "2026-03-07T15:25:00.000Z",
+      "startedAt": "2026-03-07T15:20:00.000Z"
+    },
+    {
+      "id": "GSCOPE-002",
+      "feature": "google-scope-nylas",
+      "title": "Add scope_tier column to google_integrations table",
+      "type": "schema",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "google_integrations"
+        ]
+      },
+      "blocks": [
+        "GSCOPE-003"
+      ],
+      "parallelWith": [
+        "GSCOPE-001"
+      ],
+      "acceptance": [
+        "scope_tier TEXT DEFAULT 'free' column added to google_integrations",
+        "Migration is idempotent (ADD COLUMN IF NOT EXISTS)",
+        "Existing integrations default to 'free'"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260307100001_google_scope_tier.sql"
+      ],
+      "completedAt": "2026-03-07T15:25:00.000Z",
+      "startedAt": "2026-03-07T15:20:00.000Z"
+    },
+    {
+      "id": "GSCOPE-003",
+      "feature": "google-scope-nylas",
+      "title": "Store scope_tier in OAuth callback and gate Gmail read actions",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "GSCOPE-001",
+          "GSCOPE-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "NYLAS-005",
+        "GATE-001"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "OAuth callback stores scope_tier from state record into google_integrations",
+        "OAuth initiate stores scope_tier in google_oauth_states alongside code_verifier",
+        "google-gmail list/get/get-message/draft/sync actions check scope_tier",
+        "Free tier returns {error: 'upgrade_required'} for read actions",
+        "Send/reply/forward/label actions work on both tiers"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/oauth-initiate/providers/google.ts",
+        "supabase/functions/google-oauth-callback/index.ts",
+        "supabase/functions/google-gmail/index.ts"
+      ],
+      "completedAt": "2026-03-07T15:35:00.000Z",
+      "startedAt": "2026-03-07T15:26:00.000Z"
+    },
+    {
+      "id": "NYLAS-001",
+      "feature": "google-scope-nylas",
+      "title": "Create Nylas shared client module and config",
+      "type": "backend",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "NYLAS-003",
+        "NYLAS-004"
+      ],
+      "parallelWith": [
+        "GSCOPE-001",
+        "GSCOPE-002",
+        "NYLAS-002"
+      ],
+      "acceptance": [
+        "nylasClient.ts exports helper for authenticated Nylas API v3 calls",
+        "Reads NYLAS_CLIENT_ID, NYLAS_API_KEY, NYLAS_API_URI from env",
+        "Error handling with typed NylasError responses",
+        "Follows existing _shared module patterns (microsoftOAuth.ts)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/nylasClient.ts"
+      ],
+      "completedAt": "2026-03-07T15:25:00.000Z",
+      "startedAt": "2026-03-07T15:20:00.000Z"
+    },
+    {
+      "id": "NYLAS-002",
+      "feature": "google-scope-nylas",
+      "title": "Create nylas_integrations table with RLS",
+      "type": "schema",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "NYLAS-003",
+        "NYLAS-004"
+      ],
+      "parallelWith": [
+        "GSCOPE-001",
+        "GSCOPE-002",
+        "NYLAS-001"
+      ],
+      "acceptance": [
+        "nylas_integrations table: id, user_id, grant_id, provider, email, access_token, is_active, created_at, updated_at",
+        "RLS: users can only read/update their own integrations",
+        "DROP POLICY IF EXISTS before CREATE POLICY",
+        "UNIQUE constraint on (user_id, provider)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260307100002_nylas_integrations.sql"
+      ],
+      "completedAt": "2026-03-07T15:25:00.000Z",
+      "startedAt": "2026-03-07T15:20:00.000Z"
+    },
+    {
+      "id": "NYLAS-003",
+      "feature": "google-scope-nylas",
+      "title": "Build Nylas OAuth connect and callback edge functions",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "NYLAS-001",
+          "NYLAS-002"
+        ],
+        "files": [],
+        "schema": [
+          "nylas_integrations"
+        ]
+      },
+      "blocks": [
+        "NYLAS-005",
+        "GATE-004"
+      ],
+      "parallelWith": [
+        "NYLAS-004"
+      ],
+      "acceptance": [
+        "nylas-oauth-initiate starts Nylas hosted auth for Google provider",
+        "nylas-oauth-callback stores grant_id and access token in nylas_integrations",
+        "Links to existing google_integrations user via user_id",
+        "Updates google_integrations.scope_tier to 'paid' on successful Nylas connect",
+        "Callback has verify_jwt=false (redirect from Nylas)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/nylas-oauth-initiate/index.ts",
+        "supabase/functions/nylas-oauth-callback/index.ts",
+        "supabase/functions/nylas-oauth-callback/config.toml"
+      ],
+      "completedAt": "2026-03-07T15:35:00.000Z",
+      "startedAt": "2026-03-07T15:26:00.000Z"
+    },
+    {
+      "id": "NYLAS-004",
+      "feature": "google-scope-nylas",
+      "title": "Build Nylas email read and draft edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "NYLAS-001",
+          "NYLAS-002"
+        ],
+        "files": [],
+        "schema": [
+          "nylas_integrations"
+        ]
+      },
+      "blocks": [
+        "NYLAS-005"
+      ],
+      "parallelWith": [
+        "NYLAS-003"
+      ],
+      "acceptance": [
+        "nylas-email supports list, get, draft actions via Nylas Messages API v3",
+        "Response shape matches google-gmail for frontend compatibility",
+        "Uses nylasClient.ts for authenticated calls",
+        "JWT-protected (user must be authenticated)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/nylas-email/index.ts"
+      ],
+      "completedAt": "2026-03-07T15:35:00.000Z",
+      "startedAt": "2026-03-07T15:26:00.000Z"
+    },
+    {
+      "id": "NYLAS-005",
+      "feature": "google-scope-nylas",
+      "title": "Wire Gmail read actions to Nylas for paid users",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "GSCOPE-003",
+          "NYLAS-003",
+          "NYLAS-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "google-gmail list/get/get-message/draft/sync: if user has active nylas_integration, proxy to Nylas",
+        "Falls through to direct Google API if scope_tier='paid' without Nylas",
+        "Returns upgrade_required if neither Nylas nor paid scopes available",
+        "Transparent to frontend (same response shape)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/google-gmail/index.ts"
+      ],
+      "completedAt": "2026-03-07T15:45:00.000Z",
+      "startedAt": "2026-03-07T15:36:00.000Z"
+    },
+    {
+      "id": "GATE-001",
+      "feature": "google-scope-nylas",
+      "title": "Add canReadGmail and Nylas state to integration store and API layer",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "GSCOPE-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GATE-002"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "integrationStore exposes canReadGmail boolean (derived from scope_tier or nylas active)",
+        "integrationStore exposes nylasConnected boolean",
+        "GoogleIntegrationAPI.getIntegrationStatus() includes scope_tier in response",
+        "checkGoogleConnection() populates canReadGmail state"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/stores/integrationStore.ts",
+        "src/lib/api/googleIntegration.ts"
+      ],
+      "completedAt": "2026-03-07T15:45:00.000Z",
+      "startedAt": "2026-03-07T15:36:00.000Z"
+    },
+    {
+      "id": "GATE-002",
+      "feature": "google-scope-nylas",
+      "title": "Build GmailUpgradeGate component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "GATE-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GATE-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "GmailUpgradeGate wraps Gmail-read-dependent UI with upgrade prompt",
+        "Shows teaser with blurred preview when canReadGmail is false",
+        "CTA triggers Nylas OAuth flow via integrationStore",
+        "Uses Lucide icons and existing shadcn Card/Button components"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/integrations/GmailUpgradeGate.tsx"
+      ]
+    },
+    {
+      "id": "GATE-003",
+      "feature": "google-scope-nylas",
+      "title": "Wire upgrade gate into email-dependent UI surfaces",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "GATE-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "GATE-004"
+      ],
+      "acceptance": [
+        "SendEmailButton shows upgrade gate when canReadGmail is false",
+        "Contact email timeline wrapped with GmailUpgradeGate",
+        "Copilot follow-up drafts show draft preview but gate the send for free tier"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/contacts/SendEmailButton.tsx"
+      ]
+    },
+    {
+      "id": "GATE-004",
+      "feature": "google-scope-nylas",
+      "title": "Add upgrade CTA and Limited badge to Integrations page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "GATE-001",
+          "NYLAS-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "GATE-003"
+      ],
+      "acceptance": [
+        "Google card shows 'Limited' badge when scope_tier='free' instead of 'Active'",
+        "Expanded section shows: Gmail send + Calendar (check) | Gmail read + drafts: Upgrade CTA",
+        "CTA opens Nylas OAuth flow for paid users or plan upgrade for free tier",
+        "Microsoft card unchanged (always full access)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/Integrations.tsx"
+      ]
     }
   ],
   "execution": {
-    "totalStories": 189,
-    "completedStories": 178,
-    "currentFeature": "support-electron-readiness",
-    "lastUpdated": "2026-03-06T13:53:26.761Z"
+    "totalStories": 201,
+    "completedStories": 201,
+    "currentFeature": "google-scope-nylas",
+    "lastUpdated": "2026-03-07T15:45:00.000Z"
   }
 }

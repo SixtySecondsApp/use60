@@ -1,450 +1,514 @@
 {
-  "project": "Onboarding & First-Run UX Fixes",
-  "runSlug": "onboarding-ux-fixes",
-  "branchName": "feature/onboarding-ux-fixes",
-  "description": "Fix 5 broken CTAs, config save failure, weak passwords, misleading credit displays, unpolished dropdowns, missing item limits, and auto-trigger meeting analysis pipeline on ingestion.",
-  "aiDevHubProjectId": null,
-  "createdAt": "2026-03-03T11:00:00Z",
+  "project": "Google & Microsoft Integration V2 — Agent-Grade Workspace Intelligence",
+  "runSlug": "workspace-integration-v2",
+  "branchName": "feature/workspace-integration-v2",
+  "description": "Complete overhaul of Google integration + net-new Microsoft 365 integration. Centralized provider-abstracted client, 5 AI background jobs (email classification, reply gaps, attendee enrichment, communication health, document linking), subscription tier gating, and proposal-to-Drive storage.",
+  "aiDevHubProjectId": "c5cb25f9-6dfb-4c72-a65c-34572b929185",
+  "createdAt": "2026-03-07T16:00:00Z",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Fix ActivationChecklist 'Complete Your Profile' CTA",
-      "description": "As a new user, I want the 'Go to Profile' button to take me to a working profile page so I can complete my setup.",
+      "title": "Provider-Abstracted Client Interface",
+      "description": "As a developer, I want a single WorkspaceClient interface that abstracts Google and Microsoft so that all edge functions and background jobs work identically across providers.",
       "acceptanceCriteria": [
-        "href changed from /settings/profile to /settings/account in ActivationChecklist.tsx",
-        "Clicking 'Go to Profile' lands on a working page",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "_shared/workspaceClient.ts created with provider interface: google | microsoft",
+        "Exports createWorkspaceClient(provider, userId, supabase) factory function",
+        "Interface covers email, calendar, drive, contacts namespaces with typed methods",
+        "Provider-specific implementations in _shared/providers/google.ts and _shared/providers/microsoft.ts",
+        "Microsoft provider stubs return not_implemented errors",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": false,
-      "notes": "File: src/components/dashboard/ActivationChecklist.tsx line 43",
-      "aiDevHubTaskId": null
+      "notes": "Foundation story — all other stories depend on this interface",
+      "aiDevHubTaskId": "a36bbbdf-0f75-40da-b58d-3ccfe34d1d98"
     },
     {
       "id": "US-002",
-      "title": "Fix ActivationChecklist 'Connect Calendar' CTA",
-      "description": "As a new user, I want the 'Connect Calendar' button to take me to the integrations page so I can sync my first meeting.",
+      "title": "Centralized Token Refresh",
+      "description": "As a user, I want my Google/Microsoft tokens to never expire mid-action so that API calls always succeed.",
       "acceptanceCriteria": [
-        "href changed from /settings/integrations to /integrations for first_meeting_synced item",
-        "Clicking 'Connect Calendar' lands on the integrations hub page",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "_shared/tokenManager.ts created with getValidToken(provider, userId, supabase)",
+        "Checks expires_at with 5-minute buffer, refreshes if within buffer",
+        "Uses database row-level lock (FOR UPDATE SKIP LOCKED) to prevent race conditions",
+        "All 5 existing Google edge functions refactored to use getValidToken()",
+        "Duplicated refreshAccessToken() removed from all edge functions",
+        "Drive token refresh now works (was TODO)",
+        "Typecheck passes"
       ],
-      "priority": 2,
+      "priority": 1,
       "passes": false,
-      "notes": "File: src/components/dashboard/ActivationChecklist.tsx. /settings/integrations does not exist — only /integrations does.",
-      "aiDevHubTaskId": null
+      "notes": "Fixes pain points #1 (duplicated refresh) and #2 (Drive TODO)",
+      "aiDevHubTaskId": "6358172c-8911-4119-9256-9ec4eae7e8c7"
     },
     {
       "id": "US-003",
-      "title": "Fix ActivationChecklist 'Connect Notetaker' CTA",
-      "description": "As a new user, I want the 'Connect Notetaker' button to take me to the integrations page.",
+      "title": "Auto-Pagination Helper",
+      "description": "As a developer, I want pagination handled automatically so that sync operations fetch complete datasets.",
       "acceptanceCriteria": [
-        "href changed from /settings/integrations to /integrations for notetaker_connected item",
-        "Clicking 'Connect Notetaker' lands on integrations hub",
+        "_shared/pagination.ts created with paginateAll(fetchPage, options) helper",
+        "Supports Google nextPageToken and Microsoft @odata.nextLink patterns",
+        "Configurable maxPages (default 50) and delay (default 100ms)",
+        "Gmail sync refactored to use paginateAll() — no longer capped at 10 messages",
+        "Calendar list refactored to use paginateAll()",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Fixes pain point #4 (Gmail sync capped at 10)",
+      "aiDevHubTaskId": "a987851b-c6f9-4001-a783-f059359964ec"
+    },
+    {
+      "id": "US-004",
+      "title": "Typed Error Classification",
+      "description": "As an agent, I want typed error responses so I know whether to retry, re-authenticate, or escalate.",
+      "acceptanceCriteria": [
+        "_shared/workspaceErrors.ts with error classes: TokenExpiredError, InsufficientScopeError, RateLimitError, NotFoundError, ProviderError",
+        "Each error includes retryable, statusCode, provider fields",
+        "Edge functions return correct HTTP codes: 401/403/429/404/500",
+        "Error body: { error, code, retryable, provider }",
+        "All 5 Google edge functions refactored to use typed errors",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Fixes pain point #5 (generic 400 for everything)",
+      "aiDevHubTaskId": "05d46a8a-08da-4c49-8a9d-e4d060c5f753"
+    },
+    {
+      "id": "US-005",
+      "title": "Nylas Routing in Centralized Client",
+      "description": "As a user on the free plan, I want Gmail read operations to automatically route through Nylas when connected, and paid users get expanded Nylas operations (send, reply, forward).",
+      "acceptanceCriteria": [
+        "WorkspaceClient.email.list() checks Nylas connection before routing",
+        "Nylas connected: routes read ops through Nylas API",
+        "Paid tier direct: routes through Gmail API",
+        "Free + no Nylas: returns upgrade_required error",
+        "Send, reply, forward expanded through Nylas for paid users",
+        "nylas-email edge function updated with send, reply, forward actions",
+        "Response format identical regardless of routing",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Expands Nylas from read-only to full email operations",
+      "aiDevHubTaskId": "7e6bfbcc-1d42-4067-a7ae-c66af43d536e"
+    },
+    {
+      "id": "US-006",
+      "title": "Subscription Tier Gating",
+      "description": "As a product owner, I want features gated by subscription tier so Basic and Pro plans deliver different value, with free trial getting full Pro.",
+      "acceptanceCriteria": [
+        "_shared/tierGating.ts with getUserTier() and canAccess() functions",
+        "Feature matrix config for all gated features",
+        "Trial users get full Pro access",
+        "Sync frequency resolved per tier: Basic=4h, Pro=30min",
+        "History depth resolved per tier: Basic=90d, Pro=unlimited",
+        "Gating applied in background job dispatcher",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": "e41f7f77-7be1-4da1-981b-494edab01039"
+    },
+    {
+      "id": "US-007",
+      "title": "Microsoft OAuth Flow",
+      "description": "As a user, I want to connect my Microsoft 365 account so that 60 can access my Outlook, Calendar, and OneDrive.",
+      "acceptanceCriteria": [
+        "microsoft_integrations table created via migration",
+        "microsoft_oauth_states table created via migration",
+        "oauth-initiate/providers/microsoft.ts created with PKCE flow",
+        "Scopes: Mail.ReadWrite, Mail.Send, Calendars.ReadWrite, Files.ReadWrite, Contacts.Read, User.Read, offline_access",
+        "microsoft-oauth-callback edge function created",
+        "Redirect URI allowlist matches Google pattern",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": "4d976e08-c566-4686-a437-55f89886bf90"
+    },
+    {
+      "id": "US-008",
+      "title": "Microsoft Token Refresh",
+      "description": "As a user, I want my Microsoft tokens to refresh automatically using the centralized token manager.",
+      "acceptanceCriteria": [
+        "tokenManager.ts extended with Microsoft refresh logic",
+        "Same race-condition protection (row-level lock)",
+        "Same 5-minute expiry buffer",
+        "microsoft_integrations.access_token and expires_at updated on refresh",
         "Typecheck passes"
       ],
       "priority": 3,
       "passes": false,
-      "notes": "Same root cause as US-002 — /settings/integrations does not exist",
-      "aiDevHubTaskId": null
+      "notes": "Depends on US-002 (tokenManager)",
+      "aiDevHubTaskId": "c7af3322-1ccf-42e6-ae19-67d54fb7b749"
     },
     {
-      "id": "US-004",
-      "title": "Fix ActivationChecklist 'Connect CRM' CTA",
-      "description": "As a new user, I want the 'Connect CRM' button to take me to the integrations page.",
+      "id": "US-009",
+      "title": "Microsoft Email Provider (Outlook / Graph API)",
+      "description": "As a user with Microsoft connected, I want to send, read, and manage emails through Outlook so the agent works with my Microsoft account.",
       "acceptanceCriteria": [
-        "href changed from /settings/integrations to /integrations for crm_integrated item",
-        "Clicking 'Connect CRM' lands on integrations hub",
+        "microsoft.ts email namespace implemented using Graph API",
+        "Actions: list, get, send, reply, forward, draft, archive, trash, star, mark-as-read",
+        "Response format mapped to same interface as Google",
+        "microsoft-email edge function created",
+        "Pagination uses Graph @odata.nextLink via paginateAll()",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Depends on US-001, US-007",
+      "aiDevHubTaskId": "a13750d7-eece-4258-bdf7-262b33816765"
+    },
+    {
+      "id": "US-010",
+      "title": "Microsoft Calendar Provider",
+      "description": "As a user with Microsoft connected, I want calendar events synced from Outlook Calendar so the agent can prep for meetings regardless of provider.",
+      "acceptanceCriteria": [
+        "microsoft.ts calendar namespace implemented using Graph API",
+        "Actions: list-events, create-event, update-event, delete-event, list-calendars, availability",
+        "Webhook subscriptions via Graph subscriptions endpoint",
+        "microsoft-calendar edge function created",
+        "Response format mapped to same interface as Google",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Depends on US-001, US-007",
+      "aiDevHubTaskId": "239d3b79-db98-4184-9ddb-e0d39f59de0b"
+    },
+    {
+      "id": "US-011",
+      "title": "Microsoft Drive Provider (OneDrive)",
+      "description": "As a user with Microsoft connected, I want OneDrive access so proposals and documents can be stored and linked.",
+      "acceptanceCriteria": [
+        "microsoft.ts drive namespace implemented using Graph API",
+        "Actions: list-files, create-folder, upload-file, share-file, get-file, delete-file, search",
+        "microsoft-drive edge function created",
+        "Response format mapped to same interface as Google",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Depends on US-001, US-007",
+      "aiDevHubTaskId": "a978b3c9-624d-4caf-92ce-62b7a0775911"
+    },
+    {
+      "id": "US-012",
+      "title": "Microsoft Integration UI",
+      "description": "As a user, I want to connect Microsoft 365 from the Integrations page with the same UX as Google.",
+      "acceptanceCriteria": [
+        "Microsoft card added to Integrations page with Outlook logo",
+        "Same status badges: active, limited, inactive, error",
+        "Connect/disconnect flow mirrors Google",
+        "integrationStore.ts extended with microsoft state",
+        "checkMicrosoftConnection() and connectMicrosoft() actions added",
+        "Service toggles for email, calendar, drive",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Depends on US-007",
+      "aiDevHubTaskId": "71f96d01-fe3b-4af4-8199-1adc62dfe7f5"
+    },
+    {
+      "id": "US-013",
+      "title": "Background Job Dispatcher",
+      "description": "As a system, I want a central dispatcher that runs background jobs on schedule, respecting user working hours and subscription tiers.",
+      "acceptanceCriteria": [
+        "workspace-background-jobs edge function created",
+        "Accepts job_type parameter for all job types",
+        "Resolves user working hours from user_settings (default 8am-6pm)",
+        "Skips if outside working hours (except token_refresh, calendar_watch)",
+        "Checks subscription tier before tier-gated jobs",
+        "Processes users in batches of 50 within 60s timeout",
+        "Logs to background_job_logs table",
         "Typecheck passes"
       ],
       "priority": 4,
       "passes": false,
-      "notes": "Same root cause as US-002 — /settings/integrations does not exist",
-      "aiDevHubTaskId": null
+      "notes": "Depends on US-006 (tier gating)",
+      "aiDevHubTaskId": "a3dcd766-a909-44b9-a62e-13f9ddf7df74"
     },
     {
-      "id": "US-005",
-      "title": "Fix ActivationChecklist 'Invite Team' CTA",
-      "description": "As a new user, I want the 'Invite Team' button to take me to the team management page.",
+      "id": "US-014",
+      "title": "Background Job Scheduling Migration",
+      "description": "As a system, I want pg_cron jobs configured to trigger the dispatcher on correct schedules.",
       "acceptanceCriteria": [
-        "href changed from /settings/team to /settings/team-members for team_invited item",
-        "Clicking 'Invite Team' lands on organization management page",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "background_job_logs table created via migration",
+        "pg_cron and pg_net extensions enabled",
+        "10 cron jobs created with correct frequencies per tier",
+        "Each cron calls workspace-background-jobs via pg_net",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Depends on US-013",
+      "aiDevHubTaskId": "7ab105a3-8e8e-4b5e-a593-c3a7ea6441cb"
+    },
+    {
+      "id": "US-015",
+      "title": "Proactive Token Refresh Job",
+      "description": "As a user, I want my tokens refreshed before they expire so no API call ever fails due to an expired token.",
+      "acceptanceCriteria": [
+        "Queries integrations where expires_at < NOW() + 30 minutes",
+        "Refreshes using tokenManager.getValidToken()",
+        "Logs success/failure per user",
+        "Handles revoked tokens (marks needs_reauth, notifies user)",
+        "Runs every 10 minutes regardless of working hours",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Fixes pain point #6. Depends on US-002, US-013",
+      "aiDevHubTaskId": "c7646389-2b55-4bf5-9a0f-e5a208278bef"
+    },
+    {
+      "id": "US-016",
+      "title": "Calendar Watch Auto-Renewal",
+      "description": "As a user, I want calendar watches auto-renewed so I never miss meeting notifications.",
+      "acceptanceCriteria": [
+        "calendar_watches table created via migration",
+        "Queries watches expiring within 48 hours",
+        "Renews Google watches via Calendar API",
+        "Renews Microsoft subscriptions via Graph API",
+        "Updates expiration in calendar_watches table",
+        "Runs daily at 3am UTC regardless of working hours",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Fixes pain point #3. Depends on US-013",
+      "aiDevHubTaskId": "d1686e28-ad7e-416a-9f66-34fe668b7f32"
+    },
+    {
+      "id": "US-017",
+      "title": "Email Sync V2 (Full Paginated)",
+      "description": "As a user, I want my full email history synced so the agent has complete context on every contact relationship.",
+      "acceptanceCriteria": [
+        "Email sync uses paginateAll() for complete inbox traversal",
+        "Stores sync cursor (historyId for Google, deltaLink for Microsoft)",
+        "First sync: 90 days (Basic) or full history (Pro)",
+        "Subsequent syncs: incremental from last cursor",
+        "email_messages table created via migration with RLS",
+        "Schema: id, user_id, provider, message_id, thread_id, from/to/cc, subject, snippet, labels, read, starred, has_attachments, received_at, classification JSONB",
+        "Pro: every 30min. Basic: every 4h",
+        "Typecheck passes"
       ],
       "priority": 5,
       "passes": false,
-      "notes": "File: src/components/dashboard/ActivationChecklist.tsx. /settings/team redirects to /settings which is wrong.",
-      "aiDevHubTaskId": null
+      "notes": "Depends on US-003, US-006",
+      "aiDevHubTaskId": "420aca25-5ea2-49b1-a86b-8f55d4684384"
     },
     {
-      "id": "US-006",
-      "title": "Seed missing config keys in agent_config_defaults",
-      "description": "As a new user, I want saving my configuration during onboarding to succeed instead of showing 'Failed to save configuration.'",
+      "id": "US-018",
+      "title": "Email Classification Pipeline",
+      "description": "As a Pro user, I want incoming emails automatically classified so the agent surfaces buying signals, objections, and urgent items.",
       "acceptanceCriteria": [
-        "New migration seeds 14 onboarding config keys into agent_config_defaults table",
-        "Keys: fiscal_year_start_month, typical_deal_size_range, average_sales_cycle_days, crm_stage_mapping (agent_type: deal_risk)",
-        "Keys: sales_methodology, sales_motion_type, key_competitors, pricing_model, target_customer_profile, common_objections (agent_type: crm_update)",
-        "Keys: industry_vertical, company_size, product_service_category, team_size (agent_type: morning_briefing)",
-        "Migration uses ON CONFLICT DO NOTHING for idempotency",
-        "setOrgOverride calls succeed for all config keys after migration",
+        "email-classify edge function created",
+        "Uses Haiku 4.5 (claude-haiku-4-5-20251001) with prompt caching",
+        "Classifies unprocessed emails where classification IS NULL",
+        "Schema: intent, sentiment, urgency, deal_relevance, tags, summary",
+        "Intents: buying_signal, objection, question, scheduling, follow_up_needed, ooo_auto_reply, newsletter, notification, personal, other",
+        "Results stored in email_messages.classification JSONB",
+        "Links to contacts via from_email, links to deals via contact-deal",
+        "Pro only, hourly during working hours",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Depends on US-017. The killer Pro feature.",
+      "aiDevHubTaskId": "6f905d64-7f5c-49b2-92a8-c03df0b14339"
+    },
+    {
+      "id": "US-019",
+      "title": "Reply Gap Detection",
+      "description": "As a user, I want to know which sent emails haven't received a reply so the agent can draft follow-ups proactively.",
+      "acceptanceCriteria": [
+        "reply-gap-detect edge function created",
+        "Queries sent emails, checks for reply in same thread",
+        "Gap windows: 48h (Pro), 72h (Basic+Pro), 7d (Basic+Pro)",
+        "reply_gaps table created via migration",
+        "Urgency scoring: 48h on active deal = high, 72h = medium, 7d = low",
+        "Clears gap when reply detected",
+        "Pro: every 4h. Basic: every 12h",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Depends on US-017",
+      "aiDevHubTaskId": "1a5a2993-b812-44f9-a2e0-c3f60785be48"
+    },
+    {
+      "id": "US-020",
+      "title": "Sent-vs-Received Ratio Tracking",
+      "description": "As a Pro user, I want per-contact communication health metrics so the agent can flag one-directional relationships.",
+      "acceptanceCriteria": [
+        "contact_communication_health table created via migration",
+        "Schema: user_id, contact_email, provider, sent/received counts, ratio, last sent/received, avg response time, streak type",
+        "Daily rollup from email_messages",
+        "Streak detection: 3+ consecutive sends without reply",
+        "Links to contact record if exists",
+        "Pro only, daily at 2am UTC",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Depends on US-017",
+      "aiDevHubTaskId": "bbfba13d-6aba-4682-a853-7a8209cd0ad2"
+    },
+    {
+      "id": "US-021",
+      "title": "Calendar Attendee Enrichment",
+      "description": "As a Pro user, I want meeting attendees automatically enriched with company and role data for comprehensive meeting briefs.",
+      "acceptanceCriteria": [
+        "attendee-enrich edge function created",
+        "Triggers on new calendar events via sync or webhook",
+        "Creates contact records for unknown attendee emails",
+        "Runs lead enrichment pipeline on new contacts",
+        "Stores: name, title, company, LinkedIn URL, company size, industry",
+        "Works for both Google and Microsoft calendar events",
+        "Pro only, every 15 min during working hours",
         "Typecheck passes"
       ],
       "priority": 6,
       "passes": false,
-      "notes": "Root cause: agent-config-admin edge function validates config_key exists in agent_config_defaults before allowing set_org_override. None of the onboarding keys were ever seeded. File: supabase/functions/agent-config-admin/index.ts lines 96-105.",
-      "aiDevHubTaskId": null
+      "notes": "Depends on US-016. Integrates with existing lead enrichment.",
+      "aiDevHubTaskId": "cd803522-556f-48c6-a246-d3a11547c7e5"
     },
     {
-      "id": "US-007",
-      "title": "Strengthen password validation on signup",
-      "description": "As a platform admin, I want signup passwords to require at least 1 uppercase letter and 1 special character for better security.",
+      "id": "US-022",
+      "title": "Pre-Meeting Research & Slack Alert",
+      "description": "As a Pro user, I want a Slack notification 2 hours before every meeting with a full research brief.",
       "acceptanceCriteria": [
-        "Password requires: min 6 chars, 1 uppercase, 1 special character",
-        "Validation in src/pages/auth/signup.tsx handleSubmit",
-        "Hint text updated to: 'Min 6 chars, 1 uppercase, 1 special character'",
-        "Specific toast error message for each missing requirement",
-        "Same validation applied in TestUserSignup.tsx and InviteSignup.tsx",
+        "Extends attendee enrichment to trigger when meeting is within 2 hours",
+        "Brief includes: attendee profiles, company intel, deal status, last email, open actions",
+        "Formatted as Slack Block Kit message matching existing pattern",
+        "Sent to user's Slack DM",
+        "Quick-action buttons: View Deal, Draft Agenda, Reschedule",
+        "Dedup via meeting_prep_sent flag (triggers once per meeting)",
+        "Works for both Google and Microsoft events",
+        "Pro only",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Depends on US-021. The Slack alert users already love — now automatic for every meeting.",
+      "aiDevHubTaskId": "55935ad4-b837-4670-917d-9eac8da0b99c"
+    },
+    {
+      "id": "US-023",
+      "title": "Proposal Storage to User's Drive",
+      "description": "As a user, I want proposals stored in my Google Drive or OneDrive instead of S3.",
+      "acceptanceCriteria": [
+        "Proposal pipeline uploads to user's Drive/OneDrive first",
+        "Creates '60 Proposals' folder if not exists",
+        "File named: {Company} - Proposal - {Date}.pdf",
+        "Auto-shares with proposal recipients",
+        "Drive file URL stored in proposals table",
+        "Falls back to S3 if no Drive/OneDrive connected",
+        "Works for both Google Drive and OneDrive",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Depends on US-001 (Drive provider)",
+      "aiDevHubTaskId": "ccc68b83-9401-4991-92b3-1ebc2a1d3f5a"
+    },
+    {
+      "id": "US-024",
+      "title": "Drive Document Linking",
+      "description": "As a Pro user, I want recently shared documents auto-linked to deals so the agent can reference them.",
+      "acceptanceCriteria": [
+        "deal_documents table created via migration",
+        "Background job scans recent Drive/OneDrive activity (last 2 hours)",
+        "Matches docs to deals by: recipient email, file name contains company, created during meeting",
+        "Stores in deal_documents table",
+        "Agent can query documents shared with a contact/company",
+        "Pro only, every 2 hours during working hours",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Depends on US-017, US-023",
+      "aiDevHubTaskId": "39b41059-013c-4d7b-93aa-3b142db7a684"
+    },
+    {
+      "id": "US-025",
+      "title": "Integration Dashboard Updates",
+      "description": "As a user, I want the Integrations page to show both Google and Microsoft with clear tier-based feature visibility.",
+      "acceptanceCriteria": [
+        "Microsoft 365 card added alongside Google card",
+        "Both cards show per-service status (email, calendar, drive)",
+        "Pro features show lock icon with Upgrade to Pro for Basic users",
+        "Background job status: Last synced X min ago, Classification: N new insights",
+        "Communication health summary: N contacts need follow-up",
+        "Connected provider count shown",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 7,
       "passes": false,
-      "notes": "Current validation only checks length >= 6 at signup.tsx line 124",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-008",
-      "title": "Fix credits depleted banner race condition for new users",
-      "description": "As a new user, I want to see a welcome banner about my free credits instead of 'AI credits depleted'.",
-      "acceptanceCriteria": [
-        "When balance <= 0 AND user has zero ai_cost_events, do NOT show red depleted banner",
-        "Show green banner or suppress entirely while welcome credits are pending",
-        "If welcome credits localStorage flag is 'pending', show green banner even before balance refreshes",
-        "After credits granted and balance > 0, green banner shows '10 Free AI credits have been added!'",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 8,
-      "passes": false,
-      "notes": "File: src/components/credits/LowBalanceBanner.tsx. Welcome banner logic exists at line 48 but depends on timing. grant-welcome-credits runs from CompletionStep.tsx line 116-125.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-009",
-      "title": "Remove credit migration popup for new users",
-      "description": "As a new user, I want to not see a 'We've upgraded your credits' popup since I never had a prior version.",
-      "acceptanceCriteria": [
-        "CreditMigrationModal does NOT show for orgs created after credit system launch",
-        "Add guard: check org.created_at against cutoff date or check for migration ledger entries",
-        "Existing users who haven't dismissed it should still see it",
-        "localStorage DISMISSED_KEY check remains as secondary guard",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 9,
-      "passes": false,
-      "notes": "File: src/components/credits/CreditMigrationModal.tsx. Currently only guards via localStorage key (line 24) — no server-side new-user detection.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-010",
-      "title": "Fix UsageChart header stats — remove dollar signs",
-      "description": "As a user, I want the usage chart header pills to show credits not dollars.",
-      "acceptanceCriteria": [
-        "Line 356: Change from $X.XX to 'X.X credits'",
-        "Line 363: Change 30d estimate from $X.XX to credits format",
-        "Lines 384: Change projection cards from '$X.XX/mo' to 'X.X credits/mo'",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 10,
-      "passes": false,
-      "notes": "File: src/components/credits/UsageChart.tsx. estimated_cost stores credit units not USD.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-011",
-      "title": "Fix UsageChart tooltip and Y-axis — remove dollar signs",
-      "description": "As a user, I want chart tooltips and axis labels to show credits not dollars.",
-      "acceptanceCriteria": [
-        "Line 201 (CustomTooltip): Change from $X.XXXX to credits format",
-        "Line 414 (Y-axis tickFormatter): Change from $X to credits format",
-        "Typecheck passes"
-      ],
-      "priority": 11,
-      "passes": false,
-      "notes": "File: src/components/credits/UsageChart.tsx",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-012",
-      "title": "Fix UsageChart legend and section header labels",
-      "description": "As a user, I want the chart legend and page header to use credit-appropriate language.",
-      "acceptanceCriteria": [
-        "renderLegend: 'Actual spend' changed to 'Credits used'",
-        "CreditsSettingsPage.tsx line 411: 'Spend Trend (30 Days)' changed to 'Usage Trend (30 Days)'",
-        "Header stat label 'Actual' updated if needed for clarity",
-        "Typecheck passes"
-      ],
-      "priority": 12,
-      "passes": false,
-      "notes": "File: src/components/credits/UsageChart.tsx lines 212-240, src/pages/settings/CreditsSettingsPage.tsx line 411",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-013",
-      "title": "Tag onboarding cost events with source metadata",
-      "description": "As a new user, I want onboarding AI costs to be tagged so they can be excluded from my usage display.",
-      "acceptanceCriteria": [
-        "deep-enrich-organization logAICostEvent (line 522) adds metadata: { source: 'onboarding' }",
-        "agent-initial-scan logAICostEvent adds metadata: { source: 'onboarding' }",
-        "api-skill-builder logAICostEvent calls add metadata: { source: 'onboarding' } when called during onboarding",
-        "Typecheck passes"
-      ],
-      "priority": 13,
-      "passes": false,
-      "notes": "deep-enrich-organization logs with hardcoded 1000/800 token counts. metadata jsonb column already exists on ai_cost_events.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-014",
-      "title": "Filter onboarding cost events from UsageChart display",
-      "description": "As a new user, I want the usage chart to exclude onboarding setup costs so I see 0 usage on first login.",
-      "acceptanceCriteria": [
-        "UsageChart query (line 73-79) filters out events where metadata->>'source' = 'onboarding'",
-        "New users see 0 usage on first login (not $3 / 3 credits)",
-        "Admin/power users can optionally see all events if needed",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 14,
-      "passes": false,
-      "notes": "Depends on US-013 (tagging) being deployed first. File: src/components/credits/UsageChart.tsx",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-015",
-      "title": "Fix fiscal year dropdown to show month names",
-      "description": "As a new user, I want the fiscal year dropdown to show month names instead of numbers.",
-      "acceptanceCriteria": [
-        "Dropdown shows Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec",
-        "Stored value remains numeric (1-12) — only display label changes",
-        "Fix applied in AgentConfigConfirmStep.tsx lines 83-85",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 15,
-      "passes": false,
-      "notes": "File: src/pages/onboarding/v2/AgentConfigConfirmStep.tsx",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-016",
-      "title": "Fix sales methodology dropdown capitalisation",
-      "description": "As a new user, I want sales methodology options properly capitalised.",
-      "acceptanceCriteria": [
-        "Options display as: Generic, MEDDIC, BANT, SPIN, Challenger",
-        "Acronyms fully capitalised: MEDDIC, BANT, SPIN",
-        "Non-acronyms start with capital: Generic, Challenger",
-        "Stored value can remain lowercase — only display label changes",
-        "Fix applied in AgentConfigConfirmStep.tsx line 64",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 16,
-      "passes": false,
-      "notes": "File: src/pages/onboarding/v2/AgentConfigConfirmStep.tsx",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-017",
-      "title": "Add sales methodology hover tooltips",
-      "description": "As a new user, I want hover tooltips explaining each methodology so I can choose correctly.",
-      "acceptanceCriteria": [
-        "Generic tooltip: 'A flexible, general-purpose sales approach'",
-        "MEDDIC tooltip: 'Metrics, Economic Buyer, Decision Criteria, Decision Process, Identify Pain, Champion'",
-        "BANT tooltip: 'Budget, Authority, Need, Timeline'",
-        "SPIN tooltip: 'Situation, Problem, Implication, Need-Payoff'",
-        "Challenger tooltip: 'The Challenger Sale — teach, tailor, and take control of the conversation'",
-        "Uses existing Radix/shadcn Tooltip component",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 17,
-      "passes": false,
-      "notes": "File: src/pages/onboarding/v2/AgentConfigConfirmStep.tsx",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-018",
-      "title": "Add item limit to AgentConfigConfirmStep TagEditor",
-      "description": "As a new user, I want tag inputs limited to 10 items so the system isn't overloaded.",
-      "acceptanceCriteria": [
-        "TagEditor component (lines 217-270) enforces MAX_ITEMS = 10",
-        "add() function (line 226) checks values.length >= MAX_ITEMS before adding",
-        "Input disabled or hidden when limit reached",
-        "Warning text shown: 'Maximum 10 items'",
-        "Affects: key_competitors and common_objections fields",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 18,
-      "passes": false,
-      "notes": "File: src/pages/onboarding/v2/AgentConfigConfirmStep.tsx. TagEditor has zero length enforcement currently.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-019",
-      "title": "Add item limits to AIIntelligencePage settings",
-      "description": "As a user editing AI settings, I want all list inputs limited to 10 items for consistency.",
-      "acceptanceCriteria": [
-        "Define MAX_ITEMS = 10 constant in AIIntelligencePage.tsx",
-        "Add buttons for criteria (611), disqualifiers (652), questions (697), objections (802) disabled at limit",
-        "onKeyDown Enter handlers for avoid words (743) and buyingSignals (859) check count before adding",
-        "Warning text shown when limit reached for each field",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 19,
-      "passes": false,
-      "notes": "File: src/pages/settings/AIIntelligencePage.tsx. 6 separate add-item locations all unlimited.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-020",
-      "title": "Auto-trigger basic analysis on Fathom webhook ingestion",
-      "description": "As a user, I want meetings synced via Fathom to be automatically analyzed by AI so I don't have to manually click Reprocess.",
-      "acceptanceCriteria": [
-        "When meetings-webhook receives a transcript event, auto-trigger analyzeTranscriptWithClaude",
-        "Analysis runs asynchronously so webhook responds quickly",
-        "Credits checked via checkCreditBalance — skip silently if insufficient",
-        "Cost event logged with feature key meeting_summary",
-        "Idempotency: skip if meeting already has sentiment_score",
-        "Typecheck passes"
-      ],
-      "priority": 20,
-      "passes": false,
-      "notes": "File: supabase/functions/meetings-webhook/index.ts. Currently only stores data, no AI analysis triggered.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-021",
-      "title": "Auto-trigger basic analysis on MeetingBaaS ingestion",
-      "description": "As a user using the 60 Notetaker, I want meetings automatically analyzed when transcription completes.",
-      "acceptanceCriteria": [
-        "When meetingbaas-webhook receives transcript.ready, after process-recording, auto-trigger analyzeTranscriptWithClaude",
-        "Same credit check and idempotency guards as US-020",
-        "Cost event logged",
-        "Typecheck passes"
-      ],
-      "priority": 21,
-      "passes": false,
-      "notes": "File: supabase/functions/meetingbaas-webhook/index.ts",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-022",
-      "title": "Auto-trigger deep structured summary after basic analysis",
-      "description": "As a user, I want the deep structured summary to run automatically so dashboard stats are populated without manual action.",
-      "acceptanceCriteria": [
-        "After analyzeTranscriptWithClaude completes, auto-invoke meeting-process-structured-summary",
-        "Credit check before running — skip silently if insufficient (basic summary remains as fallback)",
-        "Populates: meeting_structured_summaries, meeting_classifications, deal_truth_fields",
-        "Dashboard stats update automatically",
-        "Cost event logged",
-        "Typecheck passes"
-      ],
-      "priority": 22,
-      "passes": false,
-      "notes": "meeting-process-structured-summary uses Claude Sonnet 4 (~3 credits). Populates meeting_classifications boolean flags that power aggregate dashboard queries.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-023",
-      "title": "Auto-trigger scorecard generation after structured summary",
-      "description": "As a user, I want coaching scorecards generated automatically so team KPI grid and coaching views are populated.",
-      "acceptanceCriteria": [
-        "After meeting-process-structured-summary completes, auto-invoke meeting-generate-scorecard",
-        "Credit check before running — skip silently if insufficient",
-        "Populates: meeting_scorecards (overall_score, grade, metric_scores, coaching_tips)",
-        "Team KPI grid and coaching leaderboards update automatically",
-        "Cost event logged",
-        "Typecheck passes"
-      ],
-      "priority": 23,
-      "passes": false,
-      "notes": "meeting-generate-scorecard uses Claude Sonnet 4 (~3 credits). Feeds meeting_scorecards.overall_score into team KPI views.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-024",
-      "title": "Auto-queue meeting for Gemini intelligence indexing",
-      "description": "As a user, I want new meetings automatically indexed for semantic search so Ask Anything works without manual intervention.",
-      "acceptanceCriteria": [
-        "After analysis pipeline completes, insert row into meeting_index_queue",
-        "meeting-intelligence-process-queue picks it up on next cron run",
-        "Meeting becomes searchable via Ask Anything RAG panel",
-        "Typecheck passes"
-      ],
-      "priority": 24,
-      "passes": false,
-      "notes": "Gemini File Search Store per org. meeting_index_queue table already exists. meeting-intelligence-process-queue already handles queue processing.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-025",
-      "title": "Create analysis pipeline orchestrator shared function",
-      "description": "As a developer, I want a single orchestrator function that chains all analysis steps so all ingestion paths use one consistent pipeline.",
-      "acceptanceCriteria": [
-        "Create runFullMeetingAnalysisPipeline(supabase, meetingId, orgId, userId) shared function",
-        "Pipeline: (1) analyzeTranscriptWithClaude → (2) meeting-process-structured-summary → (3) meeting-generate-scorecard → (4) queue Gemini indexing",
-        "Each step has independent credit check — pipeline continues if one step lacks credits",
-        "Each step has error handling — failure in one step does not block subsequent steps",
-        "Pipeline logs total credits consumed",
-        "All ingestion paths call this single orchestrator",
-        "Typecheck passes"
-      ],
-      "priority": 25,
-      "passes": false,
-      "notes": "Shared function in supabase/functions/_shared/. Called by meetings-webhook, meetingbaas-webhook, fathom-sync, voice-transcribe-poll, and reprocess-meetings-ai.",
-      "aiDevHubTaskId": null
+      "notes": "Depends on US-012",
+      "aiDevHubTaskId": "c7c138b6-4ea9-4781-9457-55a5b926a115"
     },
     {
       "id": "US-026",
-      "title": "Keep manual Reprocess button as fallback — upgrade to full pipeline",
-      "description": "As a user, I want to manually reprocess a meeting to trigger the full analysis pipeline if auto-analysis was skipped.",
+      "title": "Email Intelligence UI",
+      "description": "As a user, I want classified emails surfaced with intent tags, urgency indicators, and reply gap warnings.",
       "acceptanceCriteria": [
-        "Existing Reprocess button in MeetingDetail.tsx remains functional",
-        "Button now triggers the full pipeline (basic + structured summary + scorecard + indexing) not just basic",
-        "If meeting already has complete analysis, hide the reprocess banner",
-        "Credit-gated check remains via useCreditGatedAction",
+        "Email list shows classification badges (buying signal, objection, etc.)",
+        "Urgency indicator (red/amber/green dot)",
+        "Filter by classification intent",
+        "Reply gap warnings inline with draft follow-up CTA",
+        "Communication health badge on contact cards",
+        "Basic users see Upgrade to Pro placeholder",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 26,
+      "priority": 7,
       "passes": false,
-      "notes": "File: src/pages/MeetingDetail.tsx lines 921-963. Currently only calls reprocess-meetings-ai (basic). Should call runFullMeetingAnalysisPipeline.",
-      "aiDevHubTaskId": null
+      "notes": "Depends on US-018, US-019, US-020",
+      "aiDevHubTaskId": "f21aa2d7-89c7-4d71-a669-f7dabf0fb92a"
     },
     {
       "id": "US-027",
-      "title": "Show analysis status indicators on meeting detail page",
-      "description": "As a user, I want to see what analysis has been completed on a meeting so I know if deeper insights are available.",
+      "title": "Deprecate Legacy Google Functions",
+      "description": "As a developer, I want legacy inline token refresh and per-function pagination removed.",
       "acceptanceCriteria": [
-        "MeetingDetail shows analysis status: Basic Analysis (check/pending), Structured Summary (check/pending), Scorecard (check/pending)",
-        "If all three complete, show 'Full analysis complete' badge",
-        "If only basic complete, show 'Deep analysis pending' with option to trigger",
-        "Status reads from meeting_structured_summaries and meeting_scorecards table presence",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "All inline refreshAccessToken() removed from 5 edge functions",
+        "All manual pagination loops replaced with paginateAll()",
+        "All generic catch return 400 replaced with typed errors",
+        "Gmail sync 10-message cap removed",
+        "No functional behavior change — existing API contracts preserved",
+        "Typecheck passes"
       ],
-      "priority": 27,
+      "priority": 7,
       "passes": false,
-      "notes": "File: src/pages/MeetingDetail.tsx. Query meeting_structured_summaries and meeting_scorecards for the meeting_id to determine status.",
-      "aiDevHubTaskId": null
+      "notes": "Final cleanup — depends on US-002, US-003, US-004",
+      "aiDevHubTaskId": "cf8dee18-7a72-4e41-8e24-9f5256407e54"
+    },
+    {
+      "id": "US-028",
+      "title": "Deprecate S3-Only Proposal Storage",
+      "description": "As a developer, I want proposals to default to Drive/OneDrive with S3 as fallback only.",
+      "acceptanceCriteria": [
+        "Proposal generation checks Drive/OneDrive first",
+        "Connected: uploads to 60 Proposals folder",
+        "Not connected: falls back to S3",
+        "proposals table updated with storage_provider and drive_file_id columns",
+        "Existing S3 URLs continue to work",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Depends on US-023",
+      "aiDevHubTaskId": "2258d702-71b3-489e-a365-c8185e4d68a3"
     }
   ]
 }
