@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { microsoftApi } from '@/lib/api/microsoftIntegration';
+import { microsoftApi, MicrosoftServiceStatus } from '@/lib/api/microsoftIntegration';
 
 // Query Keys
 export const MICROSOFT_QUERY_KEYS = {
@@ -67,8 +67,8 @@ export function useMicrosoftServiceToggle() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ service, enabled }: { service: string; enabled: boolean }) =>
-      microsoftApi.toggleService(service as any, enabled),
+    mutationFn: ({ service, enabled }: { service: keyof MicrosoftServiceStatus; enabled: boolean }) =>
+      microsoftApi.toggleService(service, enabled),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: MICROSOFT_QUERY_KEYS.services });
     },

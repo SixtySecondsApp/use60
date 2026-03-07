@@ -1,5 +1,6 @@
 -- Microsoft 365 Integration Tables
 -- Mirrors the Google integration pattern for Microsoft OAuth + services
+-- Rollback: DROP TABLE IF EXISTS microsoft_service_logs, microsoft_oauth_states, microsoft_integrations CASCADE;
 
 -- =============================================================================
 -- 1. microsoft_integrations - Core integration table
@@ -13,13 +14,15 @@ CREATE TABLE IF NOT EXISTS public.microsoft_integrations (
   expires_at TIMESTAMPTZ,
   scopes TEXT,
   is_active BOOLEAN DEFAULT true,
-  token_status TEXT DEFAULT 'valid' CHECK (token_status IN ('valid', 'expired', 'revoked', 'error')),
+  token_status TEXT DEFAULT 'valid' CHECK (token_status IN ('valid', 'expired', 'revoked', 'needs_reconnect')),
   last_token_refresh TIMESTAMPTZ,
   service_preferences JSONB DEFAULT '{"outlook": true, "calendar": true}'::jsonb,
   mail_subscription_id TEXT,
   mail_subscription_expiry TIMESTAMPTZ,
+  mail_client_state TEXT,
   calendar_subscription_id TEXT,
   calendar_subscription_expiry TIMESTAMPTZ,
+  calendar_client_state TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT microsoft_integrations_user_id_key UNIQUE (user_id)
@@ -48,6 +51,7 @@ CREATE TABLE IF NOT EXISTS public.microsoft_service_logs (
   service TEXT NOT NULL,
   action TEXT NOT NULL,
   status TEXT NOT NULL,
+  error_message TEXT,
   request_data JSONB,
   response_data JSONB,
   created_at TIMESTAMPTZ DEFAULT now()
@@ -60,22 +64,27 @@ CREATE TABLE IF NOT EXISTS public.microsoft_service_logs (
 -- microsoft_integrations
 ALTER TABLE public.microsoft_integrations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view their own Microsoft integration" ON public.microsoft_integrations;
 CREATE POLICY "Users can view their own Microsoft integration"
   ON public.microsoft_integrations FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update their own Microsoft integration" ON public.microsoft_integrations;
 CREATE POLICY "Users can update their own Microsoft integration"
   ON public.microsoft_integrations FOR UPDATE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert their own Microsoft integration" ON public.microsoft_integrations;
 CREATE POLICY "Users can insert their own Microsoft integration"
   ON public.microsoft_integrations FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete their own Microsoft integration" ON public.microsoft_integrations;
 CREATE POLICY "Users can delete their own Microsoft integration"
   ON public.microsoft_integrations FOR DELETE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Service role has full access to Microsoft integrations" ON public.microsoft_integrations;
 CREATE POLICY "Service role has full access to Microsoft integrations"
   ON public.microsoft_integrations FOR ALL
   TO service_role
@@ -85,18 +94,22 @@ CREATE POLICY "Service role has full access to Microsoft integrations"
 -- microsoft_oauth_states
 ALTER TABLE public.microsoft_oauth_states ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view their own OAuth states" ON public.microsoft_oauth_states;
 CREATE POLICY "Users can view their own OAuth states"
   ON public.microsoft_oauth_states FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert their own OAuth states" ON public.microsoft_oauth_states;
 CREATE POLICY "Users can insert their own OAuth states"
   ON public.microsoft_oauth_states FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete their own OAuth states" ON public.microsoft_oauth_states;
 CREATE POLICY "Users can delete their own OAuth states"
   ON public.microsoft_oauth_states FOR DELETE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Service role has full access to Microsoft OAuth states" ON public.microsoft_oauth_states;
 CREATE POLICY "Service role has full access to Microsoft OAuth states"
   ON public.microsoft_oauth_states FOR ALL
   TO service_role
@@ -106,6 +119,7 @@ CREATE POLICY "Service role has full access to Microsoft OAuth states"
 -- microsoft_service_logs
 ALTER TABLE public.microsoft_service_logs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view their own Microsoft service logs" ON public.microsoft_service_logs;
 CREATE POLICY "Users can view their own Microsoft service logs"
   ON public.microsoft_service_logs FOR SELECT
   USING (
@@ -115,6 +129,7 @@ CREATE POLICY "Users can view their own Microsoft service logs"
     )
   );
 
+DROP POLICY IF EXISTS "Service role has full access to Microsoft service logs" ON public.microsoft_service_logs;
 CREATE POLICY "Service role has full access to Microsoft service logs"
   ON public.microsoft_service_logs FOR ALL
   TO service_role
@@ -124,10 +139,10 @@ CREATE POLICY "Service role has full access to Microsoft service logs"
 -- =============================================================================
 -- Indexes
 -- =============================================================================
-CREATE INDEX idx_microsoft_integrations_user_id ON public.microsoft_integrations(user_id);
-CREATE INDEX idx_microsoft_oauth_states_state ON public.microsoft_oauth_states(state);
-CREATE INDEX idx_microsoft_oauth_states_expires_at ON public.microsoft_oauth_states(expires_at);
-CREATE INDEX idx_microsoft_service_logs_integration_id ON public.microsoft_service_logs(integration_id);
+CREATE INDEX IF NOT EXISTS idx_microsoft_integrations_user_id ON public.microsoft_integrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_microsoft_oauth_states_state ON public.microsoft_oauth_states(state);
+CREATE INDEX IF NOT EXISTS idx_microsoft_oauth_states_expires_at ON public.microsoft_oauth_states(expires_at);
+CREATE INDEX IF NOT EXISTS idx_microsoft_service_logs_integration_id ON public.microsoft_service_logs(integration_id);
 
 -- =============================================================================
 -- Updated_at trigger
@@ -140,6 +155,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_microsoft_integrations_updated_at ON public.microsoft_integrations;
 CREATE TRIGGER trigger_microsoft_integrations_updated_at
   BEFORE UPDATE ON public.microsoft_integrations
   FOR EACH ROW

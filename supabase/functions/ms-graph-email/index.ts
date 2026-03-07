@@ -354,6 +354,7 @@ serve(async (req) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[ms-graph-email] Error:', message);
-    return jsonResponse({ success: false, error: message }, req, 200);
+    const statusCode = message.includes('not connected') ? 404 : 500;
+    return errorResponse(message, req, statusCode);
   }
 });

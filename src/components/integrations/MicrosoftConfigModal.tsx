@@ -7,7 +7,7 @@ import {
 } from './ConfigureModal';
 import { Button } from '@/components/ui/button';
 import { useMicrosoftIntegrationStore } from '@/lib/stores/integrationStore';
-import { MicrosoftServiceStatus, microsoftApi, MicrosoftTestConnectionResult } from '@/lib/api/microsoftIntegration';
+import { MicrosoftServiceStatus, microsoftApi as microsoftApiClient, MicrosoftTestConnectionResult } from '@/lib/api/microsoftIntegration';
 import { Mail, Calendar, RefreshCw, Loader2, CheckCircle, XCircle, TestTube2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,6 +33,8 @@ export function MicrosoftConfigModal({ open, onOpenChange }: MicrosoftConfigModa
     services,
     isLoading,
     disconnect,
+    toggleService,
+    checkConnection,
   } = useMicrosoftIntegrationStore();
 
   const [localServices, setLocalServices] = useState<MicrosoftServiceStatus>(services);
@@ -62,9 +64,10 @@ export function MicrosoftConfigModal({ open, onOpenChange }: MicrosoftConfigModa
       const serviceKeys: (keyof MicrosoftServiceStatus)[] = ['outlook', 'calendar'];
       for (const key of serviceKeys) {
         if (localServices[key] !== services[key]) {
-          await microsoftApi.toggleService(key, localServices[key]);
+          await toggleService(key);
         }
       }
+      await checkConnection();
       toast.success('Settings saved successfully');
       onOpenChange(false);
     } catch (error: any) {
@@ -91,7 +94,7 @@ export function MicrosoftConfigModal({ open, onOpenChange }: MicrosoftConfigModa
     setIsTesting(true);
     setTestResult(null);
     try {
-      const result = await microsoftApi.testConnection();
+      const result = await microsoftApiClient.testConnection();
       setTestResult(result);
       if (result.allServicesOk) {
         toast.success('All Microsoft services are working correctly!');

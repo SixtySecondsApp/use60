@@ -58,7 +58,7 @@ serve(async (req) => {
       .from('microsoft_oauth_states')
       .select('user_id, code_verifier, redirect_uri, created_at')
       .eq('state', state)
-      .single();
+      .maybeSingle();
 
     if (stateError || !oauthState) {
       console.error('[microsoft-oauth-callback] Invalid state:', state);
@@ -167,26 +167,18 @@ serve(async (req) => {
       throw new Error('Failed to save Microsoft integration');
     }
 
-    // Update user_settings to reflect connected provider
-    await supabase
-      .from('user_settings')
-      .update({
-        preferences: supabase.rpc ? undefined : undefined, // handled via JSONB merge below
-      })
-      .eq('user_id', oauthState.user_id)
-      .then(() => {
-        // Best-effort: update connected_email_provider preference
-        return supabase.rpc('jsonb_set_key', {
-          p_table: 'user_settings',
-          p_column: 'preferences',
-          p_key: 'connected_email_provider',
-          p_value: '"microsoft"',
-          p_user_id: oauthState.user_id,
-        });
-      })
-      .catch(() => {
-        // Non-critical — preference update is best-effort
+    // Best-effort: update connected_email_provider preference
+    try {
+      await supabase.rpc('jsonb_set_key', {
+        p_table: 'user_settings',
+        p_column: 'preferences',
+        p_key: 'connected_email_provider',
+        p_value: '"microsoft"',
+        p_user_id: oauthState.user_id,
       });
+    } catch {
+      // Non-critical — preference update is best-effort
+    }
 
     // Clean up used state
     await supabase.from('microsoft_oauth_states').delete().eq('state', state);

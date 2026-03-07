@@ -61,7 +61,8 @@ export class MicrosoftIntegrationAPI {
       .eq('is_active', true)
       .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
+      console.error('[microsoftIntegration] Failed to get status:', error.message);
       return null;
     }
 
@@ -219,7 +220,7 @@ export class MicrosoftIntegrationAPI {
       }
 
       if (data && !data.success) {
-        return data;
+        console.error('[microsoftIntegration] Test connection failed:', data.error || data.message);
       }
 
       return data;

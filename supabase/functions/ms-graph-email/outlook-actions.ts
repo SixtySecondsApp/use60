@@ -33,7 +33,7 @@ export async function listMessages(accessToken: string, params: {
   search?: string;
 }) {
   const base = params.folder
-    ? `${GRAPH_BASE}/me/mailFolders/${params.folder}/messages`
+    ? `${GRAPH_BASE}/me/mailFolders/${encodeURIComponent(params.folder)}/messages`
     : `${GRAPH_BASE}/me/messages`;
 
   const qp = new URLSearchParams();
@@ -54,15 +54,16 @@ export async function getMessage(accessToken: string, params: { id: string; sele
   const qp = new URLSearchParams();
   if (params.select) qp.set('$select', params.select);
   const qs = qp.toString();
+  const encodedId = encodeURIComponent(params.id);
   const url = qs
-    ? `${GRAPH_BASE}/me/messages/${params.id}?${qs}`
-    : `${GRAPH_BASE}/me/messages/${params.id}`;
+    ? `${GRAPH_BASE}/me/messages/${encodedId}?${qs}`
+    : `${GRAPH_BASE}/me/messages/${encodedId}`;
   return graphFetch(accessToken, url);
 }
 
 /** Mark a message as read or unread */
 export async function markAsRead(accessToken: string, params: { id: string; isRead: boolean }) {
-  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${params.id}`, {
+  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(params.id)}`, {
     method: 'PATCH',
     body: JSON.stringify({ isRead: params.isRead }),
   });
@@ -70,7 +71,7 @@ export async function markAsRead(accessToken: string, params: { id: string; isRe
 
 /** Flag or unflag a message */
 export async function flagMessage(accessToken: string, params: { id: string; flagged: boolean }) {
-  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${params.id}`, {
+  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(params.id)}`, {
     method: 'PATCH',
     body: JSON.stringify({
       flag: { flagStatus: params.flagged ? 'flagged' : 'notFlagged' },
@@ -80,7 +81,7 @@ export async function flagMessage(accessToken: string, params: { id: string; fla
 
 /** Move a message to the archive folder */
 export async function archiveMessage(accessToken: string, params: { id: string }) {
-  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${params.id}/move`, {
+  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(params.id)}/move`, {
     method: 'POST',
     body: JSON.stringify({ destinationId: 'archive' }),
   });
@@ -88,7 +89,7 @@ export async function archiveMessage(accessToken: string, params: { id: string }
 
 /** Move a message to the deleted items folder */
 export async function trashMessage(accessToken: string, params: { id: string }) {
-  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${params.id}/move`, {
+  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(params.id)}/move`, {
     method: 'POST',
     body: JSON.stringify({ destinationId: 'deleteditems' }),
   });
@@ -133,23 +134,23 @@ export async function replyToMessage(accessToken: string, params: {
   // Graph /reply only supports text comments natively. For HTML we use /createReply + send.
   if (params.isHtml) {
     // Create a reply draft, update body, then send
-    const draft = await graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${params.id}/createReply`, {
+    const draft = await graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(params.id)}/createReply`, {
       method: 'POST',
       body: JSON.stringify({}),
     });
     if (draft?.id) {
-      await graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${draft.id}`, {
+      await graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(draft.id)}`, {
         method: 'PATCH',
         body: JSON.stringify({
           body: { contentType: 'HTML', content: params.comment },
         }),
       });
-      return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${draft.id}/send`, {
+      return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(draft.id)}/send`, {
         method: 'POST',
       });
     }
   }
-  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${params.id}/reply`, {
+  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(params.id)}/reply`, {
     method: 'POST',
     body: JSON.stringify({ comment: params.comment }),
   });
@@ -166,25 +167,25 @@ export async function forwardMessage(accessToken: string, params: {
 
   if (params.isHtml && params.comment) {
     // Create a forward draft, update body with HTML, then send
-    const draft = await graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${params.id}/createForward`, {
+    const draft = await graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(params.id)}/createForward`, {
       method: 'POST',
       body: JSON.stringify({}),
     });
     if (draft?.id) {
-      await graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${draft.id}`, {
+      await graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(draft.id)}`, {
         method: 'PATCH',
         body: JSON.stringify({
           toRecipients,
           body: { contentType: 'HTML', content: params.comment },
         }),
       });
-      return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${draft.id}/send`, {
+      return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(draft.id)}/send`, {
         method: 'POST',
       });
     }
   }
 
-  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${params.id}/forward`, {
+  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(params.id)}/forward`, {
     method: 'POST',
     body: JSON.stringify({ comment: params.comment || '', toRecipients }),
   });
@@ -202,7 +203,7 @@ export async function listCategories(accessToken: string) {
 
 /** Set categories on a message */
 export async function categorizeMessage(accessToken: string, params: { id: string; categories: string[] }) {
-  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${params.id}`, {
+  return graphFetch(accessToken, `${GRAPH_BASE}/me/messages/${encodeURIComponent(params.id)}`, {
     method: 'PATCH',
     body: JSON.stringify({ categories: params.categories }),
   });

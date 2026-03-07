@@ -59,15 +59,17 @@ export async function refreshMicrosoftAccessToken(
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
+    const errorData = await response.json().catch(() => ({}));
     const errorMessage = errorData.error_description || errorData.error || 'Unknown error';
 
     // Check for permanent failures that require reconnection
+    // Only match specific grant errors — not all 400s (which could be transient/config issues)
     const isTokenRevoked =
       errorData.error === 'invalid_grant' ||
+      errorData.error === 'interaction_required' ||
       errorMessage.toLowerCase().includes('token has been expired or revoked') ||
       errorMessage.toLowerCase().includes('token has been revoked') ||
-      response.status === 400;
+      errorMessage.toLowerCase().includes('refresh token has expired');
 
     if (isTokenRevoked) {
       console.error(`[microsoftOAuth] Token revoked for user ${userId}: ${errorMessage}`);

@@ -170,16 +170,18 @@ async function setupSubscription(
   const subscription = await graphResponse.json();
   console.log(`[ms-graph-webhook] Created ${type} subscription: ${subscription.id}`);
 
-  // Store subscription info in microsoft_integrations
+  // Store subscription info + clientState in microsoft_integrations
   const updateFields: Record<string, string> =
     type === 'mail'
       ? {
           mail_subscription_id: subscription.id,
           mail_subscription_expiry: subscription.expirationDateTime,
+          mail_client_state: clientState,
         }
       : {
           calendar_subscription_id: subscription.id,
           calendar_subscription_expiry: subscription.expirationDateTime,
+          calendar_client_state: clientState,
         };
 
   const { error: updateError } = await supabase
@@ -292,10 +294,11 @@ async function handleNotification(
 
   console.log(`[ms-graph-webhook] Processing ${notifications.length} notification(s)`);
 
-  // Process each notification — look up user by subscriptionId
+  // Process each notification — look up user by subscriptionId and validate clientState
   for (const notification of notifications) {
     const subscriptionId = notification.subscriptionId;
     const resource = notification.resource || '';
+    const incomingClientState = notification.clientState;
 
     if (!subscriptionId) {
       console.warn('[ms-graph-webhook] Notification missing subscriptionId, skipping');
@@ -305,7 +308,7 @@ async function handleNotification(
     // Find the user by matching subscription ID against mail or calendar columns
     const { data: mailMatch } = await supabase
       .from('microsoft_integrations')
-      .select('user_id')
+      .select('user_id, mail_client_state')
       .eq('mail_subscription_id', subscriptionId)
       .eq('is_active', true)
       .maybeSingle();
@@ -313,7 +316,7 @@ async function handleNotification(
     const { data: calendarMatch } = !mailMatch
       ? await supabase
           .from('microsoft_integrations')
-          .select('user_id')
+          .select('user_id, calendar_client_state')
           .eq('calendar_subscription_id', subscriptionId)
           .eq('is_active', true)
           .maybeSingle()
@@ -322,6 +325,16 @@ async function handleNotification(
     const match = mailMatch || calendarMatch;
     if (!match) {
       console.warn(`[ms-graph-webhook] No integration found for subscription ${subscriptionId}`);
+      continue;
+    }
+
+    // Validate clientState to prevent spoofed notifications
+    const expectedClientState = mailMatch
+      ? mailMatch.mail_client_state
+      : calendarMatch?.calendar_client_state;
+
+    if (expectedClientState && incomingClientState !== expectedClientState) {
+      console.warn(`[ms-graph-webhook] clientState mismatch for subscription ${subscriptionId}, rejecting`);
       continue;
     }
 
