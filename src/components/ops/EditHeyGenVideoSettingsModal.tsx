@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Video, Mic, FileText, Save, Loader2, Play, Pause, Check, User, Image, Clapperboard, Link2, Volume2 } from 'lucide-react';
+import { ScriptEditor } from './ScriptEditor';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { VoiceLibrary } from '@/components/settings/VoiceLibrary';
@@ -65,8 +66,6 @@ export function EditHeyGenVideoSettingsModal({
   const [showVoicePicker, setShowVoicePicker] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const scriptRef = useRef<HTMLTextAreaElement>(null);
-
   useEffect(() => {
     if (isOpen) {
       setScriptTemplate(currentConfig?.script_template || '');
@@ -119,10 +118,6 @@ export function EditHeyGenVideoSettingsModal({
   }, []);
 
   if (!isOpen) return null;
-
-  const variables = (existingColumns || [])
-    .filter(c => !['video_avatar', 'heygen_video'].includes(c.key))
-    .map(c => c.key);
 
   const filteredVoices = voices.filter(v => {
     const q = voiceSearch.toLowerCase();
@@ -188,20 +183,6 @@ export function EditHeyGenVideoSettingsModal({
     });
     setSaving(false);
     onClose();
-  };
-
-  const insertVariable = (varName: string) => {
-    const el = scriptRef.current;
-    const tag = `{{${varName}}}`;
-    if (el) {
-      const start = el.selectionStart ?? scriptTemplate.length;
-      const end = el.selectionEnd ?? start;
-      const next = scriptTemplate.slice(0, start) + tag + scriptTemplate.slice(end);
-      setScriptTemplate(next);
-      requestAnimationFrame(() => { el.focus(); el.selectionStart = el.selectionEnd = start + tag.length; });
-    } else {
-      setScriptTemplate(prev => prev + tag);
-    }
   };
 
   return createPortal(
@@ -472,36 +453,16 @@ export function EditHeyGenVideoSettingsModal({
               <FileText className="w-3.5 h-3.5" />
               Script Template
             </label>
-            <textarea
-              ref={scriptRef}
+            <ScriptEditor
               value={scriptTemplate}
-              onChange={e => setScriptTemplate(e.target.value)}
+              onChange={setScriptTemplate}
+              columns={existingColumns || []}
+              excludeKeys={['video_avatar', 'heygen_video']}
+              placeholder="Hi @contact_name, I noticed @contact_company is..."
               rows={5}
-              placeholder="Hi {{contact_name}}, I noticed {{contact_company}} is..."
               className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-purple-500 resize-y font-mono leading-relaxed"
             />
           </div>
-
-          {/* Variable chips */}
-          {variables.length > 0 && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-                Insert Variable
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {variables.map(v => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => insertVariable(v)}
-                    className="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-mono border border-gray-700 bg-gray-800 text-gray-400 hover:text-purple-300 hover:border-purple-500/40 transition-colors"
-                  >
-                    {`{{${v}}}`}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer */}

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mic, Check } from 'lucide-react';
 import { VoiceLibrary } from '@/components/settings/VoiceLibrary';
+import { ScriptEditor } from './ScriptEditor';
 
 interface ColumnConfig {
   key: string;
@@ -19,6 +20,8 @@ interface ElevenLabsAudioColumnWizardProps {
   existingColumns?: { key: string; label: string }[];
   onComplete: (config: ColumnConfig) => void;
   onCancel: () => void;
+  /** Whether the user has their own ElevenLabs API key (BYOK) */
+  isByok?: boolean;
 }
 
 type Step = 'voice' | 'script';
@@ -29,11 +32,12 @@ export function ElevenLabsAudioColumnWizard({
   existingColumns = [],
   onComplete,
   onCancel,
+  isByok = false,
 }: ElevenLabsAudioColumnWizardProps) {
   const [step, setStep] = useState<Step>('voice');
   const [selectedVoice, setSelectedVoice] = useState<{ id: string; name: string } | null>(null);
   const [scriptTemplate, setScriptTemplate] = useState('');
-  const [columnLabel, setColumnLabel] = useState('Audio');
+  const [columnLabel, setColumnLabel] = useState(isByok ? 'ElevenLabs Audio' : 'Audio');
 
   const columnKey = useMemo(() => {
     const base = 'elevenlabs_audio';
@@ -117,17 +121,14 @@ export function ElevenLabsAudioColumnWizard({
 
           <div className="space-y-2">
             <Label>Script Template</Label>
-            <textarea
+            <ScriptEditor
               value={scriptTemplate}
-              onChange={(e) => setScriptTemplate(e.target.value)}
-              placeholder={`Hey {{first_name}}, I noticed {{company}} is doing great things in {{industry}}...`}
-              className="w-full h-32 rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 resize-none"
+              onChange={setScriptTemplate}
+              columns={existingColumns}
+              placeholder="Hey @first_name, I noticed @company is doing great things in @industry..."
+              rows={5}
+              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 resize-none font-mono leading-relaxed"
             />
-            <p className="text-xs text-gray-500">
-              Use {'{{column_key}}'} to reference row values. Available columns:{' '}
-              {existingColumns.slice(0, 5).map((c) => `{{${c.key}}}`).join(', ')}
-              {existingColumns.length > 5 && '...'}
-            </p>
           </div>
 
           <div className="rounded-lg border border-gray-700/50 bg-gray-800/50 p-3">

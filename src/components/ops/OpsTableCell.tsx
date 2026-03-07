@@ -1594,7 +1594,23 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
     }
 
     const handleGenerateAudio = async () => {
-      if (!integrationConfig || !rowId || !tableId) return;
+      if (!integrationConfig || !rowId || !tableId) {
+        console.error('[ElevenLabsAudio] Missing config:', { hasConfig: !!integrationConfig, rowId, tableId, columnKey });
+        toast.error('Audio column not configured — open column settings first');
+        return;
+      }
+      if (!integrationConfig.voice_clone_id) {
+        toast.error('No voice selected — open column settings and choose a voice');
+        return;
+      }
+      if (!integrationConfig.script_template) {
+        toast.error('No script template — open column settings and add a script');
+        return;
+      }
+
+      // Immediately show pending state in the cell
+      onEdit?.(JSON.stringify({ status: 'pending' }));
+
       try {
         const { data, error } = await supabase.functions.invoke('elevenlabs-tts-generate', {
           body: {
@@ -1607,7 +1623,15 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         });
         if (error) throw new Error(error.message);
         if (data?.error) throw new Error(data.error);
+
+        // If the function returned a completed result inline, update the cell
+        const result = data?.results?.[0];
+        if (result?.audio_url) {
+          onEdit?.(JSON.stringify({ status: 'completed', audio_url: result.audio_url }));
+        }
+        // Otherwise the polling in ElevenLabsAudioCell will pick up the status change
       } catch (err) {
+        onEdit?.(JSON.stringify({ status: 'failed', error_message: err instanceof Error ? err.message : 'Generation failed' }));
         toast.error(err instanceof Error ? err.message : 'Audio generation failed');
       }
     };

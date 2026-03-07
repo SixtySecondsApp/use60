@@ -83,7 +83,8 @@ Deno.serve(async (req: Request) => {
     const body: VideoGenerateRequest = await req.json();
 
     if (!body.avatar_id) return errorResponse('avatar_id required', req, 400);
-    if (!body.script?.trim()) return errorResponse('script required', req, 400);
+    // Script is not required when using audio_column_key (audio file IS the voice)
+    if (!body.audio_column_key && !body.script?.trim()) return errorResponse('script required', req, 400);
 
     // Fetch avatar
     const { data: avatar, error: avatarError } = await svc
@@ -142,9 +143,17 @@ Deno.serve(async (req: Request) => {
         for (const cell of (row as any).dynamic_table_cells || []) {
           const key = colIdToKey[cell.column_id];
           if (key && cell.value) vars[key] = cell.value;
-          // Extract audio URL from referenced column
+          // Extract audio URL from referenced column (may be raw URL or JSON with audio_url)
           if (audioColumnId && cell.column_id === audioColumnId && cell.value) {
-            rowAudioUrl = cell.value;
+            try {
+              const parsed = JSON.parse(cell.value);
+              if (parsed.audio_url && parsed.status === 'completed') {
+                rowAudioUrl = parsed.audio_url;
+              }
+            } catch {
+              // Not JSON — treat as raw URL
+              rowAudioUrl = cell.value;
+            }
           }
         }
         entries.push({

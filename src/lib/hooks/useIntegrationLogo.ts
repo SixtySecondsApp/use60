@@ -178,6 +178,10 @@ const INTEGRATION_DOMAINS: Record<string, string> = {
   looker: 'looker.com',
   metabase: 'metabase.com',
 
+  // AI Video & Audio
+  heygen: 'heygen.com',
+  elevenlabs: 'elevenlabs.io',
+
   // AI & Productivity
   openai: 'openai.com',
   chatgpt: 'openai.com',

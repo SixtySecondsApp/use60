@@ -16,6 +16,7 @@ import { Loader2, Upload, Sparkles, ChevronRight, ChevronLeft, Check, Play, Paus
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
 import { VoiceLibrary } from '@/components/settings/VoiceLibrary';
+import { ScriptEditor } from './ScriptEditor';
 
 interface ColumnConfig {
   key: string;
@@ -143,7 +144,7 @@ export function VideoAvatarColumnWizard({
   const [scriptTemplate, setScriptTemplate] = useState(
     'Hey {{first_name}}, I saw that {{company_name}} is doing great things. I put together a quick personalized demo showing how 60 could help your team close more deals. Take a look — it\'s only 60 seconds.'
   );
-  const scriptRef = useRef<HTMLTextAreaElement>(null);
+  // scriptRef removed — ScriptEditor manages its own ref
 
   const stepIndex = STEPS.indexOf(step);
 
@@ -1160,7 +1161,7 @@ export function VideoAvatarColumnWizard({
               </select>
               {audioColumnKey && (
                 <p className="text-[10px] text-gray-500">
-                  Each row's video will use the audio URL from the <span className="font-mono text-purple-400">{audioColumnKey}</span> column.
+                  Each row&apos;s video will use the audio URL from the <span className="font-mono text-purple-400">{audioColumnKey}</span> column.
                   The avatar will lip-sync to the audio file.
                 </p>
               )}
@@ -1189,48 +1190,22 @@ export function VideoAvatarColumnWizard({
           <div className="flex items-start gap-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3.5 py-2">
             <FileText className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
             <p className="text-xs text-gray-300">
-              Write a script template. Click the variable chips below to insert personalized data from each row.
+              Write a script template. Type <span className="font-mono text-purple-400">@</span> to insert a column variable.
             </p>
           </div>
 
-          <textarea
-            ref={scriptRef}
+          <ScriptEditor
             value={scriptTemplate}
-            onChange={(e) => setScriptTemplate(e.target.value)}
+            onChange={setScriptTemplate}
+            columns={existingColumns.length > 0
+              ? existingColumns
+              : [{ key: 'first_name', label: 'First Name' }, { key: 'last_name', label: 'Last Name' }, { key: 'company_name', label: 'Company' }, { key: 'title', label: 'Title' }]
+            }
+            excludeKeys={['video_avatar']}
+            placeholder="Hey @first_name, I put together a quick demo..."
             rows={5}
-            placeholder={existingColumns.length > 0
-              ? `Hey {{${existingColumns.find(c => c.key.includes('name'))?.key || existingColumns[0].key}}}, I put together a quick demo...`
-              : 'Hey {{contact_name}}, I put together a quick demo...'}
             className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-purple-500 resize-none font-mono leading-relaxed"
           />
-
-          <div className="flex flex-wrap gap-1.5">
-            {(existingColumns.length > 0
-              ? existingColumns.filter(c => c.key !== 'video_avatar').map(c => c.key)
-              : ['first_name', 'last_name', 'company_name', 'title']
-            ).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => {
-                  const el = scriptRef.current;
-                  const tag = `{{${v}}}`;
-                  if (el) {
-                    const start = el.selectionStart ?? scriptTemplate.length;
-                    const end = el.selectionEnd ?? start;
-                    const next = scriptTemplate.slice(0, start) + tag + scriptTemplate.slice(end);
-                    setScriptTemplate(next);
-                    requestAnimationFrame(() => { el.focus(); el.selectionStart = el.selectionEnd = start + tag.length; });
-                  } else {
-                    setScriptTemplate(s => s + tag);
-                  }
-                }}
-                className="px-2 py-0.5 rounded text-[10px] font-mono bg-gray-800 border border-gray-700 text-gray-400 hover:text-purple-300 hover:border-purple-500/30"
-              >
-                {`{{${v}}}`}
-              </button>
-            ))}
-          </div>
 
           <p className="text-xs text-gray-600">
             ~15-20 second video. Keep it conversational and under 50 words.

@@ -13,6 +13,8 @@ import { ButtonColumnConfigPanel } from './ButtonColumnConfigPanel';
 import { InstantlyColumnWizard } from './InstantlyColumnWizard';
 import { VideoAvatarColumnWizard } from './VideoAvatarColumnWizard';
 import { ElevenLabsAudioColumnWizard } from './ElevenLabsAudioColumnWizard';
+import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
+import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
 
 interface ExistingColumn {
   key: string;
@@ -207,8 +209,7 @@ const HUBSPOT_COLUMN_TYPE = { value: 'hubspot_property', label: 'HubSpot Propert
 const APOLLO_COLUMN_TYPE = { value: 'apollo_property', label: 'Apollo Property' };
 const LINKEDIN_COLUMN_TYPE = { value: 'linkedin_property', label: 'LinkedIn Property' };
 const INSTANTLY_COLUMN_TYPE = { value: 'instantly', label: 'Instantly Campaign' };
-const VIDEO_AVATAR_COLUMN_TYPE = { value: 'heygen_video', label: 'Video Avatar' };
-const ELEVENLABS_AUDIO_COLUMN_TYPE = { value: 'elevenlabs_audio', label: 'ElevenLabs Audio' };
+// Labels set dynamically based on BYOK status (see COLUMN_TYPES memo below)
 
 const INTEGRATION_TYPES = [
   { value: 'reoon_email_verify', label: 'Reoon Email Verification' },
@@ -297,16 +298,18 @@ function getNextAvailableKey(baseKey: string, usedKeys: Set<string>): string {
 export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSuccess, existingColumns = [], sampleRowValues = {}, sourceType, tableId, orgId, tableName }: AddColumnModalProps) {
   const isHubSpotTable = sourceType === 'hubspot';
   const isStandardDealsTable = tableName?.toLowerCase().includes('deals') ?? false;
+  const { isConnected: hasHeyGenKey } = useHeyGenIntegration();
+  const { isConnected: hasElevenLabsKey } = useElevenLabsIntegration();
   const COLUMN_TYPES = useMemo(() => {
     const types = [...BASE_COLUMN_TYPES];
     if (isHubSpotTable) types.push(HUBSPOT_COLUMN_TYPE);
     types.push(APOLLO_COLUMN_TYPE);
     types.push(LINKEDIN_COLUMN_TYPE);
     types.push(INSTANTLY_COLUMN_TYPE);
-    types.push(VIDEO_AVATAR_COLUMN_TYPE);
-    types.push(ELEVENLABS_AUDIO_COLUMN_TYPE);
+    types.push({ value: 'heygen_video', label: hasHeyGenKey ? 'HeyGen' : 'Video Avatar' });
+    types.push({ value: 'elevenlabs_audio', label: hasElevenLabsKey ? 'ElevenLabs Audio' : 'AI Audio' });
     return types;
-  }, [isHubSpotTable]);
+  }, [isHubSpotTable, hasHeyGenKey, hasElevenLabsKey]);
   const [label, setLabel] = useState('');
   const [columnType, setColumnType] = useState('text');
   const [enrichmentPrompt, setEnrichmentPrompt] = useState('');
@@ -1424,7 +1427,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
           {columnType === 'heygen_video' && (!tableId || !orgId) && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
               <p className="text-sm text-amber-300">
-                Save this table first before adding a Video Avatar column.
+                Save this table first before adding a {hasHeyGenKey ? 'HeyGen' : 'Video Avatar'} column.
               </p>
             </div>
           )}
@@ -1434,6 +1437,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
             <ElevenLabsAudioColumnWizard
               tableId={tableId}
               orgId={orgId}
+              isByok={hasElevenLabsKey}
               existingColumns={existingColumns.map(c => ({ key: c.key, label: c.label }))}
               onComplete={(config) => {
                 onAdd(config);
@@ -1446,7 +1450,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
           {columnType === 'elevenlabs_audio' && (!tableId || !orgId) && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
               <p className="text-sm text-amber-300">
-                Save this table first before adding an ElevenLabs Audio column.
+                Save this table first before adding an {hasElevenLabsKey ? 'ElevenLabs Audio' : 'AI Audio'} column.
               </p>
             </div>
           )}

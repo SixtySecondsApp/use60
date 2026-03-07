@@ -1,6 +1,51 @@
+---
+name: 60-run
+invoke: /60/run
+description: Story execution engine — agent teams implement code, run quality gates, parallel lock system, hooks integration
+---
+
 # 60/run — Execute Stories
 
+**Phase 5 of `/60/ship` pipeline. Also works standalone.**
+
 **Purpose**: The main execution engine. Picks next available story (or parallel group), implements it, runs quality gates, updates tracking, and optionally continues until complete.
+
+---
+
+## PIPELINE INTEGRATION
+
+When called from `/60/ship`:
+1. Read `.sixty/pipeline.json` for stories, team composition, and test stubs
+2. Use auto-composed team (workers, reviewer, architect from pipeline.json.team)
+3. Run TDD: each story must make its pre-generated test stubs pass
+4. Fire heartbeat after each story completion (observe, think, propose)
+5. Background agents run concurrently:
+   - Architecture Validator: watches for pattern drift between stories
+   - Doc Drafter: writes dev + user docs as code lands
+   - Test Oracle: validates test coverage per story
+6. Post progress to Slack war room via `send-slack-message` edge function
+7. Update `pipeline.json.stories[].status` and `pipeline.json.execution` counters
+8. Set `pipeline.json.phaseGates.build.status = "complete"` when all stories done
+
+When called standalone:
+1. Falls back to `.sixty/plan.json` or legacy `prd.json`
+2. No heartbeat, no background agents, no Slack (standard behavior)
+
+### Heartbeat Checkpoint (after each story)
+
+```
+1. OBSERVE: Scan the story's changes for:
+   - Missing error handling, loading states, empty states
+   - Security issues (hardcoded keys, missing RLS)
+   - Performance concerns (no pagination, missing indexes)
+   - Documentation gaps
+
+2. CLASSIFY: HIGH / MEDIUM / LOW severity
+
+3. PROPOSE: Draft Dev Hub ticket via create_task if warranted
+
+4. ROUTE: HIGH → Slack immediately | MEDIUM → daily digest | LOW → backlog
+```
 
 ---
 
@@ -110,15 +155,14 @@ If `prd.json` has a non-null `aiDevHubProjectId`, Dev Hub sync is active for thi
 
 If Dev Hub MCP tools are unavailable, log `⚠️ Dev Hub MCP unavailable — continuing without task sync.` and skip all Dev Hub steps.
 
-### 1b. Update Dev Hub Task → in_progress
+### 1b. Update Dev Hub Status → in_progress
 
 **Skip if Dev Hub sync is not active.**
 
-1. If the story has a non-null `aiDevHubTaskId`, call `update_task` to set status to `"in_progress"`
-2. If `aiDevHubTaskId` is `null` but `aiDevHubProjectId` exists, lazy-create the task now:
-   - Call `create_task` with: projectId, title `[<runSlug>] <storyId>: <Story Title>`, description + acceptance criteria, type `"feature"`, status `"in_progress"`, priority mapped (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
-   - Store returned task ID in `prd.json.userStories[i].aiDevHubTaskId`
-3. If update/create fails, log warning and continue
+Stories are tracked as **subtasks** of the parent PRD ticket (see `/dev-hub-sync`).
+- If `prd.json.aiDevHubTaskId` exists (parent ticket), update its status to `"in_progress"` if not already
+- Subtasks (`aiDevHubSubtaskId`) don't have independent status — no action needed per-story
+- If update fails, log warning and continue
 
 ### 2. Implement Story
 
@@ -140,6 +184,31 @@ CHANGED=$(git diff --name-only HEAD -- '*.ts' '*.tsx')
 # Only test changed files (~5-30s)
 npx vitest run --changed HEAD --passWithNoTests
 ```
+
+### 3a. Commit (Default Behavior)
+
+**Per-story atomic commits are the default.** After quality gates pass, immediately commit:
+
+```bash
+git add -A
+git commit -m "<type>(<story-id>): <story title>"
+# Example: feat(DARK-003): Add theme provider with system preference detection
+```
+
+Commit type mapping:
+- `schema` -> `feat`
+- `types` -> `feat`
+- `service` -> `feat`
+- `component` -> `feat`
+- `api` -> `feat`
+- `integration` -> `feat`
+- `fix` -> `fix`
+- `docs` -> `docs`
+- `test` -> `test`
+
+This enables `git bisect` to find exact failing stories and independent reverts per story.
+
+**Opt out**: Use `--no-commit` flag to skip auto-commits (e.g., when you want a single squash commit at the end).
 
 ### 4. Update Tracking
 
@@ -178,23 +247,18 @@ When every story in a feature has `status: "complete"`:
 
 Add a brief entry to `.sixty/progress.md` with story ID, title, files changed, and gate results.
 
-### 4a. Update Dev Hub Task (post-completion)
+### 4a. Update Dev Hub (post-completion)
 
-**Skip if Dev Hub sync is not active or story has no `aiDevHubTaskId`.**
+**Skip if Dev Hub sync is not active or story has no `aiDevHubSubtaskId`.**
+
+Stories are subtasks of the parent PRD ticket. On completion:
 
 **On story success (all gates pass):**
-1. Try `update_task` with status `"in review"`
-2. If API error (known bug with `"in review"` / `"done"` statuses), keep status as `"in progress"` and add comment via `create_comment`: `"[STATUS] Story completed — ready for review"`
-3. Add a completion comment via `create_comment` with:
-   - Summary of what was implemented
-   - Files changed
-   - Quality gate results
-4. Log: `Dev Hub: task updated` or `Dev Hub: status update failed (known API bug) — added comment instead`
+1. Mark the subtask as done (if `aiDevHubSubtaskId` exists)
+2. Add completion comment on the parent ticket (`prd.json.aiDevHubTaskId`) via `create_comment`
 
 **On story failure (gates fail):**
-1. Try `update_task` with status `"blocked"`
-2. Add comment via `create_comment` with error details and what needs fixing
-3. If status update fails, add comment: `"[STATUS] Blocked — <error summary>"`
+1. Add comment on parent ticket with error details and what needs fixing
 
 **All Dev Hub operations are non-blocking** — log warnings, never stop execution.
 
@@ -204,12 +268,195 @@ Add a brief entry to `.sixty/progress.md` with story ID, title, files changed, a
 
 ---
 
+## Parallel Execution with Lock System
+
+When using `--parallel` or when the pipeline detects parallelizable stories, the orchestrator manages concurrent agent teams via a lock system.
+
+### Lock Protocol
+
+Before starting any story, acquire a lock:
+
+```
+.sixty/locks/
+  DARK-003.lock    # { "agentId": "agent_001", "startedAt": "...", "heartbeat": "..." }
+  DARK-004.lock    # { "agentId": "agent_002", "startedAt": "...", "heartbeat": "..." }
+```
+
+**Rules:**
+1. Check for lock file before starting a story — if exists and heartbeat < 5 min old, story is taken
+2. Write lock file with agent ID + timestamp when starting
+3. Update heartbeat timestamp every 30 seconds during execution
+4. Delete lock file on completion (success or failure)
+5. Stale locks (heartbeat > 5 min old) can be claimed by another agent
+
+### State Synchronization
+
+All parallel agents sync through `.sixty/state.json`:
+
+```json
+{
+  "execution": {
+    "storiesInProgress": ["DARK-003", "DARK-004"],
+    "storiesReady": ["DARK-005", "DARK-006"],
+    "storiesBlocked": []
+  },
+  "agents": [
+    { "id": "agent_001", "currentStory": "DARK-003", "status": "working" },
+    { "id": "agent_002", "currentStory": "DARK-004", "status": "working" }
+  ],
+  "locks": {
+    "DARK-003": { "agentId": "agent_001" },
+    "DARK-004": { "agentId": "agent_002" }
+  }
+}
+```
+
+### Parallel Execution Flow
+
+```
+Orchestrator
+  |
+  +-- Find parallel group (no file overlap, deps met)
+  +-- Spawn Agent teams in parallel via Agent tool
+  |     |
+  |     +-- Agent 1: Lock DARK-003 -> Implement -> Review -> Test -> Unlock
+  |     +-- Agent 2: Lock DARK-004 -> Implement -> Review -> Test -> Unlock
+  |
+  +-- Wait for all agents to complete
+  +-- Run combined quality gates
+  +-- Single grouped commit
+  +-- Update state.json + plan.json
+  +-- Check if new stories are unblocked -> continue
+```
+
+### Commands
+
+```bash
+60/run --parallel              # Auto-detect parallel groups
+60/run --parallel --agents 2   # Run 2 parallel agent teams
+60/run --parallel --agents 3   # Run 3 parallel agent teams (max)
+```
+
+---
+
+## Hooks Integration (--auto mode)
+
+When `--auto` mode is enabled, hooks from `.sixty/hooks.json` are applied. See `/60/hooks` for full configuration.
+
+**Key behaviors with hooks:**
+- `onStoryComplete.continue: true` — auto-advance to next story
+- `onStoryComplete.commit: true` — auto-commit after each story
+- `onFeatureComplete.notify: true` — Slack notification on feature done
+- `onQualityGateFail.action: "retry"` — auto-retry with fix on gate failures
+- `onBlocked.action: "switchStory"` — skip to next executable story
+- `session.maxHours` — pause after N hours
+- `session.checkpointInterval` — checkpoint every N minutes
+- `safety.requireApprovalFor` — always pause for migrations, breaking changes
+
+```bash
+60/run --auto                  # Full automation with hooks + crons
+60/run --auto --max-hours 4    # Override session limit
+60/run --auto --max-stories 10 # Override story limit
+60/run --auto --no-crons       # Skip scheduled task creation
+```
+
+### Scheduled Cron Lifecycle
+
+When `--auto` starts and `.sixty/hooks.json` has a `scheduled` section, the runner manages background crons:
+
+#### On Startup
+
+```
+1. Read hooks.json → scheduled config
+2. For each enabled task:
+   - Convert interval to cron expression (e.g. "15m" → "*/15 * * * *")
+   - For "once" tasks: calculate fire time from now + after duration
+   - Call CronCreate with the prompt and expression
+3. Write cron IDs to .sixty/active-crons.json:
+   {
+     "sessionStart": "<ISO>",
+     "crons": [
+       { "id": "abc12345", "name": "healthCheck", "schedule": "*/15 * * * *" },
+       { "id": "def67890", "name": "checkpoint", "schedule": "*/30 * * * *" },
+       { "id": "ghi24680", "name": "sessionTimeout", "schedule": "0 17 * * *", "once": true }
+     ]
+   }
+```
+
+#### During Execution
+
+Crons fire **between turns** — they queue while a story is being implemented and execute when Claude is idle between stories. This means:
+- Health checks report progress at natural pause points
+- Checkpoints capture state between stories, not mid-implementation
+- The session timeout fires even if a story is taking longer than expected
+
+#### On Completion
+
+```
+1. Read .sixty/active-crons.json
+2. Call CronDelete for each stored cron ID
+3. Delete .sixty/active-crons.json
+4. Log: "Scheduled tasks cleaned up (N crons removed)"
+```
+
+This cleanup runs on:
+- All stories complete (normal exit)
+- Pipeline paused by session limit
+- Unrecoverable error / all stories blocked
+- Manual `60/hooks --crons-stop`
+
+---
+
 ## Handling Blocked Stories
 
 If a story is blocked:
 1. Check if other stories can execute
 2. If yes, switch to executable story
 3. If all blocked, THEN report the block
+
+---
+
+## Story Rollback
+
+Use `--revert <story-id>` to surgically undo a completed story.
+
+### Command
+
+```bash
+60/run --revert DARK-003
+```
+
+### Rollback Flow
+
+```
+1. Find the commit by conventional message pattern:
+   git log --oneline --grep="(DARK-003):" -1
+
+2. Run git revert:
+   git revert <sha> --no-edit
+
+3. Update plan.json:
+   - Set story status to "reverted"
+   - Set completedAt to null
+   - Decrement execution.completedStories
+
+4. Check downstream impact:
+   - Find all stories where dependencies.stories includes "DARK-003"
+   - Set their status to "blocked" if they were pending/in_progress
+   - Report: "Reverted DARK-003. DARK-005, DARK-006 now blocked (dependency)."
+
+5. Update progress.md:
+   ### <timestamp> -- REVERTED DARK-003
+   **Reason**: <from user or auto-detected>
+   **Impact**: N downstream stories blocked
+```
+
+### Rules
+
+- Only reverts stories with atomic commits (the default behavior)
+- If the commit can't be found (squashed or `--no-commit` was used), report and suggest manual fix
+- If the revert creates merge conflicts, report them instead of force-resolving
+- After revert, re-run quality gates on the resulting state
 
 ---
 
@@ -262,4 +509,5 @@ Files created/modified:
 60/run --all                  # Execute ALL stories (no stopping!)
 60/run --story SKILL-003      # Execute specific story
 60/run --feature skills-remap # All stories in feature
+60/run --revert SKILL-003     # Surgically undo a story
 ```
