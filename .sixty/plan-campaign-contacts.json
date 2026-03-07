@@ -1,0 +1,254 @@
+{
+  "feature": "campaign-contacts",
+  "name": "Auto-Discover Contacts & Outreach Kit for /t/{domain}",
+  "description": "Transform the URL campaign creator into a killer sales tool: auto-discover 3-5 decision makers at the target company via AI Ark + Apollo, generate per-contact personalized outreach with LinkedIn activity references, provide one-click outreach actions per contact, and push everything to an Instantly campaign.",
+  "createdAt": "2026-03-06",
+  "status": "planned",
+
+  "stories": [
+    {
+      "id": "CC-001",
+      "title": "discover-contacts edge function — AI Ark people search + Apollo enrichment",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CC-003", "CC-004", "CC-005", "CC-006"],
+      "parallelWith": ["CC-002"],
+      "acceptance": [
+        "New edge function `discover-contacts` accepts { domain, icp_titles?: string[], max_contacts?: number }",
+        "Calls AI Ark POST /v1/people with account.domain.any.include[domain] + contact.title filters",
+        "Falls back to Apollo POST /api/v1/mixed_people/api_search with q_organization_domains + person_titles",
+        "Merges results: AI Ark primary, Apollo fills gaps (photo_url, linkedin_url)",
+        "Returns { success, contacts: DiscoveredContact[] } with 3-5 contacts sorted by seniority"
+      ],
+      "files": [
+        "supabase/functions/discover-contacts/index.ts"
+      ],
+      "notes": "AI Ark people search: X-TOKEN auth, POST /v1/people, body { page: 0, size: 5, account: { domain: { any: { include: [domain] } } }, contact: { title: { any: { include: icp_titles, searchMode: 'SMART' } } } }. Apollo: x-api-key auth, POST /api/v1/mixed_people/api_search. Use Promise.allSettled for resilience. AI Ark costs 12.5 credits/call, Apollo 0.3/search. ICP titles default to company.icp.title from research data."
+    },
+    {
+      "id": "CC-002",
+      "title": "DiscoveredContact type + ContactCard component shell",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CC-003", "CC-004", "CC-005"],
+      "parallelWith": ["CC-001"],
+      "acceptance": [
+        "DiscoveredContact interface in demo-types.ts: first_name, last_name, full_name, title, seniority, department, linkedin_url, photo_url, email, company_name, recent_posts?: string[]",
+        "ContactCard component renders: photo, name, title, seniority badge, LinkedIn link",
+        "ContactCard has expandable state for outreach draft + action buttons (collapsed by default)",
+        "Skeleton loading state for when contacts are being discovered"
+      ],
+      "files": [
+        "packages/landing/src/demo/demo-types.ts",
+        "packages/landing/src/components/ContactCard.tsx"
+      ],
+      "notes": "ContactCard should be a self-contained component. Photo from AI Ark profile.picture.source or Apollo photo_url. LinkedIn from AI Ark link.linkedin or Apollo linkedin_url. Seniority badge colored by level (VP/C-Suite = violet, Director = blue, Manager = emerald)."
+    },
+    {
+      "id": "CC-003",
+      "title": "Wire discover-contacts into CreatorView — contact discovery panel",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["CC-001", "CC-002"], "files": [], "schema": [] },
+      "blocks": ["CC-004", "CC-005", "CC-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "After research completes, auto-fires discover-contacts with domain + research.company.icp.title",
+        "New 'Decision Makers' section in right column shows ContactCard for each discovered contact",
+        "Loading skeleton while contacts are being discovered",
+        "Graceful empty state if no contacts found (suggest manual search)",
+        "Contact count badge on section header"
+      ],
+      "files": [
+        "packages/landing/src/pages/CreatorView.tsx"
+      ],
+      "notes": "Call discover-contacts with session.access_token. Fire after research completes (useEffect on research). Store contacts in useState<DiscoveredContact[]>. Place the Decision Makers panel above the ICP card in the right column for prominence."
+    },
+    {
+      "id": "CC-004",
+      "title": "Per-contact AI outreach drafts via campaign-outreach-draft",
+      "type": "backend+frontend",
+      "status": "pending",
+      "priority": 3,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["CC-001", "CC-002", "CC-003"], "files": [], "schema": [] },
+      "blocks": ["CC-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Clicking a ContactCard expands it to show a personalized outreach draft",
+        "Draft is generated via existing campaign-outreach-draft edge function with contact-specific prospect data",
+        "Each contact gets a DIFFERENT angle: references their title, department, and seniority for unique messaging",
+        "Draft is editable inline within the ContactCard",
+        "Drafts are cached per-contact (don't re-fetch on collapse/expand)"
+      ],
+      "files": [
+        "packages/landing/src/components/ContactCard.tsx",
+        "packages/landing/src/pages/CreatorView.tsx"
+      ],
+      "notes": "Reuse existing campaign-outreach-draft endpoint — just pass different prospect data for each contact. The edge function already accepts prospect.title, prospect.first_name etc. and personalizes based on that. No backend changes needed. Cache in a useRef map keyed by contact email/linkedin."
+    },
+    {
+      "id": "CC-005",
+      "title": "One-click outreach kit per contact — copy email, LinkedIn, mailto",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["CC-002", "CC-003", "CC-004"], "files": [], "schema": [] },
+      "blocks": ["CC-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Each expanded ContactCard shows action buttons: Copy Draft, Open LinkedIn, Send Email (mailto:)",
+        "Copy Draft copies the full outreach text to clipboard with [LINK] replaced by campaign link (if created)",
+        "Open LinkedIn opens their linkedin_url in new tab",
+        "Send Email opens mailto: link with pre-filled subject + body from the draft",
+        "Copy Demo Link copies the /t/{code} link for this specific contact (if link created)",
+        "Toast feedback on copy actions"
+      ],
+      "files": [
+        "packages/landing/src/components/ContactCard.tsx"
+      ],
+      "notes": "mailto: link needs encodeURIComponent for subject and body. LinkedIn button disabled if no linkedin_url. Copy actions use navigator.clipboard.writeText. Show checkmark icon after copy for 2s."
+    },
+    {
+      "id": "CC-006",
+      "title": "Push to Instantly campaign — all contacts + sequences in one click",
+      "type": "backend+frontend",
+      "status": "pending",
+      "priority": 5,
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["CC-001", "CC-003", "CC-004", "CC-005"], "files": [], "schema": [] },
+      "blocks": ["CC-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "New 'Push to Instantly' button appears when contacts are discovered and have email addresses",
+        "Calls new push-to-instantly-campaign edge function that creates campaign + pushes leads",
+        "Each contact becomes a lead with first_name, last_name, email, company_name, custom_variables (title, linkedin_url, demo_link)",
+        "Campaign name defaults to '{company_name} — Outreach {date}'",
+        "Uses InstantlyClient from _shared/instantly.ts",
+        "Resolves API key from instantly_org_credentials table (requires org membership)",
+        "Success state shows campaign name + lead count with link to Instantly dashboard"
+      ],
+      "files": [
+        "supabase/functions/push-campaign-instantly/index.ts",
+        "packages/landing/src/pages/CreatorView.tsx"
+      ],
+      "notes": "New edge function push-campaign-instantly because instantly-push is tightly coupled to ops table rows. This one accepts raw leads array. Use POST /api/v1/campaign/add for new campaign, POST /api/v1/lead/add to push leads. Copy InstantlyClient usage from instantly-push. Campaign schedule defaults to Mon-Fri 9-5 America/Chicago. Needs JWT auth to resolve org + API key."
+    },
+    {
+      "id": "CC-007",
+      "title": "LinkedIn activity enrichment via EXA search per contact",
+      "type": "backend+frontend",
+      "status": "pending",
+      "priority": 6,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["CC-003", "CC-006"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "After contacts are discovered, fire EXA search per contact: '{full_name} {company_name} linkedin' for recent posts/activity",
+        "Add recent_posts field to each DiscoveredContact with top 2-3 activity snippets",
+        "ContactCard shows 'Recent Activity' section with post snippets when available",
+        "Outreach drafts reference recent activity when available (pass to campaign-outreach-draft as prospect_intel.recent_activity)",
+        "EXA calls are parallel (Promise.allSettled) with 5s timeout per contact",
+        "Activity enrichment is progressive — contacts render immediately, activity populates async"
+      ],
+      "files": [
+        "supabase/functions/discover-contacts/index.ts",
+        "packages/landing/src/components/ContactCard.tsx",
+        "packages/landing/src/pages/CreatorView.tsx"
+      ],
+      "notes": "Add EXA search as a secondary enrichment pass in discover-contacts. Use EXA neural search: { query: '{name} {company} linkedin', numResults: 3, contents: { text: true, highlights: true }, useAutoprompt: true, startPublishedDate: 3 months ago }. Extract post titles/snippets. This is the 'LinkedIn scraping' feature — EXA indexes LinkedIn public posts. Much more reliable and legal than Apify LinkedIn scraping."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 7,
+    "estimatedMinutes": 170,
+    "estimatedHours": "2.5-3.5 hours",
+    "parallelOpportunities": "CC-001 + CC-002 can run in parallel (backend + frontend type scaffolding)",
+    "mvp": {
+      "stories": ["CC-001", "CC-002", "CC-003", "CC-005"],
+      "estimatedMinutes": 85,
+      "delivers": "Auto-discovered contacts with LinkedIn links and one-click outreach actions"
+    }
+  },
+
+  "dependencyGraph": "CC-001 (backend) + CC-002 (types+component) --> CC-003 (wire into CreatorView) --> CC-004 (per-contact drafts) --> CC-005 (outreach kit) --> CC-006 (Instantly push) --> CC-007 (LinkedIn activity)",
+
+  "risks": [
+    {
+      "severity": "medium",
+      "area": "api-cost",
+      "issue": "AI Ark people search costs 12.5 credits per call",
+      "mitigation": "Single call per domain visit, cache results. Apollo as fallback is 0.3 credits."
+    },
+    {
+      "severity": "medium",
+      "area": "instantly-auth",
+      "issue": "Instantly push requires org-level API key from instantly_org_credentials",
+      "mitigation": "Graceful degradation — hide Push to Instantly button if no API key configured for user's org"
+    },
+    {
+      "severity": "low",
+      "area": "contact-quality",
+      "issue": "AI Ark may return contacts without email addresses",
+      "mitigation": "Apollo match as fallback for email. Hide mailto/Instantly push for contacts without email."
+    },
+    {
+      "severity": "low",
+      "area": "linkedin-activity",
+      "issue": "EXA may not find LinkedIn posts for all contacts",
+      "mitigation": "Progressive enhancement — activity section only shown when data available"
+    }
+  ],
+
+  "apiPatterns": {
+    "aiArkPeopleSearch": {
+      "url": "https://api.ai-ark.com/api/developer-portal/v1/people",
+      "method": "POST",
+      "auth": "X-TOKEN: {api_key}",
+      "body": "{ page: 0, size: 5, account: { domain: { any: { include: [domain] } } }, contact: { title: { any: { include: titles, searchMode: 'SMART' } } } }",
+      "response": "{ content: [{ profile: { first_name, last_name, title, picture: { source } }, department: { seniority }, link: { linkedin }, location: { default } }] }",
+      "cost": "12.5 credits/request"
+    },
+    "apolloPeopleSearch": {
+      "url": "https://api.apollo.io/api/v1/mixed_people/api_search",
+      "method": "POST",
+      "auth": "x-api-key: {api_key}",
+      "body": "{ q_organization_domains: domain, person_titles: titles, per_page: 5 }",
+      "response": "{ people: [{ first_name, last_name, title, seniority, photo_url, linkedin_url, email, organization: { name } }] }",
+      "cost": "0.3 credits/search"
+    },
+    "instantlyCampaignCreate": {
+      "url": "https://api.instantly.ai/api/v1/campaign/add",
+      "method": "POST",
+      "auth": "Bearer {api_key}",
+      "body": "{ name, campaign_schedule: { schedules: [{ name: 'Default', timing: { from: '09:00', to: '17:00' }, days: { 1: true, 2: true, 3: true, 4: true, 5: true }, timezone: 'America/Chicago' }] } }",
+      "response": "{ id: string }"
+    },
+    "instantlyLeadPush": {
+      "url": "https://api.instantly.ai/api/v1/lead/add",
+      "method": "POST",
+      "auth": "Bearer {api_key}",
+      "body": "{ campaign_id, leads: [{ email, first_name, last_name, company_name, custom_variables: { title, linkedin_url, demo_link } }] }",
+      "response": "{ status: 'success' }"
+    },
+    "exaPersonActivity": {
+      "url": "https://api.exa.ai/search",
+      "method": "POST",
+      "auth": "x-api-key: {api_key}",
+      "body": "{ query: '{name} {company} linkedin', numResults: 3, contents: { text: true, highlights: true }, useAutoprompt: true, type: 'neural', startPublishedDate: '3 months ago' }",
+      "response": "{ results: [{ title, url, text, highlights }] }",
+      "cost": "~0.01/search"
+    }
+  }
+}

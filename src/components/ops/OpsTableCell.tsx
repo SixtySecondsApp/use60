@@ -4,6 +4,10 @@ import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X,
 import type { InstantlyColumnConfig } from '@/lib/types/instantly';
 import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
 import { AgentColumnCell } from './AgentColumnCell';
+import { HeyGenVideoCell } from './HeyGenVideoCell';
+import { ElevenLabsAudioCell } from './ElevenLabsAudioCell';
+import { supabase } from '@/lib/supabase/clientV2';
+import { toast } from 'sonner';
 
 interface CellData {
   value: string | null;
@@ -48,8 +52,12 @@ interface OpsTableCellProps {
   integrationConfig?: Record<string, unknown> | null;
   /** Agent column ID (for agent_research columns) */
   agentColumnId?: string;
-  /** Row ID (for agent_research columns) */
+  /** Row ID (for agent_research and heygen_video columns) */
   rowId?: string;
+  /** Table ID (for heygen_video and elevenlabs_audio columns) */
+  tableId?: string;
+  /** Column key (for elevenlabs_audio columns) */
+  columnKey?: string;
   /** Callback to run agent research for this cell */
   onRunAgentResearch?: () => void;
   /** Callback to retry agent research with optional depth override */
@@ -82,6 +90,8 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   integrationConfig,
   agentColumnId,
   rowId,
+  tableId,
+  columnKey,
   onRunAgentResearch,
   onRetryAgentResearch,
 }) => {
@@ -1504,6 +1514,137 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
           </div>
         )}
       </div>
+    );
+  }
+
+  // HeyGen video column — generate button + thumbnail + status + preview
+  if (columnType === 'heygen_video') {
+    let videoData: { status?: string; video_url?: string; thumbnail_url?: string; duration_seconds?: number; error_message?: string; video_record_id?: string } | null = null;
+    if (cell.value) {
+      try { videoData = JSON.parse(cell.value); } catch { /* not JSON */ }
+    }
+
+    const handleGenerateVideo = async () => {
+      const config = integrationConfig as { avatar_id?: string; voice_id?: string; voice_source?: string; audio_column_key?: string; script_template?: string } | null;
+      if (!config?.avatar_id || !config?.script_template || !rowId || !tableId) {
+        toast.error('Video avatar not configured — re-add the column');
+        return;
+      }
+
+      // Resolve audio URL from referenced column if using audio_column mode
+      let audioUrl: string | undefined;
+      if (config.voice_source === 'audio_column' && config.audio_column_key && rowCellValues) {
+        audioUrl = rowCellValues[config.audio_column_key] || undefined;
+        if (!audioUrl) {
+          toast.error(`No audio URL found in "${config.audio_column_key}" column for this row`);
+          return;
+        }
+      }
+
+      // Optimistically update UI to show pending state
+      onEdit?.(JSON.stringify({ status: 'pending' }));
+      try {
+        const { data, error } = await supabase.functions.invoke('heygen-video-generate', {
+          body: {
+            avatar_id: config.avatar_id,
+            voice_id: config.voice_source !== 'audio_column' ? config.voice_id : undefined,
+            audio_url: audioUrl,
+            audio_column_key: config.voice_source === 'audio_column' ? config.audio_column_key : undefined,
+            script: config.script_template,
+            table_id: tableId,
+            row_ids: [rowId],
+          },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+        if (data?.failed > 0) {
+          onEdit?.(JSON.stringify({ status: 'failed', error_message: 'Video generation failed' }));
+          toast.error('Video generation failed');
+        } else {
+          onEdit?.(JSON.stringify({ status: 'processing' }));
+          toast.success('Video generating — this takes 1-2 minutes');
+        }
+      } catch (err) {
+        onEdit?.(JSON.stringify({ status: 'failed', error_message: err instanceof Error ? err.message : 'Generation failed' }));
+        toast.error(err instanceof Error ? err.message : 'Video generation failed');
+      }
+    };
+
+    return (
+      <HeyGenVideoCell
+        status={(videoData?.status as any) || null}
+        videoUrl={videoData?.video_url || null}
+        thumbnailUrl={videoData?.thumbnail_url || null}
+        durationSeconds={videoData?.duration_seconds || null}
+        errorMessage={videoData?.error_message || null}
+        onGenerateVideo={integrationConfig ? handleGenerateVideo : undefined}
+        rowId={rowId}
+        onCellUpdate={onEdit}
+      />
+    );
+  }
+
+  // ElevenLabs audio column — generate button + play/pause + status
+  if (columnType === 'elevenlabs_audio') {
+    let audioData: { status?: string; audio_url?: string; error_message?: string } | null = null;
+    if (cell.value) {
+      try { audioData = JSON.parse(cell.value); } catch { /* not JSON — treat as raw URL */
+        audioData = { status: 'completed', audio_url: cell.value };
+      }
+    }
+
+    const handleGenerateAudio = async () => {
+      if (!integrationConfig || !rowId || !tableId) {
+        console.error('[ElevenLabsAudio] Missing config:', { hasConfig: !!integrationConfig, rowId, tableId, columnKey });
+        toast.error('Audio column not configured — open column settings first');
+        return;
+      }
+      if (!integrationConfig.voice_clone_id) {
+        toast.error('No voice selected — open column settings and choose a voice');
+        return;
+      }
+      if (!integrationConfig.script_template) {
+        toast.error('No script template — open column settings and add a script');
+        return;
+      }
+
+      // Immediately show pending state in the cell
+      onEdit?.(JSON.stringify({ status: 'pending' }));
+
+      try {
+        const { data, error } = await supabase.functions.invoke('elevenlabs-tts-generate', {
+          body: {
+            voice_clone_id: integrationConfig.voice_clone_id,
+            script_template: integrationConfig.script_template,
+            table_id: tableId,
+            row_ids: [rowId],
+            audio_column_key: columnKey,
+          },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+
+        // If the function returned a completed result inline, update the cell
+        const result = data?.results?.[0];
+        if (result?.audio_url) {
+          onEdit?.(JSON.stringify({ status: 'completed', audio_url: result.audio_url }));
+        }
+        // Otherwise the polling in ElevenLabsAudioCell will pick up the status change
+      } catch (err) {
+        onEdit?.(JSON.stringify({ status: 'failed', error_message: err instanceof Error ? err.message : 'Generation failed' }));
+        toast.error(err instanceof Error ? err.message : 'Audio generation failed');
+      }
+    };
+
+    return (
+      <ElevenLabsAudioCell
+        status={(audioData?.status as any) || null}
+        audioUrl={audioData?.audio_url || null}
+        errorMessage={audioData?.error_message || null}
+        onGenerateAudio={integrationConfig ? handleGenerateAudio : undefined}
+        rowId={rowId}
+        onCellUpdate={onEdit}
+      />
     );
   }
 

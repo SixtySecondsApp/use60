@@ -521,6 +521,11 @@ export function generatePersonalizedData(
     };
   });
 
+  // Pass through competitive data from research if available
+  const competitive = (research as Record<string, unknown>).competitive
+    ? ((research as Record<string, unknown>).competitive as { competitors: Array<{ name: string; domain: string; differentiators: string[] }> }).competitors
+    : undefined;
+
   return {
     user,
     org,
@@ -535,6 +540,7 @@ export function generatePersonalizedData(
     proposals,
     visitorCompany,
     visitorDeal: primaryDeal,
+    competitive,
   };
 }
 

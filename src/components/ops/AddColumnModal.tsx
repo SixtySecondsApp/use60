@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers, Search } from 'lucide-react';
+import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers, Search, Video, Mic } from 'lucide-react';
 import { toast } from 'sonner';
 import { GENERIC_TEMPLATES, EXA_TEMPLATES, DEAL_ENRICHMENT_TEMPLATES, type EnrichmentTemplate } from './enrichmentTemplates';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -11,6 +11,10 @@ import { LinkedInPropertyPicker } from './LinkedInPropertyPicker';
 import { OpenRouterModelPicker } from './OpenRouterModelPicker';
 import { ButtonColumnConfigPanel } from './ButtonColumnConfigPanel';
 import { InstantlyColumnWizard } from './InstantlyColumnWizard';
+import { VideoAvatarColumnWizard } from './VideoAvatarColumnWizard';
+import { ElevenLabsAudioColumnWizard } from './ElevenLabsAudioColumnWizard';
+import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
+import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
 
 interface ExistingColumn {
   key: string;
@@ -205,6 +209,7 @@ const HUBSPOT_COLUMN_TYPE = { value: 'hubspot_property', label: 'HubSpot Propert
 const APOLLO_COLUMN_TYPE = { value: 'apollo_property', label: 'Apollo Property' };
 const LINKEDIN_COLUMN_TYPE = { value: 'linkedin_property', label: 'LinkedIn Property' };
 const INSTANTLY_COLUMN_TYPE = { value: 'instantly', label: 'Instantly Campaign' };
+// Labels set dynamically based on BYOK status (see COLUMN_TYPES memo below)
 
 const INTEGRATION_TYPES = [
   { value: 'reoon_email_verify', label: 'Reoon Email Verification' },
@@ -293,14 +298,18 @@ function getNextAvailableKey(baseKey: string, usedKeys: Set<string>): string {
 export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSuccess, existingColumns = [], sampleRowValues = {}, sourceType, tableId, orgId, tableName }: AddColumnModalProps) {
   const isHubSpotTable = sourceType === 'hubspot';
   const isStandardDealsTable = tableName?.toLowerCase().includes('deals') ?? false;
+  const { isConnected: hasHeyGenKey } = useHeyGenIntegration();
+  const { isConnected: hasElevenLabsKey } = useElevenLabsIntegration();
   const COLUMN_TYPES = useMemo(() => {
     const types = [...BASE_COLUMN_TYPES];
     if (isHubSpotTable) types.push(HUBSPOT_COLUMN_TYPE);
     types.push(APOLLO_COLUMN_TYPE);
     types.push(LINKEDIN_COLUMN_TYPE);
     types.push(INSTANTLY_COLUMN_TYPE);
+    types.push({ value: 'heygen_video', label: hasHeyGenKey ? 'HeyGen' : 'Video Avatar' });
+    types.push({ value: 'elevenlabs_audio', label: hasElevenLabsKey ? 'ElevenLabs Audio' : 'AI Audio' });
     return types;
-  }, [isHubSpotTable]);
+  }, [isHubSpotTable, hasHeyGenKey, hasElevenLabsKey]);
   const [label, setLabel] = useState('');
   const [columnType, setColumnType] = useState('text');
   const [enrichmentPrompt, setEnrichmentPrompt] = useState('');
@@ -391,7 +400,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
     && (!isLinkedInProperty || linkedinPropertyName.length > 0)
     && (!isButton || (buttonConfig.label.trim().length > 0 && buttonConfig.actions.length > 0))
     && (!isAgentResearch || agentPromptTemplate.trim().length > 0)
-    && !isInstantly; // Instantly uses its own wizard flow, not the standard Add button
+    && !isInstantly // Instantly uses its own wizard flow, not the standard Add button
+    && columnType !== 'heygen_video' // Video Avatar uses its own wizard flow
+    && columnType !== 'elevenlabs_audio'; // ElevenLabs Audio uses its own wizard flow
 
   // Filter columns for the @mention dropdown (enrichment prompt)
   const filteredColumns = useMemo(() => {
@@ -1395,6 +1406,55 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
             </div>
           )}
 
+          {/* Video Avatar Wizard */}
+          {columnType === 'heygen_video' && tableId && orgId && (
+            <VideoAvatarColumnWizard
+              tableId={tableId}
+              orgId={orgId}
+              existingColumns={existingColumns.map(c => ({ key: c.key, label: c.label }))}
+              onComplete={(columns) => {
+                if (columns.length === 1) {
+                  onAdd(columns[0]);
+                } else if (onAddMultiple && columns.length > 1) {
+                  onAddMultiple(columns);
+                }
+                onClose();
+              }}
+              onCancel={onClose}
+            />
+          )}
+
+          {columnType === 'heygen_video' && (!tableId || !orgId) && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm text-amber-300">
+                Save this table first before adding a {hasHeyGenKey ? 'HeyGen' : 'Video Avatar'} column.
+              </p>
+            </div>
+          )}
+
+          {/* ElevenLabs Audio Wizard */}
+          {columnType === 'elevenlabs_audio' && tableId && orgId && (
+            <ElevenLabsAudioColumnWizard
+              tableId={tableId}
+              orgId={orgId}
+              isByok={hasElevenLabsKey}
+              existingColumns={existingColumns.map(c => ({ key: c.key, label: c.label }))}
+              onComplete={(config) => {
+                onAdd(config);
+                onClose();
+              }}
+              onCancel={onClose}
+            />
+          )}
+
+          {columnType === 'elevenlabs_audio' && (!tableId || !orgId) && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm text-amber-300">
+                Save this table first before adding an {hasElevenLabsKey ? 'ElevenLabs Audio' : 'AI Audio'} column.
+              </p>
+            </div>
+          )}
+
           {/* AI Research Agent Section */}
           {isAgentResearch && (
             <div className="space-y-4">
@@ -1967,7 +2027,8 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer — hidden for types that use their own wizard (Video Avatar, Instantly) */}
+        {columnType !== 'heygen_video' && columnType !== 'elevenlabs_audio' && !isInstantly && (
         <div className="flex items-center justify-end gap-3 border-t border-gray-700/60 px-6 py-4">
           <button
             onClick={onClose}
@@ -2022,6 +2083,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
             </button>
           )}
         </div>
+        )}
       </div>
     </div>
   );

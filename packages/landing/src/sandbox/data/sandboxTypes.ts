@@ -174,6 +174,12 @@ export interface SandboxSlackMessage {
 }
 
 /** Complete sandbox dataset */
+export interface SandboxCompetitor {
+  name: string;
+  domain: string;
+  differentiators: string[];
+}
+
 export interface SandboxData {
   user: SandboxUser;
   org: SandboxOrg;
@@ -188,6 +194,7 @@ export interface SandboxData {
   proposals: SandboxProposal[];
   visitorCompany: SandboxCompany;
   visitorDeal: SandboxDeal;
+  competitive?: SandboxCompetitor[];
 }
 
 /** A pre-loaded proposal for the sandbox demo */

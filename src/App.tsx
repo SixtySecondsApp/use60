@@ -118,6 +118,7 @@ import {
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
 const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
+// AvatarCreatorWizard is now inline in Ops table VideoAvatarColumnWizard — no standalone route needed
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION

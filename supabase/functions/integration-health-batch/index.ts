@@ -426,10 +426,25 @@ const checkJustcallHealth: HealthChecker = async (supabase, userId) => {
 // SavvyCal Integration Health Check
 const checkSavvycalHealth: HealthChecker = async (supabase, userId) => {
   try {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+
+    if (!profile?.organization_id) {
+      return {
+        connected: false,
+        status: 'not_configured',
+      };
+    }
+
     const { data: integration, error } = await supabase
       .from('savvycal_integrations')
-      .select('id, email, is_active, updated_at')
-      .eq('user_id', userId)
+      .select('id, is_active, updated_at, webhook_configured_at, webhook_last_received_at, webhook_last_event_id, last_sync_at, connected_by_user_id')
+      .eq('org_id', profile.organization_id)
       .eq('is_active', true)
       .maybeSingle();
 
@@ -442,23 +457,32 @@ const checkSavvycalHealth: HealthChecker = async (supabase, userId) => {
       };
     }
 
-    // Get recent events synced
-    const { count: eventCount } = await supabase
-      .from('savvycal_events')
+    const { count: leadCount } = await supabase
+      .from('leads')
       .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
+      .eq('org_id', profile.organization_id)
+      .eq('external_source', 'savvycal')
       .gte(
         'created_at',
         new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       );
 
+    const lastActivityAt =
+      integration.webhook_last_received_at ||
+      integration.last_sync_at ||
+      integration.updated_at;
+
     return {
       connected: true,
       status: 'connected',
-      lastSync: integration.updated_at,
+      lastSync: lastActivityAt,
       details: {
-        email: integration.email,
-        eventsLast30Days: eventCount || 0,
+        connectedByUserId: integration.connected_by_user_id,
+        webhookConfigured: Boolean(integration.webhook_configured_at),
+        webhookLastReceivedAt: integration.webhook_last_received_at,
+        webhookLastEventId: integration.webhook_last_event_id,
+        lastSyncAt: integration.last_sync_at,
+        leadsLast30Days: leadCount || 0,
       },
     };
   } catch (err) {
