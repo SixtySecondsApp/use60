@@ -110,7 +110,7 @@ import {
   // Insights
   Insights, Heatmap, SalesFunnel, TeamAnalytics, ContentTopics, MeetingAnalyticsPage,
   // Misc
-  Integrations, PublicFactProfile, GoogleCallback, Roadmap, Releases, ApiTesting, TestFallback,
+  Integrations, PublicFactProfile, GoogleCallback, MicrosoftCallback, Roadmap, Releases, ApiTesting, TestFallback,
   // Debug
   DebugAuth, AuthDebug, DebugPermissions, DebugMeetings, TestNotifications,
 } from '@/routes/lazyPages';
@@ -320,6 +320,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
 
         {/* OAuth callback routes - must be public for external redirects */}
         <Route path="/auth/google/callback" element={<GoogleCallback />} />
+        <Route path="/auth/microsoft/callback" element={<MicrosoftCallback />} />
         <Route path="/oauth/fathom/callback" element={<FathomCallbackWrapper />} />
 
         {/* Organization invitation acceptance (can be accessed logged in or out) */}

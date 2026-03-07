@@ -237,10 +237,28 @@ export class AdapterRegistry {
         )
       );
 
+      // Check Microsoft Calendar integration
+      const { data: msCalData } = await this.client
+        .from('microsoft_integrations')
+        .select('scopes')
+        .eq('user_id', this.userId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      const hasMicrosoftCalendar = !!(
+        msCalData?.scopes &&
+        typeof msCalData.scopes === 'string' &&
+        msCalData.scopes.includes('Calendars')
+      );
+
       if (hasGoogleCalendar) {
         calendarProvider = 'google';
         calendarAvailable = true;
         calendarFeatures = ['events', 'attendees', 'availability', 'free_busy'];
+      } else if (hasMicrosoftCalendar) {
+        calendarProvider = 'microsoft';
+        calendarAvailable = true;
+        calendarFeatures = ['events', 'attendees', 'availability', 'teams'];
       } else if (hasMeetingBaaSCalendar) {
         calendarProvider = meetingBaaSCalendarData?.platform === 'microsoft' ? 'microsoft' : 'google';
         calendarAvailable = true;
@@ -280,7 +298,27 @@ export class AdapterRegistry {
         emailProvider = 'google';
         emailFeatures = ['search', 'draft', 'send', 'threads'];
       }
-      // TODO: Add Outlook/Microsoft 365 check when implemented
+
+      // Check Microsoft 365 / Outlook integration
+      if (!hasGmail) {
+        const { data: msData } = await this.client
+          .from('microsoft_integrations')
+          .select('scopes, service_preferences')
+          .eq('user_id', this.userId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        const hasMicrosoftMail = !!(
+          msData?.scopes &&
+          typeof msData.scopes === 'string' &&
+          (msData.scopes.includes('Mail.Read') || msData.scopes.includes('Mail.ReadWrite'))
+        );
+
+        if (hasMicrosoftMail) {
+          emailProvider = 'microsoft';
+          emailFeatures = ['search', 'draft', 'send', 'threads'];
+        }
+      }
     }
 
     capabilities.push({

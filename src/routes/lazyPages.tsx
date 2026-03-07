@@ -254,6 +254,7 @@ export const MeetingAnalyticsPage = lazyWithRetry(() => import('@/pages/MeetingA
 export const Integrations = lazyWithRetry(() => import('@/pages/Integrations'));
 export const PublicFactProfile = lazyWithRetry(() => import('@/pages/public/PublicFactProfile'));
 export const GoogleCallback = lazyWithRetry(() => import('@/pages/GoogleCallback'));
+export const MicrosoftCallback = lazyWithRetry(() => import('@/pages/auth/MicrosoftCallback'));
 export const Roadmap = lazyWithRetry(() => import('@/pages/Roadmap'));
 export const Releases = lazyWithRetry(() => import('@/pages/Releases'));
 export const ApiTesting = lazyWithRetry(() => import('@/pages/ApiTesting'));
