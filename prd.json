@@ -1,514 +1,196 @@
 {
-  "project": "Google & Microsoft Integration V2 — Agent-Grade Workspace Intelligence",
-  "runSlug": "workspace-integration-v2",
-  "branchName": "feature/workspace-integration-v2",
-  "description": "Complete overhaul of Google integration + net-new Microsoft 365 integration. Centralized provider-abstracted client, 5 AI background jobs (email classification, reply gaps, attendee enrichment, communication health, document linking), subscription tier gating, and proposal-to-Drive storage.",
+  "project": "Nylas Integration Verification & Hardening",
+  "runSlug": "nylas-integration-verification",
+  "branchName": "feature/nylas-integration-verification",
+  "description": "End-to-end verification, test harness (admin + user), and webhook-based sync/monitoring for the Nylas v3 Gmail integration.",
   "aiDevHubProjectId": "c5cb25f9-6dfb-4c72-a65c-34572b929185",
-  "createdAt": "2026-03-07T16:00:00Z",
+  "aiDevHubTaskId": "0f4849e2-5ae4-4420-8de2-73e63cc5ff91",
+  "aiDevHubTaskCode": "TSK-0568",
+  "createdAt": "2026-03-07T18:00:00.000Z",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Provider-Abstracted Client Interface",
-      "description": "As a developer, I want a single WorkspaceClient interface that abstracts Google and Microsoft so that all edge functions and background jobs work identically across providers.",
+      "title": "Nylas Health Check Edge Function",
+      "description": "As a developer, I want a nylas-health-check edge function that runs diagnostic API calls against a user's Nylas grant so that I can verify the integration works end-to-end.",
       "acceptanceCriteria": [
-        "_shared/workspaceClient.ts created with provider interface: google | microsoft",
-        "Exports createWorkspaceClient(provider, userId, supabase) factory function",
-        "Interface covers email, calendar, drive, contacts namespaces with typed methods",
-        "Provider-specific implementations in _shared/providers/google.ts and _shared/providers/microsoft.ts",
-        "Microsoft provider stubs return not_implemented errors",
+        "New edge function nylas-health-check/index.ts created",
+        "Accepts user_id param (admin mode) or uses JWT auth (user mode)",
+        "Runs sequential checks: grant exists, grant valid with Nylas API, list messages, create+delete test draft, verify labels/folders",
+        "Returns structured JSON with checks array (name, status, latency_ms, error) and overall status",
+        "Handles missing grant gracefully (skip for API checks)",
+        "Uses getCorsHeaders(req) from _shared/corsHelper.ts",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": false,
-      "notes": "Foundation story — all other stories depend on this interface",
-      "aiDevHubTaskId": "a36bbbdf-0f75-40da-b58d-3ccfe34d1d98"
+      "notes": "",
+      "aiDevHubSubtaskId": "87850d57-ae41-424b-850d-072001e86547"
     },
     {
       "id": "US-002",
-      "title": "Centralized Token Refresh",
-      "description": "As a user, I want my Google/Microsoft tokens to never expire mid-action so that API calls always succeed.",
+      "title": "Platform Admin Integration Test Page",
+      "description": "As a platform admin, I want a test page in the admin area where I can run Nylas health checks against any user so that I can diagnose integration issues.",
       "acceptanceCriteria": [
-        "_shared/tokenManager.ts created with getValidToken(provider, userId, supabase)",
-        "Checks expires_at with 5-minute buffer, refreshes if within buffer",
-        "Uses database row-level lock (FOR UPDATE SKIP LOCKED) to prevent race conditions",
-        "All 5 existing Google edge functions refactored to use getValidToken()",
-        "Duplicated refreshAccessToken() removed from all edge functions",
-        "Drive token refresh now works (was TODO)",
+        "New admin page or section accessible from Platform Admin menu",
+        "User search/select input to pick a user to test",
+        "Run Tests button calls nylas-health-check with selected user_id",
+        "Results displayed as checklist with pass/fail Lucide icons, latency, and error details",
+        "Shows user's current scope_tier, nylas_integrations status, and google_integrations status",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "aiDevHubSubtaskId": "2a5d7071-c90e-4375-8f24-6fde92fc65d5"
+    },
+    {
+      "id": "US-003",
+      "title": "User-Facing Connection Test on Integrations Page",
+      "description": "As a user, I want a Test My Connection button on the Integrations page so that I can verify my Gmail integration is working correctly.",
+      "acceptanceCriteria": [
+        "Test Connection button appears on Gmail integration card when connected",
+        "Calls nylas-health-check using user's own JWT (no user_id param)",
+        "Shows inline results: green checkmarks for pass, red X for failures",
+        "Failed checks show actionable message (e.g. Grant expired - please reconnect)",
+        "Button shows loading state during test execution",
+        "Only visible when user has active Google or Nylas integration",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "aiDevHubSubtaskId": "9b30b297-2c5f-455e-8fac-bb2bf2087c60"
+    },
+    {
+      "id": "US-004",
+      "title": "Nylas Message List & Get Verification",
+      "description": "DEDUPED — covered by workspace-v2 TSK-0534 (Nylas Routing in Centralized Client)",
+      "acceptanceCriteria": [
+        "action=list supports search_query_native parameter for search",
+        "action=list supports in parameter for folder filtering (folder ID for Google)",
+        "action=get returns full message body, attachments metadata, and thread context",
+        "Response mapping covers all Gmail v1 fields: id, threadId, snippet, from, to, cc, bcc, date, labels, read, starred, has_attachments, body",
+        "Pagination via next_cursor mapped to nextPageToken in response",
+        "Empty results return { messages: [], nextPageToken: null }",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Covered by workspace-v2 TSK-0534",
+      "aiDevHubTaskId": "7e6bfbcc-1d42-4067-a7ae-c66af43d536e",
+      "deduped": true
+    },
+    {
+      "id": "US-005",
+      "title": "Nylas Draft Create & Send Operations",
+      "description": "DEDUPED — covered by workspace-v2 TSK-0534 (Nylas Routing in Centralized Client)",
+      "acceptanceCriteria": [
+        "action=draft creates draft with subject, body, to, cc, bcc, reply_to",
+        "New action send-draft sends existing draft via POST /v3/grants/{grant_id}/drafts/{draft_id}",
+        "New action send sends message directly via POST /v3/grants/{grant_id}/messages/send",
+        "New action delete-draft removes draft via DELETE /v3/grants/{grant_id}/drafts/{draft_id}",
+        "Response format matches Gmail API v1 shape for frontend compatibility",
+        "Error responses include Nylas error details (status code, message)",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Covered by workspace-v2 TSK-0534",
+      "aiDevHubTaskId": "7e6bfbcc-1d42-4067-a7ae-c66af43d536e",
+      "deduped": true
+    },
+    {
+      "id": "US-006",
+      "title": "Google-Gmail Proxy Full Coverage",
+      "description": "DEDUPED — covered by workspace-v2 TSK-0534 (Nylas Routing in Centralized Client)",
+      "acceptanceCriteria": [
+        "Proxy routes for free-tier: list, get, draft, send-draft, delete-draft, search",
+        "action=sync returns clear not supported message with upgrade path",
+        "Proxy adds X-Provider: nylas response header for debugging",
+        "Failed Nylas proxy calls return original Nylas error, not generic 500",
+        "Expired/revoked grant returns 401 with grant_expired error code and reconnect URL",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Covered by workspace-v2 TSK-0534",
+      "aiDevHubTaskId": "7e6bfbcc-1d42-4067-a7ae-c66af43d536e",
+      "deduped": true
+    },
+    {
+      "id": "US-007",
+      "title": "Nylas Webhook Receiver Edge Function",
+      "description": "As a developer, I want a webhook receiver that processes Nylas grant lifecycle events so that stale grants are detected automatically.",
+      "acceptanceCriteria": [
+        "New edge function nylas-webhook/index.ts with verify_jwt = false in config.toml",
+        "Handles challenge verification: returns challenge param on GET with 200 OK",
+        "Validates x-nylas-signature HMAC-SHA256 header against webhook secret",
+        "grant.expired: sets nylas_integrations.is_active = false, resets scope_tier to free",
+        "grant.deleted: removes nylas_integrations row, resets scope_tier",
+        "grant.created: logs for observability (no-op if already stored)",
+        "Stores webhook secret in NYLAS_WEBHOOK_SECRET environment variable",
+        "Returns 200 OK for all processed events",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": false,
-      "notes": "Fixes pain points #1 (duplicated refresh) and #2 (Drive TODO)",
-      "aiDevHubTaskId": "6358172c-8911-4119-9256-9ec4eae7e8c7"
-    },
-    {
-      "id": "US-003",
-      "title": "Auto-Pagination Helper",
-      "description": "As a developer, I want pagination handled automatically so that sync operations fetch complete datasets.",
-      "acceptanceCriteria": [
-        "_shared/pagination.ts created with paginateAll(fetchPage, options) helper",
-        "Supports Google nextPageToken and Microsoft @odata.nextLink patterns",
-        "Configurable maxPages (default 50) and delay (default 100ms)",
-        "Gmail sync refactored to use paginateAll() — no longer capped at 10 messages",
-        "Calendar list refactored to use paginateAll()",
-        "Typecheck passes"
-      ],
-      "priority": 2,
-      "passes": false,
-      "notes": "Fixes pain point #4 (Gmail sync capped at 10)",
-      "aiDevHubTaskId": "a987851b-c6f9-4001-a783-f059359964ec"
-    },
-    {
-      "id": "US-004",
-      "title": "Typed Error Classification",
-      "description": "As an agent, I want typed error responses so I know whether to retry, re-authenticate, or escalate.",
-      "acceptanceCriteria": [
-        "_shared/workspaceErrors.ts with error classes: TokenExpiredError, InsufficientScopeError, RateLimitError, NotFoundError, ProviderError",
-        "Each error includes retryable, statusCode, provider fields",
-        "Edge functions return correct HTTP codes: 401/403/429/404/500",
-        "Error body: { error, code, retryable, provider }",
-        "All 5 Google edge functions refactored to use typed errors",
-        "Typecheck passes"
-      ],
-      "priority": 2,
-      "passes": false,
-      "notes": "Fixes pain point #5 (generic 400 for everything)",
-      "aiDevHubTaskId": "05d46a8a-08da-4c49-8a9d-e4d060c5f753"
-    },
-    {
-      "id": "US-005",
-      "title": "Nylas Routing in Centralized Client",
-      "description": "As a user on the free plan, I want Gmail read operations to automatically route through Nylas when connected, and paid users get expanded Nylas operations (send, reply, forward).",
-      "acceptanceCriteria": [
-        "WorkspaceClient.email.list() checks Nylas connection before routing",
-        "Nylas connected: routes read ops through Nylas API",
-        "Paid tier direct: routes through Gmail API",
-        "Free + no Nylas: returns upgrade_required error",
-        "Send, reply, forward expanded through Nylas for paid users",
-        "nylas-email edge function updated with send, reply, forward actions",
-        "Response format identical regardless of routing",
-        "Typecheck passes"
-      ],
-      "priority": 2,
-      "passes": false,
-      "notes": "Expands Nylas from read-only to full email operations",
-      "aiDevHubTaskId": "7e6bfbcc-1d42-4067-a7ae-c66af43d536e"
-    },
-    {
-      "id": "US-006",
-      "title": "Subscription Tier Gating",
-      "description": "As a product owner, I want features gated by subscription tier so Basic and Pro plans deliver different value, with free trial getting full Pro.",
-      "acceptanceCriteria": [
-        "_shared/tierGating.ts with getUserTier() and canAccess() functions",
-        "Feature matrix config for all gated features",
-        "Trial users get full Pro access",
-        "Sync frequency resolved per tier: Basic=4h, Pro=30min",
-        "History depth resolved per tier: Basic=90d, Pro=unlimited",
-        "Gating applied in background job dispatcher",
-        "Typecheck passes"
-      ],
-      "priority": 2,
-      "passes": false,
       "notes": "",
-      "aiDevHubTaskId": "e41f7f77-7be1-4da1-981b-494edab01039"
-    },
-    {
-      "id": "US-007",
-      "title": "Microsoft OAuth Flow",
-      "description": "As a user, I want to connect my Microsoft 365 account so that 60 can access my Outlook, Calendar, and OneDrive.",
-      "acceptanceCriteria": [
-        "microsoft_integrations table created via migration",
-        "microsoft_oauth_states table created via migration",
-        "oauth-initiate/providers/microsoft.ts created with PKCE flow",
-        "Scopes: Mail.ReadWrite, Mail.Send, Calendars.ReadWrite, Files.ReadWrite, Contacts.Read, User.Read, offline_access",
-        "microsoft-oauth-callback edge function created",
-        "Redirect URI allowlist matches Google pattern",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 3,
-      "passes": false,
-      "notes": "",
-      "aiDevHubTaskId": "4d976e08-c566-4686-a437-55f89886bf90"
+      "aiDevHubSubtaskId": "c2acde18-31b3-4c4c-87f8-c7c2ec59b448"
     },
     {
       "id": "US-008",
-      "title": "Microsoft Token Refresh",
-      "description": "As a user, I want my Microsoft tokens to refresh automatically using the centralized token manager.",
+      "title": "Grant Status Sync & User Notification",
+      "description": "As a user, I want to be notified when my Gmail integration loses access so that I can reconnect before it affects my workflow.",
       "acceptanceCriteria": [
-        "tokenManager.ts extended with Microsoft refresh logic",
-        "Same race-condition protection (row-level lock)",
-        "Same 5-minute expiry buffer",
-        "microsoft_integrations.access_token and expires_at updated on refresh",
-        "Typecheck passes"
+        "Expired grant reflects nylasConnected = false in integrationStore on next load",
+        "Integrations page shows Connection expired - Reconnect banner when is_active = false",
+        "GmailUpgradeGate respects is_active flag (shows gate even if row exists but inactive)",
+        "Toast notification on first load after expiration",
+        "Reconnecting via Nylas OAuth upserts existing row (user_id + provider)",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 3,
       "passes": false,
-      "notes": "Depends on US-002 (tokenManager)",
-      "aiDevHubTaskId": "c7af3322-1ccf-42e6-ae19-67d54fb7b749"
+      "notes": "",
+      "aiDevHubSubtaskId": "1b7dc421-8958-42c5-8e54-ae5b49e694b5"
     },
     {
       "id": "US-009",
-      "title": "Microsoft Email Provider (Outlook / Graph API)",
-      "description": "As a user with Microsoft connected, I want to send, read, and manage emails through Outlook so the agent works with my Microsoft account.",
+      "title": "Nylas Webhook Registration & Management",
+      "description": "As a developer, I want a setup script and admin UI to register/manage Nylas webhooks so that webhook configuration is reproducible and visible.",
       "acceptanceCriteria": [
-        "microsoft.ts email namespace implemented using Graph API",
-        "Actions: list, get, send, reply, forward, draft, archive, trash, star, mark-as-read",
-        "Response format mapped to same interface as Google",
-        "microsoft-email edge function created",
-        "Pagination uses Graph @odata.nextLink via paginateAll()",
+        "Script scripts/setup-nylas-webhook.ts registers webhook via POST /v3/webhooks with grant triggers",
+        "Script outputs webhook secret for environment variable storage",
+        "Script supports --dry-run flag",
+        "Platform Admin shows active webhook status (registered, failing, failed)",
+        "Admin can trigger Send Test Event from UI to validate webhook endpoint",
         "Typecheck passes"
       ],
-      "priority": 3,
+      "priority": 4,
       "passes": false,
-      "notes": "Depends on US-001, US-007",
-      "aiDevHubTaskId": "a13750d7-eece-4258-bdf7-262b33816765"
+      "notes": "",
+      "aiDevHubSubtaskId": "64fcd66c-ab14-4a56-b6af-2bcd58cb4386"
     },
     {
       "id": "US-010",
-      "title": "Microsoft Calendar Provider",
-      "description": "As a user with Microsoft connected, I want calendar events synced from Outlook Calendar so the agent can prep for meetings regardless of provider.",
+      "title": "Integration Status Dashboard in Platform Admin",
+      "description": "As a platform admin, I want an overview dashboard showing all users' Nylas integration health so that I can proactively identify issues.",
       "acceptanceCriteria": [
-        "microsoft.ts calendar namespace implemented using Graph API",
-        "Actions: list-events, create-event, update-event, delete-event, list-calendars, availability",
-        "Webhook subscriptions via Graph subscriptions endpoint",
-        "microsoft-calendar edge function created",
-        "Response format mapped to same interface as Google",
-        "Typecheck passes"
-      ],
-      "priority": 3,
-      "passes": false,
-      "notes": "Depends on US-001, US-007",
-      "aiDevHubTaskId": "239d3b79-db98-4184-9ddb-e0d39f59de0b"
-    },
-    {
-      "id": "US-011",
-      "title": "Microsoft Drive Provider (OneDrive)",
-      "description": "As a user with Microsoft connected, I want OneDrive access so proposals and documents can be stored and linked.",
-      "acceptanceCriteria": [
-        "microsoft.ts drive namespace implemented using Graph API",
-        "Actions: list-files, create-folder, upload-file, share-file, get-file, delete-file, search",
-        "microsoft-drive edge function created",
-        "Response format mapped to same interface as Google",
-        "Typecheck passes"
-      ],
-      "priority": 3,
-      "passes": false,
-      "notes": "Depends on US-001, US-007",
-      "aiDevHubTaskId": "a978b3c9-624d-4caf-92ce-62b7a0775911"
-    },
-    {
-      "id": "US-012",
-      "title": "Microsoft Integration UI",
-      "description": "As a user, I want to connect Microsoft 365 from the Integrations page with the same UX as Google.",
-      "acceptanceCriteria": [
-        "Microsoft card added to Integrations page with Outlook logo",
-        "Same status badges: active, limited, inactive, error",
-        "Connect/disconnect flow mirrors Google",
-        "integrationStore.ts extended with microsoft state",
-        "checkMicrosoftConnection() and connectMicrosoft() actions added",
-        "Service toggles for email, calendar, drive",
+        "Admin page shows table: user email, provider, grant status, scope_tier, last_verified_at",
+        "Filterable by status (active, expired, disconnected)",
+        "Test All button runs batched health checks with progress indicator",
+        "Summary stats: total connected, active, expired, never connected",
+        "Click user row navigates to individual test results",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 4,
-      "passes": false,
-      "notes": "Depends on US-007",
-      "aiDevHubTaskId": "71f96d01-fe3b-4af4-8199-1adc62dfe7f5"
-    },
-    {
-      "id": "US-013",
-      "title": "Background Job Dispatcher",
-      "description": "As a system, I want a central dispatcher that runs background jobs on schedule, respecting user working hours and subscription tiers.",
-      "acceptanceCriteria": [
-        "workspace-background-jobs edge function created",
-        "Accepts job_type parameter for all job types",
-        "Resolves user working hours from user_settings (default 8am-6pm)",
-        "Skips if outside working hours (except token_refresh, calendar_watch)",
-        "Checks subscription tier before tier-gated jobs",
-        "Processes users in batches of 50 within 60s timeout",
-        "Logs to background_job_logs table",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": false,
-      "notes": "Depends on US-006 (tier gating)",
-      "aiDevHubTaskId": "a3dcd766-a909-44b9-a62e-13f9ddf7df74"
-    },
-    {
-      "id": "US-014",
-      "title": "Background Job Scheduling Migration",
-      "description": "As a system, I want pg_cron jobs configured to trigger the dispatcher on correct schedules.",
-      "acceptanceCriteria": [
-        "background_job_logs table created via migration",
-        "pg_cron and pg_net extensions enabled",
-        "10 cron jobs created with correct frequencies per tier",
-        "Each cron calls workspace-background-jobs via pg_net",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": false,
-      "notes": "Depends on US-013",
-      "aiDevHubTaskId": "7ab105a3-8e8e-4b5e-a593-c3a7ea6441cb"
-    },
-    {
-      "id": "US-015",
-      "title": "Proactive Token Refresh Job",
-      "description": "As a user, I want my tokens refreshed before they expire so no API call ever fails due to an expired token.",
-      "acceptanceCriteria": [
-        "Queries integrations where expires_at < NOW() + 30 minutes",
-        "Refreshes using tokenManager.getValidToken()",
-        "Logs success/failure per user",
-        "Handles revoked tokens (marks needs_reauth, notifies user)",
-        "Runs every 10 minutes regardless of working hours",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": false,
-      "notes": "Fixes pain point #6. Depends on US-002, US-013",
-      "aiDevHubTaskId": "c7646389-2b55-4bf5-9a0f-e5a208278bef"
-    },
-    {
-      "id": "US-016",
-      "title": "Calendar Watch Auto-Renewal",
-      "description": "As a user, I want calendar watches auto-renewed so I never miss meeting notifications.",
-      "acceptanceCriteria": [
-        "calendar_watches table created via migration",
-        "Queries watches expiring within 48 hours",
-        "Renews Google watches via Calendar API",
-        "Renews Microsoft subscriptions via Graph API",
-        "Updates expiration in calendar_watches table",
-        "Runs daily at 3am UTC regardless of working hours",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": false,
-      "notes": "Fixes pain point #3. Depends on US-013",
-      "aiDevHubTaskId": "d1686e28-ad7e-416a-9f66-34fe668b7f32"
-    },
-    {
-      "id": "US-017",
-      "title": "Email Sync V2 (Full Paginated)",
-      "description": "As a user, I want my full email history synced so the agent has complete context on every contact relationship.",
-      "acceptanceCriteria": [
-        "Email sync uses paginateAll() for complete inbox traversal",
-        "Stores sync cursor (historyId for Google, deltaLink for Microsoft)",
-        "First sync: 90 days (Basic) or full history (Pro)",
-        "Subsequent syncs: incremental from last cursor",
-        "email_messages table created via migration with RLS",
-        "Schema: id, user_id, provider, message_id, thread_id, from/to/cc, subject, snippet, labels, read, starred, has_attachments, received_at, classification JSONB",
-        "Pro: every 30min. Basic: every 4h",
-        "Typecheck passes"
-      ],
       "priority": 5,
       "passes": false,
-      "notes": "Depends on US-003, US-006",
-      "aiDevHubTaskId": "420aca25-5ea2-49b1-a86b-8f55d4684384"
-    },
-    {
-      "id": "US-018",
-      "title": "Email Classification Pipeline",
-      "description": "As a Pro user, I want incoming emails automatically classified so the agent surfaces buying signals, objections, and urgent items.",
-      "acceptanceCriteria": [
-        "email-classify edge function created",
-        "Uses Haiku 4.5 (claude-haiku-4-5-20251001) with prompt caching",
-        "Classifies unprocessed emails where classification IS NULL",
-        "Schema: intent, sentiment, urgency, deal_relevance, tags, summary",
-        "Intents: buying_signal, objection, question, scheduling, follow_up_needed, ooo_auto_reply, newsletter, notification, personal, other",
-        "Results stored in email_messages.classification JSONB",
-        "Links to contacts via from_email, links to deals via contact-deal",
-        "Pro only, hourly during working hours",
-        "Typecheck passes"
-      ],
-      "priority": 5,
-      "passes": false,
-      "notes": "Depends on US-017. The killer Pro feature.",
-      "aiDevHubTaskId": "6f905d64-7f5c-49b2-92a8-c03df0b14339"
-    },
-    {
-      "id": "US-019",
-      "title": "Reply Gap Detection",
-      "description": "As a user, I want to know which sent emails haven't received a reply so the agent can draft follow-ups proactively.",
-      "acceptanceCriteria": [
-        "reply-gap-detect edge function created",
-        "Queries sent emails, checks for reply in same thread",
-        "Gap windows: 48h (Pro), 72h (Basic+Pro), 7d (Basic+Pro)",
-        "reply_gaps table created via migration",
-        "Urgency scoring: 48h on active deal = high, 72h = medium, 7d = low",
-        "Clears gap when reply detected",
-        "Pro: every 4h. Basic: every 12h",
-        "Typecheck passes"
-      ],
-      "priority": 5,
-      "passes": false,
-      "notes": "Depends on US-017",
-      "aiDevHubTaskId": "1a5a2993-b812-44f9-a2e0-c3f60785be48"
-    },
-    {
-      "id": "US-020",
-      "title": "Sent-vs-Received Ratio Tracking",
-      "description": "As a Pro user, I want per-contact communication health metrics so the agent can flag one-directional relationships.",
-      "acceptanceCriteria": [
-        "contact_communication_health table created via migration",
-        "Schema: user_id, contact_email, provider, sent/received counts, ratio, last sent/received, avg response time, streak type",
-        "Daily rollup from email_messages",
-        "Streak detection: 3+ consecutive sends without reply",
-        "Links to contact record if exists",
-        "Pro only, daily at 2am UTC",
-        "Typecheck passes"
-      ],
-      "priority": 5,
-      "passes": false,
-      "notes": "Depends on US-017",
-      "aiDevHubTaskId": "bbfba13d-6aba-4682-a853-7a8209cd0ad2"
-    },
-    {
-      "id": "US-021",
-      "title": "Calendar Attendee Enrichment",
-      "description": "As a Pro user, I want meeting attendees automatically enriched with company and role data for comprehensive meeting briefs.",
-      "acceptanceCriteria": [
-        "attendee-enrich edge function created",
-        "Triggers on new calendar events via sync or webhook",
-        "Creates contact records for unknown attendee emails",
-        "Runs lead enrichment pipeline on new contacts",
-        "Stores: name, title, company, LinkedIn URL, company size, industry",
-        "Works for both Google and Microsoft calendar events",
-        "Pro only, every 15 min during working hours",
-        "Typecheck passes"
-      ],
-      "priority": 6,
-      "passes": false,
-      "notes": "Depends on US-016. Integrates with existing lead enrichment.",
-      "aiDevHubTaskId": "cd803522-556f-48c6-a246-d3a11547c7e5"
-    },
-    {
-      "id": "US-022",
-      "title": "Pre-Meeting Research & Slack Alert",
-      "description": "As a Pro user, I want a Slack notification 2 hours before every meeting with a full research brief.",
-      "acceptanceCriteria": [
-        "Extends attendee enrichment to trigger when meeting is within 2 hours",
-        "Brief includes: attendee profiles, company intel, deal status, last email, open actions",
-        "Formatted as Slack Block Kit message matching existing pattern",
-        "Sent to user's Slack DM",
-        "Quick-action buttons: View Deal, Draft Agenda, Reschedule",
-        "Dedup via meeting_prep_sent flag (triggers once per meeting)",
-        "Works for both Google and Microsoft events",
-        "Pro only",
-        "Typecheck passes"
-      ],
-      "priority": 6,
-      "passes": false,
-      "notes": "Depends on US-021. The Slack alert users already love — now automatic for every meeting.",
-      "aiDevHubTaskId": "55935ad4-b837-4670-917d-9eac8da0b99c"
-    },
-    {
-      "id": "US-023",
-      "title": "Proposal Storage to User's Drive",
-      "description": "As a user, I want proposals stored in my Google Drive or OneDrive instead of S3.",
-      "acceptanceCriteria": [
-        "Proposal pipeline uploads to user's Drive/OneDrive first",
-        "Creates '60 Proposals' folder if not exists",
-        "File named: {Company} - Proposal - {Date}.pdf",
-        "Auto-shares with proposal recipients",
-        "Drive file URL stored in proposals table",
-        "Falls back to S3 if no Drive/OneDrive connected",
-        "Works for both Google Drive and OneDrive",
-        "Typecheck passes"
-      ],
-      "priority": 6,
-      "passes": false,
-      "notes": "Depends on US-001 (Drive provider)",
-      "aiDevHubTaskId": "ccc68b83-9401-4991-92b3-1ebc2a1d3f5a"
-    },
-    {
-      "id": "US-024",
-      "title": "Drive Document Linking",
-      "description": "As a Pro user, I want recently shared documents auto-linked to deals so the agent can reference them.",
-      "acceptanceCriteria": [
-        "deal_documents table created via migration",
-        "Background job scans recent Drive/OneDrive activity (last 2 hours)",
-        "Matches docs to deals by: recipient email, file name contains company, created during meeting",
-        "Stores in deal_documents table",
-        "Agent can query documents shared with a contact/company",
-        "Pro only, every 2 hours during working hours",
-        "Typecheck passes"
-      ],
-      "priority": 6,
-      "passes": false,
-      "notes": "Depends on US-017, US-023",
-      "aiDevHubTaskId": "39b41059-013c-4d7b-93aa-3b142db7a684"
-    },
-    {
-      "id": "US-025",
-      "title": "Integration Dashboard Updates",
-      "description": "As a user, I want the Integrations page to show both Google and Microsoft with clear tier-based feature visibility.",
-      "acceptanceCriteria": [
-        "Microsoft 365 card added alongside Google card",
-        "Both cards show per-service status (email, calendar, drive)",
-        "Pro features show lock icon with Upgrade to Pro for Basic users",
-        "Background job status: Last synced X min ago, Classification: N new insights",
-        "Communication health summary: N contacts need follow-up",
-        "Connected provider count shown",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 7,
-      "passes": false,
-      "notes": "Depends on US-012",
-      "aiDevHubTaskId": "c7c138b6-4ea9-4781-9457-55a5b926a115"
-    },
-    {
-      "id": "US-026",
-      "title": "Email Intelligence UI",
-      "description": "As a user, I want classified emails surfaced with intent tags, urgency indicators, and reply gap warnings.",
-      "acceptanceCriteria": [
-        "Email list shows classification badges (buying signal, objection, etc.)",
-        "Urgency indicator (red/amber/green dot)",
-        "Filter by classification intent",
-        "Reply gap warnings inline with draft follow-up CTA",
-        "Communication health badge on contact cards",
-        "Basic users see Upgrade to Pro placeholder",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 7,
-      "passes": false,
-      "notes": "Depends on US-018, US-019, US-020",
-      "aiDevHubTaskId": "f21aa2d7-89c7-4d71-a669-f7dabf0fb92a"
-    },
-    {
-      "id": "US-027",
-      "title": "Deprecate Legacy Google Functions",
-      "description": "As a developer, I want legacy inline token refresh and per-function pagination removed.",
-      "acceptanceCriteria": [
-        "All inline refreshAccessToken() removed from 5 edge functions",
-        "All manual pagination loops replaced with paginateAll()",
-        "All generic catch return 400 replaced with typed errors",
-        "Gmail sync 10-message cap removed",
-        "No functional behavior change — existing API contracts preserved",
-        "Typecheck passes"
-      ],
-      "priority": 7,
-      "passes": false,
-      "notes": "Final cleanup — depends on US-002, US-003, US-004",
-      "aiDevHubTaskId": "cf8dee18-7a72-4e41-8e24-9f5256407e54"
-    },
-    {
-      "id": "US-028",
-      "title": "Deprecate S3-Only Proposal Storage",
-      "description": "As a developer, I want proposals to default to Drive/OneDrive with S3 as fallback only.",
-      "acceptanceCriteria": [
-        "Proposal generation checks Drive/OneDrive first",
-        "Connected: uploads to 60 Proposals folder",
-        "Not connected: falls back to S3",
-        "proposals table updated with storage_provider and drive_file_id columns",
-        "Existing S3 URLs continue to work",
-        "Typecheck passes"
-      ],
-      "priority": 7,
-      "passes": false,
-      "notes": "Depends on US-023",
-      "aiDevHubTaskId": "2258d702-71b3-489e-a365-c8185e4d68a3"
+      "notes": "",
+      "aiDevHubSubtaskId": "dc1cab81-f149-4df0-b2b8-2ceba59addf7"
     }
   ]
 }

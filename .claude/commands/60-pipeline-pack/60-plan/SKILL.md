@@ -1,40 +1,54 @@
 ---
 name: 60-plan
-invoke: /60/plan
-description: Execution planning — story breakdown, dependency graphs, parallel groups, TDD test stubs
+invoke: /60-plan
+description: Generate or edit execution plans from requirements and discovery
 ---
 
 # 60/plan — Generate Execution Plan
-
-**Phase 3 of `/60/ship` pipeline. Also works standalone.**
 
 **Purpose**: Create or extend the execution plan from requirements. Handles both new projects and features within existing projects.
 
 ---
 
-## PIPELINE INTEGRATION
+## Cross-Platform Compatibility
 
-When called from `/60/ship`:
-1. Read `.sixty/pipeline.json` for DEFINE phase output (PRD, stories outline)
-2. Refine stories: add dependencies, acceptance criteria, test stubs (TDD), parallel groups
-3. Run Dependency Forecaster agent to optimize execution order
-4. Run Test Oracle agent to generate test stubs for each story
-5. Score complexity and compose team (if not already done in DISCOVER)
-6. Write finalized stories to `pipeline.json.stories[]`
-7. Set `pipeline.json.phaseGates.plan.status = "complete"`
+- Works on **Windows**, **macOS**, and **Linux**
+- All file paths use forward slashes (`/`) in plan.json and output files
+- Shell commands run via Claude's Bash tool (bash on all platforms)
+- Uses Claude's built-in tools (Glob, Grep, Read) for codebase analysis
 
-When called standalone:
-1. Falls back to `.sixty/plan.json` or legacy `prd.json` behavior
-2. If `.sixty/pipeline.json` exists, also update it
+---
 
-### TDD Integration (Test-Driven Development)
+## CRITICAL: AUTO-CHAIN RULE
 
-During PLAN phase, generate test stubs for each story:
-- Read acceptance criteria
-- Create failing test files that define "done"
-- Store test file paths in `story.testFiles[]`
-- Tests are created BEFORE implementation code
-- BUILD phase workers must make these tests pass
+**When invoked from 60/consult, after generating the plan you MUST immediately invoke `/60-run` using the Skill tool. DO NOT tell the user to run it — YOU run it. DO NOT end with "next steps" or "you can now run..." — just invoke it.**
+
+---
+
+## Step 0: Model Profile Selection (FIRST STEP)
+
+**If invoked as part of a chain** (from 60/consult), inherit the already-selected profile and skip this prompt. Pass the profile forward to 60/run.
+
+**If invoked standalone**, ask:
+
+[Uses AskUserQuestion tool:]
+
+Question: "Select your model profile for planning:"
+Options:
+  - Economy — Sonnet leader, Haiku agents. Quick story generation.
+  - Balanced (Recommended) — Opus leader, Sonnet agents. Thorough planning.
+  - Thorough — Opus leader, Opus agents. Deep analysis and optimal sizing.
+
+Skip with `--profile <name>`.
+
+### Model Assignments by Profile
+
+| Agent Role | Economy | Balanced | Thorough |
+|------------|---------|----------|----------|
+| Leader/Orchestrator | Sonnet | Opus | Opus |
+| Story Generator | Haiku | Sonnet | Opus |
+| Dependency Analyzer | Haiku | Sonnet | Opus |
+| Size Validator | Haiku | Sonnet | Opus |
 
 ---
 
@@ -45,7 +59,7 @@ During PLAN phase, generate test stubs for each story:
 | New Project | `60/plan --project "name" --template <url>` | Starting from scratch |
 | Add Feature | `60/plan --feature "name"` | Adding to existing project |
 | Quick Feature | `60/plan --feature "name" --describe "..."` | Small feature, no PRD file |
-| From Discover | `/60/ship --resume` (auto-flows from DISCOVER) | After discovery session |
+| From Consult | `60/consult "..." --output plan` | After discovery session |
 | Edit Existing | `60/plan --edit` | Modify current plan |
 | Interactive | `60/plan` | Prompts for missing info |
 
@@ -170,7 +184,7 @@ Dependency analysis complete:
   BILL-001 (schema) → BILL-002, BILL-003
   BILL-002 (API) → BILL-004, BILL-005
   BILL-003 (API) → BILL-004, BILL-005
-
+  
 Parallel opportunities:
   • BILL-002 + BILL-003 (after BILL-001)
   • BILL-004 + BILL-005 (after BILL-002, BILL-003)
@@ -307,7 +321,7 @@ Apply story sizing rules:
 3. **Analyze requirements** (from PRD or description)
 4. **Generate stories** with proper dependencies
 5. **Merge into plan** maintaining dependency order
-6. **Sync with Dev Hub** (see Dev Hub Integration below)
+6. **Sync with Dev Hub** (if configured)
 
 ### Feature Story IDs
 
@@ -341,7 +355,7 @@ This allows features to be developed in parallel by different team members.
     },
     "createdAt": "2025-01-14T10:00:00Z"
   },
-
+  
   "features": [
     {
       "id": "auth",
@@ -359,9 +373,7 @@ This allows features to be developed in parallel by different team members.
       "createdAt": "2025-01-15T09:00:00Z"
     }
   ],
-
-  "aiDevHubProjectId": null,
-
+  
   "stories": [
     {
       "id": "AUTH-001",
@@ -370,7 +382,7 @@ This allows features to be developed in parallel by different team members.
       "type": "schema",
       "status": "complete",
       "priority": 1,
-
+      
       "dependencies": {
         "stories": [],
         "files": [],
@@ -378,23 +390,23 @@ This allows features to be developed in parallel by different team members.
       },
       "blocks": ["AUTH-002", "AUTH-003"],
       "parallelWith": [],
-
+      
       "acceptance": [
         "users table created with id, email, created_at",
         "RLS policies for user access",
         "Migration runs without errors"
       ],
-
+      
       "estimatedMinutes": 15,
       "actualMinutes": 12,
-
+      
       "files": [
         "supabase/migrations/001_users.sql"
       ],
-
+      
       "designRef": null,
-      "aiDevHubTaskId": null,
-
+      "ticketId": "TICK-101",
+      
       "startedAt": "2025-01-14T10:05:00Z",
       "completedAt": "2025-01-14T10:17:00Z"
     },
@@ -405,7 +417,7 @@ This allows features to be developed in parallel by different team members.
       "type": "schema",
       "status": "pending",
       "priority": 10,
-
+      
       "dependencies": {
         "stories": ["AUTH-001"],
         "files": [],
@@ -413,28 +425,28 @@ This allows features to be developed in parallel by different team members.
       },
       "blocks": ["DARK-002"],
       "parallelWith": [],
-
+      
       "acceptance": [
         "user_preferences table with user_id, theme columns",
         "Foreign key to users table",
         "RLS policies matching user patterns"
       ],
-
+      
       "estimatedMinutes": 15,
       "actualMinutes": null,
-
+      
       "files": [
         "supabase/migrations/010_preferences.sql"
       ],
-
+      
       "designRef": null,
-      "aiDevHubTaskId": null,
-
+      "ticketId": "TICK-110",
+      
       "startedAt": null,
       "completedAt": null
     }
   ],
-
+  
   "execution": {
     "totalStories": 15,
     "completedStories": 8,
@@ -452,25 +464,27 @@ This allows features to be developed in parallel by different team members.
     "name": "MyApp",
     "createdAt": "2025-01-14T10:00:00Z"
   },
-
+  
   "devHub": {
-    "aiDevHubProjectId": null,
+    "projectId": "proj_abc123",
+    "apiUrl": "https://devhub.api",
     "syncEnabled": true,
-    "autoCreateTickets": true
+    "autoCreateTickets": true,
+    "ticketPrefix": "TICK"
   },
-
+  
   "qualityGates": {
     "lint": { "enabled": true, "changedOnly": true },
     "test": { "enabled": true, "changedOnly": true },
     "typecheck": { "enabled": true, "finalOnly": true },
     "build": { "enabled": false }
   },
-
+  
   "parallel": {
     "enabled": true,
     "maxConcurrent": 2
   },
-
+  
   "notifications": {
     "slack": {
       "enabled": false,
@@ -565,7 +579,7 @@ Features can depend on each other:
   "id": "DASH-001",
   "feature": "dashboard",
   "dependencies": {
-    "stories": ["AUTH-002"],
+    "stories": ["AUTH-002"],  // Depends on auth feature
     "files": [],
     "schema": ["users"]
   }
@@ -583,33 +597,33 @@ Before adding any story, validate:
 ```javascript
 function validateStorySize(story) {
   const errors = [];
-
+  
   // File count
   if (story.files.length > 20) {
     errors.push(`Too many files (${story.files.length}). Max: 20`);
   }
-
+  
   // Time estimate
   if (story.estimatedMinutes > 30) {
     errors.push(`Estimate too high (${story.estimatedMinutes}m). Max: 30m`);
   }
-
+  
   // Acceptance criteria count
   if (story.acceptance.length > 5) {
     errors.push(`Too many acceptance criteria (${story.acceptance.length}). Max: 5`);
   }
-
+  
   // Single responsibility
   if (story.title.includes(' and ')) {
     errors.push('Title contains "and" - consider splitting');
   }
-
+  
   // Type mixing
   const types = detectTypes(story);
   if (types.length > 1) {
     errors.push(`Mixed types (${types.join(', ')}). Split by type.`);
   }
-
+  
   return { valid: errors.length === 0, errors };
 }
 ```
@@ -622,26 +636,26 @@ function shouldSplit(story) {
   if (story.title.includes(' and ')) {
     return { split: true, reason: 'Multiple responsibilities' };
   }
-
+  
   // Rule 2: Too many acceptance criteria
   if (story.acceptance.length > 5) {
     return { split: true, reason: 'Too many acceptance criteria' };
   }
-
+  
   // Rule 3: Mixed schema + frontend
-  if (story.files.some(f => f.includes('migration')) &&
+  if (story.files.some(f => f.includes('migration')) && 
       story.files.some(f => f.includes('components'))) {
     return { split: true, reason: 'Schema and frontend should be separate' };
   }
-
+  
   // Rule 4: Multiple API endpoints
-  const endpoints = story.acceptance.filter(a =>
+  const endpoints = story.acceptance.filter(a => 
     a.match(/endpoint|route|api/i)
   );
   if (endpoints.length > 1) {
     return { split: true, reason: 'One story per endpoint' };
   }
-
+  
   return { split: false };
 }
 ```
@@ -650,15 +664,45 @@ function shouldSplit(story) {
 
 ## Dev Hub Integration
 
-Dev Hub sync is handled by `/60/sync`. See `.claude/commands/60/sync.md` for the full protocol.
+### Initial Sync
 
-**Key rules:**
-- ONE parent ticket per PRD/plan, stories become subtasks
-- Always deduplicate against existing tasks before creating
-- Write human-readable titles (no `[slug] US-XXX:` prefixes)
-- All Dev Hub operations are **non-blocking** — log warnings, never stop execution
+When creating a plan, optionally sync with Dev Hub:
 
-After plan generation, run `/60/sync` (or let `/60/ship` auto-advance to SYNC phase).
+```bash
+60/plan --feature "dark-mode" --sync
+```
+
+Creates tickets for each story:
+
+```javascript
+for (const story of newStories) {
+  const ticket = await devHub.createTicket({
+    projectId: config.devHub.projectId,
+    title: `[${story.id}] ${story.title}`,
+    type: 'task',
+    status: 'todo',
+    labels: [story.type, story.feature],
+    acceptance_criteria: story.acceptance,
+    estimate_minutes: story.estimatedMinutes,
+    metadata: {
+      storyId: story.id,
+      feature: story.feature,
+      dependencies: story.dependencies.stories
+    }
+  });
+  
+  story.ticketId = ticket.id;
+}
+```
+
+### Environment Setup
+
+```bash
+# .env
+DEVHUB_PROJECT_ID=proj_abc123
+DEVHUB_API_URL=https://devhub.api
+DEVHUB_API_TOKEN=your_token_here
+```
 
 ---
 
@@ -732,7 +776,14 @@ After `60/plan` completes:
    .sixty/progress.md (initialized)
    .sixty/config.json (updated)
 
-🎫 Dev Hub: Run `/dev-hub-sync` to create parent ticket + subtasks
+🎫 Dev Hub: 7 tickets created
+   TICK-110: Add user_preferences table
+   TICK-111: Create preferences edge function
+   TICK-112: Build ThemeContext provider
+   TICK-113: Add toggle to settings
+   TICK-114: Hydrate theme on auth load
+   TICK-115: Add system preference detection
+   TICK-116: Write theme tests
 
 📊 Execution Plan:
    Feature: dark-mode
@@ -755,8 +806,7 @@ After `60/plan` completes:
 | Design parse fails | Continue without design refs |
 | Story too large | Auto-split or prompt user |
 | Dependency cycle | Report and ask for resolution |
-| Dev Hub MCP unavailable | Continue without sync, log warning |
-| Dev Hub sync fails | Log warning, continue — run `/dev-hub-sync` manually later |
+| Dev Hub connection fails | Continue without sync, retry later |
 
 ---
 

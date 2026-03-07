@@ -6,6 +6,7 @@ The `/60/*` command suite is an end-to-end project pipeline for Claude Code. One
 
 | Command | Phase | Purpose |
 |---------|-------|---------|
+| `/60/go` | **Entry point** | Smart router — analyzes your input and picks the right command automatically |
 | `/60/ship` | Orchestrator | End-to-end pipeline — auto-detects input, runs all phases, single human gate at DELIVER |
 | `/60/launch` | 0 | New project setup — template clone, Railway, auth, secrets, CLAUDE.md generation |
 | `/60/discover` | 1 | Research-first requirements discovery — deploys 5 parallel agents to analyze codebase, find patterns, scan risks, and size scope |
@@ -16,6 +17,7 @@ The `/60/*` command suite is an end-to-end project pipeline for Claude Code. One
 | `/60/deliver` | 6 | Quality gate — regression testing, docs generation, PR creation, staging deploy |
 | `/60/housekeeping` | 7 | Proactive cleanup — archive orphans, docs audit, maintenance proposals, Dev Bot queue |
 | `/60/hooks` | Utility | Configure automation hooks and safety rails — checkpoints, error recovery, notifications, presets |
+| `/60/quick` | Utility | Fast-path for bug fixes, small changes, ad-hoc tasks — skips discovery, PRD, and planning |
 | `/60/audit` | Utility | Full codebase and database audit — 5 specialist agents, leader review, user approval before changes |
 
 ## Pipeline Flow
@@ -80,6 +82,33 @@ Stories must be completable in one iteration:
 - Max 5 acceptance criteria
 - Single responsibility (no "and" in the title)
 
+### Learning Loop
+
+After every DELIVER phase, learnings are extracted to `.sixty/learnings.json`:
+- Estimate accuracy by story type (calibrates future estimates)
+- Common gate failures and their fixes
+- Recurring heartbeat observations
+- Stories that needed splitting
+- Blockers and their resolution times
+
+Future runs read this file to calibrate estimates, pre-load risk patterns, and warn about common blockers.
+
+### Brief Improvement Suggestions
+
+During DISCOVER, after research agents return but before gap questions, the pipeline offers 5 proactive improvements to the brief. Presented as numbered multiple-choice (e.g. "1, 3, 5" to select, "0" to skip). Categories: SCOPE, UX, SECURITY, PERF, EDGE, COMPAT, OPS, DATA.
+
+### Preview Mode
+
+`/60/ship --preview` runs DISCOVER + DEFINE + PLAN but stops before BUILD. Shows team, stories, estimates, and risks. Choose to proceed, edit the plan, or cancel.
+
+### Cross-Run Awareness
+
+At PLAN phase, the pipeline checks for other active runs (git branches, Dev Hub jobs) and flags file/migration/schema conflicts before they cause merge issues.
+
+### Smart Routing with Confidence
+
+`/60/go` scores routing confidence. High confidence (80%+) routes silently. Low confidence shows top 2 options with reasoning and lets you pick.
+
 ## Standalone Usage
 
 Every command works independently outside of `/60/ship`:
@@ -94,6 +123,7 @@ Every command works independently outside of `/60/ship`:
 /60/housekeeping --docs-only          # Docs audit only
 /60/hooks --init                     # Setup automation hooks
 /60/hooks --init --full-auto         # Full automation preset
+/60/quick "Fix date format on invoices" # Fast-path, no pipeline
 /60/audit                            # Full codebase audit
 /60/audit --focus database           # Database-only audit
 ```

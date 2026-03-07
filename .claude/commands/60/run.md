@@ -185,6 +185,31 @@ CHANGED=$(git diff --name-only HEAD -- '*.ts' '*.tsx')
 npx vitest run --changed HEAD --passWithNoTests
 ```
 
+### 3a. Commit (Default Behavior)
+
+**Per-story atomic commits are the default.** After quality gates pass, immediately commit:
+
+```bash
+git add -A
+git commit -m "<type>(<story-id>): <story title>"
+# Example: feat(DARK-003): Add theme provider with system preference detection
+```
+
+Commit type mapping:
+- `schema` -> `feat`
+- `types` -> `feat`
+- `service` -> `feat`
+- `component` -> `feat`
+- `api` -> `feat`
+- `integration` -> `feat`
+- `fix` -> `fix`
+- `docs` -> `docs`
+- `test` -> `test`
+
+This enables `git bisect` to find exact failing stories and independent reverts per story.
+
+**Opt out**: Use `--no-commit` flag to skip auto-commits (e.g., when you want a single squash commit at the end).
+
 ### 4. Update Tracking
 
 **You MUST update ALL of the following after each story completes:**
@@ -391,6 +416,50 @@ If a story is blocked:
 
 ---
 
+## Story Rollback
+
+Use `--revert <story-id>` to surgically undo a completed story.
+
+### Command
+
+```bash
+60/run --revert DARK-003
+```
+
+### Rollback Flow
+
+```
+1. Find the commit by conventional message pattern:
+   git log --oneline --grep="(DARK-003):" -1
+
+2. Run git revert:
+   git revert <sha> --no-edit
+
+3. Update plan.json:
+   - Set story status to "reverted"
+   - Set completedAt to null
+   - Decrement execution.completedStories
+
+4. Check downstream impact:
+   - Find all stories where dependencies.stories includes "DARK-003"
+   - Set their status to "blocked" if they were pending/in_progress
+   - Report: "Reverted DARK-003. DARK-005, DARK-006 now blocked (dependency)."
+
+5. Update progress.md:
+   ### <timestamp> -- REVERTED DARK-003
+   **Reason**: <from user or auto-detected>
+   **Impact**: N downstream stories blocked
+```
+
+### Rules
+
+- Only reverts stories with atomic commits (the default behavior)
+- If the commit can't be found (squashed or `--no-commit` was used), report and suggest manual fix
+- If the revert creates merge conflicts, report them instead of force-resolving
+- After revert, re-run quality gates on the resulting state
+
+---
+
 ## Error Handling
 
 | Error | Action |
@@ -440,4 +509,5 @@ Files created/modified:
 60/run --all                  # Execute ALL stories (no stopping!)
 60/run --story SKILL-003      # Execute specific story
 60/run --feature skills-remap # All stories in feature
+60/run --revert SKILL-003     # Surgically undo a story
 ```
