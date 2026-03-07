@@ -44,7 +44,7 @@ export interface GeneratePhotoResponse {
 }
 
 export interface GenerationStatus {
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'completed' | 'success' | 'failed';
   image_key_list?: string[];
   image_url_list?: string[];
   error?: string;
@@ -91,6 +91,7 @@ export interface VideoCharacter {
   type: 'avatar' | 'talking_photo';
   avatar_id?: string;
   talking_photo_id?: string;
+  avatar_version?: 'v3' | 'v4';
   scale?: number;
   avatar_style?: 'circle' | 'closeUp' | 'normal';
   offset?: { x: number; y: number };
@@ -177,6 +178,10 @@ export class HeyGenClient {
     this.apiKey = apiKey;
   }
 
+  getApiKey(): string {
+    return this.apiKey;
+  }
+
   // -- Helpers --
 
   private async request<T>(
@@ -245,34 +250,39 @@ export class HeyGenClient {
   }
 
   /**
-   * Upload a user photo as a "talking photo" — no LORA training needed.
-   * Fetches the image from a URL and uploads as multipart/form-data.
+   * Upload a user photo as a HeyGen asset (raw PNG body to upload.heygen.com).
+   * Returns image_key for use in photo avatar pipeline (group → train).
    */
-  async uploadTalkingPhoto(imageUrl: string): Promise<{ talking_photo_id: string }> {
+  async uploadPhoto(imageUrl: string): Promise<{ image_key: string; asset_url: string }> {
     // Fetch the image
     const imgRes = await fetch(imageUrl);
     if (!imgRes.ok) throw { status: imgRes.status, message: 'Failed to fetch image from URL' } as HeyGenError;
+
     const imageBlob = await imgRes.blob();
+    const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
 
-    const formData = new FormData();
-    formData.append('file', imageBlob, 'avatar.jpg');
-
-    const res = await fetch(`${HEYGEN_BASE}/v1/talking_photo`, {
+    const res = await fetch('https://upload.heygen.com/v1/asset', {
       method: 'POST',
-      headers: { 'x-api-key': this.apiKey },
-      body: formData,
+      headers: {
+        'x-api-key': this.apiKey,
+        'Content-Type': contentType,
+      },
+      body: imageBlob,
     });
 
     const json = await res.json();
-    if (!res.ok || json.error) {
+    if (json.code !== 100 && (!res.ok || json.error)) {
       throw {
         status: res.status,
-        message: json.error?.message || json.message || 'Failed to upload talking photo',
-        code: json.error?.code,
+        message: json.message || json.error?.message || 'Failed to upload photo to HeyGen',
+        code: json.error?.code || String(json.code),
       } as HeyGenError;
     }
 
-    return json.data ?? json;
+    return {
+      image_key: json.data.image_key,
+      asset_url: json.data.url,
+    };
   }
 
   async getGenerationStatus(generationId: string): Promise<GenerationStatus> {
@@ -283,9 +293,10 @@ export class HeyGenClient {
     return this.request('POST', '/v2/photo_avatar/avatar_group/create', params);
   }
 
-  async addToGroup(groupId: string, imageKeys: string[], generationId: string): Promise<void> {
+  async addToGroup(groupId: string, name: string, imageKeys: string[], generationId: string): Promise<void> {
     await this.request('POST', '/v2/photo_avatar/avatar_group/add', {
       group_id: groupId,
+      name,
       image_keys: imageKeys,
       generation_id: generationId,
     });
@@ -309,6 +320,49 @@ export class HeyGenClient {
 
   async getAvatarDetails(avatarId: string): Promise<HeyGenAvatar> {
     return this.request('GET', `/v2/photo_avatar/${avatarId}`);
+  }
+
+  // -- Digital Twin (Instant Avatar) --
+
+  async createDigitalTwin(params: {
+    training_footage_url: string;
+    video_consent_url: string;
+    avatar_name: string;
+  }): Promise<{ avatar_id: string }> {
+    return this.request('POST', '/v2/video_avatar', params);
+  }
+
+  async getDigitalTwinStatus(avatarId: string): Promise<{
+    status: string;
+    avatar_id: string;
+  }> {
+    return this.request('GET', `/v2/video_avatar/${avatarId}`);
+  }
+
+  async listAvatarGroups(): Promise<{
+    avatar_group_list: Array<{
+      id: string;
+      name: string;
+      group_type: string;
+      train_status: string | null;
+      num_looks: number;
+      default_voice_id: string | null;
+      preview_image: string;
+      created_at: number;
+    }>;
+  }> {
+    return this.request('GET', '/v2/avatar_group.list');
+  }
+
+  async listGroupAvatars(groupId: string): Promise<{
+    avatar_list: Array<{
+      avatar_id: string;
+      avatar_name: string;
+      preview_image_url: string;
+      preview_video_url: string;
+    }>;
+  }> {
+    return this.request('GET', `/v2/avatar_group/${groupId}/avatars`);
   }
 
   // -- Voices --

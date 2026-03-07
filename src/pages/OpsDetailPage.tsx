@@ -43,6 +43,7 @@ import { EditEnrichmentModal } from '@/components/ops/EditEnrichmentModal';
 import { EditColumnSettingsModal } from '@/components/ops/EditColumnSettingsModal';
 import { EditApolloSettingsModal } from '@/components/ops/EditApolloSettingsModal';
 import { EditInstantlySettingsModal } from '@/components/ops/EditInstantlySettingsModal';
+import { EditHeyGenVideoSettingsModal } from '@/components/ops/EditHeyGenVideoSettingsModal';
 import { EditEmailGenerationModal, type EmailGenerationConfig } from '@/components/ops/EditEmailGenerationModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
@@ -204,6 +205,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [editButtonColumn, setEditButtonColumn] = useState<OpsTableColumn | null>(null);
   const [editApolloColumn, setEditApolloColumn] = useState<OpsTableColumn | null>(null);
   const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
+  const [editHeyGenColumn, setEditHeyGenColumn] = useState<OpsTableColumn | null>(null);
   const [createCampaignFromStepColumn, setCreateCampaignFromStepColumn] = useState<OpsTableColumn | null>(null);
   const [editEmailGenColumn, setEditEmailGenColumn] = useState<OpsTableColumn | null>(null);
   const [scheduleDialogColumn, setScheduleDialogColumn] = useState<string | null>(null);
@@ -3346,6 +3348,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           onEditInstantly={activeColumn.column_type === 'instantly' ? () => {
             setEditInstantlyColumn(activeColumn);
           } : undefined}
+          onEditHeygen={activeColumn.column_type === 'heygen_video' ? () => {
+            setEditHeyGenColumn(activeColumn);
+          } : undefined}
           onEditEmailGeneration={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
             setEditEmailGenColumn(activeColumn);
           } : undefined}
@@ -3646,6 +3651,26 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           columnLabel={editInstantlyColumn.label}
           currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
           orgId={table?.organization_id}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Edit HeyGen Video Settings Modal */}
+      {editHeyGenColumn && (
+        <EditHeyGenVideoSettingsModal
+          isOpen={!!editHeyGenColumn}
+          onClose={() => setEditHeyGenColumn(null)}
+          onSave={async (config) => {
+            try {
+              await tableService.updateColumn(editHeyGenColumn.id, { integrationConfig: config });
+              queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+              toast.success('Video settings updated');
+            } catch {
+              toast.error('Failed to update video settings');
+            }
+          }}
+          columnLabel={editHeyGenColumn.label}
+          currentConfig={(editHeyGenColumn.integration_config as any) ?? undefined}
           existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
         />
       )}

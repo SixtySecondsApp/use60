@@ -11,9 +11,11 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Loader2, Upload, Sparkles, ChevronRight, ChevronLeft, Check, Play, Pause, Video, Mic, FileText, AlertCircle, Image, Camera, RefreshCw } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Loader2, Upload, Sparkles, ChevronRight, ChevronLeft, Check, Play, Pause, Video, Mic, FileText, AlertCircle, Image, Camera, RefreshCw, Trash2, Plus, User, Link2, Volume2, X, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
+import { VoiceLibrary } from '@/components/settings/VoiceLibrary';
 
 interface ColumnConfig {
   key: string;
@@ -28,19 +30,46 @@ interface VideoAvatarColumnWizardProps {
   orgId: string;
   onComplete: (columns: ColumnConfig[]) => void;
   onCancel: () => void;
+  /** Existing columns in the table — used for script variable suggestions */
+  existingColumns?: { key: string; label: string }[];
 }
 
-type WizardStep = 'photo' | 'training' | 'voice' | 'script';
+type WizardStep = 'pick' | 'photo' | 'training' | 'look' | 'voice' | 'script';
 
 const STEP_LABELS: Record<WizardStep, string> = {
+  pick: 'Choose Avatar',
   photo: 'Avatar Photo',
   training: 'Training',
+  look: 'Choose Look',
   voice: 'Voice',
   script: 'Script Template',
 };
 
-const ALL_STEPS: WizardStep[] = ['photo', 'training', 'voice', 'script'];
-const SKIP_TRAINING_STEPS: WizardStep[] = ['photo', 'voice', 'script'];
+// Steps are built dynamically — these are just the full sets for new avatar creation
+const NEW_AVATAR_STEPS: WizardStep[] = ['pick', 'photo', 'training', 'voice', 'script'];
+const NEW_AVATAR_SKIP_TRAINING: WizardStep[] = ['pick', 'photo', 'voice', 'script'];
+// Picking an existing avatar skips photo/training entirely
+const EXISTING_AVATAR_STEPS: WizardStep[] = ['pick', 'look', 'voice', 'script'];
+
+interface AvatarLook {
+  look_id: string;
+  name: string;
+  thumbnail_url: string;
+  preview_video_url?: string | null;
+  heygen_avatar_id?: string | null;
+}
+
+interface ExistingAvatar {
+  id: string;
+  avatar_name: string;
+  avatar_type: string;
+  status: string;
+  thumbnail_url: string | null;
+  voice_id: string | null;
+  voice_name: string | null;
+  looks?: AvatarLook[] | null;
+  created_at: string;
+}
 
 interface Voice {
   voice_id: string;
@@ -55,14 +84,19 @@ export function VideoAvatarColumnWizard({
   orgId,
   onComplete,
   onCancel,
+  existingColumns = [],
 }: VideoAvatarColumnWizardProps) {
-  const [step, setStep] = useState<WizardStep>('photo');
+  const [step, setStep] = useState<WizardStep>('pick');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Existing avatars for this org
+  const [existingAvatars, setExistingAvatars] = useState<ExistingAvatar[]>([]);
+  const [loadingAvatars, setLoadingAvatars] = useState(true);
+
   // Whether this avatar skips training (uploaded/captured photos = talking_photo)
   const [skipTraining, setSkipTraining] = useState(false);
-  const STEPS = skipTraining ? SKIP_TRAINING_STEPS : ALL_STEPS;
+  const [pickedExisting, setPickedExisting] = useState(false);
 
   // Photo step
   const [photoMode, setPhotoMode] = useState<'upload' | 'generate' | 'capture'>('generate');
@@ -82,6 +116,7 @@ export function VideoAvatarColumnWizard({
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
 
   // Training step
+  const [avatarType, setAvatarType] = useState<'photo' | 'talking_photo' | 'digital_twin'>('photo');
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [trainingStatus, setTrainingStatus] = useState<string>('idle');
   const [trainingProgress, setTrainingProgress] = useState<string>('');
@@ -90,15 +125,103 @@ export function VideoAvatarColumnWizard({
   const [voices, setVoices] = useState<Voice[]>([]);
   const [voiceSearch, setVoiceSearch] = useState('');
   const [selectedVoice, setSelectedVoice] = useState<Voice | null>(null);
+  const [voiceSource, setVoiceSource] = useState<'heygen_voice' | 'cloned_voice' | 'audio_column'>('heygen_voice');
+  const [audioColumnKey, setAudioColumnKey] = useState('');
+  const [selectedClonedVoice, setSelectedClonedVoice] = useState<{ id: string; name: string } | null>(null);
+  const [previewAvatar, setPreviewAvatar] = useState<ExistingAvatar | null>(null);
+  const [selectedLook, setSelectedLook] = useState<AvatarLook | null>(null);
+  const [avatarLooks, setAvatarLooks] = useState<AvatarLook[]>([]);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const showLookStep = avatarLooks.length > 1;
+  const STEPS = pickedExisting
+    ? EXISTING_AVATAR_STEPS.filter(s => s !== 'look' || showLookStep)
+    : (skipTraining ? NEW_AVATAR_SKIP_TRAINING : NEW_AVATAR_STEPS);
 
   // Script step
   const [scriptTemplate, setScriptTemplate] = useState(
     'Hey {{first_name}}, I saw that {{company_name}} is doing great things. I put together a quick personalized demo showing how 60 could help your team close more deals. Take a look — it\'s only 60 seconds.'
   );
+  const scriptRef = useRef<HTMLTextAreaElement>(null);
 
   const stepIndex = STEPS.indexOf(step);
+
+  // ─── Pick: Load existing avatars for this org ─────────────────────
+  const fetchAvatars = useCallback(async () => {
+    setLoadingAvatars(true);
+    try {
+      const { data } = await supabase.functions.invoke('heygen-avatar-create', {
+        body: { action: 'list' },
+      });
+      setExistingAvatars(data?.avatars || []);
+    } catch {
+      // silent
+    } finally {
+      setLoadingAvatars(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchAvatars(); }, [fetchAvatars]);
+
+  const handleDeleteAvatar = useCallback(async (id: string) => {
+    try {
+      const { data } = await supabase.functions.invoke('heygen-avatar-create', {
+        body: { action: 'delete', avatar_id: id },
+      });
+      if (data?.deleted) {
+        setExistingAvatars((prev) => prev.filter((a) => a.id !== id));
+        toast.success('Avatar deleted');
+      }
+    } catch {
+      toast.error('Failed to delete avatar');
+    }
+  }, []);
+
+  // Track whether we need to start polling after picking a training avatar
+  const [needsPollTraining, setNeedsPollTraining] = useState(false);
+
+  const handlePickAvatar = useCallback((avatar: ExistingAvatar) => {
+    setPickedExisting(true);
+    setAvatarId(avatar.id);
+    setAvatarName(avatar.avatar_name);
+    setPhotoUrl(avatar.thumbnail_url);
+    setAvatarType(avatar.avatar_type as 'photo' | 'talking_photo' | 'digital_twin');
+    const looks = avatar.looks || [];
+    setAvatarLooks(looks);
+
+    if (avatar.avatar_type === 'talking_photo') {
+      setSkipTraining(true);
+    }
+
+    // Auto-select look if only one
+    if (looks.length === 1) {
+      setSelectedLook(looks[0]);
+    } else {
+      setSelectedLook(null);
+    }
+
+    // Jump to the right step based on status
+    if (avatar.status === 'ready') {
+      // If multiple looks, show look picker first
+      if (looks.length > 1) {
+        setStep('look');
+      } else if (avatar.voice_id) {
+        setSelectedVoice({ voice_id: avatar.voice_id, name: avatar.voice_name || '', language: '', gender: '' });
+        setStep('script');
+      } else {
+        setStep('voice');
+      }
+    } else if (avatar.status === 'training') {
+      setStep('training');
+      setTrainingStatus('training');
+      setNeedsPollTraining(true);
+    } else {
+      // creating / generating_looks — go to photo step with photo loaded
+      setTrainingStatus('photo_ready');
+      setStep('photo');
+    }
+  }, []);
 
   // ─── Photo: Generate AI photo ───────────────────────────────────────
   const handleGeneratePhoto = useCallback(async () => {
@@ -143,7 +266,7 @@ export function VideoAvatarColumnWizard({
           body: { avatar_id: avId, generation_id: genId },
         });
         // Status endpoint returns generation_status + looks array
-        if (data?.generation_status === 'completed' || data?.looks?.length > 0) {
+        if (data?.generation_status === 'completed' || data?.generation_status === 'success' || data?.looks?.length > 0) {
           clearInterval(poll);
           const thumbUrl = data.looks?.[0]?.thumbnail_url || data.thumbnail_url || data.image_url;
           setPhotoUrl(thumbUrl);
@@ -222,7 +345,9 @@ export function VideoAvatarColumnWizard({
 
   // ─── Upload to Supabase Storage → HeyGen talking photo ────────────
   const uploadPhotoToStorage = useCallback(async (blob: Blob): Promise<string> => {
-    const fileName = `heygen/${orgId}-${Date.now()}.jpg`;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+    const fileName = `${user.id}-heygen-${Date.now()}.jpg`;
     const { error: uploadError } = await supabase.storage
       .from('avatars')
       .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
@@ -249,9 +374,10 @@ export function VideoAvatarColumnWizard({
       if (data?.error) throw new Error(data.error);
 
       setAvatarId(data.avatar_id);
-      setSkipTraining(true);
-      setTrainingStatus('photo_ready');
-      toast.success('Photo uploaded — no training needed!');
+      setTrainingStatus('training');
+      setStep('training');
+      setNeedsPollTraining(true);
+      toast.success('Photo uploaded — training started!');
     } catch (e: any) {
       setError(e.message || 'Upload failed');
     } finally {
@@ -282,11 +408,15 @@ export function VideoAvatarColumnWizard({
     setTrainingProgress('Starting avatar training...');
 
     try {
-      // Create group + train
+      // Create group + train in one call
       const { data, error: fnError } = await supabase.functions.invoke('heygen-avatar-create', {
-        body: { action: 'train', avatar_id: avatarId },
+        body: {
+          action: 'create_group_and_train',
+          avatar_id: avatarId,
+          avatar_name: avatarName || 'Sales Avatar',
+        },
       });
-      if (fnError) throw new Error(fnError.message);
+      if (fnError) throw new Error(data?.error || fnError.message);
       if (data?.error) throw new Error(data.error);
 
       toast.success('Training started — this takes 2-5 minutes');
@@ -331,6 +461,14 @@ export function VideoAvatarColumnWizard({
       }
     }, 600000);
   }, [trainingStatus]);
+
+  // Start polling if picked a training avatar
+  useEffect(() => {
+    if (needsPollTraining && avatarId) {
+      setNeedsPollTraining(false);
+      pollTraining(avatarId);
+    }
+  }, [needsPollTraining, avatarId, pollTraining]);
 
   // ─── Voices: Load list ──────────────────────────────────────────────
   useEffect(() => {
@@ -390,21 +528,52 @@ export function VideoAvatarColumnWizard({
   const handleComplete = useCallback(() => {
     if (selectedVoice) handleSaveVoice();
 
+    // If a specific look was selected, update the avatar record's heygen_avatar_id
+    if (selectedLook?.look_id && avatarId) {
+      supabase.functions.invoke('heygen-avatar-create', {
+        body: {
+          action: 'finalize',
+          avatar_id: avatarId,
+          look_id: selectedLook.look_id,
+          voice_id: selectedVoice?.voice_id,
+          voice_name: selectedVoice?.name,
+        },
+      }).catch(() => { /* non-blocking */ });
+    }
+
+    // Generate unique key to allow multiple video avatar columns
+    const existingVideoKeys = (existingColumns || [])
+      .filter(c => c.key.startsWith('video_avatar'))
+      .map(c => c.key);
+    let colKey = 'video_avatar';
+    if (existingVideoKeys.includes(colKey)) {
+      let suffix = 2;
+      while (existingVideoKeys.includes(`video_avatar_${suffix}`)) suffix++;
+      colKey = `video_avatar_${suffix}`;
+    }
+    const lookLabel = selectedLook?.name || avatarName;
+    const colLabel = lookLabel ? `Video — ${lookLabel}` : 'Video Avatar';
     onComplete([{
-      key: 'video_avatar',
-      label: 'Video Avatar',
+      key: colKey,
+      label: colLabel,
       columnType: 'heygen_video',
       isEnrichment: false,
       integrationConfig: {
         avatar_id: avatarId,
         avatar_name: avatarName || 'Sales Avatar',
-        voice_id: selectedVoice?.voice_id,
-        voice_name: selectedVoice?.name,
+        avatar_type: avatarType,
+        look_id: selectedLook?.look_id,
+        look_name: selectedLook?.name,
+        voice_source: voiceSource,
+        voice_id: voiceSource === 'heygen_voice' ? selectedVoice?.voice_id : undefined,
+        voice_name: voiceSource === 'heygen_voice' ? selectedVoice?.name : voiceSource === 'cloned_voice' ? selectedClonedVoice?.name : undefined,
+        voice_clone_id: voiceSource === 'cloned_voice' ? selectedClonedVoice?.id : undefined,
+        audio_column_key: voiceSource === 'audio_column' ? audioColumnKey : undefined,
         script_template: scriptTemplate,
         table_id: tableId,
       },
     }]);
-  }, [avatarId, avatarName, selectedVoice, scriptTemplate, tableId, onComplete, handleSaveVoice]);
+  }, [avatarId, avatarName, avatarType, selectedLook, voiceSource, selectedVoice, audioColumnKey, scriptTemplate, tableId, onComplete, handleSaveVoice]);
 
   // ─── Render ─────────────────────────────────────────────────────────
   return (
@@ -435,6 +604,110 @@ export function VideoAvatarColumnWizard({
         <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
           <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
           <p className="text-xs text-red-300">{error}</p>
+        </div>
+      )}
+
+      {/* ── Step 0: Pick existing or create new ───────────────── */}
+      {step === 'pick' && (
+        <div className="space-y-4">
+          <div className="flex items-start gap-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3.5 py-3">
+            <Video className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
+            <p className="text-xs text-gray-300">
+              Choose an existing avatar or create a new one for personalized video outreach.
+            </p>
+          </div>
+
+          {loadingAvatars ? (
+            <div className="flex items-center justify-center py-8 text-xs text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading avatars...
+            </div>
+          ) : existingAvatars.length === 0 ? (
+            <div className="text-center py-6">
+              <User className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+              <p className="text-sm text-gray-400">No avatars yet</p>
+              <p className="text-xs text-gray-600 mt-1">Create your first avatar to start sending personalized videos.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {existingAvatars.map((avatar) => (
+                <div
+                  key={avatar.id}
+                  className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-700/50 bg-gray-800/30 hover:border-purple-500/30 transition-colors group"
+                >
+                  {avatar.thumbnail_url ? (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setPreviewAvatar(avatar); }}
+                      className="relative w-11 h-11 rounded-lg overflow-hidden group/thumb shrink-0"
+                      title="Preview avatar"
+                    >
+                      <img src={avatar.thumbnail_url} alt={avatar.avatar_name} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
+                        <Eye className="w-4 h-4 text-white" />
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="w-11 h-11 rounded-lg bg-gray-700 flex items-center justify-center shrink-0">
+                      <User className="w-5 h-5 text-gray-500" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-200 font-medium truncate">{avatar.avatar_name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        avatar.status === 'ready'
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : avatar.status === 'training'
+                            ? 'bg-yellow-500/10 text-yellow-400'
+                            : avatar.status === 'failed'
+                              ? 'bg-red-500/10 text-red-400'
+                              : 'bg-gray-500/10 text-gray-400'
+                      }`}>
+                        {avatar.status === 'ready' ? 'Ready' : avatar.status === 'training' ? 'Training...' : avatar.status === 'failed' ? 'Failed' : 'In Progress'}
+                      </span>
+                      <span className="text-[10px] text-gray-600">
+                        {avatar.avatar_type === 'digital_twin'
+                          ? 'Digital Twin'
+                          : avatar.avatar_type === 'talking_photo'
+                            ? 'Photo Avatar'
+                            : 'Photo Avatar'}
+                      </span>
+                      {avatar.voice_name && <span className="text-[10px] text-gray-600">{avatar.voice_name}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handlePickAvatar(avatar)}
+                      className="px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium"
+                    >
+                      Use
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAvatar(avatar.id)}
+                      className="p-1.5 rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-between pt-2">
+            <button type="button" onClick={onCancel} className="text-xs text-gray-500 hover:text-gray-300">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPickedExisting(false); setStep('photo'); }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium"
+            >
+              <Plus className="w-3.5 h-3.5" /> New Avatar
+            </button>
+          </div>
         </div>
       )}
 
@@ -691,70 +964,217 @@ export function VideoAvatarColumnWizard({
         </div>
       )}
 
-      {/* ── Step 3: Voice ─────────────────────────────────────── */}
-      {step === 'voice' && (
+      {/* ── Step: Choose Look ──────────────────────────────────── */}
+      {step === 'look' && (
         <div className="space-y-3">
           <div className="flex items-start gap-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3.5 py-2">
-            <Mic className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
-            <p className="text-xs text-gray-300">Choose a voice for your avatar. Click the play button to preview.</p>
+            <Image className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
+            <p className="text-xs text-gray-300">Choose which look to use for all videos in this column.</p>
           </div>
 
-          <input
-            type="text"
-            value={voiceSearch}
-            onChange={(e) => setVoiceSearch(e.target.value)}
-            placeholder="Search voices..."
-            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-purple-500"
-          />
-
-          <div className="max-h-48 overflow-y-auto space-y-1 rounded-lg border border-gray-700/50 bg-gray-800/30 p-1">
-            {voices.length === 0 ? (
-              <div className="flex items-center gap-2 px-3 py-4 justify-center text-xs text-gray-500">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Loading voices...
-              </div>
-            ) : filteredVoices.length === 0 ? (
-              <p className="text-xs text-gray-600 text-center py-3">No voices match</p>
-            ) : filteredVoices.slice(0, 30).map((voice) => (
+          <div className="grid grid-cols-2 gap-3">
+            {avatarLooks.map((look) => (
               <button
-                key={voice.voice_id}
+                key={look.look_id}
                 type="button"
-                onClick={() => setSelectedVoice(voice)}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors ${
-                  selectedVoice?.voice_id === voice.voice_id
-                    ? 'bg-purple-500/15 border border-purple-500/30'
-                    : 'hover:bg-gray-700/50'
+                onClick={() => setSelectedLook(look)}
+                className={`relative rounded-lg overflow-hidden border-2 transition-colors ${
+                  selectedLook?.look_id === look.look_id
+                    ? 'border-purple-500'
+                    : 'border-gray-700/50 hover:border-gray-600'
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); handlePlayVoice(voice); }}
-                  className="p-1 rounded hover:bg-gray-700"
-                >
-                  {playingVoice === voice.voice_id
-                    ? <Pause className="w-3 h-3 text-purple-400" />
-                    : <Play className="w-3 h-3 text-gray-400" />
-                  }
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-200 truncate">{voice.name}</p>
-                  <p className="text-[10px] text-gray-500">{voice.language} · {voice.gender}</p>
+                {look.preview_video_url ? (
+                  <video
+                    src={look.preview_video_url}
+                    poster={look.thumbnail_url}
+                    muted
+                    loop
+                    playsInline
+                    autoPlay={selectedLook?.look_id === look.look_id}
+                    onMouseEnter={e => (e.target as HTMLVideoElement).play()}
+                    onMouseLeave={e => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
+                    className="w-full aspect-square object-cover bg-black"
+                  />
+                ) : (
+                  <img
+                    src={look.thumbnail_url}
+                    alt={look.name}
+                    className="w-full aspect-square object-cover"
+                  />
+                )}
+                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5">
+                  <p className="text-[10px] text-white font-medium truncate">{look.name}</p>
                 </div>
-                {selectedVoice?.voice_id === voice.voice_id && (
-                  <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                {selectedLook?.look_id === look.look_id && (
+                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center">
+                    <Check className="w-3 h-3 text-white" />
+                  </div>
                 )}
               </button>
             ))}
           </div>
 
           <div className="flex justify-between pt-2">
-            <button type="button" onClick={() => setStep(skipTraining ? 'photo' : 'training')} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300">
+            <button type="button" onClick={() => setStep('pick')} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300">
+              <ChevronLeft className="w-3.5 h-3.5" /> Back
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep('voice')}
+              disabled={!selectedLook}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium disabled:opacity-50"
+            >
+              Voice <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 3: Voice ─────────────────────────────────────── */}
+      {step === 'voice' && (
+        <div className="space-y-3">
+          <div className="flex items-start gap-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3.5 py-2">
+            <Mic className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
+            <p className="text-xs text-gray-300">Choose a voice source for your avatar.</p>
+          </div>
+
+          {/* Voice source toggle */}
+          <div className="flex rounded-lg border border-gray-700 bg-gray-800/50 p-0.5">
+            <button
+              type="button"
+              onClick={() => setVoiceSource('heygen_voice')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                voiceSource === 'heygen_voice'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <Volume2 className="w-3 h-3" />
+              HeyGen Voice
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoiceSource('cloned_voice')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                voiceSource === 'cloned_voice'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <Mic className="w-3 h-3" />
+              Cloned Voice
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoiceSource('audio_column')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                voiceSource === 'audio_column'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <Link2 className="w-3 h-3" />
+              Audio Column
+            </button>
+          </div>
+
+          {voiceSource === 'cloned_voice' ? (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500">
+                Select a cloned voice from your library. Audio will be generated per row and the avatar will lip-sync to it.
+              </p>
+              <VoiceLibrary
+                selectable
+                selectedVoiceId={selectedClonedVoice?.id}
+                onSelectVoice={(voice) => setSelectedClonedVoice({ id: voice.id, name: voice.name })}
+              />
+            </div>
+          ) : voiceSource === 'heygen_voice' ? (
+            <>
+              <input
+                type="text"
+                value={voiceSearch}
+                onChange={(e) => setVoiceSearch(e.target.value)}
+                placeholder="Search voices..."
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-purple-500"
+              />
+
+              <div className="max-h-48 overflow-y-auto space-y-1 rounded-lg border border-gray-700/50 bg-gray-800/30 p-1">
+                {voices.length === 0 ? (
+                  <div className="flex items-center gap-2 px-3 py-4 justify-center text-xs text-gray-500">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Loading voices...
+                  </div>
+                ) : filteredVoices.length === 0 ? (
+                  <p className="text-xs text-gray-600 text-center py-3">No voices match</p>
+                ) : filteredVoices.slice(0, 30).map((voice) => (
+                  <button
+                    key={voice.voice_id}
+                    type="button"
+                    onClick={() => setSelectedVoice(voice)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors ${
+                      selectedVoice?.voice_id === voice.voice_id
+                        ? 'bg-purple-500/15 border border-purple-500/30'
+                        : 'hover:bg-gray-700/50'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handlePlayVoice(voice); }}
+                      className="p-1 rounded hover:bg-gray-700"
+                    >
+                      {playingVoice === voice.voice_id
+                        ? <Pause className="w-3 h-3 text-purple-400" />
+                        : <Play className="w-3 h-3 text-gray-400" />
+                      }
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-200 truncate">{voice.name}</p>
+                      <p className="text-[10px] text-gray-500">{voice.language} · {voice.gender}</p>
+                    </div>
+                    {selectedVoice?.voice_id === voice.voice_id && (
+                      <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500">
+                Use an audio URL from another column (e.g. ElevenLabs) as the voice for each video.
+              </p>
+              <select
+                value={audioColumnKey}
+                onChange={e => setAudioColumnKey(e.target.value)}
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 outline-none focus:border-purple-500"
+              >
+                <option value="">Select audio column...</option>
+                {(existingColumns || [])
+                  .filter(c => !c.key.startsWith('video_avatar') && c.key !== 'heygen_video')
+                  .map(c => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                  ))
+                }
+              </select>
+              {audioColumnKey && (
+                <p className="text-[10px] text-gray-500">
+                  Each row's video will use the audio URL from the <span className="font-mono text-purple-400">{audioColumnKey}</span> column.
+                  The avatar will lip-sync to the audio file.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-between pt-2">
+            <button type="button" onClick={() => setStep(avatarLooks.length > 1 ? 'look' : skipTraining ? 'photo' : 'training')} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300">
               <ChevronLeft className="w-3.5 h-3.5" /> Back
             </button>
             <button
               type="button"
               onClick={() => setStep('script')}
-              disabled={!selectedVoice}
+              disabled={voiceSource === 'heygen_voice' ? !selectedVoice : voiceSource === 'cloned_voice' ? !selectedClonedVoice : !audioColumnKey}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium disabled:opacity-50"
             >
               Script Template <ChevronRight className="w-3.5 h-3.5" />
@@ -769,24 +1189,42 @@ export function VideoAvatarColumnWizard({
           <div className="flex items-start gap-2.5 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3.5 py-2">
             <FileText className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
             <p className="text-xs text-gray-300">
-              Write a script template. Use <code className="text-purple-300">{'{{column_name}}'}</code> to personalize per row.
+              Write a script template. Click the variable chips below to insert personalized data from each row.
             </p>
           </div>
 
           <textarea
+            ref={scriptRef}
             value={scriptTemplate}
             onChange={(e) => setScriptTemplate(e.target.value)}
             rows={5}
-            placeholder="Hey {{first_name}}, I put together a quick demo for {{company_name}}..."
+            placeholder={existingColumns.length > 0
+              ? `Hey {{${existingColumns.find(c => c.key.includes('name'))?.key || existingColumns[0].key}}}, I put together a quick demo...`
+              : 'Hey {{contact_name}}, I put together a quick demo...'}
             className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-purple-500 resize-none font-mono leading-relaxed"
           />
 
           <div className="flex flex-wrap gap-1.5">
-            {['first_name', 'last_name', 'company_name', 'title'].map((v) => (
+            {(existingColumns.length > 0
+              ? existingColumns.filter(c => c.key !== 'video_avatar').map(c => c.key)
+              : ['first_name', 'last_name', 'company_name', 'title']
+            ).map((v) => (
               <button
                 key={v}
                 type="button"
-                onClick={() => setScriptTemplate((s) => s + `{{${v}}}`)}
+                onClick={() => {
+                  const el = scriptRef.current;
+                  const tag = `{{${v}}}`;
+                  if (el) {
+                    const start = el.selectionStart ?? scriptTemplate.length;
+                    const end = el.selectionEnd ?? start;
+                    const next = scriptTemplate.slice(0, start) + tag + scriptTemplate.slice(end);
+                    setScriptTemplate(next);
+                    requestAnimationFrame(() => { el.focus(); el.selectionStart = el.selectionEnd = start + tag.length; });
+                  } else {
+                    setScriptTemplate(s => s + tag);
+                  }
+                }}
                 className="px-2 py-0.5 rounded text-[10px] font-mono bg-gray-800 border border-gray-700 text-gray-400 hover:text-purple-300 hover:border-purple-500/30"
               >
                 {`{{${v}}}`}
@@ -813,6 +1251,105 @@ export function VideoAvatarColumnWizard({
             </button>
           </div>
         </div>
+      )}
+      {/* Avatar Preview Lightbox */}
+      {previewAvatar && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          onClick={() => setPreviewAvatar(null)}
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div
+            className="relative z-10 w-full max-w-2xl mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-200">{previewAvatar.avatar_name}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  previewAvatar.avatar_type === 'digital_twin'
+                    ? 'bg-purple-500/10 text-purple-400'
+                    : 'bg-blue-500/10 text-blue-400'
+                }`}>
+                  {previewAvatar.avatar_type === 'digital_twin' ? 'Digital Twin' : 'Photo Avatar'}
+                </span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  previewAvatar.status === 'ready'
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : 'bg-yellow-500/10 text-yellow-400'
+                }`}>
+                  {previewAvatar.status === 'ready' ? 'Ready' : previewAvatar.status}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewAvatar(null)}
+                className="p-1 rounded hover:bg-gray-800 text-gray-500 hover:text-gray-300"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5">
+              {previewAvatar.looks && previewAvatar.looks.length > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-500">{previewAvatar.looks.length} look{previewAvatar.looks.length !== 1 ? 's' : ''}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {previewAvatar.looks.map((look, i) => (
+                      <div key={look.look_id || i} className="space-y-1.5">
+                        {look.preview_video_url ? (
+                          <video
+                            src={look.preview_video_url}
+                            poster={look.thumbnail_url}
+                            controls
+                            loop
+                            muted
+                            playsInline
+                            className="w-full aspect-square rounded-lg object-cover border border-gray-700/50 bg-black"
+                          />
+                        ) : (
+                          <img
+                            src={look.thumbnail_url}
+                            alt={look.name}
+                            className="w-full aspect-square rounded-lg object-cover border border-gray-700/50"
+                          />
+                        )}
+                        <p className="text-[10px] text-gray-500 text-center">{look.name}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : previewAvatar.thumbnail_url ? (
+                <img
+                  src={previewAvatar.thumbnail_url}
+                  alt={previewAvatar.avatar_name}
+                  className="w-full max-h-[60vh] rounded-lg object-contain"
+                />
+              ) : (
+                <div className="flex items-center justify-center py-16 text-gray-600">
+                  <User className="w-12 h-12" />
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-800">
+              <div className="text-[10px] text-gray-600">
+                {previewAvatar.voice_name && <span>Voice: {previewAvatar.voice_name}</span>}
+              </div>
+              <button
+                type="button"
+                onClick={() => { handlePickAvatar(previewAvatar); setPreviewAvatar(null); }}
+                className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium"
+              >
+                Use This Avatar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

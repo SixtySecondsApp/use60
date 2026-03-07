@@ -1,28 +1,28 @@
 /**
- * GenerateVideosAction — Bulk action button for generating HeyGen videos
+ * GenerateAudioAction — Bulk action button for generating ElevenLabs TTS audio
  * for selected rows in an Ops table.
  */
 
 import React, { useState } from 'react';
-import { Video, Loader2, Check, AlertCircle } from 'lucide-react';
+import { Mic, Loader2, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 
-interface GenerateVideosActionProps {
+interface GenerateAudioActionProps {
   selectedRowIds: string[];
   tableId: string;
-  avatarId: string;
-  voiceId?: string;
+  voiceCloneId: string;
   scriptTemplate: string;
+  audioColumnKey: string;
   onComplete?: () => void;
 }
 
-export const GenerateVideosAction: React.FC<GenerateVideosActionProps> = ({
+export const GenerateAudioAction: React.FC<GenerateAudioActionProps> = ({
   selectedRowIds,
   tableId,
-  avatarId,
-  voiceId,
+  voiceCloneId,
   scriptTemplate,
+  audioColumnKey,
   onComplete,
 }) => {
   const [generating, setGenerating] = useState(false);
@@ -31,7 +31,7 @@ export const GenerateVideosAction: React.FC<GenerateVideosActionProps> = ({
 
   const handleGenerate = async () => {
     if (selectedRowIds.length === 0) {
-      toast.error('Select rows to generate videos for');
+      toast.error('Select rows to generate audio for');
       return;
     }
 
@@ -39,35 +39,34 @@ export const GenerateVideosAction: React.FC<GenerateVideosActionProps> = ({
     setProgress({ total: selectedRowIds.length, succeeded: 0, failed: 0 });
 
     try {
-      const { data, error } = await supabase.functions.invoke('heygen-video-generate', {
+      const { data, error } = await supabase.functions.invoke('elevenlabs-tts-generate', {
         body: {
-          avatar_id: avatarId,
-          voice_id: voiceId,
-          script: scriptTemplate,
-          batch_row_ids: selectedRowIds,
+          voice_clone_id: voiceCloneId,
+          script_template: scriptTemplate,
           table_id: tableId,
+          row_ids: selectedRowIds,
+          audio_column_key: audioColumnKey,
         },
       });
 
-      if (error) throw new Error(error.message || 'Video generation failed');
+      if (error) throw new Error(error.message || 'Audio generation failed');
 
-      const result = data;
       setProgress({
-        total: result.total ?? selectedRowIds.length,
-        succeeded: result.succeeded ?? 0,
-        failed: result.failed ?? 0,
+        total: data.total ?? selectedRowIds.length,
+        succeeded: data.succeeded ?? 0,
+        failed: data.failed ?? 0,
       });
       setDone(true);
 
-      if (result.failed > 0) {
-        toast.error(`${result.failed} of ${result.total} videos failed to generate`);
+      if (data.failed > 0) {
+        toast.error(`${data.failed} of ${data.total} audio files failed`);
       } else {
-        toast.success(`${result.succeeded} videos generating`);
+        toast.success(`${data.succeeded} audio files generating`);
       }
 
       onComplete?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Video generation failed');
+      toast.error(err instanceof Error ? err.message : 'Audio generation failed');
     } finally {
       setGenerating(false);
     }
@@ -77,7 +76,7 @@ export const GenerateVideosAction: React.FC<GenerateVideosActionProps> = ({
     return (
       <div className="inline-flex items-center gap-1.5 text-xs text-emerald-400">
         <Check className="w-3.5 h-3.5" />
-        {progress.succeeded}/{progress.total} generating
+        {progress.succeeded}/{progress.total} generated
         {progress.failed > 0 && (
           <span className="text-red-400 ml-1">({progress.failed} failed)</span>
         )}
@@ -90,7 +89,7 @@ export const GenerateVideosAction: React.FC<GenerateVideosActionProps> = ({
       type="button"
       onClick={handleGenerate}
       disabled={generating || selectedRowIds.length === 0}
-      className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+      className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {generating ? (
         <>
@@ -99,8 +98,8 @@ export const GenerateVideosAction: React.FC<GenerateVideosActionProps> = ({
         </>
       ) : (
         <>
-          <Video className="w-3.5 h-3.5" />
-          Generate Videos ({selectedRowIds.length})
+          <Mic className="w-3.5 h-3.5" />
+          Generate Audio ({selectedRowIds.length})
         </>
       )}
     </button>

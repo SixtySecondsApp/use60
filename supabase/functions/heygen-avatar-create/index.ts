@@ -19,15 +19,23 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
 import { createHeyGenClient } from '../_shared/heygen.ts';
+import { logFlatRateCostEvent, checkCreditBalance } from '../_shared/costTracking.ts';
+import { INTEGRATION_CREDIT_COSTS } from '../_shared/creditPacks.ts';
 
 type Action =
+  | 'list'
+  | 'delete'
   | 'generate_photo'
   | 'upload_photo'
   | 'create_group'
   | 'train'
+  | 'create_group_and_train'
   | 'generate_look'
   | 'add_motion'
-  | 'finalize';
+  | 'finalize'
+  | 'create_digital_twin'
+  | 'digital_twin_status'
+  | 'import_digital_twin';
 
 interface AvatarRequest {
   action: Action;
@@ -45,8 +53,16 @@ interface AvatarRequest {
 
   // upload_photo / create_group
   image_key?: string;
+  image_url?: string;
   generation_id?: string;
   avatar_name?: string;
+
+  // create_digital_twin
+  training_footage_url?: string;
+  video_consent_url?: string;
+
+  // import_digital_twin
+  heygen_group_id?: string;
 
   // generate_look
   prompt?: string;
@@ -97,11 +113,69 @@ Deno.serve(async (req: Request) => {
 
     // HeyGen client
     const heygen = await createHeyGenClient(svc, orgId);
-
     const body: AvatarRequest = await req.json();
     const { action } = body;
 
+    // Pre-flight credit check for billable actions
+    const BILLABLE_ACTIONS = new Set([
+      'generate_photo', 'upload_photo', 'create_group_and_train',
+      'train', 'generate_look', 'add_motion',
+    ]);
+    if (BILLABLE_ACTIONS.has(action)) {
+      const creditCheck = await checkCreditBalance(svc, orgId);
+      if (!creditCheck.allowed) {
+        return errorResponse('Insufficient credits — please top up to use Video Avatar', req, 402);
+      }
+    }
+
     switch (action) {
+      // ---------------------------------------------------------------
+      // List all avatars for this org
+      // ---------------------------------------------------------------
+      case 'list': {
+        const { data: avatars, error: listError } = await svc
+          .from('heygen_avatars')
+          .select('id, avatar_name, avatar_type, status, thumbnail_url, voice_id, voice_name, looks, created_at')
+          .eq('org_id', orgId)
+          .order('created_at', { ascending: false });
+
+        if (listError) {
+          console.error('[heygen-avatar-create] list error:', listError);
+          return errorResponse('Failed to list avatars', req, 500);
+        }
+
+        return jsonResponse({ avatars: avatars || [] }, req);
+      }
+
+      // ---------------------------------------------------------------
+      // Delete an avatar
+      // ---------------------------------------------------------------
+      case 'delete': {
+        if (!body.avatar_id) return errorResponse('avatar_id required', req, 400);
+
+        // Verify ownership via org
+        const { data: toDelete } = await svc
+          .from('heygen_avatars')
+          .select('id, org_id')
+          .eq('id', body.avatar_id)
+          .eq('org_id', orgId)
+          .maybeSingle();
+
+        if (!toDelete) return errorResponse('Avatar not found or not yours', req, 404);
+
+        const { error: delError } = await svc
+          .from('heygen_avatars')
+          .delete()
+          .eq('id', body.avatar_id);
+
+        if (delError) {
+          console.error('[heygen-avatar-create] delete error:', delError);
+          return errorResponse('Failed to delete avatar', req, 500);
+        }
+
+        return jsonResponse({ deleted: true, avatar_id: body.avatar_id }, req);
+      }
+
       // ---------------------------------------------------------------
       // Step 1: Generate AI photo
       // ---------------------------------------------------------------
@@ -145,6 +219,11 @@ Deno.serve(async (req: Request) => {
           return errorResponse('Failed to create avatar record', req, 500);
         }
 
+        // Charge for photo generation
+        await logFlatRateCostEvent(svc, user.id, orgId, 'heygen', 'photo_avatar',
+          INTEGRATION_CREDIT_COSTS.heygen_photo_generate, 'heygen_photo_generate',
+          { avatar_id: avatar.id, generation_id: result.generation_id });
+
         return jsonResponse({
           avatar_id: avatar.id,
           generation_id: result.generation_id,
@@ -153,38 +232,122 @@ Deno.serve(async (req: Request) => {
       }
 
       // ---------------------------------------------------------------
-      // Step 1b: Upload user photo as talking photo (no training needed)
+      // Step 1b: Upload user photo → asset upload → group → train
       // ---------------------------------------------------------------
       case 'upload_photo': {
         if (!body.image_url) return errorResponse('image_url required', req, 400);
 
-        // Upload to HeyGen as a talking photo
-        const talkingPhoto = await heygen.uploadTalkingPhoto(body.image_url);
+        // Step 1: Fetch image from URL
+        let imgRes: Response;
+        try {
+          imgRes = await fetch(body.image_url);
+          if (!imgRes.ok) {
+            return errorResponse(`Failed to fetch image: HTTP ${imgRes.status}`, req, 400);
+          }
+        } catch (fetchErr) {
+          return errorResponse(`Failed to fetch image: ${(fetchErr as Error).message}`, req, 500);
+        }
 
-        // Create avatar record — status 'ready' (no training needed)
+        const imageBlob = await imgRes.blob();
+        const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+
+        // Step 2: Upload to HeyGen as an asset
+        let assetJson: Record<string, unknown>;
+        try {
+          const assetRes = await fetch('https://upload.heygen.com/v1/asset', {
+            method: 'POST',
+            headers: {
+              'x-api-key': heygen.getApiKey(),
+              'Content-Type': contentType,
+            },
+            body: imageBlob,
+          });
+          assetJson = await assetRes.json();
+          if (assetJson.code !== 100) {
+            return errorResponse(`HeyGen asset upload failed: ${JSON.stringify(assetJson)}`, req, 500);
+          }
+        } catch (assetErr) {
+          return errorResponse(`HeyGen asset upload error: ${(assetErr as Error).message}`, req, 500);
+        }
+
+        const assetData = assetJson.data as { image_key: string; url: string };
+
+        // Step 3: Create avatar record
         const { data: uploadAvatar, error: uploadInsertError } = await svc
           .from('heygen_avatars')
           .insert({
             org_id: orgId,
             user_id: user.id,
             avatar_name: body.avatar_name || 'My Avatar',
-            avatar_type: 'talking_photo',
-            status: 'ready',
-            heygen_avatar_id: talkingPhoto.talking_photo_id,
+            avatar_type: 'photo',
+            status: 'creating',
             thumbnail_url: body.image_url,
+            looks: [{ look_id: assetData.image_key, name: 'Uploaded', thumbnail_url: body.image_url }],
           })
           .select('id')
           .single();
 
         if (uploadInsertError) {
-          console.error('[heygen-avatar-create] upload insert error:', uploadInsertError);
-          return errorResponse('Failed to create avatar record', req, 500);
+          return errorResponse(`DB insert failed: ${uploadInsertError.message}`, req, 500);
         }
+
+        // Step 4: Create group
+        let groupResult: { group_id: string };
+        try {
+          groupResult = await heygen.createGroup({
+            name: body.avatar_name || 'avatar_group',
+            image_key: assetData.image_key,
+            generation_id: assetData.image_key,
+          });
+        } catch (groupErr) {
+          return errorResponse(`createGroup failed: ${JSON.stringify(groupErr)}`, req, 500);
+        }
+
+        await svc
+          .from('heygen_avatars')
+          .update({ heygen_group_id: groupResult.group_id })
+          .eq('id', uploadAvatar.id);
+
+        // Step 5: Add to group
+        try {
+          await heygen.addToGroup(groupResult.group_id, body.avatar_name || 'look_1', [assetData.image_key], assetData.image_key);
+        } catch (addErr) {
+          return errorResponse(`addToGroup failed: ${JSON.stringify(addErr)}`, req, 500);
+        }
+
+        // Step 6: Train (retry with backoff — HeyGen needs time to process uploaded images)
+        let trained = false;
+        for (const delay of [6000, 5000, 5000]) {
+          await new Promise((r) => setTimeout(r, delay));
+          try {
+            await heygen.trainAvatar(groupResult.group_id);
+            trained = true;
+            break;
+          } catch (trainErr) {
+            const te = trainErr as { code?: string };
+            if (te.code !== 'invalid_parameter') {
+              return errorResponse(`trainAvatar failed: ${JSON.stringify(trainErr)}`, req, 500);
+            }
+            // invalid_parameter = image not ready yet, retry
+          }
+        }
+        if (!trained) {
+          return errorResponse('Image processing timed out — please try training again in a moment', req, 408);
+        }
+
+        await svc
+          .from('heygen_avatars')
+          .update({ status: 'training' })
+          .eq('id', uploadAvatar.id);
+
+        // Charge for avatar training (upload is free, training is the billable step)
+        await logFlatRateCostEvent(svc, user.id, orgId, 'heygen', 'photo_avatar',
+          INTEGRATION_CREDIT_COSTS.heygen_avatar_train, 'heygen_avatar_train',
+          { avatar_id: uploadAvatar.id, group_id: groupResult.group_id });
 
         return jsonResponse({
           avatar_id: uploadAvatar.id,
-          talking_photo_id: talkingPhoto.talking_photo_id,
-          status: 'ready',
+          status: 'training',
         }, req);
       }
 
@@ -237,6 +400,11 @@ Deno.serve(async (req: Request) => {
           .update({ status: 'training' })
           .eq('id', body.avatar_id);
 
+        // Charge for avatar training
+        await logFlatRateCostEvent(svc, user.id, orgId, 'heygen', 'photo_avatar',
+          INTEGRATION_CREDIT_COSTS.heygen_avatar_train, 'heygen_avatar_train',
+          { avatar_id: body.avatar_id, group_id: avatar.heygen_group_id });
+
         return jsonResponse({ avatar_id: body.avatar_id, status: 'training' }, req);
       }
 
@@ -269,6 +437,11 @@ Deno.serve(async (req: Request) => {
           .update({ status: 'generating_looks' })
           .eq('id', body.avatar_id);
 
+        // Charge for look generation
+        await logFlatRateCostEvent(svc, user.id, orgId, 'heygen', 'photo_avatar',
+          INTEGRATION_CREDIT_COSTS.heygen_look_generate, 'heygen_look_generate',
+          { avatar_id: body.avatar_id, generation_id: result.generation_id });
+
         return jsonResponse({
           avatar_id: body.avatar_id,
           generation_id: result.generation_id,
@@ -284,8 +457,86 @@ Deno.serve(async (req: Request) => {
 
         const result = await heygen.addMotion(body.photo_avatar_id);
 
+        // Charge for adding motion
+        await logFlatRateCostEvent(svc, user.id, orgId, 'heygen', 'photo_avatar',
+          INTEGRATION_CREDIT_COSTS.heygen_add_motion, 'heygen_add_motion',
+          { photo_avatar_id: body.photo_avatar_id, motion_avatar_id: result.id });
+
         return jsonResponse({
           motion_avatar_id: result.id,
+        }, req);
+      }
+
+      // ---------------------------------------------------------------
+      // Step 2+3 combined: Create group + train in one call
+      // ---------------------------------------------------------------
+      case 'create_group_and_train': {
+        if (!body.avatar_id) return errorResponse('avatar_id required', req, 400);
+
+        // Fetch avatar to get generation_id and looks
+        const { data: avatarRec } = await svc
+          .from('heygen_avatars')
+          .select('heygen_generation_id, looks')
+          .eq('id', body.avatar_id)
+          .single();
+
+        if (!avatarRec) return errorResponse('Avatar not found', req, 404);
+
+        const genId = body.generation_id || avatarRec.heygen_generation_id;
+        // Use provided image_key or first look from DB
+        const imageKey = body.image_key
+          || (avatarRec.looks as Array<{ look_id?: string }>)?.[0]?.look_id;
+
+        if (!genId || !imageKey) {
+          return errorResponse('generation_id and image_key required (or must exist in DB)', req, 400);
+        }
+
+        // Step 1: Create group
+        const groupResult = await heygen.createGroup({
+          name: body.avatar_name || 'avatar_group',
+          image_key: imageKey,
+          generation_id: genId,
+        });
+
+        await svc
+          .from('heygen_avatars')
+          .update({ heygen_group_id: groupResult.group_id })
+          .eq('id', body.avatar_id);
+
+        // Step 2: Add image to group (required before training)
+        await heygen.addToGroup(groupResult.group_id, body.avatar_name || 'look_1', [imageKey], genId);
+
+        // Step 3: Train (retry with backoff — HeyGen needs time to process)
+        let cgTrained = false;
+        for (const delay of [6000, 5000, 5000]) {
+          await new Promise((r) => setTimeout(r, delay));
+          try {
+            await heygen.trainAvatar(groupResult.group_id);
+            cgTrained = true;
+            break;
+          } catch (trainErr) {
+            const te = trainErr as { code?: string };
+            if (te.code !== 'invalid_parameter') throw trainErr;
+          }
+        }
+        if (!cgTrained) {
+          throw { status: 408, message: 'Image processing timed out — please try training again', code: 'timeout' };
+        }
+
+        await svc
+          .from('heygen_avatars')
+          .update({ status: 'training' })
+          .eq('id', body.avatar_id);
+
+        // Charge for avatar training
+        await logFlatRateCostEvent(svc, user.id, orgId, 'heygen', 'photo_avatar',
+          INTEGRATION_CREDIT_COSTS.heygen_avatar_train, 'heygen_avatar_train',
+          { avatar_id: body.avatar_id, group_id: groupResult.group_id });
+
+        return jsonResponse({
+          avatar_id: body.avatar_id,
+          group_id: groupResult.group_id,
+          status: 'training',
         }, req);
       }
 
@@ -312,12 +563,153 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ avatar_id: body.avatar_id, status: 'ready' }, req);
       }
 
+      // ---------------------------------------------------------------
+      // Create a Digital Twin from training video + consent video
+      // ---------------------------------------------------------------
+      case 'create_digital_twin': {
+        if (!body.training_footage_url) return errorResponse('training_footage_url required', req, 400);
+        if (!body.video_consent_url) return errorResponse('video_consent_url required', req, 400);
+        const twinName = body.avatar_name || body.name || 'Digital Twin';
+
+        const result = await heygen.createDigitalTwin({
+          training_footage_url: body.training_footage_url,
+          video_consent_url: body.video_consent_url,
+          avatar_name: twinName,
+        });
+
+        // Save to DB
+        const { data: newAvatar, error: insertError } = await svc
+          .from('heygen_avatars')
+          .insert({
+            org_id: orgId,
+            user_id: user.id,
+            avatar_name: twinName,
+            avatar_type: 'digital_twin',
+            heygen_avatar_id: result.avatar_id,
+            status: 'training',
+            thumbnail_url: null,
+          })
+          .select('id')
+          .single();
+
+        if (insertError) {
+          console.error('[heygen-avatar-create] digital twin insert error:', insertError);
+          return errorResponse('Failed to save digital twin record', req, 500);
+        }
+
+        return jsonResponse({
+          avatar_id: newAvatar.id,
+          heygen_avatar_id: result.avatar_id,
+          status: 'training',
+        }, req);
+      }
+
+      // ---------------------------------------------------------------
+      // Check Digital Twin training status
+      // ---------------------------------------------------------------
+      case 'digital_twin_status': {
+        if (!body.avatar_id) return errorResponse('avatar_id required', req, 400);
+
+        const { data: avatar } = await svc
+          .from('heygen_avatars')
+          .select('id, heygen_avatar_id, status')
+          .eq('id', body.avatar_id)
+          .single();
+
+        if (!avatar?.heygen_avatar_id) return errorResponse('Avatar not found', req, 404);
+
+        const status = await heygen.getDigitalTwinStatus(avatar.heygen_avatar_id);
+
+        if (status.status === 'completed' && avatar.status !== 'ready') {
+          // Fetch looks from the avatar group
+          await svc
+            .from('heygen_avatars')
+            .update({ status: 'ready' })
+            .eq('id', body.avatar_id);
+        }
+
+        return jsonResponse({
+          avatar_id: body.avatar_id,
+          heygen_status: status.status,
+          db_status: avatar.status,
+        }, req);
+      }
+
+      // ---------------------------------------------------------------
+      // Import an existing Digital Twin from HeyGen (by group ID)
+      // ---------------------------------------------------------------
+      case 'import_digital_twin': {
+        if (!body.heygen_group_id) return errorResponse('heygen_group_id required', req, 400);
+        const importName = body.avatar_name || 'Digital Twin';
+
+        // Fetch looks from the group
+        const groupData = await heygen.listGroupAvatars(body.heygen_group_id);
+        const looks = (groupData.avatar_list || []).map((a: any) => ({
+          look_id: a.avatar_id,
+          name: a.avatar_name,
+          thumbnail_url: a.preview_image_url,
+          preview_video_url: a.preview_video_url || null,
+        }));
+
+        // Get group info for default voice
+        const groupInfo = await heygen.listAvatarGroups();
+        const group = (groupInfo.avatar_group_list || []).find(
+          (g) => g.id === body.heygen_group_id,
+        );
+
+        const firstLook = looks[0];
+
+        const { data: newAvatar, error: insertError } = await svc
+          .from('heygen_avatars')
+          .insert({
+            org_id: orgId,
+            user_id: user.id,
+            avatar_name: importName,
+            avatar_type: 'digital_twin',
+            heygen_avatar_id: firstLook?.look_id || null,
+            heygen_group_id: body.heygen_group_id,
+            status: 'ready',
+            looks,
+            voice_id: group?.default_voice_id || body.voice_id || null,
+            voice_name: body.voice_name || null,
+            thumbnail_url: firstLook?.thumbnail_url || group?.preview_image || null,
+          })
+          .select('id')
+          .single();
+
+        if (insertError) {
+          console.error('[heygen-avatar-create] import error:', insertError);
+          return errorResponse('Failed to import digital twin', req, 500);
+        }
+
+        return jsonResponse({
+          avatar_id: newAvatar.id,
+          looks,
+          voice_id: group?.default_voice_id || null,
+          status: 'ready',
+        }, req);
+      }
+
       default:
         return errorResponse(`Unknown action: ${action}`, req, 400);
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : typeof err === 'object' && err !== null ? JSON.stringify(err) : 'Internal error';
+    const heygenErr = err as { code?: string; message?: string; status?: number };
+    const msg = err instanceof Error
+      ? err.message
+      : typeof err === 'object' && err !== null
+        ? heygenErr.message || JSON.stringify(err)
+        : 'Internal error';
     console.error('[heygen-avatar-create] Error:', msg, err);
+
+    // Surface HeyGen-specific errors with appropriate status codes
+    if (heygenErr.code === 'insufficient_credit') {
+      return errorResponse('HeyGen credits exhausted — please top up your account', req, 402);
+    }
+    if (heygenErr.code === 'RATE_LIMITED') {
+      return errorResponse('HeyGen rate limited — please try again shortly', req, 429);
+    }
+
     return errorResponse(msg, req, 500);
   }
 });

@@ -67,19 +67,38 @@ Deno.serve(async (req: Request) => {
     // Auto-detect what to check based on current status
     if (checkType === 'auto' || checkType === 'training') {
       if (avatar.status === 'training' && avatar.heygen_group_id) {
-        const training = await heygen.getTrainingStatus(avatar.heygen_group_id);
+        let training: { status?: string; error?: string } = {};
+        try {
+          training = await heygen.getTrainingStatus(avatar.heygen_group_id);
+        } catch (trainErr) {
+          console.warn('[heygen-avatar-status] Training status API failed, checking group avatars as fallback:', trainErr);
+        }
 
         if (training.status === 'completed') {
+          // Training done — check if group has a ready avatar we can use
+          let heygenAvatarId: string | null = null;
+          try {
+            const groupAvatars = await heygen.listGroupAvatars(avatar.heygen_group_id);
+            const completedAvatar = (groupAvatars.avatar_list || []).find(
+              (a: any) => a.status === 'completed'
+            );
+            if (completedAvatar) heygenAvatarId = completedAvatar.id;
+          } catch { /* non-blocking */ }
+
+          const updateData: Record<string, unknown> = { status: heygenAvatarId ? 'ready' : 'generating_looks' };
+          if (heygenAvatarId) updateData.heygen_avatar_id = heygenAvatarId;
+
           await svc
             .from('heygen_avatars')
-            .update({ status: 'generating_looks' })
+            .update(updateData)
             .eq('id', avatar.id);
 
           return jsonResponse({
             avatar_id: avatar.id,
-            status: 'generating_looks',
+            status: updateData.status,
             training_status: 'completed',
-            message: 'Training complete — ready to generate looks',
+            heygen_avatar_id: heygenAvatarId,
+            message: heygenAvatarId ? 'Training complete — avatar ready' : 'Training complete — ready to generate looks',
           }, req);
         }
 
@@ -96,10 +115,36 @@ Deno.serve(async (req: Request) => {
           }, req);
         }
 
+        // Training status API returned no clear status — fallback: check group avatars directly
+        if (!training.status) {
+          try {
+            const groupAvatars = await heygen.listGroupAvatars(avatar.heygen_group_id);
+            const completedAvatar = (groupAvatars.avatar_list || []).find(
+              (a: any) => a.status === 'completed'
+            );
+            if (completedAvatar) {
+              await svc
+                .from('heygen_avatars')
+                .update({ status: 'ready', heygen_avatar_id: completedAvatar.id })
+                .eq('id', avatar.id);
+
+              return jsonResponse({
+                avatar_id: avatar.id,
+                status: 'ready',
+                training_status: 'completed',
+                heygen_avatar_id: completedAvatar.id,
+                message: 'Avatar ready (detected from group)',
+              }, req);
+            }
+          } catch (groupErr) {
+            console.warn('[heygen-avatar-status] Group avatars fallback failed:', groupErr);
+          }
+        }
+
         return jsonResponse({
           avatar_id: avatar.id,
           status: 'training',
-          training_status: training.status,
+          training_status: training.status || 'unknown',
         }, req);
       }
     }
@@ -110,7 +155,7 @@ Deno.serve(async (req: Request) => {
       if (generationId && (avatar.status === 'creating' || avatar.status === 'generating_looks')) {
         const generation = await heygen.getGenerationStatus(generationId);
 
-        if (generation.status === 'completed') {
+        if (generation.status === 'completed' || generation.status === 'success') {
           // Update looks array with new images
           const existingLooks = (avatar.looks as Array<Record<string, unknown>>) || [];
           const newLooks = (generation.image_url_list || []).map((url, i) => ({

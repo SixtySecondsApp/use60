@@ -17,6 +17,7 @@ import {
   Info,
   ChevronUp,
   ChevronDown,
+  Mic,
 } from 'lucide-react';
 import { HelpPanel } from '@/components/docs/HelpPanel';
 import { motion } from 'framer-motion';
@@ -45,6 +46,7 @@ import { ExplloriumConfigModal } from '@/components/integrations/ExplloriumConfi
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
 import { HeyGenConfigModal } from '@/components/integrations/HeyGenConfigModal';
+import { ElevenLabsConfigModal } from '@/components/integrations/ElevenLabsConfigModal';
 
 // Hooks and stores
 import { useGoogleIntegration } from '@/lib/stores/integrationStore';
@@ -62,6 +64,7 @@ import { useExploriumIntegration } from '@/lib/hooks/useExploriumIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
+import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
 import { getIntegrationDomain, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { useUser } from '@/lib/hooks/useUser';
@@ -543,6 +546,20 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'elevenlabs',
+    name: 'ElevenLabs',
+    description: 'Voice cloning and text-to-speech for personalized audio outreach.',
+    permissions: [
+      { title: 'Clone voices', description: 'Create instant voice clones from audio samples.' },
+      { title: 'Generate audio', description: 'Text-to-speech with cloned or stock voices.' },
+    ],
+    brandColor: 'indigo',
+    iconBgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
+    iconBorderColor: 'border-indigo-100 dark:border-indigo-800/40',
+    fallbackIcon: <Mic className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />,
+    isBuilt: true,
+  },
+  {
     id: 'apify',
     name: 'Apify',
     description: 'Run any web scraping actor from the Apify marketplace.',
@@ -757,6 +774,11 @@ export default function Integrations() {
     loading: heygenLoading,
   } = useHeyGenIntegration();
 
+  const {
+    isConnected: elevenlabsConnected,
+    loading: elevenlabsLoading,
+  } = useElevenLabsIntegration();
+
   // Modal states
   const [activeConnectModal, setActiveConnectModal] = useState<string | null>(null);
   const [activeConfigModal, setActiveConfigModal] = useState<string | null>(null);
@@ -853,6 +875,8 @@ export default function Integrations() {
         return apifyConnected ? 'active' : 'inactive';
       case 'heygen':
         return heygenConnected ? 'active' : 'inactive';
+      case 'elevenlabs':
+        return elevenlabsConnected ? 'active' : 'inactive';
       default:
         return 'coming_soon';
     }
@@ -917,6 +941,14 @@ export default function Integrations() {
       }
       if (integrationId === 'apify') {
         setActiveConfigModal('apify');
+        return;
+      }
+      if (integrationId === 'elevenlabs') {
+        setActiveConfigModal('elevenlabs');
+        return;
+      }
+      if (integrationId === 'heygen') {
+        setActiveConfigModal('heygen');
         return;
       }
       // 60 Notetaker goes straight to config modal (handles its own enable flow)
@@ -1189,6 +1221,10 @@ export default function Integrations() {
       />
       <HeyGenConfigModal
         open={activeConfigModal === 'heygen'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <ElevenLabsConfigModal
+        open={activeConfigModal === 'elevenlabs'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
     </div>
