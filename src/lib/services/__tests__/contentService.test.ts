@@ -78,7 +78,7 @@ describe('ContentService', () => {
         'https://test.supabase.co/functions/v1/extract-router'
       );
       expect((contentService as any).generateContentUrl).toBe(
-        'https://test.supabase.co/functions/v1/generate-marketing-content'
+        'https://test.supabase.co/functions/v1/generate-router'
       );
     });
 
@@ -387,13 +387,14 @@ describe('ContentService', () => {
 
       // Verify fetch called correctly
       expect(fetch).toHaveBeenCalledWith(
-        'https://test.supabase.co/functions/v1/generate-marketing-content',
+        'https://test.supabase.co/functions/v1/generate-router',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
             Authorization: 'Bearer test-jwt-token',
           }),
           body: JSON.stringify({
+            action: 'marketing_content',
             meeting_id: 'meeting-123',
             content_type: 'social',
             selected_topic_indices: [0, 1, 2],

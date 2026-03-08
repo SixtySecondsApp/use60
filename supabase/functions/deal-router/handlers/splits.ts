@@ -198,4 +198,4 @@ export async function handleSplits(req: Request): Promise<Response> {
       },
     )
   }
-}) 
+}

@@ -41,7 +41,7 @@ export const EXTERNAL_ACCESSIBLE_FUNCTIONS = [
   'condense-meeting-summary',
   'extract-action-items',
   'analyze-action-item',
-  'generate-more-actions',
+  'generate-router',
 
   // Fathom Integration
   'fathom-sync',

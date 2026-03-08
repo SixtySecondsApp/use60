@@ -23,7 +23,6 @@
 import { getCorsHeaders } from '../_shared/corsHelper.ts'
 import { handleAggregateInsightsQuery } from './handlers/aggregate-insights-query.ts'
 import { handleAnalysisBatch } from './handlers/analysis-batch.ts'
-import { handleAnalytics } from './handlers/analytics.ts'
 import { handleGenerateScorecard } from './handlers/generate-scorecard.ts'
 import { handleIntelligenceIndex } from './handlers/intelligence-index.ts'
 import { handleIntelligenceSearch } from './handlers/intelligence-search.ts'
@@ -33,7 +32,6 @@ import { handleProcessStructuredSummary } from './handlers/process-structured-su
 const HANDLERS: Record<string, (req: Request) => Promise<Response>> = {
   aggregate_insights_query: handleAggregateInsightsQuery,
   analysis_batch: handleAnalysisBatch,
-  analytics: handleAnalytics,
   generate_scorecard: handleGenerateScorecard,
   intelligence_index: handleIntelligenceIndex,
   intelligence_search: handleIntelligenceSearch,

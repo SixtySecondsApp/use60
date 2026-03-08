@@ -1,0 +1,95 @@
+{
+  "version": 2,
+  "runSlug": "edge-function-consolidation-phase1",
+  "project": "Edge Function Consolidation — Phase 1",
+  "description": "Consolidate ~33 internal edge functions into 6 routers, reducing total function count by ~27",
+  "phase": "build",
+  "startedAt": "2026-03-08T10:00:00Z",
+  "lastUpdatedAt": "2026-03-08T10:00:00Z",
+  "input": {
+    "type": "description",
+    "source": "user-input",
+    "extractedRequirements": [
+      "Consolidate enrichment services (apollo, ai-ark, apify) into domain routers",
+      "Consolidate push-to-* functions into push router",
+      "Merge CRM disconnect/list-ops into existing admin routers",
+      "Merge video thumbnail functions",
+      "Do NOT touch webhooks, OAuth callbacks, pg_cron targets, Slack endpoints",
+      "Router pattern: action parameter dispatch",
+      "Update all callers (frontend + edge functions)"
+    ]
+  },
+  "phaseGates": {
+    "discover": { "status": "complete", "completedAt": "2026-03-08T10:15:00Z" },
+    "define": { "status": "complete", "completedAt": "2026-03-08T10:15:00Z" },
+    "plan": { "status": "complete", "completedAt": "2026-03-08T10:20:00Z" },
+    "build": { "status": "in_progress", "completedAt": null },
+    "deliver": { "status": "pending", "completedAt": null }
+  },
+  "branch": "feature/edge-function-consolidation-phase1",
+  "stories": [
+    {
+      "id": "EFC-001",
+      "title": "Create Apollo router function with all 6 handlers",
+      "status": "pending",
+      "priority": 1
+    },
+    {
+      "id": "EFC-002",
+      "title": "Update all Apollo callers (frontend + edge functions)",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": ["EFC-001"]
+    },
+    {
+      "id": "EFC-003",
+      "title": "Create AI Ark router function with all 5 handlers",
+      "status": "pending",
+      "priority": 3
+    },
+    {
+      "id": "EFC-004",
+      "title": "Update all AI Ark callers (frontend + edge functions)",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": ["EFC-003"]
+    },
+    {
+      "id": "EFC-005",
+      "title": "Create Apify router function with all 6 handlers",
+      "status": "pending",
+      "priority": 5
+    },
+    {
+      "id": "EFC-006",
+      "title": "Update all Apify callers (frontend + edge functions)",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": ["EFC-005"]
+    },
+    {
+      "id": "EFC-007",
+      "title": "Create Push router function with all 6 handlers",
+      "status": "pending",
+      "priority": 7
+    },
+    {
+      "id": "EFC-008",
+      "title": "Update all Push callers (frontend + edge functions)",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": ["EFC-007"]
+    },
+    {
+      "id": "EFC-009",
+      "title": "Delete old function directories (apollo-*, ai-ark-*, apify-*, push-*)",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": ["EFC-002", "EFC-004", "EFC-006", "EFC-008"]
+    }
+  ],
+  "execution": {
+    "totalStories": 9,
+    "completedStories": 0
+  }
+}
