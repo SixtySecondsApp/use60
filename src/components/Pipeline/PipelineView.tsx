@@ -183,9 +183,13 @@ export function PipelineView() {
       grouped[stage.stage_id] = [];
     });
 
+    // Dormancy: Signed (probability=100%) → never dormant; Lost (probability=0%) → always dormant
+    const isDealDormant = (d: any) =>
+      d.probability === 0 ? true : d.probability === 100 ? false : (d.days_since_last_activity ?? 0) >= 30;
+
     // Apply dormant filter client-side if active
     const deals = isDormantFilterActive
-      ? pipelineData.data.deals.filter((d: any) => (d.days_since_last_activity ?? 0) >= 30)
+      ? pipelineData.data.deals.filter((d: any) => isDealDormant(d))
       : pipelineData.data.deals;
 
     deals.forEach((deal: any) => {
@@ -193,12 +197,12 @@ export function PipelineView() {
         grouped[deal.stage_id].push(deal);
       }
     });
-    // Sort dormant deals (30+ days no activity) to bottom of each column
+    // Sort dormant deals to bottom of each column
     if (!isDormantFilterActive) {
       Object.keys(grouped).forEach((stageId) => {
         grouped[stageId].sort((a: any, b: any) => {
-          const aDormant = (a.days_since_last_activity ?? 0) >= 30 ? 1 : 0;
-          const bDormant = (b.days_since_last_activity ?? 0) >= 30 ? 1 : 0;
+          const aDormant = isDealDormant(a) ? 1 : 0;
+          const bDormant = isDealDormant(b) ? 1 : 0;
           return aDormant - bDormant;
         });
       });

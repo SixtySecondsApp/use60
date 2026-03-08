@@ -118,7 +118,11 @@ BEGIN
               'sentiment_trend', dhs.sentiment_trend,
               'days_in_current_stage', dhs.days_in_current_stage,
               'days_since_last_meeting', dhs.days_since_last_meeting,
-              'days_since_last_activity', COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER),
+              'days_since_last_activity', CASE
+                WHEN COALESCE(ds.default_probability, 50) = 100 THEN 0          -- Signed/won → never dormant
+                WHEN COALESCE(ds.default_probability, 50) = 0   THEN 999        -- Lost → always dormant
+                ELSE COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER)
+              END,
               'predicted_close_probability', dhs.predicted_close_probability,
 
               -- Relationship health
@@ -216,9 +220,12 @@ BEGIN
             COUNT(d.id)::INTEGER as deal_count,
             COALESCE(SUM(d.value), 0) as total_value,
             COALESCE(SUM(
-              CASE WHEN COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) < 30
-                   THEN d.value * COALESCE(d.probability, ds.default_probability, 0) / 100.0
-                   ELSE 0
+              CASE
+                WHEN COALESCE(ds.default_probability, 50) = 0 THEN 0  -- Lost → always dormant, exclude
+                WHEN COALESCE(ds.default_probability, 50) = 100 THEN d.value * 1.0  -- Signed → never dormant, full value
+                WHEN COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) < 30
+                     THEN d.value * COALESCE(d.probability, ds.default_probability, 0) / 100.0
+                ELSE 0
               END
             ), 0) as weighted_value
           FROM deal_stages ds
@@ -238,9 +245,12 @@ BEGIN
       SELECT jsonb_build_object(
         'total_value', COALESCE(SUM(d.value), 0),
         'weighted_value', COALESCE(SUM(
-          CASE WHEN COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) < 30
-               THEN d.value * COALESCE(d.probability, 50) / 100.0
-               ELSE 0
+          CASE
+            WHEN COALESCE(ds2.default_probability, 50) = 0 THEN 0  -- Lost → always dormant, exclude
+            WHEN COALESCE(ds2.default_probability, 50) = 100 THEN d.value * 1.0  -- Signed → never dormant, full value
+            WHEN COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) < 30
+                 THEN d.value * COALESCE(d.probability, 50) / 100.0
+            ELSE 0
           END
         ), 0),
         'deal_count', v_total_count,
@@ -248,9 +258,14 @@ BEGIN
         'warning_count', COUNT(*) FILTER (WHERE dhs.health_status = 'warning'),
         'critical_count', COUNT(*) FILTER (WHERE dhs.health_status = 'critical'),
         'stalled_count', COUNT(*) FILTER (WHERE dhs.health_status = 'stalled'),
-        'dormant_count', COUNT(*) FILTER (WHERE COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) >= 30)
+        'dormant_count', COUNT(*) FILTER (WHERE
+          COALESCE(ds2.default_probability, 50) = 0  -- Lost → always dormant
+          OR (COALESCE(ds2.default_probability, 50) != 100  -- Signed → never dormant
+              AND COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) >= 30)
+        )
       )
       FROM deals d
+      LEFT JOIN deal_stages ds2 ON ds2.id = d.stage_id
       LEFT JOIN deal_health_scores dhs ON dhs.deal_id = d.id
       WHERE d.clerk_org_id = p_org_id
         AND d.status = v_status

@@ -132,7 +132,12 @@ export const DealCard = React.memo<DealCardProps>(({
   const showLogo = logoUrl && !logoError;
   const daysUrgency = getDaysUrgency(deal.days_in_current_stage);
   const freshness = getFreshnessStyle(deal.days_since_last_activity);
-  const isDormant = (deal.days_since_last_activity ?? 0) >= 30;
+  // Signed (probability=100%) → never dormant; Lost (probability=0%) → always dormant
+  const isDormant = deal.probability === 0
+    ? true
+    : deal.probability === 100
+      ? false
+      : (deal.days_since_last_activity ?? 0) >= 30;
 
   return (
     <div
