@@ -410,7 +410,7 @@ serve(async (req) => {
       }
 
       // Tag catch-up schedules so we can log them correctly
-      const catchUpIds = new Set(missedSchedules.map((s) => s.id));
+      catchUpIds = new Set(missedSchedules.map((s) => s.id));
 
       schedulesToRun = [...cronMatches, ...missedSchedules];
 
@@ -518,14 +518,37 @@ serve(async (req) => {
 
         const durationMs = Date.now() - runStart;
 
-        // Deliver result via configured channel
-        const delivered = await deliverResult(
-          supabase,
-          schedule,
-          runAsUserId,
-          result.responseText,
-          agentName
-        );
+        // Enforce permission_mode before delivery
+        const mode = schedule.permission_mode || 'suggest';
+        let delivered = false;
+
+        if (mode === 'suggest') {
+          // Suggest mode: suppress delivery, store result for review in Command Centre
+          await supabase.from('notifications').insert({
+            user_id: runAsUserId,
+            organization_id: schedule.organization_id,
+            type: 'agent_suggestion',
+            title: `Review: Scheduled ${agentName} report`,
+            body: `A scheduled ${agentName} report is ready for your review before delivery.`,
+            metadata: {
+              schedule_id: schedule.id,
+              agent_name: agentName,
+              full_response: result.responseText,
+              permission_mode: 'suggest',
+              pending_approval: true,
+            },
+          });
+          delivered = false; // Not delivered — pending review
+        } else {
+          // 'approve' and 'auto' modes: deliver result via configured channel
+          delivered = await deliverResult(
+            supabase,
+            schedule,
+            runAsUserId,
+            result.responseText,
+            agentName
+          );
+        }
 
         // Update last_run_at
         await supabase

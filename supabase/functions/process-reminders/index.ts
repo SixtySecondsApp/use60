@@ -22,10 +22,11 @@ serve(async (req) => {
   try {
     const isCronAuth = verifyCronSecret(req, Deno.env.get('CRON_SECRET'));
     if (!isCronAuth) {
-      // Also allow service role auth
+      // Also allow service role auth — exact match only
       const authHeader = req.headers.get('Authorization');
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-      if (!authHeader || !authHeader.includes(serviceKey)) {
+      const token = authHeader?.replace(/^Bearer\s+/i, '') ?? '';
+      if (!token || token !== serviceKey) {
         return errorResponse('Unauthorized', req, 401);
       }
     }
@@ -78,9 +79,11 @@ serve(async (req) => {
       }
 
       try {
+        let deliverySuccess = false;
+
         if (reminder.delivery_channel === 'slack') {
           // Deliver via Slack
-          await fetch(`${supabaseUrl}/functions/v1/slack-send`, {
+          const slackRes = await fetch(`${supabaseUrl}/functions/v1/slack-send`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${supabaseServiceKey}`,
@@ -93,9 +96,15 @@ serve(async (req) => {
               message: `*Reminder:* ${reminder.message}`,
             }),
           });
+
+          if (!slackRes.ok) {
+            console.error(`[process-reminders] Slack delivery failed for ${reminder.id}: ${slackRes.status}`);
+          } else {
+            deliverySuccess = true;
+          }
         } else {
           // Deliver as in-app notification
-          await supabase.from('notifications').insert({
+          const { error: insertError } = await supabase.from('notifications').insert({
             user_id: reminder.user_id,
             organization_id: reminder.organization_id,
             type: 'reminder',
@@ -107,15 +116,22 @@ serve(async (req) => {
               remind_at: reminder.remind_at,
             },
           });
+
+          if (insertError) {
+            console.error(`[process-reminders] Notification insert failed for ${reminder.id}:`, insertError);
+          } else {
+            deliverySuccess = true;
+          }
         }
 
-        // Mark as delivered
-        await supabase
-          .from('reminders')
-          .update({ delivered: true })
-          .eq('id', reminder.id);
-
-        delivered++;
+        // Only mark as delivered if delivery actually succeeded
+        if (deliverySuccess) {
+          await supabase
+            .from('reminders')
+            .update({ delivered: true })
+            .eq('id', reminder.id);
+          delivered++;
+        }
       } catch (err) {
         console.error(`[process-reminders] Error delivering reminder ${reminder.id}:`, err);
       }

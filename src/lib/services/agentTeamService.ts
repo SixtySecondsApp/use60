@@ -163,7 +163,7 @@ export async function createSchedule(
 
 export async function updateSchedule(
   id: string,
-  updates: Partial<Pick<AgentSchedule, 'agent_name' | 'cron_expression' | 'prompt_template' | 'delivery_channel' | 'is_active'>>
+  updates: Partial<Pick<AgentSchedule, 'agent_name' | 'cron_expression' | 'prompt_template' | 'delivery_channel' | 'permission_mode' | 'is_active'>>
 ): Promise<AgentSchedule> {
   const { data, error } = await supabase
     .from('agent_schedules')

@@ -24,6 +24,9 @@ import {
   Database,
   Calendar,
   Target,
+  Pencil,
+  X,
+  HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -71,6 +74,8 @@ import {
 } from '@/lib/services/agentTeamService';
 import FrequencyPicker, { describeCron } from '@/components/agent/FrequencyPicker';
 import ScheduleRunHistory from '@/components/agent/ScheduleRunHistory';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { HelpPanel } from '@/components/docs/HelpPanel';
 
 // =============================================================================
 // Constants — agent names match backend agentDefinitions registry
@@ -178,6 +183,15 @@ export default function AgentTeamSettings() {
   const [newTriggerAgent, setNewTriggerAgent] = useState('');
   const [newTriggerEvent, setNewTriggerEvent] = useState('');
   const [newTriggerPrompt, setNewTriggerPrompt] = useState('');
+
+  // Edit mode state
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [editScheduleAgent, setEditScheduleAgent] = useState('');
+  const [editScheduleCron, setEditScheduleCron] = useState('');
+  const [editSchedulePrompt, setEditSchedulePrompt] = useState('');
+  const [editScheduleChannel, setEditScheduleChannel] = useState('in_app');
+  const [editSchedulePermission, setEditSchedulePermission] = useState<'suggest' | 'approve' | 'auto'>('suggest');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Running/testing state
   const [runningScheduleId, setRunningScheduleId] = useState<string | null>(null);
@@ -314,6 +328,7 @@ export default function AgentTeamSettings() {
   };
 
   const handleDeleteSchedule = async (id: string) => {
+    if (!window.confirm('Delete this schedule? This action cannot be undone.')) return;
     try {
       await deleteSchedule(id);
       setSchedules((prev) => prev.filter((s) => s.id !== id));
@@ -349,6 +364,44 @@ export default function AgentTeamSettings() {
       toast.error(error.message || 'Failed to run schedule');
     } finally {
       setRunningScheduleId(null);
+    }
+  };
+
+  const handleEditSchedule = (schedule: AgentSchedule) => {
+    setEditingScheduleId(schedule.id);
+    setEditScheduleAgent(schedule.agent_name);
+    setEditScheduleCron(schedule.cron_expression);
+    setEditSchedulePrompt(schedule.prompt_template);
+    setEditScheduleChannel(schedule.delivery_channel || 'in_app');
+    setEditSchedulePermission(schedule.permission_mode || 'suggest');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingScheduleId(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingScheduleId || !editScheduleAgent || !editSchedulePrompt) {
+      toast.error('Please fill in all schedule fields');
+      return;
+    }
+    try {
+      setIsSavingEdit(true);
+      const updated = await updateSchedule(editingScheduleId, {
+        agent_name: editScheduleAgent,
+        cron_expression: editScheduleCron,
+        prompt_template: editSchedulePrompt,
+        delivery_channel: editScheduleChannel,
+        permission_mode: editSchedulePermission,
+      });
+      setSchedules((prev) => prev.map((s) => (s.id === editingScheduleId ? updated : s)));
+      setEditingScheduleId(null);
+      toast.success('Schedule updated');
+    } catch (error) {
+      console.error('Error updating schedule:', error);
+      toast.error('Failed to update schedule');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -391,6 +444,7 @@ export default function AgentTeamSettings() {
   };
 
   const handleDeleteTrigger = async (id: string) => {
+    if (!window.confirm('Delete this trigger? This action cannot be undone.')) return;
     try {
       await deleteTrigger(id);
       setTriggers((prev) => prev.filter((t) => t.id !== id));
@@ -452,12 +506,13 @@ export default function AgentTeamSettings() {
         <Button variant="ghost" size="icon" onClick={() => navigate('/platform')}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">Agent Team Settings</h1>
           <p className="text-muted-foreground">
             Configure multi-agent sales team, schedules, and automation triggers
           </p>
         </div>
+        <HelpPanel docSlug="scheduling-overview" tooltip="Learn about agent scheduling" />
       </div>
 
       {isLoading ? (
@@ -600,8 +655,8 @@ export default function AgentTeamSettings() {
 
                 {/* Add Schedule Form */}
                 <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1 space-y-1">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex-1 min-w-[180px] space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">Agent</label>
                       <Select value={newScheduleAgent} onValueChange={setNewScheduleAgent}>
                         <SelectTrigger>
@@ -614,7 +669,7 @@ export default function AgentTeamSettings() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex-1 space-y-1">
+                    <div className="flex-1 min-w-[200px] space-y-1">
                       <FrequencyPicker
                         value={newScheduleCron}
                         onChange={setNewScheduleCron}
@@ -634,7 +689,20 @@ export default function AgentTeamSettings() {
                       </Select>
                     </div>
                     <div className="w-40 space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Autonomy</label>
+                      <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                        Autonomy
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <HelpCircle className="h-3 w-3 text-muted-foreground/50" />
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-[220px] whitespace-normal">
+                            <p className="font-semibold mb-1">Permission modes</p>
+                            <p><strong>Suggest:</strong> Results saved for your review — not auto-delivered.</p>
+                            <p><strong>Approve:</strong> Results delivered, but external actions need approval.</p>
+                            <p><strong>Auto:</strong> Full autonomous execution and delivery.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </label>
                       <Select value={newSchedulePermission} onValueChange={(v) => setNewSchedulePermission(v as 'suggest' | 'approve' | 'auto')}>
                         <SelectTrigger>
                           <SelectValue />
@@ -665,6 +733,7 @@ export default function AgentTeamSettings() {
                 </div>
 
                 {/* Schedules Table */}
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -683,6 +752,84 @@ export default function AgentTeamSettings() {
                       schedules.map((schedule) => {
                         const agentInfo = AGENTS.find((a) => a.name === schedule.agent_name);
                         const isRunning = runningScheduleId === schedule.id;
+                        const isEditing = editingScheduleId === schedule.id;
+
+                        if (isEditing) {
+                          return (
+                            <TableRow key={schedule.id} className="bg-muted/30">
+                              <TableCell colSpan={8}>
+                                <div className="space-y-3 py-2">
+                                  <div className="flex flex-wrap items-end gap-3">
+                                    <div className="flex-1 min-w-[180px] space-y-1">
+                                      <label className="text-xs font-medium text-muted-foreground">Agent</label>
+                                      <Select value={editScheduleAgent} onValueChange={setEditScheduleAgent}>
+                                        <SelectTrigger>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {AGENTS.map((a) => (
+                                            <SelectItem key={a.name} value={a.name}>{a.displayName}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="flex-1 min-w-[200px] space-y-1">
+                                      <FrequencyPicker
+                                        value={editScheduleCron}
+                                        onChange={setEditScheduleCron}
+                                      />
+                                    </div>
+                                    <div className="w-40 space-y-1">
+                                      <label className="text-xs font-medium text-muted-foreground">Delivery</label>
+                                      <Select value={editScheduleChannel} onValueChange={setEditScheduleChannel}>
+                                        <SelectTrigger>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {DELIVERY_CHANNELS.map((ch) => (
+                                            <SelectItem key={ch.value} value={ch.value}>{ch.label}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="w-40 space-y-1">
+                                      <label className="text-xs font-medium text-muted-foreground">Autonomy</label>
+                                      <Select value={editSchedulePermission} onValueChange={(v) => setEditSchedulePermission(v as 'suggest' | 'approve' | 'auto')}>
+                                        <SelectTrigger>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="suggest">Suggest (review first)</SelectItem>
+                                          <SelectItem value="approve">Approve (gate actions)</SelectItem>
+                                          <SelectItem value="auto">Auto (full execution)</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-medium text-muted-foreground">Prompt Template</label>
+                                    <Textarea
+                                      value={editSchedulePrompt}
+                                      onChange={(e) => setEditSchedulePrompt(e.target.value)}
+                                      rows={2}
+                                    />
+                                  </div>
+                                  <div className="flex justify-end gap-2">
+                                    <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={isSavingEdit}>
+                                      <X className="h-3.5 w-3.5 mr-1" />
+                                      Cancel
+                                    </Button>
+                                    <Button size="sm" onClick={handleSaveEdit} disabled={isSavingEdit}>
+                                      {isSavingEdit ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+                                      Save Changes
+                                    </Button>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
+
                         return (
                           <TableRow key={schedule.id}>
                             <TableCell>
@@ -731,9 +878,17 @@ export default function AgentTeamSettings() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  onClick={() => handleEditSchedule(schedule)}
+                                  aria-label={`Edit ${agentInfo?.displayName || schedule.agent_name} schedule`}
+                                >
+                                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
                                   onClick={() => handleRunScheduleNow(schedule.id)}
                                   disabled={isRunning}
-                                  title="Run now"
+                                  aria-label={`Run ${agentInfo?.displayName || schedule.agent_name} schedule now`}
                                 >
                                   {isRunning ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -745,6 +900,7 @@ export default function AgentTeamSettings() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleDeleteSchedule(schedule.id)}
+                                  aria-label={`Delete ${agentInfo?.displayName || schedule.agent_name} schedule`}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
@@ -762,6 +918,7 @@ export default function AgentTeamSettings() {
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -783,8 +940,8 @@ export default function AgentTeamSettings() {
               <CardContent className="space-y-6">
                 {/* Add Trigger Form */}
                 <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1 space-y-1">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex-1 min-w-[180px] space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">Agent</label>
                       <Select value={newTriggerAgent} onValueChange={setNewTriggerAgent}>
                         <SelectTrigger>
@@ -797,7 +954,7 @@ export default function AgentTeamSettings() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex-1 space-y-1">
+                    <div className="flex-1 min-w-[180px] space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">Event Type</label>
                       <Select value={newTriggerEvent} onValueChange={setNewTriggerEvent}>
                         <SelectTrigger>
@@ -875,7 +1032,7 @@ export default function AgentTeamSettings() {
                                   size="icon"
                                   onClick={() => handleTestTrigger(trigger.id)}
                                   disabled={isTesting}
-                                  title="Test trigger"
+                                  aria-label={`Test ${agentInfo?.displayName || trigger.agent_name} trigger`}
                                 >
                                   {isTesting ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -887,6 +1044,7 @@ export default function AgentTeamSettings() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => handleDeleteTrigger(trigger.id)}
+                                  aria-label={`Delete ${agentInfo?.displayName || trigger.agent_name} trigger`}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>

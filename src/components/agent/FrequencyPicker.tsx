@@ -8,7 +8,7 @@
  * Output: a valid 5-field cron expression string.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Select,
   SelectContent,
@@ -17,6 +17,41 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+
+/** Validate a 5-field cron expression */
+function isValidCron(cron: string): boolean {
+  if (!cron) return false;
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const patterns = [
+    /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/, // minute (0-59)
+    /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/, // hour (0-23)
+    /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/, // day of month (1-31)
+    /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/, // month (1-12)
+    /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/, // day of week (0-7)
+  ];
+  return parts.every((part, i) => patterns[i].test(part));
+}
+
+/** Get the user's timezone abbreviation */
+function getUserTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return 'UTC';
+  }
+}
+
+/** Get short timezone label (e.g., "EST", "PST") */
+function getTimezoneAbbr(): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' });
+    const parts = formatter.formatToParts(new Date());
+    return parts.find((p) => p.type === 'timeZoneName')?.value || getUserTimezone();
+  } catch {
+    return 'UTC';
+  }
+}
 
 type FrequencyPreset = 'manual' | 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'custom';
 
@@ -128,19 +163,32 @@ export default function FrequencyPicker({ value, onChange }: FrequencyPickerProp
   const [time, setTime] = useState(() => extractTime(value));
   const [dayOfWeek, setDayOfWeek] = useState(() => extractDayOfWeek(value));
   const [customCron, setCustomCron] = useState(value || '');
+  const [cronError, setCronError] = useState('');
+  const isInitialMount = useRef(true);
 
-  // Rebuild cron when preset/time/day changes
+  // Rebuild cron when preset/time/day changes (skip initial mount)
   const emitCron = useCallback(() => {
     if (preset === 'custom') {
+      if (customCron && !isValidCron(customCron)) {
+        setCronError('Invalid cron — expected 5 fields (min hour dom month dow)');
+        return;
+      }
+      setCronError('');
       onChange(customCron);
     } else if (preset === 'manual') {
+      setCronError('');
       onChange('');
     } else {
+      setCronError('');
       onChange(buildCron(preset, time, dayOfWeek));
     }
   }, [preset, time, dayOfWeek, customCron, onChange]);
 
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     emitCron();
   }, [emitCron]);
 
@@ -152,7 +200,11 @@ export default function FrequencyPicker({ value, onChange }: FrequencyPickerProp
   };
 
   const showTimePicker = preset === 'daily' || preset === 'weekdays' || preset === 'weekly';
+  const showMinutePicker = preset === 'hourly';
   const showDayPicker = preset === 'weekly';
+
+  // Extract minute from time for the hourly minute-only picker
+  const minuteValue = time.split(':')[1] || '00';
 
   return (
     <div className="space-y-2">
@@ -174,6 +226,23 @@ export default function FrequencyPicker({ value, onChange }: FrequencyPickerProp
             </SelectContent>
           </Select>
         </div>
+
+        {/* Minute picker for hourly preset */}
+        {showMinutePicker && (
+          <div className="w-28 space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">At minute</label>
+            <Select value={minuteValue} onValueChange={(v) => setTime(`09:${v}`)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'].map((m) => (
+                  <SelectItem key={m} value={m}>:{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {/* Time picker */}
         {showTimePicker && (
@@ -207,17 +276,27 @@ export default function FrequencyPicker({ value, onChange }: FrequencyPickerProp
 
       {/* Custom cron input */}
       {preset === 'custom' && (
-        <Input
-          placeholder="0 9 * * 1-5"
-          value={customCron}
-          onChange={(e) => setCustomCron(e.target.value)}
-          className="font-mono text-sm"
-        />
+        <div className="space-y-1">
+          <Input
+            placeholder="0 9 * * 1-5"
+            value={customCron}
+            onChange={(e) => setCustomCron(e.target.value)}
+            className={`font-mono text-sm ${cronError ? 'border-destructive' : ''}`}
+          />
+          {cronError && (
+            <p className="text-xs text-destructive">{cronError}</p>
+          )}
+        </div>
       )}
 
-      {/* Human-readable summary */}
+      {/* Human-readable summary + timezone */}
       {value && (
-        <p className="text-xs text-muted-foreground">{describeCron(value)}</p>
+        <p className="text-xs text-muted-foreground">
+          {describeCron(value)}
+          {preset !== 'manual' && preset !== 'hourly' && (
+            <span className="ml-1 text-muted-foreground/60">({getTimezoneAbbr()})</span>
+          )}
+        </p>
       )}
     </div>
   );

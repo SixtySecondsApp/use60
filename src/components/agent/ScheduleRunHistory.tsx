@@ -5,7 +5,7 @@
  * duration, delivery status, and expandable response summaries.
  */
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle2,
@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/table';
 import { getScheduleRuns, type AgentScheduleRun } from '@/lib/services/agentTeamService';
 import type { AgentSchedule } from '@/lib/services/agentTeamService';
+import { describeCron } from '@/components/agent/FrequencyPicker';
 
 interface ScheduleRunHistoryProps {
   organizationId: string;
@@ -98,7 +99,7 @@ export default function ScheduleRunHistory({ organizationId, schedules }: Schedu
                 <SelectItem value="all">All schedules</SelectItem>
                 {schedules.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {s.agent_name} — {s.cron_expression}
+                    {s.agent_name} — {describeCron(s.cron_expression)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -137,18 +138,26 @@ export default function ScheduleRunHistory({ organizationId, schedules }: Schedu
                 const isExpanded = expandedId === run.id;
 
                 return (
-                  <>
+                  <Fragment key={run.id}>
                     <TableRow
-                      key={run.id}
                       className={run.response_summary ? 'cursor-pointer hover:bg-muted/50' : ''}
                       onClick={() => run.response_summary && setExpandedId(isExpanded ? null : run.id)}
+                      role={run.response_summary ? 'button' : undefined}
+                      aria-expanded={run.response_summary ? isExpanded : undefined}
+                      tabIndex={run.response_summary ? 0 : undefined}
+                      onKeyDown={(e) => {
+                        if (run.response_summary && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          setExpandedId(isExpanded ? null : run.id);
+                        }
+                      }}
                     >
                       <TableCell className="w-8">
                         {run.response_summary ? (
                           isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                           ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                           )
                         ) : null}
                       </TableCell>
@@ -197,7 +206,7 @@ export default function ScheduleRunHistory({ organizationId, schedules }: Schedu
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>
