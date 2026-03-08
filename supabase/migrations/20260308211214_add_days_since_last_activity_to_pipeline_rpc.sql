@@ -110,26 +110,26 @@ BEGIN
               'stage_color', ds.color,
               'stage_order', ds.order_position,
 
-              -- Deal health scores
-              'health_score', dhs.overall_health_score,
-              'health_status', dhs.health_status,
-              'risk_level', dhs.risk_level,
-              'risk_factors', dhs.risk_factors,
-              'sentiment_trend', dhs.sentiment_trend,
-              'days_in_current_stage', dhs.days_in_current_stage,
-              'days_since_last_meeting', dhs.days_since_last_meeting,
+              -- Deal health scores (nulled for Signed/Lost stages)
+              'health_score', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE dhs.overall_health_score END,
+              'health_status', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE dhs.health_status END,
+              'risk_level', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE dhs.risk_level END,
+              'risk_factors', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE dhs.risk_factors END,
+              'sentiment_trend', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE dhs.sentiment_trend END,
+              'days_in_current_stage', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE dhs.days_in_current_stage END,
+              'days_since_last_meeting', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE dhs.days_since_last_meeting END,
               'days_since_last_activity', CASE
                 WHEN COALESCE(ds.default_probability, 50) = 100 THEN 0          -- Signed/won → never dormant
                 WHEN COALESCE(ds.default_probability, 50) = 0   THEN 999        -- Lost → always dormant
                 ELSE COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER)
               END,
-              'predicted_close_probability', dhs.predicted_close_probability,
+              'predicted_close_probability', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE dhs.predicted_close_probability END,
 
-              -- Relationship health
-              'relationship_health_score', rhs.overall_health_score,
-              'relationship_health_status', rhs.health_status,
-              'ghost_probability', rhs.ghost_probability_percent,
-              'relationship_risk_factors', rhs.risk_factors,
+              -- Relationship health (nulled for Signed/Lost stages)
+              'relationship_health_score', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE rhs.overall_health_score END,
+              'relationship_health_status', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE rhs.health_status END,
+              'ghost_probability', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE rhs.ghost_probability_percent END,
+              'relationship_risk_factors', CASE WHEN COALESCE(ds.default_probability, 50) IN (0, 100) THEN NULL ELSE rhs.risk_factors END,
 
               -- Next action counts
               'pending_actions_count', COALESCE(na.pending_count, 0),
@@ -254,10 +254,10 @@ BEGIN
           END
         ), 0),
         'deal_count', v_total_count,
-        'healthy_count', COUNT(*) FILTER (WHERE dhs.health_status = 'healthy'),
-        'warning_count', COUNT(*) FILTER (WHERE dhs.health_status = 'warning'),
-        'critical_count', COUNT(*) FILTER (WHERE dhs.health_status = 'critical'),
-        'stalled_count', COUNT(*) FILTER (WHERE dhs.health_status = 'stalled'),
+        'healthy_count', COUNT(*) FILTER (WHERE dhs.health_status = 'healthy' AND COALESCE(ds2.default_probability, 50) NOT IN (0, 100)),
+        'warning_count', COUNT(*) FILTER (WHERE dhs.health_status = 'warning' AND COALESCE(ds2.default_probability, 50) NOT IN (0, 100)),
+        'critical_count', COUNT(*) FILTER (WHERE dhs.health_status = 'critical' AND COALESCE(ds2.default_probability, 50) NOT IN (0, 100)),
+        'stalled_count', COUNT(*) FILTER (WHERE dhs.health_status = 'stalled' AND COALESCE(ds2.default_probability, 50) NOT IN (0, 100)),
         'dormant_count', COUNT(*) FILTER (WHERE
           COALESCE(ds2.default_probability, 50) = 0  -- Lost → always dormant
           OR (COALESCE(ds2.default_probability, 50) != 100  -- Signed → never dormant
