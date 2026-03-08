@@ -273,9 +273,10 @@ Example: { "target_role": "VP Sales", "industry": "SaaS", "company_size": "50-20
    */
   private async callAI(systemPrompt: string, userPrompt: string): Promise<string> {
     // Call the copilot edge function with a special "understand" action
-    const { data, error } = await supabase.functions.invoke('api-copilot', {
+    const { data, error } = await supabase.functions.invoke('api-services-router', {
       body: {
-        action: 'understand',
+        action: 'copilot',
+        sub_action: 'understand',
         systemPrompt,
         userPrompt,
       },

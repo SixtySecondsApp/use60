@@ -494,8 +494,8 @@ export function AttioImportWizard({ open, onOpenChange, onComplete, importMode =
       if (!token) throw new Error('No auth token available');
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
-      const fnUrl = `${supabaseUrl}/functions/v1/import-from-attio`;
-      const jsonBody = JSON.stringify(requestBody);
+      const fnUrl = `${supabaseUrl}/functions/v1/import-router`;
+      const jsonBody = JSON.stringify({ action: 'from_attio', ...requestBody });
 
       const resp = await fetch(fnUrl, {
         method: 'POST',

@@ -55,12 +55,12 @@ echo "$MEETINGS" | jq -c '.[]' | while read -r meeting; do
     echo "📄 Fetching: $TITLE"
 
     # Call fetch-transcript edge function
-    RESULT=$(curl -s -X POST "${SUPABASE_URL}/functions/v1/fetch-transcript" \
+    RESULT=$(curl -s -X POST "${SUPABASE_URL}/functions/v1/fetch-router" \
       -H "Authorization: Bearer ${SERVICE_ROLE_KEY}" \
       -H "apikey: ${SERVICE_ROLE_KEY}" \
       -H "x-service-role-key: ${SERVICE_ROLE_KEY}" \
       -H "Content-Type: application/json" \
-      -d "{\"meetingId\": \"${MEETING_ID}\", \"user_id\": \"${OWNER_ID}\"}")
+      -d "{\"action\": \"transcript\", \"meetingId\": \"${MEETING_ID}\", \"user_id\": \"${OWNER_ID}\"}")
 
     # Check if successful
     SUCCESS_CHECK=$(echo "$RESULT" | jq -r '.success // false')

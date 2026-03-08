@@ -833,12 +833,13 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           const { data: sessionData } = await supabase.auth.getSession();
           const token = sessionData.session?.access_token;
           if (token) {
-            const resp = await supabase.functions.invoke('populate-hubspot-column', {
+            const resp = await supabase.functions.invoke('populate-router', {
               headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
+                action: 'hubspot_column',
                 table_id: tableId,
                 column_id: column.id,
                 property_name: hubspotPropertyName,
@@ -1001,8 +1002,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         })
       );
       // Then call the edge function to regenerate
-      const { error } = await supabase.functions.invoke('generate-email-sequence', {
+      const { error } = await supabase.functions.invoke('generate-router', {
         body: {
+          action: 'email_sequence',
           table_id: tableId,
           sequence_config: {
             num_steps: config.num_steps,
@@ -1073,8 +1075,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
   const pushToHubSpotMutation = useMutation({
     mutationFn: async (config: HubSpotPushConfig) => {
-      const { data, error } = await supabase.functions.invoke('push-to-hubspot', {
-        body: { table_id: tableId, row_ids: Array.from(selectedRows), config },
+      const { data, error } = await supabase.functions.invoke('crm-push', {
+        body: { action: 'to_hubspot', table_id: tableId, row_ids: Array.from(selectedRows), config },
       });
       if (error) throw error;
       return data;
@@ -1095,8 +1097,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     if (!table) return;
     setIsLoadingLists(true);
     try {
-      const { data, error } = await supabase.functions.invoke('hubspot-admin', {
-        body: { action: 'get_lists', org_id: table.organization_id },
+      const { data, error } = await supabase.functions.invoke('crm-admin-router', {
+        body: { action: 'hubspot_admin', sub_action: 'get_lists', org_id: table.organization_id },
       });
       if (error) throw error;
       const lists = (data?.lists ?? []).map((l: any) => ({
@@ -1116,9 +1118,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const createHubSpotListMutation = useMutation({
     mutationFn: async (config: { listName: string; scope: 'all' | 'selected'; linkList: boolean }) => {
       const rowIds = config.scope === 'selected' ? Array.from(selectedRows) : undefined;
-      const { data, error } = await supabase.functions.invoke('hubspot-list-ops', {
+      const { data, error } = await supabase.functions.invoke('crm-admin-router', {
         body: {
-          action: 'create_list_from_table',
+          action: 'hubspot_list_ops',
+          sub_action: 'create_list_from_table',
           table_id: tableId,
           list_name: config.listName,
           row_ids: rowIds,
@@ -1205,9 +1208,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         (table?.source_query as any)?.sync_direction === 'bidirectional';
       const listId = (table?.source_query as any)?.list_id;
       if (isBidirectional && listId && sourceIds.length > 0) {
-        supabase.functions.invoke('hubspot-list-ops', {
+        supabase.functions.invoke('crm-admin-router', {
           body: {
-            action: 'remove_from_list',
+            action: 'hubspot_list_ops',
+            sub_action: 'remove_from_list',
             list_id: listId,
             contact_ids: sourceIds,
             org_id: table?.organization_id,
@@ -1391,8 +1395,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     if (!tableId) return;
     setNlQueryLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
+      const { data, error } = await supabase.functions.invoke('ops-table-router', {
         body: {
+          action: 'ai_query',
           tableId,
           query,
           columns: columns.map((c) => ({
@@ -1827,8 +1832,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         }
 
         // Call the AI query edge function — handles both existing columns and empty tables
-        const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
+        const { data, error } = await supabase.functions.invoke('ops-table-router', {
           body: {
+            action: 'ai_query',
             tableId,
             query: submittedQuery,
             columns: effectiveColumns.map((c) => ({
@@ -2014,9 +2020,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             setTransformPreviewData(null);
             // Get preview
             const { data: previewData, error: previewErr } = await supabase.functions.invoke(
-              'ops-table-transform-column',
+              'ops-table-router',
               {
                 body: {
+                  action: 'transform_column',
                   tableId,
                   columnKey: colKey,
                   transformPrompt: result.transformPrompt as string,
@@ -2313,8 +2320,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     if (!transformPreviewData || !tableId) return;
     setIsTransformExecuting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('ops-table-transform-column', {
+      const { data, error } = await supabase.functions.invoke('ops-table-router', {
         body: {
+          action: 'transform_column',
           tableId,
           columnKey: transformPreviewData.columnKey,
           transformPrompt: transformPreviewData.transformPrompt,
@@ -3873,8 +3881,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               return;
             }
 
-            const { data, error } = await supabase.functions.invoke('push-to-instantly', {
+            const { data, error } = await supabase.functions.invoke('crm-push', {
               body: {
+                action: 'to_instantly',
                 table_id: tableId,
                 campaign_id: campaignId,
                 row_ids: Array.from(selectedRows),

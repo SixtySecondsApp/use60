@@ -27,8 +27,9 @@ export async function analyzeEmailWithClaude(
   emailBody: string
 ): Promise<EmailAnalysis> {
   try {
-    const { data, error } = await supabase.functions.invoke('analyze-email', {
+    const { data, error } = await supabase.functions.invoke('analyze-router', {
       body: {
+        action: 'email',
         subject: emailSubject,
         body: emailBody,
       },

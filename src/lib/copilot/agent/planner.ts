@@ -291,9 +291,10 @@ export class PlanningEngine {
   private async callPlanningAI(request: PlanningRequest): Promise<PlanningResponse> {
     const prompt = buildPlanningPrompt(request);
 
-    const { data, error } = await supabase.functions.invoke('api-copilot', {
+    const { data, error } = await supabase.functions.invoke('api-services-router', {
       body: {
-        action: 'plan',
+        action: 'copilot',
+        sub_action: 'plan',
         systemPrompt: PLANNER_SYSTEM_PROMPT,
         userPrompt: prompt,
       },

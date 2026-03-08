@@ -194,8 +194,8 @@ export async function runScheduleNow(scheduleId: string): Promise<{
   results: ScheduleRunResult[];
   error?: string;
 }> {
-  const { data, error } = await supabase.functions.invoke('agent-scheduler', {
-    body: { schedule_id: scheduleId },
+  const { data, error } = await supabase.functions.invoke('agent-fleet-router', {
+    body: { action: 'scheduler', schedule_id: scheduleId },
   });
 
   if (error) throw error;
@@ -298,8 +298,9 @@ export async function testTrigger(
   results: TriggerTestResult[];
   error?: string;
 }> {
-  const { data, error } = await supabase.functions.invoke('agent-trigger', {
+  const { data, error } = await supabase.functions.invoke('agent-fleet-router', {
     body: {
+      action: 'trigger',
       trigger_id: triggerId,
       organization_id: orgId,
       user_id: userId,

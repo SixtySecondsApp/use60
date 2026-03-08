@@ -943,13 +943,13 @@ async function selfInvoke(jobId: string): Promise<void> {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
   // Fire-and-forget self-invocation
-  fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+  fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${serviceKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ resume_job_id: jobId }),
+    body: JSON.stringify({ action: 'orchestrator', resume_job_id: jobId }),
   }).catch(err => {
     console.error(`[orchestrator] Self-invoke failed for job ${jobId}:`, err);
   });
@@ -982,13 +982,13 @@ async function processFollowups(
       }
 
       // Fire-and-forget
-      fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+      fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${serviceKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(event),
+        body: JSON.stringify({ action: 'orchestrator', ...event }),
       }).catch(err => {
         console.error(`[orchestrator] Follow-up ${followup.type} failed:`, err);
       });

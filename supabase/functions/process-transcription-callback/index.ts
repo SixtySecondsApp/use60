@@ -155,13 +155,14 @@ serve(async (req) => {
         const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
         try {
-          const analysisResponse = await fetch(`${supabaseUrl}/functions/v1/process-ai-analysis`, {
+          const analysisResponse = await fetch(`${supabaseUrl}/functions/v1/process-jobs-router`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${serviceRoleKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+              action: 'ai_analysis',
               recording_id,
               bot_id: recording.bot_id,
             }),

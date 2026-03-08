@@ -1127,14 +1127,15 @@ export const presentForReviewAdapter: SkillAdapter = {
 
       const fallbackText = `Proposal ready for review: ${dealName} (${companyName}) - ${dealValue}`;
 
-      // Call send-slack-message edge function
-      const response = await fetch(`${supabaseUrl}/functions/v1/send-slack-message`, {
+      // Call send-router edge function (slack_message action)
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-router`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${serviceKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'slack_message',
           org_id: state.event.org_id,
           user_id: state.event.user_id,
           message: fallbackText,

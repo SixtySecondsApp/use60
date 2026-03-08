@@ -15,8 +15,9 @@ export function useHubSpotWriteBack() {
       newValue: string | null;
     }) => {
       try {
-        const { error } = await supabase.functions.invoke('push-cell-to-hubspot', {
+        const { error } = await supabase.functions.invoke('crm-push', {
           body: {
+            action: 'cell_to_hubspot',
             table_id: params.tableId,
             row_id: params.rowId,
             column_id: params.columnId,

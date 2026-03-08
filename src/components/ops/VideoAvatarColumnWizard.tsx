@@ -152,8 +152,8 @@ export function VideoAvatarColumnWizard({
   const fetchAvatars = useCallback(async () => {
     setLoadingAvatars(true);
     try {
-      const { data } = await supabase.functions.invoke('heygen-avatar-create', {
-        body: { action: 'list' },
+      const { data } = await supabase.functions.invoke('heygen-router', {
+        body: { action: 'avatar_create', sub_action: 'list' },
       });
       setExistingAvatars(data?.avatars || []);
     } catch {
@@ -167,8 +167,8 @@ export function VideoAvatarColumnWizard({
 
   const handleDeleteAvatar = useCallback(async (id: string) => {
     try {
-      const { data } = await supabase.functions.invoke('heygen-avatar-create', {
-        body: { action: 'delete', avatar_id: id },
+      const { data } = await supabase.functions.invoke('heygen-router', {
+        body: { action: 'avatar_create', sub_action: 'delete', avatar_id: id },
       });
       if (data?.deleted) {
         setExistingAvatars((prev) => prev.filter((a) => a.id !== id));
@@ -229,9 +229,10 @@ export function VideoAvatarColumnWizard({
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('heygen-avatar-create', {
+      const { data, error: fnError } = await supabase.functions.invoke('heygen-router', {
         body: {
-          action: 'generate_photo',
+          action: 'avatar_create',
+          sub_action: 'generate_photo',
           avatar_name: avatarName || 'Sales Avatar',
           name: avatarName || 'Sales Avatar',
           age,
@@ -263,8 +264,8 @@ export function VideoAvatarColumnWizard({
     setTrainingStatus('generating_photo');
     const poll = setInterval(async () => {
       try {
-        const { data } = await supabase.functions.invoke('heygen-avatar-status', {
-          body: { avatar_id: avId, generation_id: genId },
+        const { data } = await supabase.functions.invoke('heygen-router', {
+          body: { action: 'avatar_status', avatar_id: avId, generation_id: genId },
         });
         // Status endpoint returns generation_status + looks array
         if (data?.generation_status === 'completed' || data?.generation_status === 'success' || data?.looks?.length > 0) {
@@ -364,9 +365,10 @@ export function VideoAvatarColumnWizard({
     try {
       const publicUrl = await uploadPhotoToStorage(blob);
 
-      const { data, error: fnError } = await supabase.functions.invoke('heygen-avatar-create', {
+      const { data, error: fnError } = await supabase.functions.invoke('heygen-router', {
         body: {
-          action: 'upload_photo',
+          action: 'avatar_create',
+          sub_action: 'upload_photo',
           avatar_name: avatarName || 'My Avatar',
           image_url: publicUrl,
         },
@@ -410,9 +412,10 @@ export function VideoAvatarColumnWizard({
 
     try {
       // Create group + train in one call
-      const { data, error: fnError } = await supabase.functions.invoke('heygen-avatar-create', {
+      const { data, error: fnError } = await supabase.functions.invoke('heygen-router', {
         body: {
-          action: 'create_group_and_train',
+          action: 'avatar_create',
+          sub_action: 'create_group_and_train',
           avatar_id: avatarId,
           avatar_name: avatarName || 'Sales Avatar',
         },
@@ -433,8 +436,8 @@ export function VideoAvatarColumnWizard({
   const pollTraining = useCallback((avId: string) => {
     const poll = setInterval(async () => {
       try {
-        const { data } = await supabase.functions.invoke('heygen-avatar-status', {
-          body: { avatar_id: avId },
+        const { data } = await supabase.functions.invoke('heygen-router', {
+          body: { action: 'avatar_status', avatar_id: avId },
         });
         if (data?.status === 'ready' || data?.status === 'generating_looks') {
           clearInterval(poll);
@@ -476,8 +479,8 @@ export function VideoAvatarColumnWizard({
     if (step !== 'voice' || voices.length > 0) return;
     (async () => {
       try {
-        const { data } = await supabase.functions.invoke('heygen-voices', {
-          body: { action: 'list' },
+        const { data } = await supabase.functions.invoke('heygen-router', {
+          body: { action: 'voices', sub_action: 'list' },
         });
         if (data?.voices) {
           setVoices(data.voices);
@@ -512,9 +515,10 @@ export function VideoAvatarColumnWizard({
   const handleSaveVoice = useCallback(async () => {
     if (!avatarId || !selectedVoice) return;
     try {
-      await supabase.functions.invoke('heygen-avatar-create', {
+      await supabase.functions.invoke('heygen-router', {
         body: {
-          action: 'finalize',
+          action: 'avatar_create',
+          sub_action: 'finalize',
           avatar_id: avatarId,
           voice_id: selectedVoice.voice_id,
           voice_name: selectedVoice.name,
@@ -531,9 +535,10 @@ export function VideoAvatarColumnWizard({
 
     // If a specific look was selected, update the avatar record's heygen_avatar_id
     if (selectedLook?.look_id && avatarId) {
-      supabase.functions.invoke('heygen-avatar-create', {
+      supabase.functions.invoke('heygen-router', {
         body: {
-          action: 'finalize',
+          action: 'avatar_create',
+          sub_action: 'finalize',
           avatar_id: avatarId,
           look_id: selectedLook.look_id,
           voice_id: selectedVoice?.voice_id,

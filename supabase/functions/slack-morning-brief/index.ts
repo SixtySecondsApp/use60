@@ -301,13 +301,14 @@ serve(async (req) => {
             if (new Date().getDay() === 1) {
               try {
                 const today = new Date().toISOString().split('T')[0];
-                fetch(`${SUPABASE_URL}/functions/v1/agent-orchestrator`, {
+                fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
+                    action: 'orchestrator',
                     type: 'coaching_weekly',
                     source: 'cron:weekly',
                     org_id: org.org_id,
@@ -333,13 +334,14 @@ serve(async (req) => {
 
               if (instantlyCreds?.credentials?.api_key) {
                 const today = new Date().toISOString().split('T')[0];
-                fetch(`${SUPABASE_URL}/functions/v1/agent-orchestrator`, {
+                fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
+                    action: 'orchestrator',
                     type: 'campaign_daily_check',
                     source: 'cron:morning',
                     org_id: org.org_id,

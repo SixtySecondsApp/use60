@@ -31,13 +31,14 @@ export const buildRelationshipGraphAdapter: SkillAdapter = {
       }
 
       // Call agent-relationship-graph edge function
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-relationship-graph`, {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         },
         body: JSON.stringify({
+          action: 'relationship_graph',
           mode: 'post_meeting',
           meeting_id: meetingId,
           org_id: orgId,
@@ -81,13 +82,14 @@ export const enrichRelationshipGraphAdapter: SkillAdapter = {
         return { success: true, output: { skipped: true, reason: 'no_contact_id' }, duration_ms: Date.now() - start };
       }
 
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-relationship-graph`, {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         },
         body: JSON.stringify({
+          action: 'relationship_graph',
           mode: 'enrichment',
           contact_id: contactId,
           org_id: orgId,

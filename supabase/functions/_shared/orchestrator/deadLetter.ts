@@ -148,13 +148,14 @@ export async function retryDeadLetters(
 
       try {
         // Re-fire the event through agent-orchestrator
-        const response = await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+        const response = await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${serviceKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            action: 'orchestrator',
             type: entry.event_type,
             source: 'orchestrator:dead-letter-retry',
             org_id: entry.org_id,

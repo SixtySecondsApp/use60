@@ -139,7 +139,7 @@ export function MagicLinkGenerator() {
         body.org_name = newLink.org_name.trim();
       }
 
-      const response = await supabase.functions.invoke('generate-test-user-link', { body });
+      const response = await supabase.functions.invoke('generate-router', { body: { action: 'test_user_link', ...body } });
 
       if (response.error) {
         throw new Error(response.error.message || 'Failed to generate link');

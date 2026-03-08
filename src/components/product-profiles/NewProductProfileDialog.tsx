@@ -117,9 +117,10 @@ export function NewProductProfileDialog({
 
       if (shouldResearch) {
         void supabase.functions
-          .invoke('research-product-profile', {
+          .invoke('research-router-v2', {
             body: {
-              action: 'research',
+              action: 'product_profile',
+              sub_action: 'research',
               product_profile_id: profile.id,
               organization_id: organizationId,
             },

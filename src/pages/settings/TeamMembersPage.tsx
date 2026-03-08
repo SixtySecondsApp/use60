@@ -562,14 +562,15 @@ export default function TeamMembersPage() {
         .eq('id', activeOrgId)
         .single();
 
-      // Call send-removal-email edge function
-      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-removal-email`, {
+      // Call send-router edge function (removal_email action)
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
         body: JSON.stringify({
+          action: 'removal_email',
           user_id: memberToRemove.user_id,
           org_id: activeOrgId,
           org_name: orgData?.name || 'the organization',

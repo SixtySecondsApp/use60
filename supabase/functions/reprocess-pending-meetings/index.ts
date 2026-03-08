@@ -182,7 +182,7 @@ async function generateThumbnail(
     const shareUrl = meeting.fathom_share_url || `https://fathom.video/recording/${meeting.fathom_recording_id}`
 
     const response = await fetch(
-      `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-video-thumbnail-v2`,
+      `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-router`,
       {
         method: 'POST',
         headers: {
@@ -190,6 +190,7 @@ async function generateThumbnail(
           'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
         },
         body: JSON.stringify({
+          action: 'video_thumbnail_v2',
           recording_id: meeting.fathom_recording_id,
           share_url: shareUrl,
           fathom_embed_url: `https://fathom.video/embed/${meeting.fathom_recording_id}`,

@@ -14,8 +14,9 @@ export function useAttioWriteBack() {
       newValue: string | null;
     }) => {
       try {
-        const { error } = await supabase.functions.invoke('push-cell-to-attio', {
+        const { error } = await supabase.functions.invoke('crm-push', {
           body: {
+            action: 'cell_to_attio',
             table_id: params.tableId,
             row_id: params.rowId,
             column_id: params.columnId,

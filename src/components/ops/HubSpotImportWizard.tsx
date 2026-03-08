@@ -376,15 +376,15 @@ export function HubSpotImportWizard({ open, onOpenChange, onComplete, importMode
         import_all_columns: importAllColumns,
         sync_direction: syncDirection,
       };
-      console.log('[HubSpotImportWizard] Calling import-from-hubspot with:', requestBody);
+      console.log('[HubSpotImportWizard] Calling import-router (from_hubspot) with:', requestBody);
 
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No auth token available');
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL;
-      const fnUrl = `${supabaseUrl}/functions/v1/import-from-hubspot`;
-      const jsonBody = JSON.stringify(requestBody);
+      const fnUrl = `${supabaseUrl}/functions/v1/import-router`;
+      const jsonBody = JSON.stringify({ action: 'from_hubspot', ...requestBody });
       console.log('[HubSpotImportWizard] Direct fetch to:', fnUrl, 'body length:', jsonBody.length);
 
       const resp = await fetch(fnUrl, {

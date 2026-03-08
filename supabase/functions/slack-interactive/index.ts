@@ -2373,7 +2373,7 @@ async function triggerHITLCallback(
  */
 async function resumeOrchestratorJob(jobId: string, approvalId: string): Promise<void> {
   try {
-    const orchestratorUrl = `${supabaseUrl}/functions/v1/agent-orchestrator`;
+    const orchestratorUrl = `${supabaseUrl}/functions/v1/agent-fleet-router`;
     const response = await fetch(orchestratorUrl, {
       method: 'POST',
       headers: {
@@ -2381,6 +2381,7 @@ async function resumeOrchestratorJob(jobId: string, approvalId: string): Promise
         'Authorization': `Bearer ${supabaseServiceKey}`,
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         resume_job_id: jobId,
         approval_data: {
           approved: true,
@@ -9814,18 +9815,18 @@ serve(async (req) => {
             action.action_id.startsWith('crm_edit::') ||
             action.action_id.startsWith('crm_approve_all::') ||
             action.action_id.startsWith('crm_reject_all::')) {
-          console.log('[CRM Approval] Forwarding action to agent-crm-approval:', action.action_id);
-          // Forward the raw form body to agent-crm-approval (it handles its own Slack verification)
-          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+          console.log('[CRM Approval] Forwarding action to agent-fleet-router (crm_approval):', action.action_id);
+          // Forward the raw form body to agent-fleet-router (crm_approval handler handles its own Slack verification)
+          fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Type': 'application/json',
               'Authorization': `Bearer ${supabaseServiceKey}`,
               // Forward Slack signing headers for verification
               'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
               'x-slack-signature': req.headers.get('x-slack-signature') || '',
             },
-            body: `payload=${encodeURIComponent(payloadStr)}`,
+            body: JSON.stringify({ action: 'crm_approval', payload: payloadStr }),
           }).catch(err => console.error('[CRM Approval] Forward error:', err));
           // Acknowledge immediately (agent-crm-approval handles async response)
           return new Response(JSON.stringify({ ok: true }), {
@@ -10297,16 +10298,16 @@ serve(async (req) => {
           return handleLogActivitySubmission(supabase, payload);
         }
         if (payload.view?.callback_id === 'crm_edit_modal_submit') {
-          console.log('[CRM Approval] Forwarding edit modal submission to agent-crm-approval');
-          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+          console.log('[CRM Approval] Forwarding edit modal submission to agent-fleet-router (crm_approval)');
+          fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Type': 'application/json',
               'Authorization': `Bearer ${supabaseServiceKey}`,
               'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
               'x-slack-signature': req.headers.get('x-slack-signature') || '',
             },
-            body: `payload=${encodeURIComponent(JSON.stringify(payload))}`,
+            body: JSON.stringify({ action: 'crm_approval', payload: JSON.stringify(payload) }),
           }).catch(err => console.error('[CRM Approval] Forward error:', err));
           return new Response('', { status: 200, headers: corsHeaders });
         }

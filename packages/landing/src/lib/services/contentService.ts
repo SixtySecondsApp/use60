@@ -138,7 +138,7 @@ export class ContentService {
     }
 
     // Edge Functions URLs
-    this.extractTopicsUrl = `${supabaseUrl}/functions/v1/extract-content-topics`;
+    this.extractTopicsUrl = `${supabaseUrl}/functions/v1/extract-router`;
     this.generateContentUrl = `${supabaseUrl}/functions/v1/generate-marketing-content`;
   }
 
@@ -279,6 +279,7 @@ export class ContentService {
             'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
+            action: 'content_topics',
             meeting_id: meetingId,
             force_refresh: forceRefresh,
           }),

@@ -138,8 +138,8 @@ export class ContentService {
     }
 
     // Edge Functions URLs
-    this.extractTopicsUrl = `${supabaseUrl}/functions/v1/extract-content-topics`;
-    this.generateContentUrl = `${supabaseUrl}/functions/v1/generate-marketing-content`;
+    this.extractTopicsUrl = `${supabaseUrl}/functions/v1/extract-router`;
+    this.generateContentUrl = `${supabaseUrl}/functions/v1/generate-router`;
   }
 
   // ==========================================================================
@@ -279,6 +279,7 @@ export class ContentService {
             'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
+            action: 'content_topics',
             meeting_id: meetingId,
             force_refresh: forceRefresh,
           }),
@@ -398,6 +399,7 @@ export class ContentService {
             'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
+            action: 'marketing_content',
             meeting_id: params.meeting_id,
             content_type: params.content_type,
             selected_topic_indices: params.selected_topic_indices,

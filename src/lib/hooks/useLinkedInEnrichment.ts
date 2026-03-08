@@ -117,11 +117,12 @@ export function useLinkedInEnrichment(tableId: string) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('Not authenticated');
 
-    const { data, error } = await supabase.functions.invoke('apify-linkedin-enrich', {
+    const { data, error } = await supabase.functions.invoke('enrichment-apify', {
       headers: {
         Authorization: `Bearer ${token}`,
       },
       body: {
+        action: 'linkedin_enrich',
         table_id: tableId,
         column_id: params.columnId,
         row_ids: params.rowIds,

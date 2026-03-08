@@ -44,7 +44,8 @@ export interface MethodologyTemplate {
 }
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('agent-config-admin', { body });
+  const { action: subAction, ...rest } = body;
+  const { data, error } = await supabase.functions.invoke('agent-fleet-router', { body: { action: 'config_admin', sub_action: subAction, ...rest } });
   if (error) throw error;
   return data as T;
 }

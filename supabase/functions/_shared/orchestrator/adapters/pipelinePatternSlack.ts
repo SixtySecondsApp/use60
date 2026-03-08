@@ -48,13 +48,13 @@ export const analysePipelinePatternsAdapter: SkillAdapter = {
 
       const orgId = state.event.org_id;
 
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-pipeline-patterns`, {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         },
-        body: JSON.stringify({ org_id: orgId }),
+        body: JSON.stringify({ action: 'pipeline_patterns', org_id: orgId }),
       });
 
       if (!resp.ok) {

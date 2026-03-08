@@ -205,13 +205,14 @@ export default function CreatorView({ domain, queryParams }: CreatorViewProps) {
     setInstantlyPushing(true);
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-      const response = await fetch(`${supabaseUrl}/functions/v1/push-campaign-instantly`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/crm-push`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
+          action: 'campaign_instantly',
           campaign_name: `${research.company.name} — Outreach ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`,
           contacts: contactsWithEmail.map(c => ({
             email: c.email,

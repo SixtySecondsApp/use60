@@ -328,13 +328,14 @@ serve(async (req) => {
         try {
           const firstOwnerId = staleDeals?.[0]?.owner_id;
           if (firstOwnerId) {
-            fetch(`${SUPABASE_URL}/functions/v1/agent-orchestrator`, {
+            fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
+                action: 'orchestrator',
                 type: 'deal_risk_scan',
                 source: 'cron:daily',
                 org_id: org.org_id,

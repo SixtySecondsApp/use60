@@ -60,8 +60,8 @@ export function SetupWizardComplete() {
     const runScan = async () => {
       setIsScanning(true);
       try {
-        const { data, error } = await supabase.functions.invoke('agent-initial-scan', {
-          body: { user_id: user.id, org_id: activeOrgId },
+        const { data, error } = await supabase.functions.invoke('agent-fleet-router', {
+          body: { action: 'initial_scan', user_id: user.id, org_id: activeOrgId },
         });
         if (error) throw error;
         setScanResult(data);

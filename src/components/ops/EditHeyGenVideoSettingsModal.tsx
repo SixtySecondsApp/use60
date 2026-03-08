@@ -86,8 +86,8 @@ export function EditHeyGenVideoSettingsModal({
     if (voices.length > 0) return;
     setLoadingVoices(true);
     try {
-      const { data } = await supabase.functions.invoke('heygen-voices', {
-        body: { action: 'list' },
+      const { data } = await supabase.functions.invoke('heygen-router', {
+        body: { action: 'voices', sub_action: 'list' },
       });
       if (data?.voices) setVoices(data.voices);
     } catch {
@@ -155,9 +155,10 @@ export function EditHeyGenVideoSettingsModal({
     // If voice changed, update the avatar record too
     if (selectedVoiceId && selectedVoiceId !== currentConfig?.voice_id && currentConfig?.avatar_id) {
       try {
-        await supabase.functions.invoke('heygen-avatar-create', {
+        await supabase.functions.invoke('heygen-router', {
           body: {
-            action: 'finalize',
+            action: 'avatar_create',
+            sub_action: 'finalize',
             avatar_id: currentConfig.avatar_id,
             voice_id: selectedVoiceId,
             voice_name: selectedVoiceName,

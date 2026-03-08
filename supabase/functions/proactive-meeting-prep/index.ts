@@ -438,13 +438,14 @@ async function prepMeetingsForUserInternal(
             const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
             const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-            await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+            await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${serviceKey}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
+                action: 'orchestrator',
                 type: 'internal_meeting_prep',
                 source: 'cron:proactive-meeting-prep',
                 org_id: orgId,
@@ -531,13 +532,14 @@ async function prepMeetingsForUserInternal(
           const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
           if (orgId) {
-            await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+            await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${serviceKey}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
+                action: 'orchestrator',
                 type: 'pre_meeting_90min',
                 source: 'cron:proactive-meeting-prep',
                 org_id: orgId,
@@ -845,8 +847,10 @@ async function generateMeetingPrep(
       ?.slice(0, 3) || [];
 
     // Call the copilot API to run the meeting prep sequence
-    const { data, error } = await supabase.functions.invoke('api-copilot/chat', {
+    const { data, error } = await supabase.functions.invoke('api-services-router', {
       body: {
+        action: 'copilot',
+        path: '/chat',
         message: `Prep me for my upcoming meeting: "${meeting.title}"`,
         context: {
           orgId,

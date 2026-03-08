@@ -615,8 +615,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   // Agent research handlers
   const handleRunAgentResearch = useCallback(async (agentColumnId: string, rowId: string) => {
     try {
-      await supabase.functions.invoke('research-orchestrator', {
+      await supabase.functions.invoke('research-router-v2', {
         body: {
+          action: 'orchestrator',
           agent_column_id: agentColumnId,
           row_ids: [rowId],
         },
@@ -640,8 +641,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
         .eq('row_id', rowId);
 
       // Trigger new run
-      await supabase.functions.invoke('research-orchestrator', {
+      await supabase.functions.invoke('research-router-v2', {
         body: {
+          action: 'orchestrator',
           agent_column_id: agentColumnId,
           row_ids: [rowId],
           depth_override: depthOverride,

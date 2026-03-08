@@ -112,7 +112,7 @@ export default function Calls() {
     if (!reviewCall?.id) return;
     setExtracting(true);
     try {
-      await supabase.functions.invoke('extract-call-action-items', { body: { callId: reviewCall.id } });
+      await supabase.functions.invoke('extract-router', { body: { action: 'call_action_items', callId: reviewCall.id } });
       if (orgId) {
         const { data } = await supabase
           .from('call_action_items')

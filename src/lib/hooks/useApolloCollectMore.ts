@@ -27,8 +27,9 @@ export function useApolloCollectMore() {
 
   return useMutation<CollectMoreResult, Error, CollectMoreParams>({
     mutationFn: async (params) => {
-      const { data, error } = await supabase.functions.invoke('apollo-collect-more', {
+      const { data, error } = await supabase.functions.invoke('enrichment-apollo', {
         body: {
+          action: 'collect_more',
           table_id: params.tableId,
           search_params: params.searchParams,
           desired_count: params.desiredCount,

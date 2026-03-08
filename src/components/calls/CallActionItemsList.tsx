@@ -63,8 +63,9 @@ export function CallActionItemsList({ callId, actionItems, onTasksCreated }: Cal
 
     setIsConverting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-task-unified', {
+      const { data, error } = await supabase.functions.invoke('create-router', {
         body: {
+          action: 'task_unified',
           mode: 'manual',
           action_item_ids: Array.from(selectedItems),
           source: 'call_action_item',

@@ -68,9 +68,10 @@ export function AvatarCreatorWizard({ onComplete, onClose }: AvatarCreatorWizard
   const handleGeneratePhoto = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('heygen-avatar-create', {
+      const { data, error } = await supabase.functions.invoke('heygen-router', {
         body: {
-          action: 'generate_photo',
+          action: 'avatar_create',
+          sub_action: 'generate_photo',
           avatar_name: avatarName,
           gender,
           age,
@@ -102,8 +103,8 @@ export function AvatarCreatorWizard({ onComplete, onClose }: AvatarCreatorWizard
   const pollGenerationStatus = useCallback((avId: string, genId: string) => {
     const interval = setInterval(async () => {
       try {
-        const { data } = await supabase.functions.invoke('heygen-avatar-status', {
-          body: { avatar_id: avId, generation_id: genId },
+        const { data } = await supabase.functions.invoke('heygen-router', {
+          body: { action: 'avatar_status', avatar_id: avId, generation_id: genId },
         });
 
         if (data?.generation_status === 'completed' && data?.looks?.length > 0) {
@@ -133,9 +134,10 @@ export function AvatarCreatorWizard({ onComplete, onClose }: AvatarCreatorWizard
     setStep('training');
     try {
       // Create group
-      await supabase.functions.invoke('heygen-avatar-create', {
+      await supabase.functions.invoke('heygen-router', {
         body: {
-          action: 'create_group',
+          action: 'avatar_create',
+          sub_action: 'create_group',
           avatar_id: avId,
           image_key: imageKey,
           generation_id: genId,
@@ -144,8 +146,8 @@ export function AvatarCreatorWizard({ onComplete, onClose }: AvatarCreatorWizard
       });
 
       // Start training
-      await supabase.functions.invoke('heygen-avatar-create', {
-        body: { action: 'train', avatar_id: avId },
+      await supabase.functions.invoke('heygen-router', {
+        body: { action: 'avatar_create', sub_action: 'train', avatar_id: avId },
       });
 
       toast.success('LORA training started — this takes a few minutes');
@@ -158,8 +160,8 @@ export function AvatarCreatorWizard({ onComplete, onClose }: AvatarCreatorWizard
   const pollTrainingStatus = useCallback((avId: string) => {
     const interval = setInterval(async () => {
       try {
-        const { data } = await supabase.functions.invoke('heygen-avatar-status', {
-          body: { avatar_id: avId, check_type: 'training' },
+        const { data } = await supabase.functions.invoke('heygen-router', {
+          body: { action: 'avatar_status', avatar_id: avId, check_type: 'training' },
         });
 
         if (data?.training_status === 'completed') {
@@ -194,16 +196,16 @@ export function AvatarCreatorWizard({ onComplete, onClose }: AvatarCreatorWizard
 
     for (const prompt of lookPrompts) {
       try {
-        const { data } = await supabase.functions.invoke('heygen-avatar-create', {
-          body: { action: 'generate_look', avatar_id: avId, prompt },
+        const { data } = await supabase.functions.invoke('heygen-router', {
+          body: { action: 'avatar_create', sub_action: 'generate_look', avatar_id: avId, prompt },
         });
 
         if (data?.generation_id) {
           // Poll for this look
           await new Promise<void>((resolve) => {
             const lookPoll = setInterval(async () => {
-              const { data: status } = await supabase.functions.invoke('heygen-avatar-status', {
-                body: { avatar_id: avId, generation_id: data.generation_id, check_type: 'generation' },
+              const { data: status } = await supabase.functions.invoke('heygen-router', {
+                body: { action: 'avatar_status', avatar_id: avId, generation_id: data.generation_id, check_type: 'generation' },
               });
 
               if (status?.generation_status === 'completed' && status?.looks) {
@@ -229,8 +231,8 @@ export function AvatarCreatorWizard({ onComplete, onClose }: AvatarCreatorWizard
   // -- Step 4: Load Voices --
   const loadVoices = async () => {
     try {
-      const { data } = await supabase.functions.invoke('heygen-voices', {
-        body: { action: 'list', gender: voiceGender || undefined },
+      const { data } = await supabase.functions.invoke('heygen-router', {
+        body: { action: 'voices', sub_action: 'list', gender: voiceGender || undefined },
       });
       if (data?.voices) {
         setVoices(data.voices);
@@ -251,9 +253,10 @@ export function AvatarCreatorWizard({ onComplete, onClose }: AvatarCreatorWizard
     if (!avatarId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('heygen-avatar-create', {
+      const { data, error } = await supabase.functions.invoke('heygen-router', {
         body: {
-          action: 'finalize',
+          action: 'avatar_create',
+          sub_action: 'finalize',
           avatar_id: avatarId,
           look_id: selectedLook,
           voice_id: selectedVoice,

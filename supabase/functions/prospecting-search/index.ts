@@ -164,25 +164,25 @@ serve(async (req) => {
         _skip_credit_deduction: true,
       }
 
-      searchResponse = await fetch(`${supabaseUrl}/functions/v1/apollo-search`, {
+      searchResponse = await fetch(`${supabaseUrl}/functions/v1/enrichment-apollo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: authHeader,
         },
-        body: JSON.stringify(apolloPayload),
+        body: JSON.stringify({ action: 'search', ...apolloPayload }),
       })
     } else {
       // Call ai-ark-search edge function
       const aiArkPayload = {
-        action,
+        action: action,
         ...search_params,
         page,
         per_page: Math.min(per_page, 100),
         _skip_credit_deduction: true,
       }
 
-      searchResponse = await fetch(`${supabaseUrl}/functions/v1/ai-ark-search`, {
+      searchResponse = await fetch(`${supabaseUrl}/functions/v1/enrichment-ai-ark`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

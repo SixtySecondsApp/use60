@@ -82,9 +82,9 @@ export function useCompanyLogoBatch(domains: (string | null | undefined)[]) {
 
       try {
         const { data, error } = await supabase.functions.invoke(
-          'fetch-company-logos-batch',
+          'fetch-router',
           {
-            body: { domains: normalizedDomains },
+            body: { action: 'company_logos_batch', domains: normalizedDomains },
           }
         );
 

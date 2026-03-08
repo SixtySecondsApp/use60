@@ -311,9 +311,9 @@ export function useIntegrationLogo(
     const promise =
       existingPromise ||
       supabase.functions
-        .invoke<LogoResponse>('fetch-company-logo', {
+        .invoke<LogoResponse>('fetch-router', {
           method: 'POST',
-          body: { domain: normalizedDomain },
+          body: { action: 'company_logo', domain: normalizedDomain },
         })
         .then(({ data, error: fetchError }) => {
           if (fetchError) throw new Error(fetchError.message);

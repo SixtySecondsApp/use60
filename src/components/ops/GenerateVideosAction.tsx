@@ -39,8 +39,9 @@ export const GenerateVideosAction: React.FC<GenerateVideosActionProps> = ({
     setProgress({ total: selectedRowIds.length, succeeded: 0, failed: 0 });
 
     try {
-      const { data, error } = await supabase.functions.invoke('heygen-video-generate', {
+      const { data, error } = await supabase.functions.invoke('heygen-router', {
         body: {
+          action: 'video_generate',
           avatar_id: avatarId,
           voice_id: voiceId,
           script: scriptTemplate,
