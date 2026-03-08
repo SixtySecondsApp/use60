@@ -1603,6 +1603,4 @@ export async function handleHubspotProcessQueue(req: Request): Promise<Response>
     // Release lock best-effort
     await supabase.rpc('hubspot_release_worker_lock').catch(() => {})
   }
-})
-
 }

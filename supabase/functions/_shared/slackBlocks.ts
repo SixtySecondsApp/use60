@@ -26,16 +26,16 @@ export interface SlackMessage {
  * - button text: 75 chars
  * - button value: 2000 chars
  */
-const truncate = (value: string, max: number): string => {
+export const truncate = (value: string, max: number): string => {
   const v = String(value ?? '');
   if (v.length <= max) return v;
   if (max <= 1) return v.slice(0, max);
   return `${v.slice(0, max - 1)}…`;
 };
 
-const safeHeaderText = (text: string): string => truncate(text, 150);
+export const safeHeaderText = (text: string): string => truncate(text, 150);
 const safeButtonText = (text: string): string => truncate(text, 75);
-const safeMrkdwn = (text: string): string => truncate(text, 2800);
+export const safeMrkdwn = (text: string): string => truncate(text, 2800);
 const safeFieldText = (text: string): string => truncate(text, 1900);
 const safeContextMrkdwn = (text: string): string => truncate(text, 1900);
 const safeButtonValue = (value: string): string => truncate(value, 1900);

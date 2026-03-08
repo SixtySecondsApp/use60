@@ -19,9 +19,9 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
-import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
-import { verifyCronSecret } from '../_shared/edgeAuth.ts'
-import { BullhornClient, BullhornError } from '../_shared/bullhorn.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../../_shared/corsHelper.ts'
+import { verifyCronSecret } from '../../_shared/edgeAuth.ts'
+import { BullhornClient, BullhornError } from '../../_shared/bullhorn.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -192,7 +192,7 @@ export async function handleBullhornProcessQueue(req: Request): Promise<Response
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
-})
+}
 
 /**
  * Process a single job based on its type
