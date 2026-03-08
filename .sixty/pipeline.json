@@ -1,95 +1,122 @@
 {
   "version": 2,
-  "runSlug": "edge-function-consolidation-phase1",
-  "project": "Edge Function Consolidation — Phase 1",
-  "description": "Consolidate ~33 internal edge functions into 6 routers, reducing total function count by ~27",
+  "runSlug": "native-scheduling-engine",
+  "project": "Native Scheduling Engine",
+  "description": "Close 6 UX and reliability gaps in 60's scheduling infrastructure inspired by Claude Code Desktop patterns",
   "phase": "build",
-  "startedAt": "2026-03-08T10:00:00Z",
-  "lastUpdatedAt": "2026-03-08T10:00:00Z",
+  "startedAt": "2026-03-07T12:00:00Z",
+  "lastUpdatedAt": "2026-03-07T12:00:00Z",
   "input": {
     "type": "description",
-    "source": "user-input",
+    "source": "Claude Code scheduled tasks analysis + codebase audit",
     "extractedRequirements": [
-      "Consolidate enrichment services (apollo, ai-ark, apify) into domain routers",
-      "Consolidate push-to-* functions into push router",
-      "Merge CRM disconnect/list-ops into existing admin routers",
-      "Merge video thumbnail functions",
-      "Do NOT touch webhooks, OAuth callbacks, pg_cron targets, Slack endpoints",
-      "Router pattern: action parameter dispatch",
-      "Update all callers (frontend + edge functions)"
-    ]
+      "Friendly frequency picker replacing raw cron input",
+      "Agent schedule runs table and history UI",
+      "Missed run catch-up logic",
+      "Per-schedule permission mode",
+      "One-shot reminders via copilot"
+    ],
+    "extractedConstraints": [
+      "Must not rebuild existing scheduler — extend only",
+      "Must follow existing patterns (React Query, explicit columns, maybeSingle)",
+      "Migrations must be idempotent (DROP POLICY IF EXISTS before CREATE)"
+    ],
+    "openQuestions": [],
+    "answeredQuestions": []
   },
   "phaseGates": {
-    "discover": { "status": "complete", "completedAt": "2026-03-08T10:15:00Z" },
-    "define": { "status": "complete", "completedAt": "2026-03-08T10:15:00Z" },
-    "plan": { "status": "complete", "completedAt": "2026-03-08T10:20:00Z" },
+    "launch": { "status": "skipped", "completedAt": null },
+    "discover": { "status": "complete", "completedAt": "2026-03-07T11:30:00Z" },
+    "define": { "status": "complete", "completedAt": "2026-03-07T12:00:00Z" },
+    "plan": { "status": "complete", "completedAt": "2026-03-07T12:00:00Z" },
+    "sync": { "status": "skipped", "completedAt": null },
     "build": { "status": "in_progress", "completedAt": null },
-    "deliver": { "status": "pending", "completedAt": null }
+    "deliver": { "status": "pending", "completedAt": null },
+    "housekeeping": { "status": "pending", "completedAt": null }
   },
-  "branch": "feature/edge-function-consolidation-phase1",
+  "team": {
+    "tier": 2,
+    "tierReason": "7 stories, 2 schema changes, familiar patterns, no external APIs",
+    "workers": { "model": "opus", "count": 1 },
+    "reviewer": { "model": "opus" }
+  },
+  "prdFile": "tasks/prd-native-scheduling-engine.md",
+  "branch": "feat/native-scheduling-engine",
   "stories": [
     {
-      "id": "EFC-001",
-      "title": "Create Apollo router function with all 6 handlers",
+      "id": "US-001",
+      "title": "Friendly Frequency Picker Component",
+      "type": "component",
       "status": "pending",
-      "priority": 1
+      "priority": 1,
+      "dependencies": { "stories": [], "schema": [] },
+      "parallelWith": ["US-003"],
+      "estimatedMinutes": 30
     },
     {
-      "id": "EFC-002",
-      "title": "Update all Apollo callers (frontend + edge functions)",
+      "id": "US-002",
+      "title": "Wire FrequencyPicker into AgentTeamSettings",
+      "type": "integration",
       "status": "pending",
       "priority": 2,
-      "dependencies": ["EFC-001"]
+      "dependencies": { "stories": ["US-001"], "schema": [] },
+      "parallelWith": ["US-004"],
+      "estimatedMinutes": 15
     },
     {
-      "id": "EFC-003",
-      "title": "Create AI Ark router function with all 5 handlers",
+      "id": "US-003",
+      "title": "Agent Schedule Runs Migration",
+      "type": "schema",
       "status": "pending",
-      "priority": 3
+      "priority": 3,
+      "dependencies": { "stories": [], "schema": [] },
+      "parallelWith": ["US-001"],
+      "estimatedMinutes": 15
     },
     {
-      "id": "EFC-004",
-      "title": "Update all AI Ark callers (frontend + edge functions)",
+      "id": "US-004",
+      "title": "Schedule Run History in AgentTeamSettings",
+      "type": "component",
       "status": "pending",
       "priority": 4,
-      "dependencies": ["EFC-003"]
+      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedule_runs"] },
+      "parallelWith": ["US-002"],
+      "estimatedMinutes": 30
     },
     {
-      "id": "EFC-005",
-      "title": "Create Apify router function with all 6 handlers",
+      "id": "US-005",
+      "title": "Missed Run Catch-Up Logic",
+      "type": "service",
       "status": "pending",
-      "priority": 5
+      "priority": 5,
+      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedule_runs"] },
+      "parallelWith": ["US-006"],
+      "estimatedMinutes": 45
     },
     {
-      "id": "EFC-006",
-      "title": "Update all Apify callers (frontend + edge functions)",
+      "id": "US-006",
+      "title": "Per-Schedule Permission Mode",
+      "type": "schema+service",
       "status": "pending",
       "priority": 6,
-      "dependencies": ["EFC-005"]
+      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedules"] },
+      "parallelWith": ["US-005"],
+      "estimatedMinutes": 45
     },
     {
-      "id": "EFC-007",
-      "title": "Create Push router function with all 6 handlers",
+      "id": "US-007",
+      "title": "One-Shot Reminders",
+      "type": "schema+service",
       "status": "pending",
-      "priority": 7
-    },
-    {
-      "id": "EFC-008",
-      "title": "Update all Push callers (frontend + edge functions)",
-      "status": "pending",
-      "priority": 8,
-      "dependencies": ["EFC-007"]
-    },
-    {
-      "id": "EFC-009",
-      "title": "Delete old function directories (apollo-*, ai-ark-*, apify-*, push-*)",
-      "status": "pending",
-      "priority": 9,
-      "dependencies": ["EFC-002", "EFC-004", "EFC-006", "EFC-008"]
+      "priority": 7,
+      "dependencies": { "stories": [], "schema": [] },
+      "parallelWith": [],
+      "estimatedMinutes": 45
     }
   ],
   "execution": {
-    "totalStories": 9,
-    "completedStories": 0
+    "totalStories": 7,
+    "completedStories": 0,
+    "lastUpdated": "2026-03-07T12:00:00Z"
   }
 }

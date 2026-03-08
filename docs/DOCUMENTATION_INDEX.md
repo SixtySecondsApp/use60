@@ -165,6 +165,7 @@ Developer guides, user guides, and operational references.
 | File | Description |
 |------|-------------|
 | [ADMIN_GUIDE.md](./guides/ADMIN_GUIDE.md) | Platform admin guide |
+| [SCHEDULING_GUIDE.md](./guides/SCHEDULING_GUIDE.md) | Native scheduling engine — cron schedules, permission modes, catch-up logic |
 | [CLIENT_SUBSCRIPTION_MANAGEMENT.md](./guides/CLIENT_SUBSCRIPTION_MANAGEMENT.md) | Client subscription management |
 | [SUPABASE_DATA_IMPORT_GUIDE.md](./guides/SUPABASE_DATA_IMPORT_GUIDE.md) | Supabase data import procedures |
 | [INFRASTRUCTURE_SUMMARY.md](./guides/INFRASTRUCTURE_SUMMARY.md) | Infrastructure overview |

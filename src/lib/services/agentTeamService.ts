@@ -34,6 +34,7 @@ export interface AgentSchedule {
   cron_expression: string;
   prompt_template: string;
   delivery_channel: string;
+  permission_mode: 'suggest' | 'approve' | 'auto';
   is_active: boolean;
   last_run_at: string | null;
   created_at: string;
@@ -49,6 +50,22 @@ export interface AgentTrigger {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface AgentScheduleRun {
+  id: string;
+  schedule_id: string | null;
+  organization_id: string;
+  agent_name: string;
+  user_id: string | null;
+  status: 'success' | 'failed' | 'skipped' | 'catch_up';
+  response_summary: string | null;
+  delivery_channel: string;
+  delivered: boolean;
+  duration_ms: number | null;
+  error_message: string | null;
+  skip_reason: string | null;
+  created_at: string;
 }
 
 export interface ScheduleRunResult {
@@ -72,7 +89,8 @@ export interface TriggerTestResult {
 }
 
 // Column lists for explicit selection (per CLAUDE.md: never select('*'))
-const SCHEDULE_COLS = 'id, organization_id, agent_name, cron_expression, prompt_template, delivery_channel, is_active, last_run_at, created_at, updated_at';
+const SCHEDULE_COLS = 'id, organization_id, agent_name, cron_expression, prompt_template, delivery_channel, is_active, last_run_at, created_at, updated_at, permission_mode';
+const SCHEDULE_RUN_COLS = 'id, schedule_id, organization_id, agent_name, user_id, status, response_summary, delivery_channel, delivered, duration_ms, error_message, skip_reason, created_at';
 const TRIGGER_COLS = 'id, organization_id, agent_name, trigger_event, prompt_template, is_active, created_at, updated_at';
 const CONFIG_COLS = 'id, organization_id, model_tier, enabled_agents, max_concurrent_agents, monthly_budget_cents, created_at, updated_at';
 
@@ -124,7 +142,7 @@ export async function getSchedules(orgId: string): Promise<AgentSchedule[]> {
 }
 
 export async function createSchedule(
-  data: Pick<AgentSchedule, 'organization_id' | 'agent_name' | 'cron_expression' | 'prompt_template'> & { delivery_channel?: string }
+  data: Pick<AgentSchedule, 'organization_id' | 'agent_name' | 'cron_expression' | 'prompt_template'> & { delivery_channel?: string; permission_mode?: 'suggest' | 'approve' | 'auto' }
 ): Promise<AgentSchedule> {
   const { data: result, error } = await supabase
     .from('agent_schedules')
@@ -134,6 +152,7 @@ export async function createSchedule(
       cron_expression: data.cron_expression,
       prompt_template: data.prompt_template,
       delivery_channel: data.delivery_channel || 'in_app',
+      permission_mode: data.permission_mode || 'suggest',
     })
     .select(SCHEDULE_COLS)
     .single();
@@ -144,7 +163,7 @@ export async function createSchedule(
 
 export async function updateSchedule(
   id: string,
-  updates: Partial<Pick<AgentSchedule, 'agent_name' | 'cron_expression' | 'prompt_template' | 'delivery_channel' | 'is_active'>>
+  updates: Partial<Pick<AgentSchedule, 'agent_name' | 'cron_expression' | 'prompt_template' | 'delivery_channel' | 'permission_mode' | 'is_active'>>
 ): Promise<AgentSchedule> {
   const { data, error } = await supabase
     .from('agent_schedules')
@@ -181,6 +200,31 @@ export async function runScheduleNow(scheduleId: string): Promise<{
 
   if (error) throw error;
   return data;
+}
+
+// =============================================================================
+// Schedule Runs (execution history)
+// =============================================================================
+
+export async function getScheduleRuns(
+  orgId: string,
+  scheduleId?: string,
+  limit = 50
+): Promise<AgentScheduleRun[]> {
+  let query = supabase
+    .from('agent_schedule_runs')
+    .select(SCHEDULE_RUN_COLS)
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (scheduleId) {
+    query = query.eq('schedule_id', scheduleId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
 }
 
 // =============================================================================
