@@ -257,11 +257,11 @@ BEGIN
         'healthy_count', COUNT(*) FILTER (WHERE dhs.health_status = 'healthy' AND COALESCE(ds2.default_probability, 50) NOT IN (0, 100)),
         'warning_count', COUNT(*) FILTER (WHERE dhs.health_status = 'warning' AND COALESCE(ds2.default_probability, 50) NOT IN (0, 100)),
         'critical_count', COUNT(*) FILTER (WHERE dhs.health_status = 'critical' AND COALESCE(ds2.default_probability, 50) NOT IN (0, 100)),
-        'stalled_count', COUNT(*) FILTER (WHERE dhs.health_status = 'stalled' AND COALESCE(ds2.default_probability, 50) NOT IN (0, 100)),
         'dormant_count', COUNT(*) FILTER (WHERE
           COALESCE(ds2.default_probability, 50) = 0  -- Lost → always dormant
           OR (COALESCE(ds2.default_probability, 50) != 100  -- Signed → never dormant
-              AND COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) >= 30)
+              AND (dhs.health_status = 'stalled'
+                   OR COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) >= 30))
         )
       )
       FROM deals d

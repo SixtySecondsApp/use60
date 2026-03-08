@@ -97,7 +97,6 @@ export function PipelineHeader({
     healthy_count: 0,
     warning_count: 0,
     critical_count: 0,
-    stalled_count: 0,
     dormant_count: 0,
   };
 
@@ -110,7 +109,6 @@ export function PipelineHeader({
     { value: 'healthy', label: 'Healthy' },
     { value: 'warning', label: 'Warning' },
     { value: 'critical', label: 'Critical' },
-    { value: 'stalled', label: 'Stalled' },
     { value: 'dormant', label: 'Dormant' },
   ];
 
@@ -293,7 +291,7 @@ export function PipelineHeader({
           </div>
           <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-gray-500 dark:text-gray-400">
             <span className="w-[7px] h-[7px] rounded-full bg-gray-400 dark:bg-gray-500" />
-            {safeSummary.stalled_count} Stalled
+            {safeSummary.dormant_count} Dormant
           </div>
         </div>
       </div>
@@ -364,7 +362,7 @@ export function PipelineHeader({
                   healthy: 'bg-emerald-500',
                   warning: 'bg-amber-500',
                   critical: 'bg-red-500',
-                  stalled: 'bg-gray-400',
+                  dormant: 'bg-gray-400',
                 };
                 return (
                   <label key={option.value} className="flex items-center gap-2.5 p-2 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg cursor-pointer transition-colors">
@@ -479,7 +477,7 @@ export function PipelineHeader({
           </div>
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
             <span className="w-[6px] h-[6px] rounded-full bg-gray-400" />
-            {safeSummary.stalled_count}
+            {safeSummary.dormant_count}
           </div>
         </div>
 
@@ -557,7 +555,7 @@ export function PipelineHeader({
                       healthy: 'bg-emerald-500',
                       warning: 'bg-amber-500',
                       critical: 'bg-red-500',
-                      stalled: 'bg-gray-400',
+                      dormant: 'bg-gray-400',
                     };
                     return (
                       <label key={option.value} className="flex items-center gap-3 p-2.5 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-xl cursor-pointer transition-colors">

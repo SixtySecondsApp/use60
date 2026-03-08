@@ -89,7 +89,6 @@ export interface PipelineSummary {
   healthy_count: number;
   warning_count: number;
   critical_count: number;
-  stalled_count: number;
   dormant_count: number;
 }
 
@@ -260,7 +259,6 @@ async function fetchPipelineFallback(
     healthy_count: 0,
     warning_count: 0,
     critical_count: 0,
-    stalled_count: 0,
     dormant_count: 0,
   };
 
@@ -329,8 +327,7 @@ export function usePipelineData(options: UsePipelineDataOptions = {}) {
             healthy_count: 0,
             warning_count: 0,
             critical_count: 0,
-            stalled_count: 0,
-            dormant_count: 0,
+                    dormant_count: 0,
           },
         };
       }
@@ -367,8 +364,7 @@ export function usePipelineData(options: UsePipelineDataOptions = {}) {
               healthy_count: 0,
               warning_count: 0,
               critical_count: 0,
-              stalled_count: 0,
-            dormant_count: 0,
+                      dormant_count: 0,
             },
           };
         }
@@ -384,8 +380,7 @@ export function usePipelineData(options: UsePipelineDataOptions = {}) {
           healthy_count: 0,
           warning_count: 0,
           critical_count: 0,
-          stalled_count: 0,
-            dormant_count: 0,
+                  dormant_count: 0,
         };
 
         // Create O(1) lookup map by deal ID
@@ -426,8 +421,7 @@ export function usePipelineData(options: UsePipelineDataOptions = {}) {
         healthy_count: 0,
         warning_count: 0,
         critical_count: 0,
-        stalled_count: 0,
-            dormant_count: 0,
+                dormant_count: 0,
       },
     },
     isLoading,
