@@ -19,7 +19,7 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
-import { isServiceRoleAuth } from '../_shared/edgeAuth.ts';
+import { verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
 import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
 import { sendSlackDM } from '../_shared/proactive/deliverySlack.ts';
 import { buildPipelineHygieneDigest } from '../_shared/slackBlocks.ts';
@@ -44,9 +44,10 @@ serve(async (req) => {
     return errorResponse('Method not allowed', req, 405);
   }
 
-  // Auth: service role only
+  // Auth: service role or cron secret (matches agent-morning-briefing pattern)
   const authHeader = req.headers.get('Authorization');
-  if (!isServiceRoleAuth(authHeader, SUPABASE_SERVICE_ROLE_KEY)) {
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!verifyCronSecret(req, cronSecret) && !isServiceRoleAuth(authHeader, SUPABASE_SERVICE_ROLE_KEY)) {
     return errorResponse('Unauthorized — service role required', req, 401);
   }
 
