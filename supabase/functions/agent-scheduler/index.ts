@@ -42,6 +42,7 @@ interface ScheduleRow {
   agent_name: string;
   prompt_template: string;
   delivery_channel: string;
+  permission_mode: 'suggest' | 'approve' | 'auto';
   last_run_at: string | null;
 }
 
@@ -187,29 +188,93 @@ async function logScheduleRun(
   supabase: SupabaseClient,
   schedule: ScheduleRow,
   userId: string,
-  success: boolean,
+  status: 'success' | 'failed' | 'skipped' | 'catch_up',
   responseText: string,
   delivered: boolean,
   durationMs: number,
-  errorMessage?: string
+  errorMessage?: string,
+  skipReason?: string
 ): Promise<void> {
   try {
     await supabase.from('agent_schedule_runs').insert({
       schedule_id: schedule.id,
       organization_id: schedule.organization_id,
       agent_name: schedule.agent_name,
-      user_id: userId,
-      success,
-      response_text: responseText.slice(0, 5000),
+      user_id: userId || null,
+      status,
+      response_summary: responseText?.slice(0, 5000) || null,
       delivery_channel: schedule.delivery_channel,
       delivered,
       duration_ms: durationMs,
       error_message: errorMessage || null,
+      skip_reason: skipReason || null,
     });
   } catch {
     // Non-fatal — table may not exist
     console.warn('[agent-scheduler] Failed to log schedule run (table may not exist)');
   }
+}
+
+// =============================================================================
+// Missed Run Catch-Up
+// =============================================================================
+
+/**
+ * Estimate the expected interval (in ms) from a cron expression.
+ * Used by catch-up logic to detect missed runs.
+ */
+function getExpectedIntervalMs(cronExpr: string): number {
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length !== 5) return 24 * 60 * 60 * 1000; // default 1 day
+
+  const [minuteField, hourField, , , dowField] = parts;
+
+  // Hourly: minute is fixed, hour is *
+  if (hourField === '*' && minuteField !== '*') {
+    if (minuteField.startsWith('*/')) {
+      const step = parseInt(minuteField.slice(2), 10);
+      return (step || 60) * 60 * 1000;
+    }
+    return 60 * 60 * 1000; // every hour
+  }
+
+  // Weekly: specific dow
+  if (dowField !== '*' && !dowField.includes('-') && !dowField.includes(',')) {
+    return 7 * 24 * 60 * 60 * 1000;
+  }
+
+  // Weekdays (1-5): ~24h on weekdays
+  if (dowField === '1-5') {
+    return 24 * 60 * 60 * 1000;
+  }
+
+  // Daily (everything else with a fixed hour)
+  return 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Detect schedules that missed their expected run window.
+ * Returns at most ONE catch-up per schedule, for the most recent missed window.
+ * Max lookback: 7 days.
+ */
+function findMissedSchedules(schedules: ScheduleRow[], now: Date): ScheduleRow[] {
+  const MAX_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+  const missed: ScheduleRow[] = [];
+
+  for (const schedule of schedules) {
+    if (!schedule.last_run_at) continue; // never ran — don't catch up on first-time schedules
+
+    const lastRun = new Date(schedule.last_run_at).getTime();
+    const expectedInterval = getExpectedIntervalMs(schedule.cron_expression);
+    const buffer = Math.max(15 * 60 * 1000, expectedInterval * 0.1); // 15min or 10%, whichever is larger
+    const timeSinceLastRun = now.getTime() - lastRun;
+
+    if (timeSinceLastRun > expectedInterval + buffer && timeSinceLastRun < MAX_LOOKBACK_MS) {
+      missed.push(schedule);
+    }
+  }
+
+  return missed;
 }
 
 // =============================================================================
@@ -279,12 +344,13 @@ serve(async (req) => {
     const now = new Date();
 
     let schedulesToRun: ScheduleRow[];
+    let catchUpIds: Set<string> | null = null;
 
     if (isManualRun) {
       // Manual mode: fetch the specific schedule by ID
       const { data: schedule, error: schedError } = await supabase
         .from('agent_schedules')
-        .select('id, organization_id, cron_expression, agent_name, prompt_template, delivery_channel, last_run_at')
+        .select('id, organization_id, cron_expression, agent_name, prompt_template, delivery_channel, permission_mode, last_run_at')
         .eq('id', body.schedule_id!)
         .maybeSingle();
 
@@ -312,7 +378,7 @@ serve(async (req) => {
       // Cron mode: fetch all active schedules matching current time
       const { data: schedules, error: schedError } = await supabase
         .from('agent_schedules')
-        .select('id, organization_id, cron_expression, agent_name, prompt_template, delivery_channel, last_run_at')
+        .select('id, organization_id, cron_expression, agent_name, prompt_template, delivery_channel, permission_mode, last_run_at')
         .eq('is_active', true);
 
       if (schedError) {
@@ -327,9 +393,26 @@ serve(async (req) => {
         return jsonResponse({ success: true, message: 'No active schedules', executed: 0 }, req);
       }
 
-      schedulesToRun = (schedules as ScheduleRow[]).filter((s) =>
+      const allSchedules = schedules as ScheduleRow[];
+
+      // Phase 1: regular cron matches
+      const cronMatches = allSchedules.filter((s) =>
         cronMatchesNow(s.cron_expression, now)
       );
+
+      // Phase 2: missed run catch-up (only for schedules NOT in cronMatches)
+      const cronMatchIds = new Set(cronMatches.map((s) => s.id));
+      const nonMatching = allSchedules.filter((s) => !cronMatchIds.has(s.id));
+      const missedSchedules = findMissedSchedules(nonMatching, now);
+
+      if (missedSchedules.length > 0) {
+        console.log(`[agent-scheduler] Catch-up: ${missedSchedules.length} missed schedule(s) detected`);
+      }
+
+      // Tag catch-up schedules so we can log them correctly
+      const catchUpIds = new Set(missedSchedules.map((s) => s.id));
+
+      schedulesToRun = [...cronMatches, ...missedSchedules];
 
       if (schedulesToRun.length === 0) {
         return jsonResponse({ success: true, message: 'No schedules due', executed: 0 }, req);
@@ -450,15 +533,18 @@ serve(async (req) => {
           .update({ last_run_at: now.toISOString() })
           .eq('id', schedule.id);
 
-        // Log the run
+        // Log the run — tag as catch_up if this was a missed run
+        const isCatchUp = !isManualRun && catchUpIds?.has(schedule.id);
         await logScheduleRun(
           supabase,
           schedule,
           runAsUserId,
-          true,
+          isCatchUp ? 'catch_up' : 'success',
           result.responseText,
           delivered,
-          durationMs
+          durationMs,
+          undefined,
+          isCatchUp ? 'missed_run_catchup' : undefined
         );
 
         results.push({
@@ -484,7 +570,7 @@ serve(async (req) => {
           supabase,
           schedule,
           callerUserId || '',
-          false,
+          'failed',
           '',
           false,
           durationMs,

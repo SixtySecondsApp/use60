@@ -69,6 +69,8 @@ import {
   type AgentSchedule,
   type AgentTrigger,
 } from '@/lib/services/agentTeamService';
+import FrequencyPicker, { describeCron } from '@/components/agent/FrequencyPicker';
+import ScheduleRunHistory from '@/components/agent/ScheduleRunHistory';
 
 // =============================================================================
 // Constants — agent names match backend agentDefinitions registry
@@ -170,6 +172,7 @@ export default function AgentTeamSettings() {
   const [newScheduleCron, setNewScheduleCron] = useState('');
   const [newSchedulePrompt, setNewSchedulePrompt] = useState('');
   const [newScheduleChannel, setNewScheduleChannel] = useState('in_app');
+  const [newSchedulePermission, setNewSchedulePermission] = useState<'suggest' | 'approve' | 'auto'>('suggest');
 
   // Form state for new trigger
   const [newTriggerAgent, setNewTriggerAgent] = useState('');
@@ -284,12 +287,14 @@ export default function AgentTeamSettings() {
         cron_expression: newScheduleCron,
         prompt_template: newSchedulePrompt,
         delivery_channel: newScheduleChannel,
+        permission_mode: newSchedulePermission,
       });
       setSchedules((prev) => [created, ...prev]);
       setNewScheduleAgent('');
       setNewScheduleCron('');
       setNewSchedulePrompt('');
       setNewScheduleChannel('in_app');
+      setNewSchedulePermission('suggest');
       toast.success('Schedule created');
     } catch (error) {
       console.error('Error creating schedule:', error);
@@ -474,6 +479,10 @@ export default function AgentTeamSettings() {
               <Zap className="h-4 w-4 mr-2" />
               Triggers
             </TabsTrigger>
+            <TabsTrigger value="history">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Run History
+            </TabsTrigger>
           </TabsList>
 
           {/* Configuration Tab */}
@@ -606,14 +615,12 @@ export default function AgentTeamSettings() {
                       </Select>
                     </div>
                     <div className="flex-1 space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Cron Expression</label>
-                      <Input
-                        placeholder="0 9 * * 1-5"
+                      <FrequencyPicker
                         value={newScheduleCron}
-                        onChange={(e) => setNewScheduleCron(e.target.value)}
+                        onChange={setNewScheduleCron}
                       />
                     </div>
-                    <div className="w-48 space-y-1">
+                    <div className="w-40 space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">Delivery</label>
                       <Select value={newScheduleChannel} onValueChange={setNewScheduleChannel}>
                         <SelectTrigger>
@@ -623,6 +630,19 @@ export default function AgentTeamSettings() {
                           {DELIVERY_CHANNELS.map((ch) => (
                             <SelectItem key={ch.value} value={ch.value}>{ch.label}</SelectItem>
                           ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="w-40 space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Autonomy</label>
+                      <Select value={newSchedulePermission} onValueChange={(v) => setNewSchedulePermission(v as 'suggest' | 'approve' | 'auto')}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="suggest">Suggest (review first)</SelectItem>
+                          <SelectItem value="approve">Approve (gate actions)</SelectItem>
+                          <SelectItem value="auto">Auto (full execution)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -652,6 +672,7 @@ export default function AgentTeamSettings() {
                       <TableHead>Cron</TableHead>
                       <TableHead className="max-w-[200px]">Prompt</TableHead>
                       <TableHead>Delivery</TableHead>
+                      <TableHead>Autonomy</TableHead>
                       <TableHead>Last Run</TableHead>
                       <TableHead className="text-center">Active</TableHead>
                       <TableHead className="w-[120px]"></TableHead>
@@ -671,7 +692,10 @@ export default function AgentTeamSettings() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <code className="text-xs bg-muted px-2 py-1 rounded">{schedule.cron_expression}</code>
+                              <div>
+                                <span className="text-sm">{describeCron(schedule.cron_expression)}</span>
+                                <code className="block text-[10px] text-muted-foreground mt-0.5">{schedule.cron_expression}</code>
+                              </div>
                             </TableCell>
                             <TableCell className="max-w-[200px]">
                               <p className="text-sm text-muted-foreground truncate" title={schedule.prompt_template}>
@@ -681,6 +705,14 @@ export default function AgentTeamSettings() {
                             <TableCell>
                               <Badge variant="outline" className="text-xs">
                                 {schedule.delivery_channel || 'in_app'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={schedule.permission_mode === 'auto' ? 'default' : 'secondary'}
+                                className="text-xs"
+                              >
+                                {schedule.permission_mode || 'suggest'}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground text-sm">
@@ -723,7 +755,7 @@ export default function AgentTeamSettings() {
                       })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           No schedules configured. Add one above.
                         </TableCell>
                       </TableRow>
@@ -732,6 +764,11 @@ export default function AgentTeamSettings() {
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* History Tab */}
+          <TabsContent value="history" className="space-y-6">
+            {activeOrgId && <ScheduleRunHistory organizationId={activeOrgId} schedules={schedules} />}
           </TabsContent>
 
           {/* Triggers Tab */}
