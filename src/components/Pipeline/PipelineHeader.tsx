@@ -98,6 +98,7 @@ export function PipelineHeader({
     warning_count: 0,
     critical_count: 0,
     stalled_count: 0,
+    dormant_count: 0,
   };
 
   const [stagePopoverOpen, setStagePopoverOpen] = useState(false);
@@ -110,6 +111,7 @@ export function PipelineHeader({
     { value: 'warning', label: 'Warning' },
     { value: 'critical', label: 'Critical' },
     { value: 'stalled', label: 'Stalled' },
+    { value: 'dormant', label: 'Dormant' },
   ];
 
   const riskOptions = [

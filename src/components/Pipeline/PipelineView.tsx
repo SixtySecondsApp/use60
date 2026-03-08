@@ -118,8 +118,18 @@ export function PipelineView() {
     enabled: !!forecastOrgId && isForecastView,
     staleTime: 5 * 60 * 1000,
   });
+  // Strip 'dormant' from health_status filter before sending to RPC (it's a client-side filter)
+  const isDormantFilterActive = filterState.filters.health_status?.includes('dormant') ?? false;
+  const rpcFilters = useMemo(() => {
+    if (!isDormantFilterActive) return filterState.filters;
+    return {
+      ...filterState.filters,
+      health_status: filterState.filters.health_status?.filter((s: string) => s !== 'dormant'),
+    };
+  }, [filterState.filters, isDormantFilterActive]);
+
   const pipelineData = usePipelineData({
-    filters: filterState.filters,
+    filters: rpcFilters,
     sortBy: filterState.sortBy as any,
     sortDir: filterState.sortDir,
     // Table: paginated 25 at a time. Kanban: load all deals, lazy-render per column.
@@ -166,19 +176,39 @@ export function PipelineView() {
   // Get selected deal from dealMap
   const selectedDeal = selectedDealId ? pipelineData.data.dealMap[selectedDealId] || null : null;
 
-  // Group deals by stage for kanban view
+  // Group deals by stage for kanban view, with dormant deals sorted to bottom
   const dealsByStage = useMemo(() => {
     const grouped: Record<string, any[]> = {};
     pipelineData.data.stageMetrics.forEach((stage) => {
       grouped[stage.stage_id] = [];
     });
-    pipelineData.data.deals.forEach((deal) => {
+
+    // Dormancy: Signed (probability=100%) → never dormant; Lost (probability=0%) → always dormant
+    const isDealDormant = (d: any) =>
+      d.probability === 0 ? true : d.probability === 100 ? false : (d.days_since_last_activity ?? 0) >= 30;
+
+    // Apply dormant filter client-side if active
+    const deals = isDormantFilterActive
+      ? pipelineData.data.deals.filter((d: any) => isDealDormant(d))
+      : pipelineData.data.deals;
+
+    deals.forEach((deal: any) => {
       if (deal.stage_id && grouped[deal.stage_id]) {
         grouped[deal.stage_id].push(deal);
       }
     });
+    // Sort dormant deals to bottom of each column
+    if (!isDormantFilterActive) {
+      Object.keys(grouped).forEach((stageId) => {
+        grouped[stageId].sort((a: any, b: any) => {
+          const aDormant = isDealDormant(a) ? 1 : 0;
+          const bDormant = isDealDormant(b) ? 1 : 0;
+          return aDormant - bDormant;
+        });
+      });
+    }
     return grouped;
-  }, [pipelineData.data.deals, pipelineData.data.stageMetrics]);
+  }, [pipelineData.data.deals, pipelineData.data.stageMetrics, isDormantFilterActive]);
 
   // Apply a saved view (PIPE-ADV-001)
   const handleApplySavedView = useCallback((view: PipelineSavedView) => {
