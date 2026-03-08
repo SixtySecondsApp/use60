@@ -1964,13 +1964,14 @@ export async function executeAction(
       const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
 
       try {
-        const resp = await fetch(`${supabaseUrl}/functions/v1/push-to-instantly`, {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/crm-push`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': authHeader,
           },
           body: JSON.stringify({
+            action: 'to_instantly',
             table_id: tableId,
             campaign_id: params.campaign_id ? String(params.campaign_id) : undefined,
             row_ids: Array.isArray(params.row_ids) ? params.row_ids : undefined,

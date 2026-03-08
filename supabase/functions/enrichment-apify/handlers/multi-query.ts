@@ -1,11 +1,10 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import {
   getCorsHeaders,
   handleCorsPreflightRequest,
   jsonResponse,
   errorResponse,
-} from '../_shared/corsHelper.ts';
+} from '../../_shared/corsHelper.ts';
 
 // ---------------------------------------------------------------------------
 // Types (imported from frontend)
@@ -707,7 +706,7 @@ function deduplicateResults(results: NormalizedResult[]): NormalizedResult[] {
 // Main Handler
 // ---------------------------------------------------------------------------
 
-serve(async (req) => {
+export async function handleMultiQuery(req: Request): Promise<Response> {
   const preflightResponse = handleCorsPreflightRequest(req);
   if (preflightResponse) return preflightResponse;
 
@@ -929,4 +928,4 @@ serve(async (req) => {
     console.error('[apify-multi-query] Error:', error);
     return errorResponse((error as Error).message, req, 500);
   }
-});
+}

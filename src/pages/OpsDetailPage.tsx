@@ -1073,8 +1073,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
   const pushToHubSpotMutation = useMutation({
     mutationFn: async (config: HubSpotPushConfig) => {
-      const { data, error } = await supabase.functions.invoke('push-to-hubspot', {
-        body: { table_id: tableId, row_ids: Array.from(selectedRows), config },
+      const { data, error } = await supabase.functions.invoke('crm-push', {
+        body: { action: 'to_hubspot', table_id: tableId, row_ids: Array.from(selectedRows), config },
       });
       if (error) throw error;
       return data;
@@ -3873,8 +3873,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               return;
             }
 
-            const { data, error } = await supabase.functions.invoke('push-to-instantly', {
+            const { data, error } = await supabase.functions.invoke('crm-push', {
               body: {
+                action: 'to_instantly',
                 table_id: tableId,
                 campaign_id: campaignId,
                 row_ids: Array.from(selectedRows),

@@ -429,8 +429,9 @@ export default function AgentResearchDemo() {
 
     try {
       setIsSearching(true);
-      const { data, error } = await supabase.functions.invoke('apollo-search', {
+      const { data, error } = await supabase.functions.invoke('enrichment-apollo', {
         body: {
+          action: 'search',
           query: apolloSearchQuery,
           page: 1,
           per_page: 20
@@ -565,8 +566,9 @@ export default function AgentResearchDemo() {
         setTimeout(() => reject(new Error('Query timed out')), 60000)
       );
 
-      const queryPromise = supabase.functions.invoke('apify-multi-query', {
+      const queryPromise = supabase.functions.invoke('enrichment-apify', {
         body: {
+          action: 'multi_query',
           parsedQuery,
           tableId: demoTableId,
           selectedSources: selectedSources.length > 0 ? selectedSources : undefined,
