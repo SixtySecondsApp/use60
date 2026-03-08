@@ -93,13 +93,14 @@ export async function handleProposalAction(ctx: ProposalActionContext): Promise<
       .eq('id', pendingAction.id);
 
     // Resume orchestrator with send approval
-    await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+    await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         resume_job_id: jobId,
         approval_data: {
           action: 'approve_and_send',

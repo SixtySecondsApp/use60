@@ -101,7 +101,7 @@ serve(async (req) => {
     let processError: string | null = null;
 
     try {
-      processResponse = await fetch(`${SUPABASE_URL}/functions/v1/process-lead-prep`, {
+      processResponse = await fetch(`${SUPABASE_URL}/functions/v1/process-jobs-router`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -111,7 +111,7 @@ serve(async (req) => {
             ? { "x-cron-secret": Deno.env.get("CRON_SECRET") as string }
             : {}),
         },
-        body: JSON.stringify({ lead_ids: [leadId] }),
+        body: JSON.stringify({ action: 'lead_prep', lead_ids: [leadId] }),
       });
 
       const responseText = await processResponse.text();

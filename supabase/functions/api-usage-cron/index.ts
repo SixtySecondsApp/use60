@@ -98,12 +98,13 @@ Deno.serve(async (req) => {
     try {
       console.log('[api-usage-cron] Triggering usage alerts check...');
 
-      const alertsResponse = await fetch(`${supabaseUrl}/functions/v1/api-usage-alerts`, {
+      const alertsResponse = await fetch(`${supabaseUrl}/functions/v1/api-services-router`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${supabaseServiceKey}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ action: 'usage_alerts' }),
       });
 
       if (alertsResponse.ok) {

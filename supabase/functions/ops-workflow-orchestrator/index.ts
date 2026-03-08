@@ -1200,7 +1200,7 @@ serve(async (req) => {
             const emailStep = steps.find(s => s.step === 'email_generation' && s.status === 'complete')
             const campaignStep = steps.find(s => s.step === 'campaign_creation' && s.status === 'complete')
 
-            await fetch(`${SUPABASE_URL}/functions/v1/send-slack-message`, {
+            await fetch(`${SUPABASE_URL}/functions/v1/send-router`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -1208,6 +1208,7 @@ serve(async (req) => {
                 apikey: SUPABASE_ANON_KEY,
               },
               body: JSON.stringify({
+                action: 'slack_message',
                 user_id: user.id,
                 org_id: orgId,
                 message_type: 'campaign_ready',

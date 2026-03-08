@@ -658,9 +658,11 @@ async function executeTaskAction(
       case 'draft_email':
       case 'run_research':
         // Call copilot to run the sequence
-        const { data, error } = await supabase.functions.invoke('api-copilot/chat', {
+        const { data, error } = await supabase.functions.invoke('api-services-router', {
           body: {
-            message: actionType === 'draft_email' 
+            action: 'copilot',
+            path: '/chat',
+            message: actionType === 'draft_email'
               ? `Draft a follow-up email for task ${taskId}`
               : `Research the contact for task ${taskId}`,
             context: { userId, taskId },

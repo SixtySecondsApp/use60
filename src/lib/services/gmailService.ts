@@ -172,9 +172,7 @@ class GmailService {
       }
 
       // Call the Gmail edge function sync action
-      const { data, error } = await supabase.functions.invoke('google-gmail', {
-        body: {
-          action: 'sync',
+      const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'sync',
           query: options.query,
           maxResults: options.maxResults || 50,
         },

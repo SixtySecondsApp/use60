@@ -230,11 +230,11 @@ export function createSlackTests(orgId: string): IntegrationTest[] {
 
           // Try to list channels as a connectivity test
           const startTime = Date.now();
-          const response = await supabase.functions.invoke('slack-list-channels', {
+          const response = await supabase.functions.invoke('slack-ops-router', {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
-            body: { org_id: orgId },
+            body: { action: 'list_channels', org_id: orgId },
           });
 
           const duration = Date.now() - startTime;
@@ -874,11 +874,11 @@ export function createSlackTests(orgId: string): IntegrationTest[] {
 
           // Try to list channels as a health check
           const startTime = Date.now();
-          const response = await supabase.functions.invoke('slack-list-channels', {
+          const response = await supabase.functions.invoke('slack-ops-router', {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
-            body: { org_id: orgId },
+            body: { action: 'list_channels', org_id: orgId },
           });
 
           const duration = Date.now() - startTime;

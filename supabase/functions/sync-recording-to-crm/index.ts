@@ -602,13 +602,14 @@ async function syncRecordingToCRM(
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (supabaseUrl && serviceRoleKey) {
       try {
-        await fetch(`${supabaseUrl}/functions/v1/send-recording-notification`, {
+        await fetch(`${supabaseUrl}/functions/v1/send-router`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${serviceRoleKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            action: 'recording_notification',
             recording_id: recordingId,
             notification_type: 'hitl_deal_selection',
             deals: dealAssociations.map(d => ({

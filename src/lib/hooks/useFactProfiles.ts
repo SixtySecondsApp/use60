@@ -156,7 +156,7 @@ export function useUpdateFactProfile() {
         profile.research_status === 'complete'
       ) {
         supabase.functions
-          .invoke('sync-fact-profile-context', { body: { profileId: profile.id } })
+          .invoke('sync-jobs-router', { body: { action: 'fact_profile_context', profileId: profile.id } })
           .then(({ data, error }) => {
             if (error) {
               console.error('[auto-sync] Failed to sync org profile to context:', error);

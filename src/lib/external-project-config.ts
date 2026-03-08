@@ -72,12 +72,12 @@ export const INTERNAL_ONLY_FUNCTIONS = [
   'add-sale',
   'add-router',
   'bulk-import-activities',
-  'process-single-activity',
+  'process-jobs-router',
   'create-task-unified',
   'create-task-from-action-item',
 
   // Leads & Pipeline
-  'process-lead-prep',
+  // process-lead-prep is now routed through process-jobs-router (already listed above)
   'reprocess-lead-prep',
   'webhook-leads',
   'import-leads-generic',

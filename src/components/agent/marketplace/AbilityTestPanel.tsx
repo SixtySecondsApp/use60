@@ -127,8 +127,9 @@ export function AbilityTestPanel({ ability }: AbilityTestPanelProps) {
         // Orchestrator path: run with in-app channel only (safe)
         const selectedMeeting = meetings?.find(m => m.id === selectedMeetingId);
 
-        const { data, error } = await supabase.functions.invoke('agent-orchestrator', {
+        const { data, error } = await supabase.functions.invoke('agent-fleet-router', {
           body: {
+            action: 'orchestrator',
             type: ability.eventType,
             source: 'manual',
             org_id: selectedMeeting?.org_id || orgId,

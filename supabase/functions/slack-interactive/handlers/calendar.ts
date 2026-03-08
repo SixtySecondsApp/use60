@@ -113,13 +113,14 @@ export async function handleCalendarAction(ctx: CalendarActionContext): Promise<
     }
 
     // Resume orchestrator with email_times action
-    await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+    await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         resume_job_id: jobId,
         approval_data: {
           action: 'send_times_email',
@@ -142,13 +143,14 @@ export async function handleCalendarAction(ctx: CalendarActionContext): Promise<
     const jobId = parts.slice(2).join('_');
 
     // Re-invoke find-available-slots with extended range
-    await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+    await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         resume_job_id: jobId,
         approval_data: {
           action: 'show_more_options',

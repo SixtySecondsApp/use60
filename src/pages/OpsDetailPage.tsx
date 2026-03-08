@@ -1097,8 +1097,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     if (!table) return;
     setIsLoadingLists(true);
     try {
-      const { data, error } = await supabase.functions.invoke('hubspot-admin', {
-        body: { action: 'get_lists', org_id: table.organization_id },
+      const { data, error } = await supabase.functions.invoke('crm-admin-router', {
+        body: { action: 'hubspot_admin', sub_action: 'get_lists', org_id: table.organization_id },
       });
       if (error) throw error;
       const lists = (data?.lists ?? []).map((l: any) => ({
@@ -1118,9 +1118,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const createHubSpotListMutation = useMutation({
     mutationFn: async (config: { listName: string; scope: 'all' | 'selected'; linkList: boolean }) => {
       const rowIds = config.scope === 'selected' ? Array.from(selectedRows) : undefined;
-      const { data, error } = await supabase.functions.invoke('hubspot-list-ops', {
+      const { data, error } = await supabase.functions.invoke('crm-admin-router', {
         body: {
-          action: 'create_list_from_table',
+          action: 'hubspot_list_ops',
+          sub_action: 'create_list_from_table',
           table_id: tableId,
           list_name: config.listName,
           row_ids: rowIds,
@@ -1207,9 +1208,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         (table?.source_query as any)?.sync_direction === 'bidirectional';
       const listId = (table?.source_query as any)?.list_id;
       if (isBidirectional && listId && sourceIds.length > 0) {
-        supabase.functions.invoke('hubspot-list-ops', {
+        supabase.functions.invoke('crm-admin-router', {
           body: {
-            action: 'remove_from_list',
+            action: 'hubspot_list_ops',
+            sub_action: 'remove_from_list',
             list_id: listId,
             contact_ids: sourceIds,
             org_id: table?.organization_id,
@@ -1393,8 +1395,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     if (!tableId) return;
     setNlQueryLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
+      const { data, error } = await supabase.functions.invoke('ops-table-router', {
         body: {
+          action: 'ai_query',
           tableId,
           query,
           columns: columns.map((c) => ({
@@ -1829,8 +1832,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         }
 
         // Call the AI query edge function — handles both existing columns and empty tables
-        const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
+        const { data, error } = await supabase.functions.invoke('ops-table-router', {
           body: {
+            action: 'ai_query',
             tableId,
             query: submittedQuery,
             columns: effectiveColumns.map((c) => ({
@@ -2016,9 +2020,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             setTransformPreviewData(null);
             // Get preview
             const { data: previewData, error: previewErr } = await supabase.functions.invoke(
-              'ops-table-transform-column',
+              'ops-table-router',
               {
                 body: {
+                  action: 'transform_column',
                   tableId,
                   columnKey: colKey,
                   transformPrompt: result.transformPrompt as string,
@@ -2315,8 +2320,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     if (!transformPreviewData || !tableId) return;
     setIsTransformExecuting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('ops-table-transform-column', {
+      const { data, error } = await supabase.functions.invoke('ops-table-router', {
         body: {
+          action: 'transform_column',
           tableId,
           columnKey: transformPreviewData.columnKey,
           transformPrompt: transformPreviewData.transformPrompt,

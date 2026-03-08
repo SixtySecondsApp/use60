@@ -77,9 +77,10 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
 
     const name = inviterName || 'A team member';
 
-    // Call send-organization-invitation edge function with dark-themed template
-    const { error } = await supabase.functions.invoke('send-organization-invitation', {
+    // Call send-router edge function with dark-themed template
+    const { error } = await supabase.functions.invoke('send-router', {
       body: {
+        action: 'organization_invitation',
         to_email: invitation.email,
         to_name: inviteeName,
         organization_name: organizationName,

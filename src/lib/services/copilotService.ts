@@ -12,7 +12,7 @@ import type {
 } from '@/components/copilot/types';
 
 export class CopilotService {
-  private static readonly BASE_URL = `${API_BASE_URL}/api-copilot`;
+  private static readonly BASE_URL = `${API_BASE_URL}/api-services-router`;
 
   /**
    * Send a message to the Copilot and get AI response
@@ -33,13 +33,13 @@ export class CopilotService {
 
       logger.log('🤖 Sending message to Copilot:', { message, context });
 
-      const response = await fetch(`${this.BASE_URL}/chat`, {
+      const response = await fetch(this.BASE_URL, {
         method: 'POST',
         headers: {
           ...headers,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({ action: 'copilot', path: '/chat', ...requestBody })
       });
 
       if (!response.ok) {
@@ -74,10 +74,15 @@ export class CopilotService {
     try {
       const headers = await getSupabaseHeaders();
 
-      const response = await fetch(`${this.BASE_URL}/actions/draft-email`, {
+      const response = await fetch(this.BASE_URL, {
         method: 'POST',
-        headers,
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
+          action: 'copilot',
+          path: '/actions/draft-email',
           contactId,
           context,
           tone
@@ -111,12 +116,17 @@ export class CopilotService {
     try {
       const headers = await getSupabaseHeaders();
 
-      const response = await fetch(`${this.BASE_URL}/conversations/${conversationId}`, {
-        method: 'GET',
+      const response = await fetch(this.BASE_URL, {
+        method: 'POST',
         headers: {
           ...headers,
           'Content-Type': 'application/json',
-        }
+        },
+        body: JSON.stringify({
+          action: 'copilot',
+          path: `/conversations/${conversationId}`,
+          method: 'GET',
+        })
       });
 
       if (!response.ok) {

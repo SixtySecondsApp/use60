@@ -541,11 +541,12 @@ export function useFathomIntegration() {
       console.log('[useFathomIntegration] Disconnecting Fathom for user:', user.id);
 
       // Per-user disconnect: no org_id needed
-      const response = await supabase.functions.invoke('fathom-disconnect', {
+      const response = await supabase.functions.invoke('fathom-ops-router', {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
         body: {
+          action: 'disconnect',
           delete_synced_meetings: deleteSyncedMeetings,
         },
       });
@@ -637,11 +638,12 @@ export function useFathomIntegration() {
       console.log('[useFathomIntegration] Session valid, invoking fathom-sync...');
 
       // Per-user sync: no org_id needed, Edge Function uses user_id from token
-      const response = await supabase.functions.invoke('fathom-sync', {
+      const response = await supabase.functions.invoke('fathom-ops-router', {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
         body: {
+          action: 'sync',
           sync_type: params?.sync_type || 'manual',
           start_date: params?.start_date,
           end_date: params?.end_date,

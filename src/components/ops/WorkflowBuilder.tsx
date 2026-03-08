@@ -37,9 +37,9 @@ export function WorkflowBuilder({ tableId, onClose }: WorkflowBuilderProps) {
   const parseMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await opsTableService.supabase.functions.invoke(
-        'ops-table-workflow-engine',
+        'ops-table-router',
         {
-          body: { tableId, action: 'parse', description },
+          body: { action: 'workflow_engine', handler_action: 'parse', tableId, description },
         }
       );
       if (error) throw new Error(error.message || 'Failed to invoke workflow engine');

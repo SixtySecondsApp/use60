@@ -246,8 +246,9 @@ async function sendBulkInvitesFallback(params: SendInvitesParams): Promise<SendI
   // Send emails via Edge Function (or mark as pending if not configured)
   try {
     // Check if RESEND_API_KEY is configured by attempting to invoke the function
-    const { data: edgeFunctionData, error: edgeFunctionError } = await supabase.functions.invoke('send-waitlist-invite', {
+    const { data: edgeFunctionData, error: edgeFunctionError } = await supabase.functions.invoke('send-router', {
       body: {
+        action: 'waitlist_invite',
         invites: insertedInvites?.map(invite => ({
           id: invite.id,
           email: invite.email

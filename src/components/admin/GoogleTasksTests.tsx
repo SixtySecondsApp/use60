@@ -176,8 +176,7 @@ export function GoogleTasksTests() {
         'Fetch Google Task Lists',
         'Lists',
         async () => {
-          const { data, error } = await supabase.functions.invoke('google-tasks', {
-            body: { action: 'list-tasklists' }
+          const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'list-tasklists' }
           });
           
           if (error) throw error;
@@ -560,8 +559,7 @@ export function GoogleTasksTests() {
         'Google Tasks Edge Function Health',
         'System',
         async () => {
-          const { data, error } = await supabase.functions.invoke('google-tasks', {
-            body: { action: 'list-tasklists' }
+          const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'list-tasklists' }
           });
           
           if (error) {
@@ -620,16 +618,13 @@ export function GoogleTasksTests() {
           const startTime = Date.now();
           
           // Fetch task lists
-          const { data: listsData } = await supabase.functions.invoke('google-tasks', {
-            body: { action: 'list-tasklists' }
+          const { data: listsData } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'list-tasklists' }
           });
           const listsFetchTime = Date.now() - startTime;
           
           // Fetch tasks from default list
           const tasksFetchStart = Date.now();
-          const { data: tasksData } = await supabase.functions.invoke('google-tasks', {
-            body: { 
-              action: 'list-tasks',
+          const { data: tasksData } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'list-tasks',
               taskListId: '@default',
               maxResults: 10
             }

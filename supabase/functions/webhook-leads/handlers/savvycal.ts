@@ -716,7 +716,7 @@ async function processSavvyCalEvent(
     }
 
     // Auto-enrich new lead - trigger lead prep generation for this specific lead
-    const prepUrl = `${SUPABASE_URL}/functions/v1/process-lead-prep`;
+    const prepUrl = `${SUPABASE_URL}/functions/v1/process-jobs-router`;
 
     // Fire and forget - don't wait for prep generation to complete
     fetch(prepUrl, {
@@ -729,7 +729,7 @@ async function processSavvyCalEvent(
           ? { "x-cron-secret": Deno.env.get("CRON_SECRET") as string }
           : {}),
       },
-      body: JSON.stringify({ lead_id: leadData.id }),
+      body: JSON.stringify({ action: 'lead_prep', lead_id: leadData.id }),
     }).then(async (res) => {
       if (!res.ok) {
         const text = await res.text().catch(() => "");

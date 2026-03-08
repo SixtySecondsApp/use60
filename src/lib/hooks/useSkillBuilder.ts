@@ -84,18 +84,25 @@ async function callSkillBuilderApi<T>(
   method: 'GET' | 'POST',
   body?: unknown
 ): Promise<T> {
-  const url = `${getSupabaseUrl()}/functions/v1/api-skill-builder/${endpoint}`;
+  const url = `${getSupabaseUrl()}/functions/v1/api-services-router`;
 
   // Get session for auth header
   const { data: { session } } = await supabase.auth.getSession();
 
-  const response = await fetch(url, {
+  const routerBody: Record<string, unknown> = {
+    action: 'skill_builder',
+    path: `/${endpoint}`,
     method,
+    ...(body && typeof body === 'object' ? body as Record<string, unknown> : {}),
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${session?.access_token || ''}`,
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: JSON.stringify(routerBody),
   });
 
   if (!response.ok) {

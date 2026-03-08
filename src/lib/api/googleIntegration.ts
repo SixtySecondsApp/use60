@@ -32,8 +32,7 @@ export class GoogleIntegrationAPI {
     // Get current origin to pass to Edge Function for dynamic redirect URI
     const origin = window.location.origin;
 
-    const { data, error } = await supabase.functions.invoke('google-oauth-initiate', {
-      body: { origin, scope_tier: scopeTier }
+    const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'oauth_initiate',  origin, scope_tier: scopeTier }
     });
 
     if (error) {
@@ -307,8 +306,7 @@ export class GoogleIntegrationAPI {
    */
   static async testConnection(): Promise<GoogleTestConnectionResult> {
     try {
-      const { data, error } = await supabase.functions.invoke('google-test-connection', {
-        body: {}
+      const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'test_connection', }
       });
 
       // Log full response for debugging
