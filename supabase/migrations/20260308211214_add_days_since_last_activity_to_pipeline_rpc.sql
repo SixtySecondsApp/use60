@@ -118,7 +118,7 @@ BEGIN
               'sentiment_trend', dhs.sentiment_trend,
               'days_in_current_stage', dhs.days_in_current_stage,
               'days_since_last_meeting', dhs.days_since_last_meeting,
-              'days_since_last_activity', dhs.days_since_last_activity,
+              'days_since_last_activity', COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER),
               'predicted_close_probability', dhs.predicted_close_probability,
 
               -- Relationship health
@@ -216,7 +216,7 @@ BEGIN
             COUNT(d.id)::INTEGER as deal_count,
             COALESCE(SUM(d.value), 0) as total_value,
             COALESCE(SUM(
-              CASE WHEN COALESCE(dhs.days_since_last_activity, 0) < 30
+              CASE WHEN COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) < 30
                    THEN d.value * COALESCE(d.probability, ds.default_probability, 0) / 100.0
                    ELSE 0
               END
@@ -238,7 +238,7 @@ BEGIN
       SELECT jsonb_build_object(
         'total_value', COALESCE(SUM(d.value), 0),
         'weighted_value', COALESCE(SUM(
-          CASE WHEN COALESCE(dhs.days_since_last_activity, 0) < 30
+          CASE WHEN COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) < 30
                THEN d.value * COALESCE(d.probability, 50) / 100.0
                ELSE 0
           END
@@ -248,7 +248,7 @@ BEGIN
         'warning_count', COUNT(*) FILTER (WHERE dhs.health_status = 'warning'),
         'critical_count', COUNT(*) FILTER (WHERE dhs.health_status = 'critical'),
         'stalled_count', COUNT(*) FILTER (WHERE dhs.health_status = 'stalled'),
-        'dormant_count', COUNT(*) FILTER (WHERE COALESCE(dhs.days_since_last_activity, 0) >= 30)
+        'dormant_count', COUNT(*) FILTER (WHERE COALESCE(dhs.days_since_last_activity, EXTRACT(DAY FROM NOW() - d.created_at)::INTEGER) >= 30)
       )
       FROM deals d
       LEFT JOIN deal_health_scores dhs ON dhs.deal_id = d.id
