@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { CircleDot, Users, Clock, TrendingUp, TrendingDown, Minus, AlertTriangle, ListTodo, Calendar } from 'lucide-react';
+import { CircleDot, Users, Clock, Activity, TrendingUp, TrendingDown, Minus, AlertTriangle, ListTodo, Calendar } from 'lucide-react';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import type { PipelineDeal } from './hooks/usePipelineData';
 import { DealTemperatureGauge } from '@/components/signals/DealTemperatureGauge';
@@ -92,6 +92,17 @@ function getDaysUrgency(days: number | null): string {
 }
 
 /**
+ * Get freshness color and label based on days since last activity
+ */
+function getFreshnessStyle(days: number | null): { colorClass: string; label: string } | null {
+  if (days === null || days === undefined) return null;
+  if (days <= 7) return { colorClass: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/10', label: `${days}d` };
+  if (days <= 14) return { colorClass: 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/10', label: `${days}d` };
+  if (days <= 21) return { colorClass: 'text-red-500 dark:text-red-400 bg-red-500/10 border-red-500/10', label: `${days}d` };
+  return { colorClass: 'text-gray-400 dark:text-gray-500 bg-gray-500/10 border-gray-500/10', label: `${days}d` };
+}
+
+/**
  * Get owner initials from split_users or fallback
  */
 function getOwnerInitials(deal: PipelineDeal): string {
@@ -120,6 +131,8 @@ export const DealCard = React.memo<DealCardProps>(({
   const avatarGradient = getAvatarGradient(deal.company);
   const showLogo = logoUrl && !logoError;
   const daysUrgency = getDaysUrgency(deal.days_in_current_stage);
+  const freshness = getFreshnessStyle(deal.days_since_last_activity);
+  const isDormant = (deal.days_since_last_activity ?? 0) >= 30;
 
   return (
     <div
@@ -133,6 +146,7 @@ export const DealCard = React.memo<DealCardProps>(({
         hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-[0_8px_25px_rgba(0,0,0,0.25)]
         transition-all duration-200
         ${isDragging ? 'opacity-50' : ''}
+        ${isDormant ? 'opacity-50' : ''}
       `}
     >
       {/* Subtle gradient overlay */}
@@ -186,8 +200,22 @@ export const DealCard = React.memo<DealCardProps>(({
       </div>
 
       {/* Tags */}
-      {(deal.risk_factors?.length || deal.pending_actions_count > 0 || deal.health_status || temperatureData) && (
+      {(deal.risk_factors?.length || deal.pending_actions_count > 0 || deal.health_status || temperatureData || freshness || isDormant) && (
         <div className="relative z-[1] px-3 pb-2 flex flex-wrap gap-1">
+          {isDormant && (
+            <span className="text-[10px] font-semibold px-[7px] py-[2.5px] rounded-[5px] bg-gray-500/10 text-gray-400 dark:text-gray-500 border border-gray-500/10">
+              Dormant
+            </span>
+          )}
+          {freshness && !isDormant && (
+            <span
+              className={`text-[10px] font-semibold px-[7px] py-[2.5px] rounded-[5px] border flex items-center gap-0.5 ${freshness.colorClass}`}
+              title={`Last activity ${deal.days_since_last_activity} days ago`}
+            >
+              <Activity className="w-2.5 h-2.5" />
+              {freshness.label}
+            </span>
+          )}
           {deal.risk_factors && deal.risk_factors.length > 0 && (
             <span className="text-[10px] font-semibold px-[7px] py-[2.5px] rounded-[5px] bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/10">
               At Risk
@@ -203,7 +231,6 @@ export const DealCard = React.memo<DealCardProps>(({
               {deal.pending_actions_count} Action{deal.pending_actions_count !== 1 ? 's' : ''}
             </span>
           )}
-          {/* Deal temperature gauge — only shown when data is available */}
           {temperatureData && (
             <DealTemperatureGauge
               temperature={Math.round(temperatureData.temperature * 100)}

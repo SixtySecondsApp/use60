@@ -50,6 +50,7 @@ export interface PipelineDeal {
   sentiment_trend: 'improving' | 'stable' | 'declining' | 'unknown' | null;
   days_in_current_stage: number | null;
   days_since_last_meeting: number | null;
+  days_since_last_activity: number | null;
   predicted_close_probability: number | null;
 
   // Relationship health
@@ -89,6 +90,7 @@ export interface PipelineSummary {
   warning_count: number;
   critical_count: number;
   stalled_count: number;
+  dormant_count: number;
 }
 
 export interface PipelineFilters {
@@ -216,6 +218,7 @@ async function fetchPipelineFallback(
       sentiment_trend: null,
       days_in_current_stage: daysInStage,
       days_since_last_meeting: null,
+      days_since_last_activity: null,
       predicted_close_probability: null,
       relationship_health_score: null,
       relationship_health_status: null,
@@ -258,6 +261,7 @@ async function fetchPipelineFallback(
     warning_count: 0,
     critical_count: 0,
     stalled_count: 0,
+    dormant_count: 0,
   };
 
   // 7. Build deal map
@@ -326,6 +330,7 @@ export function usePipelineData(options: UsePipelineDataOptions = {}) {
             warning_count: 0,
             critical_count: 0,
             stalled_count: 0,
+            dormant_count: 0,
           },
         };
       }
@@ -363,6 +368,7 @@ export function usePipelineData(options: UsePipelineDataOptions = {}) {
               warning_count: 0,
               critical_count: 0,
               stalled_count: 0,
+            dormant_count: 0,
             },
           };
         }
@@ -379,6 +385,7 @@ export function usePipelineData(options: UsePipelineDataOptions = {}) {
           warning_count: 0,
           critical_count: 0,
           stalled_count: 0,
+            dormant_count: 0,
         };
 
         // Create O(1) lookup map by deal ID
@@ -420,6 +427,7 @@ export function usePipelineData(options: UsePipelineDataOptions = {}) {
         warning_count: 0,
         critical_count: 0,
         stalled_count: 0,
+            dormant_count: 0,
       },
     },
     isLoading,
