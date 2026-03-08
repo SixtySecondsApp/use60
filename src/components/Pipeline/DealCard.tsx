@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { CircleDot, Users, Clock, Activity, TrendingUp, TrendingDown, Minus, AlertTriangle, ListTodo, Calendar } from 'lucide-react';
+import { CircleDot, Users, Clock, Activity, TrendingUp, TrendingDown, Minus, AlertTriangle, ListTodo, Calendar, Ghost } from 'lucide-react';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 import type { PipelineDeal } from './hooks/usePipelineData';
 import { DealTemperatureGauge } from '@/components/signals/DealTemperatureGauge';
@@ -138,6 +138,10 @@ export const DealCard = React.memo<DealCardProps>(({
     : deal.probability === 100
       ? false
       : (deal.days_since_last_activity ?? 0) >= 30;
+  const isTerminalStage = deal.probability === 0 || deal.probability === 100;
+  const closeDate = deal.close_date || deal.expected_close_date;
+  const isOverdue = !isTerminalStage && closeDate ? new Date(closeDate) < new Date() : false;
+  const showGhost = !isTerminalStage && (deal.ghost_probability ?? 0) > 70;
 
   return (
     <div
@@ -205,8 +209,19 @@ export const DealCard = React.memo<DealCardProps>(({
       </div>
 
       {/* Tags */}
-      {(deal.risk_factors?.length || deal.pending_actions_count > 0 || deal.health_status || temperatureData || freshness || isDormant) && (
+      {(deal.risk_factors?.length || deal.pending_actions_count > 0 || deal.health_status || temperatureData || freshness || isDormant || isOverdue || showGhost) && (
         <div className="relative z-[1] px-3 pb-2 flex flex-wrap gap-1">
+          {isOverdue && (
+            <span className="text-[10px] font-semibold px-[7px] py-[2.5px] rounded-[5px] bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/10">
+              Overdue
+            </span>
+          )}
+          {showGhost && (
+            <span className="text-[10px] font-semibold px-[7px] py-[2.5px] rounded-[5px] bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/10 flex items-center gap-0.5">
+              <Ghost className="w-2.5 h-2.5" />
+              {deal.ghost_probability}%
+            </span>
+          )}
           {isDormant && (
             <span className="text-[10px] font-semibold px-[7px] py-[2.5px] rounded-[5px] bg-gray-500/10 text-gray-400 dark:text-gray-500 border border-gray-500/10">
               Dormant

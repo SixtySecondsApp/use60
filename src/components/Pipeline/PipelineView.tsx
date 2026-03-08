@@ -28,6 +28,7 @@ import { BulkActionBar } from './BulkActionBar';
 import { usePipelineColumns } from './hooks/usePipelineColumns';
 import { exportDealsToCSV } from './pipelineUtils';
 import type { PipelineSavedView } from './hooks/usePipelineSavedViews';
+import { useOrgMembers } from '@/lib/hooks/useOrgMembers';
 import { ForecastSummaryCards } from '@/components/forecast/ForecastSummaryCards';
 import { ForecastVsActualChart } from '@/components/forecast/ForecastVsActualChart';
 import { RepCalibrationCards } from '@/components/forecast/RepCalibrationCards';
@@ -92,6 +93,11 @@ export function PipelineView() {
     return org?.currency_code || 'USD';
   });
   const filterState = usePipelineFilters();
+  const { data: orgMembers = [] } = useOrgMembers();
+  const ownerOptions = useMemo(() =>
+    orgMembers.map((m) => ({ id: m.user_id, name: m.name || m.email })),
+    [orgMembers]
+  );
   const isTableView = filterState.viewMode === 'table';
   const isForecastView = filterState.viewMode === 'forecast';
 
@@ -359,6 +365,9 @@ export function PipelineView() {
         onHealthStatusChange={filterState.setHealthStatus}
         selectedRiskLevel={filterState.filters.risk_level || []}
         onRiskLevelChange={filterState.setRiskLevel}
+        selectedOwners={filterState.filters.owner_ids || []}
+        onOwnersChange={filterState.setOwnerIds}
+        ownerOptions={ownerOptions}
         onClearFilters={filterState.clearFilters}
         hasActiveFilters={filterState.hasActiveFilters}
         onAddDeal={() => handleAddDealClick(null)}
@@ -509,16 +518,6 @@ export function PipelineView() {
           stageMetrics={pipelineData.data.stageMetrics}
           onClear={() => setSelectedDealIds(new Set())}
           onRefresh={() => pipelineData.refetch().catch((err) => logger.warn('Refetch after bulk action failed:', err))}
-        />
-      )}
-
-      {isTableView && totalPages > 1 && (
-        <PipelinePagination
-          currentPage={filterState.page}
-          totalPages={totalPages}
-          totalCount={pipelineData.data.totalCount}
-          pageSize={PIPELINE_PAGE_SIZE}
-          onPageChange={filterState.setPage}
         />
       )}
 

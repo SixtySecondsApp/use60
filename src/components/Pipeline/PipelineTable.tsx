@@ -4,12 +4,15 @@
  * Premium glass-morphism table view with health columns and inline indicators.
  */
 
-import React from 'react';
-import { ChevronDown, ChevronUp, Square, CheckSquare } from 'lucide-react';
-import { format } from 'date-fns';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { ChevronDown, ChevronUp, Square, CheckSquare, Ghost } from 'lucide-react';
+import { format, differenceInDays } from 'date-fns';
+import { toast } from 'sonner';
 import type { PipelineDeal } from './hooks/usePipelineData';
 import type { PipelineColumn } from './hooks/usePipelineColumns';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
+import { supabase } from '@/lib/supabase';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface PipelineTableProps {
   deals: PipelineDeal[];
@@ -350,7 +353,102 @@ function CompanyCell({ company, dealName }: { company: string | null; dealName: 
 // =============================================================================
 
 // Default columns for when visibleColumns is not provided
-const DEFAULT_COLUMN_IDS = ['company', 'value', 'stage', 'health', 'rel_health', 'risk', 'probability', 'days', 'close_date', 'owner'];
+const DEFAULT_COLUMN_IDS = ['company', 'value', 'stage', 'health', 'rel_health', 'risk', 'probability', 'days', 'close_date', 'overdue', 'owner'];
+
+/** Inline editable number cell */
+function InlineNumberEdit({ value, onSave, min = 0, max = 100, suffix = '%' }: {
+  value: number | null;
+  onSave: (val: number) => void;
+  min?: number;
+  max?: number;
+  suffix?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value ?? ''));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      setDraft(String(value ?? ''));
+      setTimeout(() => inputRef.current?.select(), 0);
+    }
+  }, [editing, value]);
+
+  const save = () => {
+    const num = parseInt(draft, 10);
+    if (!isNaN(num) && num >= min && num <= max && num !== value) {
+      onSave(num);
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="number"
+        min={min}
+        max={max}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-16 px-1.5 py-0.5 text-xs rounded border border-blue-400 dark:border-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-white outline-none"
+      />
+    );
+  }
+
+  return (
+    <span
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
+      title="Click to edit"
+    >
+      {value != null ? `${value}${suffix}` : '--'}
+    </span>
+  );
+}
+
+/** Inline editable date cell */
+function InlineDateEdit({ value, onSave }: { value: string | null; onSave: (val: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) setTimeout(() => inputRef.current?.showPicker?.(), 50);
+  }, [editing]);
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="date"
+        defaultValue={value ? format(new Date(value), 'yyyy-MM-dd') : ''}
+        onChange={(e) => {
+          if (e.target.value) {
+            onSave(e.target.value);
+            setEditing(false);
+          }
+        }}
+        onBlur={() => setEditing(false)}
+        onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false); }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-32 px-1.5 py-0.5 text-xs rounded border border-blue-400 dark:border-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-white outline-none"
+      />
+    );
+  }
+
+  return (
+    <span
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
+      title="Click to edit"
+    >
+      {value ? format(new Date(value), 'MMM d, yyyy') : '--'}
+    </span>
+  );
+}
 
 export function PipelineTable({
   deals,
@@ -374,6 +472,17 @@ export function PipelineTable({
     : DEFAULT_COLUMN_IDS;
 
   const isVisible = (id: string) => visibleIds.includes(id);
+
+  const queryClient = useQueryClient();
+
+  const updateDeal = useCallback(async (dealId: string, updates: Record<string, any>) => {
+    const { error } = await supabase.from('deals').update(updates).eq('id', dealId);
+    if (error) {
+      toast.error(`Failed to update: ${error.message}`);
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+    }
+  }, [queryClient]);
 
   if (deals.length === 0) {
     return (
@@ -459,6 +568,11 @@ export function PipelineTable({
               )}
               {isVisible('days') && <SortableHeader label="Days" column="days_in_stage" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />}
               {isVisible('close_date') && <SortableHeader label="Close Date" column="close_date" sortBy={sortBy} sortDir={sortDir} onSort={onSort} />}
+              {isVisible('overdue') && (
+                <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+                  Overdue
+                </th>
+              )}
               {isVisible('owner') && (
                 <th className="px-4 py-3 text-left text-[10.5px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider">
                   Owner
@@ -543,10 +657,13 @@ export function PipelineTable({
                     </td>
                   )}
 
-                  {/* Probability */}
+                  {/* Probability (inline editable) */}
                   {isVisible('probability') && (
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <ProbabilityBar probability={deal.probability} />
+                      <InlineNumberEdit
+                        value={deal.probability}
+                        onSave={(val) => updateDeal(deal.id, { probability: val })}
+                      />
                     </td>
                   )}
 
@@ -557,12 +674,33 @@ export function PipelineTable({
                     </td>
                   )}
 
-                  {/* Close Date */}
+                  {/* Close Date (inline editable) */}
                   {isVisible('close_date') && (
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400">
-                      {deal.close_date ? format(new Date(deal.close_date), 'MMM d, yyyy') : '--'}
+                      <InlineDateEdit
+                        value={deal.close_date}
+                        onSave={(val) => updateDeal(deal.id, { close_date: val })}
+                      />
                     </td>
                   )}
+
+                  {/* Overdue */}
+                  {isVisible('overdue') && (() => {
+                    const closeDate = deal.close_date || deal.expected_close_date;
+                    const isTerminal = deal.probability === 0 || deal.probability === 100;
+                    const daysOverdue = !isTerminal && closeDate
+                      ? differenceInDays(new Date(), new Date(closeDate))
+                      : 0;
+                    return (
+                      <td className="px-4 py-3 whitespace-nowrap text-xs tabular-nums">
+                        {daysOverdue > 0 ? (
+                          <span className="text-red-600 dark:text-red-400 font-semibold">{daysOverdue}d</span>
+                        ) : (
+                          <span className="text-gray-400">--</span>
+                        )}
+                      </td>
+                    );
+                  })()}
 
                   {/* Owner */}
                   {isVisible('owner') && (
